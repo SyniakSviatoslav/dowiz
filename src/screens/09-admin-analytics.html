@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="sq" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analytics - DeliveryOS Admin</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=Cormorant+Garamond:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="mock-data.js"></script>
+
+  <style>
+    :root {
+      --brand-primary:        #ea4f16;
+      --brand-primary-hover:  #ffa12e;
+      --brand-primary-light:  rgba(234, 79, 22, 0.12);
+      --brand-accent:         #2a2a2a;
+      --brand-bg:             #121212;
+      --brand-surface:        #1e1e1e;
+      --brand-surface-raised: #2a2a2a;
+      --brand-text:           #ffffff;
+      --brand-text-muted:     #a8a8a8;
+      --brand-border:         #2c2c2c;
+      --brand-font-heading:   'Inter', sans-serif;
+      --brand-font-body:      'Inter', sans-serif;
+      --brand-radius:         12px;
+      --brand-radius-sm:      8px;
+      --brand-radius-btn:     78px;
+
+      --color-success:  #059669;
+      --color-warning:  #D97706;
+      --color-danger:   #DC2626;
+      --color-info:     #2563EB;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --brand-bg:             #0F172A;
+        --brand-surface:        #1E293B;
+        --brand-surface-raised: #263548;
+        --brand-text:           #F1F5F9;
+        --brand-text-muted:     #94A3B8;
+        --brand-border:         #334155;
+        --brand-primary-light:  rgba(234, 79, 22, 0.15);
+        --brand-accent:         #1E1A14;
+      }
+    }
+
+    body {
+      font-family: var(--brand-font-body);
+      background-color: var(--brand-bg);
+      color: var(--brand-text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    button, .interactive-card {
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    button:active, .interactive-card:active { transform: scale(0.97); }
+    .interactive-card {
+      box-shadow: 0 2px 12px color-mix(in srgb, #000 30%, transparent);
+    }
+    .interactive-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px color-mix(in srgb, #000 40%, transparent);
+    }
+
+    .heatmap-cell {
+      aspect-ratio: 1;
+      border-radius: 2px;
+      transition: transform 0.1s;
+    }
+    .heatmap-cell:hover {
+      transform: scale(1.15);
+      z-index: 10;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+
+    body.embed-mode .embed-hidden { display: none !important; }
+  </style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col md:flex-row">
+
+  <!-- Theme Switcher -->
+  <button id="theme-btn" onclick="cycleTheme()" class="fixed bottom-20 md:bottom-4 right-4 z-[9999] border rounded-full px-3 py-1.5 text-[12px] cursor-pointer shadow-sm flex items-center gap-1.5 font-semibold embed-hidden" style="background: var(--brand-surface); border-color: var(--brand-border); color: var(--brand-text);">
+    <i class="ti ti-palette text-[14px]"></i> Food Dark
+  </button>
+
+  <!-- Sidebar -->
+  <aside class="hidden md:flex flex-col w-[64px] lg:w-[240px] flex-shrink-0 border-r transition-all duration-300 z-50" style="background: #0F172A; border-color: rgba(255,255,255,0.05);">
+    <div class="px-[16px] py-[20px] pb-[12px] flex items-center gap-3">
+      <i class="ti ti-rocket text-[16px] shrink-0" style="color: var(--brand-primary);"></i>
+      <span class="hidden lg:block text-white text-[16px] font-semibold tracking-[-0.01em]">DeliveryOS</span>
+    </div>
+    <nav class="flex-1 mt-2 flex flex-col gap-1 px-2">
+      <a href="05-admin-dashboard.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm transition-colors border-l-[3px] border-transparent" style="color: rgba(255,255,255,0.65);" onmouseover="this.style.background='rgba(255,255,255,0.05)';this.style.color='white'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,0.65)'">
+        <i class="ti ti-layout-dashboard text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Dashboard</span>
+      </a>
+      <a href="06-admin-orders.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm transition-colors border-l-[3px] border-transparent" style="color: rgba(255,255,255,0.65);" onmouseover="this.style.background='rgba(255,255,255,0.05)';this.style.color='white'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,0.65)'">
+        <i class="ti ti-clipboard-list text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Orders</span>
+      </a>
+      <a href="07-admin-menu.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm transition-colors border-l-[3px] border-transparent" style="color: rgba(255,255,255,0.65);" onmouseover="this.style.background='rgba(255,255,255,0.05)';this.style.color='white'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,0.65)'">
+        <i class="ti ti-tools-kitchen-2 text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Menu</span>
+      </a>
+      <a href="08-admin-couriers.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm transition-colors border-l-[3px] border-transparent" style="color: rgba(255,255,255,0.65);" onmouseover="this.style.background='rgba(255,255,255,0.05)';this.style.color='white'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,0.65)'">
+        <i class="ti ti-bike text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Couriers</span>
+      </a>
+      <a href="09-admin-analytics.html" class="h-[48px] px-3 flex items-center gap-3 rounded-r-sm transition-colors border-l-[3px]" style="background: rgba(255,255,255,0.10); border-color: var(--brand-primary); color: white;">
+        <i class="ti ti-chart-bar text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px] font-semibold">Analytics</span>
+      </a>
+      <a href="10-admin-crm.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm transition-colors border-l-[3px] border-transparent" style="color: rgba(255,255,255,0.65);" onmouseover="this.style.background='rgba(255,255,255,0.05)';this.style.color='white'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,0.65)'">
+        <i class="ti ti-address-book text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">CRM</span>
+      </a>
+      <a href="11-admin-settings.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm transition-colors border-l-[3px] border-transparent" style="color: rgba(255,255,255,0.65);" onmouseover="this.style.background='rgba(255,255,255,0.05)';this.style.color='white'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,0.65)'">
+        <i class="ti ti-settings text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Settings</span>
+      </a>
+    </nav>
+  </aside>
+
+  <!-- Mobile Tab Bar -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 h-[60px] border-t flex justify-around items-center z-50 embed-hidden" style="background: #0F172A; border-color: rgba(255,255,255,0.10);">
+    <a href="05-admin-dashboard.html" class="flex flex-col items-center gap-1 transition-colors" style="color: rgba(255,255,255,0.50);">
+      <i class="ti ti-layout-dashboard text-[20px]"></i>
+      <span class="text-[10px]">Home</span>
+    </a>
+    <a href="06-admin-orders.html" class="flex flex-col items-center gap-1 transition-colors" style="color: rgba(255,255,255,0.50);">
+      <i class="ti ti-clipboard-list text-[20px]"></i>
+      <span class="text-[10px]">Orders</span>
+    </a>
+    <a href="09-admin-analytics.html" class="flex flex-col items-center gap-1 text-white">
+      <i class="ti ti-chart-bar text-[20px]"></i>
+      <span class="text-[10px] font-semibold">Analytics</span>
+    </a>
+  </nav>
+
+  <!-- Main Content Wrapper -->
+  <div class="flex-1 flex flex-col h-full relative z-0 overflow-hidden">
+
+    <!-- Toolbar -->
+    <header class="h-[64px] border-b px-6 flex items-center justify-between shrink-0 z-10" style="background: var(--brand-bg); border-color: var(--brand-border);">
+      <h1 class="text-[18px] font-semibold" style="color: var(--brand-text);">Analytics</h1>
+      <div class="flex items-center gap-4">
+        <!-- DateRangePicker -->
+        <div class="hidden lg:flex p-1 border" style="background: var(--brand-surface); border-radius: var(--brand-radius-sm); border-color: var(--brand-border);">
+          <button class="px-3 py-1 text-[12px] font-semibold transition-colors" style="border-radius: 6px; color: var(--brand-text-muted);">Today</button>
+          <button class="px-3 py-1 text-[12px] font-semibold shadow-sm border flex items-center gap-1.5" style="border-radius: 6px; background: var(--brand-surface-raised); color: var(--brand-text); border-color: var(--brand-border);"><span class="w-1.5 h-1.5 rounded-full" style="background: var(--brand-primary);"></span> 7 days</button>
+          <button class="px-3 py-1 text-[12px] font-semibold transition-colors" style="border-radius: 6px; color: var(--brand-text-muted);">30 days</button>
+          <button class="px-3 py-1 text-[12px] font-semibold transition-colors" style="border-radius: 6px; color: var(--brand-text-muted);">Month</button>
+          <button class="px-3 py-1 text-[12px] font-semibold border-l ml-1 pl-4 transition-colors" style="color: var(--brand-text-muted); border-color: var(--brand-border);"><i class="ti ti-calendar text-[14px] align-middle"></i> Custom</button>
+        </div>
+        <!-- Export -->
+        <div class="flex border overflow-hidden" style="border-radius: var(--brand-radius-sm); border-color: var(--brand-border); background: var(--brand-surface);">
+          <button class="px-3 min-h-[44px] text-[12px] font-semibold border-r transition-colors flex items-center gap-1" style="color: var(--brand-text); border-color: var(--brand-border);"><i class="ti ti-download text-[14px]"></i> CSV</button>
+          <button class="px-3 min-h-[44px] text-[12px] font-semibold transition-colors flex items-center gap-1" style="color: var(--brand-text);"><i class="ti ti-download text-[14px]"></i> JSON</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="flex-1 overflow-y-auto p-4 md:p-6 pb-[80px] md:pb-6 space-y-6 hide-scrollbar" style="background: var(--brand-surface);">
+
+      <!-- Metric Cards Row -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="p-4 border flex flex-col relative" style="background: var(--brand-bg); border-radius: var(--brand-radius); border-color: var(--brand-border); box-shadow: 0 2px 12px color-mix(in srgb, #000 30%, transparent);">
+          <span class="text-[12px] font-semibold mb-1" style="color: var(--brand-text-muted);">Total Orders</span>
+          <span class="text-[24px] font-bold" style="color: var(--brand-text);">363</span>
+          <div class="flex items-center gap-1 text-[11px] mt-1" style="color: var(--color-success);">
+            <i class="ti ti-arrow-up-right text-[12px]"></i> 12% vs last week
+          </div>
+          <svg class="absolute right-4 bottom-4 w-[48px] h-[24px]" viewBox="0 0 100 30" preserveAspectRatio="none">
+            <polyline points="0,25 20,20 40,25 60,10 80,15 100,5" fill="none" stroke="var(--brand-primary)" stroke-width="2.5"/>
+          </svg>
+        </div>
+        <div class="p-4 border flex flex-col relative" style="background: var(--brand-bg); border-radius: var(--brand-radius); border-color: var(--brand-border); box-shadow: 0 2px 12px color-mix(in srgb, #000 30%, transparent);">
+          <span class="text-[12px] font-semibold mb-1" style="color: var(--brand-text-muted);">Revenue (ALL)</span>
+          <span class="text-[24px] font-bold" style="color: var(--brand-text);">452,600</span>
+          <div class="flex items-center gap-1 text-[11px] mt-1" style="color: var(--color-success);">
+            <i class="ti ti-arrow-up-right text-[12px]"></i> 18% vs last week
+          </div>
+          <svg class="absolute right-4 bottom-4 w-[48px] h-[24px]" viewBox="0 0 100 30" preserveAspectRatio="none">
+            <polyline points="0,20 20,25 40,15 60,20 80,5 100,0" fill="none" stroke="var(--brand-primary)" stroke-width="2.5"/>
+          </svg>
+        </div>
+        <div class="p-4 border flex flex-col relative" style="background: var(--brand-bg); border-radius: var(--brand-radius); border-color: var(--brand-border); box-shadow: 0 2px 12px color-mix(in srgb, #000 30%, transparent);">
+          <span class="text-[12px] font-semibold mb-1" style="color: var(--brand-text-muted);">Avg Check (ALL)</span>
+          <span class="text-[24px] font-bold" style="color: var(--brand-text);">1,246</span>
+          <div class="flex items-center gap-1 text-[11px] mt-1" style="color: var(--color-warning);">
+            <i class="ti ti-arrow-down-right text-[12px]"></i> 2% vs last week
+          </div>
+          <svg class="absolute right-4 bottom-4 w-[48px] h-[24px]" viewBox="0 0 100 30" preserveAspectRatio="none">
+            <polyline points="0,15 20,10 40,15 60,5 80,10 100,15" fill="none" stroke="var(--color-warning)" stroke-width="2.5"/>
+          </svg>
+        </div>
+        <div class="p-4 border flex flex-col relative" style="background: var(--brand-bg); border-radius: var(--brand-radius); border-color: var(--brand-border); box-shadow: 0 2px 12px color-mix(in srgb, #000 30%, transparent);">
+          <span class="text-[12px] font-semibold mb-1" style="color: var(--brand-text-muted);">New Customers</span>
+          <span class="text-[24px] font-bold" style="color: var(--brand-text);">48</span>
+          <div class="flex items-center gap-1 text-[11px] mt-1" style="color: var(--color-success);">
+            <i class="ti ti-arrow-up-right text-[12px]"></i> 8% vs last week
+          </div>
+          <svg class="absolute right-4 bottom-4 w-[48px] h-[24px]" viewBox="0 0 100 30" preserveAspectRatio="none">
+            <polyline points="0,25 20,25 40,20 60,15 80,5 100,0" fill="none" stroke="var(--brand-primary)" stroke-width="2.5"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Revenue Area Chart -->
+      <div class="p-5 border" style="background: var(--brand-bg); border-radius: var(--brand-radius); border-color: var(--brand-border); box-shadow: 0 2px 12px color-mix(in srgb, #000 30%, transparent);">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-[16px] font-bold" style="color: var(--brand-text);">Revenue over time</h2>
+          <span class="text-[13px] font-semibold" style="color: var(--brand-text-muted);">7 days</span>
+        </div>
+        <div class="relative w-full h-[240px]">
+          <div class="absolute left-0 top-0 bottom-6 w-[40px] flex flex-col justify-between text-[11px] text-right pr-2" style="color: var(--brand-text-muted);">
+            <span>80k</span><span>60k</span><span>40k</span><span>20k</span><span>0</span>
+          </div>
+          <div class="absolute left-[40px] right-0 top-0 bottom-6 flex flex-col justify-between border-b" style="border-color: var(--brand-border);">
+            <div class="w-full border-t" style="border-color: var(--brand-border); opacity: 0.5;"></div>
+            <div class="w-full border-t" style="border-color: var(--brand-border); opacity: 0.5;"></div>
+            <div class="w-full border-t" style="border-color: var(--brand-border); opacity: 0.5;"></div>
+            <div class="w-full border-t" style="border-color: var(--brand-border); opacity: 0.5;"></div>
+            <div></div>
+          </div>
+          <svg class="absolute left-[40px] top-0 bottom-6 overflow-visible" style="right: 0; width: calc(100% - 40px); height: 100%;" preserveAspectRatio="none" viewBox="0 0 100 100">
+            <defs>
+              <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="var(--brand-primary)" stop-opacity="0.25" />
+                <stop offset="100%" stop-color="var(--brand-primary)" stop-opacity="0.02" />
+              </linearGradient>
+            </defs>
+            <path d="M 0,100 L 0,80 C 15,80 15,60 30,55 C 45,50 45,70 60,65 C 75,60 75,10 90,5 C 95,3.3 98,4 100,5 L 100,100 Z" fill="url(#areaGradient)" />
+            <path d="M 0,80 C 15,80 15,60 30,55 C 45,50 45,70 60,65 C 75,60 75,10 90,5 C 95,3.3 98,4 100,5" fill="none" stroke="var(--brand-primary)" stroke-width="2.5" vector-effect="non-scaling-stroke"/>
+            <circle cx="90" cy="5" r="4" fill="var(--brand-bg)" stroke="var(--brand-primary)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+            <g transform="translate(90, 5)">
+              <rect x="-40" y="-30" width="80" height="20" rx="4" fill="var(--brand-primary)" opacity="0.9"/>
+              <text x="0" y="-17" font-size="10" fill="white" font-weight="bold" text-anchor="middle">Sun 87,400</text>
+            </g>
+          </svg>
+          <div class="absolute left-[40px] right-0 bottom-0 h-6 flex justify-between items-end text-[11px] font-semibold px-2" style="color: var(--brand-text-muted);">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Second Row -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- HeatmapDemand -->
+        <div class="p-5 border" style="background: var(--brand-bg); border-radius: var(--brand-radius); border-color: var(--brand-border); box-shadow: 0 2px 12px color-mix(in srgb, #000 30%, transparent);">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-[14px] font-bold" style="color: var(--brand-text);">Demand by Day &amp; Hour</h2>
+            <div class="flex items-center gap-1 text-[11px]" style="color: var(--brand-text-muted);">
+              Low <div class="w-16 h-2 rounded-sm mx-1" style="background: linear-gradient(to right, color-mix(in srgb, var(--brand-primary) 8%, transparent), var(--brand-primary));"></div> High
+            </div>
+          </div>
+          <div class="flex">
+            <div class="flex flex-col justify-between text-[10px] font-semibold pr-2 pb-[14px]" style="color: var(--brand-text-muted);">
+              <span class="flex-1 flex items-center">Mon</span>
+              <span class="flex-1 flex items-center">Tue</span>
+              <span class="flex-1 flex items-center">Wed</span>
+              <span class="flex-1 flex items-center">Thu</span>
+              <span class="flex-1 flex items-center">Fri</span>
+              <span class="flex-1 flex items-center">Sat</span>
+              <span class="flex-1 flex items-center">Sun</span>
+            </div>
+            <div class="flex-1 flex flex-col">
+              <div id="heatmapGrid" class="flex-1 grid grid-rows-7 grid-cols-12 gap-[2px]"></div>
+              <div class="flex justify-between text-[10px] mt-1 px-1" style="color: var(--brand-text-muted);">
+                <span>11</span><span>13</span><span>15</span><span>17</span><span>19</span><span>21</span><span>23</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right charts wrapper -->
+        <div class="flex flex-col gap-6">
+
+          <!-- CustomerLTVChart -->
+          <div class="p-5 border flex-1" style="background: var(--brand-bg); border-radius: var(--brand-radius); border-color: var(--brand-border); box-shadow: 0 2px 12px color-mix(in srgb, #000 30%, transparent);">
+            <h2 class="text-[14px] font-bold mb-4" style="color: var(--brand-text);">Customer Lifetime Value</h2>
+            <div class="space-y-4">
+              <div class="flex items-center text-[12px]">
+                <span class="w-[72px] font-semibold" style="color: var(--brand-text-muted);">1 order</span>
+                <div class="flex-1 h-5 rounded-sm overflow-hidden flex items-center" style="background: var(--brand-surface-raised);">
+                  <div class="h-full w-[15%]" style="background: rgba(234,79,22,0.20);"></div>
+                  <span class="ml-2 text-[11px] font-bold" style="color: var(--brand-text);">1,246 ALL</span>
+                </div>
+              </div>
+              <div class="flex items-center text-[12px]">
+                <span class="w-[72px] font-semibold" style="color: var(--brand-text-muted);">2–5 orders</span>
+                <div class="flex-1 h-5 rounded-sm overflow-hidden flex items-center" style="background: var(--brand-surface-raised);">
+                  <div class="h-full w-[40%]" style="background: rgba(234,79,22,0.40);"></div>
+                  <span class="ml-2 text-[11px] font-bold" style="color: var(--brand-text);">4,120 ALL</span>
+                </div>
+              </div>
+              <div class="flex items-center text-[12px]">
+                <span class="w-[72px] font-semibold" style="color: var(--brand-text-muted);">6–15 orders</span>
+                <div class="flex-1 h-5 rounded-sm overflow-hidden flex items-center" style="background: var(--brand-surface-raised);">
+                  <div class="h-full w-[70%]" style="background: rgba(234,79,22,0.70);"></div>
+                  <span class="ml-2 text-[11px] font-bold" style="color: var(--brand-text);">15,800 ALL</span>
+                </div>
+              </div>
+              <div class="flex items-center text-[12px]">
+                <span class="w-[72px] font-semibold" style="color: var(--brand-text-muted);">16+ orders</span>
+                <div class="flex-1 h-5 rounded-sm overflow-hidden flex items-center" style="background: var(--brand-surface-raised);">
+                  <div class="h-full w-[95%]" style="background: var(--brand-primary);"></div>
+                  <span class="ml-2 text-[11px] font-bold" style="color: var(--brand-text);">42,500 ALL</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- OrderLatencyChart -->
+          <div class="p-5 border flex-1" style="background: var(--brand-bg); border-radius: var(--brand-radius); border-color: var(--brand-border); box-shadow: 0 2px 12px color-mix(in srgb, #000 30%, transparent);">
+            <div class="flex justify-between items-start mb-4">
+              <h2 class="text-[14px] font-bold" style="color: var(--brand-text);">System Performance</h2>
+              <span class="text-[10px] px-1.5 py-0.5" style="background: var(--brand-surface-raised); color: var(--brand-text-muted); border-radius: 4px;">WebSocket Latency</span>
+            </div>
+            <div class="space-y-3">
+              <div class="relative pt-1">
+                <div class="flex mb-1 items-center justify-between text-[11px]">
+                  <span class="font-semibold" style="color: var(--brand-text-muted);">P50 (Median)</span>
+                  <span class="font-bold" style="color: var(--color-success);">38ms</span>
+                </div>
+                <div class="w-full h-1.5 rounded-full" style="background: var(--brand-surface-raised);">
+                  <div class="h-1.5 rounded-full w-[15%]" style="background: var(--color-success);"></div>
+                </div>
+              </div>
+              <div class="relative pt-1">
+                <div class="flex mb-1 items-center justify-between text-[11px]">
+                  <span class="font-semibold" style="color: var(--brand-text-muted);">P95</span>
+                  <span class="font-bold" style="color: var(--color-warning);">72ms</span>
+                </div>
+                <div class="w-full h-1.5 rounded-full" style="background: var(--brand-surface-raised);">
+                  <div class="h-1.5 rounded-full w-[35%]" style="background: var(--color-warning);"></div>
+                </div>
+              </div>
+              <div class="relative pt-1">
+                <div class="flex mb-1 items-center justify-between text-[11px]">
+                  <span class="font-semibold" style="color: var(--brand-text-muted);">P99</span>
+                  <span class="font-bold" style="color: var(--color-danger);">118ms</span>
+                </div>
+                <div class="w-full h-1.5 rounded-full" style="background: var(--brand-surface-raised);">
+                  <div class="h-1.5 rounded-full w-[60%]" style="background: var(--color-danger);"></div>
+                </div>
+              </div>
+              <div class="text-[10px] text-center pt-2 italic" style="color: var(--brand-text-muted);">Lower is better. Optimal &lt; 50ms.</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Tables Row -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- CourierPerformanceTable -->
+        <div class="border flex flex-col overflow-hidden" style="background: var(--brand-bg); border-radius: var(--brand-radius); border-color: var(--brand-border); box-shadow: 0 2px 12px color-mix(in srgb, #000 30%, transparent);">
+          <div class="p-5 border-b" style="border-color: var(--brand-border);">
+            <h2 class="text-[14px] font-bold" style="color: var(--brand-text);">Courier Performance</h2>
+          </div>
+          <div class="overflow-x-auto hide-scrollbar">
+            <table class="w-full text-left text-[13px]">
+              <thead class="text-[11px] uppercase border-b" style="color: var(--brand-text-muted); background: color-mix(in srgb, var(--brand-surface) 50%, transparent); border-color: var(--brand-border);">
+                <tr>
+                  <th class="px-4 py-3 font-bold cursor-pointer">Courier <i class="ti ti-selector ml-1 align-middle"></i></th>
+                  <th class="px-4 py-3 font-bold cursor-pointer text-right">Orders <i class="ti ti-selector ml-1 align-middle"></i></th>
+                  <th class="px-4 py-3 font-bold cursor-pointer text-right">Avg Time <i class="ti ti-selector ml-1 align-middle"></i></th>
+                  <th class="px-4 py-3 font-bold cursor-pointer text-center">Rating <i class="ti ti-selector ml-1 align-middle"></i></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-b transition-colors cursor-default" style="border-color: var(--brand-border);" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface')" onmouseout="this.style.background=''">
+                  <td class="px-4 py-3 font-semibold flex items-center gap-2" style="color: var(--brand-text);">
+                    <div class="w-6 h-6 rounded-full text-white flex items-center justify-center text-[9px] font-bold" style="background: var(--brand-primary);">AK</div> Ardit K.
+                  </td>
+                  <td class="px-4 py-3 text-right font-mono" style="color: var(--brand-text);">142</td>
+                  <td class="px-4 py-3 text-right" style="color: var(--brand-text);">28 min</td>
+                  <td class="px-4 py-3 text-center font-semibold" style="color: var(--brand-text);"><i class="ti ti-star-filled text-[12px]" style="color: var(--color-warning);"></i> 4.9</td>
+                </tr>
+                <tr class="border-b transition-colors cursor-default" style="border-color: var(--brand-border);" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface')" onmouseout="this.style.background=''">
+                  <td class="px-4 py-3 font-semibold flex items-center gap-2" style="color: var(--brand-text);">
+                    <div class="w-6 h-6 rounded-full text-white flex items-center justify-center text-[9px] font-bold" style="background: var(--brand-primary);">BH</div> Blerim H.
+                  </td>
+                  <td class="px-4 py-3 text-right font-mono" style="color: var(--brand-text);">98</td>
+                  <td class="px-4 py-3 text-right" style="color: var(--brand-text);">32 min</td>
+                  <td class="px-4 py-3 text-center font-semibold" style="color: var(--brand-text);"><i class="ti ti-star-filled text-[12px]" style="color: var(--color-warning);"></i> 4.7</td>
+                </tr>
+                <tr class="transition-colors cursor-default" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface')" onmouseout="this.style.background=''">
+                  <td class="px-4 py-3 font-semibold flex items-center gap-2" style="color: var(--brand-text);">
+                    <div class="w-6 h-6 rounded-full text-white flex items-center justify-center text-[9px] font-bold" style="background: var(--brand-text-muted);">GD</div> Genci D.
+                  </td>
+                  <td class="px-4 py-3 text-right font-mono" style="color: var(--brand-text);">65</td>
+                  <td class="px-4 py-3 text-right" style="color: var(--brand-text);">24 min</td>
+                  <td class="px-4 py-3 text-center font-semibold" style="color: var(--brand-text);"><i class="ti ti-star-filled text-[12px]" style="color: var(--color-warning);"></i> 5.0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TopProducts Table -->
+        <div class="border flex flex-col overflow-hidden" style="background: var(--brand-bg); border-radius: var(--brand-radius); border-color: var(--brand-border); box-shadow: 0 2px 12px color-mix(in srgb, #000 30%, transparent);">
+          <div class="p-5 border-b flex justify-between items-center" style="border-color: var(--brand-border);">
+            <h2 class="text-[14px] font-bold" style="color: var(--brand-text);">Top Products</h2>
+            <button class="text-[12px] font-semibold hover:underline flex items-center gap-1" style="color: var(--brand-primary);"><i class="ti ti-download"></i> CSV</button>
+          </div>
+          <div class="overflow-x-auto hide-scrollbar">
+            <table class="w-full text-left text-[13px]">
+              <thead class="text-[11px] uppercase border-b" style="color: var(--brand-text-muted); background: color-mix(in srgb, var(--brand-surface) 50%, transparent); border-color: var(--brand-border);">
+                <tr>
+                  <th class="px-4 py-3 font-bold">Product</th>
+                  <th class="px-4 py-3 font-bold text-right">Sold</th>
+                  <th class="px-4 py-3 font-bold text-right w-[40%]">Revenue Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-b transition-colors cursor-default" style="border-color: var(--brand-border);" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface')" onmouseout="this.style.background=''">
+                  <td class="px-4 py-3 font-semibold" style="color: var(--brand-text);">Dragon Roll</td>
+                  <td class="px-4 py-3 text-right font-mono" style="color: var(--brand-text);">312</td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2 justify-end">
+                      <span class="text-[11px] font-bold" style="color: var(--brand-text);">24%</span>
+                      <div class="w-[60%] h-1.5 rounded-full" style="background: var(--brand-surface-raised);"><div class="h-1.5 rounded-full w-full" style="background: var(--brand-primary);"></div></div>
+                    </div>
+                  </td>
+                </tr>
+                <tr class="border-b transition-colors cursor-default" style="border-color: var(--brand-border);" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface')" onmouseout="this.style.background=''">
+                  <td class="px-4 py-3 font-semibold" style="color: var(--brand-text);">Spicy Tuna Roll</td>
+                  <td class="px-4 py-3 text-right font-mono" style="color: var(--brand-text);">245</td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2 justify-end">
+                      <span class="text-[11px] font-bold" style="color: var(--brand-text);">18%</span>
+                      <div class="w-[60%] h-1.5 rounded-full" style="background: var(--brand-surface-raised);"><div class="h-1.5 rounded-full w-[75%]" style="background: rgba(234,79,22,0.80);"></div></div>
+                    </div>
+                  </td>
+                </tr>
+                <tr class="border-b transition-colors cursor-default" style="border-color: var(--brand-border);" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface')" onmouseout="this.style.background=''">
+                  <td class="px-4 py-3 font-semibold" style="color: var(--brand-text);">Miso Soup</td>
+                  <td class="px-4 py-3 text-right font-mono" style="color: var(--brand-text);">198</td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2 justify-end">
+                      <span class="text-[11px] font-bold" style="color: var(--brand-text);">12%</span>
+                      <div class="w-[60%] h-1.5 rounded-full" style="background: var(--brand-surface-raised);"><div class="h-1.5 rounded-full w-[50%]" style="background: rgba(234,79,22,0.60);"></div></div>
+                    </div>
+                  </td>
+                </tr>
+                <tr class="border-b transition-colors cursor-default" style="border-color: var(--brand-border);" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface')" onmouseout="this.style.background=''">
+                  <td class="px-4 py-3 font-semibold" style="color: var(--brand-text);">Rainbow Roll</td>
+                  <td class="px-4 py-3 text-right font-mono" style="color: var(--brand-text);">156</td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2 justify-end">
+                      <span class="text-[11px] font-bold" style="color: var(--brand-text);">10%</span>
+                      <div class="w-[60%] h-1.5 rounded-full" style="background: var(--brand-surface-raised);"><div class="h-1.5 rounded-full w-[40%]" style="background: rgba(234,79,22,0.40);"></div></div>
+                    </div>
+                  </td>
+                </tr>
+                <tr class="transition-colors cursor-default" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface')" onmouseout="this.style.background=''">
+                  <td class="px-4 py-3 font-semibold" style="color: var(--brand-text);">Edamame</td>
+                  <td class="px-4 py-3 text-right font-mono" style="color: var(--brand-text);">112</td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2 justify-end">
+                      <span class="text-[11px] font-bold" style="color: var(--brand-text);">5%</span>
+                      <div class="w-[60%] h-1.5 rounded-full" style="background: var(--brand-surface-raised);"><div class="h-1.5 rounded-full w-[20%]" style="background: rgba(234,79,22,0.20);"></div></div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    const PRESETS = {
+      "Food Dark":       { "--brand-primary":"#ea4f16","--brand-primary-hover":"#ffa12e","--brand-primary-light":"rgba(234,79,22,0.12)","--brand-accent":"#2a2a2a","--brand-bg":"#121212","--brand-surface":"#1e1e1e","--brand-surface-raised":"#2a2a2a","--brand-text":"#ffffff","--brand-text-muted":"#a8a8a8","--brand-border":"#2c2c2c","--brand-font-heading":"'Inter',sans-serif","--brand-font-body":"'Inter',sans-serif","--brand-radius":"12px","--brand-radius-sm":"8px","--brand-radius-btn":"78px" },
+      "Crimson Classic": { "--brand-primary":"#C1121F","--brand-primary-hover":"#9B0D17","--brand-primary-light":"#FFF0F1","--brand-accent":"#F5F0E8","--brand-bg":"#FFFFFF","--brand-surface":"#F8F9FA","--brand-surface-raised":"#F0F0F0","--brand-text":"#1A1A1A","--brand-text-muted":"#6B7280","--brand-border":"#E5E7EB","--brand-font-heading":"'DM Serif Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"12px","--brand-radius-sm":"6px","--brand-radius-btn":"24px" },
+      "Ocean Fresh":     { "--brand-primary":"#0D9488","--brand-primary-hover":"#0A7567","--brand-primary-light":"#F0FDFA","--brand-accent":"#F0F9F8","--brand-bg":"#FFFFFF","--brand-surface":"#F8FFFE","--brand-surface-raised":"#E0F7F5","--brand-text":"#134E4A","--brand-text-muted":"#6B7280","--brand-border":"#CCFBF1","--brand-font-heading":"'Cormorant Garamond',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"24px","--brand-radius-sm":"12px","--brand-radius-btn":"32px" },
+      "Midnight Urban":  { "--brand-primary":"#F97316","--brand-primary-hover":"#EA6A0A","--brand-primary-light":"rgba(249,115,22,0.10)","--brand-accent":"#1E1E1E","--brand-bg":"#111111","--brand-surface":"#1C1C1C","--brand-surface-raised":"#2a2a2a","--brand-text":"#F5F5F5","--brand-text-muted":"#9CA3AF","--brand-border":"#2D2D2D","--brand-font-heading":"'DM Sans',sans-serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"4px","--brand-radius-sm":"2px","--brand-radius-btn":"4px" },
+      "Sage Garden":     { "--brand-primary":"#4D7C0F","--brand-primary-hover":"#3F6812","--brand-primary-light":"#F7FEE7","--brand-accent":"#ECFCCB","--brand-bg":"#FFFFFF","--brand-surface":"#F7FEE7","--brand-surface-raised":"#E8F5E0","--brand-text":"#1A2E05","--brand-text-muted":"#6B7280","--brand-border":"#D9F99D","--brand-font-heading":"'Playfair Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px" },
+      "Royal Gold":      { "--brand-primary":"#B45309","--brand-primary-hover":"#92400E","--brand-primary-light":"rgba(180,83,9,0.10)","--brand-accent":"#1C1400","--brand-bg":"#0D0900","--brand-surface":"#1A1200","--brand-surface-raised":"#2a2000","--brand-text":"#FEF3C7","--brand-text-muted":"#D97706","--brand-border":"#2D2000","--brand-font-heading":"'Cormorant Garamond',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"2px","--brand-radius-sm":"1px","--brand-radius-btn":"2px" },
+      "Coral Breeze":    { "--brand-primary":"#DB2777","--brand-primary-hover":"#BE185D","--brand-primary-light":"#FDF2F8","--brand-accent":"#FCE7F3","--brand-bg":"#FFFFFF","--brand-surface":"#FDF2F8","--brand-surface-raised":"#FDE8F0","--brand-text":"#500724","--brand-text-muted":"#9D174D","--brand-border":"#FBCFE8","--brand-font-heading":"'Playfair Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px" }
+    };
+
+    let themeIdx = 0;
+    const themeKeys = Object.keys(PRESETS);
+    let savedTheme = localStorage.getItem('dos_mockup_theme');
+    if (!savedTheme) { savedTheme = 'Food Dark'; localStorage.setItem('dos_mockup_theme', 'Food Dark'); }
+    if (savedTheme && PRESETS[savedTheme]) {
+      themeIdx = themeKeys.indexOf(savedTheme);
+      applyPreset(savedTheme);
+      document.getElementById('theme-btn').innerHTML = '<i class="ti ti-palette text-[14px]"></i> ' + savedTheme;
+    }
+
+    function cycleTheme() {
+      themeIdx = (themeIdx + 1) % themeKeys.length;
+      const name = themeKeys[themeIdx];
+      applyPreset(name);
+      localStorage.setItem('dos_mockup_theme', name);
+      document.getElementById('theme-btn').innerHTML = '<i class="ti ti-palette text-[14px]"></i> ' + name;
+    }
+
+    function applyPreset(name) {
+      const p = PRESETS[name] || PRESETS['Food Dark'];
+      const r = document.documentElement.style;
+      Object.entries(p).forEach(([k, v]) => r.setProperty(k, v));
+    }
+
+    // Heatmap Generation
+    const heatmapGrid = document.getElementById('heatmapGrid');
+    const rows = 7; const cols = 12;
+    const getIntensity = (r, c) => {
+      let base = Math.random() * 0.3;
+      if (r >= 4 && r <= 5) base += 0.3;
+      if (c >= 8 && c <= 10) base += 0.3;
+      if (r === 4 && c === 9) base = 1.0;
+      return Math.min(1.0, base + 0.05);
+    };
+
+    let html = '';
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        let opacity = getIntensity(r, c).toFixed(2);
+        let time = 11 + c;
+        let days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+        let tooltip = `${days[r]} ${time}:00 — ${Math.floor(opacity*100)}% capacity`;
+        html += `<div class="heatmap-cell" style="background-color: color-mix(in srgb, var(--brand-primary) ${Math.floor(opacity*100)}%, transparent)" title="${tooltip}"></div>`;
+      }
+    }
+    heatmapGrid.innerHTML = html;
+
+    if (new URLSearchParams(window.location.search).get('embed') === 'true') {
+      document.body.classList.add('embed-mode');
+    }
+  </script>
+</body>
+</html>

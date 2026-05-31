@@ -1,0 +1,4691 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "label": "presets.json",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L1",
+      "id": "agents_skills_deliveryos_theme_resources_presets_json",
+      "community": 7,
+      "norm_label": "presets.json"
+    },
+    {
+      "label": "Crimson Classic",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L2",
+      "id": "resources_presets_crimson_classic",
+      "community": 8,
+      "norm_label": "crimson classic"
+    },
+    {
+      "label": "--brand-primary",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L3",
+      "id": "resources_presets_crimson_classic_brand_primary",
+      "community": 8,
+      "norm_label": "--brand-primary"
+    },
+    {
+      "label": "--brand-primary-hover",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L4",
+      "id": "resources_presets_crimson_classic_brand_primary_hover",
+      "community": 8,
+      "norm_label": "--brand-primary-hover"
+    },
+    {
+      "label": "--brand-primary-light",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L5",
+      "id": "resources_presets_crimson_classic_brand_primary_light",
+      "community": 8,
+      "norm_label": "--brand-primary-light"
+    },
+    {
+      "label": "--brand-accent",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L6",
+      "id": "resources_presets_crimson_classic_brand_accent",
+      "community": 8,
+      "norm_label": "--brand-accent"
+    },
+    {
+      "label": "--brand-bg",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L7",
+      "id": "resources_presets_crimson_classic_brand_bg",
+      "community": 8,
+      "norm_label": "--brand-bg"
+    },
+    {
+      "label": "--brand-surface",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L8",
+      "id": "resources_presets_crimson_classic_brand_surface",
+      "community": 8,
+      "norm_label": "--brand-surface"
+    },
+    {
+      "label": "--brand-text",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L9",
+      "id": "resources_presets_crimson_classic_brand_text",
+      "community": 8,
+      "norm_label": "--brand-text"
+    },
+    {
+      "label": "--brand-text-muted",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L10",
+      "id": "resources_presets_crimson_classic_brand_text_muted",
+      "community": 8,
+      "norm_label": "--brand-text-muted"
+    },
+    {
+      "label": "--brand-border",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L11",
+      "id": "resources_presets_crimson_classic_brand_border",
+      "community": 8,
+      "norm_label": "--brand-border"
+    },
+    {
+      "label": "--brand-font-heading",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L12",
+      "id": "resources_presets_crimson_classic_brand_font_heading",
+      "community": 8,
+      "norm_label": "--brand-font-heading"
+    },
+    {
+      "label": "--brand-font-body",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L13",
+      "id": "resources_presets_crimson_classic_brand_font_body",
+      "community": 8,
+      "norm_label": "--brand-font-body"
+    },
+    {
+      "label": "--brand-radius",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L14",
+      "id": "resources_presets_crimson_classic_brand_radius",
+      "community": 8,
+      "norm_label": "--brand-radius"
+    },
+    {
+      "label": "--brand-radius-btn",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L15",
+      "id": "resources_presets_crimson_classic_brand_radius_btn",
+      "community": 8,
+      "norm_label": "--brand-radius-btn"
+    },
+    {
+      "label": "Ocean Fresh",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L17",
+      "id": "resources_presets_ocean_fresh",
+      "community": 10,
+      "norm_label": "ocean fresh"
+    },
+    {
+      "label": "--brand-primary",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L18",
+      "id": "resources_presets_ocean_fresh_brand_primary",
+      "community": 10,
+      "norm_label": "--brand-primary"
+    },
+    {
+      "label": "--brand-primary-hover",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L19",
+      "id": "resources_presets_ocean_fresh_brand_primary_hover",
+      "community": 10,
+      "norm_label": "--brand-primary-hover"
+    },
+    {
+      "label": "--brand-primary-light",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L20",
+      "id": "resources_presets_ocean_fresh_brand_primary_light",
+      "community": 10,
+      "norm_label": "--brand-primary-light"
+    },
+    {
+      "label": "--brand-accent",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L21",
+      "id": "resources_presets_ocean_fresh_brand_accent",
+      "community": 10,
+      "norm_label": "--brand-accent"
+    },
+    {
+      "label": "--brand-bg",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L22",
+      "id": "resources_presets_ocean_fresh_brand_bg",
+      "community": 10,
+      "norm_label": "--brand-bg"
+    },
+    {
+      "label": "--brand-surface",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L23",
+      "id": "resources_presets_ocean_fresh_brand_surface",
+      "community": 10,
+      "norm_label": "--brand-surface"
+    },
+    {
+      "label": "--brand-text",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L24",
+      "id": "resources_presets_ocean_fresh_brand_text",
+      "community": 10,
+      "norm_label": "--brand-text"
+    },
+    {
+      "label": "--brand-text-muted",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L25",
+      "id": "resources_presets_ocean_fresh_brand_text_muted",
+      "community": 10,
+      "norm_label": "--brand-text-muted"
+    },
+    {
+      "label": "--brand-border",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L26",
+      "id": "resources_presets_ocean_fresh_brand_border",
+      "community": 10,
+      "norm_label": "--brand-border"
+    },
+    {
+      "label": "--brand-font-heading",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L27",
+      "id": "resources_presets_ocean_fresh_brand_font_heading",
+      "community": 10,
+      "norm_label": "--brand-font-heading"
+    },
+    {
+      "label": "--brand-font-body",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L28",
+      "id": "resources_presets_ocean_fresh_brand_font_body",
+      "community": 10,
+      "norm_label": "--brand-font-body"
+    },
+    {
+      "label": "--brand-radius",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L29",
+      "id": "resources_presets_ocean_fresh_brand_radius",
+      "community": 10,
+      "norm_label": "--brand-radius"
+    },
+    {
+      "label": "--brand-radius-btn",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L30",
+      "id": "resources_presets_ocean_fresh_brand_radius_btn",
+      "community": 10,
+      "norm_label": "--brand-radius-btn"
+    },
+    {
+      "label": "Midnight Urban",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L32",
+      "id": "resources_presets_midnight_urban",
+      "community": 9,
+      "norm_label": "midnight urban"
+    },
+    {
+      "label": "--brand-primary",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L33",
+      "id": "resources_presets_midnight_urban_brand_primary",
+      "community": 9,
+      "norm_label": "--brand-primary"
+    },
+    {
+      "label": "--brand-primary-hover",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L34",
+      "id": "resources_presets_midnight_urban_brand_primary_hover",
+      "community": 9,
+      "norm_label": "--brand-primary-hover"
+    },
+    {
+      "label": "--brand-primary-light",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L35",
+      "id": "resources_presets_midnight_urban_brand_primary_light",
+      "community": 9,
+      "norm_label": "--brand-primary-light"
+    },
+    {
+      "label": "--brand-accent",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L36",
+      "id": "resources_presets_midnight_urban_brand_accent",
+      "community": 9,
+      "norm_label": "--brand-accent"
+    },
+    {
+      "label": "--brand-bg",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L37",
+      "id": "resources_presets_midnight_urban_brand_bg",
+      "community": 9,
+      "norm_label": "--brand-bg"
+    },
+    {
+      "label": "--brand-surface",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L38",
+      "id": "resources_presets_midnight_urban_brand_surface",
+      "community": 9,
+      "norm_label": "--brand-surface"
+    },
+    {
+      "label": "--brand-text",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L39",
+      "id": "resources_presets_midnight_urban_brand_text",
+      "community": 9,
+      "norm_label": "--brand-text"
+    },
+    {
+      "label": "--brand-text-muted",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L40",
+      "id": "resources_presets_midnight_urban_brand_text_muted",
+      "community": 9,
+      "norm_label": "--brand-text-muted"
+    },
+    {
+      "label": "--brand-border",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L41",
+      "id": "resources_presets_midnight_urban_brand_border",
+      "community": 9,
+      "norm_label": "--brand-border"
+    },
+    {
+      "label": "--brand-font-heading",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L42",
+      "id": "resources_presets_midnight_urban_brand_font_heading",
+      "community": 9,
+      "norm_label": "--brand-font-heading"
+    },
+    {
+      "label": "--brand-font-body",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L43",
+      "id": "resources_presets_midnight_urban_brand_font_body",
+      "community": 9,
+      "norm_label": "--brand-font-body"
+    },
+    {
+      "label": "--brand-radius",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L44",
+      "id": "resources_presets_midnight_urban_brand_radius",
+      "community": 9,
+      "norm_label": "--brand-radius"
+    },
+    {
+      "label": "--brand-radius-btn",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L45",
+      "id": "resources_presets_midnight_urban_brand_radius_btn",
+      "community": 9,
+      "norm_label": "--brand-radius-btn"
+    },
+    {
+      "label": "Sage Garden",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L47",
+      "id": "resources_presets_sage_garden",
+      "community": 11,
+      "norm_label": "sage garden"
+    },
+    {
+      "label": "--brand-primary",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L48",
+      "id": "resources_presets_sage_garden_brand_primary",
+      "community": 11,
+      "norm_label": "--brand-primary"
+    },
+    {
+      "label": "--brand-primary-hover",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L49",
+      "id": "resources_presets_sage_garden_brand_primary_hover",
+      "community": 11,
+      "norm_label": "--brand-primary-hover"
+    },
+    {
+      "label": "--brand-primary-light",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L50",
+      "id": "resources_presets_sage_garden_brand_primary_light",
+      "community": 11,
+      "norm_label": "--brand-primary-light"
+    },
+    {
+      "label": "--brand-accent",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L51",
+      "id": "resources_presets_sage_garden_brand_accent",
+      "community": 11,
+      "norm_label": "--brand-accent"
+    },
+    {
+      "label": "--brand-bg",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L52",
+      "id": "resources_presets_sage_garden_brand_bg",
+      "community": 11,
+      "norm_label": "--brand-bg"
+    },
+    {
+      "label": "--brand-surface",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L53",
+      "id": "resources_presets_sage_garden_brand_surface",
+      "community": 11,
+      "norm_label": "--brand-surface"
+    },
+    {
+      "label": "--brand-text",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L54",
+      "id": "resources_presets_sage_garden_brand_text",
+      "community": 11,
+      "norm_label": "--brand-text"
+    },
+    {
+      "label": "--brand-text-muted",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L55",
+      "id": "resources_presets_sage_garden_brand_text_muted",
+      "community": 11,
+      "norm_label": "--brand-text-muted"
+    },
+    {
+      "label": "--brand-border",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L56",
+      "id": "resources_presets_sage_garden_brand_border",
+      "community": 11,
+      "norm_label": "--brand-border"
+    },
+    {
+      "label": "--brand-font-heading",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L57",
+      "id": "resources_presets_sage_garden_brand_font_heading",
+      "community": 11,
+      "norm_label": "--brand-font-heading"
+    },
+    {
+      "label": "--brand-font-body",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L58",
+      "id": "resources_presets_sage_garden_brand_font_body",
+      "community": 11,
+      "norm_label": "--brand-font-body"
+    },
+    {
+      "label": "--brand-radius",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L59",
+      "id": "resources_presets_sage_garden_brand_radius",
+      "community": 11,
+      "norm_label": "--brand-radius"
+    },
+    {
+      "label": "--brand-radius-btn",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L60",
+      "id": "resources_presets_sage_garden_brand_radius_btn",
+      "community": 11,
+      "norm_label": "--brand-radius-btn"
+    },
+    {
+      "label": "Royal Gold",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L62",
+      "id": "resources_presets_royal_gold",
+      "community": 5,
+      "norm_label": "royal gold"
+    },
+    {
+      "label": "--brand-primary",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L63",
+      "id": "resources_presets_royal_gold_brand_primary",
+      "community": 5,
+      "norm_label": "--brand-primary"
+    },
+    {
+      "label": "--brand-primary-hover",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L64",
+      "id": "resources_presets_royal_gold_brand_primary_hover",
+      "community": 5,
+      "norm_label": "--brand-primary-hover"
+    },
+    {
+      "label": "--brand-primary-light",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L65",
+      "id": "resources_presets_royal_gold_brand_primary_light",
+      "community": 5,
+      "norm_label": "--brand-primary-light"
+    },
+    {
+      "label": "--brand-accent",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L66",
+      "id": "resources_presets_royal_gold_brand_accent",
+      "community": 5,
+      "norm_label": "--brand-accent"
+    },
+    {
+      "label": "--brand-bg",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L67",
+      "id": "resources_presets_royal_gold_brand_bg",
+      "community": 5,
+      "norm_label": "--brand-bg"
+    },
+    {
+      "label": "--brand-surface",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L68",
+      "id": "resources_presets_royal_gold_brand_surface",
+      "community": 5,
+      "norm_label": "--brand-surface"
+    },
+    {
+      "label": "--brand-text",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L69",
+      "id": "resources_presets_royal_gold_brand_text",
+      "community": 5,
+      "norm_label": "--brand-text"
+    },
+    {
+      "label": "--brand-text-muted",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L70",
+      "id": "resources_presets_royal_gold_brand_text_muted",
+      "community": 5,
+      "norm_label": "--brand-text-muted"
+    },
+    {
+      "label": "--brand-border",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L71",
+      "id": "resources_presets_royal_gold_brand_border",
+      "community": 5,
+      "norm_label": "--brand-border"
+    },
+    {
+      "label": "--brand-font-heading",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L72",
+      "id": "resources_presets_royal_gold_brand_font_heading",
+      "community": 5,
+      "norm_label": "--brand-font-heading"
+    },
+    {
+      "label": "--brand-font-body",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L73",
+      "id": "resources_presets_royal_gold_brand_font_body",
+      "community": 5,
+      "norm_label": "--brand-font-body"
+    },
+    {
+      "label": "--brand-radius",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L74",
+      "id": "resources_presets_royal_gold_brand_radius",
+      "community": 5,
+      "norm_label": "--brand-radius"
+    },
+    {
+      "label": "--brand-radius-btn",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L75",
+      "id": "resources_presets_royal_gold_brand_radius_btn",
+      "community": 5,
+      "norm_label": "--brand-radius-btn"
+    },
+    {
+      "label": "Coral Breeze",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L77",
+      "id": "resources_presets_coral_breeze",
+      "community": 7,
+      "norm_label": "coral breeze"
+    },
+    {
+      "label": "--brand-primary",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L78",
+      "id": "resources_presets_coral_breeze_brand_primary",
+      "community": 7,
+      "norm_label": "--brand-primary"
+    },
+    {
+      "label": "--brand-primary-hover",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L79",
+      "id": "resources_presets_coral_breeze_brand_primary_hover",
+      "community": 7,
+      "norm_label": "--brand-primary-hover"
+    },
+    {
+      "label": "--brand-primary-light",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L80",
+      "id": "resources_presets_coral_breeze_brand_primary_light",
+      "community": 7,
+      "norm_label": "--brand-primary-light"
+    },
+    {
+      "label": "--brand-accent",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L81",
+      "id": "resources_presets_coral_breeze_brand_accent",
+      "community": 7,
+      "norm_label": "--brand-accent"
+    },
+    {
+      "label": "--brand-bg",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L82",
+      "id": "resources_presets_coral_breeze_brand_bg",
+      "community": 7,
+      "norm_label": "--brand-bg"
+    },
+    {
+      "label": "--brand-surface",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L83",
+      "id": "resources_presets_coral_breeze_brand_surface",
+      "community": 7,
+      "norm_label": "--brand-surface"
+    },
+    {
+      "label": "--brand-text",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L84",
+      "id": "resources_presets_coral_breeze_brand_text",
+      "community": 7,
+      "norm_label": "--brand-text"
+    },
+    {
+      "label": "--brand-text-muted",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L85",
+      "id": "resources_presets_coral_breeze_brand_text_muted",
+      "community": 7,
+      "norm_label": "--brand-text-muted"
+    },
+    {
+      "label": "--brand-border",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L86",
+      "id": "resources_presets_coral_breeze_brand_border",
+      "community": 7,
+      "norm_label": "--brand-border"
+    },
+    {
+      "label": "--brand-font-heading",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L87",
+      "id": "resources_presets_coral_breeze_brand_font_heading",
+      "community": 7,
+      "norm_label": "--brand-font-heading"
+    },
+    {
+      "label": "--brand-font-body",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L88",
+      "id": "resources_presets_coral_breeze_brand_font_body",
+      "community": 7,
+      "norm_label": "--brand-font-body"
+    },
+    {
+      "label": "--brand-radius",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L89",
+      "id": "resources_presets_coral_breeze_brand_radius",
+      "community": 7,
+      "norm_label": "--brand-radius"
+    },
+    {
+      "label": "--brand-radius-btn",
+      "file_type": "code",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L90",
+      "id": "resources_presets_coral_breeze_brand_radius_btn",
+      "community": 7,
+      "norm_label": "--brand-radius-btn"
+    },
+    {
+      "label": "settings.local.json",
+      "file_type": "code",
+      "source_file": ".claude/settings.local.json",
+      "source_location": "L1",
+      "id": "claude_settings_local_json",
+      "community": 1,
+      "norm_label": "settings.local.json"
+    },
+    {
+      "label": "permissions",
+      "file_type": "code",
+      "source_file": ".claude/settings.local.json",
+      "source_location": "L2",
+      "id": "claude_settings_local_permissions",
+      "community": 1,
+      "norm_label": "permissions"
+    },
+    {
+      "label": "allow",
+      "file_type": "code",
+      "source_file": ".claude/settings.local.json",
+      "source_location": "L3",
+      "id": "claude_settings_local_permissions_allow",
+      "community": 1,
+      "norm_label": "allow"
+    },
+    {
+      "label": "AGENTS.md",
+      "file_type": "document",
+      "source_file": "AGENTS.md",
+      "source_location": "L1",
+      "id": "agents_md",
+      "community": 20,
+      "norm_label": "agents.md"
+    },
+    {
+      "label": "DeliveryOS \u2014 Agent Context",
+      "file_type": "document",
+      "source_file": "AGENTS.md",
+      "source_location": "L1",
+      "id": "delivery_agents_deliveryos_agent_context",
+      "community": 20,
+      "norm_label": "deliveryos \u2014 agent context"
+    },
+    {
+      "label": "What this project is",
+      "file_type": "document",
+      "source_file": "AGENTS.md",
+      "source_location": "L3",
+      "id": "delivery_agents_what_this_project_is",
+      "community": 20,
+      "norm_label": "what this project is"
+    },
+    {
+      "label": "What we are building",
+      "file_type": "document",
+      "source_file": "AGENTS.md",
+      "source_location": "L8",
+      "id": "delivery_agents_what_we_are_building",
+      "community": 20,
+      "norm_label": "what we are building"
+    },
+    {
+      "label": "Non-negotiable rules",
+      "file_type": "document",
+      "source_file": "AGENTS.md",
+      "source_location": "L12",
+      "id": "delivery_agents_non_negotiable_rules",
+      "community": 20,
+      "norm_label": "non-negotiable rules"
+    },
+    {
+      "label": "Active skills",
+      "file_type": "document",
+      "source_file": "AGENTS.md",
+      "source_location": "L19",
+      "id": "delivery_agents_active_skills",
+      "community": 20,
+      "norm_label": "active skills"
+    },
+    {
+      "label": "Reference documents",
+      "file_type": "document",
+      "source_file": "AGENTS.md",
+      "source_location": "L24",
+      "id": "delivery_agents_reference_documents",
+      "community": 20,
+      "norm_label": "reference documents"
+    },
+    {
+      "label": "design.md",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L1",
+      "id": "design_md",
+      "community": 6,
+      "norm_label": "design.md"
+    },
+    {
+      "label": "DeliveryOS \u2014 Design System",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L1",
+      "id": "delivery_design_deliveryos_design_system",
+      "community": 6,
+      "norm_label": "deliveryos \u2014 design system"
+    },
+    {
+      "label": "Identity",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L3",
+      "id": "delivery_design_identity",
+      "community": 6,
+      "norm_label": "identity"
+    },
+    {
+      "label": "Critical Rule #1 \u2014 Zero hardcoded colors",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L9",
+      "id": "delivery_design_critical_rule_1_zero_hardcoded_colors",
+      "community": 6,
+      "norm_label": "critical rule #1 \u2014 zero hardcoded colors"
+    },
+    {
+      "label": "CSS Variables (Crimson Classic preset \u2014 default)",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L13",
+      "id": "delivery_design_css_variables_crimson_classic_preset_default",
+      "community": 6,
+      "norm_label": "css variables (crimson classic preset \u2014 default)"
+    },
+    {
+      "label": "code:css (:root {)",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L14",
+      "id": "delivery_design_codeblock_1",
+      "community": 6,
+      "norm_label": "code:css (:root {)"
+    },
+    {
+      "label": "Typography",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L37",
+      "id": "delivery_design_typography",
+      "community": 6,
+      "norm_label": "typography"
+    },
+    {
+      "label": "Spacing \u2014 4px base unit",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L42",
+      "id": "delivery_design_spacing_4px_base_unit",
+      "community": 6,
+      "norm_label": "spacing \u2014 4px base unit"
+    },
+    {
+      "label": "Border Radius",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L45",
+      "id": "delivery_design_border_radius",
+      "community": 6,
+      "norm_label": "border radius"
+    },
+    {
+      "label": "Tap targets (courier UI)",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L51",
+      "id": "delivery_design_tap_targets_courier_ui",
+      "community": 6,
+      "norm_label": "tap targets (courier ui)"
+    },
+    {
+      "label": "Component States (always implement all 4)",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L55",
+      "id": "delivery_design_component_states_always_implement_all_4",
+      "community": 6,
+      "norm_label": "component states (always implement all 4)"
+    },
+    {
+      "label": "Order Status Colors (semantic, not brand)",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L60",
+      "id": "delivery_design_order_status_colors_semantic_not_brand",
+      "community": 6,
+      "norm_label": "order status colors (semantic, not brand)"
+    },
+    {
+      "label": "Storage rule",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L72",
+      "id": "delivery_design_storage_rule",
+      "community": 6,
+      "norm_label": "storage rule"
+    },
+    {
+      "label": "Embed mode constraints",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L76",
+      "id": "delivery_design_embed_mode_constraints",
+      "community": 6,
+      "norm_label": "embed mode constraints"
+    },
+    {
+      "label": "Visual references by screen",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L80",
+      "id": "delivery_design_visual_references_by_screen",
+      "community": 6,
+      "norm_label": "visual references by screen"
+    },
+    {
+      "label": "Client Menu (/s/:slug)",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L82",
+      "id": "delivery_design_client_menu_s_slug",
+      "community": 6,
+      "norm_label": "client menu (/s/:slug)"
+    },
+    {
+      "label": "Admin Dashboard (/admin/)",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L87",
+      "id": "delivery_design_admin_dashboard_admin",
+      "community": 6,
+      "norm_label": "admin dashboard (/admin/)"
+    },
+    {
+      "label": "Courier Screen (/courier/delivery/:id)",
+      "file_type": "document",
+      "source_file": "design.md",
+      "source_location": "L92",
+      "id": "delivery_design_courier_screen_courier_delivery_id",
+      "community": 6,
+      "norm_label": "courier screen (/courier/delivery/:id)"
+    },
+    {
+      "label": "design-system.md",
+      "file_type": "document",
+      "source_file": ".agents/rules/design-system.md",
+      "source_location": "L1",
+      "id": "agents_rules_design_system_md",
+      "community": 14,
+      "norm_label": "design-system.md"
+    },
+    {
+      "label": "DeliveryOS \u2014 Always-on design rules",
+      "file_type": "document",
+      "source_file": ".agents/rules/design-system.md",
+      "source_location": "L2",
+      "id": "rules_design_system_deliveryos_always_on_design_rules",
+      "community": 14,
+      "norm_label": "deliveryos \u2014 always-on design rules"
+    },
+    {
+      "label": "CRITICAL: Zero hardcoded colors",
+      "file_type": "document",
+      "source_file": ".agents/rules/design-system.md",
+      "source_location": "L4",
+      "id": "rules_design_system_critical_zero_hardcoded_colors",
+      "community": 14,
+      "norm_label": "critical: zero hardcoded colors"
+    },
+    {
+      "label": "CRITICAL: No cookies",
+      "file_type": "document",
+      "source_file": ".agents/rules/design-system.md",
+      "source_location": "L9",
+      "id": "rules_design_system_critical_no_cookies",
+      "community": 14,
+      "norm_label": "critical: no cookies"
+    },
+    {
+      "label": "Typography rule",
+      "file_type": "document",
+      "source_file": ".agents/rules/design-system.md",
+      "source_location": "L12",
+      "id": "rules_design_system_typography_rule",
+      "community": 14,
+      "norm_label": "typography rule"
+    },
+    {
+      "label": "Tap target rule",
+      "file_type": "document",
+      "source_file": ".agents/rules/design-system.md",
+      "source_location": "L17",
+      "id": "rules_design_system_tap_target_rule",
+      "community": 14,
+      "norm_label": "tap target rule"
+    },
+    {
+      "label": "Embed mode rule",
+      "file_type": "document",
+      "source_file": ".agents/rules/design-system.md",
+      "source_location": "L21",
+      "id": "rules_design_system_embed_mode_rule",
+      "community": 14,
+      "norm_label": "embed mode rule"
+    },
+    {
+      "label": "graphify.md",
+      "file_type": "document",
+      "source_file": ".agents/rules/graphify.md",
+      "source_location": "L1",
+      "id": "agents_rules_graphify_md",
+      "community": 3,
+      "norm_label": "graphify.md"
+    },
+    {
+      "label": "graphify",
+      "file_type": "document",
+      "source_file": ".agents/rules/graphify.md",
+      "source_location": "L6",
+      "id": "rules_graphify_graphify",
+      "community": 3,
+      "norm_label": "graphify"
+    },
+    {
+      "label": "SKILL.md",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L1",
+      "id": "agents_skills_component_builder_skill_md",
+      "community": 12,
+      "norm_label": "skill.md"
+    },
+    {
+      "label": "DeliveryOS Component Builder",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L11",
+      "id": "component_builder_skill_deliveryos_component_builder",
+      "community": 12,
+      "norm_label": "deliveryos component builder"
+    },
+    {
+      "label": "Goal",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L13",
+      "id": "component_builder_skill_goal",
+      "community": 12,
+      "norm_label": "goal"
+    },
+    {
+      "label": "Component anatomy rules",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L17",
+      "id": "component_builder_skill_component_anatomy_rules",
+      "community": 12,
+      "norm_label": "component anatomy rules"
+    },
+    {
+      "label": "ProductCard spec",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L25",
+      "id": "component_builder_skill_productcard_spec",
+      "community": 12,
+      "norm_label": "productcard spec"
+    },
+    {
+      "label": "code:html (<article class=\"product-card\" data-available=\"true\">)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L26",
+      "id": "component_builder_skill_codeblock_1",
+      "community": 12,
+      "norm_label": "code:html (<article class=\"product-card\" data-available=\"true\">)"
+    },
+    {
+      "label": "OrderCard spec",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L44",
+      "id": "component_builder_skill_ordercard_spec",
+      "community": 12,
+      "norm_label": "ordercard spec"
+    },
+    {
+      "label": "Button variants",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L49",
+      "id": "component_builder_skill_button_variants",
+      "community": 12,
+      "norm_label": "button variants"
+    },
+    {
+      "label": "StatusBadge spec",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L56",
+      "id": "component_builder_skill_statusbadge_spec",
+      "community": 12,
+      "norm_label": "statusbadge spec"
+    },
+    {
+      "label": "Animation rules",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L60",
+      "id": "component_builder_skill_animation_rules",
+      "community": 12,
+      "norm_label": "animation rules"
+    },
+    {
+      "label": "Reference implementations",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L67",
+      "id": "component_builder_skill_reference_implementations",
+      "community": 12,
+      "norm_label": "reference implementations"
+    },
+    {
+      "label": "Constraints",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L70",
+      "id": "component_builder_skill_constraints",
+      "community": 12,
+      "norm_label": "constraints"
+    },
+    {
+      "label": "ux-rules-and-component-specs.md",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L1",
+      "id": "agents_skills_component_builder_references_ux_rules_and_component_specs_md",
+      "community": 16,
+      "norm_label": "ux-rules-and-component-specs.md"
+    },
+    {
+      "label": "DeliveryOS \u2014 UX Rules & Component Specs",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L1",
+      "id": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "community": 16,
+      "norm_label": "deliveryos \u2014 ux rules & component specs"
+    },
+    {
+      "label": "Global UX rules",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L6",
+      "id": "references_ux_rules_and_component_specs_global_ux_rules",
+      "community": 16,
+      "norm_label": "global ux rules"
+    },
+    {
+      "label": "Interaction basics",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L8",
+      "id": "references_ux_rules_and_component_specs_interaction_basics",
+      "community": 16,
+      "norm_label": "interaction basics"
+    },
+    {
+      "label": "Tap targets",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L16",
+      "id": "references_ux_rules_and_component_specs_tap_targets",
+      "community": 16,
+      "norm_label": "tap targets"
+    },
+    {
+      "label": "Transitions",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L21",
+      "id": "references_ux_rules_and_component_specs_transitions",
+      "community": 16,
+      "norm_label": "transitions"
+    },
+    {
+      "label": "Button variants",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L29",
+      "id": "references_ux_rules_and_component_specs_button_variants",
+      "community": 16,
+      "norm_label": "button variants"
+    },
+    {
+      "label": "Input variants",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L47",
+      "id": "references_ux_rules_and_component_specs_input_variants",
+      "community": 16,
+      "norm_label": "input variants"
+    },
+    {
+      "label": "Toggle component",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L61",
+      "id": "references_ux_rules_and_component_specs_toggle_component",
+      "community": 16,
+      "norm_label": "toggle component"
+    },
+    {
+      "label": "code:css (/* ON state */)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L63",
+      "id": "references_ux_rules_and_component_specs_codeblock_1",
+      "community": 16,
+      "norm_label": "code:css (/* on state */)"
+    },
+    {
+      "label": "StatusBadge \u2014 10 variants",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L76",
+      "id": "references_ux_rules_and_component_specs_statusbadge_10_variants",
+      "community": 16,
+      "norm_label": "statusbadge \u2014 10 variants"
+    },
+    {
+      "label": "code:css (/* Add to tokens.css */)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L91",
+      "id": "references_ux_rules_and_component_specs_codeblock_2",
+      "community": 16,
+      "norm_label": "code:css (/* add to tokens.css */)"
+    },
+    {
+      "label": "ProductCard spec",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L115",
+      "id": "references_ux_rules_and_component_specs_productcard_spec",
+      "community": 16,
+      "norm_label": "productcard spec"
+    },
+    {
+      "label": "code:block3 (\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L117",
+      "id": "references_ux_rules_and_component_specs_codeblock_3",
+      "community": 16,
+      "norm_label": "code:block3 (\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510)"
+    },
+    {
+      "label": "code:css (@keyframes shimmer {)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L136",
+      "id": "references_ux_rules_and_component_specs_codeblock_4",
+      "community": 16,
+      "norm_label": "code:css (@keyframes shimmer {)"
+    },
+    {
+      "label": "OrderCard spec",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L150",
+      "id": "references_ux_rules_and_component_specs_ordercard_spec",
+      "community": 16,
+      "norm_label": "ordercard spec"
+    },
+    {
+      "label": "code:block5 (\u250c 3px status-color border)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L154",
+      "id": "references_ux_rules_and_component_specs_codeblock_5",
+      "community": 16,
+      "norm_label": "code:block5 (\u250c 3px status-color border)"
+    },
+    {
+      "label": "code:css (@media (prefers-reduced-motion: no-preference) {)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L172",
+      "id": "references_ux_rules_and_component_specs_codeblock_6",
+      "community": 16,
+      "norm_label": "code:css (@media (prefers-reduced-motion: no-preference) {)"
+    },
+    {
+      "label": "CartFAB (client menu, full mode only)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L186",
+      "id": "references_ux_rules_and_component_specs_cartfab_client_menu_full_mode_only",
+      "community": 16,
+      "norm_label": "cartfab (client menu, full mode only)"
+    },
+    {
+      "label": "code:block7 (Fixed bottom: 24px, right: 24px)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L188",
+      "id": "references_ux_rules_and_component_specs_codeblock_7",
+      "community": 16,
+      "norm_label": "code:block7 (fixed bottom: 24px, right: 24px)"
+    },
+    {
+      "label": "code:css (@media (prefers-reduced-motion: no-preference) {)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L199",
+      "id": "references_ux_rules_and_component_specs_codeblock_8",
+      "community": 16,
+      "norm_label": "code:css (@media (prefers-reduced-motion: no-preference) {)"
+    },
+    {
+      "label": "CategoryNav (client menu)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L211",
+      "id": "references_ux_rules_and_component_specs_categorynav_client_menu",
+      "community": 16,
+      "norm_label": "categorynav (client menu)"
+    },
+    {
+      "label": "code:css (.category-nav {)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L213",
+      "id": "references_ux_rules_and_component_specs_codeblock_9",
+      "community": 16,
+      "norm_label": "code:css (.category-nav {)"
+    },
+    {
+      "label": "Admin sidebar",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L246",
+      "id": "references_ux_rules_and_component_specs_admin_sidebar",
+      "community": 16,
+      "norm_label": "admin sidebar"
+    },
+    {
+      "label": "code:css (.sidebar {)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L250",
+      "id": "references_ux_rules_and_component_specs_codeblock_10",
+      "community": 16,
+      "norm_label": "code:css (.sidebar {)"
+    },
+    {
+      "label": "QuickStatCard (admin dashboard)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L282",
+      "id": "references_ux_rules_and_component_specs_quickstatcard_admin_dashboard",
+      "community": 16,
+      "norm_label": "quickstatcard (admin dashboard)"
+    },
+    {
+      "label": "code:css (.stat-card {)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L284",
+      "id": "references_ux_rules_and_component_specs_codeblock_11",
+      "community": 16,
+      "norm_label": "code:css (.stat-card {)"
+    },
+    {
+      "label": "Allergen pills",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L298",
+      "id": "references_ux_rules_and_component_specs_allergen_pills",
+      "community": 16,
+      "norm_label": "allergen pills"
+    },
+    {
+      "label": "code:html (<div class=\"allergens\">)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L300",
+      "id": "references_ux_rules_and_component_specs_codeblock_12",
+      "community": 16,
+      "norm_label": "code:html (<div class=\"allergens\">)"
+    },
+    {
+      "label": "code:css (.allergen {)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L308",
+      "id": "references_ux_rules_and_component_specs_codeblock_13",
+      "community": 16,
+      "norm_label": "code:css (.allergen {)"
+    },
+    {
+      "label": "Theme switcher (required on all screens)",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L323",
+      "id": "references_ux_rules_and_component_specs_theme_switcher_required_on_all_screens",
+      "community": 16,
+      "norm_label": "theme switcher (required on all screens)"
+    },
+    {
+      "label": "code:html (<button id=\"theme-btn\" onclick=\"cycleTheme()\")",
+      "file_type": "document",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L325",
+      "id": "references_ux_rules_and_component_specs_codeblock_14",
+      "community": 16,
+      "norm_label": "code:html (<button id=\"theme-btn\" onclick=\"cycletheme()\")"
+    },
+    {
+      "label": "SKILL.md",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L1",
+      "id": "agents_skills_deliveryos_theme_skill_md",
+      "community": 13,
+      "norm_label": "skill.md"
+    },
+    {
+      "label": "DeliveryOS Theme System",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L10",
+      "id": "deliveryos_theme_skill_deliveryos_theme_system",
+      "community": 13,
+      "norm_label": "deliveryos theme system"
+    },
+    {
+      "label": "Goal",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L12",
+      "id": "deliveryos_theme_skill_goal",
+      "community": 13,
+      "norm_label": "goal"
+    },
+    {
+      "label": "Always read resources/tokens.css and resources/presets.json before writing any CSS.",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L17",
+      "id": "deliveryos_theme_skill_always_read_resources_tokens_css_and_resources_presets_json_before_writing_any_css",
+      "community": 13,
+      "norm_label": "always read resources/tokens.css and resources/presets.json before writing any css."
+    },
+    {
+      "label": "How themes work",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L19",
+      "id": "deliveryos_theme_skill_how_themes_work",
+      "community": 13,
+      "norm_label": "how themes work"
+    },
+    {
+      "label": "Theme switcher implementation",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L25",
+      "id": "deliveryos_theme_skill_theme_switcher_implementation",
+      "community": 13,
+      "norm_label": "theme switcher implementation"
+    },
+    {
+      "label": "code:html (<button id=\"theme-btn\" onclick=\"cycleTheme()\")",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L26",
+      "id": "deliveryos_theme_skill_codeblock_1",
+      "community": 13,
+      "norm_label": "code:html (<button id=\"theme-btn\" onclick=\"cycletheme()\")"
+    },
+    {
+      "label": "Constraints",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L47",
+      "id": "deliveryos_theme_skill_constraints",
+      "community": 13,
+      "norm_label": "constraints"
+    },
+    {
+      "label": "technical-reference.md",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L1",
+      "id": "agents_skills_deliveryos_theme_references_technical_reference_md",
+      "community": 17,
+      "norm_label": "technical-reference.md"
+    },
+    {
+      "label": "DeliveryOS \u2014 Technical & Architecture Reference",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L1",
+      "id": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "community": 17,
+      "norm_label": "deliveryos \u2014 technical & architecture reference"
+    },
+    {
+      "label": "1. Business economics",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L6",
+      "id": "references_technical_reference_1_business_economics",
+      "community": 17,
+      "norm_label": "1. business economics"
+    },
+    {
+      "label": "2. White-label architecture decisions",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L18",
+      "id": "references_technical_reference_2_white_label_architecture_decisions",
+      "community": 17,
+      "norm_label": "2. white-label architecture decisions"
+    },
+    {
+      "label": "3. CSS Variables \u2014 complete spec",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L33",
+      "id": "references_technical_reference_3_css_variables_complete_spec",
+      "community": 17,
+      "norm_label": "3. css variables \u2014 complete spec"
+    },
+    {
+      "label": "code:css (:root {)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L35",
+      "id": "references_technical_reference_codeblock_1",
+      "community": 17,
+      "norm_label": "code:css (:root {)"
+    },
+    {
+      "label": "4. How theme technically works",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L70",
+      "id": "references_technical_reference_4_how_theme_technically_works",
+      "community": 17,
+      "norm_label": "4. how theme technically works"
+    },
+    {
+      "label": "5. Database schema",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L82",
+      "id": "references_technical_reference_5_database_schema",
+      "community": 19,
+      "norm_label": "5. database schema"
+    },
+    {
+      "label": "Core tables",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L84",
+      "id": "references_technical_reference_core_tables",
+      "community": 19,
+      "norm_label": "core tables"
+    },
+    {
+      "label": "code:sql (id, location_id, preset_id, logo_url, cover_url, favicon_url)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L91",
+      "id": "references_technical_reference_codeblock_2",
+      "community": 19,
+      "norm_label": "code:sql (id, location_id, preset_id, logo_url, cover_url, favicon_url)"
+    },
+    {
+      "label": "White-label tables",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L121",
+      "id": "references_technical_reference_white_label_tables",
+      "community": 19,
+      "norm_label": "white-label tables"
+    },
+    {
+      "label": "code:sql (id, location_id, url, events text[], secret (HMAC), is_activ)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L124",
+      "id": "references_technical_reference_codeblock_3",
+      "community": 19,
+      "norm_label": "code:sql (id, location_id, url, events text[], secret (hmac), is_activ)"
+    },
+    {
+      "label": "code:sql (id, location_id, key_hash (SHA256, raw key never stored), ke)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L129",
+      "id": "references_technical_reference_codeblock_4",
+      "community": 19,
+      "norm_label": "code:sql (id, location_id, key_hash (sha256, raw key never stored), ke)"
+    },
+    {
+      "label": "code:sql (id, location_id, domain, cname_target, verified_at, ssl_stat)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L135",
+      "id": "references_technical_reference_codeblock_5",
+      "community": 19,
+      "norm_label": "code:sql (id, location_id, domain, cname_target, verified_at, ssl_stat)"
+    },
+    {
+      "label": "TimescaleDB hypertables",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L139",
+      "id": "references_technical_reference_timescaledb_hypertables",
+      "community": 19,
+      "norm_label": "timescaledb hypertables"
+    },
+    {
+      "label": "6. Full tech stack",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L151",
+      "id": "references_technical_reference_6_full_tech_stack",
+      "community": 17,
+      "norm_label": "6. full tech stack"
+    },
+    {
+      "label": "7. Architecture \u2014 one Fastify server",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L185",
+      "id": "references_technical_reference_7_architecture_one_fastify_server",
+      "community": 17,
+      "norm_label": "7. architecture \u2014 one fastify server"
+    },
+    {
+      "label": "code:block6 (/api/*              \u2192 Fastify routes (WebSocket, BullMQ, eve)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L187",
+      "id": "references_technical_reference_codeblock_6",
+      "community": 17,
+      "norm_label": "code:block6 (/api/*              \u2192 fastify routes (websocket, bullmq, eve)"
+    },
+    {
+      "label": "8. Security rules",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L200",
+      "id": "references_technical_reference_8_security_rules",
+      "community": 17,
+      "norm_label": "8. security rules"
+    },
+    {
+      "label": "9. Project structure (monorepo)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L220",
+      "id": "references_technical_reference_9_project_structure_monorepo",
+      "community": 17,
+      "norm_label": "9. project structure (monorepo)"
+    },
+    {
+      "label": "code:block7 (deliveryos/)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L222",
+      "id": "references_technical_reference_codeblock_7",
+      "community": 17,
+      "norm_label": "code:block7 (deliveryos/)"
+    },
+    {
+      "label": "10. GPS and geo-streaming (courier)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L258",
+      "id": "references_technical_reference_10_gps_and_geo_streaming_courier",
+      "community": 17,
+      "norm_label": "10. gps and geo-streaming (courier)"
+    },
+    {
+      "label": "code:block8 (Courier PWA \u2192 watchPosition every 5s \u2192 WS \u2192 Redis SET courie)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L260",
+      "id": "references_technical_reference_codeblock_8",
+      "community": 17,
+      "norm_label": "code:block8 (courier pwa \u2192 watchposition every 5s \u2192 ws \u2192 redis set courie)"
+    },
+    {
+      "label": "11. Circuit breaker matrix",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L274",
+      "id": "references_technical_reference_11_circuit_breaker_matrix",
+      "community": 17,
+      "norm_label": "11. circuit breaker matrix"
+    },
+    {
+      "label": "12. Idempotency and storage",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L290",
+      "id": "references_technical_reference_12_idempotency_and_storage",
+      "community": 17,
+      "norm_label": "12. idempotency and storage"
+    },
+    {
+      "label": "code:block9 (Idempotency: every POST \u2192 X-Idempotency-Key header (UUID on )",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L292",
+      "id": "references_technical_reference_codeblock_9",
+      "community": 17,
+      "norm_label": "code:block9 (idempotency: every post \u2192 x-idempotency-key header (uuid on )"
+    },
+    {
+      "label": "13. Embed widget spec",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L306",
+      "id": "references_technical_reference_13_embed_widget_spec",
+      "community": 17,
+      "norm_label": "13. embed widget spec"
+    },
+    {
+      "label": "code:html (<!-- Owner inserts on their website: -->)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L308",
+      "id": "references_technical_reference_codeblock_10",
+      "community": 17,
+      "norm_label": "code:html (<!-- owner inserts on their website: -->)"
+    },
+    {
+      "label": "14. Google Sheets integration (pull-based, no OAuth)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L335",
+      "id": "references_technical_reference_14_google_sheets_integration_pull_based_no_oauth",
+      "community": 17,
+      "norm_label": "14. google sheets integration (pull-based, no oauth)"
+    },
+    {
+      "label": "code:block11 (GET /api/v1/export/orders?key={api_key}&format=csv&from=2024)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L337",
+      "id": "references_technical_reference_codeblock_11",
+      "community": 17,
+      "norm_label": "code:block11 (get /api/v1/export/orders?key={api_key}&format=csv&from=2024)"
+    },
+    {
+      "label": "15. Branding settings page \u2014 three tabs",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L349",
+      "id": "references_technical_reference_15_branding_settings_page_three_tabs",
+      "community": 17,
+      "norm_label": "15. branding settings page \u2014 three tabs"
+    },
+    {
+      "label": "16. Promotions system \u2014 8 types",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L359",
+      "id": "references_technical_reference_16_promotions_system_8_types",
+      "community": 17,
+      "norm_label": "16. promotions system \u2014 8 types"
+    },
+    {
+      "label": "17. AI features (Claude API \u2014 Sonnet 4)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L370",
+      "id": "references_technical_reference_17_ai_features_claude_api_sonnet_4",
+      "community": 17,
+      "norm_label": "17. ai features (claude api \u2014 sonnet 4)"
+    },
+    {
+      "label": "18. Infrastructure costs (~$25\u201340/month)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L388",
+      "id": "references_technical_reference_18_infrastructure_costs_25_40_month",
+      "community": 17,
+      "norm_label": "18. infrastructure costs (~$25\u201340/month)"
+    },
+    {
+      "label": "19. Architecture Decision Records (key decisions)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L405",
+      "id": "references_technical_reference_19_architecture_decision_records_key_decisions",
+      "community": 17,
+      "norm_label": "19. architecture decision records (key decisions)"
+    },
+    {
+      "label": "20. Critical reminders (read before every session)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L425",
+      "id": "references_technical_reference_20_critical_reminders_read_before_every_session",
+      "community": 17,
+      "norm_label": "20. critical reminders (read before every session)"
+    },
+    {
+      "label": "code:block12 (\u2717 Supabase direct connection (5432) for migrations and analy)",
+      "file_type": "document",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L427",
+      "id": "references_technical_reference_codeblock_12",
+      "community": 17,
+      "norm_label": "code:block12 (\u2717 supabase direct connection (5432) for migrations and analy)"
+    },
+    {
+      "label": "SKILL.md",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/SKILL.md",
+      "source_location": "L1",
+      "id": "agents_skills_screen_builder_skill_md",
+      "community": 15,
+      "norm_label": "skill.md"
+    },
+    {
+      "label": "DeliveryOS Screen Builder",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/SKILL.md",
+      "source_location": "L11",
+      "id": "screen_builder_skill_deliveryos_screen_builder",
+      "community": 15,
+      "norm_label": "deliveryos screen builder"
+    },
+    {
+      "label": "Goal",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/SKILL.md",
+      "source_location": "L13",
+      "id": "screen_builder_skill_goal",
+      "community": 15,
+      "norm_label": "goal"
+    },
+    {
+      "label": "Required CDN links (include in every screen's <head>)",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/SKILL.md",
+      "source_location": "L17",
+      "id": "screen_builder_skill_required_cdn_links_include_in_every_screen_s_head",
+      "community": 15,
+      "norm_label": "required cdn links (include in every screen's <head>)"
+    },
+    {
+      "label": "code:html (<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">)",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/SKILL.md",
+      "source_location": "L18",
+      "id": "screen_builder_skill_codeblock_1",
+      "community": 15,
+      "norm_label": "code:html (<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">)"
+    },
+    {
+      "label": "File structure",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/SKILL.md",
+      "source_location": "L26",
+      "id": "screen_builder_skill_file_structure",
+      "community": 15,
+      "norm_label": "file structure"
+    },
+    {
+      "label": "product-context.md",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L1",
+      "id": "agents_skills_screen_builder_references_product_context_md",
+      "community": 18,
+      "norm_label": "product-context.md"
+    },
+    {
+      "label": "DeliveryOS \u2014 Product Context",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L1",
+      "id": "references_product_context_deliveryos_product_context",
+      "community": 18,
+      "norm_label": "deliveryos \u2014 product context"
+    },
+    {
+      "label": "1. What DeliveryOS is",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L6",
+      "id": "references_product_context_1_what_deliveryos_is",
+      "community": 18,
+      "norm_label": "1. what deliveryos is"
+    },
+    {
+      "label": "2. Three roles",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L16",
+      "id": "references_product_context_2_three_roles",
+      "community": 18,
+      "norm_label": "2. three roles"
+    },
+    {
+      "label": "3. Market \u2014 Albania as entry point",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L26",
+      "id": "references_product_context_3_market_albania_as_entry_point",
+      "community": 18,
+      "norm_label": "3. market \u2014 albania as entry point"
+    },
+    {
+      "label": "4. Pricing",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L41",
+      "id": "references_product_context_4_pricing",
+      "community": 18,
+      "norm_label": "4. pricing"
+    },
+    {
+      "label": "5. Product principles (immutable)",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L53",
+      "id": "references_product_context_5_product_principles_immutable",
+      "community": 18,
+      "norm_label": "5. product principles (immutable)"
+    },
+    {
+      "label": "6. Onboarding \u2014 8 steps, ~10-14 min total",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L66",
+      "id": "references_product_context_6_onboarding_8_steps_10_14_min_total",
+      "community": 18,
+      "norm_label": "6. onboarding \u2014 8 steps, ~10-14 min total"
+    },
+    {
+      "label": "7. Order types (MVP)",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L87",
+      "id": "references_product_context_7_order_types_mvp",
+      "community": 18,
+      "norm_label": "7. order types (mvp)"
+    },
+    {
+      "label": "8. Order state machine \u2014 10 statuses",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L95",
+      "id": "references_product_context_8_order_state_machine_10_statuses",
+      "community": 18,
+      "norm_label": "8. order state machine \u2014 10 statuses"
+    },
+    {
+      "label": "9. White-label system \u2014 two UI layers",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L121",
+      "id": "references_product_context_9_white_label_system_two_ui_layers",
+      "community": 18,
+      "norm_label": "9. white-label system \u2014 two ui layers"
+    },
+    {
+      "label": "CSS Variables \u2014 Rule #1 (NEVER violate)",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L128",
+      "id": "references_product_context_css_variables_rule_1_never_violate",
+      "community": 18,
+      "norm_label": "css variables \u2014 rule #1 (never violate)"
+    },
+    {
+      "label": "code:css (:root {)",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L130",
+      "id": "references_product_context_codeblock_1",
+      "community": 18,
+      "norm_label": "code:css (:root {)"
+    },
+    {
+      "label": "10. Theme presets (6 curated)",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L159",
+      "id": "references_product_context_10_theme_presets_6_curated",
+      "community": 18,
+      "norm_label": "10. theme presets (6 curated)"
+    },
+    {
+      "label": "11. White-label by plan",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L174",
+      "id": "references_product_context_11_white_label_by_plan",
+      "community": 18,
+      "norm_label": "11. white-label by plan"
+    },
+    {
+      "label": "12. Embed widget constraints",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L193",
+      "id": "references_product_context_12_embed_widget_constraints",
+      "community": 18,
+      "norm_label": "12. embed widget constraints"
+    },
+    {
+      "label": "13. Storage rules (NEVER use cookies)",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L206",
+      "id": "references_product_context_13_storage_rules_never_use_cookies",
+      "community": 18,
+      "norm_label": "13. storage rules (never use cookies)"
+    },
+    {
+      "label": "code:block2 (Cart state:          localStorage  (persists between session)",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L208",
+      "id": "references_product_context_codeblock_2",
+      "community": 18,
+      "norm_label": "code:block2 (cart state:          localstorage  (persists between session)"
+    },
+    {
+      "label": "14. UX rules by role",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L220",
+      "id": "references_product_context_14_ux_rules_by_role",
+      "community": 18,
+      "norm_label": "14. ux rules by role"
+    },
+    {
+      "label": "All screens",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L222",
+      "id": "references_product_context_all_screens",
+      "community": 18,
+      "norm_label": "all screens"
+    },
+    {
+      "label": "Admin \u2014 during peak hours",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L229",
+      "id": "references_product_context_admin_during_peak_hours",
+      "community": 18,
+      "norm_label": "admin \u2014 during peak hours"
+    },
+    {
+      "label": "Courier interface",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L236",
+      "id": "references_product_context_courier_interface",
+      "community": 18,
+      "norm_label": "courier interface"
+    },
+    {
+      "label": "Client page",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L245",
+      "id": "references_product_context_client_page",
+      "community": 18,
+      "norm_label": "client page"
+    },
+    {
+      "label": "15. Design references by role",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L253",
+      "id": "references_product_context_15_design_references_by_role",
+      "community": 18,
+      "norm_label": "15. design references by role"
+    },
+    {
+      "label": "16. WebSocket rooms",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L266",
+      "id": "references_product_context_16_websocket_rooms",
+      "community": 18,
+      "norm_label": "16. websocket rooms"
+    },
+    {
+      "label": "code:block3 (order:{id}      \u2192 client + owner + courier (order status upd)",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L268",
+      "id": "references_product_context_codeblock_3",
+      "community": 18,
+      "norm_label": "code:block3 (order:{id}      \u2192 client + owner + courier (order status upd)"
+    },
+    {
+      "label": "17. Technology stack (relevant for mockup)",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L279",
+      "id": "references_product_context_17_technology_stack_relevant_for_mockup",
+      "community": 18,
+      "norm_label": "17. technology stack (relevant for mockup)"
+    },
+    {
+      "label": "18. Priority build order",
+      "file_type": "document",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L298",
+      "id": "references_product_context_18_priority_build_order",
+      "community": 18,
+      "norm_label": "18. priority build order"
+    },
+    {
+      "label": "graphify.md",
+      "file_type": "document",
+      "source_file": ".agents/workflows/graphify.md",
+      "source_location": "L1",
+      "id": "agents_workflows_graphify_md",
+      "community": 4,
+      "norm_label": "graphify.md"
+    },
+    {
+      "label": "Workflow: graphify",
+      "file_type": "document",
+      "source_file": ".agents/workflows/graphify.md",
+      "source_location": "L6",
+      "id": "workflows_graphify_workflow_graphify",
+      "community": 4,
+      "norm_label": "workflow: graphify"
+    },
+    {
+      "label": "Claude Local Settings",
+      "file_type": "code",
+      "source_file": ".claude/settings.local.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 0,
+      "norm_label": "claude local settings",
+      "id": "claude_settings"
+    },
+    {
+      "label": "Figma Integration & Capture",
+      "file_type": "code",
+      "source_file": "index.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 0,
+      "norm_label": "figma integration & capture",
+      "id": "figma_integration"
+    },
+    {
+      "label": "Pizza Roma Menu UI",
+      "file_type": "document",
+      "source_file": "index.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 0,
+      "norm_label": "pizza roma menu ui",
+      "id": "pizza_roma_menu"
+    },
+    {
+      "label": "UI Design Tokens",
+      "file_type": "rationale",
+      "source_file": "index.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 0,
+      "norm_label": "ui design tokens",
+      "id": "design_tokens"
+    },
+    {
+      "label": "Graphify Rules",
+      "file_type": "document",
+      "source_file": ".agents/rules/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 2,
+      "norm_label": "graphify rules",
+      "id": "graphify_rules"
+    },
+    {
+      "label": "Graphify Workflow",
+      "file_type": "document",
+      "source_file": ".agents/workflows/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 2,
+      "norm_label": "graphify workflow",
+      "id": "graphify_workflow"
+    }
+  ],
+  "links": [
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L77",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "agents_skills_deliveryos_theme_resources_presets_json",
+      "target": "resources_presets_coral_breeze"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L2",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "agents_skills_deliveryos_theme_resources_presets_json",
+      "target": "resources_presets_crimson_classic"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L32",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "agents_skills_deliveryos_theme_resources_presets_json",
+      "target": "resources_presets_midnight_urban"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L17",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "agents_skills_deliveryos_theme_resources_presets_json",
+      "target": "resources_presets_ocean_fresh"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L62",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "agents_skills_deliveryos_theme_resources_presets_json",
+      "target": "resources_presets_royal_gold"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L47",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "agents_skills_deliveryos_theme_resources_presets_json",
+      "target": "resources_presets_sage_garden"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L6",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_crimson_classic",
+      "target": "resources_presets_crimson_classic_brand_accent"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L7",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_crimson_classic",
+      "target": "resources_presets_crimson_classic_brand_bg"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L11",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_crimson_classic",
+      "target": "resources_presets_crimson_classic_brand_border"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L13",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_crimson_classic",
+      "target": "resources_presets_crimson_classic_brand_font_body"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L12",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_crimson_classic",
+      "target": "resources_presets_crimson_classic_brand_font_heading"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L3",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_crimson_classic",
+      "target": "resources_presets_crimson_classic_brand_primary"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L4",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_crimson_classic",
+      "target": "resources_presets_crimson_classic_brand_primary_hover"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L5",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_crimson_classic",
+      "target": "resources_presets_crimson_classic_brand_primary_light"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L14",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_crimson_classic",
+      "target": "resources_presets_crimson_classic_brand_radius"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L15",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_crimson_classic",
+      "target": "resources_presets_crimson_classic_brand_radius_btn"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L8",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_crimson_classic",
+      "target": "resources_presets_crimson_classic_brand_surface"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L9",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_crimson_classic",
+      "target": "resources_presets_crimson_classic_brand_text"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L10",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_crimson_classic",
+      "target": "resources_presets_crimson_classic_brand_text_muted"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L21",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_ocean_fresh",
+      "target": "resources_presets_ocean_fresh_brand_accent"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L22",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_ocean_fresh",
+      "target": "resources_presets_ocean_fresh_brand_bg"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L26",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_ocean_fresh",
+      "target": "resources_presets_ocean_fresh_brand_border"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L28",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_ocean_fresh",
+      "target": "resources_presets_ocean_fresh_brand_font_body"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L27",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_ocean_fresh",
+      "target": "resources_presets_ocean_fresh_brand_font_heading"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L18",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_ocean_fresh",
+      "target": "resources_presets_ocean_fresh_brand_primary"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L19",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_ocean_fresh",
+      "target": "resources_presets_ocean_fresh_brand_primary_hover"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L20",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_ocean_fresh",
+      "target": "resources_presets_ocean_fresh_brand_primary_light"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L29",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_ocean_fresh",
+      "target": "resources_presets_ocean_fresh_brand_radius"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L30",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_ocean_fresh",
+      "target": "resources_presets_ocean_fresh_brand_radius_btn"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L23",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_ocean_fresh",
+      "target": "resources_presets_ocean_fresh_brand_surface"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L24",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_ocean_fresh",
+      "target": "resources_presets_ocean_fresh_brand_text"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L25",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_ocean_fresh",
+      "target": "resources_presets_ocean_fresh_brand_text_muted"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L36",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_midnight_urban",
+      "target": "resources_presets_midnight_urban_brand_accent"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L37",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_midnight_urban",
+      "target": "resources_presets_midnight_urban_brand_bg"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L41",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_midnight_urban",
+      "target": "resources_presets_midnight_urban_brand_border"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L43",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_midnight_urban",
+      "target": "resources_presets_midnight_urban_brand_font_body"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L42",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_midnight_urban",
+      "target": "resources_presets_midnight_urban_brand_font_heading"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L33",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_midnight_urban",
+      "target": "resources_presets_midnight_urban_brand_primary"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L34",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_midnight_urban",
+      "target": "resources_presets_midnight_urban_brand_primary_hover"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L35",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_midnight_urban",
+      "target": "resources_presets_midnight_urban_brand_primary_light"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L44",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_midnight_urban",
+      "target": "resources_presets_midnight_urban_brand_radius"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L45",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_midnight_urban",
+      "target": "resources_presets_midnight_urban_brand_radius_btn"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L38",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_midnight_urban",
+      "target": "resources_presets_midnight_urban_brand_surface"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L39",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_midnight_urban",
+      "target": "resources_presets_midnight_urban_brand_text"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L40",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_midnight_urban",
+      "target": "resources_presets_midnight_urban_brand_text_muted"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L51",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_sage_garden",
+      "target": "resources_presets_sage_garden_brand_accent"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L52",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_sage_garden",
+      "target": "resources_presets_sage_garden_brand_bg"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L56",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_sage_garden",
+      "target": "resources_presets_sage_garden_brand_border"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L58",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_sage_garden",
+      "target": "resources_presets_sage_garden_brand_font_body"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L57",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_sage_garden",
+      "target": "resources_presets_sage_garden_brand_font_heading"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L48",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_sage_garden",
+      "target": "resources_presets_sage_garden_brand_primary"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L49",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_sage_garden",
+      "target": "resources_presets_sage_garden_brand_primary_hover"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L50",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_sage_garden",
+      "target": "resources_presets_sage_garden_brand_primary_light"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L59",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_sage_garden",
+      "target": "resources_presets_sage_garden_brand_radius"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L60",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_sage_garden",
+      "target": "resources_presets_sage_garden_brand_radius_btn"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L53",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_sage_garden",
+      "target": "resources_presets_sage_garden_brand_surface"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L54",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_sage_garden",
+      "target": "resources_presets_sage_garden_brand_text"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L55",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_sage_garden",
+      "target": "resources_presets_sage_garden_brand_text_muted"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L66",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_royal_gold",
+      "target": "resources_presets_royal_gold_brand_accent"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L67",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_royal_gold",
+      "target": "resources_presets_royal_gold_brand_bg"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L71",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_royal_gold",
+      "target": "resources_presets_royal_gold_brand_border"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L73",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_royal_gold",
+      "target": "resources_presets_royal_gold_brand_font_body"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L72",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_royal_gold",
+      "target": "resources_presets_royal_gold_brand_font_heading"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L63",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_royal_gold",
+      "target": "resources_presets_royal_gold_brand_primary"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L64",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_royal_gold",
+      "target": "resources_presets_royal_gold_brand_primary_hover"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L65",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_royal_gold",
+      "target": "resources_presets_royal_gold_brand_primary_light"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L74",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_royal_gold",
+      "target": "resources_presets_royal_gold_brand_radius"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L75",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_royal_gold",
+      "target": "resources_presets_royal_gold_brand_radius_btn"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L68",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_royal_gold",
+      "target": "resources_presets_royal_gold_brand_surface"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L69",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_royal_gold",
+      "target": "resources_presets_royal_gold_brand_text"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L70",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_royal_gold",
+      "target": "resources_presets_royal_gold_brand_text_muted"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L81",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_coral_breeze",
+      "target": "resources_presets_coral_breeze_brand_accent"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L82",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_coral_breeze",
+      "target": "resources_presets_coral_breeze_brand_bg"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L86",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_coral_breeze",
+      "target": "resources_presets_coral_breeze_brand_border"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L88",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_coral_breeze",
+      "target": "resources_presets_coral_breeze_brand_font_body"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L87",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_coral_breeze",
+      "target": "resources_presets_coral_breeze_brand_font_heading"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L78",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_coral_breeze",
+      "target": "resources_presets_coral_breeze_brand_primary"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L79",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_coral_breeze",
+      "target": "resources_presets_coral_breeze_brand_primary_hover"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L80",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_coral_breeze",
+      "target": "resources_presets_coral_breeze_brand_primary_light"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L89",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_coral_breeze",
+      "target": "resources_presets_coral_breeze_brand_radius"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L90",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_coral_breeze",
+      "target": "resources_presets_coral_breeze_brand_radius_btn"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L83",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_coral_breeze",
+      "target": "resources_presets_coral_breeze_brand_surface"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L84",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_coral_breeze",
+      "target": "resources_presets_coral_breeze_brand_text"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/resources/presets.json",
+      "source_location": "L85",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resources_presets_coral_breeze",
+      "target": "resources_presets_coral_breeze_brand_text_muted"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/settings.local.json",
+      "source_location": "L2",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "claude_settings_local_json",
+      "target": "claude_settings_local_permissions"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "settings.local.json",
+      "source_location": "L3",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "claude_settings_local_permissions",
+      "target": "claude_settings_local_permissions_allow"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AGENTS.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "agents_md",
+      "target": "delivery_agents_deliveryos_agent_context",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AGENTS.md",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "delivery_agents_deliveryos_agent_context",
+      "target": "delivery_agents_active_skills",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AGENTS.md",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "delivery_agents_deliveryos_agent_context",
+      "target": "delivery_agents_non_negotiable_rules",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AGENTS.md",
+      "source_location": "L24",
+      "weight": 1.0,
+      "source": "delivery_agents_deliveryos_agent_context",
+      "target": "delivery_agents_reference_documents",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AGENTS.md",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "delivery_agents_deliveryos_agent_context",
+      "target": "delivery_agents_what_this_project_is",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AGENTS.md",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "delivery_agents_deliveryos_agent_context",
+      "target": "delivery_agents_what_we_are_building",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "design_md",
+      "target": "delivery_design_deliveryos_design_system"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L45",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "delivery_design_deliveryos_design_system",
+      "target": "delivery_design_border_radius"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L55",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "delivery_design_deliveryos_design_system",
+      "target": "delivery_design_component_states_always_implement_all_4"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "delivery_design_deliveryos_design_system",
+      "target": "delivery_design_critical_rule_1_zero_hardcoded_colors"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L13",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "delivery_design_deliveryos_design_system",
+      "target": "delivery_design_css_variables_crimson_classic_preset_default"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L76",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "delivery_design_deliveryos_design_system",
+      "target": "delivery_design_embed_mode_constraints"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L3",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "delivery_design_deliveryos_design_system",
+      "target": "delivery_design_identity"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L60",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "delivery_design_deliveryos_design_system",
+      "target": "delivery_design_order_status_colors_semantic_not_brand"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L42",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "delivery_design_deliveryos_design_system",
+      "target": "delivery_design_spacing_4px_base_unit"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L72",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "delivery_design_deliveryos_design_system",
+      "target": "delivery_design_storage_rule"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L51",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "delivery_design_deliveryos_design_system",
+      "target": "delivery_design_tap_targets_courier_ui"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L37",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "delivery_design_deliveryos_design_system",
+      "target": "delivery_design_typography"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L80",
+      "weight": 1.0,
+      "source": "delivery_design_deliveryos_design_system",
+      "target": "delivery_design_visual_references_by_screen",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L14",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "delivery_design_css_variables_crimson_classic_preset_default",
+      "target": "delivery_design_codeblock_1"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L87",
+      "weight": 1.0,
+      "source": "delivery_design_visual_references_by_screen",
+      "target": "delivery_design_admin_dashboard_admin",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L82",
+      "weight": 1.0,
+      "source": "delivery_design_visual_references_by_screen",
+      "target": "delivery_design_client_menu_s_slug",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "design.md",
+      "source_location": "L92",
+      "weight": 1.0,
+      "source": "delivery_design_visual_references_by_screen",
+      "target": "delivery_design_courier_screen_courier_delivery_id",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/rules/design-system.md",
+      "source_location": "L2",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "agents_rules_design_system_md",
+      "target": "rules_design_system_deliveryos_always_on_design_rules"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/rules/design-system.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "rules_design_system_deliveryos_always_on_design_rules",
+      "target": "rules_design_system_critical_no_cookies"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/rules/design-system.md",
+      "source_location": "L4",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "rules_design_system_deliveryos_always_on_design_rules",
+      "target": "rules_design_system_critical_zero_hardcoded_colors"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/rules/design-system.md",
+      "source_location": "L21",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "rules_design_system_deliveryos_always_on_design_rules",
+      "target": "rules_design_system_embed_mode_rule"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/rules/design-system.md",
+      "source_location": "L17",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "rules_design_system_deliveryos_always_on_design_rules",
+      "target": "rules_design_system_tap_target_rule"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/rules/design-system.md",
+      "source_location": "L12",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "rules_design_system_deliveryos_always_on_design_rules",
+      "target": "rules_design_system_typography_rule"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/rules/graphify.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "agents_rules_graphify_md",
+      "target": "rules_graphify_graphify"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L11",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "agents_skills_component_builder_skill_md",
+      "target": "component_builder_skill_deliveryos_component_builder"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L60",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "component_builder_skill_deliveryos_component_builder",
+      "target": "component_builder_skill_animation_rules"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L49",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "component_builder_skill_deliveryos_component_builder",
+      "target": "component_builder_skill_button_variants"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L17",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "component_builder_skill_deliveryos_component_builder",
+      "target": "component_builder_skill_component_anatomy_rules"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L70",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "component_builder_skill_deliveryos_component_builder",
+      "target": "component_builder_skill_constraints"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L13",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "component_builder_skill_deliveryos_component_builder",
+      "target": "component_builder_skill_goal"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L44",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "component_builder_skill_deliveryos_component_builder",
+      "target": "component_builder_skill_ordercard_spec"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L25",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "component_builder_skill_deliveryos_component_builder",
+      "target": "component_builder_skill_productcard_spec"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L67",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "component_builder_skill_deliveryos_component_builder",
+      "target": "component_builder_skill_reference_implementations"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L56",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "component_builder_skill_deliveryos_component_builder",
+      "target": "component_builder_skill_statusbadge_spec"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/SKILL.md",
+      "source_location": "L26",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "component_builder_skill_productcard_spec",
+      "target": "component_builder_skill_codeblock_1"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "agents_skills_component_builder_references_ux_rules_and_component_specs_md",
+      "target": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L246",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "target": "references_ux_rules_and_component_specs_admin_sidebar",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L298",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "target": "references_ux_rules_and_component_specs_allergen_pills",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L29",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "target": "references_ux_rules_and_component_specs_button_variants",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L186",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "target": "references_ux_rules_and_component_specs_cartfab_client_menu_full_mode_only",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L211",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "target": "references_ux_rules_and_component_specs_categorynav_client_menu",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "target": "references_ux_rules_and_component_specs_global_ux_rules",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L47",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "target": "references_ux_rules_and_component_specs_input_variants",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L150",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "target": "references_ux_rules_and_component_specs_ordercard_spec",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L115",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "target": "references_ux_rules_and_component_specs_productcard_spec",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L282",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "target": "references_ux_rules_and_component_specs_quickstatcard_admin_dashboard",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L76",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "target": "references_ux_rules_and_component_specs_statusbadge_10_variants",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L323",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "target": "references_ux_rules_and_component_specs_theme_switcher_required_on_all_screens",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L61",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_deliveryos_ux_rules_component_specs",
+      "target": "references_ux_rules_and_component_specs_toggle_component",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_global_ux_rules",
+      "target": "references_ux_rules_and_component_specs_interaction_basics",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L16",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_global_ux_rules",
+      "target": "references_ux_rules_and_component_specs_tap_targets",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L21",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_global_ux_rules",
+      "target": "references_ux_rules_and_component_specs_transitions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L63",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_toggle_component",
+      "target": "references_ux_rules_and_component_specs_codeblock_1",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L91",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_statusbadge_10_variants",
+      "target": "references_ux_rules_and_component_specs_codeblock_2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L117",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_productcard_spec",
+      "target": "references_ux_rules_and_component_specs_codeblock_3",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L136",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_productcard_spec",
+      "target": "references_ux_rules_and_component_specs_codeblock_4",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L154",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_ordercard_spec",
+      "target": "references_ux_rules_and_component_specs_codeblock_5",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L172",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_ordercard_spec",
+      "target": "references_ux_rules_and_component_specs_codeblock_6",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L188",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_cartfab_client_menu_full_mode_only",
+      "target": "references_ux_rules_and_component_specs_codeblock_7",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L199",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_cartfab_client_menu_full_mode_only",
+      "target": "references_ux_rules_and_component_specs_codeblock_8",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L213",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_categorynav_client_menu",
+      "target": "references_ux_rules_and_component_specs_codeblock_9",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L250",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_admin_sidebar",
+      "target": "references_ux_rules_and_component_specs_codeblock_10",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L284",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_quickstatcard_admin_dashboard",
+      "target": "references_ux_rules_and_component_specs_codeblock_11",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L300",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_allergen_pills",
+      "target": "references_ux_rules_and_component_specs_codeblock_12",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L308",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_allergen_pills",
+      "target": "references_ux_rules_and_component_specs_codeblock_13",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/component-builder/references/ux-rules-and-component-specs.md",
+      "source_location": "L325",
+      "weight": 1.0,
+      "source": "references_ux_rules_and_component_specs_theme_switcher_required_on_all_screens",
+      "target": "references_ux_rules_and_component_specs_codeblock_14",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L10",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "agents_skills_deliveryos_theme_skill_md",
+      "target": "deliveryos_theme_skill_deliveryos_theme_system"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L17",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "deliveryos_theme_skill_deliveryos_theme_system",
+      "target": "deliveryos_theme_skill_always_read_resources_tokens_css_and_resources_presets_json_before_writing_any_css"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L47",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "deliveryos_theme_skill_deliveryos_theme_system",
+      "target": "deliveryos_theme_skill_constraints"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L12",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "deliveryos_theme_skill_deliveryos_theme_system",
+      "target": "deliveryos_theme_skill_goal"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L19",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "deliveryos_theme_skill_deliveryos_theme_system",
+      "target": "deliveryos_theme_skill_how_themes_work"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L25",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "deliveryos_theme_skill_deliveryos_theme_system",
+      "target": "deliveryos_theme_skill_theme_switcher_implementation"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/SKILL.md",
+      "source_location": "L26",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "deliveryos_theme_skill_theme_switcher_implementation",
+      "target": "deliveryos_theme_skill_codeblock_1"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "agents_skills_deliveryos_theme_references_technical_reference_md",
+      "target": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L258",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_10_gps_and_geo_streaming_courier",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L274",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_11_circuit_breaker_matrix",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L290",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_12_idempotency_and_storage",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L306",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_13_embed_widget_spec",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L335",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_14_google_sheets_integration_pull_based_no_oauth",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L349",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_15_branding_settings_page_three_tabs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L359",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_16_promotions_system_8_types",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L370",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_17_ai_features_claude_api_sonnet_4",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L388",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_18_infrastructure_costs_25_40_month",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L405",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_19_architecture_decision_records_key_decisions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_1_business_economics",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L425",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_20_critical_reminders_read_before_every_session",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_2_white_label_architecture_decisions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L33",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_3_css_variables_complete_spec",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L70",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_4_how_theme_technically_works",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L82",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_5_database_schema",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L151",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_6_full_tech_stack",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L185",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_7_architecture_one_fastify_server",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L200",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_8_security_rules",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L220",
+      "weight": 1.0,
+      "source": "references_technical_reference_deliveryos_technical_architecture_reference",
+      "target": "references_technical_reference_9_project_structure_monorepo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L35",
+      "weight": 1.0,
+      "source": "references_technical_reference_3_css_variables_complete_spec",
+      "target": "references_technical_reference_codeblock_1",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L84",
+      "weight": 1.0,
+      "source": "references_technical_reference_5_database_schema",
+      "target": "references_technical_reference_core_tables",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L139",
+      "weight": 1.0,
+      "source": "references_technical_reference_5_database_schema",
+      "target": "references_technical_reference_timescaledb_hypertables",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L121",
+      "weight": 1.0,
+      "source": "references_technical_reference_5_database_schema",
+      "target": "references_technical_reference_white_label_tables",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L91",
+      "weight": 1.0,
+      "source": "references_technical_reference_core_tables",
+      "target": "references_technical_reference_codeblock_2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L124",
+      "weight": 1.0,
+      "source": "references_technical_reference_white_label_tables",
+      "target": "references_technical_reference_codeblock_3",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L129",
+      "weight": 1.0,
+      "source": "references_technical_reference_white_label_tables",
+      "target": "references_technical_reference_codeblock_4",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L135",
+      "weight": 1.0,
+      "source": "references_technical_reference_white_label_tables",
+      "target": "references_technical_reference_codeblock_5",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L187",
+      "weight": 1.0,
+      "source": "references_technical_reference_7_architecture_one_fastify_server",
+      "target": "references_technical_reference_codeblock_6",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L222",
+      "weight": 1.0,
+      "source": "references_technical_reference_9_project_structure_monorepo",
+      "target": "references_technical_reference_codeblock_7",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L260",
+      "weight": 1.0,
+      "source": "references_technical_reference_10_gps_and_geo_streaming_courier",
+      "target": "references_technical_reference_codeblock_8",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L292",
+      "weight": 1.0,
+      "source": "references_technical_reference_12_idempotency_and_storage",
+      "target": "references_technical_reference_codeblock_9",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L308",
+      "weight": 1.0,
+      "source": "references_technical_reference_13_embed_widget_spec",
+      "target": "references_technical_reference_codeblock_10",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L337",
+      "weight": 1.0,
+      "source": "references_technical_reference_14_google_sheets_integration_pull_based_no_oauth",
+      "target": "references_technical_reference_codeblock_11",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/deliveryos-theme/references/technical-reference.md",
+      "source_location": "L427",
+      "weight": 1.0,
+      "source": "references_technical_reference_20_critical_reminders_read_before_every_session",
+      "target": "references_technical_reference_codeblock_12",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/SKILL.md",
+      "source_location": "L11",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "agents_skills_screen_builder_skill_md",
+      "target": "screen_builder_skill_deliveryos_screen_builder"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/SKILL.md",
+      "source_location": "L26",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "screen_builder_skill_deliveryos_screen_builder",
+      "target": "screen_builder_skill_file_structure"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/SKILL.md",
+      "source_location": "L13",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "screen_builder_skill_deliveryos_screen_builder",
+      "target": "screen_builder_skill_goal"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/SKILL.md",
+      "source_location": "L17",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "screen_builder_skill_deliveryos_screen_builder",
+      "target": "screen_builder_skill_required_cdn_links_include_in_every_screen_s_head"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/SKILL.md",
+      "source_location": "L18",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "screen_builder_skill_required_cdn_links_include_in_every_screen_s_head",
+      "target": "screen_builder_skill_codeblock_1"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "agents_skills_screen_builder_references_product_context_md",
+      "target": "references_product_context_deliveryos_product_context",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L159",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_10_theme_presets_6_curated",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L174",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_11_white_label_by_plan",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L193",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_12_embed_widget_constraints",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L206",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_13_storage_rules_never_use_cookies",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L220",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_14_ux_rules_by_role",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L253",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_15_design_references_by_role",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L266",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_16_websocket_rooms",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L279",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_17_technology_stack_relevant_for_mockup",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L298",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_18_priority_build_order",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_1_what_deliveryos_is",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L16",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_2_three_roles",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L26",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_3_market_albania_as_entry_point",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L41",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_4_pricing",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L53",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_5_product_principles_immutable",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L66",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_6_onboarding_8_steps_10_14_min_total",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L87",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_7_order_types_mvp",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L95",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_8_order_state_machine_10_statuses",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L121",
+      "weight": 1.0,
+      "source": "references_product_context_deliveryos_product_context",
+      "target": "references_product_context_9_white_label_system_two_ui_layers",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L128",
+      "weight": 1.0,
+      "source": "references_product_context_9_white_label_system_two_ui_layers",
+      "target": "references_product_context_css_variables_rule_1_never_violate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L130",
+      "weight": 1.0,
+      "source": "references_product_context_css_variables_rule_1_never_violate",
+      "target": "references_product_context_codeblock_1",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L208",
+      "weight": 1.0,
+      "source": "references_product_context_13_storage_rules_never_use_cookies",
+      "target": "references_product_context_codeblock_2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L229",
+      "weight": 1.0,
+      "source": "references_product_context_14_ux_rules_by_role",
+      "target": "references_product_context_admin_during_peak_hours",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L222",
+      "weight": 1.0,
+      "source": "references_product_context_14_ux_rules_by_role",
+      "target": "references_product_context_all_screens",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L245",
+      "weight": 1.0,
+      "source": "references_product_context_14_ux_rules_by_role",
+      "target": "references_product_context_client_page",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L236",
+      "weight": 1.0,
+      "source": "references_product_context_14_ux_rules_by_role",
+      "target": "references_product_context_courier_interface",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/screen-builder/references/product-context.md",
+      "source_location": "L268",
+      "weight": 1.0,
+      "source": "references_product_context_16_websocket_rooms",
+      "target": "references_product_context_codeblock_3",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/workflows/graphify.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "agents_workflows_graphify_md",
+      "target": "workflows_graphify_workflow_graphify"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".claude/settings.local.json",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "claude_settings",
+      "target": "figma_integration"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "index.html",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "pizza_roma_menu",
+      "target": "figma_integration"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "index.html",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "pizza_roma_menu",
+      "target": "design_tokens"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": ".agents/rules/graphify.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "graphify_rules",
+      "target": "graphify_workflow"
+    }
+  ],
+  "hyperedges": []
+}

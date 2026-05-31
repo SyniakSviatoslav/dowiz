@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="sq" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Help & Support — DeliveryOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@400;500;600&family=Cormorant+Garamond:wght@400;500;600&family=Playfair+Display:wght@400;500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { --brand-primary:#ea4f16;--brand-primary-hover:#ffa12e;--brand-primary-light:rgba(234,79,22,0.12);--brand-accent:#2a2a2a;--brand-bg:#121212;--brand-surface:#1e1e1e;--brand-surface-raised:#2a2a2a;--brand-text:#ffffff;--brand-text-muted:#a8a8a8;--brand-border:#2c2c2c;--brand-font-heading:'Inter',sans-serif;--brand-font-body:'Inter',sans-serif;--brand-radius:12px;--brand-radius-sm:8px;--brand-radius-btn:78px;--color-success:#059669;--color-warning:#D97706;--color-danger:#DC2626;--color-info:#2563EB; }
+    @media (prefers-color-scheme:dark){:root{--brand-bg:#0F172A;--brand-surface:#1E293B;--brand-surface-raised:#263548;--brand-text:#F1F5F9;--brand-text-muted:#94A3B8;--brand-border:#334155;--brand-primary-light:rgba(234,79,22,0.15);--brand-accent:#1E1A14;}}
+    body { font-family:var(--brand-font-body);background:var(--brand-bg);color:var(--brand-text);-webkit-font-smoothing:antialiased; }
+    button{transition:transform 0.15s cubic-bezier(0.34,1.56,0.64,1),background-color 0.2s ease}
+    button:active{transform:scale(0.97)}
+    textarea:focus{outline:none;border-color:var(--brand-primary)!important}
+    details summary::-webkit-details-marker{display:none}
+    details summary{cursor:pointer;user-select:none}
+    @keyframes fadeSlideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    @media(prefers-reduced-motion:reduce){*,::before,::after{animation-duration:0.01ms!important;transition-duration:0.01ms!important}}
+  </style>
+</head>
+<body class="min-h-screen pb-8">
+  <div class="w-full max-w-[390px] mx-auto min-h-screen" style="background:var(--brand-bg)">
+    <header class="sticky top-0 z-50 h-[56px] border-b flex items-center justify-between px-4" style="background:var(--brand-surface);border-color:var(--brand-border)">
+      <button onclick="history.back()" class="min-w-[44px] min-h-[44px] -ml-2 rounded-full flex items-center justify-center active:scale-[0.97]" style="color:var(--brand-text)"><i class="ti ti-arrow-left text-[22px]"></i></button>
+      <h1 class="text-[16px] font-bold" style="color:var(--brand-text)">Help &amp; Support</h1>
+      <button onclick="cycleTheme()" class="min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center active:scale-[0.97]" style="color:var(--brand-text-muted)"><i class="ti ti-palette text-[18px]"></i></button>
+    </header>
+
+    <div class="px-4 pt-6">
+      <div class="search-bar relative mb-6">
+        <i class="ti ti-search absolute left-4 top-1/2 -translate-y-1/2" style="color:var(--brand-text-muted);font-size:18px;pointer-events:none"></i>
+        <input type="text" placeholder="Search help articles..." class="w-full h-[44px] pl-11 pr-4 rounded-[78px] text-[14px] font-medium border transition-colors" style="background:var(--brand-surface-raised);border-color:var(--brand-border);color:var(--brand-text)">
+      </div>
+
+      <h3 class="text-[12px] font-bold uppercase tracking-wider mb-3" style="color:var(--brand-text-muted)">Quick Contact</h3>
+      <div class="grid grid-cols-2 gap-3 mb-6">
+        <a href="tel:+35569234567" class="flex flex-col items-center justify-center p-4 rounded-[12px] border gap-2 active:scale-[0.97] transition-transform" style="background:var(--brand-surface);border-color:var(--brand-border)">
+          <div class="w-10 h-10 rounded-full flex items-center justify-center" style="background:var(--brand-primary-light);color:var(--brand-primary)"><i class="ti ti-phone text-[20px]"></i></div>
+          <span class="text-[12px] font-medium" style="color:var(--brand-text)">Call Us</span>
+        </a>
+        <a href="#" class="flex flex-col items-center justify-center p-4 rounded-[12px] border gap-2 active:scale-[0.97] transition-transform" style="background:var(--brand-surface);border-color:var(--brand-border)">
+          <div class="w-10 h-10 rounded-full flex items-center justify-center" style="background:var(--brand-primary-light);color:var(--brand-primary)"><i class="ti ti-message text-[20px]"></i></div>
+          <span class="text-[12px] font-medium" style="color:var(--brand-text)">Live Chat</span>
+        </a>
+      </div>
+
+      <h3 class="text-[12px] font-bold uppercase tracking-wider mb-3" style="color:var(--brand-text-muted)">Frequently Asked Questions</h3>
+      <div class="rounded-[12px] overflow-hidden border mb-6" style="background:var(--brand-surface);border-color:var(--brand-border)">
+        <details class="border-b" style="border-color:var(--brand-border)">
+          <summary class="flex items-center justify-between p-4 text-[14px] font-medium" style="color:var(--brand-text)"><span>How do I track my order?</span><i class="ti ti-chevron-down text-[16px] transition-transform" style="color:var(--brand-text-muted)"></i></summary>
+          <div class="px-4 pb-4 text-[13px]" style="color:var(--brand-text-muted)">Open the order status screen from your order history or tap the active order notification. You'll see live updates from preparation to delivery.</div>
+        </details>
+        <details class="border-b" style="border-color:var(--brand-border)">
+          <summary class="flex items-center justify-between p-4 text-[14px] font-medium" style="color:var(--brand-text)"><span>What payment methods are accepted?</span><i class="ti ti-chevron-down text-[16px] transition-transform" style="color:var(--brand-text-muted)"></i></summary>
+          <div class="px-4 pb-4 text-[13px]" style="color:var(--brand-text-muted)">We accept cash (ALL) on delivery, credit/debit cards (Visa, MasterCard), and mobile payments. Cash is the most popular in Tirana.</div>
+        </details>
+        <details class="border-b" style="border-color:var(--brand-border)">
+          <summary class="flex items-center justify-between p-4 text-[14px] font-medium" style="color:var(--brand-text)"><span>Can I change or cancel my order?</span><i class="ti ti-chevron-down text-[16px] transition-transform" style="color:var(--brand-text-muted)"></i></summary>
+          <div class="px-4 pb-4 text-[13px]" style="color:var(--brand-text-muted)">You can cancel within 2 minutes of placing the order. After that, please contact the restaurant directly.</div>
+        </details>
+        <details class="border-b" style="border-color:var(--brand-border)">
+          <summary class="flex items-center justify-between p-4 text-[14px] font-medium" style="color:var(--brand-text)"><span>What is the delivery zone?</span><i class="ti ti-chevron-down text-[16px] transition-transform" style="color:var(--brand-text-muted)"></i></summary>
+          <div class="px-4 pb-4 text-[13px]" style="color:var(--brand-text-muted)">We deliver within a 5 km radius of each restaurant. Enter your address to check if you're within the delivery zone.</div>
+        </details>
+        <details style="border-color:var(--brand-border)">
+          <summary class="flex items-center justify-between p-4 text-[14px] font-medium" style="color:var(--brand-text)"><span>How do I apply a promo code?</span><i class="ti ti-chevron-down text-[16px] transition-transform" style="color:var(--brand-text-muted)"></i></summary>
+          <div class="px-4 pb-4 text-[13px]" style="color:var(--brand-text-muted)">Enter your promo code in the cart screen before checkout. Promo codes cannot be combined.</div>
+        </details>
+      </div>
+
+      <h3 class="text-[12px] font-bold uppercase tracking-wider mb-3" style="color:var(--brand-text-muted)">Still need help?</h3>
+      <div class="rounded-[12px] p-5 border" style="background:var(--brand-surface);border-color:var(--brand-border)">
+        <p class="text-[14px] mb-4" style="color:var(--brand-text-muted)">Send us a message and we'll get back to you within 24 hours.</p>
+        <textarea rows="3" placeholder="Describe your issue..." class="w-full border rounded-[12px] p-4 text-[14px] transition-colors resize-none mb-3" style="background:var(--brand-surface-raised);border-color:var(--brand-border);color:var(--brand-text)"></textarea>
+        <button class="w-full h-[48px] rounded-[78px] text-white font-bold text-[14px] active:scale-[0.97] transition-all" style="background:var(--brand-primary)">Send Message</button>
+      </div>
+
+      <p class="text-center text-[12px] mt-6 mb-4" style="color:var(--brand-text-muted)">Available Mon–Sat, 9:00–22:00</p>
+    </div>
+  </div>
+
+  <script>
+    const PRESETS = {
+      "Food Dark":{ "--brand-primary":"#ea4f16","--brand-primary-hover":"#ffa12e","--brand-primary-light":"rgba(234,79,22,0.12)","--brand-accent":"#2a2a2a","--brand-bg":"#121212","--brand-surface":"#1e1e1e","--brand-surface-raised":"#2a2a2a","--brand-text":"#ffffff","--brand-text-muted":"#a8a8a8","--brand-border":"#2c2c2c","--brand-font-heading":"'Inter',sans-serif","--brand-font-body":"'Inter',sans-serif","--brand-radius":"12px","--brand-radius-sm":"8px","--brand-radius-btn":"78px" },
+      "Crimson Classic":{ "--brand-primary":"#C1121F","--brand-primary-hover":"#9B0D17","--brand-primary-light":"#FFF0F1","--brand-accent":"#F5F0E8","--brand-bg":"#FFFFFF","--brand-surface":"#F8F9FA","--brand-surface-raised":"#F0F0F0","--brand-text":"#1A1A1A","--brand-text-muted":"#6B7280","--brand-border":"#E5E7EB","--brand-font-heading":"'DM Serif Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"12px","--brand-radius-sm":"6px","--brand-radius-btn":"24px" },
+      "Ocean Fresh":{ "--brand-primary":"#0D9488","--brand-primary-hover":"#0A7567","--brand-primary-light":"#F0FDFA","--brand-accent":"#F0F9F8","--brand-bg":"#FFFFFF","--brand-surface":"#F8FFFE","--brand-surface-raised":"#E0F7F5","--brand-text":"#134E4A","--brand-text-muted":"#6B7280","--brand-border":"#CCFBF1","--brand-font-heading":"'Cormorant Garamond',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"24px","--brand-radius-sm":"12px","--brand-radius-btn":"32px" },
+      "Midnight Urban":{ "--brand-primary":"#F97316","--brand-primary-hover":"#EA6A0A","--brand-primary-light":"rgba(249,115,22,0.10)","--brand-accent":"#1E1E1E","--brand-bg":"#111111","--brand-surface":"#1C1C1C","--brand-surface-raised":"#2a2a2a","--brand-text":"#F5F5F5","--brand-text-muted":"#9CA3AF","--brand-border":"#2D2D2D","--brand-font-heading":"'DM Sans',sans-serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"4px","--brand-radius-sm":"2px","--brand-radius-btn":"4px" },
+      "Sage Garden":{ "--brand-primary":"#4D7C0F","--brand-primary-hover":"#3F6812","--brand-primary-light":"#F7FEE7","--brand-accent":"#ECFCCB","--brand-bg":"#FFFFFF","--brand-surface":"#F7FEE7","--brand-surface-raised":"#E8F5E0","--brand-text":"#1A2E05","--brand-text-muted":"#6B7280","--brand-border":"#D9F99D","--brand-font-heading":"'Playfair Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px" },
+      "Royal Gold":{ "--brand-primary":"#B45309","--brand-primary-hover":"#92400E","--brand-primary-light":"rgba(180,83,9,0.10)","--brand-accent":"#1C1400","--brand-bg":"#0D0900","--brand-surface":"#1A1200","--brand-surface-raised":"#2a2000","--brand-text":"#FEF3C7","--brand-text-muted":"#D97706","--brand-border":"#2D2000","--brand-font-heading":"'Cormorant Garamond',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"2px","--brand-radius-sm":"1px","--brand-radius-btn":"2px" },
+      "Coral Breeze":{ "--brand-primary":"#DB2777","--brand-primary-hover":"#BE185D","--brand-primary-light":"#FDF2F8","--brand-accent":"#FCE7F3","--brand-bg":"#FFFFFF","--brand-surface":"#FDF2F8","--brand-surface-raised":"#FDE8F0","--brand-text":"#500724","--brand-text-muted":"#9D174D","--brand-border":"#FBCFE8","--brand-font-heading":"'Playfair Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px" }
+    };
+    const PRESET_NAMES = Object.keys(PRESETS); let currentThemeIdx = 0;
+    function applyPreset(name) { const p=PRESETS[name]||PRESETS['Food Dark']; const r=document.documentElement.style; Object.entries(p).forEach(([k,v])=>r.setProperty(k,v)); localStorage.setItem('dos_mockup_theme',name); }
+    function cycleTheme() { currentThemeIdx=(currentThemeIdx+1)%PRESET_NAMES.length; applyPreset(PRESET_NAMES[currentThemeIdx]); }
+    const saved = localStorage.getItem('dos_mockup_theme');
+    if (saved && PRESETS[saved]) { currentThemeIdx = PRESET_NAMES.indexOf(saved); applyPreset(saved); } else applyPreset('Food Dark');
+
+    document.querySelectorAll('details').forEach(d => { d.querySelector('summary').addEventListener('click', function(e) { const icon = this.querySelector('.ti-chevron-down'); if (icon) icon.style.transform = d.open ? 'rotate(0deg)' : 'rotate(180deg)'; }); });
+  </script>
+</body>
+</html>

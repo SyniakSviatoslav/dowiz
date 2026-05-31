@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="sq" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRM - DeliveryOS Admin</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=Cormorant+Garamond:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="mock-data.js"></script>
+
+  <style>
+    :root {
+      --brand-primary:        #ea4f16;
+      --brand-primary-hover:  #ffa12e;
+      --brand-primary-light:  rgba(234, 79, 22, 0.12);
+      --brand-accent:         #2a2a2a;
+      --brand-bg:             #121212;
+      --brand-surface:        #1e1e1e;
+      --brand-surface-raised: #2a2a2a;
+      --brand-text:           #ffffff;
+      --brand-text-muted:     #a8a8a8;
+      --brand-border:         #2c2c2c;
+      --brand-font-heading:   'Inter', sans-serif;
+      --brand-font-body:      'Inter', sans-serif;
+      --brand-radius:         12px;
+      --brand-radius-sm:      8px;
+      --brand-radius-btn:     78px;
+
+      --color-success:  #059669;
+      --color-warning:  #D97706;
+      --color-danger:   #DC2626;
+      --color-info:     #2563EB;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --brand-bg:             #0F172A;
+        --brand-surface:        #1E293B;
+        --brand-surface-raised: #263548;
+        --brand-text:           #F1F5F9;
+        --brand-text-muted:     #94A3B8;
+        --brand-border:         #334155;
+        --brand-primary-light:  rgba(234, 79, 22, 0.15);
+        --brand-accent:         #1E1A14;
+      }
+    }
+
+    body {
+      font-family: var(--brand-font-body);
+      background-color: var(--brand-bg);
+      color: var(--brand-text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    button, .interactive-card {
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    button:active, .interactive-card:active { transform: scale(0.97); }
+
+    body.embed-mode .embed-hidden { display: none !important; }
+  </style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col md:flex-row">
+
+  <!-- Theme Switcher -->
+  <button id="theme-btn" onclick="cycleTheme()" class="fixed bottom-20 md:bottom-4 right-4 z-[9999] border rounded-full px-3 py-1.5 text-[12px] cursor-pointer shadow-sm flex items-center gap-1.5 font-semibold embed-hidden" style="background: var(--brand-surface); border-color: var(--brand-border); color: var(--brand-text);">
+    <i class="ti ti-palette text-[14px]"></i> Food Dark
+  </button>
+
+  <!-- Sidebar -->
+  <aside class="hidden md:flex flex-col w-[64px] lg:w-[240px] flex-shrink-0 border-r transition-all duration-300 z-50" style="background: #0F172A; border-color: rgba(255,255,255,0.05);">
+    <div class="px-[16px] py-[20px] pb-[12px] flex items-center gap-3">
+      <i class="ti ti-rocket text-[16px] shrink-0" style="color: var(--brand-primary);"></i>
+      <span class="hidden lg:block text-white text-[16px] font-semibold tracking-[-0.01em]">DeliveryOS</span>
+    </div>
+    <nav class="flex-1 mt-2 flex flex-col gap-1 px-2">
+      <a href="05-admin-dashboard.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm transition-colors border-l-[3px] border-transparent" style="color: rgba(255,255,255,0.65);" onmouseover="this.style.background='rgba(255,255,255,0.05)';this.style.color='white'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,0.65)'">
+        <i class="ti ti-layout-dashboard text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Dashboard</span>
+      </a>
+      <a href="06-admin-orders.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm transition-colors border-l-[3px] border-transparent" style="color: rgba(255,255,255,0.65);" onmouseover="this.style.background='rgba(255,255,255,0.05)';this.style.color='white'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,0.65)'">
+        <i class="ti ti-clipboard-list text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Orders</span>
+      </a>
+      <a href="07-admin-menu.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm transition-colors border-l-[3px] border-transparent" style="color: rgba(255,255,255,0.65);" onmouseover="this.style.background='rgba(255,255,255,0.05)';this.style.color='white'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,0.65)'">
+        <i class="ti ti-tools-kitchen-2 text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Menu</span>
+      </a>
+      <a href="08-admin-couriers.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm transition-colors border-l-[3px] border-transparent" style="color: rgba(255,255,255,0.65);" onmouseover="this.style.background='rgba(255,255,255,0.05)';this.style.color='white'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,0.65)'">
+        <i class="ti ti-bike text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Couriers</span>
+      </a>
+      <a href="09-admin-analytics.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm transition-colors border-l-[3px] border-transparent" style="color: rgba(255,255,255,0.65);" onmouseover="this.style.background='rgba(255,255,255,0.05)';this.style.color='white'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,0.65)'">
+        <i class="ti ti-chart-bar text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Analytics</span>
+      </a>
+      <a href="10-admin-crm.html" class="h-[48px] px-3 flex items-center gap-3 rounded-r-sm transition-colors border-l-[3px]" style="background: rgba(255,255,255,0.10); border-color: var(--brand-primary); color: white;">
+        <i class="ti ti-address-book text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px] font-semibold">CRM</span>
+      </a>
+      <a href="11-admin-settings.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm transition-colors border-l-[3px] border-transparent" style="color: rgba(255,255,255,0.65);" onmouseover="this.style.background='rgba(255,255,255,0.05)';this.style.color='white'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,0.65)'">
+        <i class="ti ti-settings text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Settings</span>
+      </a>
+    </nav>
+  </aside>
+
+  <!-- Mobile Tab Bar -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 h-[60px] border-t flex justify-around items-center z-50 embed-hidden" style="background: #0F172A; border-color: rgba(255,255,255,0.10);">
+    <a href="05-admin-dashboard.html" class="flex flex-col items-center gap-1 transition-colors" style="color: rgba(255,255,255,0.50);">
+      <i class="ti ti-layout-dashboard text-[20px]"></i>
+      <span class="text-[10px]">Home</span>
+    </a>
+    <a href="06-admin-orders.html" class="flex flex-col items-center gap-1 transition-colors" style="color: rgba(255,255,255,0.50);">
+      <i class="ti ti-clipboard-list text-[20px]"></i>
+      <span class="text-[10px]">Orders</span>
+    </a>
+    <a href="10-admin-crm.html" class="flex flex-col items-center gap-1 text-white">
+      <i class="ti ti-address-book text-[20px]"></i>
+      <span class="text-[10px] font-semibold">CRM</span>
+    </a>
+  </nav>
+
+  <!-- Main Content Wrapper -->
+  <div class="flex-1 flex flex-col h-full relative z-0 overflow-hidden">
+
+    <!-- Toolbar -->
+    <header class="h-[64px] border-b px-6 flex items-center justify-between shrink-0 z-10" style="background: var(--brand-bg); border-color: var(--brand-border);">
+      <h1 class="text-[18px] font-semibold" style="color: var(--brand-text);">Customers (7)</h1>
+      <div class="flex items-center gap-4 w-full max-w-[420px]">
+        <div class="relative w-full">
+          <i class="ti ti-search absolute left-3 top-1/2 -translate-y-1/2" style="color: var(--brand-text-muted);"></i>
+          <input type="text" placeholder="Search by name or phone..." class="w-full h-[36px] pl-[36px] pr-3 text-[13px] outline-none transition-all" style="background: var(--brand-surface-raised); border-radius: var(--brand-radius-sm); border: 1px solid var(--brand-border); color: var(--brand-text);">
+        </div>
+        <button class="px-3 min-h-[44px] text-[13px] font-semibold transition-colors flex items-center gap-1 whitespace-nowrap" style="border-radius: var(--brand-radius-sm); border: 1px solid var(--brand-border); background: var(--brand-surface); color: var(--brand-text);"><i class="ti ti-download text-[16px]"></i> Export CSV</button>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="flex-1 overflow-y-auto p-4 md:p-6 pb-[80px] md:pb-6 hide-scrollbar" style="background: var(--brand-surface);">
+
+      <div class="border flex flex-col overflow-hidden" style="background: var(--brand-bg); border-radius: var(--brand-radius); border-color: var(--brand-border); box-shadow: 0 2px 12px color-mix(in srgb, #000 30%, transparent);">
+        <div class="overflow-x-auto hide-scrollbar">
+          <table class="w-full text-left text-[13px]">
+            <thead class="text-[11px] uppercase border-b" style="color: var(--brand-text-muted); background: color-mix(in srgb, var(--brand-surface) 50%, transparent); border-color: var(--brand-border);">
+              <tr>
+                <th class="px-4 py-3 font-bold w-[25%]">Name</th>
+                <th class="px-4 py-3 font-bold w-[20%]">Phone</th>
+                <th class="px-4 py-3 font-bold text-right">Orders</th>
+                <th class="px-4 py-3 font-bold text-right">LTV</th>
+                <th class="px-4 py-3 font-bold">Last Order</th>
+                <th class="px-4 py-3 font-bold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Customer 1 -->
+              <tr class="border-b transition-colors" style="border-color: var(--brand-border);" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface')" onmouseout="this.style.background=''">
+                <td class="px-4 py-3 font-semibold" style="color: var(--brand-text);">
+                  <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold" style="background: var(--brand-surface-raised); color: var(--brand-text-muted);">SM</div>
+                    Sara Mancini
+                  </div>
+                </td>
+                <td class="px-4 py-3 font-mono" style="color: var(--brand-text-muted);">+355 69 876 543</td>
+                <td class="px-4 py-3 text-right font-mono" style="color: var(--brand-text);">18</td>
+                <td class="px-4 py-3 text-right font-bold" style="color: var(--brand-text);">32,400 ALL</td>
+                <td class="px-4 py-3">
+                  <span class="px-2 py-0.5 text-[11px] font-bold rounded-sm inline-block" style="background: rgba(5,150,105,0.12); color: var(--color-success);">Today</span>
+                </td>
+                <td class="px-4 py-3 text-right">
+                  <button onclick="openDetailPanel()" class="text-[13px] font-semibold hover:underline" style="color: var(--brand-primary);">Details</button>
+                </td>
+              </tr>
+              <!-- Customer 2 -->
+              <tr class="border-b transition-colors" style="border-color: var(--brand-border);" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface')" onmouseout="this.style.background=''">
+                <td class="px-4 py-3 font-semibold" style="color: var(--brand-text);">
+                  <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold" style="background: var(--brand-surface-raised); color: var(--brand-text-muted);">BG</div>
+                    Bled Gjoni
+                  </div>
+                </td>
+                <td class="px-4 py-3 font-mono relative cursor-pointer" style="color: var(--brand-text-muted);" onclick="this.querySelector('.alias-editor').classList.toggle('hidden')">
+                  +355 69 321 654
+                  <span class="ml-2 px-1.5 py-0.5 border rounded-sm text-[9px] font-bold" style="background: var(--brand-surface); border-color: var(--brand-border);">+1 alias</span>
+                  <div class="alias-editor hidden absolute top-full left-4 mt-1 border rounded-[8px] shadow-md p-2 z-10 w-[200px]" style="background: var(--brand-bg); border-color: var(--brand-border);">
+                    <div class="text-[11px] font-bold uppercase mb-1" style="color: var(--brand-text-muted);">Aliases</div>
+                    <div class="flex justify-between items-center text-[12px] p-1 rounded-sm" style="color: var(--brand-text);" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface')" onmouseout="this.style.background=''">
+                      +355 69 321 655
+                      <button class="hover:underline" style="color: var(--color-danger);">×</button>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-right font-mono" style="color: var(--brand-text);">8</td>
+                <td class="px-4 py-3 text-right font-bold" style="color: var(--brand-text);">14,200 ALL</td>
+                <td class="px-4 py-3">
+                  <span class="px-2 py-0.5 text-[11px] font-bold rounded-sm inline-block" style="background: rgba(5,150,105,0.12); color: var(--color-success);">Yesterday</span>
+                </td>
+                <td class="px-4 py-3 text-right">
+                  <button class="text-[13px] font-semibold hover:underline" style="color: var(--brand-primary);">Details</button>
+                </td>
+              </tr>
+              <!-- Customer 3 -->
+              <tr class="border-b transition-colors" style="border-color: var(--brand-border);" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface')" onmouseout="this.style.background=''">
+                <td class="px-4 py-3 font-semibold" style="color: var(--brand-text);">
+                  <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold" style="background: var(--brand-surface-raised); color: var(--brand-text-muted);">EM</div>
+                    Evis Meta
+                  </div>
+                </td>
+                <td class="px-4 py-3 font-mono" style="color: var(--brand-text-muted);">+355 69 222 333</td>
+                <td class="px-4 py-3 text-right font-mono" style="color: var(--brand-text);">2</td>
+                <td class="px-4 py-3 text-right font-bold" style="color: var(--brand-text);">3,800 ALL</td>
+                <td class="px-4 py-3 text-[12px]" style="color: var(--brand-text-muted);">4 days ago</td>
+                <td class="px-4 py-3 text-right">
+                  <button class="text-[13px] font-semibold hover:underline" style="color: var(--brand-primary);">Details</button>
+                </td>
+              </tr>
+              <!-- Customer 4 -->
+              <tr class="border-b transition-colors" style="border-color: var(--brand-border);" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface')" onmouseout="this.style.background=''">
+                <td class="px-4 py-3 font-semibold" style="color: var(--brand-text);">
+                  <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold" style="background: var(--brand-surface-raised); color: var(--brand-text-muted);">AS</div>
+                    Arta Spahiu
+                  </div>
+                </td>
+                <td class="px-4 py-3 font-mono" style="color: var(--brand-text-muted);">+355 69 444 555</td>
+                <td class="px-4 py-3 text-right font-mono" style="color: var(--brand-text);">1</td>
+                <td class="px-4 py-3 text-right font-bold" style="color: var(--brand-text);">1,400 ALL</td>
+                <td class="px-4 py-3">
+                  <span class="px-2 py-0.5 text-[11px] font-bold rounded-sm inline-block" style="background: rgba(217,119,6,0.15); color: var(--color-warning);">Inactive (3 weeks)</span>
+                </td>
+                <td class="px-4 py-3 text-right">
+                  <button class="text-[13px] font-semibold hover:underline" style="color: var(--brand-primary);">Details</button>
+                </td>
+              </tr>
+              <!-- Customer 5 -->
+              <tr class="transition-colors opacity-70 hover:opacity-100" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface')" onmouseout="this.style.background=''">
+                <td class="px-4 py-3 font-semibold" style="color: var(--brand-text);">
+                  <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold" style="background: var(--brand-surface-raised); color: var(--brand-text-muted);">IH</div>
+                    Ilir Hoxha
+                  </div>
+                </td>
+                <td class="px-4 py-3 font-mono" style="color: var(--brand-text-muted);">+355 69 555 666</td>
+                <td class="px-4 py-3 text-right font-mono" style="color: var(--brand-text);">4</td>
+                <td class="px-4 py-3 text-right font-bold" style="color: var(--brand-text);">6,200 ALL</td>
+                <td class="px-4 py-3">
+                  <span class="px-2 py-0.5 text-[11px] font-bold rounded-sm inline-block" style="background: rgba(220,38,38,0.10); color: var(--color-danger);">Churned risk (3 mos)</span>
+                </td>
+                <td class="px-4 py-3 text-right">
+                  <button class="text-[13px] font-semibold hover:underline" style="color: var(--brand-primary);">Details</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- CustomerDetailPanel Overlay -->
+  <div id="detailOverlay" class="fixed inset-0 z-[100] hidden opacity-0 transition-opacity bg-black/60 backdrop-blur-sm" onclick="closeDetailPanel()"></div>
+
+  <!-- CustomerDetailPanel Drawer -->
+  <div id="crmDrawer" class="fixed top-0 right-0 bottom-0 w-full sm:w-[360px] shadow-2xl z-[110] transform translate-x-full transition-transform duration-300 flex flex-col border-l" style="background: var(--brand-bg); border-color: var(--brand-border);">
+
+    <div class="p-5 border-b shrink-0 relative" style="background: var(--brand-surface); border-color: var(--brand-border);">
+      <button onclick="closeDetailPanel()" class="absolute top-4 right-4 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center transition-colors active:scale-[0.97]" style="color: var(--brand-text-muted);" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--brand-surface-raised')" onmouseout="this.style.background=''"><i class="ti ti-x text-[20px]"></i></button>
+
+      <div class="flex items-center gap-4 mb-4 mt-2">
+        <div class="w-14 h-14 rounded-full flex items-center justify-center text-[16px] font-bold shadow-inner border" style="background: var(--brand-surface-raised); color: var(--brand-text-muted); border-color: var(--brand-border);">SM</div>
+        <div>
+          <h2 class="text-[18px] font-bold" style="color: var(--brand-text);">Sara Mancini</h2>
+          <div class="text-[13px] font-mono mt-0.5 hover:underline cursor-pointer" style="color: var(--brand-primary);">+355 69 876 543</div>
+        </div>
+      </div>
+      <div class="text-[11px] mt-2" style="color: var(--brand-text-muted);">Registered 2 months ago</div>
+
+      <!-- Stats Row -->
+      <div class="flex items-center gap-4 mt-4 p-3 border" style="background: var(--brand-bg); border-radius: var(--brand-radius-sm); border-color: var(--brand-border);">
+        <div class="flex-1 text-center border-r" style="border-color: var(--brand-border);">
+          <div class="text-[14px] font-bold" style="color: var(--brand-text);">18</div>
+          <div class="text-[10px] uppercase mt-0.5" style="color: var(--brand-text-muted);">Orders</div>
+        </div>
+        <div class="flex-1 text-center border-r" style="border-color: var(--brand-border);">
+          <div class="text-[14px] font-bold" style="color: var(--brand-text);">32.4k</div>
+          <div class="text-[10px] uppercase mt-0.5" style="color: var(--brand-text-muted);">LTV (ALL)</div>
+        </div>
+        <div class="flex-1 text-center">
+          <div class="text-[14px] font-bold" style="color: var(--brand-text);">1.8k</div>
+          <div class="text-[10px] uppercase mt-0.5" style="color: var(--brand-text-muted);">Avg/Order</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-5 hide-scrollbar">
+
+      <!-- Merge Duplicates -->
+      <div class="mb-6 p-4 flex flex-col gap-3" style="background: rgba(217,119,6,0.08); border: 1px solid rgba(217,119,6,0.25); border-radius: var(--brand-radius-sm);">
+        <div class="flex items-start gap-2">
+          <i class="ti ti-alert-triangle mt-0.5" style="color: var(--color-warning);"></i>
+          <div>
+            <div class="text-[13px] font-bold" style="color: var(--brand-text);">Possible duplicate detected</div>
+            <div class="text-[12px] mt-0.5" style="color: var(--brand-text-muted);">A profile "Sara M." shares a similar phone number variant.</div>
+          </div>
+        </div>
+        <button onclick="openMergeModal()" class="min-h-[44px] text-[12px] font-semibold transition-colors" style="border-radius: var(--brand-radius-sm); background: var(--brand-bg); border: 1px solid var(--color-warning); color: var(--color-warning);">Review &amp; Merge</button>
+      </div>
+
+      <!-- PhoneAliasEditor -->
+      <h3 class="text-[12px] font-bold uppercase mb-3" style="color: var(--brand-text-muted);">Known Phone Numbers</h3>
+      <div class="p-3 mb-6" style="background: var(--brand-surface); border-radius: var(--brand-radius-sm); border: 1px solid var(--brand-border);">
+        <div class="flex justify-between items-center py-2 border-b" style="border-color: var(--brand-border);">
+          <div class="flex items-center gap-2">
+            <span class="px-1.5 py-0.5 text-[9px] font-bold rounded-sm uppercase tracking-wide" style="background: var(--brand-primary-light); color: var(--brand-primary);">Primary</span>
+            <span class="font-mono text-[13px]" style="color: var(--brand-text);">+355 69 876 543</span>
+          </div>
+        </div>
+        <button class="mt-3 text-[12px] font-semibold hover:underline flex items-center gap-1" style="color: var(--brand-primary);"><i class="ti ti-plus"></i> Add alias phone</button>
+      </div>
+
+      <!-- OrderHistoryList -->
+      <h3 class="text-[12px] font-bold uppercase mb-3" style="color: var(--brand-text-muted);">Recent Orders (last 5)</h3>
+      <div class="space-y-2">
+        <div class="flex flex-col p-3 cursor-pointer transition-colors" style="background: var(--brand-surface); border-radius: var(--brand-radius-sm); border: 1px solid var(--brand-border);" onmouseover="this.style.borderColor=getComputedStyle(document.documentElement).getPropertyValue('--brand-primary')" onmouseout="this.style.borderColor=getComputedStyle(document.documentElement).getPropertyValue('--brand-border')">
+          <div class="flex justify-between items-center mb-1">
+            <span class="font-mono text-[12px] font-bold" style="color: var(--brand-text);">#2301 <span class="font-normal ml-1" style="color: var(--brand-text-muted);">Today</span></span>
+            <span class="text-[12px] font-bold" style="color: var(--brand-text);">1,806 ALL</span>
+          </div>
+          <div class="text-[11px] truncate mb-1" style="color: var(--brand-text-muted);">Dragon Roll ×1, Ramen ×1, Tea ×2</div>
+          <div class="flex text-[10px]" style="color: var(--color-warning);">
+            <i class="ti ti-star-filled"></i><i class="ti ti-star-filled"></i><i class="ti ti-star-filled"></i><i class="ti ti-star-filled"></i><i class="ti ti-star-filled"></i>
+          </div>
+        </div>
+        <div class="flex flex-col p-3 cursor-pointer transition-colors" style="background: var(--brand-surface); border-radius: var(--brand-radius-sm); border: 1px solid var(--brand-border);" onmouseover="this.style.borderColor=getComputedStyle(document.documentElement).getPropertyValue('--brand-primary')" onmouseout="this.style.borderColor=getComputedStyle(document.documentElement).getPropertyValue('--brand-border')">
+          <div class="flex justify-between items-center mb-1">
+            <span class="font-mono text-[12px] font-bold" style="color: var(--brand-text);">#2250 <span class="font-normal ml-1" style="color: var(--brand-text-muted);">May 21</span></span>
+            <span class="text-[12px] font-bold" style="color: var(--brand-text);">2,100 ALL</span>
+          </div>
+          <div class="text-[11px] truncate mb-1" style="color: var(--brand-text-muted);">Sashimi Platter ×1, Sake ×1</div>
+          <div class="text-[10px]" style="color: var(--brand-text-muted);">No rating</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MergeDuplicatesModal -->
+  <div id="mergeModal" class="fixed inset-0 z-[200] hidden items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
+    <div class="w-full max-w-[600px] shadow-xl p-6" style="background: var(--brand-bg); border-radius: var(--brand-radius); border: 1px solid var(--brand-border);">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-[18px] font-bold" style="color: var(--brand-text);">Merge duplicate customers</h3>
+        <button onclick="closeMergeModal()" style="color: var(--brand-text-muted);"><i class="ti ti-x text-[20px]"></i></button>
+      </div>
+
+      <p class="text-[13px] mb-4" style="color: var(--brand-text-muted);">Merging will combine order history and keep the primary profile. This action cannot be undone.</p>
+
+      <div class="grid grid-cols-2 gap-4 mb-6">
+        <div class="p-4 relative border-2" style="border-color: var(--brand-primary); background: var(--brand-primary-light); border-radius: var(--brand-radius);">
+          <div class="absolute top-0 right-0 text-white text-[10px] font-bold px-2 py-1 uppercase" style="background: var(--brand-primary); border-bottom-left-radius: var(--brand-radius-sm); border-top-right-radius: var(--brand-radius);">Primary Target</div>
+          <div class="font-bold text-[14px] mb-1 mt-2" style="color: var(--brand-text);">Sara Mancini</div>
+          <div class="font-mono text-[12px] mb-3" style="color: var(--brand-text-muted);">+355 69 876 543</div>
+          <div class="text-[12px]" style="color: var(--brand-text);">18 orders</div>
+          <div class="text-[12px] font-bold" style="color: var(--brand-text);">32,400 ALL LTV</div>
+        </div>
+        <div class="p-4 relative border opacity-70" style="border-color: rgba(220,38,38,0.30); background: rgba(220,38,38,0.05); border-radius: var(--brand-radius);">
+          <div class="absolute top-0 right-0 text-white text-[10px] font-bold px-2 py-1 uppercase" style="background: var(--color-danger); border-bottom-left-radius: var(--brand-radius-sm); border-top-right-radius: var(--brand-radius);">Will be removed</div>
+          <div class="font-bold text-[14px] mb-1 mt-2" style="color: var(--brand-text);">Sara M.</div>
+          <div class="font-mono text-[12px] mb-3" style="color: var(--brand-text-muted);">+355 69 876 543</div>
+          <div class="text-[12px]" style="color: var(--brand-text);">3 orders</div>
+          <div class="text-[12px] font-bold" style="color: var(--brand-text);">5,400 ALL LTV</div>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3">
+        <button onclick="closeMergeModal()" class="px-4 h-[40px] text-[13px] font-semibold transition-colors" style="border-radius: var(--brand-radius-sm); border: 1px solid var(--brand-border); background: var(--brand-surface); color: var(--brand-text);">Cancel</button>
+        <button class="px-6 h-[40px] text-white text-[13px] font-bold shadow-sm transition-colors" style="border-radius: var(--brand-radius-sm); background: var(--color-danger);">Merge Profiles</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PRESETS = {
+      "Food Dark":       { "--brand-primary":"#ea4f16","--brand-primary-hover":"#ffa12e","--brand-primary-light":"rgba(234,79,22,0.12)","--brand-accent":"#2a2a2a","--brand-bg":"#121212","--brand-surface":"#1e1e1e","--brand-surface-raised":"#2a2a2a","--brand-text":"#ffffff","--brand-text-muted":"#a8a8a8","--brand-border":"#2c2c2c","--brand-font-heading":"'Inter',sans-serif","--brand-font-body":"'Inter',sans-serif","--brand-radius":"12px","--brand-radius-sm":"8px","--brand-radius-btn":"78px" },
+      "Crimson Classic": { "--brand-primary":"#C1121F","--brand-primary-hover":"#9B0D17","--brand-primary-light":"#FFF0F1","--brand-accent":"#F5F0E8","--brand-bg":"#FFFFFF","--brand-surface":"#F8F9FA","--brand-surface-raised":"#F0F0F0","--brand-text":"#1A1A1A","--brand-text-muted":"#6B7280","--brand-border":"#E5E7EB","--brand-font-heading":"'DM Serif Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"12px","--brand-radius-sm":"6px","--brand-radius-btn":"24px" },
+      "Ocean Fresh":     { "--brand-primary":"#0D9488","--brand-primary-hover":"#0A7567","--brand-primary-light":"#F0FDFA","--brand-accent":"#F0F9F8","--brand-bg":"#FFFFFF","--brand-surface":"#F8FFFE","--brand-surface-raised":"#E0F7F5","--brand-text":"#134E4A","--brand-text-muted":"#6B7280","--brand-border":"#CCFBF1","--brand-font-heading":"'Cormorant Garamond',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"24px","--brand-radius-sm":"12px","--brand-radius-btn":"32px" },
+      "Midnight Urban":  { "--brand-primary":"#F97316","--brand-primary-hover":"#EA6A0A","--brand-primary-light":"rgba(249,115,22,0.10)","--brand-accent":"#1E1E1E","--brand-bg":"#111111","--brand-surface":"#1C1C1C","--brand-surface-raised":"#2a2a2a","--brand-text":"#F5F5F5","--brand-text-muted":"#9CA3AF","--brand-border":"#2D2D2D","--brand-font-heading":"'DM Sans',sans-serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"4px","--brand-radius-sm":"2px","--brand-radius-btn":"4px" },
+      "Sage Garden":     { "--brand-primary":"#4D7C0F","--brand-primary-hover":"#3F6812","--brand-primary-light":"#F7FEE7","--brand-accent":"#ECFCCB","--brand-bg":"#FFFFFF","--brand-surface":"#F7FEE7","--brand-surface-raised":"#E8F5E0","--brand-text":"#1A2E05","--brand-text-muted":"#6B7280","--brand-border":"#D9F99D","--brand-font-heading":"'Playfair Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px" },
+      "Royal Gold":      { "--brand-primary":"#B45309","--brand-primary-hover":"#92400E","--brand-primary-light":"rgba(180,83,9,0.10)","--brand-accent":"#1C1400","--brand-bg":"#0D0900","--brand-surface":"#1A1200","--brand-surface-raised":"#2a2000","--brand-text":"#FEF3C7","--brand-text-muted":"#D97706","--brand-border":"#2D2000","--brand-font-heading":"'Cormorant Garamond',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"2px","--brand-radius-sm":"1px","--brand-radius-btn":"2px" },
+      "Coral Breeze":    { "--brand-primary":"#DB2777","--brand-primary-hover":"#BE185D","--brand-primary-light":"#FDF2F8","--brand-accent":"#FCE7F3","--brand-bg":"#FFFFFF","--brand-surface":"#FDF2F8","--brand-surface-raised":"#FDE8F0","--brand-text":"#500724","--brand-text-muted":"#9D174D","--brand-border":"#FBCFE8","--brand-font-heading":"'Playfair Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px" }
+    };
+
+    let themeIdx = 0;
+    const themeKeys = Object.keys(PRESETS);
+    let savedTheme = localStorage.getItem('dos_mockup_theme');
+    if (!savedTheme) { savedTheme = 'Food Dark'; localStorage.setItem('dos_mockup_theme', 'Food Dark'); }
+    if (savedTheme && PRESETS[savedTheme]) {
+      themeIdx = themeKeys.indexOf(savedTheme);
+      applyPreset(savedTheme);
+      document.getElementById('theme-btn').innerHTML = '<i class="ti ti-palette text-[14px]"></i> ' + savedTheme;
+    }
+
+    function cycleTheme() {
+      themeIdx = (themeIdx + 1) % themeKeys.length;
+      const name = themeKeys[themeIdx];
+      applyPreset(name);
+      localStorage.setItem('dos_mockup_theme', name);
+      document.getElementById('theme-btn').innerHTML = '<i class="ti ti-palette text-[14px]"></i> ' + name;
+    }
+
+    function applyPreset(name) {
+      const p = PRESETS[name] || PRESETS['Food Dark'];
+      const r = document.documentElement.style;
+      Object.entries(p).forEach(([k, v]) => r.setProperty(k, v));
+    }
+
+    function openDetailPanel() {
+      document.getElementById('detailOverlay').classList.remove('hidden');
+      setTimeout(() => document.getElementById('detailOverlay').classList.remove('opacity-0'), 10);
+      document.getElementById('crmDrawer').classList.remove('translate-x-full');
+    }
+    function closeDetailPanel() {
+      document.getElementById('detailOverlay').classList.add('opacity-0');
+      document.getElementById('crmDrawer').classList.add('translate-x-full');
+      setTimeout(() => document.getElementById('detailOverlay').classList.add('hidden'), 300);
+    }
+    function openMergeModal() { document.getElementById('mergeModal').classList.replace('hidden', 'flex'); }
+    function closeMergeModal() { document.getElementById('mergeModal').classList.replace('flex', 'hidden'); }
+
+    if (new URLSearchParams(window.location.search).get('embed') === 'true') {
+      document.body.classList.add('embed-mode');
+    }
+  </script>
+</body>
+</html>

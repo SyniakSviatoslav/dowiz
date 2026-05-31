@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="sq" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dubin & Sushi — Menu</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <script src="mock-data.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              primary: 'var(--brand-primary)',
+              'primary-hover': 'var(--brand-primary-hover)',
+              'primary-light': 'var(--brand-primary-light)',
+              accent: 'var(--brand-accent)',
+              bg: 'var(--brand-bg)',
+              surface: 'var(--brand-surface)',
+              'surface-raised': 'var(--brand-surface-raised)',
+              text: 'var(--brand-text)',
+              'text-muted': 'var(--brand-text-muted)',
+              border: 'var(--brand-border)',
+            },
+            semantic: {
+              success: 'var(--color-success)',
+              warning: 'var(--color-warning)',
+              danger: 'var(--color-danger)',
+              info: 'var(--color-info)',
+            }
+          },
+          fontFamily: {
+            heading: 'var(--brand-font-heading)',
+            body: 'var(--brand-font-body)',
+          },
+          borderRadius: {
+            brand: 'var(--brand-radius)',
+            'brand-sm': 'var(--brand-radius-sm)',
+            'brand-btn': 'var(--brand-radius-btn)',
+      }
+    }
+
+    function showSkeletons() { document.querySelectorAll('.skeleton-container').forEach(el => el.classList.remove('hidden')); document.querySelectorAll('.content-container').forEach(el => el.classList.add('hidden')); }
+    function hideSkeletons() { document.querySelectorAll('.skeleton-container').forEach(el => el.classList.add('hidden')); document.querySelectorAll('.content-container').forEach(el => el.classList.remove('hidden')); }
+    showSkeletons();
+    setTimeout(() => hideSkeletons(), 800);
+  </script>
+
+  <style>
+    :root {
+      --brand-primary:        #ea4f16;
+      --brand-primary-hover:  #ffa12e;
+      --brand-primary-light:  rgba(234, 79, 22, 0.12);
+      --brand-accent:         #2a2a2a;
+      --brand-bg:             #121212;
+      --brand-surface:        #1e1e1e;
+      --brand-surface-raised: #2a2a2a;
+      --brand-text:           #ffffff;
+      --brand-text-muted:     #a8a8a8;
+      --brand-border:         #2c2c2c;
+      --brand-font-heading:   'Inter', sans-serif;
+      --brand-font-body:      'Inter', sans-serif;
+      --brand-radius:         12px;
+      --brand-radius-sm:      8px;
+      --brand-radius-btn:     78px;
+      --color-success:  #059669;
+      --color-warning:  #D97706;
+      --color-danger:   #DC2626;
+      --color-info:     #2563EB;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --brand-bg:             #0F172A;
+        --brand-surface:        #1E293B;
+        --brand-surface-raised: #263548;
+        --brand-text:           #F1F5F9;
+        --brand-text-muted:     #94A3B8;
+        --brand-border:         #334155;
+        --brand-primary-light:  rgba(234, 79, 22, 0.15);
+        --brand-accent:         #1E1A14;
+      }
+    }
+
+    body {
+      font-family: var(--brand-font-body);
+      background-color: var(--brand-bg);
+      color: var(--brand-text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    .product-card {
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 2px 12px color-mix(in srgb, #000 30%, transparent);
+    }
+    .product-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 32px color-mix(in srgb, var(--brand-primary) 8%, transparent);
+    }
+
+    .hero-overlay {
+      background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.1) 100%);
+    }
+
+    .skeleton-block {
+      background: linear-gradient(90deg, var(--brand-surface) 25%, var(--brand-border) 50%, var(--brand-surface) 75%);
+      background-size: 200% 100%;
+      border-radius: var(--brand-radius-sm);
+    }
+
+    body.embed-mode .embed-hidden { display: none !important; }
+    body.embed-mode .no-fixed { position: static !important; }
+    body.embed-mode header, body.embed-mode nav { display: none !important; }
+    body.embed-mode .embed-show { display: flex !important; }
+    .embed-show { display: none; }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .cart-bounce { animation: cart-bounce 0.35s ease; }
+      @keyframes cart-bounce {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.12); }
+      }
+      .animate-pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+      @keyframes pulse-dot {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.4; transform: scale(0.85); }
+      }
+      @keyframes shimmer {
+        0%   { background-position: -200% 0; }
+        100% { background-position:  200% 0; }
+      }
+      .skeleton-block { animation: shimmer 1.5s ease-in-out infinite; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, ::before, ::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    button, .interactive-card {
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    button:active, .interactive-card:active { transform: scale(0.97); }
+    .skeleton { background:linear-gradient(90deg, var(--brand-border) 25%, var(--brand-surface-raised) 50%, var(--brand-border) 75%); background-size:200px 100%; animation:shimmer 1.5s infinite; border-radius:var(--brand-radius-sm); }
+    .skeleton-text { height:14px; margin-bottom:8px; width:100%; }
+    .skeleton-text-sm { height:10px; width:60%; }
+    .skeleton-card { height:100px; width:100%; }
+    .skeleton-circle { width:44px; height:44px; border-radius:50%; }
+  </style>
+</head>
+<body class="relative min-h-screen pb-20">
+
+  <!-- Theme Switcher -->
+  <button id="theme-btn" onclick="cycleTheme()" class="fixed top-4 right-4 z-[9999] bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-full px-3 py-1.5 text-[12px] cursor-pointer shadow-sm flex items-center justify-center gap-1.5 font-medium embed-hidden" style="color:var(--brand-text)">
+    <i class="ti ti-palette text-[14px]"></i> Food Dark
+  </button>
+
+  <!-- Sticky Header -->
+  <header class="sticky top-0 z-50 h-[56px] bg-[var(--brand-surface)] border-b border-[var(--brand-border)] px-4 flex items-center justify-between no-fixed w-full" style="backdrop-filter:blur(12px)">
+    <div class="font-bold text-[20px]" style="color:var(--brand-primary);font-family:var(--brand-font-heading)">
+      Dubin &amp; Sushi
+    </div>
+    <div class="flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-full" style="background:rgba(5,150,105,0.12);color:var(--color-success)">
+      <div class="w-1.5 h-1.5 rounded-full animate-pulse-dot" style="background:var(--color-success)"></div>
+      Open · until 22:00
+    </div>
+    <button class="relative p-2 rounded-full transition-colors" style="color:var(--brand-text)" aria-label="Cart" onclick="toggleClosedOverlay()">
+      <i class="ti ti-shopping-cart text-[24px]"></i>
+      <span id="headerCartCount" class="absolute top-1.5 right-1.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-white text-[10px] font-bold rounded-full border-2" style="background:var(--brand-primary);border-color:var(--brand-bg)">0</span>
+    </button>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="relative w-full h-[240px] flex items-end overflow-hidden" style="background:linear-gradient(160deg,var(--brand-surface-raised) 0%,var(--brand-accent) 60%,var(--brand-primary) 100%)">
+    <div class="absolute inset-0 hero-overlay"></div>
+    <div class="relative z-10 w-full px-5 pb-5">
+      <div class="flex items-center gap-1 text-[13px] font-medium mb-2" style="color:var(--brand-text-muted)">
+        <span class="text-yellow-400">★★★★★</span>
+        <span style="color:var(--brand-text)">4.8</span>
+        <span>(124 reviews)</span>
+      </div>
+      <h1 class="text-[32px] font-bold text-white" style="font-family:var(--brand-font-heading);text-shadow:0 2px 12px rgba(0,0,0,0.5)">Dubin &amp; Sushi</h1>
+      <p class="text-[14px] font-medium mt-1" style="color:rgba(255,255,255,0.8)">Sushi &amp; Noodles · Delivery from 30 min</p>
+    </div>
+  </section>
+
+  <!-- Category Nav -->
+  <nav id="categoryNav" class="sticky top-[56px] z-40 h-[48px] border-b no-fixed w-full" style="background:var(--brand-bg);border-color:var(--brand-border)">
+    <div class="h-full overflow-x-auto hide-scrollbar flex items-center text-[14px]">
+      <button data-target="cat-pizza" class="cat-link h-full flex items-center px-4 whitespace-nowrap font-semibold border-b-2 transition-colors" style="color:var(--brand-primary);border-color:var(--brand-primary)">Sushi</button>
+      <button data-target="cat-pasta" class="cat-link h-full flex items-center px-4 whitespace-nowrap font-medium transition-colors border-b-2 border-transparent" style="color:var(--brand-text-muted)">Ramen</button>
+      <button class="cat-link h-full flex items-center px-4 whitespace-nowrap font-medium transition-colors border-b-2 border-transparent" style="color:var(--brand-text-muted)">Bao Buns</button>
+      <button class="cat-link h-full flex items-center px-4 whitespace-nowrap font-medium transition-colors border-b-2 border-transparent" style="color:var(--brand-text-muted)">Drinks</button>
+      <button class="cat-link h-full flex items-center px-4 whitespace-nowrap font-medium transition-colors border-b-2 border-transparent" style="color:var(--brand-text-muted)">Desserts</button>
+      <button class="cat-link h-full flex items-center px-4 whitespace-nowrap font-medium transition-colors border-b-2 border-transparent" style="color:var(--brand-text-muted)">Sauces</button>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto pt-4">
+
+    <div id="menuSkeleton" class="skeleton-container px-4 mt-4 grid grid-cols-2 gap-3">
+      <div class="skeleton rounded-brand" style="height:200px"></div>
+      <div class="skeleton rounded-brand" style="height:200px"></div>
+      <div class="skeleton rounded-brand" style="height:200px"></div>
+      <div class="skeleton rounded-brand" style="height:200px"></div>
+      <div class="skeleton rounded-brand" style="height:200px"></div>
+      <div class="skeleton rounded-brand" style="height:200px"></div>
+    </div>
+
+    <div id="menuContent" class="content-container">
+    <!-- Section: Sushi -->
+    <section id="cat-pizza" class="cat-section mb-10 scroll-mt-[120px]">
+      <h2 class="text-[22px] font-bold px-4 mb-4" style="font-family:var(--brand-font-heading);color:var(--brand-text)">Sushi</h2>
+      <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 px-4">
+
+        <article class="product-card rounded-[12px] flex flex-col cursor-pointer overflow-hidden border" style="background:var(--brand-surface);border-color:var(--brand-border)">
+          <div class="w-full aspect-[4/3] flex items-center justify-center" style="background:var(--brand-surface-raised);color:var(--brand-border)">
+            <i class="ti ti-photo text-[32px]"></i>
+          </div>
+          <div class="p-3 flex flex-col flex-1">
+            <h3 class="font-medium text-[14px] mb-1" style="color:var(--brand-text)">Spicy Tuna Roll</h3>
+            <p class="text-[12px] mb-2" style="color:var(--brand-text-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">Fresh tuna, spicy mayo, scallions, sesame.</p>
+            <div class="flex items-center justify-between mt-auto pt-2">
+              <span class="font-bold text-[15px]" style="color:var(--brand-primary)">320 ALL</span>
+              <button class="min-w-[44px] min-h-[44px] flex items-center justify-center text-white active:scale-[0.97]" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn)" onclick="addToCart(event, 320)" aria-label="Add">
+                <i class="ti ti-plus text-[16px]"></i>
+              </button>
+            </div>
+            <div class="flex gap-1 mt-1.5 flex-wrap">
+              <span class="px-1.5 py-0.5 rounded-[6px] text-[10px]" style="background:var(--brand-surface-raised);color:var(--brand-text-muted)">gluten</span>
+              <span class="px-1.5 py-0.5 rounded-[6px] text-[10px]" style="background:var(--brand-surface-raised);color:var(--brand-text-muted)">dairy</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="product-card rounded-[12px] flex flex-col cursor-pointer overflow-hidden border" style="background:var(--brand-surface);border-color:var(--brand-border)">
+          <div class="w-full aspect-[4/3] flex items-center justify-center" style="background:var(--brand-surface-raised);color:var(--brand-border)">
+            <i class="ti ti-photo text-[32px]"></i>
+          </div>
+          <div class="p-3 flex flex-col flex-1">
+            <h3 class="font-medium text-[14px] mb-1" style="color:var(--brand-text)">Salmon Avocado Roll</h3>
+            <p class="text-[12px] mb-2" style="color:var(--brand-text-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">Fresh salmon, avocado, cream cheese.</p>
+            <div class="flex items-center justify-between mt-auto pt-2">
+              <span class="font-bold text-[15px]" style="color:var(--brand-primary)">380 ALL</span>
+              <button class="min-w-[44px] min-h-[44px] flex items-center justify-center text-white active:scale-[0.97]" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn)" onclick="addToCart(event, 380)" aria-label="Add">
+                <i class="ti ti-plus text-[16px]"></i>
+              </button>
+            </div>
+            <div class="flex gap-1 mt-1.5 flex-wrap">
+              <span class="px-1.5 py-0.5 rounded-[6px] text-[10px]" style="background:var(--brand-surface-raised);color:var(--brand-text-muted)">gluten</span>
+              <span class="px-1.5 py-0.5 rounded-[6px] text-[10px]" style="background:var(--brand-surface-raised);color:var(--brand-text-muted)">dairy</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- Stop-list -->
+        <article class="product-card rounded-[12px] flex flex-col overflow-hidden relative border opacity-60" style="background:var(--brand-surface);border-color:var(--brand-border)" data-available="false">
+          <div class="relative w-full aspect-[4/3] flex items-center justify-center" style="background:var(--brand-surface-raised);color:var(--brand-border)">
+            <i class="ti ti-photo text-[32px]"></i>
+            <div class="absolute inset-0 z-10" style="background:rgba(0,0,0,0.5)"></div>
+            <div class="absolute inset-0 flex items-center justify-center z-20">
+              <span class="text-[11px] px-2 py-1 rounded-[6px] font-medium" style="background:var(--brand-surface-raised);color:var(--brand-text)">Temporarily unavailable</span>
+            </div>
+          </div>
+          <div class="p-3 flex flex-col flex-1">
+            <h3 class="font-medium text-[14px] mb-1" style="color:var(--brand-text)">Dragon Roll</h3>
+            <p class="text-[12px] mb-2" style="color:var(--brand-text-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">Eel, cucumber, avocado, eel sauce.</p>
+            <div class="flex items-center justify-between mt-auto pt-2">
+              <span class="font-bold text-[15px]" style="color:var(--brand-primary)">420 ALL</span>
+              <button class="min-w-[44px] min-h-[44px] flex items-center justify-center text-white opacity-30 cursor-not-allowed pointer-events-none" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn)" disabled>
+                <i class="ti ti-plus text-[16px]"></i>
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <article class="product-card rounded-[12px] flex flex-col cursor-pointer overflow-hidden border" style="background:var(--brand-surface);border-color:var(--brand-border)">
+          <div class="w-full aspect-[4/3] flex items-center justify-center" style="background:var(--brand-surface-raised);color:var(--brand-border)">
+            <i class="ti ti-photo text-[32px]"></i>
+          </div>
+          <div class="p-3 flex flex-col flex-1">
+            <h3 class="font-medium text-[14px] mb-1" style="color:var(--brand-text)">Shrimp Tempura Roll</h3>
+            <p class="text-[12px] mb-2" style="color:var(--brand-text-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">Crispy shrimp, avocado, spicy mayo.</p>
+            <div class="flex items-center justify-between mt-auto pt-2">
+              <span class="font-bold text-[15px]" style="color:var(--brand-primary)">390 ALL</span>
+              <button class="min-w-[44px] min-h-[44px] flex items-center justify-center text-white active:scale-[0.97]" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn)" onclick="addToCart(event, 390)" aria-label="Add">
+                <i class="ti ti-plus text-[16px]"></i>
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <article class="product-card rounded-[12px] flex flex-col cursor-pointer overflow-hidden border" style="background:var(--brand-surface);border-color:var(--brand-border)">
+          <div class="w-full aspect-[4/3] flex items-center justify-center" style="background:var(--brand-surface-raised);color:var(--brand-border)">
+            <i class="ti ti-photo text-[32px]"></i>
+          </div>
+          <div class="p-3 flex flex-col flex-1">
+            <h3 class="font-medium text-[14px] mb-1" style="color:var(--brand-text)">Volcano Roll</h3>
+            <p class="text-[12px] mb-2" style="color:var(--brand-text-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">Spicy tuna, jalapeño, sriracha, tempura flakes.</p>
+            <div class="flex items-center justify-between mt-auto pt-2">
+              <span class="font-bold text-[15px]" style="color:var(--brand-primary)">410 ALL</span>
+              <button class="min-w-[44px] min-h-[44px] flex items-center justify-center text-white active:scale-[0.97]" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn)" onclick="addToCart(event, 410)" aria-label="Add">
+                <i class="ti ti-plus text-[16px]"></i>
+              </button>
+            </div>
+            <div class="flex gap-1 mt-1.5 flex-wrap">
+              <span class="px-1.5 py-0.5 rounded-[6px] text-[10px]" style="background:var(--brand-surface-raised);color:var(--brand-text-muted)">gluten</span>
+              <span class="px-1.5 py-0.5 rounded-[6px] text-[10px]" style="background:var(--brand-surface-raised);color:var(--brand-text-muted)">dairy</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="product-card rounded-[12px] flex flex-col cursor-pointer overflow-hidden border" style="background:var(--brand-surface);border-color:var(--brand-border)">
+          <div class="w-full aspect-[4/3] flex items-center justify-center" style="background:var(--brand-surface-raised);color:var(--brand-border)">
+            <i class="ti ti-photo text-[32px]"></i>
+          </div>
+          <div class="p-3 flex flex-col flex-1">
+            <h3 class="font-medium text-[14px] mb-1" style="color:var(--brand-text)">Cucumber Roll</h3>
+            <p class="text-[12px] mb-2" style="color:var(--brand-text-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">Fresh cucumber, sesame seeds, nori.</p>
+            <div class="flex items-center justify-between mt-auto pt-2">
+              <span class="font-bold text-[15px]" style="color:var(--brand-primary)">290 ALL</span>
+              <button class="min-w-[44px] min-h-[44px] flex items-center justify-center text-white active:scale-[0.97]" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn)" onclick="addToCart(event, 290)" aria-label="Add">
+                <i class="ti ti-plus text-[16px]"></i>
+              </button>
+            </div>
+            <div class="flex gap-1 mt-1.5 flex-wrap">
+              <span class="px-1.5 py-0.5 rounded-[6px] text-[10px]" style="background:var(--brand-surface-raised);color:var(--brand-text-muted)">gluten</span>
+            </div>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- Section: Ramen -->
+    <section id="cat-pasta" class="cat-section mb-10 scroll-mt-[120px]">
+      <h2 class="text-[22px] font-bold px-4 mb-4" style="font-family:var(--brand-font-heading);color:var(--brand-text)">Ramen</h2>
+      <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 px-4">
+
+        <article class="product-card rounded-[12px] flex flex-col cursor-pointer overflow-hidden border" style="background:var(--brand-surface);border-color:var(--brand-border)">
+          <div class="w-full aspect-[4/3] flex items-center justify-center" style="background:var(--brand-surface-raised);color:var(--brand-border)">
+            <i class="ti ti-photo text-[32px]"></i>
+          </div>
+          <div class="p-3 flex flex-col flex-1">
+            <h3 class="font-medium text-[14px] mb-1" style="color:var(--brand-text)">Tonkotsu Ramen</h3>
+            <p class="text-[12px] mb-2" style="color:var(--brand-text-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">Rich pork broth, chashu, soft egg, noodles.</p>
+            <div class="flex items-center justify-between mt-auto pt-2">
+              <span class="font-bold text-[15px]" style="color:var(--brand-primary)">350 ALL</span>
+              <button class="min-w-[44px] min-h-[44px] flex items-center justify-center text-white active:scale-[0.97]" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn)" onclick="addToCart(event, 350)" aria-label="Add">
+                <i class="ti ti-plus text-[16px]"></i>
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <article class="product-card rounded-[12px] flex flex-col cursor-pointer overflow-hidden border" style="background:var(--brand-surface);border-color:var(--brand-border)">
+          <div class="w-full aspect-[4/3] flex items-center justify-center" style="background:var(--brand-surface-raised);color:var(--brand-border)">
+            <i class="ti ti-photo text-[32px]"></i>
+          </div>
+          <div class="p-3 flex flex-col flex-1">
+            <h3 class="font-medium text-[14px] mb-1" style="color:var(--brand-text)">Spicy Miso Ramen</h3>
+            <p class="text-[12px] mb-2" style="color:var(--brand-text-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">Miso broth, spicy ground pork, corn, scallions.</p>
+            <div class="flex items-center justify-between mt-auto pt-2">
+              <span class="font-bold text-[15px]" style="color:var(--brand-primary)">330 ALL</span>
+              <button class="min-w-[44px] min-h-[44px] flex items-center justify-center text-white active:scale-[0.97]" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn)" onclick="addToCart(event, 330)" aria-label="Add">
+                <i class="ti ti-plus text-[16px]"></i>
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <!-- Skeletons -->
+        <article class="rounded-[12px] overflow-hidden border" style="background:var(--brand-surface);border-color:var(--brand-border)">
+          <div class="w-full aspect-[4/3] skeleton-block rounded-none"></div>
+          <div class="p-3">
+            <div class="h-3 w-3/4 skeleton-block mb-3"></div>
+            <div class="h-2 w-full skeleton-block mb-1.5"></div>
+            <div class="h-2 w-4/5 skeleton-block mb-4"></div>
+            <div class="flex justify-between items-center pt-2">
+              <div class="h-4 w-16 skeleton-block"></div>
+              <div class="w-8 h-8 rounded-full skeleton-block"></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="rounded-[12px] overflow-hidden border" style="background:var(--brand-surface);border-color:var(--brand-border)">
+          <div class="w-full aspect-[4/3] skeleton-block rounded-none"></div>
+          <div class="p-3">
+            <div class="h-3 w-2/3 skeleton-block mb-3"></div>
+            <div class="h-2 w-full skeleton-block mb-1.5"></div>
+            <div class="h-2 w-3/4 skeleton-block mb-4"></div>
+            <div class="flex justify-between items-center pt-2">
+              <div class="h-4 w-16 skeleton-block"></div>
+              <div class="w-8 h-8 rounded-full skeleton-block"></div>
+            </div>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+  </div>
+  </main>
+
+  <!-- Cart FAB -->
+  <div id="cartFabWrapper" class="fixed bottom-[80px] right-[20px] z-[100] embed-hidden hidden">
+    <button id="cartFabBtn" class="h-[48px] px-5 text-white text-[14px] font-medium flex items-center justify-center gap-1" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn);box-shadow:0 4px 12px color-mix(in srgb,var(--brand-primary) 40%,transparent)" onclick="toggleClosedOverlay()">
+      <i class="ti ti-shopping-cart text-[18px]"></i>
+      <span class="mx-1 opacity-40">·</span>Cart
+      <span class="mx-1 opacity-40">·</span>
+      <span id="fabCount">0</span>
+      <span class="mx-1 opacity-40">·</span>
+      <span id="fabTotal">0</span> ALL
+    </button>
+  </div>
+
+  <!-- Inline Cart Bar (embed mode) -->
+  <div id="inlineCartBar" class="w-full h-[64px] border-t flex items-center justify-between px-4 mt-8 embed-show" style="background:var(--brand-surface);border-color:var(--brand-border)">
+    <div class="flex items-center gap-2">
+      <div class="w-10 h-10 rounded-full flex items-center justify-center" style="background:var(--brand-primary-light);color:var(--brand-primary)">
+        <i class="ti ti-shopping-cart text-[20px]"></i>
+      </div>
+      <div>
+        <div class="text-[14px] font-bold" style="color:var(--brand-text)"><span id="inlineCount">0</span> items</div>
+        <div class="text-[12px]" style="color:var(--brand-text-muted)"><span id="inlineTotal">0</span> ALL</div>
+      </div>
+    </div>
+    <a href="02-cart.html" target="_top" class="h-[40px] px-6 text-white font-bold text-[14px] flex items-center justify-center" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn)">
+      View Cart
+    </a>
+  </div>
+
+  <!-- Bottom Navigation -->
+  <nav class="fixed bottom-0 left-0 right-0 z-50 h-[64px] flex items-center justify-around border-t embed-hidden" style="background:var(--brand-surface);border-color:var(--brand-border)">
+    <button class="flex flex-col items-center gap-0.5 px-3" style="color:var(--brand-primary)">
+      <i class="ti ti-home-2 text-[22px]"></i>
+      <span class="text-[10px] font-medium">Home</span>
+    </button>
+    <button class="flex flex-col items-center gap-0.5 px-3" style="color:var(--brand-text-muted)">
+      <i class="ti ti-search text-[22px]"></i>
+      <span class="text-[10px] font-medium">Search</span>
+    </button>
+    <a href="02-cart.html" class="flex flex-col items-center gap-0.5 px-3" style="color:var(--brand-text-muted)">
+      <i class="ti ti-shopping-bag text-[22px]"></i>
+      <span class="text-[10px] font-medium">Orders</span>
+    </a>
+    <button class="flex flex-col items-center gap-0.5 px-3" style="color:var(--brand-text-muted)">
+      <i class="ti ti-bookmark text-[22px]"></i>
+      <span class="text-[10px] font-medium">Saved</span>
+    </button>
+    <button class="flex flex-col items-center gap-0.5 px-3" style="color:var(--brand-text-muted)">
+      <i class="ti ti-user text-[22px]"></i>
+      <span class="text-[10px] font-medium">Profile</span>
+    </button>
+  </nav>
+
+  <!-- Closed Overlay -->
+  <div id="closedOverlay" class="fixed inset-0 bg-black/60 z-[200] hidden items-center justify-center embed-hidden">
+    <div class="rounded-[20px] p-8 max-w-[300px] w-full text-center relative shadow-2xl" style="background:var(--brand-surface-raised)">
+      <button onclick="toggleClosedOverlay()" class="absolute top-4 right-4 text-[24px] leading-none transition-colors" style="color:var(--brand-text-muted)">&times;</button>
+      <i class="ti ti-clock text-[48px] mb-4 block" style="color:var(--brand-text-muted)"></i>
+      <h2 class="text-[22px] font-bold mb-2" style="color:var(--brand-text);font-family:var(--brand-font-heading)">Restaurant closed</h2>
+      <p class="text-[14px] mb-6" style="color:var(--brand-text-muted)">Open daily 10:00–22:00</p>
+      <a href="tel:+35569234567" class="flex items-center justify-center gap-2 w-full min-h-[44px] text-white text-[14px] font-medium transition-all active:scale-[0.97]" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn)">
+        <i class="ti ti-phone text-[18px]"></i>
+        +355 69 234 567
+      </a>
+    </div>
+  </div>
+
+  <!-- Product Modal -->
+  <div id="productModal" class="fixed inset-0 bg-black/60 z-[300] hidden items-end sm:items-center justify-center opacity-0 backdrop-blur-sm" onclick="closeProductModal(event)">
+    <div class="w-full sm:max-w-[440px] sm:rounded-[12px] rounded-t-[12px] h-[85vh] sm:h-auto sm:max-h-[85vh] flex flex-col transform translate-y-full sm:translate-y-4 transition-transform duration-300 overflow-hidden shadow-2xl" id="productModalContent" style="background:var(--brand-surface)" onclick="event.stopPropagation()">
+      <div class="relative w-full h-[240px] shrink-0 flex items-center justify-center" style="background:var(--brand-surface-raised);color:var(--brand-border)">
+        <i class="ti ti-photo text-[64px]"></i>
+        <button onclick="closeProductModal(event)" class="absolute top-4 right-4 min-w-[44px] min-h-[44px] rounded-full bg-black/50 text-white flex items-center justify-center backdrop-blur-md active:scale-[0.97]">
+          <i class="ti ti-x text-[16px]"></i>
+        </button>
+      </div>
+      <div class="p-5 flex-1 overflow-y-auto hide-scrollbar">
+        <h2 class="text-[24px] font-bold mb-2" id="modalTitle" style="color:var(--brand-text);font-family:var(--brand-font-heading)">Dragon Roll</h2>
+        <p class="text-[14px] mb-4 leading-relaxed" id="modalDesc" style="color:var(--brand-text-muted)">Eel, cucumber, avocado, eel sauce, and sesame seeds.</p>
+        <div class="flex flex-wrap gap-2 mb-6">
+          <span class="border px-2 py-1 rounded-[6px] text-[11px] font-bold uppercase tracking-wide" style="background:var(--brand-surface-raised);border-color:var(--brand-border);color:var(--brand-text-muted)">Sushi Rolls</span>
+          <span class="px-2 py-1 rounded-[6px] text-[11px] font-bold uppercase tracking-wide flex items-center gap-1" style="background:rgba(217,119,6,0.1);color:var(--color-warning)"><i class="ti ti-flame text-[12px]"></i> Popular</span>
+        </div>
+        <div class="w-full h-px my-4" style="background:var(--brand-border)"></div>
+
+        <!-- Choice Group -->
+        <div class="mb-5">
+          <h3 class="text-[13px] font-bold uppercase tracking-wide mb-2" style="color:var(--brand-text-muted)">Choose your side</h3>
+          <div class="flex flex-wrap gap-2">
+            <button data-side="fries" class="modifier-chip px-4 py-2.5 rounded-[10px] border text-[13px] font-medium transition-all active:scale-[0.97]" style="border-color:var(--brand-border);background:var(--brand-surface);color:var(--brand-text)" onclick="selectSide('fries')">Fries</button>
+            <button data-side="salad" class="modifier-chip px-4 py-2.5 rounded-[10px] border text-[13px] font-medium transition-all active:scale-[0.97]" style="border-color:var(--brand-border);background:var(--brand-surface);color:var(--brand-text)" onclick="selectSide('salad')">Salad</button>
+            <button data-side="fruit" class="modifier-chip px-4 py-2.5 rounded-[10px] border text-[13px] font-medium transition-all active:scale-[0.97]" style="border-color:var(--brand-border);background:var(--brand-surface);color:var(--brand-text)" onclick="selectSide('fruit')">Fruit <span class="opacity-60">+50 ALL</span></button>
+          </div>
+        </div>
+
+        <!-- Extra Toppings -->
+        <div class="mb-5">
+          <h3 class="text-[13px] font-bold uppercase tracking-wide mb-2" style="color:var(--brand-text-muted)">Add extras</h3>
+          <div class="space-y-2">
+            <div id="extra-row-cheese" class="flex items-center justify-between p-2.5 rounded-[10px] border cursor-pointer" style="border-color:var(--brand-border)" onclick="toggleExtra('cheese')">
+              <div class="flex items-center gap-2">
+                <i id="extra-icon-cheese" class="ti ti-circle-minus text-[18px]" style="color:var(--brand-text-muted)"></i>
+                <span class="text-[13px] font-medium" style="color:var(--brand-text)">Extra Cheese</span>
+              </div>
+              <span class="text-[12px]" style="color:var(--brand-text-muted)">+100 ALL</span>
+            </div>
+            <div id="extra-row-bacon" class="flex items-center justify-between p-2.5 rounded-[10px] border cursor-pointer" style="border-color:var(--brand-border)" onclick="toggleExtra('bacon')">
+              <div class="flex items-center gap-2">
+                <i id="extra-icon-bacon" class="ti ti-circle-minus text-[18px]" style="color:var(--brand-text-muted)"></i>
+                <span class="text-[13px] font-medium" style="color:var(--brand-text)">Bacon</span>
+              </div>
+              <span class="text-[12px]" style="color:var(--brand-text-muted)">+150 ALL</span>
+            </div>
+            <div id="extra-row-avocado" class="flex items-center justify-between p-2.5 rounded-[10px] border cursor-pointer" style="border-color:var(--brand-border)" onclick="toggleExtra('avocado')">
+              <div class="flex items-center gap-2">
+                <i id="extra-icon-avocado" class="ti ti-circle-minus text-[18px]" style="color:var(--brand-text-muted)"></i>
+                <span class="text-[13px] font-medium" style="color:var(--brand-text)">Avocado</span>
+              </div>
+              <span class="text-[12px]" style="color:var(--brand-text-muted)">+80 ALL</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Special Instructions -->
+        <div class="mb-2">
+          <h3 class="text-[13px] font-bold uppercase tracking-wide mb-2" style="color:var(--brand-text-muted)">Special instructions</h3>
+          <textarea id="modalInstructions" class="w-full h-[44px] rounded-[10px] px-3 py-2.5 text-[13px] resize-none outline-none" placeholder="Any allergies or preferences?" maxlength="200" style="background:var(--brand-surface-raised);border-color:var(--brand-border);color:var(--brand-text);border-width:1px" oninput="updateInstructions(this.value)"></textarea>
+        </div>
+      </div>
+      <div class="p-4 border-t shrink-0" style="background:var(--brand-surface);border-color:var(--brand-border)">
+        <div class="flex items-center gap-4">
+          <div class="flex items-center border rounded-full h-[48px] px-2 shrink-0" style="background:var(--brand-surface-raised);border-color:var(--brand-border)">
+            <button class="min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center active:scale-[0.97]" style="color:var(--brand-text)" onclick="updateModalQty(-1)"><i class="ti ti-minus"></i></button>
+            <span class="w-8 text-center text-[15px] font-bold" id="modalQty" style="color:var(--brand-text)">1</span>
+            <button class="min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center active:scale-[0.97]" style="color:var(--brand-text)" onclick="updateModalQty(1)"><i class="ti ti-plus"></i></button>
+          </div>
+          <button class="flex-1 h-[48px] text-white font-bold text-[15px] flex items-center justify-center gap-2 active:scale-95 transition-transform" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn)" onclick="confirmModalAdd()">
+            Add <span class="font-normal opacity-50">·</span> <span id="modalTotal">850</span> ALL
+          </button>
+        </div>
+        <div id="modifierSummary" class="text-[11px] text-center mt-2" style="color:var(--brand-text-muted)"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delivery Zone Gate -->
+  <div id="deliveryZoneGate" class="fixed inset-0 z-[400] flex-col hidden embed-hidden" style="background:var(--brand-bg)">
+    <div class="flex-1 overflow-y-auto flex flex-col items-center justify-center p-6 text-center max-w-[400px] mx-auto">
+      <div class="w-20 h-20 rounded-full flex items-center justify-center mb-6" style="background:var(--brand-primary-light);color:var(--brand-primary)">
+        <i class="ti ti-map-pin text-[40px]"></i>
+      </div>
+      <h2 class="text-[28px] font-bold mb-3" style="color:var(--brand-text);font-family:var(--brand-font-heading)">Where to deliver?</h2>
+      <p class="text-[14px] mb-8 leading-relaxed" style="color:var(--brand-text-muted)">Enter your address to check if you are within Dubin &amp; Sushi's delivery zone.</p>
+      <div class="w-full relative mb-4 text-left">
+        <i class="ti ti-search absolute left-4 top-1/2 -translate-y-1/2 text-[18px]" style="color:var(--brand-text-muted)"></i>
+        <input type="text" placeholder="Search street, area..." class="w-full h-[56px] pl-11 pr-4 outline-none text-[15px] font-medium border-2 transition-colors" style="background:var(--brand-surface-raised);border-color:var(--brand-border);border-radius:var(--brand-radius-sm);color:var(--brand-text)">
+      </div>
+      <button class="w-full h-[56px] text-white font-bold text-[15px] flex items-center justify-center gap-2 mb-4 active:scale-[0.97]" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn)" onclick="closeDeliveryZoneGate()">
+        Confirm Address
+      </button>
+      <button class="text-[13px] font-bold hover:underline" style="color:var(--brand-primary)" onclick="closeDeliveryZoneGate()">
+        I'll pick it up myself
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // THEME SWITCHER
+    const PRESETS = {
+      "Food Dark":       { "--brand-primary":"#ea4f16","--brand-primary-hover":"#ffa12e","--brand-primary-light":"rgba(234,79,22,0.12)","--brand-accent":"#2a2a2a","--brand-bg":"#121212","--brand-surface":"#1e1e1e","--brand-surface-raised":"#2a2a2a","--brand-text":"#ffffff","--brand-text-muted":"#a8a8a8","--brand-border":"#2c2c2c","--brand-font-heading":"'Inter',sans-serif","--brand-font-body":"'Inter',sans-serif","--brand-radius":"12px","--brand-radius-sm":"8px","--brand-radius-btn":"78px" },
+      "Crimson Classic": { "--brand-primary":"#C1121F","--brand-primary-hover":"#9B0D17","--brand-primary-light":"#FFF0F1","--brand-accent":"#F5F0E8","--brand-bg":"#FFFFFF","--brand-surface":"#F8F9FA","--brand-surface-raised":"#F0F0F0","--brand-text":"#1A1A1A","--brand-text-muted":"#6B7280","--brand-border":"#E5E7EB","--brand-font-heading":"'DM Serif Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"12px","--brand-radius-sm":"6px","--brand-radius-btn":"24px" },
+      "Ocean Fresh":     { "--brand-primary":"#0D9488","--brand-primary-hover":"#0A7567","--brand-primary-light":"#F0FDFA","--brand-accent":"#F0F9F8","--brand-bg":"#FFFFFF","--brand-surface":"#F8FFFE","--brand-surface-raised":"#E0F7F5","--brand-text":"#134E4A","--brand-text-muted":"#6B7280","--brand-border":"#CCFBF1","--brand-font-heading":"'Cormorant Garamond',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"24px","--brand-radius-sm":"12px","--brand-radius-btn":"32px" },
+      "Midnight Urban":  { "--brand-primary":"#F97316","--brand-primary-hover":"#EA6A0A","--brand-primary-light":"rgba(249,115,22,0.10)","--brand-accent":"#1E1E1E","--brand-bg":"#111111","--brand-surface":"#1C1C1C","--brand-surface-raised":"#2a2a2a","--brand-text":"#F5F5F5","--brand-text-muted":"#9CA3AF","--brand-border":"#2D2D2D","--brand-font-heading":"'DM Sans',sans-serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"4px","--brand-radius-sm":"2px","--brand-radius-btn":"4px" },
+      "Sage Garden":     { "--brand-primary":"#4D7C0F","--brand-primary-hover":"#3F6812","--brand-primary-light":"#F7FEE7","--brand-accent":"#ECFCCB","--brand-bg":"#FFFFFF","--brand-surface":"#F7FEE7","--brand-surface-raised":"#E8F5E0","--brand-text":"#1A2E05","--brand-text-muted":"#6B7280","--brand-border":"#D9F99D","--brand-font-heading":"'Playfair Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px" },
+      "Royal Gold":      { "--brand-primary":"#B45309","--brand-primary-hover":"#92400E","--brand-primary-light":"rgba(180,83,9,0.10)","--brand-accent":"#1C1400","--brand-bg":"#0D0900","--brand-surface":"#1A1200","--brand-surface-raised":"#2a2000","--brand-text":"#FEF3C7","--brand-text-muted":"#D97706","--brand-border":"#2D2000","--brand-font-heading":"'Cormorant Garamond',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"2px","--brand-radius-sm":"1px","--brand-radius-btn":"2px" },
+      "Coral Breeze":    { "--brand-primary":"#DB2777","--brand-primary-hover":"#BE185D","--brand-primary-light":"#FDF2F8","--brand-accent":"#FCE7F3","--brand-bg":"#FFFFFF","--brand-surface":"#FDF2F8","--brand-surface-raised":"#FDE8F0","--brand-text":"#500724","--brand-text-muted":"#9D174D","--brand-border":"#FBCFE8","--brand-font-heading":"'Playfair Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px" }
+    };
+
+    let themeIdx = 0;
+    const themeKeys = Object.keys(PRESETS);
+
+    let savedTheme = localStorage.getItem('dos_mockup_theme') || 'Food Dark';
+    if (!PRESETS[savedTheme]) savedTheme = 'Food Dark';
+    themeIdx = themeKeys.indexOf(savedTheme);
+    applyPreset(savedTheme);
+    document.getElementById('theme-btn').innerHTML = '<i class="ti ti-palette text-[14px]"></i> ' + savedTheme;
+
+    function cycleTheme() {
+      themeIdx = (themeIdx + 1) % themeKeys.length;
+      const name = themeKeys[themeIdx];
+      applyPreset(name);
+      localStorage.setItem('dos_mockup_theme', name);
+      document.getElementById('theme-btn').innerHTML = '<i class="ti ti-palette text-[14px]"></i> ' + name;
+    }
+
+    function applyPreset(name) {
+      const p = PRESETS[name];
+      const r = document.documentElement.style;
+      Object.entries(p).forEach(([k, v]) => r.setProperty(k, v));
+    }
+
+    // Embed mode check
+    const isEmbed = window.location.search.includes('embed=true');
+    if (isEmbed) {
+      document.body.classList.add('embed-mode');
+      reportHeight();
+      window.addEventListener('resize', reportHeight);
+    }
+
+    function reportHeight() {
+      if (isEmbed) {
+        window.parent.postMessage({ type: 'dos:height', height: document.body.scrollHeight }, '*');
+      }
+    }
+
+    // Cart Logic
+    const storagePrefix = isEmbed ? 'dos_embed_dubin-sushi-tirana_' : 'dos_';
+    let cart = JSON.parse(localStorage.getItem(storagePrefix + 'cart') || '[]');
+    let itemCount = cart.reduce((sum, i) => sum + i.qty, 0);
+    let total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+
+    function updateCartUI() {
+      document.getElementById('headerCartCount').textContent = itemCount;
+
+      const fabWrapper = document.getElementById('cartFabWrapper');
+      if (itemCount > 0) {
+        if (!isEmbed) {
+          fabWrapper.classList.remove('hidden');
+          document.getElementById('fabCount').textContent = itemCount;
+          document.getElementById('fabTotal').textContent = total;
+        } else {
+          document.getElementById('inlineCount').textContent = itemCount;
+          document.getElementById('inlineTotal').textContent = total;
+        }
+      } else {
+        fabWrapper.classList.add('hidden');
+      }
+
+      localStorage.setItem(storagePrefix + 'cart', JSON.stringify(cart));
+      reportHeight();
+    }
+
+    updateCartUI();
+
+    function addToCart(event, price) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      itemCount++;
+      total += price;
+      cart.push({ id: Date.now(), price: price, qty: 1 });
+      updateCartUI();
+
+      if (!isEmbed) {
+        const fabBtn = document.getElementById('cartFabBtn');
+        fabBtn.classList.remove('cart-bounce');
+        void fabBtn.offsetWidth;
+        fabBtn.classList.add('cart-bounce');
+      }
+    }
+
+    // Product Modal Logic
+    let currentModalPrice = 0;
+    let currentModalQty = 1;
+    let currentModifiers = { side: null, extras: [], instructions: '' };
+    const MODIFIER_DATA = {
+      side: { fries: { label: 'Fries', price: 0 }, salad: { label: 'Salad', price: 0 }, fruit: { label: 'Fruit', price: 50 } },
+      extras: { cheese: { label: 'Extra Cheese', price: 100 }, bacon: { label: 'Bacon', price: 150 }, avocado: { label: 'Avocado', price: 80 } }
+    };
+
+    function calcModifierPrice() {
+      const sidePrice = currentModifiers.side ? MODIFIER_DATA.side[currentModifiers.side].price : 0;
+      const extrasPrice = currentModifiers.extras.reduce((sum, e) => sum + MODIFIER_DATA.extras[e].price, 0);
+      return sidePrice + extrasPrice;
+    }
+
+    function updateModalTotal() {
+      const unitPrice = currentModalPrice + calcModifierPrice();
+      const totalPrice = unitPrice * currentModalQty;
+      document.getElementById('modalTotal').textContent = totalPrice;
+      updateModifierSummary();
+    }
+
+    function updateModifierSummary() {
+      const el = document.getElementById('modifierSummary');
+      const parts = [];
+      if (currentModifiers.side) parts.push(MODIFIER_DATA.side[currentModifiers.side].label);
+      if (currentModifiers.extras.length) {
+        parts.push(currentModifiers.extras.map(e => MODIFIER_DATA.extras[e].label).join(', '));
+      }
+      el.textContent = parts.length ? parts.join(' · ') : '';
+    }
+
+    function selectSide(side) {
+      currentModifiers.side = side;
+      document.querySelectorAll('.modifier-chip').forEach(chip => {
+        const sel = chip.dataset.side === side;
+        chip.style.borderColor = sel ? 'var(--brand-primary)' : 'var(--brand-border)';
+        chip.style.background = sel ? 'var(--brand-primary-light)' : 'var(--brand-surface)';
+        chip.style.color = sel ? 'var(--brand-primary)' : 'var(--brand-text)';
+      });
+      updateModalTotal();
+    }
+
+    function toggleExtra(key) {
+      const idx = currentModifiers.extras.indexOf(key);
+      if (idx > -1) currentModifiers.extras.splice(idx, 1);
+      else currentModifiers.extras.push(key);
+      const row = document.getElementById('extra-row-' + key);
+      const icon = document.getElementById('extra-icon-' + key);
+      const sel = currentModifiers.extras.includes(key);
+      if (sel) {
+        icon.className = 'ti ti-check-circle text-[18px]';
+        icon.style.color = 'var(--brand-primary)';
+        row.style.borderColor = 'var(--brand-primary)';
+        row.style.background = 'var(--brand-primary-light)';
+      } else {
+        icon.className = 'ti ti-circle-minus text-[18px]';
+        icon.style.color = 'var(--brand-text-muted)';
+        row.style.borderColor = 'var(--brand-border)';
+        row.style.background = 'transparent';
+      }
+      updateModalTotal();
+    }
+
+    function updateInstructions(val) {
+      currentModifiers.instructions = val;
+    }
+
+    document.querySelectorAll('.product-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        if (card.getAttribute('data-available') === 'false') return;
+
+        const title = card.querySelector('h3').textContent;
+        const priceText = card.querySelector('[style*="brand-primary"]').textContent;
+        currentModalPrice = parseInt(priceText.replace(/[^0-9]/g, ''));
+        currentModalQty = 1;
+        currentModifiers = { side: null, extras: [], instructions: '' };
+
+        document.getElementById('modalTitle').textContent = title;
+        document.getElementById('modalQty').textContent = currentModalQty;
+
+        document.querySelectorAll('.modifier-chip').forEach(chip => {
+          chip.style.borderColor = 'var(--brand-border)';
+          chip.style.background = 'var(--brand-surface)';
+          chip.style.color = 'var(--brand-text)';
+        });
+        ['cheese', 'bacon', 'avocado'].forEach(k => {
+          const r = document.getElementById('extra-row-' + k);
+          const ic = document.getElementById('extra-icon-' + k);
+          if (r) { r.style.borderColor = 'var(--brand-border)'; r.style.background = 'transparent'; }
+          if (ic) { ic.className = 'ti ti-circle-minus text-[18px]'; ic.style.color = 'var(--brand-text-muted)'; }
+        });
+        const ta = document.getElementById('modalInstructions');
+        if (ta) ta.value = '';
+
+        updateModalTotal();
+
+        const modal = document.getElementById('productModal');
+        const content = document.getElementById('productModalContent');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        setTimeout(() => {
+          modal.classList.remove('opacity-0');
+          if (window.innerWidth < 640) content.classList.remove('translate-y-full');
+          else content.classList.remove('sm:translate-y-4');
+        }, 10);
+      });
+    });
+
+    function closeProductModal(event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      const modal = document.getElementById('productModal');
+      const content = document.getElementById('productModalContent');
+
+      modal.classList.add('opacity-0');
+      if (window.innerWidth < 640) content.classList.add('translate-y-full');
+      else content.classList.add('sm:translate-y-4');
+
+      setTimeout(() => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }, 300);
+    }
+
+    function updateModalQty(delta) {
+      currentModalQty += delta;
+      if (currentModalQty < 1) currentModalQty = 1;
+      document.getElementById('modalQty').textContent = currentModalQty;
+      updateModalTotal();
+    }
+
+    function confirmModalAdd() {
+      const unitPrice = currentModalPrice + calcModifierPrice();
+      itemCount += currentModalQty;
+      total += unitPrice * currentModalQty;
+      cart.push({ id: Date.now(), price: unitPrice, qty: currentModalQty, name: document.getElementById('modalTitle').textContent, modifiers: { ...currentModifiers } });
+      updateCartUI();
+      closeProductModal();
+      if (!isEmbed) {
+        const fabBtn = document.getElementById('cartFabBtn');
+        fabBtn.classList.remove('cart-bounce');
+        void fabBtn.offsetWidth;
+        fabBtn.classList.add('cart-bounce');
+      }
+    }
+
+    // Delivery Zone Gate Logic
+    if (!isEmbed && !sessionStorage.getItem('dos_zone_checked')) {
+      const gate = document.getElementById('deliveryZoneGate');
+      gate.classList.remove('hidden');
+      gate.classList.add('flex');
+    }
+
+    function closeDeliveryZoneGate() {
+      sessionStorage.setItem('dos_zone_checked', 'true');
+      const gate = document.getElementById('deliveryZoneGate');
+      gate.classList.add('hidden');
+      gate.classList.remove('flex');
+    }
+
+    // Category Nav Scroll & Active State
+    const navLinks = document.querySelectorAll('.cat-link');
+    const sections = document.querySelectorAll('.cat-section');
+
+    navLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        const targetId = e.currentTarget.getAttribute('data-target');
+        if (targetId) {
+          const section = document.getElementById(targetId);
+          if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+
+    const observer = new IntersectionObserver((entries) => {
+      let currentSection = null;
+      entries.forEach(entry => {
+        if (entry.isIntersecting) currentSection = entry.target.id;
+      });
+      if (currentSection) {
+        navLinks.forEach(link => {
+          const isActive = link.getAttribute('data-target') === currentSection;
+          link.style.color = isActive ? 'var(--brand-primary)' : 'var(--brand-text-muted)';
+          link.style.borderBottomColor = isActive ? 'var(--brand-primary)' : 'transparent';
+        });
+      }
+    }, { rootMargin: '-130px 0px -50% 0px' });
+
+    sections.forEach(sec => observer.observe(sec));
+
+    function toggleClosedOverlay() {
+      const overlay = document.getElementById('closedOverlay');
+      if (overlay.classList.contains('hidden')) {
+        overlay.classList.remove('hidden');
+        overlay.classList.add('flex');
+      } else {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+      }
+    }
+  </script>
+</body>
+</html>

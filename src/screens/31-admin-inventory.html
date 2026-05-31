@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="sq" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inventory — DeliveryOS Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { --brand-primary:#ea4f16;--brand-primary-hover:#ffa12e;--brand-primary-light:rgba(234,79,22,0.12);--brand-accent:#2a2a2a;--brand-bg:#121212;--brand-surface:#1e1e1e;--brand-surface-raised:#2a2a2a;--brand-text:#ffffff;--brand-text-muted:#a8a8a8;--brand-border:#2c2c2c;--brand-font-heading:'Inter',sans-serif;--brand-font-body:'Inter',sans-serif;--brand-radius:12px;--brand-radius-sm:8px;--brand-radius-btn:78px;--color-success:#059669;--color-warning:#D97706;--color-danger:#DC2626;--color-info:#2563EB; }
+    @media (prefers-color-scheme:dark){:root{--brand-bg:#0F172A;--brand-surface:#1E293B;--brand-surface-raised:#263548;--brand-text:#F1F5F9;--brand-text-muted:#94A3B8;--brand-border:#334155;--brand-primary-light:rgba(234,79,22,0.15);--brand-accent:#1E1A14;}}
+    body { font-family:var(--brand-font-body);background:var(--brand-bg);color:var(--brand-text);-webkit-font-smoothing:antialiased; }
+    button,.interactive-card{transition:transform 0.15s cubic-bezier(0.34,1.56,0.64,1),background-color 0.2s ease,box-shadow 0.2s ease,border-color 0.2s ease}
+    button:active,.interactive-card:active{transform:scale(0.97)}
+    .hide-scrollbar::-webkit-scrollbar{display:none}
+    @keyframes fadeSlideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    @media(prefers-reduced-motion:reduce){*,::before,::after{animation-duration:0.01ms!important;transition-duration:0.01ms!important}}
+  </style>
+</head>
+<body class="min-h-screen pb-24 md:pb-0">
+  <div class="flex flex-col md:flex-row min-h-screen" style="background:var(--brand-bg)">
+    <aside class="hidden md:flex flex-col w-[64px] lg:w-[240px] flex-shrink-0 border-r" style="background:#0F172A;border-color:rgba(255,255,255,0.05)">
+      <div class="px-[16px] py-[20px] flex items-center gap-3"><i class="ti ti-rocket text-[16px]" style="color:var(--brand-primary)"></i><span class="hidden lg:block text-white text-[16px] font-semibold">DeliveryOS</span></div>
+      <nav class="flex-1 mt-2 flex flex-col gap-1 px-2">
+        <a href="05-admin-dashboard.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm border-l-[3px] border-transparent" style="color:rgba(255,255,255,0.6)"><i class="ti ti-layout-dashboard text-[20px]"></i><span class="hidden lg:block text-[13px]">Dashboard</span></a>
+        <a href="06-admin-orders.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm border-l-[3px] border-transparent" style="color:rgba(255,255,255,0.6)"><i class="ti ti-clipboard-list text-[20px]"></i><span class="hidden lg:block text-[13px]">Orders</span></a>
+        <a href="30-admin-staff.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm border-l-[3px] border-transparent" style="color:rgba(255,255,255,0.6)"><i class="ti ti-users text-[20px]"></i><span class="hidden lg:block text-[13px]">Staff</span></a>
+        <a href="31-admin-inventory.html" class="h-[48px] px-3 flex items-center gap-3 rounded-r-sm" style="background:rgba(255,255,255,0.1);border-left:3px solid var(--brand-primary);color:white"><i class="ti ti-package text-[20px]"></i><span class="hidden lg:block text-[13px] font-medium">Inventory</span></a>
+        <a href="32-admin-payouts.html" class="h-[48px] px-3 flex items-center gap-3 rounded-sm border-l-[3px] border-transparent" style="color:rgba(255,255,255,0.6)"><i class="ti ti-coin text-[20px]"></i><span class="hidden lg:block text-[13px]">Payouts</span></a>
+      </nav>
+      <div class="p-[16px] border-t flex items-center gap-3" style="border-color:rgba(255,255,255,0.1)">
+        <div class="w-[32px] h-[32px] rounded-full flex items-center justify-center text-[12px] font-medium" style="background:var(--brand-primary);color:#fff">KT</div>
+        <div class="hidden lg:flex flex-col"><span class="text-white text-[13px] font-medium">Kenji T.</span><span class="text-[11px]" style="color:rgba(255,255,255,0.5)">Dubin &amp; Sushi</span></div>
+      </div>
+    </aside>
+
+    <div class="flex-1 flex flex-col h-screen">
+      <header class="h-[64px] border-b px-[24px] flex items-center justify-between shrink-0" style="background:var(--brand-surface);border-color:var(--brand-border)">
+        <h1 class="text-[18px] font-medium" style="color:var(--brand-text)">Inventory</h1>
+        <div class="flex items-center gap-3">
+          <span class="text-[12px] chip chip-info"><i class="ti ti-refresh"></i> Auto-updates</span>
+          <button onclick="cycleTheme()" class="min-w-[44px] min-h-[44px] p-2 rounded-full flex items-center justify-center active:scale-[0.97]" style="color:var(--brand-text-muted)"><i class="ti ti-palette text-[18px]"></i></button>
+        </div>
+      </header>
+
+      <div class="flex-1 overflow-y-auto hide-scrollbar p-[24px]">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          <div class="rounded-[12px] p-4 border" style="background:var(--brand-surface);border-color:var(--brand-border)">
+            <span class="text-[11px] uppercase tracking-wide" style="color:var(--brand-text-muted)">Stock Items</span>
+            <span class="text-[28px] font-medium block my-1" style="color:var(--brand-text)">42</span>
+            <span class="text-[11px] chip chip-success">3 low stock</span>
+          </div>
+          <div class="rounded-[12px] p-4 border" style="background:var(--brand-surface);border-color:var(--brand-border)">
+            <span class="text-[11px] uppercase tracking-wide" style="color:var(--brand-text-muted)">Stop-listed Items</span>
+            <span class="text-[28px] font-medium block my-1" style="color:var(--brand-text)">1</span>
+            <span class="text-[11px] chip chip-warning">Rainbow Roll</span>
+          </div>
+        </div>
+
+        <div class="rounded-[12px] overflow-hidden border mb-4" style="background:var(--brand-surface);border-color:var(--brand-border)">
+          <div class="px-4 py-3 border-b text-[13px] font-bold" style="border-color:var(--brand-border);color:var(--brand-text)">Low Stock Alert</div>
+          <div class="p-4 flex items-center gap-3" style="background:rgba(220,38,38,0.05)">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style="background:rgba(220,38,38,0.1);color:var(--color-danger)"><i class="ti ti-alert-triangle text-[16px]"></i></div>
+            <div class="flex-1">
+              <div class="text-[13px] font-medium" style="color:var(--brand-text)">Avocado — 2 units remaining</div>
+              <div class="text-[11px]" style="color:var(--brand-text-muted)">Used in: Dragon Roll, Salmon Avocado, Rainbow Roll</div>
+            </div>
+            <button class="min-h-[44px] px-3 rounded-full text-[12px] font-medium" style="background:var(--brand-primary);color:#fff">Restock</button>
+          </div>
+        </div>
+
+        <div class="flex gap-2 overflow-x-auto hide-scrollbar mb-4">
+          <button class="chip chip-primary" onclick="filterInv('all',this)">All</button>
+          <button class="chip chip-muted" onclick="filterInv('produce',this)">Produce</button>
+          <button class="chip chip-muted" onclick="filterInv('protein',this)">Protein</button>
+          <button class="chip chip-muted" onclick="filterInv('dry',this)">Dry Goods</button>
+          <button class="chip chip-muted" onclick="filterInv('beverage',this)">Beverage</button>
+        </div>
+
+        <div id="invList"></div>
+      </div>
+    </div>
+
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 h-[60px] border-t flex justify-around items-center z-50" style="background:#0F172A;border-color:rgba(255,255,255,0.1)">
+      <a href="05-admin-dashboard.html" class="flex flex-col items-center gap-1" style="color:rgba(255,255,255,0.5)"><i class="ti ti-layout-dashboard text-[20px]"></i><span class="text-[10px]">Home</span></a>
+      <a href="06-admin-orders.html" class="flex flex-col items-center gap-1" style="color:rgba(255,255,255,0.5)"><i class="ti ti-clipboard-list text-[20px]"></i><span class="text-[10px]">Orders</span></a>
+      <a href="31-admin-inventory.html" class="flex flex-col items-center gap-1 text-white"><i class="ti ti-package text-[20px]"></i><span class="text-[10px] font-medium">Stock</span></a>
+      <a href="32-admin-payouts.html" class="flex flex-col items-center gap-1" style="color:rgba(255,255,255,0.5)"><i class="ti ti-coin text-[20px]"></i><span class="text-[10px]">Pay</span></a>
+    </nav>
+  </div>
+
+  <script>
+    const PRESETS = { "Food Dark":{ "--brand-primary":"#ea4f16","--brand-primary-hover":"#ffa12e","--brand-primary-light":"rgba(234,79,22,0.12)","--brand-accent":"#2a2a2a","--brand-bg":"#121212","--brand-surface":"#1e1e1e","--brand-surface-raised":"#2a2a2a","--brand-text":"#ffffff","--brand-text-muted":"#a8a8a8","--brand-border":"#2c2c2c","--brand-font-heading":"'Inter',sans-serif","--brand-font-body":"'Inter',sans-serif","--brand-radius":"12px","--brand-radius-sm":"8px","--brand-radius-btn":"78px" },"Crimson Classic":{ "--brand-primary":"#C1121F","--brand-primary-hover":"#9B0D17","--brand-primary-light":"#FFF0F1","--brand-accent":"#F5F0E8","--brand-bg":"#FFFFFF","--brand-surface":"#F8F9FA","--brand-surface-raised":"#F0F0F0","--brand-text":"#1A1A1A","--brand-text-muted":"#6B7280","--brand-border":"#E5E7EB","--brand-font-heading":"'DM Serif Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"12px","--brand-radius-sm":"6px","--brand-radius-btn":"24px" },"Ocean Fresh":{ "--brand-primary":"#0D9488","--brand-primary-hover":"#0A7567","--brand-primary-light":"#F0FDFA","--brand-accent":"#F0F9F8","--brand-bg":"#FFFFFF","--brand-surface":"#F8FFFE","--brand-surface-raised":"#E0F7F5","--brand-text":"#134E4A","--brand-text-muted":"#6B7280","--brand-border":"#CCFBF1","--brand-font-heading":"'Cormorant Garamond',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"24px","--brand-radius-sm":"12px","--brand-radius-btn":"32px" },"Midnight Urban":{ "--brand-primary":"#F97316","--brand-primary-hover":"#EA6A0A","--brand-primary-light":"rgba(249,115,22,0.10)","--brand-accent":"#1E1E1E","--brand-bg":"#111111","--brand-surface":"#1C1C1C","--brand-surface-raised":"#2a2a2a","--brand-text":"#F5F5F5","--brand-text-muted":"#9CA3AF","--brand-border":"#2D2D2D","--brand-font-heading":"'DM Sans',sans-serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"4px","--brand-radius-sm":"2px","--brand-radius-btn":"4px" },"Sage Garden":{ "--brand-primary":"#4D7C0F","--brand-primary-hover":"#3F6812","--brand-primary-light":"#F7FEE7","--brand-accent":"#ECFCCB","--brand-bg":"#FFFFFF","--brand-surface":"#F7FEE7","--brand-surface-raised":"#E8F5E0","--brand-text":"#1A2E05","--brand-text-muted":"#6B7280","--brand-border":"#D9F99D","--brand-font-heading":"'Playfair Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px" },"Royal Gold":{ "--brand-primary":"#B45309","--brand-primary-hover":"#92400E","--brand-primary-light":"rgba(180,83,9,0.10)","--brand-accent":"#1C1400","--brand-bg":"#0D0900","--brand-surface":"#1A1200","--brand-surface-raised":"#2a2000","--brand-text":"#FEF3C7","--brand-text-muted":"#D97706","--brand-border":"#2D2000","--brand-font-heading":"'Cormorant Garamond',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"2px","--brand-radius-sm":"1px","--brand-radius-btn":"2px" },"Coral Breeze":{ "--brand-primary":"#DB2777","--brand-primary-hover":"#BE185D","--brand-primary-light":"#FDF2F8","--brand-accent":"#FCE7F3","--brand-bg":"#FFFFFF","--brand-surface":"#FDF2F8","--brand-surface-raised":"#FDE8F0","--brand-text":"#500724","--brand-text-muted":"#9D174D","--brand-border":"#FBCFE8","--brand-font-heading":"'Playfair Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px" }};
+    const PRESET_NAMES = Object.keys(PRESETS); let currentThemeIdx = 0;
+    function applyPreset(name) { const p=PRESETS[name]||PRESETS['Food Dark']; const r=document.documentElement.style; Object.entries(p).forEach(([k,v])=>r.setProperty(k,v)); localStorage.setItem('dos_mockup_theme',name); }
+    function cycleTheme() { currentThemeIdx=(currentThemeIdx+1)%PRESET_NAMES.length; applyPreset(PRESET_NAMES[currentThemeIdx]); }
+    const saved = localStorage.getItem('dos_mockup_theme');
+    if (saved && PRESETS[saved]) { currentThemeIdx = PRESET_NAMES.indexOf(saved); applyPreset(saved); } else applyPreset('Food Dark');
+
+    const invData = [
+      { name:'Avocado', category:'produce', stock:2, unit:'units', critical:true },
+      { name:'Salmon (fresh)', category:'protein', stock:8, unit:'kg', critical:false },
+      { name:'Tuna (fresh)', category:'protein', stock:5, unit:'kg', critical:false },
+      { name:'Sushi Rice', category:'dry', stock:25, unit:'kg', critical:false },
+      { name:'Nori Sheets', category:'dry', stock:200, unit:'sheets', critical:false },
+      { name:'Soy Sauce', category:'dry', stock:15, unit:'bottles', critical:false },
+      { name:'Cucumber', category:'produce', stock:12, unit:'units', critical:false },
+      { name:'Cream Cheese', category:'produce', stock:6, unit:'kg', critical:false },
+      { name:'Green Tea', category:'beverage', stock:30, unit:'bags', critical:false },
+      { name:'Matcha Powder', category:'beverage', stock:3, unit:'kg', critical:false },
+    ];
+
+    function renderInv(filter) {
+      const list = document.getElementById('invList');
+      const filtered = filter === 'all' ? invData : invData.filter(i => i.category === filter);
+      list.innerHTML = filtered.map((i, idx) => `
+        <div class="flex items-center justify-between p-4 border-b" style="background:var(--brand-surface);border-color:var(--brand-border)">
+          <div class="flex items-center gap-3">
+            <div class="flex flex-col">
+              <span class="text-[14px] font-medium" style="color:var(--brand-text)">${i.name}</span>
+              <span class="text-[11px]" style="color:var(--brand-text-muted)">${i.category} · ${i.unit}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[14px] font-medium ${i.critical ? '' : ''}" style="color:${i.critical ? 'var(--color-danger)' : 'var(--brand-text)'}">${i.stock}</span>
+            ${i.critical ? '<span class="w-2 h-2 rounded-full animate-pulse" style="background:var(--color-danger)"></span>' : ''}
+          </div>
+        </div>`).join('');
+    }
+
+    function filterInv(filter, btn) {
+      document.querySelectorAll('.chip').forEach(c => { c.className = c.className.replace('chip-primary','chip-muted'); });
+      btn.className = 'chip chip-primary';
+      renderInv(filter);
+    }
+
+    renderInv('all');
+  </script>
+</body>
+</html>

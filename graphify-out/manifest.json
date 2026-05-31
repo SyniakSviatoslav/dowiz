@@ -1,0 +1,107 @@
+{
+  "C:\\Users\\Dell5\\Documents\\delivery\\.claude\\settings.local.json": {
+    "mtime": 1779886428.89607,
+    "ast_hash": "7ed744ee6a2525e4b47d3afefea3715d",
+    "semantic_hash": "7ed744ee6a2525e4b47d3afefea3715d"
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\index.html": {
+    "mtime": 1779905775.9104211,
+    "ast_hash": "c23e37b200915fe35e15912b44eb964a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\.agents\\rules\\graphify.md": {
+    "mtime": 1779898213.9880893,
+    "ast_hash": "a0e4d192b9e2e17256124dbfc8e24e6a",
+    "semantic_hash": "a0e4d192b9e2e17256124dbfc8e24e6a"
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\.agents\\workflows\\graphify.md": {
+    "mtime": 1779898213.9880893,
+    "ast_hash": "84de69efd46ab0b8430393bd4188f8f2",
+    "semantic_hash": "84de69efd46ab0b8430393bd4188f8f2"
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\.agents\\skills\\deliveryos-theme\\resources\\presets.json": {
+    "mtime": 1779907078.3045824,
+    "ast_hash": "2be9ad56941955b73197443a75fc0522",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\design.md": {
+    "mtime": 1779908206.648379,
+    "ast_hash": "f7784f84c49d0bc5fa9ece857657de50",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\.agents\\rules\\design-system.md": {
+    "mtime": 1779907049.2928205,
+    "ast_hash": "eae645f1ea3c5528a3060080c5eb3378",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\.agents\\skills\\component-builder\\SKILL.md": {
+    "mtime": 1779907093.7709334,
+    "ast_hash": "d35b1be845fe9cd1fed1ebf27c1d4036",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\.agents\\skills\\component-builder\\examples\\OrderCard.html": {
+    "mtime": 1779907099.8522973,
+    "ast_hash": "ef6f8bdef712190c78db4748f4f64389",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\.agents\\skills\\component-builder\\examples\\ProductCard.html": {
+    "mtime": 1779907097.8324263,
+    "ast_hash": "b5b85b799e5a472ef2e6da485c54999b",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\.agents\\skills\\deliveryos-theme\\SKILL.md": {
+    "mtime": 1779907058.7834992,
+    "ast_hash": "c2f6343784a3f2aa2462750f3b0fb35e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\.agents\\skills\\screen-builder\\SKILL.md": {
+    "mtime": 1779907101.8727257,
+    "ast_hash": "77d2c968e0c40e7b7da6ed85fae72968",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\src\\screens\\01-menu-client.html": {
+    "mtime": 1779910378.0493262,
+    "ast_hash": "c3849a1ac0f96fd2c351d4853d7f2984",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\AGENTS.md": {
+    "mtime": 1779907980.2522776,
+    "ast_hash": "6cfd680e30900b97df2bf9a61383be33",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\.agents\\skills\\component-builder\\references\\ux-rules-and-component-specs.md": {
+    "mtime": 1779908910.090613,
+    "ast_hash": "bbda4802a12762063030bd3ec40c43eb",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\.agents\\skills\\deliveryos-theme\\references\\technical-reference.md": {
+    "mtime": 1779908910.04503,
+    "ast_hash": "c1b11c9c4f5f9e8d47669d4cd40369a8",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\.agents\\skills\\screen-builder\\references\\product-context.md": {
+    "mtime": 1779908909.9851055,
+    "ast_hash": "0c6c80a084dbc0430f299399b56b26b9",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\src\\screens\\02-admin-dashboard.html": {
+    "mtime": 1779911251.0899172,
+    "ast_hash": "0150a66b2cee29a2b1e53263f42fefce",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\src\\screens\\03-branding-settings.html": {
+    "mtime": 1779911451.8278987,
+    "ast_hash": "91beb4289e62be0914d0565105bfde72",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\src\\screens\\04-courier-delivery.html": {
+    "mtime": 1779911885.3772502,
+    "ast_hash": "01e89fb7b067fcf8ae3988eea563c2af",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\delivery\\src\\screens\\05-admin-menu.html": {
+    "mtime": 1779913120.401857,
+    "ast_hash": "1d0e09226989b6dde0378e2e24b030fa",
+    "semantic_hash": ""
+  }
+}

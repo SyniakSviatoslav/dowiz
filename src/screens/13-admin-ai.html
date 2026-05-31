@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="sq" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Assistant - DeliveryOS Admin</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="mock-data.js"></script>
+
+  <style>
+    :root {
+      --brand-primary:        #0D9488;
+      --brand-primary-hover:  #0A7567;
+      --brand-primary-light:  #F0FDFA;
+      --brand-accent:         #F0F9F8;
+      --brand-bg:             #FFFFFF;
+      --brand-surface:        #F8FFFE;
+      --brand-text:           #134E4A;
+      --brand-text-muted:     #6B7280;
+      --brand-border:         #CCFBF1;
+      --brand-font-heading:   'Cormorant Garamond', serif;
+      --brand-font-body:      'DM Sans', sans-serif;
+      --brand-radius:         24px;
+      --brand-radius-sm:      12px;
+      --brand-radius-btn:     32px;
+
+      --color-success:  #059669;
+      --color-warning:  #D97706;
+      --color-danger:   #DC2626;
+      --color-info:     #2563EB;
+
+      --brand-sidebar: #0F172A;
+    }
+
+    body {
+      font-family: var(--brand-font-body);
+      background-color: var(--brand-bg);
+      color: var(--brand-text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    button, .interactive-card {
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    button:active, .interactive-card:active {
+      transform: scale(0.97);
+    }
+    
+    /* Typing indicator animation */
+    .typing-dot {
+      animation: typing 1.4s infinite ease-in-out both;
+    }
+    .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+    .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes typing {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1); }
+    }
+    
+    /* Voice waveform animation */
+    .waveform-bar {
+      animation: waveform 1s infinite ease-in-out;
+      transform-origin: bottom;
+    }
+    .waveform-bar:nth-child(1) { animation-delay: 0.1s; animation-duration: 0.8s; }
+    .waveform-bar:nth-child(2) { animation-delay: 0.3s; animation-duration: 1.1s; }
+    .waveform-bar:nth-child(3) { animation-delay: 0.2s; animation-duration: 0.9s; }
+    .waveform-bar:nth-child(4) { animation-delay: 0.4s; animation-duration: 1.2s; }
+    .waveform-bar:nth-child(5) { animation-delay: 0.1s; animation-duration: 0.7s; }
+    @keyframes waveform {
+      0%, 100% { transform: scaleY(0.4); }
+      50% { transform: scaleY(1); }
+    }
+      /* Global Interactions */
+    button, .interactive-card {
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    button:active, .interactive-card:active {
+      transform: scale(0.97);
+    }
+    .interactive-card {
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+      border-color: transparent;
+    }
+    .interactive-card:hover {
+      transform: translateY(-3px);
+      box-shadow:
+        0 12px 32px color-mix(in srgb, var(--brand-primary) 4%, transparent),
+        0 4px 8px color-mix(in srgb, var(--brand-primary) 2%, transparent);
+    }
+  </style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col md:flex-row bg-brand-surface">
+
+  <!-- Sidebar -->
+  <aside class="hidden md:flex flex-col w-[64px] lg:w-[240px] flex-shrink-0 border-r border-white/5 transition-all duration-300 z-50" style="background:var(--brand-sidebar)">
+    <div class="px-[16px] py-[20px] pb-[12px] flex items-center gap-3">
+      <i class="ti ti-rocket text-[16px] text-brand-primary shrink-0"></i>
+      <span class="hidden lg:block text-white text-[16px] font-semibold tracking-[-0.01em]">DeliveryOS</span>
+    </div>
+    <nav class="flex-1 mt-2 flex flex-col gap-1 px-2">
+      <a href="05-admin-dashboard.html" class="h-[48px] px-3 flex items-center gap-3 text-white/65 hover:bg-white/5 hover:text-white rounded-sm transition-colors border-l-[3px] border-transparent">
+        <i class="ti ti-layout-dashboard text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Dashboard</span>
+      </a>
+      <a href="06-admin-orders.html" class="h-[48px] px-3 flex items-center gap-3 text-white/65 hover:bg-white/5 hover:text-white rounded-sm transition-colors border-l-[3px] border-transparent">
+        <i class="ti ti-clipboard-list text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Orders</span>
+      </a>
+      <a href="07-admin-menu.html" class="h-[48px] px-3 flex items-center gap-3 text-white/65 hover:bg-white/5 hover:text-white rounded-sm transition-colors border-l-[3px] border-transparent">
+        <i class="ti ti-tools-kitchen-2 text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Menu</span>
+      </a>
+      <a href="08-admin-couriers.html" class="h-[48px] px-3 flex items-center gap-3 text-white/65 hover:bg-white/5 hover:text-white rounded-sm transition-colors border-l-[3px] border-transparent">
+        <i class="ti ti-bike text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Couriers</span>
+      </a>
+      <a href="09-admin-analytics.html" class="h-[48px] px-3 flex items-center gap-3 text-white/65 hover:bg-white/5 hover:text-white rounded-sm transition-colors border-l-[3px] border-transparent">
+        <i class="ti ti-chart-bar text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Analytics</span>
+      </a>
+      <a href="13-admin-ai.html" class="h-[48px] px-3 flex items-center gap-3 bg-white/10 border-l-[3px] border-brand-primary text-white rounded-r-sm transition-colors">
+        <i class="ti ti-robot text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px] font-medium">AI Assistant</span>
+      </a>
+      <a href="11-admin-settings.html" class="h-[48px] px-3 flex items-center gap-3 text-white/65 hover:bg-white/5 hover:text-white rounded-sm transition-colors border-l-[3px] border-transparent">
+        <i class="ti ti-settings text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Settings</span>
+      </a>
+      <a href="14-admin-branding.html" class="h-[48px] px-3 flex items-center gap-3 text-white/65 hover:bg-white/5 hover:text-white rounded-sm transition-colors border-l-[3px] border-transparent">
+        <i class="ti ti-brush text-[20px] shrink-0"></i>
+        <span class="hidden lg:block text-[13px]">Branding</span>
+      </a>
+    </nav>
+  </aside>
+
+  <!-- Mobile Tab Bar -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 h-[60px] border-t border-white/10 flex justify-around items-center z-50" style="background:var(--brand-sidebar)">
+    <a href="05-admin-dashboard.html" class="flex flex-col items-center gap-1 text-white/50 hover:text-white transition-colors">
+      <i class="ti ti-layout-dashboard text-[20px]"></i>
+      <span class="text-[10px]">Home</span>
+    </a>
+    <a href="13-admin-ai.html" class="flex flex-col items-center gap-1 text-white opacity-100">
+      <i class="ti ti-robot text-[20px]"></i>
+      <span class="text-[10px] font-medium">AI Assist</span>
+    </a>
+    <a href="09-admin-analytics.html" class="flex flex-col items-center gap-1 text-white/50 hover:text-white transition-colors">
+      <i class="ti ti-chart-bar text-[20px]"></i>
+      <span class="text-[10px]">Analytics</span>
+    </a>
+  </nav>
+
+  <!-- Main Content Wrapper -->
+  <div class="flex-1 flex flex-col h-full relative z-0 overflow-hidden">
+    
+    <!-- Mobile view toggle -->
+    <div class="md:hidden flex items-center p-4 bg-brand-bg border-b border-brand-border shrink-0 gap-2">
+      <button onclick="switchMobileTab('chat')" id="tabBtnChat" class="flex-1 py-2 rounded-brand-sm bg-brand-primary text-white font-medium text-[13px]">Chat</button>
+      <button onclick="switchMobileTab('insights')" id="tabBtnInsights" class="flex-1 py-2 rounded-brand-sm border border-brand-border bg-brand-surface text-brand-text font-medium text-[13px]">Insights</button>
+    </div>
+
+    <div class="flex-1 flex flex-col md:flex-row overflow-hidden pb-[60px] md:pb-0">
+      
+      <!-- LEFT: ChatInterface (60%) -->
+      <div id="chatPanel" class="w-full md:w-[60%] h-full flex flex-col border-r border-brand-border bg-brand-bg relative z-10">
+        
+        <!-- Header -->
+        <div class="h-[64px] border-b border-brand-border bg-brand-surface flex items-center px-6 shrink-0 shadow-sm z-20">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center">
+              <i class="ti ti-robot text-[20px]"></i>
+            </div>
+            <div>
+              <h1 class="text-[16px] font-bold text-brand-text">Dubin & Sushi AI</h1>
+              <div class="text-[11px] text-semantic-success flex items-center gap-1 font-medium"><span class="w-1.5 h-1.5 rounded-full bg-semantic-success"></span> Online</div>
+            </div>
+          </div>
+          <button onclick="cycleTheme()" class="min-w-[44px] min-h-[44px] p-2 rounded-full flex items-center justify-center ml-auto active:scale-[0.97]" style="background:var(--brand-primary-light);color:var(--brand-primary)"><i class="ti ti-palette text-[16px]"></i></button>
+        </div>
+
+        <!-- Messages List -->
+        <div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 hide-scrollbar flex flex-col" id="messageList">
+          
+          <!-- System Message -->
+          <div class="flex justify-center">
+            <div class="bg-brand-surface border border-brand-border px-4 py-2 rounded-brand text-[12px] text-brand-text-muted text-center max-w-[80%]">
+              Hi Kenji! I've analyzed your menu and last week's orders. Ready to help with insights, descriptions, or anything else.
+            </div>
+          </div>
+
+          <!-- Proactive Alert Card -->
+          <div class="bg-brand-primary-light border border-brand-primary rounded-brand-sm p-4 w-full max-w-[90%] self-start shadow-sm flex flex-col gap-3">
+            <div class="flex items-start gap-3">
+              <div class="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center shrink-0 border border-brand-primary/30">
+                <i class="ti ti-bulb text-[18px] text-brand-primary"></i>
+              </div>
+              <div class="text-[13px] text-brand-text font-medium leading-relaxed">
+                <span class="font-bold">Rainbow Roll</span> has been on stop-list for 3h. It averaged 1,840 ALL/day revenue this week. Want me to unblock it or suggest a substitute?
+              </div>
+            </div>
+            <div class="flex items-center gap-2 pl-11">
+              <button class="px-4 py-1.5 rounded-brand-sm bg-brand-primary text-white text-[12px] font-bold shadow-sm hover:bg-brand-primary-hover transition-colors">Restore Rainbow Roll</button>
+              <button class="px-4 py-1.5 rounded-brand-sm border border-brand-primary text-brand-primary text-[12px] font-medium hover:bg-brand-primary/10 transition-colors">Suggest substitute</button>
+            </div>
+          </div>
+
+          <!-- User Message -->
+          <div class="self-end max-w-[80%]">
+            <div class="bg-brand-primary text-white px-4 py-3 rounded-t-brand-sm rounded-bl-brand-sm rounded-br-sm text-[13px] shadow-sm">
+              Which product has the best margin?
+            </div>
+          </div>
+
+          <!-- Assistant Message -->
+          <div class="self-start max-w-[80%]">
+            <div class="bg-brand-surface border border-brand-border text-brand-text px-4 py-3 rounded-t-brand-sm rounded-br-brand-sm rounded-bl-sm text-[13px] shadow-sm leading-relaxed">
+              Your highest-margin item is the <span class="font-bold text-brand-primary">Salmon Sashimi ×5</span> at 680 ALL. Food cost is approximately 38% of price — vs 52% for rolls that include tempura or premium toppings. Consider featuring it more prominently in the menu or creating a combo around it.
+            </div>
+          </div>
+
+          <!-- Opening Checklist -->
+          <div class="bg-brand-surface border border-brand-border rounded-brand-sm p-4 w-full max-w-[90%] self-start shadow-sm flex flex-col gap-3">
+            <div class="text-[13px] font-bold text-brand-text flex items-center gap-2">
+              <i class="ti ti-clipboard-list text-[16px] text-brand-primary"></i> Opening checklist for tonight
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-[12px] text-brand-text font-medium">
+              <div class="flex items-center gap-1.5"><i class="ti ti-check text-semantic-success text-[14px]"></i> Check stop-list (1 item)</div>
+              <div class="flex items-center gap-1.5"><i class="ti ti-check text-semantic-success text-[14px]"></i> Couriers online (2/3)</div>
+              <div class="flex items-center gap-1.5 opacity-50"><i class="ti ti-circle text-[14px]"></i> Test order placed</div>
+              <div class="flex items-center gap-1.5 opacity-50"><i class="ti ti-circle text-[14px]"></i> Printer connected</div>
+            </div>
+            <div class="mt-2">
+              <div class="flex justify-between text-[11px] font-bold text-brand-text-muted mb-1">
+                <span>Progress</span><span>2/4 complete</span>
+              </div>
+              <div class="w-full h-1.5 bg-brand-border rounded-full overflow-hidden">
+                <div class="h-full bg-brand-primary rounded-full w-[50%]"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- User Message -->
+          <div class="self-end max-w-[80%]">
+            <div class="bg-brand-primary text-white px-4 py-3 rounded-t-brand-sm rounded-bl-brand-sm rounded-br-sm text-[13px] shadow-sm">
+              Generate a better description for Dragon Roll
+            </div>
+          </div>
+
+          <!-- Assistant Message (Streaming simulated) -->
+          <div class="self-start max-w-[80%]">
+            <div class="bg-brand-surface border border-brand-border text-brand-text px-4 py-3 rounded-t-brand-sm rounded-br-brand-sm rounded-bl-sm text-[13px] shadow-sm leading-relaxed" id="streamingMsg">
+              Dragon Roll — a show-stopping creation of crispy shrimp tempura and creamy avocado, wrapped in nori and topped with velvety eel sauce and vibrant tobiko. Every bite is a balance of texture and depth. Our most requested roll. ✨
+            </div>
+            <div class="mt-2">
+              <a href="07-admin-menu.html" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-sm border border-brand-border bg-white text-brand-text text-[11px] font-bold hover:bg-brand-surface transition-colors shadow-sm uppercase tracking-wide">
+                Apply to menu <i class="ti ti-arrow-right text-[12px]"></i>
+              </a>
+            </div>
+          </div>
+
+          <!-- Typing Indicator -->
+          <div class="self-start max-w-[80%] flex items-center gap-2 text-brand-text-muted text-[12px] font-medium opacity-70">
+            <div class="flex items-center gap-1 bg-brand-surface border border-brand-border px-3 py-2 rounded-t-brand-sm rounded-br-brand-sm rounded-bl-sm">
+              <div class="w-1.5 h-1.5 bg-brand-primary rounded-full typing-dot"></div>
+              <div class="w-1.5 h-1.5 bg-brand-primary rounded-full typing-dot"></div>
+              <div class="w-1.5 h-1.5 bg-brand-primary rounded-full typing-dot"></div>
+            </div>
+            Dubin & Sushi AI is thinking…
+          </div>
+
+        </div>
+
+        <!-- Input Area -->
+        <div class="p-4 bg-brand-bg border-t border-brand-border relative z-20 shrink-0">
+          
+          <!-- Voice overlay (hidden by default) -->
+          <div id="voiceOverlay" class="hidden absolute inset-0 bg-brand-bg z-30 p-4 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-full bg-semantic-danger/10 text-semantic-danger flex items-center justify-center animate-pulse shrink-0">
+              <i class="ti ti-microphone text-[24px]"></i>
+            </div>
+            <div class="flex-1 flex flex-col justify-center">
+              <div class="text-[12px] text-brand-text-muted font-bold uppercase tracking-wide mb-1">Listening… say an order</div>
+              <div class="flex items-end gap-1 h-6 text-brand-text font-medium text-[14px]">
+                "One Dragon Roll, one Miso Soup"
+              </div>
+            </div>
+            <div class="flex items-end gap-1 h-6 shrink-0 opacity-50 mr-4">
+              <div class="w-1 bg-brand-primary rounded-full waveform-bar"></div>
+              <div class="w-1 bg-brand-primary rounded-full waveform-bar"></div>
+              <div class="w-1 bg-brand-primary rounded-full waveform-bar"></div>
+              <div class="w-1 bg-brand-primary rounded-full waveform-bar"></div>
+              <div class="w-1 bg-brand-primary rounded-full waveform-bar"></div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button onclick="toggleVoice()" class="min-w-[44px] min-h-[44px] rounded-full bg-brand-surface border border-brand-border text-brand-text hover:bg-brand-border transition-colors flex items-center justify-center"><i class="ti ti-x text-[16px]"></i></button>
+              <button onclick="toggleVoice()" class="min-w-[44px] min-h-[44px] rounded-full bg-brand-primary text-white hover:bg-brand-primary-hover shadow-sm transition-colors flex items-center justify-center"><i class="ti ti-check text-[16px]"></i></button>
+            </div>
+          </div>
+
+          <div class="relative">
+            <textarea placeholder="Ask about menu, revenue, couriers, tips…" class="w-full bg-brand-surface border border-brand-border rounded-brand-sm pl-4 pr-[120px] py-3 text-[13px] text-brand-text outline-none focus:border-brand-primary resize-none min-h-[50px] shadow-inner"></textarea>
+            <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              <button onclick="toggleVoice()" class="min-h-[44px] px-3 rounded-sm border border-brand-border bg-white text-brand-text text-[12px] font-medium hover:bg-brand-surface transition-colors flex items-center gap-1.5 shadow-sm">
+                <i class="ti ti-microphone"></i> Voice
+              </button>
+              <button class="min-w-[44px] min-h-[44px] rounded-sm bg-brand-primary text-white flex items-center justify-center hover:bg-brand-primary-hover shadow-sm transition-colors">
+                <i class="ti ti-send text-[16px]"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: InsightsPanel (40%) -->
+      <div id="insightsPanel" class="hidden md:flex w-full md:w-[40%] h-full flex-col bg-brand-surface relative z-0">
+        <div class="h-[64px] px-6 flex items-center border-b border-brand-border shrink-0">
+          <h2 class="text-[16px] font-bold text-brand-text flex items-center gap-2"><i class="ti ti-chart-pie text-brand-primary"></i> Real-time Insights</h2>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 hide-scrollbar">
+          
+          <!-- MenuAnalysisReport -->
+          <div class="bg-brand-bg rounded-brand border border-brand-border p-5 shadow-sm">
+            <h3 class="text-[14px] font-bold text-brand-text mb-4">Menu Analysis</h3>
+            
+            <div class="mb-5">
+              <h4 class="text-[11px] font-bold text-semantic-danger uppercase tracking-wide mb-3">Underperforming items</h4>
+              <div class="space-y-3">
+                <div class="flex items-start justify-between">
+                  <div>
+                    <div class="text-[13px] font-bold text-brand-text">Vegetable Maki</div>
+                    <div class="text-[11px] text-brand-text-muted mt-0.5">3 orders/week</div>
+                  </div>
+                  <div class="text-[11px] text-brand-primary font-medium bg-brand-primary/10 px-2 py-1 rounded-sm max-w-[120px] text-right">Consider updating photo or description</div>
+                </div>
+                <div class="flex items-start justify-between">
+                  <div>
+                    <div class="text-[13px] font-bold text-brand-text">Taiyaki</div>
+                    <div class="text-[11px] text-brand-text-muted mt-0.5">4 orders/week</div>
+                  </div>
+                  <div class="text-[11px] text-brand-primary font-medium bg-brand-primary/10 px-2 py-1 rounded-sm max-w-[120px] text-right">Try featuring in a combo</div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 class="text-[11px] font-bold text-semantic-success uppercase tracking-wide mb-3">Top performers</h4>
+              <div class="space-y-3">
+                <div>
+                  <div class="flex justify-between text-[12px] font-medium text-brand-text mb-1">
+                    <span>Dragon Roll</span><span>100%</span>
+                  </div>
+                  <div class="w-full h-1.5 bg-brand-surface rounded-full overflow-hidden">
+                    <div class="h-full bg-semantic-success rounded-full w-[100%]"></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex justify-between text-[12px] font-medium text-brand-text mb-1">
+                    <span>Salmon Sashimi</span><span>79%</span>
+                  </div>
+                  <div class="w-full h-1.5 bg-brand-surface rounded-full overflow-hidden">
+                    <div class="h-full bg-semantic-success rounded-full w-[79%]"></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex justify-between text-[12px] font-medium text-brand-text mb-1">
+                    <span>Chicken Ramen</span><span>70%</span>
+                  </div>
+                  <div class="w-full h-1.5 bg-brand-surface rounded-full overflow-hidden">
+                    <div class="h-full bg-semantic-success rounded-full w-[70%]"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PriceIntelPanel -->
+          <div class="bg-brand-bg rounded-brand border border-brand-border p-5 shadow-sm">
+            <h3 class="text-[14px] font-bold text-brand-text mb-1">Price Intelligence</h3>
+            <p class="text-[11px] text-brand-text-muted mb-4">Market comparison (Tirana area)</p>
+            
+            <div class="overflow-x-auto hide-scrollbar mb-4">
+              <table class="w-full text-left text-[12px]">
+                <thead class="text-[10px] text-brand-text-muted uppercase border-b border-brand-border bg-brand-surface">
+                  <tr>
+                    <th class="p-2 font-semibold">Product</th>
+                    <th class="p-2 font-semibold text-right">Our Price</th>
+                    <th class="p-2 font-semibold text-right">Market Avg</th>
+                    <th class="p-2 font-semibold text-right">Variance</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-brand-border">
+                  <tr>
+                    <td class="p-2 font-medium text-brand-text">Dragon Roll</td>
+                    <td class="p-2 text-right font-bold text-brand-text">850 ALL</td>
+                    <td class="p-2 text-right text-brand-text-muted">920 ALL</td>
+                    <td class="p-2 text-right text-semantic-success font-medium">12% below avg</td>
+                  </tr>
+                  <tr>
+                    <td class="p-2 font-medium text-brand-text">Sashimi Platter</td>
+                    <td class="p-2 text-right font-bold text-brand-text">1,480 ALL</td>
+                    <td class="p-2 text-right text-brand-text-muted">1,350 ALL</td>
+                    <td class="p-2 text-right text-semantic-warning font-medium">10% above avg</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="bg-brand-primary-light border border-brand-primary rounded-brand-sm p-3 flex gap-2 items-start">
+              <i class="ti ti-info-circle text-brand-primary text-[16px] shrink-0 mt-0.5"></i>
+              <span class="text-[12px] text-brand-text font-medium">Your sushi rolls are priced competitively. You could potentially increase Sashimi Platter margins slightly.</span>
+            </div>
+          </div>
+
+          <!-- TipsCarousel -->
+          <div class="bg-brand-bg rounded-brand border border-brand-border p-5 shadow-sm relative overflow-hidden group">
+            <div class="flex justify-between items-center mb-3">
+              <h3 class="text-[14px] font-bold text-brand-text flex items-center gap-1.5"><i class="ti ti-bulb text-semantic-warning"></i> Growth Tips</h3>
+              <div class="flex items-center gap-1">
+                <button onclick="prevTip()" class="w-6 h-6 rounded-full bg-brand-surface flex items-center justify-center text-brand-text-muted hover:text-brand-text transition-colors"><i class="ti ti-chevron-left text-[14px]"></i></button>
+                <button onclick="nextTip()" class="w-6 h-6 rounded-full bg-brand-surface flex items-center justify-center text-brand-text-muted hover:text-brand-text transition-colors"><i class="ti ti-chevron-right text-[14px]"></i></button>
+              </div>
+            </div>
+            
+            <div class="relative h-[60px] overflow-hidden" id="tipContainer">
+              <div class="absolute inset-0 transition-opacity duration-300 opacity-100" id="tip1">
+                <div class="text-[10px] font-bold text-brand-text-muted uppercase mb-1">Tip 1/3</div>
+                <div class="text-[13px] text-brand-text font-medium leading-relaxed">Friday is your peak day. Consider a weekend combo promotion to drive higher cart values.</div>
+              </div>
+              <div class="absolute inset-0 transition-opacity duration-300 opacity-0 pointer-events-none" id="tip2">
+                <div class="text-[10px] font-bold text-brand-text-muted uppercase mb-1">Tip 2/3</div>
+                <div class="text-[13px] text-brand-text font-medium leading-relaxed">Sencha Green Tea appears in 68% of orders — ideal for combos or cross-selling.</div>
+              </div>
+              <div class="absolute inset-0 transition-opacity duration-300 opacity-0 pointer-events-none" id="tip3">
+                <div class="text-[10px] font-bold text-brand-text-muted uppercase mb-1">Tip 3/3</div>
+                <div class="text-[13px] text-brand-text font-medium leading-relaxed">Your avg delivery time is 32 min. Top performers in Tirana are at 28 min.</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // Theme Logic — 7 presets
+    const PRESETS = {
+      "Food Dark":{ "--brand-primary":"#ea4f16","--brand-primary-hover":"#ffa12e","--brand-primary-light":"rgba(234,79,22,0.12)","--brand-accent":"#2a2a2a","--brand-bg":"#121212","--brand-surface":"#1e1e1e","--brand-surface-raised":"#2a2a2a","--brand-text":"#ffffff","--brand-text-muted":"#a8a8a8","--brand-border":"#2c2c2c","--brand-font-heading":"'Inter',sans-serif","--brand-font-body":"'Inter',sans-serif","--brand-radius":"12px","--brand-radius-sm":"8px","--brand-radius-btn":"78px" },
+      "Crimson Classic":{ "--brand-primary":"#C1121F","--brand-primary-hover":"#9B0D17","--brand-primary-light":"#FFF0F1","--brand-accent":"#F5F0E8","--brand-bg":"#FFFFFF","--brand-surface":"#F8F9FA","--brand-surface-raised":"#F0F0F0","--brand-text":"#1A1A1A","--brand-text-muted":"#6B7280","--brand-border":"#E5E7EB","--brand-font-heading":"'DM Serif Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"12px","--brand-radius-sm":"6px","--brand-radius-btn":"24px" },
+      "Ocean Fresh":{ "--brand-primary":"#0D9488","--brand-primary-hover":"#0A7567","--brand-primary-light":"#F0FDFA","--brand-accent":"#F0F9F8","--brand-bg":"#FFFFFF","--brand-surface":"#F8FFFE","--brand-surface-raised":"#E0F7F5","--brand-text":"#134E4A","--brand-text-muted":"#6B7280","--brand-border":"#CCFBF1","--brand-font-heading":"'Cormorant Garamond',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"24px","--brand-radius-sm":"12px","--brand-radius-btn":"32px" },
+      "Midnight Urban":{ "--brand-primary":"#F97316","--brand-primary-hover":"#EA6A0A","--brand-primary-light":"rgba(249,115,22,0.10)","--brand-accent":"#1E1E1E","--brand-bg":"#111111","--brand-surface":"#1C1C1C","--brand-surface-raised":"#2a2a2a","--brand-text":"#F5F5F5","--brand-text-muted":"#9CA3AF","--brand-border":"#2D2D2D","--brand-font-heading":"'DM Sans',sans-serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"4px","--brand-radius-sm":"2px","--brand-radius-btn":"4px" },
+      "Sage Garden":{ "--brand-primary":"#4D7C0F","--brand-primary-hover":"#3F6812","--brand-primary-light":"#F7FEE7","--brand-accent":"#ECFCCB","--brand-bg":"#FFFFFF","--brand-surface":"#F7FEE7","--brand-surface-raised":"#E8F5E0","--brand-text":"#1A2E05","--brand-text-muted":"#6B7280","--brand-border":"#D9F99D","--brand-font-heading":"'Playfair Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px" },
+      "Royal Gold":{ "--brand-primary":"#B45309","--brand-primary-hover":"#92400E","--brand-primary-light":"rgba(180,83,9,0.10)","--brand-accent":"#1C1400","--brand-bg":"#0D0900","--brand-surface":"#1A1200","--brand-surface-raised":"#2a2000","--brand-text":"#FEF3C7","--brand-text-muted":"#D97706","--brand-border":"#2D2000","--brand-font-heading":"'Cormorant Garamond',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"2px","--brand-radius-sm":"1px","--brand-radius-btn":"2px" },
+      "Coral Breeze":{ "--brand-primary":"#DB2777","--brand-primary-hover":"#BE185D","--brand-primary-light":"#FDF2F8","--brand-accent":"#FCE7F3","--brand-bg":"#FFFFFF","--brand-surface":"#FDF2F8","--brand-surface-raised":"#FDE8F0","--brand-text":"#500724","--brand-text-muted":"#9D174D","--brand-border":"#FBCFE8","--brand-font-heading":"'Playfair Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px" }
+    };
+    const PRESET_NAMES = Object.keys(PRESETS);
+    let currentThemeIdx = 0;
+    function applyPreset(name) { const p=PRESETS[name]||PRESETS['Ocean Fresh']; const r=document.documentElement.style; Object.entries(p).forEach(([k,v])=>r.setProperty(k,v)); localStorage.setItem('dos_mockup_theme',name); }
+    function cycleTheme() { currentThemeIdx=(currentThemeIdx+1)%PRESET_NAMES.length; applyPreset(PRESET_NAMES[currentThemeIdx]); }
+    const saved = localStorage.getItem('dos_mockup_theme');
+    if (saved && PRESETS[saved]) { currentThemeIdx = PRESET_NAMES.indexOf(saved); applyPreset(saved); } else applyPreset('Ocean Fresh');
+
+    // Mobile tabs
+    function switchMobileTab(tab) {
+      const chatPanel = document.getElementById('chatPanel');
+      const insPanel = document.getElementById('insightsPanel');
+      const btnChat = document.getElementById('tabBtnChat');
+      const btnIns = document.getElementById('tabBtnInsights');
+      
+      if (tab === 'chat') {
+        chatPanel.classList.remove('hidden'); chatPanel.classList.add('flex');
+        insPanel.classList.add('hidden'); insPanel.classList.remove('flex');
+        btnChat.className = "flex-1 py-2 rounded-brand-sm bg-brand-primary text-white font-medium text-[13px]";
+        btnIns.className = "flex-1 py-2 rounded-brand-sm border border-brand-border bg-brand-surface text-brand-text font-medium text-[13px]";
+      } else {
+        chatPanel.classList.add('hidden'); chatPanel.classList.remove('flex');
+        insPanel.classList.remove('hidden'); insPanel.classList.add('flex');
+        btnIns.className = "flex-1 py-2 rounded-brand-sm bg-brand-primary text-white font-medium text-[13px]";
+        btnChat.className = "flex-1 py-2 rounded-brand-sm border border-brand-border bg-brand-surface text-brand-text font-medium text-[13px]";
+      }
+    }
+
+    // Voice Toggle
+    function toggleVoice() {
+      const overlay = document.getElementById('voiceOverlay');
+      overlay.classList.toggle('hidden');
+    }
+
+    // Tips Carousel
+    let currentTip = 1;
+    function showTip(idx) {
+      document.getElementById('tip1').classList.replace('opacity-100', 'opacity-0');
+      document.getElementById('tip2').classList.replace('opacity-100', 'opacity-0');
+      document.getElementById('tip3').classList.replace('opacity-100', 'opacity-0');
+      document.getElementById('tip' + idx).classList.replace('opacity-0', 'opacity-100');
+    }
+    function nextTip() {
+      currentTip = currentTip >= 3 ? 1 : currentTip + 1;
+      showTip(currentTip);
+    }
+    function prevTip() {
+      currentTip = currentTip <= 1 ? 3 : currentTip - 1;
+      showTip(currentTip);
+    }
+  </script>
+</body>
+</html>

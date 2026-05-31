@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude mcp *)",
+      "mcp__figma-remote-mcp__generate_figma_design",
+      "Bash(curl -s http://localhost:3845/)",
+      "PowerShell(Start-Process \"http://localhost:3845/#figmacapture=4f91faed-c76b-4d93-be56-0f53082f2808&figmaendpoint=https%3A%2F%2Fmcp.figma.com%2Fmcp%2Fcapture%2F4f91faed-c76b-4d93-be56-0f53082f2808%2Fsubmit&figmadelay=3000\")",
+      "mcp__figma-remote-mcp__whoami",
+      "mcp__figma-remote-mcp__get_screenshot",
+      "mcp__figma-remote-mcp__get_design_context",
+      "Bash(Get-Content \"C:\\\\Users\\\\Dell5\\\\.claude\\\\projects\\\\C--Users-Dell5-Documents-delivery\\\\7d6a0a2b-5d2b-4dd1-b45b-317c0d8687da\\\\tool-results\\\\toolu_01WEcTy9dDK5hULVwq2Q2C3C.json\")",
+      "Bash(Measure-Object -Line)",
+      "PowerShell(Get-Content *)",
+      "mcp__figma-remote-mcp__get_metadata"
+    ]
+  }
+}

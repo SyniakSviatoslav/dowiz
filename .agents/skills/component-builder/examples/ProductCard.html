@@ -1,0 +1,207 @@
+<style>
+  /* Base reset inherited from app */
+  
+  .product-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--brand-bg);
+    border: 1px solid var(--brand-border);
+    border-radius: var(--brand-radius);
+    overflow: hidden;
+    position: relative;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    cursor: pointer;
+  }
+  
+  .product-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  }
+  
+  .product-card:active {
+    transform: scale(0.98);
+  }
+
+  .product-img {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    background-color: var(--brand-surface);
+    border-radius: var(--brand-radius-sm) var(--brand-radius-sm) 0 0;
+  }
+
+  .product-body {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
+
+  .product-name {
+    font-family: var(--brand-font-body);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--brand-text);
+    margin: 0 0 4px 0;
+  }
+
+  .product-desc {
+    font-size: 12px;
+    color: var(--brand-text-muted);
+    margin: 0 0 12px 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    flex: 1;
+  }
+
+  .product-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .product-price {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--brand-primary);
+  }
+
+  .btn-add {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--brand-radius-btn);
+    background: var(--brand-primary);
+    color: var(--brand-bg);
+    border: none;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  
+  .btn-add:hover {
+    background: var(--brand-primary-hover);
+  }
+
+  .btn-add:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* Unavailable State */
+  .product-card.unavailable .product-img {
+    filter: grayscale(100%);
+    opacity: 0.7;
+  }
+  
+  .product-card.unavailable::after {
+    content: "Тимчасово недоступно";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.6);
+    color: #FFF;
+    padding: 4px 8px;
+    border-radius: var(--brand-radius-sm);
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .product-card.unavailable .product-name,
+  .product-card.unavailable .product-desc,
+  .product-card.unavailable .product-price {
+    opacity: 0.6;
+  }
+
+  /* Skeleton Shimmer */
+  .skeleton-card .product-img,
+  .skeleton-card .skeleton-text,
+  .skeleton-card .skeleton-btn {
+    background: linear-gradient(90deg, var(--brand-surface) 25%, var(--brand-border) 50%, var(--brand-surface) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite linear;
+  }
+
+  .skeleton-card .product-img {
+    border-radius: var(--brand-radius-sm) var(--brand-radius-sm) 0 0;
+  }
+
+  .skeleton-card .skeleton-text {
+    height: 14px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+  }
+  
+  .skeleton-card .skeleton-text.short {
+    width: 60%;
+  }
+
+  .skeleton-card .skeleton-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton-card .product-img,
+    .skeleton-card .skeleton-text,
+    .skeleton-card .skeleton-btn {
+      animation: none;
+    }
+  }
+</style>
+
+<!-- 1. Default State -->
+<article class="product-card" data-available="true">
+  <img src="placeholder.jpg" alt="Маргарита" class="product-img">
+  <div class="product-body">
+    <h3 class="product-name">Піца Маргарита</h3>
+    <p class="product-desc">Класична італійська піца з томатним соусом, моцарелою та базиліком.</p>
+    <div class="product-footer">
+      <span class="product-price">250 ₴</span>
+      <button class="btn-add" aria-label="Додати">+</button>
+    </div>
+  </div>
+</article>
+
+<br>
+
+<!-- 2. Stop-List (Unavailable) State -->
+<article class="product-card unavailable" data-available="false">
+  <img src="placeholder.jpg" alt="Пепероні" class="product-img">
+  <div class="product-body">
+    <h3 class="product-name">Піца Пепероні</h3>
+    <p class="product-desc">Гостра піца з салямі пепероні, моцарелою та томатним соусом.</p>
+    <div class="product-footer">
+      <span class="product-price">280 ₴</span>
+      <button class="btn-add" aria-label="Недоступно" disabled>+</button>
+    </div>
+  </div>
+</article>
+
+<br>
+
+<!-- 3. Skeleton Loading State -->
+<article class="product-card skeleton-card">
+  <div class="product-img"></div>
+  <div class="product-body">
+    <div class="skeleton-text"></div>
+    <div class="skeleton-text short"></div>
+    <div class="product-footer" style="margin-top: 12px;">
+      <div class="skeleton-text" style="width: 40px; margin-bottom: 0;"></div>
+      <div class="skeleton-btn"></div>
+    </div>
+  </div>
+</article>

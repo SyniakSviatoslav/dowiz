@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cart - Dubin & Sushi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+  <script src="mock-data.js"></script>
+
+  <style>
+    :root {
+      --brand-primary:        #ea4f16;
+      --brand-primary-hover:  #ffa12e;
+      --brand-primary-light:  rgba(234, 79, 22, 0.12);
+      --brand-accent:         #2a2a2a;
+      --brand-bg:             #121212;
+      --brand-surface:        #1e1e1e;
+      --brand-surface-raised: #2a2a2a;
+      --brand-text:           #ffffff;
+      --brand-text-muted:     #a8a8a8;
+      --brand-border:         #2c2c2c;
+      --brand-font-heading:   'Inter', sans-serif;
+      --brand-font-body:      'Inter', sans-serif;
+      --brand-radius:         12px;
+      --brand-radius-sm:      8px;
+      --brand-radius-btn:     78px;
+      --color-success:  #059669;
+      --color-warning:  #D97706;
+      --color-danger:   #DC2626;
+      --color-info:     #2563EB;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --brand-bg:             #0F172A;
+        --brand-surface:        #1E293B;
+        --brand-surface-raised: #263548;
+        --brand-text:           #F1F5F9;
+        --brand-text-muted:     #94A3B8;
+        --brand-border:         #334155;
+        --brand-primary-light:  rgba(234, 79, 22, 0.15);
+        --brand-accent:         #1E1A14;
+      }
+    }
+    body {
+      font-family: var(--brand-font-body);
+      background-color: var(--brand-bg);
+      color: var(--brand-text);
+      -webkit-font-smoothing: antialiased;
+    }
+    body.embed-mode .embed-hidden { display: none !important; }
+    button, .interactive-card {
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    button:active, .interactive-card:active { transform: scale(0.97); }
+  </style>
+</head>
+<body style="background:var(--brand-bg)">
+
+  <div class="max-w-md mx-auto min-h-screen relative pb-28 flex flex-col" style="background:var(--brand-bg)">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-50 h-[56px] border-b flex items-center justify-between px-4" style="background:var(--brand-surface);border-color:var(--brand-border)">
+      <a href="01-menu-client.html" class="min-w-[44px] min-h-[44px] -ml-2 rounded-full flex items-center justify-center transition-all active:scale-[0.97]" style="color:var(--brand-text)">
+        <i class="ti ti-arrow-left text-[20px]"></i>
+      </a>
+      <h1 class="text-[16px] font-bold" style="color:var(--brand-text)">Cart</h1>
+      <button onclick="cycleTheme()" class="min-w-[44px] min-h-[44px] p-2 ml-auto rounded-full flex items-center justify-center active:scale-[0.97]" style="color:var(--brand-text-muted)"><i class="ti ti-palette text-[18px]"></i></button>
+      <button onclick="clearCart()" class="text-[13px] font-medium px-2 transition-colors" style="color:var(--brand-text-muted)">Clear all</button>
+    </header>
+
+    <!-- Cart Content -->
+    <main class="flex-1 px-4 pt-4 flex flex-col" id="cart-container"></main>
+
+    <!-- Checkout Bar -->
+    <div id="checkout-bar" class="embed-hidden fixed bottom-0 left-0 right-0 max-w-md mx-auto border-t p-3 sm:p-4 z-40" style="background:var(--brand-surface);border-color:var(--brand-border)">
+      <button onclick="proceedToCheckout()" class="w-full h-[52px] flex items-center justify-between px-6 text-white font-medium active:scale-[0.97] transition-all" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn)">
+        <span class="text-[16px]">Checkout</span>
+        <span class="text-[16px] font-bold" id="checkout-total">0 ALL</span>
+      </button>
+    </div>
+
+  </div>
+
+  <script>
+    if (window.location.search.includes('embed=true')) { document.body.classList.add('embed-mode'); }
+    // --- Theme Logic ---
+    const PRESETS = {
+      "Food Dark":       { "--brand-primary":"#ea4f16","--brand-primary-hover":"#ffa12e","--brand-primary-light":"rgba(234,79,22,0.12)","--brand-accent":"#2a2a2a","--brand-bg":"#121212","--brand-surface":"#1e1e1e","--brand-surface-raised":"#2a2a2a","--brand-text":"#ffffff","--brand-text-muted":"#a8a8a8","--brand-border":"#2c2c2c","--brand-font-heading":"'Inter',sans-serif","--brand-font-body":"'Inter',sans-serif","--brand-radius":"12px","--brand-radius-sm":"8px","--brand-radius-btn":"78px" },
+      "Crimson Classic": { "--brand-primary":"#C1121F","--brand-primary-hover":"#9B0D17","--brand-primary-light":"#FFF0F1","--brand-accent":"#F5F0E8","--brand-bg":"#FFFFFF","--brand-surface":"#F8F9FA","--brand-surface-raised":"#F0F0F0","--brand-text":"#1A1A1A","--brand-text-muted":"#6B7280","--brand-border":"#E5E7EB","--brand-font-heading":"'DM Serif Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"12px","--brand-radius-sm":"6px","--brand-radius-btn":"24px" },
+      "Ocean Fresh":     { "--brand-primary":"#0D9488","--brand-primary-hover":"#0A7567","--brand-primary-light":"#F0FDFA","--brand-accent":"#F0F9F8","--brand-bg":"#FFFFFF","--brand-surface":"#F8FFFE","--brand-surface-raised":"#E0F7F5","--brand-text":"#134E4A","--brand-text-muted":"#6B7280","--brand-border":"#CCFBF1","--brand-font-heading":"'Cormorant Garamond',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"24px","--brand-radius-sm":"12px","--brand-radius-btn":"32px" },
+      "Midnight Urban":  { "--brand-primary":"#F97316","--brand-primary-hover":"#EA6A0A","--brand-primary-light":"rgba(249,115,22,0.10)","--brand-accent":"#1E1E1E","--brand-bg":"#111111","--brand-surface":"#1C1C1C","--brand-surface-raised":"#2a2a2a","--brand-text":"#F5F5F5","--brand-text-muted":"#9CA3AF","--brand-border":"#2D2D2D","--brand-font-heading":"'DM Sans',sans-serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"4px","--brand-radius-sm":"2px","--brand-radius-btn":"4px" },
+      "Sage Garden":     { "--brand-primary":"#4D7C0F","--brand-primary-hover":"#3F6812","--brand-primary-light":"#F7FEE7","--brand-accent":"#ECFCCB","--brand-bg":"#FFFFFF","--brand-surface":"#F7FEE7","--brand-surface-raised":"#E8F5E0","--brand-text":"#1A2E05","--brand-text-muted":"#6B7280","--brand-border":"#D9F99D","--brand-font-heading":"'Playfair Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px" },
+      "Royal Gold":      { "--brand-primary":"#B45309","--brand-primary-hover":"#92400E","--brand-primary-light":"rgba(180,83,9,0.10)","--brand-accent":"#1C1400","--brand-bg":"#0D0900","--brand-surface":"#1A1200","--brand-surface-raised":"#2a2000","--brand-text":"#FEF3C7","--brand-text-muted":"#D97706","--brand-border":"#2D2000","--brand-font-heading":"'Cormorant Garamond',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"2px","--brand-radius-sm":"1px","--brand-radius-btn":"2px" },
+      "Coral Breeze":    { "--brand-primary":"#DB2777","--brand-primary-hover":"#BE185D","--brand-primary-light":"#FDF2F8","--brand-accent":"#FCE7F3","--brand-bg":"#FFFFFF","--brand-surface":"#FDF2F8","--brand-surface-raised":"#FDE8F0","--brand-text":"#500724","--brand-text-muted":"#9D174D","--brand-border":"#FBCFE8","--brand-font-heading":"'Playfair Display',serif","--brand-font-body":"'DM Sans',sans-serif","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px" }
+    };
+    const PRESET_NAMES = Object.keys(PRESETS);
+    let currentThemeIdx = 0;
+    function applyPreset(name) {
+      const p = PRESETS[name] || PRESETS['Food Dark'];
+      const r = document.documentElement.style;
+      Object.entries(p).forEach(([k, v]) => r.setProperty(k, v));
+    }
+    function cycleTheme() { currentThemeIdx=(currentThemeIdx+1)%PRESET_NAMES.length; applyPreset(PRESET_NAMES[currentThemeIdx]); }
+    const saved = localStorage.getItem('dos_mockup_theme');
+    if (saved && PRESETS[saved]) { currentThemeIdx = PRESET_NAMES.indexOf(saved); applyPreset(saved); } else applyPreset('Food Dark');
+
+    // --- Cart Logic ---
+    if (!localStorage.getItem('dos_cart')) {
+      localStorage.setItem('dos_cart', JSON.stringify(window.MOCK.cart));
+    }
+
+    let promoApplied = localStorage.getItem('dos_promo') === 'SUSHI15';
+
+    function getCart() {
+      return JSON.parse(localStorage.getItem('dos_cart') || '[]');
+    }
+
+    function saveCart(cart) {
+      localStorage.setItem('dos_cart', JSON.stringify(cart));
+      renderCart();
+    }
+
+    function updateQty(index, change) {
+      if (navigator.vibrate) navigator.vibrate(10);
+      let cart = getCart();
+      cart[index].qty += change;
+      if (cart[index].qty <= 0) cart.splice(index, 1);
+      saveCart(cart);
+    }
+
+    function removeItem(index) {
+      let cart = getCart();
+      cart.splice(index, 1);
+      saveCart(cart);
+    }
+
+    function clearCart() {
+      saveCart([]);
+    }
+
+    function proceedToCheckout() {
+      const cart = getCart();
+      if (cart.length === 0) return;
+      let subtotal = 0;
+      cart.forEach(function(item) { subtotal += item.price * item.qty; });
+      sessionStorage.setItem('dos_cart_subtotal', subtotal.toString());
+      sessionStorage.setItem('dos_cart_promo', localStorage.getItem('dos_promo') || '');
+      window.location.href = '03-checkout.html';
+    }
+
+    function applyPromo() {
+      const input = document.getElementById('promo-input');
+      const errorMsg = document.getElementById('promo-error');
+      if (input.value.trim().toUpperCase() === 'SUSHI15') {
+        localStorage.setItem('dos_promo', 'SUSHI15');
+        promoApplied = true;
+        renderCart();
+      } else {
+        errorMsg.classList.remove('hidden');
+      }
+    }
+
+    function removePromo() {
+      localStorage.removeItem('dos_promo');
+      promoApplied = false;
+      renderCart();
+    }
+
+    function renderCart() {
+      const cart = getCart();
+      const container = document.getElementById('cart-container');
+      const checkoutBar = document.getElementById('checkout-bar');
+
+      if (cart.length === 0) {
+        checkoutBar.style.display = 'none';
+        container.innerHTML = `
+          <div class="flex-1 flex flex-col items-center justify-center text-center -mt-10 py-16">
+            <i class="ti ti-shopping-bag text-[56px] mb-4 opacity-40" style="color:var(--brand-text-muted)"></i>
+            <h2 class="text-[18px] font-semibold mb-1" style="color:var(--brand-text)">Your cart is empty</h2>
+            <p class="text-[14px] mb-6" style="color:var(--brand-text-muted)">Add items from the menu to get started</p>
+            <a href="01-menu-client.html" class="px-6 h-[44px] text-white font-medium flex items-center justify-center active:scale-[0.97] transition-all" style="background:var(--brand-primary);border-radius:var(--brand-radius-btn)">Browse Menu</a>
+          </div>
+        `;
+        return;
+      }
+
+      checkoutBar.style.display = 'block';
+
+      let html = '<div class="flex flex-col mb-6">';
+      let subtotal = 0;
+
+      cart.forEach((item, idx) => {
+        subtotal += item.price * item.qty;
+        const product = window.MOCK.products.find(p => p.id === item.product_id);
+        const desc = product ? product.desc : '';
+
+        html += `
+          <div class="py-4 border-b flex gap-3 last:border-0" style="border-color:var(--brand-border)">
+            <div class="w-[56px] h-[56px] rounded-[8px] shrink-0 border flex items-center justify-center" style="background:var(--brand-surface-raised);border-color:var(--brand-border);color:var(--brand-text-muted)">
+              <i class="ti ti-photo"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex justify-between items-start mb-1">
+                <h3 class="text-[14px] font-medium leading-snug pr-4" style="color:var(--brand-text)">${item.name}</h3>
+                <button onclick="removeItem(${idx})" class="shrink-0 -mt-1 -mr-2 p-1 active:scale-90 transition-transform" style="color:var(--brand-text-muted)">
+                  <i class="ti ti-x text-[18px]"></i>
+                </button>
+              </div>
+              <p class="text-[12px] truncate mb-2" style="color:var(--brand-text-muted)">${desc}</p>
+              <div class="flex items-center justify-between mt-auto gap-2">
+                <div class="flex items-center gap-1 sm:gap-3 rounded-full border px-1 py-1" style="background:var(--brand-surface-raised);border-color:var(--brand-border)">
+                  <button onclick="updateQty(${idx}, -1)" class="min-w-[44px] min-h-[44px] p-2 rounded-full flex items-center justify-center active:scale-90 transition-all" style="color:var(--brand-text)"><i class="ti ti-minus text-[14px]"></i></button>
+                  <span class="text-[14px] font-medium w-4 text-center" style="color:var(--brand-text)">${item.qty}</span>
+                  <button onclick="updateQty(${idx}, 1)" class="min-w-[44px] min-h-[44px] p-2 rounded-full flex items-center justify-center active:scale-90 transition-all" style="color:var(--brand-text)"><i class="ti ti-plus text-[14px]"></i></button>
+                </div>
+                <div class="text-right">
+                  <div class="text-[12px] mb-0.5" style="color:var(--brand-text-muted)">${item.price} ALL / ea</div>
+                  <div class="text-[14px] font-bold" style="color:var(--brand-primary)">${item.price * item.qty} ALL</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      html += '</div>';
+
+      // Promo Code
+      html += `
+        <div class="mb-6">
+          ${promoApplied ? `
+            <div class="border rounded-[8px] p-3 flex items-center justify-between" style="background:rgba(5,150,105,0.1);border-color:rgba(5,150,105,0.2)">
+              <div class="flex items-center gap-2">
+                <i class="ti ti-circle-check-filled text-[18px]" style="color:var(--color-success)"></i>
+                <span class="text-[13px] font-medium" style="color:var(--color-success)">−284 ALL · SUSHI15 applied</span>
+              </div>
+              <button onclick="removePromo()" class="active:scale-90" style="color:var(--color-success)"><i class="ti ti-x"></i></button>
+            </div>
+          ` : `
+            <div class="flex gap-2">
+              <input type="text" id="promo-input" placeholder="Promo code" class="flex-1 h-[44px] px-3 outline-none text-[14px] border" style="background:var(--brand-surface-raised);border-color:var(--brand-border);border-radius:var(--brand-radius-sm);color:var(--brand-text)">
+              <button onclick="applyPromo()" class="px-4 h-[44px] font-medium border text-[14px] active:scale-95 transition-all" style="background:var(--brand-surface-raised);border-color:var(--brand-border);color:var(--brand-text);border-radius:var(--brand-radius-sm)">Apply</button>
+            </div>
+            <p id="promo-error" class="hidden text-[12px] mt-1" style="color:var(--color-danger)">Invalid code. Try SUSHI15 😉</p>
+          `}
+        </div>
+      `;
+
+      // Order Summary
+      const deliveryFee = window.MOCK.location.delivery_fee;
+      const discount = promoApplied ? window.MOCK.promo_discount : 0;
+      const finalTotal = subtotal + deliveryFee - discount;
+
+      html += `
+        <div class="rounded-[12px] p-4 mb-8 border" style="background:var(--brand-surface);border-color:var(--brand-border)">
+          <div class="flex justify-between text-[14px] mb-2" style="color:var(--brand-text)">
+            <span>Subtotal</span><span>${subtotal} ALL</span>
+          </div>
+          <div class="flex justify-between text-[14px] mb-2" style="color:var(--brand-text)">
+            <span>Delivery</span><span>${deliveryFee} ALL</span>
+          </div>
+          ${promoApplied ? `
+            <div class="flex justify-between text-[14px] mb-3" style="color:var(--color-success)">
+              <span>Discount (SUSHI15)</span><span>−${discount} ALL</span>
+            </div>
+          ` : ''}
+          <div class="h-px w-full my-3" style="background:var(--brand-border)"></div>
+          <div class="flex justify-between items-center">
+            <span class="text-[16px] font-bold" style="color:var(--brand-text)">Total</span>
+            <div class="text-right">
+              <span class="text-[16px] font-bold block" style="color:var(--brand-primary)">${finalTotal} ALL</span>
+              <span class="text-[11px]" style="color:var(--brand-text-muted)">Cash on delivery</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      container.innerHTML = html;
+      document.getElementById('checkout-total').textContent = finalTotal + ' ALL';
+    }
+
+    renderCart();
+  </script>
+</body>
+</html>
