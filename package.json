@@ -61,7 +61,7 @@
     "esbuild": "^0.28.0",
     "eslint": "^9.10.0",
     "eslint-plugin-local": "workspace:*",
-    "husky": "^9.1.6",
+    "husky": "^9.1.7",
     "lint-staged": "^15.2.10",
     "node-pg-migrate": "^8.0.4",
     "prettier": "^3.3.3",
