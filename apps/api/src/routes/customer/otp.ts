@@ -58,7 +58,7 @@ export default (async function customerOtpRoutes(fastify, opts) {
     }
 
     // 4. Generate code and hash
-    const { generateOtpCode, hashOtpCode, generateOpaqueToken, hashPhone, hashOrderIntent } = await import('../lib/otp.js');
+    const { generateOtpCode, hashOtpCode, generateOpaqueToken, hashPhone, hashOrderIntent } = await import('../../lib/otp.js');
     const code = generateOtpCode();
     const codeHash = await hashOtpCode(code);
     const { token: otpToken, hash: tokenHash } = generateOpaqueToken();
@@ -91,7 +91,7 @@ export default (async function customerOtpRoutes(fastify, opts) {
     }
 
     // 6. Log (SMS scaffold — P5+ real gateway)
-    const { maskPhone } = await import('../lib/otp.js');
+    const { maskPhone } = await import('../../lib/otp.js');
     console.log(`[OTP] Sending code to ${maskPhone(phone)} for location ${slug}`);
 
     // Publish event
@@ -120,7 +120,7 @@ export default (async function customerOtpRoutes(fastify, opts) {
     const location = locRes.rows[0];
 
     // 2. Find OTP session
-    const { hashPhone, verifyOtpCode, generateOpaqueToken, hashOrderIntent } = await import('../lib/otp.js');
+    const { hashPhone, verifyOtpCode, generateOpaqueToken, hashOrderIntent } = await import('../../lib/otp.js');
     const phoneHash = hashPhone(phone);
 
     // 3. Find latest unspent OTP
