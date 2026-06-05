@@ -1,0 +1,5 @@
+# .env is gitignored and contains operational secrets for local dev
+# Ignore strip-related findings in branding HTML (display-only placeholder)
+76856da9635a964b32db6e8d134f4e432c9086a2:src/screens/14-admin-branding.html:stripe-access-token:310
+# Ignore .env (operational, gitignored)
+.env:generic-api-key:11

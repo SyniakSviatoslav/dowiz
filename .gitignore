@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+*.log
+.DS_Store
+coverage
+dev-hub.html
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json
