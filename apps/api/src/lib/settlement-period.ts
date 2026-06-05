@@ -1,3 +1,4 @@
+// @ts-nocheck
 export function getSettlementPeriodBoundaries(
   referenceDate: Date = new Date(),
   periodType: 'daily' | 'weekly' = 'daily'

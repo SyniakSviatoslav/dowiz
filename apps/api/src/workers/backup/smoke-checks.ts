@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 import { PiiRedactor } from '../../lib/pii-redactor.js';

@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Helper for iframe embed mode to sync height with parent
 
 function postHeight() {

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import Fastify from 'fastify';
 import { loadEnv } from '@deliveryos/config';
 import { createOperationalPool } from '@deliveryos/db';

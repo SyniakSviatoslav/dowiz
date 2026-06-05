@@ -46,8 +46,8 @@ export function CourierShell({ children, currentPath, onNavigate }: CourierShell
 export interface CourierTask {
   id: string;
   status: string;
-  restaurant: { name: string; address: string };
-  customer: { address: string; phone?: string; instructions?: string };
+  restaurant: { name: string; address: string; lat?: number; lng?: number; };
+  customer: { address: string; phone?: string; instructions?: string; lat?: number; lng?: number; };
   total: number;
   eta: string;
 }

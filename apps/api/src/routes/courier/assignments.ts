@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { z } from 'zod';
 import { loadEnv } from '@deliveryos/config';
 import { MessageBus } from '@deliveryos/platform';

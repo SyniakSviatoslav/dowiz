@@ -83,6 +83,7 @@ export function RecipeEditor({ lines, onChange }: RecipeEditorProps) {
     if (newQty <= 0) { onChange(lines.filter((_, i) => i !== index)); return; }
     const updated = [...lines];
     const line = updated[index];
+    if (!line) return;
     const supply = allSupplies.find(s => s.id === line.supplyId);
     if (!supply) return;
     const ratio = newQty / 100;

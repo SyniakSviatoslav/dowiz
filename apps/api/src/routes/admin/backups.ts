@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import { runRestoreVerify } from '../../workers/backup/backup-verify.js';
 

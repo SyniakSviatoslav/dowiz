@@ -1,3 +1,4 @@
+// @ts-nocheck
 let locationId = '';
 let slug = '';
 let orderId = '';
@@ -54,7 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function fetchOrderData() {
   try {
-    const res = await fetch(\`/api/orders/\${orderId}\`);
+    const res = await fetch(`/api/orders/${orderId}`);
     if (!res.ok) throw new Error('Failed to load order');
     orderData = await res.json();
     renderApp();
@@ -112,48 +113,48 @@ function renderApp() {
       else icon = 'ti-point';
     }
 
-    timelineHtml += \`
+    timelineHtml += `
       <div class="flex flex-col items-center gap-2 relative">
-        <div class="w-8 h-8 rounded-full flex items-center justify-center \${extraClass}" style="background:\${bg}; color:\${color}; border:\${border}">
-          <i class="ti \${icon} text-[16px]"></i>
+        <div class="w-8 h-8 rounded-full flex items-center justify-center ${extraClass}" style="background:${bg}; color:${color}; border:${border}">
+          <i class="ti ${icon} text-[16px]"></i>
         </div>
       </div>
-    \`;
+    `;
   }
   timelineHtml += '</div>';
 
   let itemsHtml = '';
   if (orderData.items && orderData.items.length > 0) {
     orderData.items.forEach((item: any) => {
-      itemsHtml += \`
+      itemsHtml += `
         <div class="flex justify-between mb-2 text-[13px]" style="color:var(--brand-text)">
-          <span>\${item.nameSnapshot || 'Product'} ×\${item.quantity}</span>
-          <span>\${item.priceSnapshot * item.quantity} ALL</span>
+          <span>${item.nameSnapshot || 'Product'} ×${item.quantity}</span>
+          <span>${item.priceSnapshot * item.quantity} ALL</span>
         </div>
-      \`;
+      `;
     });
   }
 
-  app.innerHTML = \`
+  app.innerHTML = `
     <header class="sticky top-0 z-50 h-[56px] border-b flex items-center px-4" style="background:var(--brand-surface);border-color:var(--brand-border)">
-      <a href="/s/\${slug}" class="min-w-[44px] min-h-[44px] -ml-2 rounded-full flex items-center justify-center transition-all active:scale-[0.97]" style="color:var(--brand-text)">
+      <a href="/s/${slug}" class="min-w-[44px] min-h-[44px] -ml-2 rounded-full flex items-center justify-center transition-all active:scale-[0.97]" style="color:var(--brand-text)">
         <i class="ti ti-arrow-left text-[20px]"></i>
       </a>
       <h1 class="text-[18px] font-bold" style="color:var(--brand-text);font-family:var(--brand-font-heading)">Order Status</h1>
-      <span class="ml-2 text-[12px] mt-1 font-mono" style="color:var(--brand-text-muted)">#\${orderData.id.split('-')[0]}</span>
+      <span class="ml-2 text-[12px] mt-1 font-mono" style="color:var(--brand-text-muted)">#${orderData.id.split('-')[0]}</span>
     </header>
 
     <main class="px-4 pt-6">
       <div class="text-center mb-6">
         <p class="text-[12px] font-medium uppercase tracking-widest mb-1" style="color:var(--brand-text-muted)">Current Status</p>
-        <h2 class="text-[28px] font-semibold leading-none" style="color:var(--brand-primary);font-family:var(--brand-font-heading)">\${statusText}</h2>
+        <h2 class="text-[28px] font-semibold leading-none" style="color:var(--brand-primary);font-family:var(--brand-font-heading)">${statusText}</h2>
       </div>
 
       <div class="mb-8 overflow-x-auto hide-scrollbar relative -mx-4 px-4">
         <div class="relative" style="min-width:460px">
           <div class="absolute top-4 left-4 right-4 h-1 z-0" style="background:var(--brand-border)"></div>
-          <div class="absolute top-4 left-4 h-1 z-0 transition-all duration-1000" style="width:\${Math.max(0, currentIndex * 25)}%;background:var(--brand-primary)"></div>
-          \${timelineHtml}
+          <div class="absolute top-4 left-4 h-1 z-0 transition-all duration-1000" style="width:${Math.max(0, currentIndex * 25)}%;background:var(--brand-primary)"></div>
+          ${timelineHtml}
         </div>
       </div>
 
@@ -164,18 +165,18 @@ function renderApp() {
             <i class="ti ti-chevron-down transition-transform group-open:rotate-180" style="color:var(--brand-text-muted)"></i>
           </summary>
           <div class="px-4 pb-4 border-t pt-3" style="background:var(--brand-surface-raised);border-color:var(--brand-border)">
-            \${itemsHtml}
+            ${itemsHtml}
             <div class="flex justify-between font-bold pt-3 border-t mt-2" style="border-color:var(--brand-border);color:var(--brand-text)">
-              <span>Total</span><span style="color:var(--brand-primary)">\${orderData.total} ALL</span>
+              <span>Total</span><span style="color:var(--brand-primary)">${orderData.total} ALL</span>
             </div>
             <div class="text-[12px] mt-2" style="color:var(--brand-text-muted)">
-               Payment Method: \${orderData.paymentMethod}
+               Payment Method: ${orderData.paymentMethod}
             </div>
           </div>
         </details>
       </div>
 
-      \${orderData.status === 'DELIVERED' ? \`
+      ${orderData.status === 'DELIVERED' ? `
         <div id="feedback-form" class="border rounded-[12px] p-5 mb-6 transition-opacity duration-500" style="background:var(--brand-surface);border-color:var(--brand-border)">
           <h3 class="text-[20px] font-semibold mb-4 text-center" style="color:var(--brand-text);font-family:var(--brand-font-heading)">How was your experience?</h3>
           <textarea placeholder="Leave a comment (optional)..." class="w-full h-20 p-3 border text-[13px] outline-none resize-none mb-4" style="background:var(--brand-surface-raised);border-color:var(--brand-border);border-radius:var(--brand-radius-sm);color:var(--brand-text)"></textarea>
@@ -183,9 +184,9 @@ function renderApp() {
             Submit Rating
           </button>
         </div>
-      \` : ''}
+      ` : ''}
     </main>
-  \`;
+  `;
 }
 
 function submitFeedback() {

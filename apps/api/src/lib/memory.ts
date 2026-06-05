@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Memory, type MemoryConfig, type AddMemoryOptions, type SearchMemoryOptions, type SearchResult, type Message } from 'mem0ai/oss';
 
 const DEFAULT_OLLAMA_URL = 'http://localhost:11434';

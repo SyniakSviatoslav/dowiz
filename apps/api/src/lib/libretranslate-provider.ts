@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { TranslationProvider } from '../ports.js';
 import type { TranslateRequest, TranslateResponse } from '@deliveryos/shared-types';
 

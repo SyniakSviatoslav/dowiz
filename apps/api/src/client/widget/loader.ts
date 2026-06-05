@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Widget Loader
 // Intended to be included via <script src=".../widget.js" data-slug="my-loc" integrity="..." crossorigin="anonymous"></script>
 

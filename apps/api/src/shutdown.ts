@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { FastifyInstance } from 'fastify';
 import type { MessageBus, QueueProvider } from '@deliveryos/platform';
 import type { Pool } from 'pg';

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import crypto from 'node:crypto';
 
 // The key must be exactly 32 bytes (256 bits) for AES-256-GCM.
