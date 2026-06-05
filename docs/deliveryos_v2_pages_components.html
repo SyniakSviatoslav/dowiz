@@ -1,0 +1,525 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.root{padding:8px 0 24px}
+.tab-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.tab{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--color-border-tertiary);color:var(--color-text-secondary);background:transparent;transition:all .15s}
+.tab:hover{border-color:var(--color-border-secondary);color:var(--color-text-primary)}
+.tab.active.t-c{background:#E6F1FB;color:#0C447C;border-color:#85B7EB}
+.tab.active.t-o{background:#EAF3DE;color:#27500A;border-color:#97C459}
+.tab.active.t-r{background:#FAEEDA;color:#633806;border-color:#EF9F27}
+.tab.active.t-s{background:#EEEDFE;color:#3C3489;border-color:#AFA9EC}
+.tab.active.t-wl{background:#FAECE7;color:#712B13;border-color:#F0997B}
+@media(prefers-color-scheme:dark){
+.tab.active.t-c{background:#0C447C;color:#B5D4F4;border-color:#378ADD}
+.tab.active.t-o{background:#27500A;color:#C0DD97;border-color:#639922}
+.tab.active.t-r{background:#633806;color:#FAC775;border-color:#BA7517}
+.tab.active.t-s{background:#3C3489;color:#CECBF6;border-color:#7F77DD}
+.tab.active.t-wl{background:#712B13;color:#F0997B;border-color:#D85A30}
+}
+.sec{display:none}.sec.on{display:block}
+.pg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;margin-bottom:20px}
+.pg-card{border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:12px 14px;cursor:pointer;transition:border-color .15s;background:var(--color-background-secondary)}
+.pg-card:hover{border-color:var(--color-border-secondary)}
+.pg-card.sel{border-color:var(--color-border-primary);background:var(--color-background-primary)}
+.pg-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.pg-icon{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.pg-title{font-size:13px;font-weight:500;color:var(--color-text-primary);flex:1}
+.pg-route{font-size:11px;color:var(--color-text-tertiary);font-family:var(--font-mono);margin-bottom:6px}
+.chips{display:flex;flex-wrap:wrap;gap:3px}
+.chip{font-size:10px;padding:2px 7px;border-radius:9px}
+.ch-blue{background:#E6F1FB;color:#0C447C}.ch-purple{background:#EEEDFE;color:#3C3489}
+.ch-teal{background:#E1F5EE;color:#085041}.ch-amber{background:#FAEEDA;color:#633806}
+.ch-coral{background:#FAECE7;color:#712B13}.ch-gray{background:#F1EFE8;color:#444441}
+.ch-green{background:#EAF3DE;color:#27500A}
+@media(prefers-color-scheme:dark){
+.ch-blue{background:#0C447C;color:#B5D4F4}.ch-purple{background:#3C3489;color:#CECBF6}
+.ch-teal{background:#085041;color:#5DCAA5}.ch-amber{background:#633806;color:#FAC775}
+.ch-coral{background:#712B13;color:#F0997B}.ch-gray{background:#444441;color:#D3D1C7}
+.ch-green{background:#27500A;color:#C0DD97}
+}
+.badge-mvp{background:#E1F5EE;color:#085041;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:500;white-space:nowrap}
+.badge-post{background:#F1EFE8;color:#444441;font-size:10px;padding:1px 6px;border-radius:8px}
+@media(prefers-color-scheme:dark){
+.badge-mvp{background:#085041;color:#5DCAA5}.badge-post{background:#444441;color:#D3D1C7}
+}
+.detail{border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:14px 16px;margin-bottom:18px;background:var(--color-background-primary);display:none}
+.detail.on{display:block}
+.det-title{font-size:14px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px}
+.det-route{font-size:11px;color:var(--color-text-tertiary);font-family:var(--font-mono);margin-bottom:12px}
+.det-cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+@media(max-width:560px){.det-cols{grid-template-columns:1fr}}
+.det-h{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-tertiary);margin-bottom:6px}
+.det-list{list-style:none}
+.det-list li{font-size:12px;color:var(--color-text-secondary);padding:3px 0;line-height:1.5;display:flex;gap:5px}
+.det-list li::before{content:'—';color:var(--color-text-tertiary);flex-shrink:0}
+.det-close{float:right;font-size:12px;color:var(--color-text-tertiary);cursor:pointer}
+.det-close:hover{color:var(--color-text-primary)}
+.comp-sec-title{font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.comp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:7px}
+.comp-item{display:flex;align-items:flex-start;gap:8px;padding:9px 11px;border-radius:var(--border-radius-md);border:1px solid var(--color-border-tertiary);background:var(--color-background-primary)}
+.comp-item i{font-size:14px;color:var(--color-text-secondary);margin-top:1px;flex-shrink:0}
+.comp-name{font-size:12px;font-weight:500;color:var(--color-text-primary)}
+.comp-desc{font-size:11px;color:var(--color-text-tertiary);margin-top:1px;line-height:1.4}
+.layer-badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:7px;margin-bottom:4px}
+.lb-ui{background:#E6F1FB;color:#0C447C}.lb-hook{background:#EEEDFE;color:#3C3489}
+.lb-ctx{background:#E1F5EE;color:#085041}.lb-util{background:#F1EFE8;color:#444441}
+@media(prefers-color-scheme:dark){
+.lb-ui{background:#0C447C;color:#B5D4F4}.lb-hook{background:#3C3489;color:#CECBF6}
+.lb-ctx{background:#085041;color:#5DCAA5}.lb-util{background:#444441;color:#D3D1C7}
+}
+.wl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:20px}
+.wl-card{border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:12px 14px;background:var(--color-background-secondary)}
+.wl-title{font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.wl-desc{font-size:12px;color:var(--color-text-secondary);line-height:1.5}
+.tier-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px}
+.tier-table th{text-align:left;padding:7px 10px;background:var(--color-background-secondary);color:var(--color-text-secondary);font-weight:500;border-bottom:1px solid var(--color-border-tertiary)}
+.tier-table td{padding:6px 10px;border-bottom:1px solid var(--color-border-tertiary);color:var(--color-text-secondary)}
+.tier-table tr:last-child td{border-bottom:none}
+.tick{color:#0F6E56;font-size:13px}.cross{color:var(--color-text-tertiary);font-size:11px}
+@media(prefers-color-scheme:dark){.tick{color:#5DCAA5}}
+.css-block{background:var(--color-background-secondary);border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px;font-family:var(--font-mono);font-size:11px;color:var(--color-text-secondary);line-height:1.7;white-space:pre;overflow-x:auto;margin-bottom:14px}
+</style>
+<div class="root">
+<div class="tab-bar">
+  <button class="tab t-c active" onclick="sw('c',this)"><i class="ti ti-device-mobile" aria-hidden="true"></i> Клієнт PWA</button>
+  <button class="tab t-o" onclick="sw('o',this)"><i class="ti ti-layout-dashboard" aria-hidden="true"></i> Власник</button>
+  <button class="tab t-r" onclick="sw('r',this)"><i class="ti ti-bike" aria-hidden="true"></i> Курʼєр PWA</button>
+  <button class="tab t-s" onclick="sw('s',this)"><i class="ti ti-puzzle" aria-hidden="true"></i> Shared</button>
+  <button class="tab t-wl" onclick="sw('wl',this)"><i class="ti ti-palette" aria-hidden="true"></i> White-label</button>
+</div>
+
+<div id="detail-box" class="detail">
+  <span class="det-close" onclick="closeD()"><i class="ti ti-x" aria-hidden="true"></i></span>
+  <div id="detail-inner"></div>
+</div>
+
+<div class="sec on" id="sec-c">
+  <div class="pg-grid" id="grid-c"></div>
+  <div class="comp-sec-title">Компоненти клієнтського інтерфейсу</div>
+  <div class="comp-grid" id="comp-c"></div>
+</div>
+<div class="sec" id="sec-o">
+  <div class="pg-grid" id="grid-o"></div>
+  <div class="comp-sec-title">Компоненти адмін-панелі</div>
+  <div class="comp-grid" id="comp-o"></div>
+</div>
+<div class="sec" id="sec-r">
+  <div class="pg-grid" id="grid-r"></div>
+  <div class="comp-sec-title">Компоненти курʼєрського інтерфейсу</div>
+  <div class="comp-grid" id="comp-r"></div>
+</div>
+<div class="sec" id="sec-s">
+  <div style="margin-bottom:14px">
+    <div class="comp-sec-title">UI компоненти — packages/ui (CSS variables скрізь, var(--brand-*))</div>
+    <div class="comp-grid" id="comp-s-ui"></div>
+  </div>
+  <div style="margin-bottom:14px">
+    <div class="comp-sec-title">Hooks — packages/shared-types + apps/web/src/lib</div>
+    <div class="comp-grid" id="comp-s-hooks"></div>
+  </div>
+  <div>
+    <div class="comp-sec-title">Утиліти — packages/shared-types</div>
+    <div class="comp-grid" id="comp-s-utils"></div>
+  </div>
+</div>
+<div class="sec" id="sec-wl">
+  <div class="comp-sec-title" style="margin-bottom:10px">Тарифна матриця white-label</div>
+  <table class="tier-table">
+    <thead><tr><th style="width:44%">Можливість</th><th>Starter $19</th><th>Pro $39</th><th>Business $59</th></tr></thead>
+    <tbody id="tier-rows"></tbody>
+  </table>
+  <div class="comp-sec-title" style="margin-bottom:10px">Компоненти white-label системи</div>
+  <div class="wl-grid" id="wl-grid"></div>
+  <div class="comp-sec-title" style="margin-bottom:8px">CSS Variables — архітектурне правило</div>
+  <div class="css-block" id="css-block"></div>
+  <div class="comp-sec-title" style="margin-bottom:10px">Embed widget специфіка</div>
+  <div class="comp-grid" id="embed-comps"></div>
+</div>
+</div>
+
+<script>
+const D = {
+  c: {
+    pages:[
+      {icon:'ti-tools-kitchen-2',ic:'icon-blue',ac:'t-c',title:'Меню',route:'/s/:slug',mvp:true,
+       chips:[{l:'SSR',c:'ch-purple'},{l:'SEO',c:'ch-purple'},{l:'schema.org',c:'ch-gray'},{l:'PWA',c:'ch-blue'}],
+       comps:['MenuHeader з brand logo','CategoryNav (sticky, horizontal scroll)','ProductCard (grid / list layout)','ProductModal — Drawer з деталями','CartFAB — floating кнопка кошика','StopListBadge — недоступна страва','ClosedOverlay — заклад закрито','DeliveryZoneGate — перевірка зони до меню','SkeletonGrid — skeleton screens','HeroSection (cover / minimal / none)'],
+       ws:[],
+       api:['GET /menu/:slug (SSR)','GET /location/:slug/status','POST /geo/check-zone'],
+       notes:['SSR через Fastify+Vite — CSS variables з brand_config в <head>','Перевірка delivery zone до відображення меню','menu_version кешування (stale-while-revalidate)','Fallback: телефон закладу якщо offline','HeroStyle з brand_config: cover|minimal|none','layout: grid|list з brand_config']
+      },
+      {icon:'ti-shopping-cart',ic:'icon-blue',ac:'t-c',title:'Кошик',route:'/s/:slug/cart',mvp:true,
+       chips:[{l:'localStorage',c:'ch-teal'},{l:'Optimistic UI',c:'ch-blue'},{l:'Haptic',c:'ch-amber'}],
+       comps:['CartItem з quantity control','QuantityControl (+ / -)','PromoCodeInput з live validation','OrderSummary з ціновим breakdown','CheckoutButton','EmptyCartState'],
+       ws:[],
+       api:['POST /promotions/validate'],
+       notes:['Стан кошика — localStorage (не cookies)','Перевірка актуальності цін при переході','Промокод валідується миттєво','Haptic feedback при зміні кількості','Оновлення ціни при зміні кошика']
+      },
+      {icon:'ti-map-pin',ic:'icon-blue',ac:'t-c',title:'Оформлення',route:'/s/:slug/checkout',mvp:true,
+       chips:[{l:'3 кроки',c:'ch-blue'},{l:'Geolocation',c:'ch-teal'},{l:'Idempotency',c:'ch-purple'}],
+       comps:['CheckoutStepper (3 кроки)','PhoneInput з нормалізацією','AddressInput з автодоповненням','MapAddressPicker (MapLibre GL)','DeliveryTypeSelector (delivery/pickup/scheduled)','TimeSlotPicker з maxOrdersPerSlot','PaymentSelector (cash / 2Checkout)','OrderConfirmButton з idempotency key'],
+       ws:[],
+       api:['POST /orders (X-Idempotency-Key header)','POST /geocode/reverse'],
+       notes:['Крок 1: контакти (phone), Крок 2: адреса+тип, Крок 3: оплата','Geolocation API для автопідстановки адреси','Scheduled: timeslot picker з доступністю','Pickup: без адреси, показати pickup_code після','Idempotency key генерується на клієнті (crypto.randomUUID)','sessionStorage для checkout state між кроками']
+      },
+      {icon:'ti-truck-delivery',ic:'icon-blue',ac:'t-c',title:'Статус замовлення',route:'/s/:slug/order/:id',mvp:true,
+       chips:[{l:'WebSocket',c:'ch-coral'},{l:'Live map',c:'ch-teal'},{l:'7 днів',c:'ch-gray'}],
+       comps:['OrderStatusStepper (10 станів, анімовано)','CourierMapLive (MapLibre GL, interpolation)','ETADisplay — живий час прибуття','CourierContactBtn — дзвінок курʼєру','FeedbackForm (їжа + доставка)','ReorderButton з перевіркою цін','PickupCodeDisplay — QR + код','FallbackPhone — телефон якщо WS down'],
+       ws:['order:{id} → статус змінився','order:{id} → позиція курʼєра (lat/lng)'],
+       api:['GET /orders/:id/status','POST /orders/:id/rate'],
+       notes:['Активна 7 днів після DELIVERED','Маркер курʼєра: WebGL interpolation для плавності','FeedbackForm через 30хв (BullMQ job)','Reorder: перевірка is_available + ціни','localStorage: cart state для reorder']
+      },
+      {icon:'ti-frame',ic:'icon-blue',ac:'t-c',title:'Меню (embed mode)',route:'/s/:slug?embed=true',mvp:true,
+       chips:[{l:'iframe',c:'ch-coral'},{l:'postMessage',c:'ch-purple'},{l:'без fixed',c:'ch-amber'}],
+       comps:['EmbedShell — без header/footer','InlineCartButton (не fixed FAB)','EmbedHeightReporter — postMessage','CartDrawer (bottom sheet, не overlay)'],
+       ws:[],
+       api:['Ті самі що /s/:slug'],
+       notes:['?embed=true: без position:fixed (iOS Safari bug)','postMessage → батьківська сторінка змінює height iframe','localStorage з prefix dos_embed_{locationId}_ (не cookies)','Без зовнішніх посилань (target blank блокується)','Окремий легший bundle (без MapLibre, без WS)','CORS: Access-Control-Allow-Origin: * для embed routes']
+      },
+    ],
+    comps:[
+      {i:'ti-grid-dots',n:'CategoryNav',d:'Sticky scroll, активна категорія highlight'},
+      {i:'ti-cards',n:'ProductCard',d:'Фото, ціна, алергени, стоп-лист badge'},
+      {i:'ti-maximize',n:'ProductModal',d:'Drawer з деталями страви'},
+      {i:'ti-map-pin-check',n:'MapAddressPicker',d:'MapLibre GL, drag pin'},
+      {i:'ti-loader',n:'SkeletonGrid',d:'Skeleton screens при завантаженні'},
+      {i:'ti-device-mobile-vibration',n:'HapticFeedback',d:'navigator.vibrate() при діях'},
+      {i:'ti-steps',n:'CheckoutStepper',d:'3-кроковий progress, збереження кроку'},
+      {i:'ti-map-route',n:'OrderStatusStepper',d:'10 станів анімовано через Motion'},
+      {i:'ti-map-2',n:'CourierMapLive',d:'WebGL interpolation позиції курʼєра'},
+      {i:'ti-clock',n:'ETADisplay',d:'Розрахунковий час, live update'},
+      {i:'ti-star',n:'FeedbackForm',d:'2 рейтинги: їжа + доставка'},
+      {i:'ti-tag',n:'StopListBadge',d:'Недоступна страва з причиною'},
+      {i:'ti-frame',n:'EmbedShell',d:'Shell для iframe без fixed елементів'},
+      {i:'ti-message',n:'EmbedHeightReporter',d:'postMessage для resize iframe'},
+    ]
+  },
+  o: {
+    pages:[
+      {icon:'ti-dashboard',ic:'icon-green',ac:'t-o',title:'Dashboard',route:'/admin/',mvp:true,
+       chips:[{l:'WebSocket',c:'ch-coral'},{l:'Live',c:'ch-teal'},{l:'Sound',c:'ch-amber'}],
+       comps:['ActiveOrdersBoard — live kanban','LocationStatusToggle — відкрито/закрито','BusyModeToggle — таймаут x2','AlertsDropdown — bell + 4 severity','CourierMapOverview — всі курʼєри','QuickStats — замовлення/виручка сьогодні','SoundToggle — iOS audio fix'],
+       ws:['location:{id} → нове замовлення','location:{id} → курʼєри lat/lng'],
+       api:['GET /orders?status=active','GET /couriers/online','GET /location/status'],
+       notes:['Звуковий сигнал при новому замовленні (iOS audio context fix)','BusyMode: таймаут x2, не змінює статус','Critical alerts non-dismissible','Карта всіх активних курʼєрів одночасно']
+      },
+      {icon:'ti-clipboard-list',ic:'icon-green',ac:'t-o',title:'Замовлення',route:'/admin/orders',mvp:true,
+       chips:[{l:'WebSocket',c:'ch-coral'},{l:'State machine',c:'ch-purple'},{l:'Kanban',c:'ch-green'}],
+       comps:['OrdersKanban — колонки по статусах','OrderCard — compact з часом і сумою','OrderActionButtons — підтвердити/призначити','RejectionModal — причина + стоп-лист?','CourierAssignModal — вибір курʼєра','OrderDetailDrawer — повні деталі','DispatchView — маршрут + оцінки після DELIVERED','ScheduledOrdersSection — перегляд по часу'],
+       ws:['location:{id} → статус будь-якого замовлення'],
+       api:['PATCH /orders/:id/confirm','PATCH /orders/:id/assign-courier','PATCH /orders/:id/reject','PATCH /orders/:id/ready'],
+       notes:['Kanban drag між статусами','Rejection: питання стоп-листа після','DispatchView: delivery_trace + ratings']
+      },
+      {icon:'ti-tools-kitchen-2',ic:'icon-green',ac:'t-o',title:'Меню',route:'/admin/menu',mvp:true,
+       chips:[{l:'Bulk actions',c:'ch-green'},{l:'AI',c:'ch-purple'},{l:'dnd-kit',c:'ch-amber'}],
+       comps:['CategoryAccordion — розгортання категорій','ProductRow — рядок з bulk checkbox','BulkEditBar — ціна/доступність/категорія','StopListToggle — is_available + until date','AIDescriptionGen — генерація Claude API','PriceEditor — inline edit','PositionDragHandle — dnd-kit reorder','MenuVersionBadge — поточна версія','AllergenEditor — мультивибір','MenuCheckedTodayBadge'],
+       ws:[],
+       api:['PATCH /menu/products/bulk','PATCH /products/:id/availability','POST /ai/describe-product'],
+       notes:['dnd-kit: категорії і продукти','Bulk: ціна, доступність, категорія, позиція','menu_version інкрементується при кожній зміні','stale-while-revalidate для меню клієнта']
+      },
+      {icon:'ti-users',ic:'icon-green',ac:'t-o',title:'Курʼєри',route:'/admin/couriers',mvp:true,
+       chips:[{l:'Live map',c:'ch-teal'},{l:'Stats',c:'ch-green'}],
+       comps:['CourierList з StatusBadge','CourierMapPanel — позиція в реалтайм','CourierDailyStats — замовлення/дистанція','AddCourierForm','CourierAccuracyIndicator'],
+       ws:['location:{id} → positiй курʼєрів'],
+       api:['GET /couriers','PATCH /couriers/:id/status','GET /couriers/:id/stats'],
+       notes:['online/offline/busy статус','Daily stats: замовлення, дистанція, час, оцінки']
+      },
+      {icon:'ti-chart-bar',ic:'icon-green',ac:'t-o',title:'Аналітика',route:'/admin/analytics',mvp:true,
+       chips:[{l:'TimescaleDB',c:'ch-purple'},{l:'Recharts',c:'ch-blue'}],
+       comps:['RevenueChart — Recharts AreaChart','HeatmapDemand — попит по годинах/днях','CourierPerformanceTable — TanStack Table','CustomerLTVChart','OrderLatencyChart — WS benchmark','DateRangePicker','ExportButton — CSV/JSON pull'],
+       ws:[],
+       api:['GET /analytics/revenue','GET /analytics/heatmap','GET /analytics/courier-perf','GET /analytics/ltv'],
+       notes:['Всі дані з TimescaleDB hypertables','CSV export через pull endpoint з API key']
+      },
+      {icon:'ti-address-book',ic:'icon-green',ac:'t-o',title:'CRM',route:'/admin/crm',mvp:true,
+       chips:[{l:'TanStack Table',c:'ch-blue'},{l:'Export',c:'ch-gray'}],
+       comps:['CustomerTable — sort/filter/search','CustomerDetailPanel — замовлення + LTV','PhoneAliasEditor — альтернативні номери','MergeDuplicatesModal','DaysSinceOrderBadge — inactive highlight','OrderHistoryList'],
+       ws:[],
+       api:['GET /customers','GET /customers/:id','POST /customers/merge','GET /export/customers'],
+       notes:['Phone normalization + aliases','findOrCreateCustomer логіка','CSV pull endpoint для Google Sheets']
+      },
+      {icon:'ti-settings',ic:'icon-green',ac:'t-o',title:'Налаштування',route:'/admin/settings',mvp:true,
+       chips:[{l:'Multi-section',c:'ch-gray'}],
+       comps:['BusinessHoursEditor — hourly grid','DeliveryZoneMap — MapLibre polygon draw','TimeoutSettings — 5/10/15/30хв','PaymentSettings','ClosedDayOverride — конкретна дата','LocationStatusManager','OnboardingChecklist'],
+       ws:[],
+       api:['PATCH /location/:id','PATCH /location/:id/hours','POST /location/:id/overrides'],
+       notes:['Polygon editor для зони доставки','Timezone-aware business hours','Manual override: закрити на день']
+      },
+      {icon:'ti-palette',ic:'icon-purple',ac:'t-o',title:'Брендинг (NEW)',route:'/admin/settings/branding',mvp:true,
+       chips:[{l:'No-code',c:'ch-coral'},{l:'Live preview',c:'ch-purple'},{l:'CSS vars',c:'ch-blue'}],
+       comps:['PresetPicker — 5-8 curated тем з preview','ColorPaletteSelector — Radix Colors (не hex input)','LogoUpload + FaviconUpload','CoverImageUpload','BorderRadiusSelector — sharp/rounded/pill','MenuLayoutToggle — grid/list','LiveMobilePreview — реальні дані меню','EmbedCodePanel — copy-paste iframe code','GoogleSheetsPanel — pull URL + API key','WCAGContrastChecker — при виборі кольору'],
+       ws:[],
+       api:['GET /location/:id/theme','PATCH /location/:id/theme','POST /api-keys','GET /api-keys'],
+       notes:['Live preview: iframe з реальним /s/:slug?preview=true','CSS vars генеруються BullMQ → CDN','custom_css поле тільки Business (DOMPurify sanitize)','Google Sheets: pull URL з api key, без OAuth','WCAGContrastChecker: AA мінімум (4.5:1)']
+      },
+      {icon:'ti-robot',ic:'icon-purple',ac:'t-o',title:'AI асистент',route:'/admin/ai',mvp:true,
+       chips:[{l:'Claude API',c:'ch-purple'},{l:'Streaming',c:'ch-coral'}],
+       comps:['ChatInterface з streaming','ProactiveAlertCard — системні підказки','MenuAnalysisReport — слабкі позиції','PriceIntelPanel — порівняння ринку','TipsCarousel','VoiceOrderInput — Web Speech API','OpeningChecklistPanel'],
+       ws:[],
+       api:['POST /ai/chat (streaming)','GET /ai/tips','POST /ai/menu-analysis','GET /ai/price-intel'],
+       notes:['ai_usage_log в TimescaleDB','Graceful degradation при Claude API outage']
+      },
+      {icon:'ti-ticket',ic:'icon-amber',ac:'t-o',title:'Акції',route:'/admin/promotions',mvp:true,
+       chips:[{l:'8 типів',c:'ch-amber'},{l:'Builder',c:'ch-coral'}],
+       comps:['PromotionList з статусом','PromotionForm — основні поля','RuleBuilder — jsonb rules конструктор','HappyHourScheduler — авто-розклад','ComboEditor з substitutes','UsageStatsCard'],
+       ws:[],
+       api:['POST /promotions','PATCH /promotions/:id','GET /promotions/:id/stats'],
+       notes:['Custom rule builder (jsonb rules)','Happy hour: автоматична активація/деактивація']
+      },
+    ],
+    comps:[
+      {i:'ti-layout-kanban',n:'OrdersKanban',d:'Motion AnimatePresence між статусами'},
+      {i:'ti-bell',n:'AlertsDropdown',d:'Bell + badge + 4 severity, critical non-dismissible'},
+      {i:'ti-map-2',n:'CourierMapOverview',d:'Всі курʼєри на одній MapLibre карті'},
+      {i:'ti-volume',n:'SoundToggle',d:'iOS audio context fix для нових замовлень'},
+      {i:'ti-wand',n:'AIDescriptionGen',d:'Streaming Claude API, graceful fallback'},
+      {i:'ti-drag-drop',n:'PositionDragHandle',d:'dnd-kit reorder категорій і продуктів'},
+      {i:'ti-calendar',n:'BusinessHoursEditor',d:'Hourly grid + override на дату'},
+      {i:'ti-polygon',n:'DeliveryZoneMap',d:'MapLibre: malюнок полігону зони'},
+      {i:'ti-chart-area',n:'RevenueChart',d:'Recharts AreaChart з drill-down по дням'},
+      {i:'ti-table',n:'CustomerTable',d:'TanStack Table v8: sort/filter/search'},
+      {i:'ti-git-merge',n:'MergeDuplicatesModal',d:'Злиття дублікатів клієнтів'},
+      {i:'ti-eye',n:'LiveMobilePreview',d:'iframe preview з реальними даними теми'},
+      {i:'ti-check',n:'WCAGContrastChecker',d:'AA 4.5:1 перевірка при виборі кольору'},
+      {i:'ti-color-swatch',n:'ColorPaletteSelector',d:'Radix Colors pre-approved палітра'},
+    ]
+  },
+  r: {
+    pages:[
+      {icon:'ti-list-check',ic:'icon-amber',ac:'t-r',title:'Завдання',route:'/courier/',mvp:true,
+       chips:[{l:'WebSocket',c:'ch-coral'},{l:'GPS check',c:'ch-teal'}],
+       comps:['TaskCard — замовлення з адресою і сумою','OnlineToggle — великий перемикач','GPSPermissionCheck — blocking modal якщо denied','PendingBadge — кількість нових завдань','TaskDetailModal — деталі перед прийняттям'],
+       ws:['courier:{id} → нове завдання','courier:{id} → скасування завдання'],
+       api:['GET /courier/tasks','PATCH /couriers/:id/status'],
+       notes:['GPS check при старті зміни (blocking)','Вібро + звук при новому завданні','Лого закладу з brand_config (primary color)']
+      },
+      {icon:'ti-navigation',ic:'icon-amber',ac:'t-r',title:'Активна доставка',route:'/courier/delivery/:id',mvp:true,
+       chips:[{l:'Wake Lock',c:'ch-coral'},{l:'GPS stream',c:'ch-teal'},{l:'Deep link',c:'ch-green'}],
+       comps:['DeliveryMap (MapLibre, маршрут+ціль)','NavigationDeepLink — Google/Apple Maps','GeoStreamStatus — точність GPS','DeliveryActionButtons — pickup/deliver','CustomerContactBtn — дзвінок клієнту','PhotoUpload — підтвердження доставки','AccuracyIndicator — accuracy рівень','BackgroundWarning — Page Visibility API','WakeLockIndicator — статус Wake Lock'],
+       ws:['order:{id} → статус від власника'],
+       api:['PATCH /orders/:id/pickup','PATCH /orders/:id/deliver','WS: /couriers/:id/location (geo stream)'],
+       notes:['Wake Lock API: екран не гасне','accuracy > 100м → відхилити позицію','speed > 150км/год → відхилити позицію','Heartbeat 15с, 30с без гео → попередження','Page Visibility: попередження при фоні','sessionStorage: поточна доставка state']
+      },
+    ],
+    comps:[
+      {i:'ti-location',n:'GeoStreamStatus',d:'Точність GPS, статус watchPosition'},
+      {i:'ti-lock-open',n:'WakeLockIndicator',d:'Статус Wake Lock API, запит при потребі'},
+      {i:'ti-alert-triangle',n:'BackgroundWarning',d:'Page Visibility API попередження'},
+      {i:'ti-navigation',n:'NavigationDeepLink',d:'Deep link Google Maps / Apple Maps'},
+      {i:'ti-camera',n:'PhotoUpload',d:'Фото підтвердження доставки'},
+      {i:'ti-toggle-left',n:'OnlineToggle',d:'Великий перемикач online/offline/busy'},
+      {i:'ti-phone',n:'CustomerContactBtn',d:'Кнопка дзвінка клієнту з номером'},
+      {i:'ti-map-2',n:'DeliveryMap',d:'MapLibre: маршрут курʼєра до клієнта'},
+    ]
+  }
+};
+
+const SHARED_UI = [
+  {i:'ti-brand-craft',n:'ThemeProvider',d:'CSS variables з brand_config, font inject',l:'lb-ctx'},
+  {i:'ti-photo',n:'BrandLogo',d:'Лого з fallback на текстову назву',l:'lb-ui'},
+  {i:'ti-badge',n:'StatusBadge',d:'10 статусів замовлення, var(--brand-*)',l:'lb-ui'},
+  {i:'ti-wifi-off',n:'OfflineBanner',d:'Банер з fallback телефоном закладу',l:'lb-ui'},
+  {i:'ti-loader-2',n:'SkeletonBase',d:'Базовий skeleton для всіх секцій',l:'lb-ui'},
+  {i:'ti-alert-circle',n:'ErrorBoundary',d:'React Error Boundary з fallback UI',l:'lb-ui'},
+  {i:'ti-connection',n:'WSStatusDot',d:'Індикатор WebSocket зʼєднання',l:'lb-ui'},
+  {i:'ti-moon',n:'DarkModeAuto',d:'System dark/light mode sync',l:'lb-ui'},
+  {i:'ti-language',n:'i18nProvider',d:'AL/EN react-i18next',l:'lb-ctx'},
+  {i:'ti-device-mobile',n:'PWAInstallPrompt',d:'Запрошення встановити PWA',l:'lb-ui'},
+  {i:'ti-clock',n:'RelativeTime',d:'«2 хв тому» з auto-update',l:'lb-ui'},
+  {i:'ti-currency-lira',n:'PriceDisplay',d:'Форматування ціни (ALL валюта)',l:'lb-ui'},
+  {i:'ti-phone',n:'PhoneFormat',d:'Нормалізація та відображення номерів',l:'lb-ui'},
+  {i:'ti-shield-check',n:'AuthGuard',d:'Route guard по ролях (owner/courier/admin)',l:'lb-ctx'},
+  {i:'ti-map-2',n:'MapLibreBase',d:'Ініціалізація MapLibre GL + OSM tile',l:'lb-ui'},
+  {i:'ti-qrcode',n:'QRCodeDisplay',d:'QR для pickup_code і embed посилання',l:'lb-ui'},
+  {i:'ti-file-download',n:'CSVExportButton',d:'Pull endpoint download з api key',l:'lb-ui'},
+  {i:'ti-bell',n:'ToastManager',d:'shadcn Sonner, 4 типи (success/error/warn/info)',l:'lb-ui'},
+  {i:'ti-chart-line',n:'SparklineChart',d:'Recharts mini-chart для dashboard cards',l:'lb-ui'},
+  {i:'ti-arrow-back-up',n:'ReorderButton',d:'Reorder з перевіркою цін і доступності',l:'lb-ui'},
+];
+const SHARED_HOOKS = [
+  {i:'ti-plug',n:'useWebSocket',d:'Reconnect + auth + room subscription',l:'lb-hook'},
+  {i:'ti-map-pin',n:'useGeolocation',d:'watchPosition + accuracy filter + WakeLock',l:'lb-hook'},
+  {i:'ti-refresh',n:'useGeoStream',d:'WS geo stream + Redis TTL heartbeat',l:'lb-hook'},
+  {i:'ti-microphone',n:'useVoiceOrder',d:'Web Speech API + Claude parsing',l:'lb-hook'},
+  {i:'ti-palette',n:'useBrandTheme',d:'Завантаження theme, CSS variable inject',l:'lb-hook'},
+  {i:'ti-brand-google',n:'useEmbedMode',d:'?embed=true detection + postMessage height',l:'lb-hook'},
+  {i:'ti-shopping-cart',n:'useCart',d:'localStorage cart state + validation',l:'lb-hook'},
+  {i:'ti-bell',n:'useSound',d:'iOS audio context + toggle + новий звук',l:'lb-hook'},
+  {i:'ti-network',n:'useOnlineStatus',d:'navigator.onLine + fallback UI',l:'lb-hook'},
+  {i:'ti-key',n:'useAuth',d:'JWT + refresh rotation + RBAC role check',l:'lb-hook'},
+];
+const SHARED_UTILS = [
+  {i:'ti-phone',n:'normalizePhone',d:'Стандартизація Albanian номерів',l:'lb-util'},
+  {i:'ti-map-pin',n:'checkDeliveryZone',d:'Point-in-polygon для зони доставки',l:'lb-util'},
+  {i:'ti-clock',n:'calcETA',d:'Розрахунок часу доставки',l:'lb-util'},
+  {i:'ti-shield',n:'assertTransition',d:'State machine validator — кидає при помилці',l:'lb-util'},
+  {i:'ti-key',n:'generateIdempotencyKey',d:'crypto.randomUUID() wrapper',l:'lb-util'},
+  {i:'ti-contrast',n:'checkWCAGContrast',d:'AA 4.5:1 перевірка для brand colors',l:'lb-util'},
+  {i:'ti-currency-lira',n:'formatALL',d:'Albanian Lek форматування',l:'lb-util'},
+  {i:'ti-sanitizer',n:'sanitizeCSS',d:'DOMPurify для custom_css (Business тариф)',l:'lb-util'},
+];
+
+const TIER = [
+  ['Лого + назва закладу','✓','✓','✓'],
+  ['Primary color (Radix palette)','✗','✓','✓'],
+  ['Preset теми (5–8 варіантів)','✗','✓','✓'],
+  ['Rebrand клієнтської сторінки','✗','✓','✓'],
+  ['Rebrand адмін + курʼєр (лого+колір)','✗','✗','✓'],
+  ['Custom domain (після MVP)','✗','✗','✓'],
+  ['Embeddable widget (iframe)','✗','✗','✓'],
+  ['Приховати Powered by DeliveryOS','✗','✗','✓'],
+  ['Custom CSS override','✗','✗','✓'],
+  ['Webhooks outbound','✗','✓','✓'],
+  ['REST API + API keys','✗','✗','✓'],
+  ['CSV / JSON pull export','✓','✓','✓'],
+  ['Google Sheets pull endpoint','✗','✓','✓'],
+];
+
+const WL_COMPS = [
+  {i:'ti-color-swatch',t:'PresetPicker',d:'5–8 curated тем на Radix Colors. Preview з реальними даними меню.'},
+  {i:'ti-palette',t:'ColorPaletteSelector',d:'Pre-approved Radix Colors палітра. WCAG contrast check. Не hex input.'},
+  {i:'ti-photo-up',t:'LogoUpload',d:'Лого + favicon + cover. Fallback на текстову назву закладу.'},
+  {i:'ti-eye',t:'LiveMobilePreview',d:'iframe з /s/:slug?preview=true. Оновлюється при зміні будь-якого параметру.'},
+  {i:'ti-code',t:'EmbedCodePanel',d:'Copy-paste iframe snippet. Інструкція для WordPress/Wix.'},
+  {i:'ti-brand-google-drive',t:'GoogleSheetsPanel',d:'Pull URL + API key. Інструкція "Import from URL". Без OAuth.'},
+  {i:'ti-webhook',t:'WebhookManager',d:'Список endpoints. Тест ping. Failure count. Events вибір.'},
+  {i:'ti-key',t:'APIKeyManager',d:'Генерація/відкликання. key_prefix показ. Scopes вибір. Business only.'},
+  {i:'ti-world',t:'DomainManager',d:'Статус CNAME. Інструкція. SSL статус. Неактивно до post-MVP.'},
+  {i:'ti-adjustments',t:'BorderRadiusSelector',d:'sharp / rounded / pill. Live preview на кнопці і картці.'},
+];
+
+const CSS_VARS = `:root {
+  /* Кольори — всі через CSS variables */
+  --brand-primary:       #E63946;  /* кнопки, акценти */
+  --brand-primary-hover: #C1121F;  /* hover стан */
+  --brand-primary-light: #FFF0F1;  /* фони з акцентом */
+  --brand-accent:        #F1FAEE;  /* вторинний акцент */
+  --brand-bg:            #FFFFFF;  /* фон сторінки */
+  --brand-surface:       #F8F9FA;  /* фон карток */
+  --brand-text:          #1D1D1D;  /* основний текст */
+  --brand-text-muted:    #6C757D;  /* другорядний текст */
+  --brand-border:        #DEE2E6;  /* межі */
+
+  /* Типографія */
+  --brand-font-heading: 'Inter', system-ui, sans-serif;
+  --brand-font-body:    'Inter', system-ui, sans-serif;
+
+  /* Форма */
+  --brand-radius:    12px;  /* sharp:0 | rounded:12px | pill:24px */
+  --brand-radius-sm: 6px;
+}
+
+/* Tailwind — всі кольори через variables */
+theme: { extend: { colors: {
+  primary:       'var(--brand-primary)',
+  'primary-hover':'var(--brand-primary-hover)',
+  accent:        'var(--brand-accent)',
+  surface:       'var(--brand-surface)',
+} } }
+
+/* ПРАВИЛО: жодних хардкоджених кольорів
+   у будь-якому компоненті. Тільки var(--brand-*). */`;
+
+const EMBED_COMPS = [
+  {i:'ti-frame',n:'EmbedShell',d:'Wrapper без header/footer/nav. Визначає embed mode.'},
+  {i:'ti-layout-bottombar',n:'InlineCartButton',d:'Не fixed — inline в потоці (iOS Safari fix)'},
+  {i:'ti-arrows-vertical',n:'EmbedHeightReporter',d:'postMessage з висотою при зміні контенту'},
+  {i:'ti-shopping-bag',n:'EmbedCart',d:'localStorage з prefix dos_embed_{id}_ (не cookies)'},
+  {i:'ti-package',n:'EmbedWidget (JS)',d:'<delivery-widget> Custom Element → iframe wrapper'},
+];
+
+let curSec = 'c';
+let curPg = null;
+
+function sw(id, btn) {
+  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('on');
+  btn.classList.add('active');
+  curSec = id; curPg = null;
+  document.getElementById('detail-box').classList.remove('on');
+}
+
+function openD(role, idx) {
+  const key = role+idx;
+  if(curPg === key){closeD(); return;}
+  curPg = key;
+  const p = D[role].pages[idx];
+  const wsHtml = p.ws.length ? p.ws.map(e=>`<li>${e}</li>`).join('') : '<li>немає WS подій</li>';
+  const apiHtml = p.api.map(e=>`<li><code style="font-family:var(--font-mono);font-size:10px">${e}</code></li>`).join('');
+  const compHtml = p.comps.map(c=>`<li>${c}</li>`).join('');
+  const notesHtml = p.notes.map(n=>`<li>${n}</li>`).join('');
+  document.getElementById('detail-inner').innerHTML = `
+    <div class="det-title">${p.title}</div>
+    <div class="det-route">${p.route}</div>
+    <div class="det-cols">
+      <div><div class="det-h">Компоненти</div><ul class="det-list">${compHtml}</ul></div>
+      <div><div class="det-h">WebSocket події</div><ul class="det-list">${wsHtml}</ul>
+           <div class="det-h" style="margin-top:10px">API виклики</div><ul class="det-list">${apiHtml}</ul></div>
+      <div><div class="det-h">Ключові деталі</div><ul class="det-list">${notesHtml}</ul></div>
+    </div>`;
+  document.getElementById('detail-box').classList.add('on');
+  document.getElementById('detail-box').scrollIntoView({behavior:'smooth',block:'nearest'});
+  document.querySelectorAll('.pg-card').forEach(c=>c.classList.remove('sel'));
+  document.querySelectorAll('.pg-card')[idx].classList.add('sel');
+}
+
+function closeD() {
+  curPg=null;
+  document.getElementById('detail-box').classList.remove('on');
+  document.querySelectorAll('.pg-card').forEach(c=>c.classList.remove('sel'));
+}
+
+function renderPages(role) {
+  const g = document.getElementById('grid-'+role);
+  g.innerHTML = D[role].pages.map((p,i)=>`
+    <div class="pg-card" onclick="openD('${role}',${i})">
+      <div class="pg-head">
+        <div class="pg-icon"><i class="ti ${p.icon}" aria-hidden="true"></i></div>
+        <span class="pg-title">${p.title}</span>
+        <span class="${p.mvp?'badge-mvp':'badge-post'}">${p.mvp?'MVP':'Post-MVP'}</span>
+      </div>
+      <div class="pg-route">${p.route}</div>
+      <div class="chips">${p.chips.map(ch=>`<span class="chip ${ch.c}">${ch.l}</span>`).join('')}</div>
+    </div>`).join('');
+}
+
+function renderComps(id, comps) {
+  document.getElementById(id).innerHTML = comps.map(c=>`
+    <div class="comp-item">
+      ${c.l?`<span class="layer-badge ${c.l}">${c.l==='lb-ui'?'UI':c.l==='lb-hook'?'Hook':c.l==='lb-ctx'?'Context':'Util'}</span>`:''}
+      <i class="ti ${c.i}" aria-hidden="true"></i>
+      <div><div class="comp-name">${c.n||c.name}</div><div class="comp-desc">${c.d||c.desc}</div></div>
+    </div>`).join('');
+}
+
+function renderWL() {
+  const tb = document.getElementById('tier-rows');
+  tb.innerHTML = TIER.map(([f,s,p,b])=>`<tr>
+    <td>${f}</td>
+    <td class="${s==='✓'?'tick':'cross'}">${s}</td>
+    <td class="${p==='✓'?'tick':'cross'}">${p}</td>
+    <td class="${b==='✓'?'tick':'cross'}">${b}</td>
+  </tr>`).join('');
+  document.getElementById('wl-grid').innerHTML = WL_COMPS.map(c=>`
+    <div class="wl-card">
+      <div class="wl-title"><i class="ti ${c.i}" aria-hidden="true" style="font-size:15px"></i>${c.t}</div>
+      <div class="wl-desc">${c.d}</div>
+    </div>`).join('');
+  document.getElementById('css-block').textContent = CSS_VARS;
+  renderComps('embed-comps', EMBED_COMPS.map(c=>({i:c.i,n:c.n,d:c.d,l:'lb-ui'})));
+}
+
+function renderShared() {
+  renderComps('comp-s-ui', SHARED_UI);
+  renderComps('comp-s-hooks', SHARED_HOOKS);
+  renderComps('comp-s-utils', SHARED_UTILS);
+}
+
+renderPages('c'); renderComps('comp-c', D.c.comps);
+renderPages('o'); renderComps('comp-o', D.o.comps);
+renderPages('r'); renderComps('comp-r', D.r.comps);
+renderShared();
+renderWL();
+</script>

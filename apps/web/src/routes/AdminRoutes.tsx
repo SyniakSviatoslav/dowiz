@@ -1,0 +1,152 @@
+import React, { useState } from 'react';
+import { Routes, Route, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { ToastProvider, LanguageSwitcher } from '@deliveryos/ui';
+import { DashboardPage } from '../pages/admin/DashboardPage.js';
+import { MenuManagerPage } from '../pages/admin/MenuManagerPage.js';
+import { BrandingPage } from '../pages/admin/BrandingPage.js';
+import { CouriersPage } from '../pages/admin/CouriersPage.js';
+import { AnalyticsPage } from '../pages/admin/AnalyticsPage.js';
+import { CRMPage } from '../pages/admin/CRMPage.js';
+import { SettingsPage } from '../pages/admin/SettingsPage.js';
+import { OnboardingPage } from '../pages/admin/OnboardingPage.js';
+import { SupplyLibraryPage } from '../pages/admin/SupplyLibraryPage.js';
+
+const NAV_ITEMS = [
+  { label: 'Dashboard', href: '/admin', icon: 'ti ti-layout-dashboard' },
+  { label: 'Orders', href: '/admin/orders', icon: 'ti ti-clipboard-list' },
+  { label: 'Menu', href: '/admin/menu', icon: 'ti ti-tools-kitchen-2' },
+  { label: 'Supplies', href: '/admin/supplies', icon: 'ti ti-packages' },
+  { label: 'Couriers', href: '/admin/couriers', icon: 'ti ti-motorbike' },
+  { label: 'Analytics', href: '/admin/analytics', icon: 'ti ti-chart-bar' },
+  { label: 'CRM', href: '/admin/crm', icon: 'ti ti-users' },
+  { label: 'Branding', href: '/admin/branding', icon: 'ti ti-palette' },
+  { label: 'Settings', href: '/admin/settings', icon: 'ti ti-settings' },
+];
+
+function AdminLayout() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const isDev = typeof window !== 'undefined' && (sessionStorage.getItem('dos_dev') === '1' || new URLSearchParams(window.location.search).get('dev') === 'true');
+  const devSuffix = isDev ? '?dev=true' : '';
+
+  const navTo = (href: string) => {
+    navigate(href + devSuffix);
+    setMobileOpen(false);
+  };
+
+  const isActive = (href: string) => location.pathname === href || (href !== '/admin' && location.pathname.startsWith(href));
+
+  const sidebarWidth = collapsed ? 'w-[56px]' : 'w-56';
+
+  const SidebarNav = () => (
+    <nav className="flex-1 p-2 space-y-0.5 overflow-auto">
+      {NAV_ITEMS.map(item => (
+        <button
+          key={item.href}
+              onClick={() => { navTo(item.href); setMobileOpen(false); }}
+          title={collapsed ? item.label : undefined}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--brand-radius-sm)] text-sm transition-all duration-200 ${
+            isActive(item.href)
+              ? 'bg-[var(--brand-primary)] text-white font-medium shadow-sm'
+              : 'text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)] hover:text-[var(--brand-text)]'
+          }`}
+        >
+          <i className={`${item.icon} text-[18px] shrink-0 ${collapsed ? 'mx-auto' : ''}`} />
+          {!collapsed && <span className="truncate">{item.label}</span>}
+        </button>
+      ))}
+    </nav>
+  );
+
+  return (
+    <div className="min-h-screen bg-[var(--brand-bg)] text-[var(--brand-text)] flex">
+      {/* Desktop sidebar */}
+      <aside className={`hidden lg:flex flex-col shrink-0 bg-[var(--brand-surface)] border-r border-[var(--brand-border)] sidebar-transition overflow-hidden ${sidebarWidth}`}>
+        <div className={`flex items-center border-b border-[var(--brand-border)] ${collapsed ? 'justify-center p-3' : 'justify-between p-4'}`}>
+          {!collapsed && (
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🍱</span>
+              <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Dowiz</h2>
+            </div>
+          )}
+          <button
+            onClick={() => setCollapsed(c => !c)}
+            className="w-7 h-7 flex items-center justify-center rounded-md text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)] hover:text-[var(--brand-text)] transition-colors"
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            <i className={`ti ${collapsed ? 'ti-chevron-right' : 'ti-chevron-left'} text-sm`} />
+          </button>
+        </div>
+        <SidebarNav />
+        <div className={`p-2 border-t border-[var(--brand-border)] space-y-1 ${collapsed ? 'text-center' : ''}`}>
+          {!collapsed && <div className="px-1"><LanguageSwitcher variant="full" /></div>}
+          <button
+            onClick={() => navigate('/')}
+            className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)] hover:text-[var(--brand-text)] transition-colors ${collapsed ? 'justify-center' : ''}`}
+          >
+            <i className="ti ti-logout text-[18px]" />
+            {!collapsed && 'Exit'}
+          </button>
+        </div>
+      </aside>
+
+      {/* Mobile top bar */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-[var(--brand-surface)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] px-4 h-14 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <i className="ti ti-tools-kitchen-2 text-lg" style={{ color: 'var(--brand-primary)' }} />
+          <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Dowiz</h2>
+        </div>
+        <button onClick={() => setMobileOpen(true)} className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)]">
+          <i className="ti ti-menu-2 text-xl" />
+        </button>
+      </div>
+
+      {/* Mobile drawer */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex fade-in">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
+          <aside className="relative w-64 bg-[var(--brand-surface)] border-r border-[var(--brand-border)] flex flex-col z-10 slide-in-right">
+            <div className="p-4 border-b border-[var(--brand-border)] flex justify-between items-center">
+              <div className="flex items-center gap-2">
+              <i className="ti ti-tools-kitchen-2 text-xl" style={{ color: 'var(--brand-primary)' }} />
+                <h2 className="text-lg font-bold">Dowiz</h2>
+              </div>
+              <button onClick={() => setMobileOpen(false)} className="w-7 h-7 flex items-center justify-center rounded-md text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)]">
+                <i className="ti ti-x text-lg" />
+              </button>
+            </div>
+            <SidebarNav />
+          </aside>
+        </div>
+      )}
+
+      {/* Main content */}
+      <main className="flex-1 overflow-auto lg:pt-0 pt-14">
+        <Outlet />
+      </main>
+    </div>
+  );
+}
+
+export function AdminRoutes() {
+  return (
+    <ToastProvider>
+      <Routes>
+        <Route path="/" element={<AdminLayout />}>
+          <Route index element={<DashboardPage />} />
+          <Route path="orders" element={<DashboardPage />} />
+          <Route path="menu" element={<MenuManagerPage />} />
+          <Route path="supplies" element={<SupplyLibraryPage />} />
+          <Route path="branding" element={<BrandingPage />} />
+          <Route path="couriers" element={<CouriersPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="crm" element={<CRMPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="onboarding" element={<OnboardingPage />} />
+        </Route>
+      </Routes>
+    </ToastProvider>
+  );
+}
