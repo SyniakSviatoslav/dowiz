@@ -51,8 +51,8 @@ import { WorkerHeartbeat } from './lib/worker/heartbeat.js';
 import { LivenessChecker } from './workers/liveness-checker.js';
 import securityHeadersPlugin from './lib/security/headers.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Safe __dirname fallback for dual ESM/CJS bundling
+const dirName = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath((import.meta as any).url));
 import authPlugin from './plugins/auth.js';
 import multipart from '@fastify/multipart';
 import { setupWebSocket } from './websocket.js';
@@ -112,6 +112,15 @@ async function main() {
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
 
+  fastify.addHook('onRequest', async (request, reply) => {
+    if (process.env.NODE_ENV === 'production') {
+      reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Frame-Options', 'SAMEORIGIN');
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  });
+
   // P34: Strict CORS — restrictive default; public routes override via hook
   fastify.register(fastifyCors, {
     origin: (origin: string, cb: any) => {
@@ -130,8 +139,17 @@ async function main() {
   });
 
   fastify.register(fastifyStatic, {
-    root: path.join(__dirname, '..', 'public'),
-    prefix: '/' // Serves /dist/* and /sw.js at root
+    root: path.join(dirName, '..', 'public'),
+    prefix: '/',
+    cacheControl: true,
+    maxAge: '30d',
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'public, max-age=0');
+      }
+    },
   });
 
   // Subdomain routing middleware
@@ -201,7 +219,8 @@ async function main() {
   notifyDispatcher.register('telegram', telegramAdapter);
 
   if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
-    const webPushAdapter = new WebPushAdapter(env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY, env.VAPID_SUBJECT || 'mailto:admin@deliveryos.local');
+    const subject = env.VAPID_SUBJECT ? (env.VAPID_SUBJECT.startsWith('mailto:') ? env.VAPID_SUBJECT : `mailto:${env.VAPID_SUBJECT}`) : 'mailto:admin@deliveryos.local';
+    const webPushAdapter = new WebPushAdapter(env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY, subject);
     notifyDispatcher.register('push', webPushAdapter);
   }
 
@@ -465,8 +484,10 @@ async function main() {
     }
   });
   fastify.register(authRoutes);
+  const { default: localAuthRoutes } = await import('./routes/auth/local.js');
+  fastify.register(localAuthRoutes);
   fastify.register(courierRoutes);
-  fastify.register(orderRoutes, { db: pool, messageBus, queue });
+  fastify.register(orderRoutes, { prefix: '/api', db: pool, messageBus, queue });
   fastify.register(categoryRoutes);
   fastify.register(productRoutes);
   fastify.register(modifierGroupRoutes);
@@ -548,6 +569,14 @@ async function main() {
   // P33 — Fallback admin routes
   const { default: fallbackAdminRoutes } = await import('./routes/admin/fallback.js');
   fastify.register(fallbackAdminRoutes, { prefix: '/api/admin', db: pool });
+
+  // SPA Fallback: Serve index.html for unknown HTML requests (enables client-side routing)
+  fastify.setNotFoundHandler((request, reply) => {
+    if (request.method === 'GET' && request.headers.accept?.includes('text/html')) {
+      return reply.sendFile('index.html');
+    }
+    reply.status(404).send({ error: 'Not found', path: request.url });
+  });
 
   fastify.ready(err => {
     if (err) throw err;

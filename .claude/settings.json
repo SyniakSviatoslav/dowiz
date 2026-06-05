@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(**)", "Glob(**)", "Grep(**)",
+      "Bash(pnpm lint*)", "Bash(pnpm test*)", "Bash(pnpm build*)",
+      "Bash(pnpm typecheck*)", "Bash(pnpm verify:*)", "Bash(pnpm migrate:status*)",
+      "Bash(git status*)", "Bash(git diff*)", "Bash(git log*)",
+      "Bash(git checkout -b fix/*)", "Bash(git add*)", "Bash(git commit*)",
+      "Bash(git push origin fix/*)", "Bash(npx playwright*)",
+      "Edit(apps/web/**)", "Write(apps/web/**)",
+      "Edit(apps/api/src/**)", "Write(apps/api/src/**)",
+      "Write(audit/**)", "Write(agent/proposals/**)"
+    ],
+    "deny": [
+      "Edit(migrations/**)", "Write(migrations/**)",
+      "Edit(packages/shared-types/**)", "Write(packages/shared-types/**)",
+      "Edit(packages/db/**)", "Write(packages/db/**)",
+      "Edit(apps/api/**/contracts/**)", "Edit(apps/api/**/*.contract.*)",
+      "Edit(fly.toml)", "Write(fly.toml)", "Edit(Dockerfile)",
+      "Edit(.github/**)", "Write(.github/**)",
+      "Edit(.claude/**)", "Write(.claude/**)",
+      "Edit(**/package.json)", "Edit(pnpm-lock.yaml)", "Edit(**/.env*)",
+      "Bash(fly *)", "Bash(supabase *)", "Bash(wrangler *)",
+      "Bash(git push origin main*)", "Bash(git push * main*)", "Bash(git push --force*)",
+      "Bash(pnpm migrate:up*)", "Bash(pnpm add*)", "Bash(pnpm remove*)",
+      "Bash(npm install*)", "Bash(rm -rf *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Edit|Write", "hooks": [{ "type": "command", "command": "bash .claude/hooks/protect-paths.sh" }] },
+      { "matcher": "Bash",        "hooks": [{ "type": "command", "command": "bash .claude/hooks/guard-bash.sh" }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "Edit|Write",  "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-gates.sh" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "bash .claude/hooks/require-classification.sh" }] }
+    ]
+  }
+}
