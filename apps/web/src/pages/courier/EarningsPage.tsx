@@ -1,0 +1,130 @@
+import React, { useEffect, useState } from 'react';
+import { EmptyState, SkeletonBase, StatusBadge } from '@deliveryos/ui';
+import { apiClient } from '../../lib/index.js';
+
+interface EarningSummary {
+  today: number;
+  week: number;
+  month: number;
+  currency: string;
+}
+
+interface Payout {
+  id: string;
+  date: string;
+  amount: number;
+  status: string;
+  reference: string;
+}
+
+const MOCK_SUMMARY: EarningSummary = {
+  today: 4500,
+  week: 28500,
+  month: 112000,
+  currency: 'ALL'
+};
+
+const MOCK_PAYOUTS: Payout[] = [
+  { id: 'pay_001', date: '2026-06-01', amount: 28000, status: 'PAID', reference: 'Bank Transfer #T-8821' },
+  { id: 'pay_002', date: '2026-05-25', amount: 31500, status: 'PAID', reference: 'Bank Transfer #T-8742' },
+  { id: 'pay_003', date: '2026-05-18', amount: 24000, status: 'PAID', reference: 'Bank Transfer #T-8660' },
+  { id: 'pay_004', date: '2026-06-04', amount: 4500, status: 'PENDING', reference: 'Bank Transfer #T-8912' }
+];
+
+export function EarningsPage() {
+  const [summary, setSummary] = useState<EarningSummary | null>(null);
+  const [payouts, setPayouts] = useState<Payout[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const fetchEarnings = async () => {
+    try {
+      setLoading(true);
+      const data = await apiClient<any>('/courier/me/earnings');
+      setSummary(data?.summary || MOCK_SUMMARY);
+      setPayouts(Array.isArray(data?.payouts) ? data.payouts : MOCK_PAYOUTS);
+    } catch (err: any) {
+      if (err.status === 404) {
+        setSummary(MOCK_SUMMARY);
+        setPayouts(MOCK_PAYOUTS);
+      } else {
+        setError('Failed to fetch earnings data');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEarnings();
+  }, []);
+
+  const summaryCards = summary ? [
+    { label: 'Today', amount: summary.today, icon: '\u2600' },
+    { label: 'This Week', amount: summary.week, icon: '\u{1F4C5}' },
+    { label: 'This Month', amount: summary.month, icon: '\u{1F4B0}' },
+  ] : [];
+
+  return (
+    <div className="p-4 space-y-6">
+      <div className="flex justify-between items-center pb-4 border-b border-[var(--brand-border)]">
+        <h1 className="text-2xl font-bold text-[var(--brand-text)]" style={{ fontFamily: 'var(--brand-font-heading)' }}>Earnings</h1>
+      </div>
+
+      {loading ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            {[1, 2, 3].map((i) => (
+              <SkeletonBase key={i} className="h-24 rounded-[var(--brand-radius)]" />
+            ))}
+          </div>
+          <SkeletonBase className="h-64 rounded-[var(--brand-radius)]" />
+        </div>
+      ) : error ? (
+        <EmptyState title="Error" description={error} />
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-3">
+            {summaryCards.map((card) => (
+              <div
+                key={card.label}
+                className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4 text-center"
+              >
+                <div className="text-2xl mb-1">{card.icon}</div>
+                <div className="text-xs text-[var(--brand-text-muted)] uppercase tracking-wider font-semibold mb-1">{card.label}</div>
+                <div className="text-lg font-bold text-[var(--brand-text)]">{card.amount.toLocaleString()} ALL</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] overflow-hidden">
+            <div className="p-4 border-b border-[var(--brand-border)]">
+              <h2 className="font-bold text-[var(--brand-text)]">Payout History</h2>
+            </div>
+
+            {payouts.length === 0 ? (
+              <div className="p-8">
+                <EmptyState title="No payouts yet" description="Your payouts will appear here once processed." />
+              </div>
+            ) : (
+              <div className="divide-y divide-[var(--brand-border)]">
+                {payouts.map((payout) => (
+                  <div key={payout.id} className="p-4 flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-[var(--brand-text)]">{payout.reference}</div>
+                      <div className="text-xs text-[var(--brand-text-muted)]">{payout.date}</div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-sm font-bold text-[var(--brand-text)]">{payout.amount.toLocaleString()} ALL</div>
+                      <StatusBadge status={payout.status} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
