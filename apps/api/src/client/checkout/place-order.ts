@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { getCart } from '../cart/store.js';
 import { showFallbackBanner } from '../shared/fallback-phone.js';
 

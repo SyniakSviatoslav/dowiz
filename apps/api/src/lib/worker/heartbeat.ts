@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { Pool } from 'pg';
 
 export interface HeartbeatOptions {

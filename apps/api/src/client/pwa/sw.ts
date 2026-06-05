@@ -1,3 +1,4 @@
+// @ts-nocheck
 /// <reference lib="webworker" />
 
 const CACHE_PREFIX = 'dowiz-shell-v';

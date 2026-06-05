@@ -80,7 +80,7 @@ export function MenuManagerPage() {
   const [formTaste, setFormTaste] = useState<Record<string, number>>({});
   const [formAllergenStatus, setFormAllergenStatus] = useState<'unset' | 'none' | 'listed'>('unset');
   const [formAllergensList, setFormAllergensList] = useState<string[]>([]);
-  const [formRecipeLines, setFormRecipeLines] = useState<Array<{supplyId: string; supplyName: string; qty: number; unit: string; kcal: number | null; proteinG: number | null; fatG: number | null; carbsG: number | null; allergens: string[]}>>([]);
+  const [formRecipeLines, setFormRecipeLines] = useState<Array<{supplyId: string; supplyName: string; qty: number; unit: string; kind: string; kcal: number | null; proteinG: number | null; fatG: number | null; carbsG: number | null; allergens: string[]}>>([]);
 
   // Filter/sort state
   const [searchQuery, setSearchQuery] = useState('');

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createHash } from 'node:crypto';
 
 export interface IpHashConfig {

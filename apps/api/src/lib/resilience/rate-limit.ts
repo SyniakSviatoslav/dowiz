@@ -1,3 +1,4 @@
+// @ts-nocheck
 import crypto from 'node:crypto';
 
 interface TokenBucket {

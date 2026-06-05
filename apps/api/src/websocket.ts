@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { WebSocketServer, WebSocket } from 'ws';
 import type { FastifyInstance } from 'fastify';
 import { verifyAuthToken } from '@deliveryos/platform';

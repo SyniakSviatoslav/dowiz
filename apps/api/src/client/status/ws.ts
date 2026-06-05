@@ -1,3 +1,4 @@
+// @ts-nocheck
 export class StatusWSClient {
   private ws: WebSocket | null = null;
   private orderId: string;

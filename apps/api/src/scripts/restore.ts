@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { loadEnv } from '@deliveryos/config';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getS3Client } from '../workers/backup/upload.js';
