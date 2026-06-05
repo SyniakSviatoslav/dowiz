@@ -49,6 +49,9 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
   }
 }
 
+import { Navigate } from 'react-router-dom';
+import { LoginPage } from './pages/admin/LoginPage.js';
+
 // Lazy-loaded surfaces
 const ClientRoutes = lazy(() => import('./routes/ClientRoutes.js').then(m => ({ default: m.ClientRoutes })));
 const AdminRoutes = lazy(() => import('./routes/AdminRoutes.js').then(m => ({ default: m.AdminRoutes })));
@@ -72,6 +75,8 @@ function App() {
           <ErrorBoundary>
             <Suspense fallback={<LoadingFallback />}>
               <Routes>
+                <Route path="/" element={<Navigate to="/login" replace />} />
+                <Route path="/login" element={<LoginPage />} />
                 <Route path="/s/:slug/*" element={<ClientRoutes />} />
                 <Route path="/admin/*" element={<AdminRoutes />} />
                 <Route path="/courier/*" element={<CourierRoutes />} />
