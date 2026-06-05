@@ -17,7 +17,10 @@ async function build() {
       'fsevents',
       'mock-aws-s3',
       'aws-sdk',
-      'nock'
+      'nock',
+      'argon2',
+      '@aws-sdk/*',
+      '@smithy/*'
     ],
   };
 

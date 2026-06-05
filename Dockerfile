@@ -14,6 +14,7 @@ COPY scripts ./scripts
 
 # Install dependencies and bundle apps
 RUN pnpm install --frozen-lockfile
+RUN pnpm -r build
 RUN pnpm dlx tsx scripts/build-apps.ts
 
 # Production Runtime Stage
