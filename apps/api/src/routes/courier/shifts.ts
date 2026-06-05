@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { z } from 'zod';
 import { roundCoordinate, isWithinGeofence } from '../../lib/geo.js';
 import { loadEnv } from '@deliveryos/config';

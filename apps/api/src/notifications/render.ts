@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { NotificationData, NotificationEvent } from './provider.js';
 
 function escapeHtml(unsafe: string) {

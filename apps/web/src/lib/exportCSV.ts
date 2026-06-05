@@ -1,6 +1,8 @@
 export function exportCSV(data: Record<string, any>[], filename: string) {
   if (data.length === 0) return;
-  const headers = Object.keys(data[0]).filter(k => !k.startsWith('_'));
+  const firstRow = data[0];
+  if (!firstRow) return;
+  const headers = Object.keys(firstRow).filter(k => !k.startsWith('_'));
   const csv = [headers.join(','), ...data.map(row => headers.map(h => {
     const v = row[h];
     if (v === null || v === undefined) return '';

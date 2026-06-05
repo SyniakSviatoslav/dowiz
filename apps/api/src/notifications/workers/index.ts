@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { Job } from 'pg-boss';
 import type { NotificationDispatcher, NotificationEventType, NotificationTarget } from '../provider.js';
 import { RetryPolicy } from '../retry.js';

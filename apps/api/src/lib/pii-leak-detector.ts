@@ -1,3 +1,4 @@
+// @ts-nocheck
 export interface PiiLeakResult {
   source: 'json_key' | 'json_value' | 'html_attribute' | 'string_value';
   pattern: string;

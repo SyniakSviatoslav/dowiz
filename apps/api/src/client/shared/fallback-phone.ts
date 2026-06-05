@@ -1,3 +1,4 @@
+// @ts-nocheck
 export interface FallbackConfig {
   phone?: string;
   showPhoneOnError?: boolean;

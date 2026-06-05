@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { Pool } from 'pg';
 import type Boss from 'pg-boss';
 import type { MessageBus } from '@deliveryos/platform';

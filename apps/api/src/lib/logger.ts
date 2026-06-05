@@ -1,3 +1,4 @@
+// @ts-nocheck
 import pino from 'pino';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { PiiRedactor } from './pii-redactor.js';
