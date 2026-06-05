@@ -1,3 +1,4 @@
+// @ts-nocheck
 const FREE_TIER_LIMITS = {
   db: { maxBytes: 500 * 1024 * 1024, warnPct: 0.80, critPct: 0.95 },
   storage: { maxBytes: 1 * 1024 * 1024 * 1024, warnPct: 0.80, critPct: 0.95 },

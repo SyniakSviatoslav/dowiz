@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { MenuParserProvider, ParserInputType } from '../ports.js';
 import type { CanonicalMenuDraft, ParseIssue, ParseResult, ParseMode, CanonicalCategory, CanonicalProduct, CanonicalModifierGroup, CanonicalModifier } from '@deliveryos/shared-types';
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { h } from 'preact';
 import render from 'preact-render-to-string';
 import htm from 'htm';

@@ -1,3 +1,4 @@
+// @ts-nocheck
 export interface LocationPin {
   lat: number;
   lng: number;

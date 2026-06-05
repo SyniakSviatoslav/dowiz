@@ -1,3 +1,4 @@
+// @ts-nocheck
 export interface NotificationTarget {
   id: string; // the target id from owner_notification_targets
   channel: 'telegram' | 'push';

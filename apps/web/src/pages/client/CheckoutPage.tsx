@@ -39,13 +39,12 @@ export function CheckoutPage() {
     setOTPOpen(true);
   };
 
-  const handleSendOTP = async (verifyPhone: string) => {
+  const handleSendOTP = async (verifyPhone: string): Promise<void> => {
     setPhone(verifyPhone);
     setOtpError('');
     try {
       await apiClient('/customer/otp/send', { method: 'POST', body: { phone: verifyPhone } });
-      return true;
-    } catch { return true; }
+    } catch { }
   };
 
   const handleVerifyOTP = async (code: string) => {

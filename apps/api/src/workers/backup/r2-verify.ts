@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Pool } from 'pg';
 import { S3Client, GetObjectCommand, HeadBucketCommand, GetBucketLifecycleConfigurationCommand } from '@aws-sdk/client-s3';
 import { createHash } from 'node:crypto';

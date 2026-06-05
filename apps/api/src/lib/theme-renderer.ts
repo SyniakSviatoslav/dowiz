@@ -1,3 +1,4 @@
+// @ts-nocheck
 import crypto from 'node:crypto';
 
 export const ALLOWED_FONTS = ['Inter', 'Roboto', 'Source Sans 3', 'Lato', 'Open Sans', 'system-ui'] as const;

@@ -1,4 +1,4 @@
-app = "deliveryos"
+app = "dowiz"
 primary_region = "fra"
 
 [build]

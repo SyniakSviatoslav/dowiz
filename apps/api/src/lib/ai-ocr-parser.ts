@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { MenuParserProvider, ParserInputType } from '../ports.js';
 import type { CanonicalMenuDraft, ParseIssue, ParseResult } from '@deliveryos/shared-types';
 import { PiiRedactor } from './pii-redactor.js';

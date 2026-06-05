@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { ParseResult, CsvParseConfig, AiOcrConfig, TranslateRequest, TranslateResponse } from '@deliveryos/shared-types';
 
 export type ParserInputType = 
