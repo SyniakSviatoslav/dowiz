@@ -1,0 +1,21 @@
+{
+  "name": "@deliveryos/db",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify:db": "tsx --env-file=../../.env src/verify-db.ts"
+  },
+  "dependencies": {
+    "@deliveryos/config": "workspace:*",
+    "pg": "^8.21.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.2"
+  }
+}

@@ -11,7 +11,9 @@
       "Bash(Get-Content \"C:\\\\Users\\\\Dell5\\\\.claude\\\\projects\\\\C--Users-Dell5-Documents-delivery\\\\7d6a0a2b-5d2b-4dd1-b45b-317c0d8687da\\\\tool-results\\\\toolu_01WEcTy9dDK5hULVwq2Q2C3C.json\")",
       "Bash(Measure-Object -Line)",
       "PowerShell(Get-Content *)",
-      "mcp__figma-remote-mcp__get_metadata"
+      "mcp__figma-remote-mcp__get_metadata",
+      "Read(//c/Users/Dell5/.claude/skills/gstack/**)",
+      "Bash(./setup)"
     ]
   }
 }

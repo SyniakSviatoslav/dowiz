@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeliveryOS — Retention Settings</title>
+  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Serif+Display&family=Cormorant+Garamond:wght@400;600&family=Playfair+Display:wght@400;600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/admin/dashboard.js"></script>
+  <style>
+    :root {
+      --brand-bg:#0F172A;--brand-surface:#1E293B;--brand-raised:#263548;
+      --brand-text:#F1F5F9;--brand-muted:#94A3B8;--brand-border:#334155;
+      --brand-primary:#ea4f16;--brand-primary-hover:#ffa12e;
+      --brand-primary-light:rgba(234,79,22,0.12);--brand-accent:#2a2a2a;
+      --brand-surface-raised:#263548;--brand-text-muted:#94A3B8;
+      --brand-radius:12px;--brand-radius-sm:8px;--brand-radius-btn:78px;
+      --color-success:#059669;--color-warning:#D97706;--color-danger:#DC2626;--color-info:#2563EB;
+    }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--brand-bg); color:var(--brand-text); }
+    .setting-card { background:var(--brand-surface); border:1px solid var(--brand-border); border-radius:12px; padding:20px; }
+    .setting-card:hover { border-color:var(--brand-primary); }
+    input[type="range"] { -webkit-appearance:none; appearance:none; width:100%; height:6px; border-radius:3px; background:var(--brand-border); outline:none; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:20px; height:20px; border-radius:50%; background:var(--brand-primary); cursor:pointer; border:2px solid var(--brand-surface); }
+    input[type="range"]::-moz-range-thumb { width:20px; height:20px; border-radius:50%; background:var(--brand-primary); cursor:pointer; border:2px solid var(--brand-surface); }
+    input[type="number"] { background:var(--brand-bg); border:1px solid var(--brand-border); border-radius:8px; padding:8px 12px; color:var(--brand-text); width:100px; }
+    input[type="number"]:focus { outline:2px solid var(--brand-primary); outline-offset:-1px; }
+    .retention-display { font-size:72px; font-weight:700; line-height:1; }
+    @media (max-width:640px) { .retention-display { font-size:48px; } }
+    .info-icon { width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; border-radius:50%; font-size:11px; font-weight:700; flex-shrink:0; background:var(--brand-primary);color:#fff; }
+  </style>
+</head>
+<body>
+  <button id="themeBtn" onclick="cycleTheme()" class="fixed top-4 right-4 z-50 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full cursor-pointer" style="background:var(--brand-surface);border:1px solid var(--brand-border);color:var(--brand-muted);">
+    <i class="ti ti-palette"></i><span id="themeLabel">Food Dark</span>
+  </button>
+
+  <div class="flex flex-col min-h-screen">
+    <header class="flex items-center justify-between px-6 py-3 border-b" style="border-color:var(--brand-border);background:var(--brand-surface);">
+      <div class="flex items-center gap-3">
+        <h1 class="text-lg font-bold">DeliveryOS</h1>
+        <span class="text-sm px-2 py-0.5 rounded-full" style="background:var(--brand-primary);color:#fff;" id="statusBadge">disconnected</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm" style="color:var(--brand-muted);">
+        <a href="/admin/dashboard.html" class="hover:text-white">Dashboard</a>
+        <a href="/admin/orders.html" class="hover:text-white">Orders</a>
+        <a href="/admin/alerts.html" class="hover:text-white">Alerts</a>
+        <a href="/admin/signals.html" class="hover:text-white">Signals</a>
+        <a href="/admin/settings-dwell.html" class="hover:text-white">Dwell</a>
+        <a href="/admin/settings-security.html" class="hover:text-white">Security</a>
+        <a href="/admin/gdpr.html" class="hover:text-white">GDPR</a>
+        <a href="/admin/settings-retention.html" class="hover:text-white font-semibold" style="color:var(--brand-text);">Retention</a>
+        <a href="/admin/health.html" class="hover:text-white">Health</a>
+      </div>
+    </header>
+
+    <div class="flex-1 p-6 max-w-2xl mx-auto w-full">
+      <!-- Breadcrumb -->
+      <nav class="text-xs mb-4" style="color:var(--brand-muted);">
+        <a href="/admin/dashboard.html" class="hover:text-white">Dashboard</a>
+        <span class="mx-1">/</span>
+        <a href="/admin/settings-security.html" class="hover:text-white">Settings</a>
+        <span class="mx-1">/</span>
+        <span>Retention</span>
+      </nav>
+
+      <h2 class="text-xl font-bold mb-1">Retention Settings</h2>
+      <p class="text-sm mb-6" style="color:var(--brand-muted);">Configure how long customer data is retained before automatic anonymization.</p>
+
+      <!-- Loading state -->
+      <div id="loadingState" class="text-center py-16" style="color:var(--brand-muted);">Loading settings...</div>
+
+      <!-- Settings content (hidden until loaded) -->
+      <div id="settingsContent" class="hidden">
+        <!-- Current Retention Display -->
+        <div class="setting-card mb-6 text-center">
+          <div class="retention-display" id="retentionDaysDisplay">365</div>
+          <div class="text-sm mt-1" style="color:var(--brand-muted);">days</div>
+          <div class="text-xs mt-2" style="color:var(--brand-muted);">
+            Data older than this will be anonymized nightly
+          </div>
+        </div>
+
+        <!-- Slider -->
+        <div class="setting-card mb-6">
+          <div class="flex items-center justify-between mb-4">
+            <div class="font-medium">Retention Period</div>
+            <div class="flex items-center gap-2">
+              <input type="number" id="retentionInput" min="30" max="2555" value="365" class="text-right">
+              <span class="text-sm" style="color:var(--brand-muted);">days</span>
+            </div>
+          </div>
+          <input type="range" id="retentionSlider" min="30" max="2555" value="365" class="mt-2">
+          <div class="flex justify-between text-xs mt-1" style="color:var(--brand-muted);">
+            <span>30 days (min)</span>
+            <span>7 years (max)</span>
+          </div>
+        </div>
+
+        <!-- Save -->
+        <div class="flex items-center gap-3 mb-8">
+          <button onclick="saveRetention()" id="saveBtn" class="px-6 py-2 rounded-lg font-medium" style="background:var(--brand-primary);color:#fff;">Save Changes</button>
+          <span id="saveStatus" class="text-sm"></span>
+        </div>
+
+        <!-- Info cards -->
+        <div class="space-y-4">
+          <div class="setting-card">
+            <div class="flex items-start gap-3">
+              <span class="info-icon mt-0.5">i</span>
+              <div>
+                <div class="font-medium text-sm mb-1">What happens during anonymization</div>
+                <div class="text-sm" style="color:var(--brand-muted);">
+                  Orders and customer PII older than <strong id="infoDays">365</strong> days will be anonymized nightly at 03:00 UTC.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="flex items-start gap-3">
+              <span class="info-icon mt-0.5" style="background:var(--color-danger);">X</span>
+              <div>
+                <div class="font-medium text-sm mb-1">Anonymized data</div>
+                <ul class="text-sm space-y-1" style="color:var(--brand-muted);">
+                  <li><i class="ti ti-minus text-xs mr-1"></i>Phone number</li>
+                  <li><i class="ti ti-minus text-xs mr-1"></i>Name</li>
+                  <li><i class="ti ti-minus text-xs mr-1"></i>Email</li>
+                  <li><i class="ti ti-minus text-xs mr-1"></i>Client IP hash</li>
+                  <li><i class="ti ti-minus text-xs mr-1"></i>Delivery address</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="flex items-start gap-3">
+              <span class="info-icon" style="background:var(--color-success);">&#10003;</span>
+              <div>
+                <div class="font-medium text-sm mb-1">Preserved data</div>
+                <ul class="text-sm space-y-1" style="color:var(--brand-muted);">
+                  <li><i class="ti ti-plus text-xs mr-1"></i>Order totals</li>
+                  <li><i class="ti ti-plus text-xs mr-1"></i>Item names &amp; prices</li>
+                  <li><i class="ti ti-plus text-xs mr-1"></i>No-show counters</li>
+                  <li><i class="ti ti-plus text-xs mr-1"></i>Loyalty points</li>
+                  <li><i class="ti ti-plus text-xs mr-1"></i>Order timestamps</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-card" id="r2Card">
+            <div class="flex items-start gap-3">
+              <span class="info-icon" style="background:var(--color-info);"><i class="ti ti-cloud"></i></span>
+              <div class="flex-1">
+                <div class="font-medium text-sm mb-1">R2 Backup Retention</div>
+                <div class="text-sm" style="color:var(--brand-muted);" id="r2Info">
+                  <span id="r2Retention">Checking...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const PRESETS = {
+    "Food Dark": {"--brand-primary":"#ea4f16","--brand-primary-hover":"#ffa12e","--brand-primary-light":"rgba(234,79,22,0.12)","--brand-accent":"#2a2a2a","--brand-bg":"#121212","--brand-surface":"#1e1e1e","--brand-surface-raised":"#2a2a2a","--brand-text":"#ffffff","--brand-text-muted":"#a8a8a8","--brand-border":"#2c2c2c","--brand-radius":"12px","--brand-radius-sm":"8px","--brand-radius-btn":"78px"},
+    "Crimson Classic": {"--brand-primary":"#C1121F","--brand-primary-hover":"#9B0D17","--brand-primary-light":"#FFF0F1","--brand-accent":"#F5F0E8","--brand-bg":"#FFFFFF","--brand-surface":"#F8F9FA","--brand-surface-raised":"#F0F0F0","--brand-text":"#1A1A1A","--brand-text-muted":"#6B7280","--brand-border":"#E5E7EB","--brand-radius":"12px","--brand-radius-sm":"6px","--brand-radius-btn":"24px"},
+    "Ocean Fresh": {"--brand-primary":"#0D9488","--brand-primary-hover":"#0A7567","--brand-primary-light":"#F0FDFA","--brand-accent":"#F0F9F8","--brand-bg":"#FFFFFF","--brand-surface":"#F8FFFE","--brand-surface-raised":"#E0F7F5","--brand-text":"#134E4A","--brand-text-muted":"#6B7280","--brand-border":"#CCFBF1","--brand-radius":"24px","--brand-radius-sm":"12px","--brand-radius-btn":"32px"},
+    "Midnight Urban": {"--brand-primary":"#F97316","--brand-primary-hover":"#EA6A0A","--brand-primary-light":"rgba(249,115,22,0.10)","--brand-accent":"#1E1E1E","--brand-bg":"#111111","--brand-surface":"#1C1C1C","--brand-surface-raised":"#2a2a2a","--brand-text":"#F5F5F5","--brand-text-muted":"#9CA3AF","--brand-border":"#2D2D2D","--brand-radius":"4px","--brand-radius-sm":"2px","--brand-radius-btn":"4px"},
+    "Sage Garden": {"--brand-primary":"#4D7C0F","--brand-primary-hover":"#3F6812","--brand-primary-light":"#F7FEE7","--brand-accent":"#ECFCCB","--brand-bg":"#FFFFFF","--brand-surface":"#F7FEE7","--brand-surface-raised":"#E8F5E0","--brand-text":"#1A2E05","--brand-text-muted":"#6B7280","--brand-border":"#D9F99D","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px"},
+    "Royal Gold": {"--brand-primary":"#B45309","--brand-primary-hover":"#92400E","--brand-primary-light":"rgba(180,83,9,0.10)","--brand-accent":"#1C1400","--brand-bg":"#0D0900","--brand-surface":"#1A1200","--brand-surface-raised":"#2a2000","--brand-text":"#FEF3C7","--brand-text-muted":"#D97706","--brand-border":"#2D2000","--brand-radius":"2px","--brand-radius-sm":"1px","--brand-radius-btn":"2px"}
+  };
+  const PRESET_KEYS = Object.keys(PRESETS);
+  let currentPresetIdx = parseInt(localStorage.getItem('dos_theme_idx') || '0', 10);
+
+  function cycleTheme() {
+    currentPresetIdx = (currentPresetIdx + 1) % PRESET_KEYS.length;
+    localStorage.setItem('dos_theme_idx', String(currentPresetIdx));
+    applyTheme(PRESET_KEYS[currentPresetIdx]);
+  }
+
+  function applyTheme(name) {
+    const p = PRESETS[name];
+    const r = document.documentElement.style;
+    Object.entries(p).forEach(([k, v]) => r.setProperty(k, v));
+    document.getElementById('themeLabel').textContent = name;
+  }
+
+  applyTheme(PRESET_KEYS[currentPresetIdx]);
+
+  (async () => {
+    const token = getOwnerToken();
+    const locationId = getLocationId();
+    if (!token || !locationId) {
+      document.body.innerHTML = '<div class="flex items-center justify-center h-screen" style="color:var(--brand-muted);"><div class="text-center"><p class="text-lg mb-2">Not authenticated</p><p class="text-sm">Please <a href="/29-admin-login.html" class="underline">log in</a> first.</p></div></div>';
+      return;
+    }
+
+    let retentionDays = 365;
+    let dirty = false;
+
+    const loadingState = document.getElementById('loadingState');
+    const settingsContent = document.getElementById('settingsContent');
+    const retentionDisplay = document.getElementById('retentionDaysDisplay');
+    const retentionSlider = document.getElementById('retentionSlider');
+    const retentionInput = document.getElementById('retentionInput');
+    const saveBtn = document.getElementById('saveBtn');
+    const saveStatus = document.getElementById('saveStatus');
+    const infoDays = document.getElementById('infoDays');
+
+    function updateUI() {
+      retentionDisplay.textContent = retentionDays;
+      retentionSlider.value = retentionDays;
+      retentionInput.value = retentionDays;
+      infoDays.textContent = retentionDays;
+    }
+
+    function onValueChange() {
+      dirty = true;
+      saveStatus.textContent = 'Unsaved changes';
+      saveStatus.style.color = 'var(--color-warning)';
+      updateUI();
+    }
+
+    retentionSlider.addEventListener('input', () => {
+      retentionDays = parseInt(retentionSlider.value, 10);
+      onValueChange();
+    });
+
+    retentionInput.addEventListener('change', () => {
+      let val = parseInt(retentionInput.value, 10);
+      if (isNaN(val)) val = 365;
+      if (val < 30) val = 30;
+      if (val > 2555) val = 2555;
+      retentionDays = val;
+      onValueChange();
+    });
+
+    async function loadRetention() {
+      try {
+        const res = await fetch(`/api/owner/locations/${locationId}/settings/retention`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(`Failed: ${res.status}`);
+        const data = await res.json();
+        retentionDays = data.retention_days || 365;
+        updateUI();
+        dirty = false;
+        saveStatus.textContent = '';
+      } catch (e) {
+        console.warn('API unavailable, using default retention:', e.message);
+        retentionDays = 365;
+        updateUI();
+      } finally {
+        loadingState.classList.add('hidden');
+        settingsContent.classList.remove('hidden');
+      }
+    }
+
+    window.saveRetention = async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+      saveStatus.textContent = '';
+
+      try {
+        const res = await fetch(`/api/owner/locations/${locationId}/settings/retention`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ retention_days: retentionDays }),
+        });
+        if (!res.ok) throw new Error(`Failed: ${res.status}`);
+        dirty = false;
+        saveStatus.textContent = 'Saved';
+        saveStatus.style.color = 'var(--color-success)';
+        setTimeout(() => { saveStatus.textContent = ''; }, 3000);
+      } catch (e) {
+        saveStatus.textContent = `Error: ${e.message}`;
+        saveStatus.style.color = 'var(--color-danger)';
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Changes';
+      }
+    };
+
+    // Confirmation before leaving with unsaved changes
+    window.addEventListener('beforeunload', (e) => {
+      if (dirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    // R2 Backup Retention — auto-discover from env
+    async function loadR2Info() {
+      const r2Info = document.getElementById('r2Retention');
+      try {
+        const res = await fetch(`/api/owner/locations/${locationId}/settings/retention`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error('Not available');
+        const data = await res.json();
+        const r2Days = data.r2_backup_retention_days;
+        if (r2Days) {
+          r2Info.textContent = `Backups retained for ${r2Days} days in Cloudflare R2. Anonymized data is excluded from backups after retention period.`;
+        } else {
+          r2Info.textContent = 'R2 backup retention matches the configured retention period. Anonymized data is excluded from backups.';
+        }
+      } catch {
+        r2Info.textContent = 'R2 backup retention period is configured server-side. Anonymized data is always excluded from backups.';
+      }
+    }
+
+    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    new DashboardWSClient({
+      url: `${wsProtocol}//${location.host}`,
+      token, locationId,
+      onStatusChange: (s) => {
+        const badge = document.getElementById('statusBadge');
+        if (badge) { badge.textContent = s; badge.style.background = s === 'subscribed' ? '#059669' : '#D97706'; }
+      },
+    });
+
+    await loadRetention();
+    await loadR2Info();
+  })();
+  </script>
+</body>
+</html>
