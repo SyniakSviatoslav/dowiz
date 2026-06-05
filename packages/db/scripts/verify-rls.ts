@@ -92,6 +92,50 @@ async function run() {
 
     console.log('🎉 All RLS empirical tests passed!');
 
+    // ── API Exposure check: zero grants for anon/authenticated/service_role on non-tenant tables ──
+    console.log('\n🔍 Checking Data API perimeter...');
+    const NON_TENANT_TABLES = ['users', 'ops_worker_heartbeat', 'auth_refresh_tokens'];
+
+    for (const table of NON_TENANT_TABLES) {
+      const grantRes = await pool.query(
+        `SELECT grantee, privilege_type
+         FROM information_schema.role_table_grants
+         WHERE table_schema = 'public'
+           AND table_name = $1
+           AND grantee IN ('anon', 'authenticated', 'service_role')`,
+        [table],
+      );
+      if (grantRes.rowCount && grantRes.rowCount > 0) {
+        console.error(`❌ API exposure: ${table} has ${grantRes.rowCount} grant(s) for API roles:`);
+        for (const row of grantRes.rows) {
+          console.error(`   ${row.grantee}: ${row.privilege_type}`);
+        }
+        process.exit(1);
+      }
+      console.log(`✅ ${table.padEnd(25, ' ')} zero API role grants`);
+
+      // Verify RLS is ENABLED (linter 0013 check)
+      const rlsRes = await pool.query(
+        `SELECT relrowsecurity, relforcerowsecurity
+         FROM pg_class
+         WHERE relnamespace = 'public'::regnamespace
+           AND relname = $1`,
+        [table],
+      );
+      if (rlsRes.rows.length === 0) {
+        console.error(`❌ ${table}: table not found in pg_class`);
+        process.exit(1);
+      }
+      const rls = rlsRes.rows[0];
+      if (!rls.relrowsecurity) {
+        console.error(`❌ ${table}: RLS NOT ENABLED`);
+        process.exit(1);
+      }
+      console.log(`   RLS: ${rls.relrowsecurity ? 'ENABLED' : '❌'} / FORCE: ${rls.relforcerowsecurity ? 'YES' : 'NO'}`);
+    }
+
+    console.log('\n🎉 Non-tenant API perimeter locked down!');
+
   } catch (err) {
     console.error('❌ Verification failed:', err);
     process.exit(1);
