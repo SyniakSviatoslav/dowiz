@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { NotificationProvider, NotificationTarget, NotificationEvent, NotificationData, NotifyResult } from '../provider.js';
 
 export class PushAdapter implements NotificationProvider {

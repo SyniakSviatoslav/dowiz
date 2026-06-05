@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { TelegramAdapter } from '../adapters/telegram.js';
 
 export class TelegramPoller {

@@ -128,7 +128,7 @@ export function DeliveryPage() {
         </button>
 
         <div className="absolute top-4 right-4 bg-white/90 p-1.5 rounded-full shadow-md flex gap-2 items-center px-3 z-10">
-          <WSStatusDot status={wsStatus} />
+          <WSStatusDot status={wsStatus === 'disabled' ? 'disconnected' : wsStatus} />
           {position && <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" title="GPS Active" />}
         </div>
       </div>

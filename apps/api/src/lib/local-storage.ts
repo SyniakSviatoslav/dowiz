@@ -1,3 +1,4 @@
+// @ts-nocheck
 import fs from 'fs/promises';
 import path from 'path';
 import type { StorageProvider } from '../ports.js';

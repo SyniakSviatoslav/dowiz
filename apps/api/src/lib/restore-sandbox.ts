@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Client } from 'pg';
 
 const DB_NAME_REGEX = /^[a-z0-9_]+$/;

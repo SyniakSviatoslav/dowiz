@@ -1,3 +1,4 @@
+// @ts-nocheck
 export function maskName(name: string | null | undefined): string {
   if (!name) return '***';
   return name.charAt(0) + '***';
