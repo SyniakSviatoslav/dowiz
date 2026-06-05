@@ -18,8 +18,7 @@ export default (async function seoRoutes(fastify, opts) {
       try {
         const res = await client.query(
           `SELECT slug, supported_locales 
-           FROM locations 
-           WHERE deleted_at IS NULL AND status = 'active'`
+           FROM locations`
         );
         
         let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n`;

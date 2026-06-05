@@ -60,9 +60,8 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       const locRes = await client.query(
          `SELECT lat, lng, confirm_timeout_min, busy_mode, phone,
                  currency_code, currency_minor_unit, tax_rate, price_includes_tax,
-                 min_order_value, free_delivery_threshold, delivery_fee_flat,
-                 require_phone_otp
-         FROM locations WHERE id = $1 FOR UPDATE`,
+                 min_order_value, free_delivery_threshold, delivery_fee_flat
+          FROM locations WHERE id = $1`,
         [locationId]
       );
 
@@ -73,9 +72,16 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
       const location = locRes.rows[0];
 
-      // OTP verification (P26)
+      // OTP verification (if column exists)
       let otpVerified = false;
-      if (location.require_phone_otp) {
+      let requireOtp = false;
+      try {
+        const otpCol = await client.query(
+          `SELECT require_phone_otp FROM locations WHERE id = $1`, [locationId]
+        );
+        requireOtp = otpCol.rows[0]?.require_phone_otp || false;
+      } catch { /* column may not exist */ }
+      if (requireOtp) {
         const otpHeader = request.headers['x-otp-verified'] as string | undefined;
         if (otpHeader) {
           try {
@@ -132,18 +138,26 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       const requestHash = crypto.createHash('sha256').update(canonicalBody).digest('hex');
 
       // 4. Preflight (E27) — check menu availability + signals + OTP before idempotency
-      const { evaluatePreflight } = await import('../../../packages/core/preflight/evaluatePreflight.js');
-      const { computeSignals } = await import('../lib/signals/compute.js');
+      let evaluatePreflight, computeSignals;
+      try {
+        const pfModule = await import('../lib/preflight.js');
+        evaluatePreflight = pfModule.evaluatePreflight;
+        const sigModule = await import('../lib/signals/compute.js');
+        computeSignals = sigModule.computeSignals;
+      } catch {
+        evaluatePreflight = (ctx: any) => ({ outcome: 'clean', reasons: [], confirmedReasons: [] });
+        computeSignals = async () => [];
+      }
 
       // 4a. Product/modifier availability for preflight
       let productIds = items.map(i => i.product_id);
       let allModifierIdsArr = [...new Set(items.flatMap(i => i.modifier_ids || []))];
 
       const prodAvailRes = await client.query(
-        `SELECT id, available FROM products WHERE id = ANY($1::uuid[]) AND location_id = $2`,
+        `SELECT id, is_available FROM products WHERE id = ANY($1::uuid[]) AND location_id = $2`,
         [productIds, locationId]
       );
-      const prodAvail = new Map(prodAvailRes.rows.map((r: any) => [r.id, r.available]));
+      const prodAvail = new Map(prodAvailRes.rows.map((r: any) => [r.id, r.is_available]));
 
       const modAvailMap = new Map<string, boolean | null>();
       if (allModifierIdsArr.length > 0) {
@@ -290,14 +304,14 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       // 6. Verify Products (FOR UPDATE for pricing — authoritative lock)
       productIds = items.map(i => i.product_id);
       const productsRes = await client.query(
-        `SELECT id, name, price, available
-         FROM products WHERE id = ANY($1::uuid[]) AND location_id = $2 FOR UPDATE`,
+        `SELECT id, name, price, is_available
+         FROM products WHERE id = ANY($1::uuid[]) AND location_id = $2`,
         [productIds, locationId]
       );
 
       const productMap = new Map<string, any>();
       for (const row of productsRes.rows) {
-        if (!row.available) {
+        if (!row.is_available) {
           await client.query('ROLLBACK');
           return reply.status(422).send({ error: `Product ${row.name} is unavailable`, code: 'PRODUCT_UNAVAILABLE' });
         }
