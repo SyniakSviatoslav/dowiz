@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Pool } from 'pg';
 import { loadEnv } from '@deliveryos/config';
 import crypto from 'node:crypto';

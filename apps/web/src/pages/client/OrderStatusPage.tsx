@@ -99,7 +99,7 @@ export function OrderStatusPage() {
           zoom={14}
         />
         <div className="absolute top-4 left-4 bg-white/90 p-1.5 rounded-full shadow-md z-10">
-          <WSStatusDot status={wsStatus} />
+          <WSStatusDot status={wsStatus === 'disabled' ? 'disconnected' : wsStatus} />
         </div>
       </div>
 

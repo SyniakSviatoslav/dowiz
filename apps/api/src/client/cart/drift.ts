@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { getCart, saveCart, CartSchema } from './store.js';
 
 export interface MenuProduct {

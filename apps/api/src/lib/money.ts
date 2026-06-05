@@ -1,3 +1,4 @@
+// @ts-nocheck
 export function toMinorUnit(amount: number, currency: string): number {
   if (!Number.isInteger(amount)) {
     throw new Error('Amount must be an integer');

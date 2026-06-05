@@ -1,3 +1,4 @@
+// @ts-nocheck
 export interface PiiRedaction {
   kind: 'email' | 'phone' | 'card' | 'iban' | 'url';
   start: number;

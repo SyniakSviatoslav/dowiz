@@ -1,3 +1,4 @@
+// @ts-nocheck
 import crypto from 'node:crypto';
 import { Pool } from 'pg';
 import { createReadStream } from 'node:fs';

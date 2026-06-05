@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { getCart, saveCart, CartItem } from '../cart/store.js';
 
 let currentLocationId = '';

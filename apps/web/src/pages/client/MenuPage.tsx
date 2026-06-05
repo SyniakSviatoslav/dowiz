@@ -25,7 +25,7 @@ export function MenuPage() {
         const data = await apiClient<any>(`/public/menu/${slug}`);
         const cats = Array.isArray(data) ? data : [];
         setCategories(cats);
-        if (cats.length > 0) setActiveTab(cats[0].id);
+        if (cats[0]) setActiveTab(cats[0].id);
         setLoading(false);
       } catch (err) {
         // Fallback mock data
@@ -46,7 +46,7 @@ export function MenuPage() {
           }
         ];
         setCategories(mockCategories);
-        if (mockCategories.length > 0) setActiveTab(mockCategories[0].id);
+        if (mockCategories[0]) setActiveTab(mockCategories[0].id);
         setLoading(false);
       }
     }

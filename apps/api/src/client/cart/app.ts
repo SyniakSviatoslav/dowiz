@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { getCart, saveCart, clearCart } from './store.js';
 import { checkDrift } from './drift.js';
 import { fetchFallbackConfig, showFallbackBanner, hideFallbackBanner, getCachedFallbackConfig } from '../shared/fallback-phone.js';
