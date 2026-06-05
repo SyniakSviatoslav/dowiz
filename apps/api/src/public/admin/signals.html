@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeliveryOS — Signals</title>
+  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/admin/dashboard.js"></script>
+  <style>
+    :root {
+      --brand-bg:#0F172A;--brand-surface:#1E293B;--brand-raised:#263548;
+      --brand-text:#F1F5F9;--brand-muted:#94A3B8;--brand-border:#334155;
+      --brand-primary:#ea4f16;--brand-primary-hover:#ffa12e;
+      --sig-low:#F59E0B;--sig-medium:#DC2626;--sig-high:#7C3AED;
+    }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--brand-bg); color:var(--brand-text); }
+    .signal-row { background:var(--brand-surface); border:1px solid var(--brand-border); border-radius:10px; padding:14px 16px; }
+    .signal-row:hover { border-color:var(--brand-primary); }
+  </style>
+</head>
+<body>
+  <div class="flex flex-col min-h-screen">
+    <header class="flex items-center justify-between px-6 py-3 border-b" style="border-color:var(--brand-border);background:var(--brand-surface);">
+      <div class="flex items-center gap-3">
+        <h1 class="text-lg font-bold">DeliveryOS</h1>
+        <span class="text-sm px-2 py-0.5 rounded-full" style="background:var(--sig-medium);color:#fff;" id="statusBadge">connecting</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm" style="color:var(--brand-muted);">
+        <a href="/admin/dashboard.html" class="hover:text-white">Dashboard</a>
+        <a href="/admin/orders.html" class="hover:text-white">Orders</a>
+        <a href="/admin/alerts.html" class="hover:text-white">Alerts</a>
+        <a href="/admin/signals.html" class="hover:text-white font-semibold" style="color:var(--brand-text);">Signals</a>
+        <a href="/admin/settings-security.html" class="hover:text-white">Security</a>
+      </div>
+    </header>
+
+    <div class="flex items-center gap-3 px-6 py-3 border-b flex-wrap" style="border-color:var(--brand-border);background:var(--brand-surface);">
+      <select id="statusFilter" class="text-sm px-3 py-1.5 rounded-lg" style="background:var(--brand-bg);border:1px solid var(--brand-border);color:var(--brand-text);">
+        <option value="">Active</option>
+        <option value="acknowledged">Acknowledged</option>
+        <option value="dismissed">Dismissed</option>
+      </select>
+      <select id="kindFilter" class="text-sm px-3 py-1.5 rounded-lg" style="background:var(--brand-bg);border:1px solid var(--brand-border);color:var(--brand-text);">
+        <option value="">All kinds</option>
+        <option value="no_show_recent">No-Show</option>
+        <option value="velocity_rapid">Velocity (1h)</option>
+        <option value="velocity_high_volume">Velocity (24h)</option>
+        <option value="ip_velocity_rapid">IP Velocity (1h)</option>
+        <option value="ip_velocity_high_volume">IP Velocity (24h)</option>
+      </select>
+      <button onclick="refresh()" class="ml-auto text-sm px-3 py-1.5 rounded-lg" style="background:var(--brand-bg);border:1px solid var(--brand-border);color:var(--brand-text);">
+        <i class="ti ti-refresh"></i>
+      </button>
+    </div>
+
+    <div class="flex-1 p-6" id="signalContainer">
+      <div class="text-center py-16" style="color:var(--brand-muted);">Loading signals...</div>
+    </div>
+
+    <div id="pagination" class="hidden px-6 pb-4 flex items-center justify-between text-sm" style="color:var(--brand-muted);">
+      <span id="signalCount">0 signals</span>
+      <button id="loadMore" class="hidden px-4 py-1.5 rounded-lg" style="background:var(--brand-bg);border:1px solid var(--brand-border);color:var(--brand-text);" onclick="loadMore()">Load more</button>
+    </div>
+  </div>
+
+  <script>
+  (async () => {
+    const token = getOwnerToken();
+    const locationId = getLocationId();
+    if (!token || !locationId) {
+      document.body.innerHTML = `<div class="flex items-center justify-center h-screen" style="color:var(--brand-muted);"><div class="text-center"><p class="text-lg mb-2">Not authenticated</p></div></div>`;
+      return;
+    }
+
+    const SEVERITY_COLORS = { low:'var(--sig-low)', medium:'var(--sig-medium)', high:'var(--sig-high)' };
+    const KIND_LABELS = {
+      no_show_recent:'No-Show Recent', velocity_rapid:'Phone Velocity (1h)', velocity_high_volume:'Phone Velocity (24h)',
+      ip_velocity_rapid:'IP Velocity (1h)', ip_velocity_high_volume:'IP Velocity (24h)', manual_flag:'Manual Flag'
+    };
+
+    let cursor = null;
+
+    const signalContainer = document.getElementById('signalContainer');
+    const pagination = document.getElementById('pagination');
+    const signalCount = document.getElementById('signalCount');
+    const loadMoreBtn = document.getElementById('loadMore');
+
+    async function fetchSignals(reset = true) {
+      if (reset) { cursor = null; signalContainer.innerHTML = '<div class="text-center py-16" style="color:var(--brand-muted);">Loading...</div>'; }
+      const params = new URLSearchParams();
+      const status = document.getElementById('statusFilter').value;
+      const kind = document.getElementById('kindFilter').value;
+      if (status) params.set('status', status);
+      if (kind) params.set('kind', kind);
+      if (!reset && cursor) params.set('cursor', cursor);
+      params.set('limit', '50');
+      const url = `/api/owner/locations/${locationId}/signals?${params}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(`Failed: ${res.status}`);
+      return res.json();
+    }
+
+    function renderSignals(data, append = false) {
+      const { signals, nextCursor } = data;
+      if (!append) signalContainer.innerHTML = '';
+      pagination.classList.remove('hidden');
+
+      if (signals.length === 0 && !append) {
+        signalContainer.innerHTML = '<div class="text-center py-16" style="color:var(--brand-muted);"><i class="ti ti-shield-off text-3xl"></i><p class="mt-2">No signals</p></div>';
+        pagination.classList.add('hidden');
+        return;
+      }
+
+      for (const s of signals) {
+        const el = document.createElement('div');
+        el.className = 'signal-row flex items-start justify-between gap-4 mb-2';
+        const kindLabel = KIND_LABELS[s.kind] || s.kind;
+        const sevColor = SEVERITY_COLORS[s.severity] || 'var(--brand-muted)';
+        const isActive = !s.acknowledgedAt && !s.dismissedAt;
+        const ev = s.evidence || {};
+        const detail = ev.count ? `${ev.count} occurrences` : (ev.ageDays ? `${Math.round(ev.ageDays)}d ago` : '');
+
+        el.innerHTML = `<div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="w-2 h-2 rounded-full" style="background:${sevColor}"></span>
+            <span class="font-medium text-sm">${kindLabel}</span>
+            <span class="text-xs px-1.5 py-0.5 rounded" style="background:${sevColor}20;color:${sevColor};">${s.severity}</span>
+            ${ev.ratio ? `<span class="text-xs" style="color:var(--brand-muted);">ratio=${ev.ratio}</span>` : ''}
+          </div>
+          <div class="text-xs" style="color:var(--brand-muted);">
+            ${s.customerNameMasked || 'Unknown'} · ${s.customerPhoneMasked || ''} · ${detail}
+          </div>
+          <div class="text-xs mt-1" style="color:var(--brand-muted);">
+            ${ev.decayFactor ? `Decay: ${ev.decayFactor}` : ''}
+            ${ev.windowSize ? `Window: ${ev.windowSize} · Threshold: ${ev.threshold}` : ''}
+          </div>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          ${isActive ? `<button onclick="acknowledge('${s.id}')" class="text-xs px-3 py-1.5 rounded-lg font-medium" style="background:var(--brand-primary);color:#fff;">Ack</button>
+          <button onclick="dismiss('${s.id}')" class="text-xs px-3 py-1.5 rounded-lg" style="background:transparent;border:1px solid var(--brand-border);color:var(--brand-muted);">Dismiss</button>` : `<span class="text-xs" style="color:var(--brand-muted);">${s.acknowledgedAt ? 'Acknowledged' : 'Dismissed'}</span>`}
+        </div>`;
+        signalContainer.appendChild(el);
+      }
+
+      signalCount.textContent = `${signals.length} signals`;
+      cursor = nextCursor || null;
+      loadMoreBtn.classList.toggle('hidden', !nextCursor);
+    }
+
+    window.refresh = async () => {
+      try { renderSignals(await fetchSignals(true)); }
+      catch (e) { signalContainer.innerHTML = `<div class="text-center py-16" style="color:var(--status-active);">Error: ${e.message}</div>`; }
+    };
+
+    window.loadMore = async () => {
+      try { renderSignals(await fetchSignals(false), true); }
+      catch (e) { alert(`Load more failed: ${e.message}`); }
+    };
+
+    window.acknowledge = async (signalId) => {
+      try {
+        const res = await fetch(`/api/owner/locations/${locationId}/signals/${signalId}/acknowledge`, {
+          method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        });
+        if (!res.ok) throw new Error(`Failed: ${res.status}`);
+        refresh();
+      } catch (e) { alert(`Acknowledge failed: ${e.message}`); }
+    };
+
+    window.dismiss = async (signalId) => {
+      try {
+        const res = await fetch(`/api/owner/locations/${locationId}/signals/${signalId}/dismiss`, {
+          method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        if (!res.ok) throw new Error(`Failed: ${res.status}`);
+        refresh();
+      } catch (e) { alert(`Dismiss failed: ${e.message}`); }
+    };
+
+    document.getElementById('statusFilter').addEventListener('change', () => refresh());
+    document.getElementById('kindFilter').addEventListener('change', () => refresh());
+
+    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    new DashboardWSClient({
+      url: `${wsProtocol}//${location.host}`,
+      token, locationId,
+      onStatusChange: (s) => {
+        const badge = document.getElementById('statusBadge');
+        if (badge) { badge.textContent = s; badge.style.background = s === 'subscribed' ? '#059669' : '#D97706'; }
+      },
+      onEvent: (msg) => {
+        const t = msg.type || (msg.data && msg.data.type);
+        if (t && t.startsWith('preflight.signal')) refresh();
+      },
+    });
+
+    refresh();
+  })();
+  </script>
+</body>
+</html>
