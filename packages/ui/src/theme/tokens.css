@@ -1,0 +1,212 @@
+/* ── DeliveryOS Design Tokens ── */
+
+:root {
+  /* ── Food Dark (default) ── */
+  --brand-primary: #ea4f16;
+  --brand-primary-hover: #ffa12e;
+  --brand-primary-light: rgba(234, 79, 22, 0.12);
+  --brand-accent: #2a2a2a;
+  --brand-bg: #121212;
+  --brand-surface: #1e1e1e;
+  --brand-surface-raised: #2a2a2a;
+  --brand-text: #ffffff;
+  --brand-text-muted: #a8a8a8;
+  --brand-border: #2c2c2c;
+  --brand-font-heading: 'Inter', sans-serif;
+  --brand-font-body: 'Inter', sans-serif;
+  --brand-radius: 12px;
+  --brand-radius-sm: 8px;
+  --brand-radius-btn: 78px;
+
+  /* ── Semantic colors ── */
+  --color-success: #059669;
+  --color-warning: #D97706;
+  --color-danger: #DC2626;
+  --color-info: #2563EB;
+  --color-success-light: rgba(5, 150, 105, 0.08);
+  --color-warning-light: rgba(217, 119, 6, 0.08);
+  --color-danger-light: rgba(220, 38, 38, 0.08);
+  --color-info-light: rgba(37, 99, 235, 0.08);
+
+  /* ── Status colors ── */
+  --status-pending: #D97706;
+  --status-confirmed: #2563EB;
+  --status-preparing: #F59E0B;
+  --status-ready: #0D9488;
+  --status-in-delivery: #3B82F6;
+  --status-delivered: #059669;
+  --status-rejected: #DC2626;
+  --status-cancelled: #DC2626;
+  --status-scheduled: #7C3AED;
+  --status-picked-up: #0D9488;
+
+  /* ── Spacing ── */
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+  --space-32: 128px;
+  --space-40: 160px;
+  --space-48: 192px;
+  --space-64: 256px;
+
+  /* ── Border radius ── */
+  --radius-none: 0px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* ── Elevation shadows ── */
+  --elevation-1: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --elevation-2: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --elevation-3: 0 8px 24px rgba(0, 0, 0, 0.18);
+  --elevation-4: 0 16px 48px rgba(0, 0, 0, 0.22);
+
+  /* ── Z-index layers ── */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal-backdrop: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+}
+
+/* ── Theme Presets ── */
+
+/* Food Dark (default) — already defined */
+
+.theme-crimson-classic {
+  --brand-primary: #C1121F;
+  --brand-primary-hover: #9B0D17;
+  --brand-primary-light: #FFF0F1;
+  --brand-accent: #F5F0E8;
+  --brand-bg: #FFFFFF;
+  --brand-surface: #F8F9FA;
+  --brand-surface-raised: #FFFFFF;
+  --brand-text: #1A1A1A;
+  --brand-text-muted: #6B7280;
+  --brand-border: #E5E7EB;
+  --brand-font-heading: 'DM Serif Display', serif;
+  --brand-font-body: 'DM Sans', sans-serif;
+  --brand-radius: 12px;
+  --brand-radius-sm: 6px;
+  --brand-radius-btn: 24px;
+}
+
+.theme-ocean-fresh {
+  --brand-primary: #0D9488;
+  --brand-primary-hover: #0F766E;
+  --brand-primary-light: #F0FDFA;
+  --brand-accent: #CCFBF1;
+  --brand-bg: #FFFFFF;
+  --brand-surface: #F8FFFE;
+  --brand-surface-raised: #FFFFFF;
+  --brand-text: #134E4A;
+  --brand-text-muted: #6B7280;
+  --brand-border: #CCFBF1;
+  --brand-font-heading: 'Cormorant Garamond', serif;
+  --brand-font-body: 'DM Sans', sans-serif;
+  --brand-radius: 16px;
+  --brand-radius-sm: 8px;
+  --brand-radius-btn: 28px;
+}
+
+.theme-midnight-urban {
+  --brand-primary: #F97316;
+  --brand-primary-hover: #EA580C;
+  --brand-primary-light: rgba(249, 115, 22, 0.12);
+  --brand-accent: #1C1917;
+  --brand-bg: #0C0C0C;
+  --brand-surface: #1A1A1A;
+  --brand-surface-raised: #262626;
+  --brand-text: #FAFAFA;
+  --brand-text-muted: #A3A3A3;
+  --brand-border: #262626;
+  --brand-font-heading: 'DM Sans', sans-serif;
+  --brand-font-body: 'DM Sans', sans-serif;
+  --brand-radius: 8px;
+  --brand-radius-sm: 4px;
+  --brand-radius-btn: 8px;
+}
+
+.theme-sage-garden {
+  --brand-primary: #4D7C0F;
+  --brand-primary-hover: #3F6212;
+  --brand-primary-light: #F7FEE7;
+  --brand-accent: #ECFCCB;
+  --brand-bg: #FAFAF5;
+  --brand-surface: #F5F5F0;
+  --brand-surface-raised: #FFFFFF;
+  --brand-text: #1A2E05;
+  --brand-text-muted: #6B7280;
+  --brand-border: #D9F99D;
+  --brand-font-heading: 'Playfair Display', serif;
+  --brand-font-body: 'Inter', sans-serif;
+  --brand-radius: 12px;
+  --brand-radius-sm: 6px;
+  --brand-radius-btn: 24px;
+}
+
+.theme-royal-gold {
+  --brand-primary: #B45309;
+  --brand-primary-hover: #92400E;
+  --brand-primary-light: rgba(180, 83, 9, 0.12);
+  --brand-accent: #1C1917;
+  --brand-bg: #0A0A0A;
+  --brand-surface: #1A1A1A;
+  --brand-surface-raised: #262626;
+  --brand-text: #FEF3C7;
+  --brand-text-muted: #A8A29E;
+  --brand-border: #292524;
+  --brand-font-heading: 'Cormorant Garamond', serif;
+  --brand-font-body: 'Inter', sans-serif;
+  --brand-radius: 12px;
+  --brand-radius-sm: 6px;
+  --brand-radius-btn: 78px;
+}
+
+.theme-coral-breeze {
+  --brand-primary: #DB2777;
+  --brand-primary-hover: #BE185D;
+  --brand-primary-light: #FDF2F8;
+  --brand-accent: #FCE7F3;
+  --brand-bg: #FFFBFB;
+  --brand-surface: #FFF5F5;
+  --brand-surface-raised: #FFFFFF;
+  --brand-text: #1A1A2E;
+  --brand-text-muted: #6B7280;
+  --brand-border: #FBCFE8;
+  --brand-font-heading: 'Playfair Display', serif;
+  --brand-font-body: 'DM Sans', sans-serif;
+  --brand-radius: 16px;
+  --brand-radius-sm: 8px;
+  --brand-radius-btn: 32px;
+}
+
+/* ── Dark mode override for light presets ── */
+@media (prefers-color-scheme: dark) {
+  .theme-crimson-classic,
+  .theme-ocean-fresh,
+  .theme-sage-garden,
+  .theme-coral-breeze {
+    --brand-bg: #1A1A2E;
+    --brand-surface: #16213E;
+    --brand-surface-raised: #1E2A4A;
+    --brand-text: #F1F5F9;
+    --brand-text-muted: #94A3B8;
+    --brand-border: #2D3A5C;
+    --brand-primary-light: rgba(234, 79, 22, 0.15);
+    --brand-accent: #1E1A14;
+  }
+}

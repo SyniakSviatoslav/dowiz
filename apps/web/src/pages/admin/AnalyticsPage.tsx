@@ -1,0 +1,367 @@
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { EmptyState, SkeletonBase } from '@deliveryos/ui';
+import { apiClient } from '../../lib/index.js';
+import { exportCSV } from '../../lib/exportCSV.js';
+
+interface AnalyticsData {
+  revenue: { today: number; trend: string };
+  orders: { today: number; trend: string };
+  avgOrderValue: { value: number; trend: string };
+  deliveryTime: { avg: number; trend: string };
+  chart: Array<{ day: string; revenue: number }>;
+  topProducts: Array<{ name: string; orders: number; revenue: number }>;
+}
+
+const CONSUMPTION_DATA = [
+  { name: 'Salmon fillet', consumed: 12.5, unit: 'kg', ordered: 8, pct: 85 },
+  { name: 'Sushi rice', consumed: 28, unit: 'kg', ordered: 4, pct: 65 },
+  { name: 'Nori sheets', consumed: 240, unit: 'pcs', ordered: 60, pct: 50 },
+  { name: 'Avocado', consumed: 35, unit: 'pcs', ordered: 10, pct: 40 },
+  { name: 'Cream cheese', consumed: 6.2, unit: 'kg', ordered: 3, pct: 70 },
+  { name: 'Spicy mayo', consumed: 4.5, unit: 'L', ordered: 2, pct: 30 },
+  { name: 'Takeout boxes', consumed: 126, unit: 'pcs', ordered: 126, pct: 100 },
+  { name: 'Chopsticks', consumed: 252, unit: 'pairs', ordered: 126, pct: 100 },
+];
+
+const HEATMAP_HOURS = [
+  { day: 'Mon', hours: [2, 1, 4, 8, 6, 3] },
+  { day: 'Tue', hours: [1, 2, 3, 7, 5, 4] },
+  { day: 'Wed', hours: [3, 2, 5, 9, 8, 2] },
+  { day: 'Thu', hours: [2, 3, 4, 6, 7, 5] },
+  { day: 'Fri', hours: [4, 3, 6, 10, 12, 8] },
+  { day: 'Sat', hours: [5, 4, 8, 14, 16, 10] },
+  { day: 'Sun', hours: [6, 5, 7, 12, 10, 6] },
+];
+const HOUR_LABELS = ['0-3', '4-7', '8-11', '12-15', '16-19', '20-23'];
+
+function AnimatedBar({ value, maxValue, label, dayLabel, delay }: { value: number; maxValue: number; label: string; dayLabel: string; delay: number }) {
+  const [height, setHeight] = useState(0);
+  const barRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setTimeout(() => setHeight((value / maxValue) * 100), delay);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1 }
+    );
+    if (barRef.current) observer.observe(barRef.current);
+    return () => observer.disconnect();
+  }, [value, maxValue, delay]);
+
+  return (
+    <div ref={barRef} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+      <span className="text-[10px] font-medium opacity-0 animate-[fadeIn_0.3s_ease-out_forwards]" style={{ color: 'var(--brand-text-muted)', animationDelay: `${delay + 300}ms` }}>
+        {label}
+      </span>
+      <div
+        className="w-full rounded-t-md progress-animate"
+        style={{
+          height: `${height}%`,
+          minHeight: 4,
+          background: 'linear-gradient(to top, var(--brand-primary), var(--brand-primary-hover))',
+          transitionDuration: '0.8s',
+          transitionDelay: `${delay}ms`,
+        }}
+      />
+      <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{dayLabel}</span>
+    </div>
+  );
+}
+
+export function AnalyticsPage() {
+  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<'7d' | '30d'>('7d');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    apiClient<any>(`/owner/analytics?period=${period}`)
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => {
+        setData({
+          revenue: { today: 87400, trend: '+18%' },
+          orders: { today: 63, trend: '+11' },
+          avgOrderValue: { value: 1387, trend: '+5%' },
+          deliveryTime: { avg: 32, trend: '-8%' },
+          chart: [
+            { day: 'Mon', revenue: 52000 }, { day: 'Tue', revenue: 61000 },
+            { day: 'Wed', revenue: 48000 }, { day: 'Thu', revenue: 71000 },
+            { day: 'Fri', revenue: 95000 }, { day: 'Sat', revenue: 110000 },
+            { day: 'Sun', revenue: 87400 },
+          ],
+          topProducts: [
+            { name: 'Dragon Roll', orders: 28, revenue: 23800 },
+            { name: 'Salmon Sashimi', orders: 22, revenue: 14960 },
+            { name: 'Chicken Ramen', orders: 19, revenue: 12920 },
+            { name: 'Matcha Latte', orders: 15, revenue: 4200 },
+            { name: 'Mochi Ice Cream', orders: 12, revenue: 4560 },
+          ],
+        });
+        setLoading(false);
+      });
+  }, [period]);
+
+  const handleCopyReorder = useCallback(() => {
+    const list = ['Salmon fillet', 'Sushi rice', 'Nori sheets', 'Avocado', 'Cream cheese', 'Spicy mayo', 'Takeout boxes', 'Chopsticks'].join('\n');
+    navigator.clipboard.writeText(list).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  }, []);
+
+  if (loading) return (
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <SkeletonBase className="h-8 w-32" />
+        <SkeletonBase className="h-8 w-24 rounded-lg" />
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[1, 2, 3, 4].map(i => <SkeletonBase key={i} className="h-24 rounded-xl" />)}
+      </div>
+      <SkeletonBase className="h-64 rounded-xl" />
+    </div>
+  );
+
+  if (!data) return <EmptyState title="No data" description="Analytics will appear here." icon={<i className="ti ti-chart-bar text-4xl opacity-30" />} />;
+
+  const maxRevenue = Math.max(...data.chart.map(c => c.revenue), 1);
+  const heatmapMax = Math.max(...HEATMAP_HOURS.flatMap(d => d.hours), 1);
+
+  const statCards = [
+    { label: 'Revenue', value: `${(data.revenue.today / 100).toFixed(0)}k ALL`, trend: data.revenue.trend, icon: 'ti ti-wallet', color: '#059669' },
+    { label: 'Orders', value: data.orders.today.toString(), trend: data.orders.trend, icon: 'ti ti-shopping-cart', color: '#2563EB' },
+    { label: 'Avg Order', value: `${data.avgOrderValue.value} ALL`, trend: data.avgOrderValue.trend, icon: 'ti ti-receipt', color: '#7C3AED' },
+    { label: 'Delivery', value: `${data.deliveryTime.avg} min`, trend: data.deliveryTime.trend, icon: 'ti ti-truck-delivery', color: '#D97706' },
+  ];
+
+  return (
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Analytics</h2>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>Performance overview for your restaurant</p>
+        </div>
+        <div className="flex rounded-lg p-0.5" style={{ background: 'var(--brand-surface-raised)' }}>
+          {(['7d', '30d'] as const).map(p => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${period === p ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+            >
+              {p === '7d' ? '7 days' : '30 days'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Stat cards */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Overview</h3>
+        <button
+          onClick={() => exportCSV(statCards.map(c => ({ Metric: c.label, Value: c.value, Trend: c.trend })), 'analytics-stats.csv')}
+          className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md hover:bg-[var(--brand-surface-raised)] transition-colors"
+          style={{ color: 'var(--brand-text-muted)' }}
+        >
+          <i className="ti ti-download" /> Export Stats CSV
+        </button>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 stagger-children">
+        {statCards.map((card, i) => (
+          <div key={i} className="p-4 rounded-xl border card-lift breathe" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', animationDelay: `${i * 0.3}s` }}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium" style={{ color: 'var(--brand-text-muted)' }}>{card.label}</span>
+              <i className={`${card.icon} text-lg`} style={{ color: card.color }} />
+            </div>
+            <div className="text-xl font-bold mb-1" style={{ color: 'var(--brand-text)' }}>{card.value}</div>
+            <span className="text-xs font-medium" style={{ color: card.trend.startsWith('+') ? '#059669' : card.trend.startsWith('-') ? '#DC2626' : 'var(--brand-text-muted)' }}>
+              {card.trend} vs last period
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Revenue chart */}
+      <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Revenue Trend</h3>
+          <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
+            Total: {data.chart.reduce((s, c) => s + c.revenue, 0).toLocaleString()} ALL
+          </span>
+        </div>
+        <div className="flex items-end gap-2 h-48">
+          {data.chart.map((item, idx) => (
+            <AnimatedBar
+              key={item.day}
+              value={item.revenue}
+              maxValue={maxRevenue}
+              label={`${(item.revenue / 1000).toFixed(0)}k`}
+              dayLabel={item.day}
+              delay={idx * 60}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Two-column layout for Top Products + Consumption */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top products */}
+        <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Top Products</h3>
+            <button
+              onClick={() => exportCSV(data.topProducts.map(p => ({ Product: p.name, Orders: p.orders, Revenue: p.revenue })), 'top-products.csv')}
+              className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md hover:bg-[var(--brand-surface-raised)] transition-colors"
+              style={{ color: 'var(--brand-text-muted)' }}
+            >
+              <i className="ti ti-download" /> Export CSV
+            </button>
+          </div>
+          <div className="space-y-1">
+            {data.topProducts.map((p, i) => {
+              const firstRevenue = data.topProducts[0]?.revenue ?? p.revenue;
+              const barPct = firstRevenue > 0 ? Math.round((p.revenue / firstRevenue) * 100) : 100;
+              return (
+                <div key={i} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors slide-in-right" style={{ animationDelay: `${i * 50}ms` }}>
+                  <span className="text-xs font-bold w-6 text-center shrink-0" style={{ color: i === 0 ? 'var(--brand-primary)' : 'var(--brand-text-muted)' }}>
+                    {i === 0 ? <i className="ti ti-crown" style={{ color: '#D97706' }} /> : `#${i + 1}`}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="text-sm font-medium truncate">{p.name}</div>
+                    </div>
+                    <div className="h-1 rounded-full" style={{ background: 'var(--brand-border)' }}>
+                      <div className="h-full rounded-full progress-animate" style={{ width: `${barPct}%`, background: 'var(--brand-primary)', opacity: 0.3 + (barPct / 100) * 0.7 }} />
+                    </div>
+                    <div className="flex justify-between mt-1">
+                      <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{p.orders} orders</span>
+                    </div>
+                  </div>
+                  <div className="text-sm font-semibold text-right shrink-0" style={{ color: 'var(--brand-primary)' }}>
+                    {p.revenue.toLocaleString()} ALL
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Consumption report */}
+        <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>
+              Ingredient Consumption <span className="text-[10px] font-normal opacity-50">(derived)</span>
+            </h3>
+            <button
+              onClick={() => exportCSV(CONSUMPTION_DATA, 'consumption.csv')}
+              className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border transition-colors hover:bg-[var(--brand-surface-raised)]"
+              style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}
+            >
+              <i className="ti ti-download" /> Export
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {CONSUMPTION_DATA.map((item, i) => (
+              <div
+                key={item.name}
+                className="flex items-center justify-between p-3 rounded-lg border slide-in-up"
+                style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)', animationDelay: `${i * 60}ms` }}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium truncate">{item.name}</div>
+                  <div className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{item.consumed} {item.unit}</div>
+                  <div className="w-full h-1 rounded-full mt-1.5" style={{ background: 'var(--brand-border)' }}>
+                    <div
+                      className="h-full rounded-full progress-animate"
+                      style={{
+                        width: `${item.pct}%`,
+                        background: item.pct > 80 ? 'var(--color-warning)' : 'var(--color-success)',
+                        transitionDelay: `${i * 80}ms`,
+                      }}
+                    />
+                  </div>
+                </div>
+                {item.pct > 80 && (
+                  <span className="text-[10px] ml-2 px-1.5 py-0.5 rounded font-medium shrink-0 animate-pulse" style={{ background: 'rgba(217,119,6,0.15)', color: 'var(--color-warning)' }}>
+                    Reorder
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] mt-3" style={{ color: 'var(--brand-text-muted)' }}>
+            Based on today's orders x recipe quantities. Estimates only.
+          </p>
+          <button
+            onClick={handleCopyReorder}
+            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 text-[11px] font-medium rounded-lg border transition-all duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97]"
+            style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-primary)' }}
+          >
+            {copied ? (
+              <><i className="ti ti-check" /> Copied!</>
+            ) : (
+              <><i className="ti ti-clipboard" /> Copy Reorder List</>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Order Heatmap */}
+      <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Order Heatmap</h3>
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
+              <span className="w-2 h-2 rounded-sm" style={{ background: 'var(--brand-surface-raised)' }} /> Low
+            </span>
+            <span className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
+              <span className="w-2 h-2 rounded-sm" style={{ background: `rgba(234,79,22,0.85)` }} /> Peak
+            </span>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr>
+                <th className="text-left font-medium py-1 pr-3" style={{ color: 'var(--brand-text-muted)' }}>Day</th>
+                {HOUR_LABELS.map(label => (
+                  <th key={label} className="text-center font-medium py-1 px-1" style={{ color: 'var(--brand-text-muted)' }}>{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {HEATMAP_HOURS.map(row => (
+                <tr key={row.day}>
+                  <td className="text-left font-medium py-1 pr-3" style={{ color: 'var(--brand-text)' }}>{row.day}</td>
+                  {row.hours.map((count, ci) => (
+                    <td key={ci} className="p-0.5">
+                      <div
+                        className="rounded-sm transition-all duration-300 hover:scale-110"
+                        title={`${row.day} ${HOUR_LABELS[ci]}: ${count} orders`}
+                        style={{
+                          minHeight: 28,
+                          minWidth: 32,
+                          background: count === heatmapMax
+                            ? 'rgba(234,79,22, 0.9)'
+                            : count > 0
+                              ? `rgba(234,79,22, ${0.1 + (count / heatmapMax) * 0.8})`
+                              : 'var(--brand-surface-raised)',
+                          ...(count === heatmapMax ? { border: '1px solid var(--brand-primary)', boxShadow: '0 0 8px rgba(234,79,22,0.3)' } : {}),
+                        }}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

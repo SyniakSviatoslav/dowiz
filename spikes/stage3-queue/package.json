@@ -1,0 +1,19 @@
+{
+  "name": "stage3-queue",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "h1": "tsx --env-file=../../.env h1-install.ts",
+    "h4": "tsx --env-file=../../.env h4-maintenance.ts",
+    "h3-worker": "tsx --env-file=../../.env h3-worker.ts",
+    "h3-producer": "tsx --env-file=../../.env h3-producer.ts",
+    "h2": "tsx --env-file=../../.env h2-budget.ts"
+  },
+  "dependencies": {
+    "@deliveryos/config": "workspace:*",
+    "@deliveryos/db": "workspace:*",
+    "pg-boss": "^10.1.3",
+    "pg": "^8.13.1"
+  }
+}
