@@ -188,20 +188,25 @@ export function MenuManagerPage() {
       categoryId: expandedCat,
     };
 
+    // Optimistic update — update UI immediately
+    setCategories(prev => prev.map(c => {
+      if (c.id !== expandedCat) return c;
+      const prods = c.products || [];
+      if (editingProduct) return { ...c, products: prods.map(p => p.id === editingProduct.id ? { ...p, ...product } : p) };
+      return { ...c, products: [...prods, product] };
+    }));
+    closeForm();
+
     try {
       if (editingProduct) {
         await apiClient(`/owner/menu/products/${editingProduct.id}`, { method: 'PATCH', body: product });
       } else {
         await apiClient('/owner/menu/products', { method: 'POST', body: product });
       }
-      setCategories(prev => prev.map(c => {
-        if (c.id !== expandedCat) return c;
-        const prods = c.products || [];
-        if (editingProduct) return { ...c, products: prods.map(p => p.id === editingProduct.id ? { ...p, ...product } : p) };
-        return { ...c, products: [...prods, product] };
-      }));
-      closeForm();
-    } catch { closeForm(); }
+    } catch {
+      // Revert on error: refetch
+      fetchCategories();
+    }
   };
 
   const handleDeleteProduct = async (catId: string, productId: string) => {
