@@ -588,7 +588,14 @@ export function MenuManagerPage() {
             </div>
 
             {/* BOM Recipe */}
-            <RecipeEditor lines={formRecipeLines} onChange={setFormRecipeLines} />
+            <RecipeEditor lines={formRecipeLines} onChange={setFormRecipeLines}
+              onBomAllergensChange={(allergens) => {
+                if (allergens.length > 0 && formAllergenStatus === 'unset') {
+                  setFormAllergenStatus('listed');
+                  setFormAllergensList(allergens);
+                }
+              }}
+            />
 
             {/* Allergen Attestation (replaces inline) */}
             <AllergenEditor
