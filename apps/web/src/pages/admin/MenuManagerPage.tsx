@@ -48,6 +48,8 @@ interface Category {
   products?: Product[];
 }
 
+}
+
 export function MenuManagerPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [supplies, setSupplies] = useState<Supply[]>([]);
