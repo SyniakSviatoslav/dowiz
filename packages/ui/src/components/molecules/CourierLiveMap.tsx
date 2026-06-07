@@ -1,5 +1,10 @@
 import { MapLibreBase, type LngLatLike } from './MapLibreBase.js';
 
+function getCSSVar(name: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
 interface CourierOnMap {
   id: string;
   name: string;
@@ -27,15 +32,15 @@ export function CourierLiveMap({
   zoom = 13,
 }: CourierLiveMapProps) {
   const statusColors: Record<string, string> = {
-    online: '#059669',
-    busy: '#ea4f16',
-    offline: '#6B7280',
+    online: getCSSVar('--color-success', '#059669'),
+    busy: getCSSVar('--color-warning', '#D97706'),
+    offline: getCSSVar('--brand-text-muted', '#6B7280'),
   };
 
   const markers = couriers.map(c => ({
     id: c.id,
     lngLat: c.lngLat,
-    color: statusColors[c.status] || '#6B7280',
+    color: statusColors[c.status] || getCSSVar('--brand-text-muted', '#6B7280'),
     label: c.initials,
   }));
 
@@ -43,7 +48,7 @@ export function CourierLiveMap({
     markers.push({
       id: 'destination',
       lngLat: destinationPin,
-      color: '#2563EB',
+      color: getCSSVar('--color-info', '#2563EB'),
       label: '🏠',
     });
   }

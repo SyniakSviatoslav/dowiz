@@ -1,6 +1,11 @@
 import { useState, useCallback } from 'react';
 import { MapLibreBase, type LngLatLike } from './MapLibreBase.js';
 
+function getCSSVar(name: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
 interface MapWithPinProps {
   className?: string;
   initialCenter?: LngLatLike;
@@ -32,7 +37,7 @@ export function MapWithPin({
     setConfirmed(true);
   };
 
-  const markers = pin ? [{ lngLat: pin, color: confirmed ? '#059669' : '#ea4f16', label: confirmed ? '✓' : '📍' }] : [];
+  const markers = pin ? [{ lngLat: pin, color: confirmed ? getCSSVar('--color-success', '#059669') : getCSSVar('--brand-primary', '#ea4f16'), label: confirmed ? '✓' : '📍' }] : [];
 
   return (
     <div className="relative">
@@ -54,7 +59,7 @@ export function MapWithPin({
             onClick={handleConfirm}
             className={`px-6 py-2.5 rounded-full font-medium text-sm shadow-lg transition-all ${
               confirmed
-                ? 'bg-green-600 text-white'
+                ? 'bg-[var(--color-success)] text-[var(--color-on-success)]'
                 : 'bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-primary-hover)]'
             }`}
           >

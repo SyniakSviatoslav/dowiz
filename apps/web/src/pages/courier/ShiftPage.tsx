@@ -139,8 +139,8 @@ export function ShiftPage() {
       <div className="flex justify-between items-center pb-4 border-b border-[var(--brand-border)]">
         <h1 className="text-2xl font-bold text-[var(--brand-text)]" style={{ fontFamily: 'var(--brand-font-heading)' }}>Shift</h1>
         <div className="flex items-center gap-2 text-sm">
-          <div className={`w-2 h-2 rounded-full ${shift.isActive ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-          <span className={shift.isActive ? 'text-green-500 font-medium' : 'text-[var(--brand-text-muted)]'}>
+          <div className={`w-2 h-2 rounded-full ${shift.isActive ? 'bg-[var(--color-success)] animate-pulse' : 'bg-[var(--brand-text-muted)]'}`} />
+          <span className={shift.isActive ? 'text-[var(--color-success)] font-medium' : 'text-[var(--brand-text-muted)]'}>
             {shift.isActive ? 'On Shift' : 'Offline'}
           </span>
         </div>

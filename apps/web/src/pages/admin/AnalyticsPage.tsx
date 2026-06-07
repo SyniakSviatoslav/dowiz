@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { EmptyState, SkeletonBase } from '@deliveryos/ui';
+import { EmptyState, SkeletonBase, useI18n } from '@deliveryos/ui';
+import Map, { Marker } from 'react-map-gl/maplibre';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { apiClient } from '../../lib/index.js';
 import { exportCSV } from '../../lib/exportCSV.js';
 
@@ -10,6 +12,7 @@ interface AnalyticsData {
   deliveryTime: { avg: number; trend: string };
   chart: Array<{ day: string; revenue: number }>;
   topProducts: Array<{ name: string; orders: number; revenue: number }>;
+  geoLocations?: Array<{ lat: number; lng: number }>;
 }
 
 const CONSUMPTION_DATA = [
@@ -73,35 +76,21 @@ function AnimatedBar({ value, maxValue, label, dayLabel, delay }: { value: numbe
 }
 
 export function AnalyticsPage() {
+  const { t } = useI18n();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<'7d' | '30d'>('7d');
   const [copied, setCopied] = useState(false);
 
+  const [error, setError] = useState(false);
+
   useEffect(() => {
     setLoading(true);
+    setError(false);
     apiClient<any>(`/owner/analytics?period=${period}`)
       .then(d => { setData(d); setLoading(false); })
       .catch(() => {
-        setData({
-          revenue: { today: 87400, trend: '+18%' },
-          orders: { today: 63, trend: '+11' },
-          avgOrderValue: { value: 1387, trend: '+5%' },
-          deliveryTime: { avg: 32, trend: '-8%' },
-          chart: [
-            { day: 'Mon', revenue: 52000 }, { day: 'Tue', revenue: 61000 },
-            { day: 'Wed', revenue: 48000 }, { day: 'Thu', revenue: 71000 },
-            { day: 'Fri', revenue: 95000 }, { day: 'Sat', revenue: 110000 },
-            { day: 'Sun', revenue: 87400 },
-          ],
-          topProducts: [
-            { name: 'Dragon Roll', orders: 28, revenue: 23800 },
-            { name: 'Salmon Sashimi', orders: 22, revenue: 14960 },
-            { name: 'Chicken Ramen', orders: 19, revenue: 12920 },
-            { name: 'Matcha Latte', orders: 15, revenue: 4200 },
-            { name: 'Mochi Ice Cream', orders: 12, revenue: 4560 },
-          ],
-        });
+        setError(true);
         setLoading(false);
       });
   }, [period]);
@@ -127,16 +116,16 @@ export function AnalyticsPage() {
     </div>
   );
 
-  if (!data) return <EmptyState title="No data" description="Analytics will appear here." icon={<i className="ti ti-chart-bar text-4xl opacity-30" />} />;
+  if (!data) return <EmptyState title={t('admin.no_data', 'No data')} description={t('admin.analytics_empty', 'Analytics will appear here.')} icon={<i className="ti ti-chart-bar text-4xl opacity-30" />} />;
 
   const maxRevenue = Math.max(...data.chart.map(c => c.revenue), 1);
   const heatmapMax = Math.max(...HEATMAP_HOURS.flatMap(d => d.hours), 1);
 
   const statCards = [
-    { label: 'Revenue', value: `${(data.revenue.today / 100).toFixed(0)}k ALL`, trend: data.revenue.trend, icon: 'ti ti-wallet', color: '#059669' },
-    { label: 'Orders', value: data.orders.today.toString(), trend: data.orders.trend, icon: 'ti ti-shopping-cart', color: '#2563EB' },
-    { label: 'Avg Order', value: `${data.avgOrderValue.value} ALL`, trend: data.avgOrderValue.trend, icon: 'ti ti-receipt', color: '#7C3AED' },
-    { label: 'Delivery', value: `${data.deliveryTime.avg} min`, trend: data.deliveryTime.trend, icon: 'ti ti-truck-delivery', color: '#D97706' },
+    { label: t('admin.revenue', 'Revenue'), value: `${(data.revenue.today / 100).toFixed(0)}k ALL`, trend: data.revenue.trend, icon: 'ti ti-wallet', colorVar: '--color-success' },
+    { label: t('admin.orders', 'Orders'), value: data.orders.today.toString(), trend: data.orders.trend, icon: 'ti ti-shopping-cart', colorVar: '--color-info' },
+    { label: t('admin.avg_order', 'Avg Order'), value: `${data.avgOrderValue.value} ALL`, trend: data.avgOrderValue.trend, icon: 'ti ti-receipt', colorVar: '--status-scheduled' },
+    { label: t('admin.delivery_time', 'Delivery'), value: `${data.deliveryTime.avg} min`, trend: data.deliveryTime.trend, icon: 'ti ti-truck-delivery', colorVar: '--color-warning' },
   ];
 
   return (
@@ -144,8 +133,8 @@ export function AnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Analytics</h2>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>Performance overview for your restaurant</p>
+          <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.analytics', 'Analytics')}</h2>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.analytics_desc', 'Performance overview for your restaurant')}</p>
         </div>
         <div className="flex rounded-lg p-0.5" style={{ background: 'var(--brand-surface-raised)' }}>
           {(['7d', '30d'] as const).map(p => (
@@ -154,7 +143,7 @@ export function AnalyticsPage() {
               onClick={() => setPeriod(p)}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${period === p ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
             >
-              {p === '7d' ? '7 days' : '30 days'}
+              {p === '7d' ? t('admin.7_days', '7 days') : t('admin.30_days', '30 days')}
             </button>
           ))}
         </div>
@@ -162,13 +151,13 @@ export function AnalyticsPage() {
 
       {/* Stat cards */}
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Overview</h3>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{t('admin.overview', 'Overview')}</h3>
         <button
           onClick={() => exportCSV(statCards.map(c => ({ Metric: c.label, Value: c.value, Trend: c.trend })), 'analytics-stats.csv')}
           className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md hover:bg-[var(--brand-surface-raised)] transition-colors"
           style={{ color: 'var(--brand-text-muted)' }}
         >
-          <i className="ti ti-download" /> Export Stats CSV
+          <i className="ti ti-download" /> {t('admin.export_csv', 'Export CSV')}
         </button>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 stagger-children">
@@ -176,10 +165,10 @@ export function AnalyticsPage() {
           <div key={i} className="p-4 rounded-xl border card-lift breathe" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', animationDelay: `${i * 0.3}s` }}>
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-medium" style={{ color: 'var(--brand-text-muted)' }}>{card.label}</span>
-              <i className={`${card.icon} text-lg`} style={{ color: card.color }} />
+              <i className={`${card.icon} text-lg`} style={{ color: `var(${card.colorVar})` }} />
             </div>
             <div className="text-xl font-bold mb-1" style={{ color: 'var(--brand-text)' }}>{card.value}</div>
-            <span className="text-xs font-medium" style={{ color: card.trend.startsWith('+') ? '#059669' : card.trend.startsWith('-') ? '#DC2626' : 'var(--brand-text-muted)' }}>
+            <span className="text-xs font-medium" style={{ color: card.trend.startsWith('+') ? 'var(--color-success)' : card.trend.startsWith('-') ? 'var(--color-danger)' : 'var(--brand-text-muted)' }}>
               {card.trend} vs last period
             </span>
           </div>
@@ -189,9 +178,9 @@ export function AnalyticsPage() {
       {/* Revenue chart */}
       <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Revenue Trend</h3>
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{t('admin.revenue_trend', 'Revenue Trend')}</h3>
           <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
-            Total: {data.chart.reduce((s, c) => s + c.revenue, 0).toLocaleString()} ALL
+            {t('admin.total', 'Total:')} {data.chart.reduce((s, c) => s + c.revenue, 0).toLocaleString()} ALL
           </span>
         </div>
         <div className="flex items-end gap-2 h-48">
@@ -213,13 +202,13 @@ export function AnalyticsPage() {
         {/* Top products */}
         <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Top Products</h3>
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{t('admin.top_products', 'Top Products')}</h3>
             <button
               onClick={() => exportCSV(data.topProducts.map(p => ({ Product: p.name, Orders: p.orders, Revenue: p.revenue })), 'top-products.csv')}
               className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md hover:bg-[var(--brand-surface-raised)] transition-colors"
               style={{ color: 'var(--brand-text-muted)' }}
             >
-              <i className="ti ti-download" /> Export CSV
+              <i className="ti ti-download" /> {t('admin.export_csv', 'Export CSV')}
             </button>
           </div>
           <div className="space-y-1">
@@ -229,7 +218,7 @@ export function AnalyticsPage() {
               return (
                 <div key={i} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors slide-in-right" style={{ animationDelay: `${i * 50}ms` }}>
                   <span className="text-xs font-bold w-6 text-center shrink-0" style={{ color: i === 0 ? 'var(--brand-primary)' : 'var(--brand-text-muted)' }}>
-                    {i === 0 ? <i className="ti ti-crown" style={{ color: '#D97706' }} /> : `#${i + 1}`}
+                    {i === 0 ? <i className="ti ti-crown" style={{ color: 'var(--color-warning)' }} /> : `#${i + 1}`}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -239,7 +228,7 @@ export function AnalyticsPage() {
                       <div className="h-full rounded-full progress-animate" style={{ width: `${barPct}%`, background: 'var(--brand-primary)', opacity: 0.3 + (barPct / 100) * 0.7 }} />
                     </div>
                     <div className="flex justify-between mt-1">
-                      <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{p.orders} orders</span>
+                      <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{p.orders} {t('admin.orders', 'orders').toLowerCase()}</span>
                     </div>
                   </div>
                   <div className="text-sm font-semibold text-right shrink-0" style={{ color: 'var(--brand-primary)' }}>
@@ -255,14 +244,14 @@ export function AnalyticsPage() {
         <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>
-              Ingredient Consumption <span className="text-[10px] font-normal opacity-50">(derived)</span>
+              {t('admin.ingredient_consumption', 'Ingredient Consumption')} <span className="text-[10px] font-normal opacity-50">({t('admin.derived', 'derived')})</span>
             </h3>
             <button
               onClick={() => exportCSV(CONSUMPTION_DATA, 'consumption.csv')}
               className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border transition-colors hover:bg-[var(--brand-surface-raised)]"
               style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}
             >
-              <i className="ti ti-download" /> Export
+              <i className="ti ti-download" /> {t('admin.export', 'Export')}
             </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -288,14 +277,14 @@ export function AnalyticsPage() {
                 </div>
                 {item.pct > 80 && (
                   <span className="text-[10px] ml-2 px-1.5 py-0.5 rounded font-medium shrink-0 animate-pulse" style={{ background: 'rgba(217,119,6,0.15)', color: 'var(--color-warning)' }}>
-                    Reorder
+                    {t('admin.reorder', 'Reorder')}
                   </span>
                 )}
               </div>
             ))}
           </div>
           <p className="text-[10px] mt-3" style={{ color: 'var(--brand-text-muted)' }}>
-            Based on today's orders x recipe quantities. Estimates only.
+            {t('admin.consumption_hint', 'Based on today\'s orders x recipe quantities. Estimates only.')}
           </p>
           <button
             onClick={handleCopyReorder}
@@ -303,9 +292,9 @@ export function AnalyticsPage() {
             style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-primary)' }}
           >
             {copied ? (
-              <><i className="ti ti-check" /> Copied!</>
+              <><i className="ti ti-check" /> {t('common.copied', 'Copied!')}</>
             ) : (
-              <><i className="ti ti-clipboard" /> Copy Reorder List</>
+              <><i className="ti ti-clipboard" /> {t('admin.copy_reorder', 'Copy Reorder List')}</>
             )}
           </button>
         </div>
@@ -314,13 +303,13 @@ export function AnalyticsPage() {
       {/* Order Heatmap */}
       <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Order Heatmap</h3>
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{t('admin.order_heatmap', 'Order Heatmap')}</h3>
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
-              <span className="w-2 h-2 rounded-sm" style={{ background: 'var(--brand-surface-raised)' }} /> Low
+              <span className="w-2 h-2 rounded-sm" style={{ background: 'var(--brand-surface-raised)' }} /> {t('admin.low', 'Low')}
             </span>
             <span className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
-              <span className="w-2 h-2 rounded-sm" style={{ background: `rgba(234,79,22,0.85)` }} /> Peak
+              <span className="w-2 h-2 rounded-sm" style={{ background: 'var(--brand-primary)' }} /> {t('admin.peak', 'Peak')}
             </span>
           </div>
         </div>
@@ -328,7 +317,7 @@ export function AnalyticsPage() {
           <table className="w-full text-xs">
             <thead>
               <tr>
-                <th className="text-left font-medium py-1 pr-3" style={{ color: 'var(--brand-text-muted)' }}>Day</th>
+                <th className="text-left font-medium py-1 pr-3" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.day', 'Day')}</th>
                 {HOUR_LABELS.map(label => (
                   <th key={label} className="text-center font-medium py-1 px-1" style={{ color: 'var(--brand-text-muted)' }}>{label}</th>
                 ))}
@@ -347,11 +336,11 @@ export function AnalyticsPage() {
                           minHeight: 28,
                           minWidth: 32,
                           background: count === heatmapMax
-                            ? 'rgba(234,79,22, 0.9)'
+                            ? 'color-mix(in srgb, var(--brand-primary) 90%, transparent)'
                             : count > 0
-                              ? `rgba(234,79,22, ${0.1 + (count / heatmapMax) * 0.8})`
+                              ? `color-mix(in srgb, var(--brand-primary) ${Math.round((0.1 + (count / heatmapMax) * 0.8) * 100)}%, transparent)`
                               : 'var(--brand-surface-raised)',
-                          ...(count === heatmapMax ? { border: '1px solid var(--brand-primary)', boxShadow: '0 0 8px rgba(234,79,22,0.3)' } : {}),
+                          ...(count === heatmapMax ? { border: '1px solid var(--brand-primary)', boxShadow: '0 0 8px color-mix(in srgb, var(--brand-primary) 30%, transparent)' } : {}),
                         }}
                       />
                     </td>
@@ -360,6 +349,28 @@ export function AnalyticsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Geo-Analytics */}
+      <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+        <h3 className="text-sm font-semibold mb-4" style={{ color: 'var(--brand-text)' }}>{t('admin.delivery_heatmap', 'Delivery Heatmap (Last 7 Days)')}</h3>
+        <div className="h-64 rounded-xl overflow-hidden">
+          <Map
+            initialViewState={{
+              longitude: 19.8187,
+              latitude: 41.3275,
+              zoom: 12
+            }}
+            mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+            interactive={true}
+          >
+            {data.geoLocations?.map((loc, i) => (
+              <Marker key={i} longitude={loc.lng} latitude={loc.lat}>
+                <div className="w-3 h-3 rounded-full bg-[var(--brand-primary)] opacity-60 shadow-lg" />
+              </Marker>
+            ))}
+          </Map>
         </div>
       </div>
     </div>

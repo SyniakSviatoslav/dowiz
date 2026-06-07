@@ -49,18 +49,18 @@ export function LoginPage() {
       <div className="w-full max-w-md p-8 bg-[var(--brand-surface)] rounded-xl shadow-elevation-2">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold mb-2" style={{ fontFamily: 'var(--brand-font-heading)' }}>DeliveryOS</h1>
-          <p className="text-[var(--brand-text-muted)]">Sign in to your owner account</p>
+          <p className="text-[var(--brand-text-muted)]">{t('admin.sign_in_owner', 'Sign in to your owner account')}</p>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-md text-sm text-center">
+          <div className="mb-4 p-3 bg-[var(--status-cancelled-light)] border border-[var(--status-cancelled-border)] text-[var(--color-danger)] rounded-md text-sm text-center">
             {error}
           </div>
         )}
 
         <form onSubmit={handleLocalLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1 text-[var(--brand-text-muted)]">Email</label>
+            <label className="block text-sm font-medium mb-1 text-[var(--brand-text-muted)]">{t('admin.email', 'Email')}</label>
             <Input 
               type="email" 
               value={email} 
@@ -70,7 +70,7 @@ export function LoginPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1 text-[var(--brand-text-muted)]">Password</label>
+            <label className="block text-sm font-medium mb-1 text-[var(--brand-text-muted)]">{t('admin.password', 'Password')}</label>
             <Input 
               type="password" 
               value={password} 
@@ -81,13 +81,13 @@ export function LoginPage() {
           </div>
           
           <Button type="submit" variant="primary" className="w-full" disabled={loading}>
-            {loading ? t('common.loading') : 'Sign In'}
+            {loading ? t('common.loading') : t('admin.sign_in', 'Sign In')}
           </Button>
         </form>
 
         <div className="mt-6 flex items-center justify-center gap-4">
           <div className="h-px bg-[var(--brand-border)] flex-1" />
-          <span className="text-xs text-[var(--brand-text-muted)] uppercase tracking-wider">OR</span>
+          <span className="text-xs text-[var(--brand-text-muted)] uppercase tracking-wider">{t('common.or', 'OR')}</span>
           <div className="h-px bg-[var(--brand-border)] flex-1" />
         </div>
 
@@ -97,12 +97,12 @@ export function LoginPage() {
             className="flex items-center justify-center gap-3 w-full px-4 py-2 border border-[var(--brand-border)] rounded-[var(--brand-radius)] hover:bg-[var(--brand-surface-raised)] transition-colors"
           >
             <i className="ti ti-brand-google" />
-            Sign in with Google
+            {t('admin.sign_in_google', 'Sign in with Google')}
           </a>
 
           {isDev && (
             <Button variant="secondary" className="w-full" onClick={handleDevLogin}>
-              [DEV] One-Click Login
+              {t('admin.dev_login', '[DEV] One-Click Login')}
             </Button>
           )}
         </div>

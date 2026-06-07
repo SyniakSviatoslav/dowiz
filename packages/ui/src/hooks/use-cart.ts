@@ -59,7 +59,8 @@ function persistCart(state: CartState): void {
     };
     localStorage.setItem(key, JSON.stringify(persist));
   } catch {
-    // Storage full — silently fail
+    // Storage full or unavailable — silently fail
+    console.debug('[use-cart] localStorage write failed');
   }
 }
 

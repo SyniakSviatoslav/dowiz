@@ -181,6 +181,9 @@ export class DwellEscalationWorker {
   private async publishEvent(locationId: string, type: string, data: any) {
     try {
       await this.messageBus.publish(`location:${locationId}:dashboard`, { type, data });
-    } catch { /* ignore publish errors */ }
+    } catch {
+      // ignore publish errors — dashboard event is non-critical
+      console.debug('[dwell-escalation] failed to publish event', type);
+    }
   }
 }

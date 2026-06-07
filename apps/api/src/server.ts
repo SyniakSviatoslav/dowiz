@@ -235,7 +235,6 @@ async function main() {
   // Register escalation worker
   await queue.boss.createQueue('order.pending_aging');
   await queue.boss.work('order.pending_aging', async () => notifyWorker.escalatePendingAging());
-  await queue.boss.createQueue('order.pending_aging');
   await queue.boss.schedule('order.pending_aging', '*/5 * * * *');
 
   const { CourierDispatchWorker } = await import('./workers/courier-dispatch.js');

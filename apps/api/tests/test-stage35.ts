@@ -16,7 +16,10 @@ function findFiles(dir: string, pattern: RegExp, maxDepth = 5): string[] {
         if (e.isDirectory()) walk(full, depth + 1);
         else if (pattern.test(e.name)) results.push(full);
       }
-    } catch { /* skip unreadable */ }
+    } catch {
+      // skip unreadable directories
+      console.debug('[test-stage35] skipping unreadable dir');
+    }
   }
   walk(dir, 0);
   return results;

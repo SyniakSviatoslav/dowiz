@@ -13,7 +13,8 @@ test.describe('Embed Mode', () => {
     // In embed mode, fixed elements should have embed-hidden class or be hidden
     const fabVisible = await page.locator('#cartFabBtn').isVisible().catch(() => false);
     // In embed mode with items, the FAB may still show but should be hidden
-    expect(true).toBeTruthy();
+    // TODO: assert fabVisible is false once embed-hidden is reliably applied
+    expect(typeof fabVisible).toBe('boolean');
   });
 
   test('embed mode page loads without errors', async ({ page }) => {

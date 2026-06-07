@@ -84,7 +84,10 @@ function AdminLayout() {
         <div className={`p-2 border-t border-[var(--brand-border)] space-y-1 ${collapsed ? 'text-center' : ''}`}>
           {!collapsed && <div className="px-1"><LanguageSwitcher variant="full" /></div>}
           <button
-            onClick={() => navigate('/')}
+            onClick={() => {
+              localStorage.removeItem('dos_access_token');
+              navigate('/login');
+            }}
             className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)] hover:text-[var(--brand-text)] transition-colors ${collapsed ? 'justify-center' : ''}`}
           >
             <i className="ti ti-logout text-[18px]" />

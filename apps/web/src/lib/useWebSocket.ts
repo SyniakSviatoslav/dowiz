@@ -70,7 +70,8 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
           const data = JSON.parse(event.data);
           onMessageRef.current?.(data);
         } catch {
-          // ignore parse errors
+          // ignore parse errors — malformed ws message
+          console.debug('[useWebSocket] received malformed message');
         }
       };
 
@@ -121,7 +122,10 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
       }
       if (wsRef.current) {
         if (room && wsRef.current.readyState === WebSocket.OPEN) {
-          try { wsRef.current.send(JSON.stringify({ type: 'unsubscribe', room })); } catch {}
+          try { wsRef.current.send(JSON.stringify({ type: 'unsubscribe', room })); } catch {
+            // unsubscribe send may fail if ws is closing — ignore
+            console.debug('[useWebSocket] unsubscribe send failed');
+          }
         }
         wsRef.current.close(1000, 'unmount');
         wsRef.current = null;

@@ -20,7 +20,7 @@ test.describe('Cross-Cutting', () => {
     });
 
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('theme cycling through presets does not crash', async ({ page }) => {
@@ -54,7 +54,7 @@ test.describe('Cross-Cutting', () => {
 
     // Should eventually render (with fallback after timeout)
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('multiple rapid navigation does not crash', async ({ page }) => {
@@ -63,7 +63,7 @@ test.describe('Cross-Cutting', () => {
       await page.goto(p);
       await page.waitForTimeout(1000);
       const body = await page.textContent('body');
-      expect(body).toBeTruthy();
+      expect(body!.length).toBeGreaterThan(0);
     }
   });
 
@@ -78,7 +78,7 @@ test.describe('Cross-Cutting', () => {
 
     // Page should not crash with corrupted localStorage
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('map component fallback when maplibre fails', async ({ page }) => {
@@ -89,7 +89,7 @@ test.describe('Cross-Cutting', () => {
 
     // Should show fallback message, not crash
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
 });
