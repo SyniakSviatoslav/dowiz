@@ -10,7 +10,7 @@ test.describe('Error Handling', () => {
 
     // Page should not crash — should show fallback data
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('menu page handles network timeout', async ({ page }) => {
@@ -20,7 +20,7 @@ test.describe('Error Handling', () => {
 
     // Page should not crash — should show fallback
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('checkout handles 422 validation error', async ({ page }) => {
@@ -37,7 +37,7 @@ test.describe('Error Handling', () => {
     await page.route('**/customer/orders**', route => route.fulfill({ status: 422, body: JSON.stringify({ error: 'Validation failed' }) }));
 
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('checkout handles 429 rate limit', async ({ page }) => {
@@ -52,7 +52,7 @@ test.describe('Error Handling', () => {
     await page.route('**/customer/otp/**', route => route.fulfill({ status: 429, body: JSON.stringify({ error: 'Too many requests' }) }));
 
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('order status handles 404 gracefully', async ({ page }) => {
@@ -61,7 +61,7 @@ test.describe('Error Handling', () => {
     await page.waitForTimeout(3000);
 
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('admin page handles 401 gracefully', async ({ page }) => {
@@ -71,7 +71,7 @@ test.describe('Error Handling', () => {
 
     // Page should not crash
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('admin page handles 403 gracefully', async ({ page }) => {
@@ -80,7 +80,7 @@ test.describe('Error Handling', () => {
     await page.waitForTimeout(3000);
 
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('admin page handles 5xx gracefully', async ({ page }) => {
@@ -89,7 +89,7 @@ test.describe('Error Handling', () => {
     await page.waitForTimeout(3000);
 
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
 });

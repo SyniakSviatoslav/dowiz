@@ -36,7 +36,7 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
               borderRadius: 'var(--brand-radius)',
               border: 'none',
               background: 'var(--brand-primary)',
-              color: '#fff',
+              color: 'var(--color-on-primary)',
               cursor: 'pointer',
             }}
           >
@@ -48,6 +48,9 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+
+import { Navigate } from 'react-router-dom';
+import { LoginPage } from './pages/admin/LoginPage.js';
 
 // Lazy-loaded surfaces
 const ClientRoutes = lazy(() => import('./routes/ClientRoutes.js').then(m => ({ default: m.ClientRoutes })));
@@ -72,6 +75,8 @@ function App() {
           <ErrorBoundary>
             <Suspense fallback={<LoadingFallback />}>
               <Routes>
+                <Route path="/" element={<Navigate to="/login" replace />} />
+                <Route path="/login" element={<LoginPage />} />
                 <Route path="/s/:slug/*" element={<ClientRoutes />} />
                 <Route path="/admin/*" element={<AdminRoutes />} />
                 <Route path="/courier/*" element={<CourierRoutes />} />
@@ -92,7 +97,7 @@ function NotFound() {
     <div className="min-h-screen flex flex-col items-center justify-center gap-4">
       <h1 className="text-6xl font-bold">404</h1>
       <p>Faqja nuk u gjet / Page not found</p>
-      <a href="/" className="text-blue-500 hover:underline">Return home</a>
+      <a href="/" className="text-[var(--color-info)] hover:underline">Return home</a>
     </div>
   );
 }

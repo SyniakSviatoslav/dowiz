@@ -21,7 +21,8 @@ async function waitForHealth(url: string, retries = 30) {
       const res = await fetch(url);
       if (res.ok) return true;
     } catch {
-      // ignore
+      // server not ready yet — retry
+      console.debug('[verify-stage10] health check failed, retrying');
     }
     await new Promise(r => setTimeout(r, 500));
   }

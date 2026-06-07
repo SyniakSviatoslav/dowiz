@@ -55,7 +55,10 @@ export default (async function ownerAlertRoutes(fastify, opts) {
           params.push(decoded.createdAt);
           clauses += ` AND la.created_at < $${params.length}`;
         }
-      } catch { /* ignore */ }
+      } catch {
+        // invalid cursor — ignore, will use no cursor filter
+        console.debug('[alerts] invalid cursor, ignoring');
+      }
     }
 
     const limitIdx = params.length + 1;
@@ -133,7 +136,10 @@ export default (async function ownerAlertRoutes(fastify, opts) {
       for (const job of jobs) {
         await queue.boss.cancel(job.id);
       }
-    } catch { /* ignore pg-boss query errors */ }
+    } catch {
+      // pg-boss query errors are non-critical — alert already acknowledged
+      console.debug('[alerts] pg-boss cancel failed for', alertId);
+    }
 
     await messageBus.publish(`location:${locationId}:dashboard`, {
       type: 'dwell.alert_acknowledged',

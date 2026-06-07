@@ -6,7 +6,7 @@ async function build() {
     bundle: true,
     platform: 'node',
     target: 'node22',
-    format: 'esm',
+    format: 'cjs',
     minify: false,
     sourcemap: true,
     // We want all workspaces (which are essentially local packages) bundled 
@@ -19,6 +19,7 @@ async function build() {
       'aws-sdk',
       'nock',
       'argon2',
+      'sharp',
       '@aws-sdk/*',
       '@smithy/*'
     ],
@@ -28,12 +29,12 @@ async function build() {
     esbuild.build({
       ...commonOptions,
       entryPoints: ['apps/api/src/server.ts'],
-      outfile: 'dist/api/server.js',
+      outfile: 'dist/api/server.cjs',
     }),
     esbuild.build({
       ...commonOptions,
       entryPoints: ['apps/worker/src/index.ts'],
-      outfile: 'dist/worker/index.js',
+      outfile: 'dist/worker/index.cjs',
     })
   ]);
 

@@ -65,7 +65,7 @@ export function TaskCard({ task, onAccept, onReject, isLoading }: TaskCardProps)
       {/* Header */}
       <div className="flex justify-between items-start">
         <h3 className="font-bold text-lg text-[var(--brand-text)]">New Delivery</h3>
-        <span className="bg-yellow-500/20 text-yellow-500 font-bold px-2 py-1 rounded text-sm">{task.eta}</span>
+        <span className="bg-[var(--status-pending-bg)] text-[var(--status-pending)] font-bold px-2 py-1 rounded text-sm">{task.eta}</span>
       </div>
 
       {/* Locations */}
@@ -81,7 +81,7 @@ export function TaskCard({ task, onAccept, onReject, isLoading }: TaskCardProps)
 
         {/* Dropoff */}
         <div className="relative">
-          <div className="absolute -left-[26px] top-1 w-3 h-3 rounded-full bg-green-500 border-2 border-[var(--brand-surface)]" />
+          <div className="absolute -left-[26px] top-1 w-3 h-3 rounded-full bg-[var(--color-success)] border-2 border-[var(--brand-surface)]" />
           <div className="text-xs text-[var(--brand-text-muted)] uppercase font-bold tracking-wider">Drop-off</div>
           <div className="font-medium text-[var(--brand-text)]">{task.customer.address}</div>
         </div>
@@ -202,7 +202,7 @@ export function SwipeToComplete({ onComplete, label = 'Slide to Deliver', isComp
 
   if (isCompleted) {
     return (
-      <div className="h-14 rounded-full bg-green-500 flex items-center justify-center font-bold text-white shadow-lg">
+      <div className="h-14 rounded-full bg-[var(--color-success)] flex items-center justify-center font-bold text-[var(--color-on-success)] shadow-lg">
         Delivered \u2713
       </div>
     );
@@ -217,7 +217,7 @@ export function SwipeToComplete({ onComplete, label = 'Slide to Deliver', isComp
       onKeyDown={handleKeyDown}
       className="relative h-14 bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-full overflow-hidden flex items-center justify-center select-none focus:outline-2 focus:outline-[var(--brand-primary)]"
     >
-      <div className="absolute inset-0 bg-green-500/20" style={{ width: `${slideRatio * 100}%` }} />
+      <div className="absolute inset-0 bg-[var(--status-delivered-bg)]" style={{ width: `${slideRatio * 100}%` }} />
       <span className="font-bold text-[var(--brand-text-muted)] z-10 pointer-events-none" style={{ opacity: 1 - slideRatio }}>{loading ? 'Processing...' : label}</span>
       
       <div 

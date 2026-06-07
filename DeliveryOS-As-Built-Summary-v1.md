@@ -100,79 +100,91 @@ See `docs/audit/flows/` for Mermaid diagrams of each flow:
 
 ---
 
-## 5. Security Posture
+## 5. Security Posture (re-verified 2026-06-07)
 
-| Red Line | Status | Critical Issue |
-|----------|--------|----------------|
-| V1 · Tenant Isolation | WEAK | Superuser DB role bypasses RLS |
-| V2 · AuthZ Memberships | WEAK | Theme/notification routes lack auth |
-| V3 · Tokens/OAuth | **HOLDS** | — |
-| V4 · Idempotency | WEAK | No location_id in dedup key |
-| V5 · Money Integrity | **HOLDS** | Server-authoritative prices |
-| V6 · Injection/XSS | WEAK | MapLibreBase.innerHTML |
-| V7 · Secrets | **HOLDS** | — |
-| V8 · PII | **HOLDS** | Claim-check, no PII in JWT |
-| V9 · Queue/Worker | WEAK | Only 1 job uses outbox |
-| V10 · WS | WEAK | In-memory, N=1 safe |
-| V11 · DoS/Throttle | **BROKEN** | No per-phone throttle |
-| V12 · Error Leakage | WEAK | No custom error handler |
-| V13 · Client Storage | **HOLDS** | Cart versioning implemented |
-| V14 · Embed/CORS | WEAK | Courier bottom bar uses fixed |
-| V15 · Dependencies | **HOLDS** | — |
-| V16 · Cash | **BROKEN** | Courier routes unregistered |
+| Red Line | Status | Change from v1 | Evidence |
+|----------|--------|----------------|----------|
+| V1 · Tenant Isolation | WEAK | — | Superuser DB role bypasses RLS (config issue, not code) |
+| V2 · AuthZ Memberships | **HOLDS** | ↑ FIXED | `owner/themes.ts:12-13`, `owner/notifications.ts:11-12` — plugin-level `verifyAuth` + `requireRole(['owner'])` |
+| V3 · Tokens/OAuth | **HOLDS** | — | — |
+| V4 · Idempotency | **HOLDS** | ↑ FIXED | `orders.ts:286-287,301,529-531` — all 3 ops scope by `location_id` |
+| V5 · Money Integrity | **HOLDS** | — | Server-authoritative prices |
+| V6 · Injection/XSS | **HOLDS** | ↑ FIXED | `MapLibreBase.tsx:115` — `el.textContent = label` |
+| V7 · Secrets | **HOLDS** | — | — |
+| V8 · PII | **HOLDS** | — | Claim-check, no PII in JWT |
+| V9 · Queue/Worker | WEAK | — | Only 1 job uses outbox |
+| V10 · WS | WEAK | — | In-memory, N=1 safe |
+| V11 · DoS/Throttle | **BROKEN** | — | No per-phone throttle — only global IP rate limit (10/min) on POST /orders |
+| V12 · Error Leakage | **HOLDS** | ↑ FIXED | `server.ts:459-478` — strips stack traces, returns safe messages + correlation ID |
+| V13 · Client Storage | **HOLDS** | — | Cart versioning implemented |
+| V14 · Embed/CORS | WEAK | — | Courier bottom bar uses fixed |
+| V15 · Dependencies | **HOLDS** | — | — |
+| V16 · Cash | **HOLDS** | ↑ FIXED | `server.ts:527-528` — courier assignments + shifts routes registered |
 
-**HOLDS: 7 · WEAK: 6 · BROKEN: 3**
+**HOLDS: 12 · WEAK: 3 · BROKEN: 1** (was HOLDS 7 · WEAK 6 · BROKEN 3)
 
 ---
 
-## 6. Required Actions Before Pilot
+## 6. Required Actions Before Pilot (re-verified 2026-06-07)
 
-### Must-Fix (CRITICAL + HIGH)
+### Must-Fix (CRITICAL)
 
-| # | Action | Severity | Ticket |
-|---|--------|----------|--------|
-| 1 | Register courier routes (assignments + shifts) in server.ts | CRITICAL | FX-NEW |
-| 2 | Implement per-phone order throttle (FX-4) | CRITICAL | FX-4 |
-| 3 | Set statement_timeout + acquire-timeout (FX-9) | HIGH | FX-9 |
-| 4 | Add auth to theme/notification owner routes | HIGH | FX-NEW-2 |
-| 5 | Add location_id scope to idempotency dedup (FX-5) | HIGH | FX-5 |
-| 6 | Implement custom error handler (FX-6) | HIGH | FX-6 |
-| 7 | Fix MapLibreBase.innerHTML → textContent for marker labels | HIGH | FX-NEW-3 |
-| 8 | Create non-superuser DB role for operational pool | HIGH | FX-NEW-1 |
+| # | Action | Severity | Status | Evidence |
+|---|--------|----------|--------|----------|
+| 1 | Implement per-phone order throttle (FX-4) | CRITICAL | 🔴 OPEN | `orders.ts:50` — only global IP rate limit, no phone-based throttle |
+
+### Should-Fix (HIGH — config / hardening)
+
+| # | Action | Status | Evidence |
+|---|--------|--------|----------|
+| 2 | Create non-superuser DB role + add startup guardrail | ⚠️ CONFIG | `packages/db/src/index.ts` — uses env var, no role validation |
+
+### Already Fixed (verified 2026-06-07)
+
+| # | Action | Fixed In | Evidence |
+|---|--------|----------|----------|
+| ~~1~~ | Register courier routes (assignments + shifts) | `server.ts:527-528` | Routes registered with prefix `/api/courier` |
+| ~~3~~ | Set statement_timeout + acquire-timeout (FX-9) | `packages/db/src/index.ts:28-29,48-49` | 10s/30s statement_timeout, 5s connectionTimeout |
+| ~~4~~ | Add auth to theme/notification owner routes | `owner/themes.ts:12-13`, `owner/notifications.ts:11-12` | Plugin-level `verifyAuth` + `requireRole(['owner'])` |
+| ~~5~~ | Add location_id scope to idempotency dedup (FX-5) | `orders.ts:286-287,301,529-531` | SELECT/DELETE/INSERT all scope by `location_id` |
+| ~~6~~ | Implement custom error handler (FX-6) | `server.ts:459-478` | Strips stack traces, returns safe messages + correlation ID |
+| ~~7~~ | Fix MapLibreBase.innerHTML → textContent (XSS) | `MapLibreBase.tsx:115` | `el.textContent = label` |
 
 ### Should-Fix (MEDIUM)
 
-| # | Action | Ticket |
-|---|--------|--------|
-| 9 | Use outbox pattern for all transactional enqueues | FX-NEW-4 |
-| 10 | Fix CourierRoutes bottom bar position:fixed for embed | P1-14 |
-| 11 | Remove hardcoded credentials from LoginPage | P0-2 |
-| 12 | Enforce OTP in CheckoutPage (don't skip on error) | P0-1 |
-| 13 | Extract duplicate exportCSV to shared utility | DONE |
-| 14 | Fix broken Tailwind classes in molecules | DONE |
-| 15 | Add ErrorBoundary to main.tsx | DONE |
+| # | Action | Ticket | Status |
+|---|--------|--------|--------|
+| 8 | Use outbox pattern for all transactional enqueues | FX-NEW-4 | OPEN |
+| 9 | Fix CourierRoutes bottom bar position:fixed for embed | P1-14 | OPEN |
+| 10 | Remove hardcoded credentials from LoginPage | P0-2 | OPEN |
+| 11 | Enforce OTP in CheckoutPage (don't skip on error) | P0-1 | OPEN |
+| ~~12~~ | Extract duplicate exportCSV to shared utility | — | DONE |
+| ~~13~~ | Fix broken Tailwind classes in molecules | — | DONE |
+| ~~14~~ | Add ErrorBoundary to main.tsx | — | DONE |
 
 ---
 
-## 7. Verdict — Per-Area GO / NO-GO
+## 7. Verdict — Per-Area GO / NO-GO (re-verified 2026-06-07)
 
 | Area | Verdict | Conditions |
 |------|---------|------------|
 | Auth (OAuth + JWT) | **GO** | — |
 | Menu & storefront | **GO** | — |
-| Order placement (idempotent) | **GO-WITH-FIXES** | FX-5 (location_id scope) |
+| Order placement (idempotent) | **GO** | FX-5 fixed (location_id scope) |
 | Order lifecycle (state machine) | **GO** | — |
 | Durable timeout | **GO** | — |
 | Courier invite + activation | **GO** | — |
-| Courier delivery (GPS + WS) | **NO-GO** | Routes unregistered — broken |
-| Cash cycle + settlements | **NO-GO** | Courier routes unregistered |
-| Branding / themes | **GO** | Add auth to theme routes |
-| Embed / iframe | **GO-WITH-FIXES** | Courier fixed position |
-| Notifications | **GO-WITH-FIXES** | Add auth to notification routes |
-| Fallback / degradation | **GO-WITH-FIXES** | FX-9 (timeouts) |
+| Courier delivery (GPS + WS) | **GO** | Routes registered (`server.ts:527-528`) |
+| Cash cycle + settlements | **GO** | Routes registered (`server.ts:527-528`) |
+| Branding / themes | **GO** | Auth added to theme routes |
+| Embed / iframe | **GO-WITH-FIXES** | Courier fixed position (P1-14) |
+| Notifications | **GO** | Auth added to notification routes |
+| Fallback / degradation | **GO** | FX-9 fixed (timeouts set) |
 | Onboarding | **GO-WITH-FIXES** | Publish missing data |
 | Anonymizer / GDPR | **GO** | — |
 | Operations (backup, heartbeat) | **GO** | — |
+
+**Summary:** 13 GO · 2 GO-WITH-FIXES · 0 NO-GO. Only remaining blocker: per-phone order throttle (FX-4).
 
 ---
 

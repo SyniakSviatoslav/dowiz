@@ -185,9 +185,10 @@ async function cleanupTempDir(dir: string): Promise<void> {
       await fs.unlink(fp).catch(() => {});
     }
     await fs.rmdir(dir).catch(() => {});
-  } catch {
-    // dir doesn't exist
-  }
+    } catch {
+      // dir doesn't exist — nothing to clean
+      console.debug('[backup-verify] temp dir not found during cleanup');
+    }
 }
 
 async function writeAudit(
@@ -203,7 +204,8 @@ async function writeAudit(
       error: data.error ? redactPII(data.error) : undefined,
     });
   } catch {
-    // best-effort
+    // best-effort audit logging
+    console.debug('[backup-verify] audit log write failed');
   }
 }
 
@@ -227,7 +229,7 @@ async function alertFailure(result: VerifyResult): Promise<void> {
           extra: { durationMs: result.durationMs, smokeChecks: result.smokeChecks.length },
         });
       }
-    } catch { /* sentry not available */ }
+    } catch { /* sentry not available */ console.debug('[backup-verify] sentry capture failed'); }
 
     // MessageBus event for Telegram
     try {
@@ -242,8 +244,8 @@ async function alertFailure(result: VerifyResult): Promise<void> {
         timestamp: new Date().toISOString(),
       });
       await bus.close();
-    } catch { /* messageBus not available */ }
-  } catch { /* alert best-effort */ }
+    } catch { /* messageBus not available */ console.debug('[backup-verify] messageBus publish failed'); }
+  } catch { /* alert best-effort */ console.debug('[backup-verify] alert dispatch failed'); }
 }
 
 export async function runRestoreVerify(
@@ -335,7 +337,9 @@ export async function runRestoreVerify(
         try {
           if (sandboxPool) await sandboxPool.end();
           await dropSandboxDatabase(sandboxUrl);
-        } catch { /* best-effort */ }
+        } catch { /* best-effort sandbox cleanup */
+          console.debug('[backup-verify] sandbox cleanup failed during error recovery');
+        }
         throw err;
       }
     } catch (err: any) {

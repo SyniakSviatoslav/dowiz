@@ -124,7 +124,10 @@ export default (async function ownerGdprRoutes(fastify, opts) {
           params.push(decoded.requestedAt);
           clauses += ` AND requested_at < $${params.length}`;
         }
-      } catch { /* ignore invalid cursor */ }
+      } catch {
+        // invalid cursor — ignore, will use no cursor filter
+        console.debug('[gdpr] invalid cursor, ignoring');
+      }
     }
 
     const limitIdx = params.length + 1;

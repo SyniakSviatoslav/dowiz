@@ -78,7 +78,8 @@ export function DeliveryPage() {
         body: { status: 'DELIVERED' }
       });
     } catch (e) {
-      // Dev-only: mock fallback
+      // Dev-only: mock fallback — delivery status update may fail in dev mode
+      console.debug('[DeliveryPage] delivery status update failed', e);
     }
     setTimeout(() => navigate('/courier'), 1500);
   };
@@ -118,7 +119,7 @@ export function DeliveryPage() {
         />
 
         {geoError && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-4 py-2 rounded-lg text-sm text-center max-w-xs shadow-lg z-10">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-[var(--color-danger)] text-[var(--color-on-danger)] px-4 py-2 rounded-lg text-sm text-center max-w-xs shadow-lg z-10">
             {geoError.message}
           </div>
         )}
@@ -129,7 +130,7 @@ export function DeliveryPage() {
 
         <div className="absolute top-4 right-4 bg-white/90 p-1.5 rounded-full shadow-md flex gap-2 items-center px-3 z-10">
           <WSStatusDot status={wsStatus === 'disabled' ? 'disconnected' : wsStatus} />
-          {position && <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" title="GPS Active" />}
+          {position && <div className="w-2 h-2 rounded-full bg-[var(--color-info)] animate-pulse" title="GPS Active" />}
         </div>
       </div>
 
@@ -149,7 +150,7 @@ export function DeliveryPage() {
         </div>
 
         {task.customer.instructions && (
-          <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-600 p-3 rounded-[var(--brand-radius-sm)] text-sm font-medium">
+          <div className="bg-[var(--status-pending-light)] border border-[var(--status-pending-border)] text-[var(--status-pending)] p-3 rounded-[var(--brand-radius-sm)] text-sm font-medium">
             Note: {task.customer.instructions}
           </div>
         )}

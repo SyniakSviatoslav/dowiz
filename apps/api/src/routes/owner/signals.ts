@@ -60,7 +60,10 @@ export default (async function ownerSignalRoutes(fastify, opts) {
           params.push(decoded.raisedAt);
           clauses += ` AND cs.raised_at < $${params.length}`;
         }
-      } catch { /* ignore */ }
+      } catch {
+        // invalid cursor — ignore, will use no cursor filter
+        console.debug('[signals] invalid cursor, ignoring');
+      }
     }
 
     const limitIdx = params.length + 1;

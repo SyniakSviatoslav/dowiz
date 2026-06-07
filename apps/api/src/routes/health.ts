@@ -16,6 +16,7 @@ type HealthCheckResult<T = undefined> = HealthCheckBase & { data?: T };
 async function withTimeout<T>(
   promise: Promise<T>,
   label: string,
+  treatErrorAsDegraded = false
 ): Promise<HealthCheckResult<T>> {
   const start = Date.now();
   try {
@@ -28,11 +29,11 @@ async function withTimeout<T>(
     return { status: 'ok', latencyMs: Date.now() - start, data: result };
   } catch (err: any) {
     const latencyMs = Date.now() - start;
-    if (err.message === 'timeout') {
+    if (err.message === 'timeout' || treatErrorAsDegraded) {
       return {
         status: 'degraded',
         latencyMs,
-        detail: `${label} check timed out after ${CHECK_TIMEOUT_MS}ms`,
+        detail: `${label} check timed out or failed: ${err.message}`,
       };
     }
     return { status: 'down', latencyMs, detail: `${label}: ${err.message}` };
@@ -43,7 +44,7 @@ export default async function healthRoutes(
   fastify: FastifyInstance,
   opts: { db: Pool; messageBus: MessageBus },
 ) {
-  fastify.get('/health', async (request, reply) => {
+  fastify.get('/health', { config: { rateLimit: false } }, async (request, reply) => {
     // ── 1. Postgres (Critical) ──────────────────────────────────────
     const pgResult = await withTimeout<{ rows: Array<{ alive: number }> }>(
       opts.db.query('SELECT 1 AS alive'),
@@ -139,6 +140,7 @@ export default async function healthRoutes(
          FROM settlements WHERE status = 'generated' LIMIT 1`,
       ),
       'settlement',
+      true
     );
 
     // ── 7. Anonymizer (Degraded) ────────────────────────────────────
@@ -148,6 +150,7 @@ export default async function healthRoutes(
          FROM anonymization_audit_log WHERE scope = 'retention' LIMIT 1`,
       ),
       'anonymizer',
+      true
     );
 
     // ── 8. Backup drift (Degraded) ──────────────────────────────────
@@ -161,6 +164,7 @@ export default async function healthRoutes(
            FROM backup_metadata WHERE status = 'completed' GROUP BY type`,
         ),
         'backup',
+        true
       );
       if (backupCheck.status === 'ok' && backupCheck.data) {
         const now = Date.now();
@@ -190,6 +194,7 @@ export default async function healthRoutes(
          LIMIT 1`,
       ),
       'backup_restore',
+      true
     );
     if (restoreCheck.status === 'ok' && restoreCheck.data) {
       const row = restoreCheck.data.rows[0];
@@ -215,6 +220,7 @@ export default async function healthRoutes(
          FROM locations`,
       ),
       'fallback',
+      true
     );
     if (fallbackCheck.status === 'ok' && fallbackCheck.data) {
       const { total, with_phone } = fallbackCheck.data.rows[0];
@@ -237,6 +243,7 @@ export default async function healthRoutes(
          ORDER BY created_at DESC LIMIT 1`,
       ),
       'free_tier',
+      true
     );
     if (freeTierCheck.status === 'ok' && freeTierCheck.data) {
       const row = freeTierCheck.data.rows[0];

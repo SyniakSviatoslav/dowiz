@@ -10,7 +10,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
   const { db, messageBus } = opts as { db: any, messageBus: MessageBus };
 
   // 1. Transition Shift Status
-  fastify.post('/api/courier/shifts/transition', {
+  fastify.post('/shifts/transition', {
     preValidation: [fastify.verifyAuth, fastify.requireRole(['courier'])],
     schema: {
       body: z.object({
@@ -143,7 +143,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
   });
 
   // 2. Ping (GPS Update)
-  fastify.post('/api/courier/shifts/ping', {
+  fastify.post('/shifts/ping', {
     preValidation: [fastify.verifyAuth, fastify.requireRole(['courier'])],
     schema: {
       body: z.object({

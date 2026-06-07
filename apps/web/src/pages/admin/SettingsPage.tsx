@@ -1,6 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Input, EmptyState } from '@deliveryos/ui';
+import { Button, Input, EmptyState, MapWithRadius, Toggle, useI18n } from '@deliveryos/ui';
+import type { LngLatLike } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
+
+interface DaySchedule {
+  isOpen: boolean;
+  open: string;
+  close: string;
+}
+type WeeklySchedule = Record<string, DaySchedule>;
+
+const DEFAULT_SCHEDULE: WeeklySchedule = {
+  monday: { isOpen: true, open: '09:00', close: '22:00' },
+  tuesday: { isOpen: true, open: '09:00', close: '22:00' },
+  wednesday: { isOpen: true, open: '09:00', close: '22:00' },
+  thursday: { isOpen: true, open: '09:00', close: '22:00' },
+  friday: { isOpen: true, open: '09:00', close: '23:00' },
+  saturday: { isOpen: true, open: '10:00', close: '23:00' },
+  sunday: { isOpen: true, open: '10:00', close: '22:00' },
+};
 
 interface LocationSettings {
   locationName: string;
@@ -9,6 +27,9 @@ interface LocationSettings {
   deliveryFee: number;
   minOrder: number;
   radiusKm: number;
+  lat: number;
+  lng: number;
+  hoursJson: WeeklySchedule;
 }
 
 const MOCK_SETTINGS: LocationSettings = {
@@ -18,9 +39,13 @@ const MOCK_SETTINGS: LocationSettings = {
   deliveryFee: 120,
   minOrder: 500,
   radiusKm: 8,
+  lat: 41.331,
+  lng: 19.817,
+  hoursJson: DEFAULT_SCHEDULE,
 };
 
 export function SettingsPage() {
+  const { t } = useI18n();
   const [settings, setSettings] = useState<LocationSettings>({
     locationName: '',
     phone: '',
@@ -28,6 +53,9 @@ export function SettingsPage() {
     deliveryFee: 0,
     minOrder: 0,
     radiusKm: 0,
+    lat: 41.331,
+    lng: 19.817,
+    hoursJson: DEFAULT_SCHEDULE,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -39,7 +67,12 @@ export function SettingsPage() {
       setLoading(true);
       const data = await apiClient<any>('/owner/settings');
       if (data && data.locationName) {
-        setSettings(data);
+        setSettings({
+          ...data,
+          hoursJson: data.hoursJson || DEFAULT_SCHEDULE,
+          lat: data.lat || 41.331,
+          lng: data.lng || 19.817,
+        });
       } else {
         setSettings(MOCK_SETTINGS);
       }
@@ -58,7 +91,7 @@ export function SettingsPage() {
     fetchSettings();
   }, []);
 
-  const handleChange = (field: keyof LocationSettings, value: string) => {
+  const handleChange = (field: keyof LocationSettings, value: any) => {
     setSettings((prev) => ({
       ...prev,
       [field]:
@@ -66,6 +99,23 @@ export function SettingsPage() {
           ? Number(value) || 0
           : value,
     }));
+  };
+
+  const handleScheduleChange = (day: string, field: keyof DaySchedule, value: any) => {
+    setSettings((prev) => {
+      const currentDay = prev.hoursJson[day as keyof WeeklySchedule] || DEFAULT_SCHEDULE[day];
+      const newSchedule = {
+        ...prev.hoursJson,
+        [day]: {
+          ...currentDay,
+          [field]: value
+        }
+      } as WeeklySchedule;
+      return {
+        ...prev,
+        hoursJson: newSchedule
+      };
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -110,7 +160,7 @@ export function SettingsPage() {
           className="text-2xl font-bold"
           style={{ fontFamily: 'var(--brand-font-heading)' }}
         >
-          Location Settings
+          {t('admin.settings')}
         </h2>
       </div>
 
@@ -125,13 +175,13 @@ export function SettingsPage() {
           <div className="h-10 bg-[var(--brand-surface)] rounded-[var(--brand-radius)] w-32" />
         </div>
       ) : error && settings.locationName === '' ? (
-        <EmptyState title="Error" description={error} />
+        <EmptyState title={t('common.error')} description={error} />
       ) : (
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1" style={labelStyle}>
-                Location Name
+                {t('admin.location_name', 'Location Name')}
               </label>
               <Input
                 value={settings.locationName}
@@ -143,7 +193,7 @@ export function SettingsPage() {
 
             <div>
               <label className="block text-sm font-medium mb-1" style={labelStyle}>
-                Phone
+                {t('common.phone', 'Phone')}
               </label>
               <Input
                 value={settings.phone}
@@ -155,7 +205,7 @@ export function SettingsPage() {
 
             <div>
               <label className="block text-sm font-medium mb-1" style={labelStyle}>
-                Address
+                {t('common.address', 'Address')}
               </label>
               <Input
                 value={settings.address}
@@ -168,12 +218,12 @@ export function SettingsPage() {
 
           <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">
             <h3 className="font-semibold text-sm text-[var(--brand-text-muted)]">
-              Delivery Config
+              {t('admin.delivery_config', 'Delivery Config')}
             </h3>
 
             <div>
               <label className="block text-sm font-medium mb-1" style={labelStyle}>
-                Delivery Fee (ALL)
+                {t('cart.delivery_fee', 'Delivery Fee')} (ALL)
               </label>
               <Input
                 type="number"
@@ -186,7 +236,7 @@ export function SettingsPage() {
 
             <div>
               <label className="block text-sm font-medium mb-1" style={labelStyle}>
-                Minimum Order (ALL)
+                {t('admin.min_order', 'Minimum Order')} (ALL)
               </label>
               <Input
                 type="number"
@@ -198,29 +248,59 @@ export function SettingsPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1" style={labelStyle}>
-                Delivery Radius (km)
+              <label className="block text-sm font-medium mb-3" style={labelStyle}>
+                {t('admin.delivery_zone', 'Delivery Zone (Radius & Location)')}
               </label>
-              <Input
-                type="number"
-                value={String(settings.radiusKm)}
-                onChange={(e) => handleChange('radiusKm', e.target.value)}
-                min="0"
-                max="50"
-                required
+              <MapWithRadius
+                className="h-64 w-full rounded-lg mb-2"
+                initialCenter={[settings.lng, settings.lat]}
+                initialRadiusKm={settings.radiusKm}
+                onRadiusChange={(c, r) => {
+                  handleChange('lng', c[0]);
+                  handleChange('lat', c[1]);
+                  handleChange('radiusKm', r);
+                }}
               />
+              <p className="text-xs" style={labelStyle}>{t('admin.map_hint', 'Drag the pin to update location, adjust radius for delivery zone.')}</p>
+            </div>
+          </div>
+
+          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">
+            <h3 className="font-semibold text-sm text-[var(--brand-text-muted)]">
+              {t('admin.working_hours', 'Working Hours')}
+            </h3>
+            <div className="space-y-3">
+              {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => {
+                const dayData = (settings.hoursJson[day as keyof WeeklySchedule] || DEFAULT_SCHEDULE[day]) as DaySchedule;
+                return (
+                  <div key={day} className="flex items-center gap-3 p-2 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)]">
+                    <div className="w-24 font-medium text-sm capitalize">{t(`admin.days.${day}`, day)}</div>
+                    <div className="flex-1 flex items-center gap-2">
+                      <Toggle checked={dayData.isOpen} onChange={(v) => handleScheduleChange(day, 'isOpen', v)} />
+                      <span className="text-xs w-10 text-[var(--brand-text-muted)]">{dayData.isOpen ? t('admin.open', 'Open') : t('admin.closed', 'Closed')}</span>
+                    </div>
+                    {dayData.isOpen && (
+                      <div className="flex items-center gap-2">
+                        <Input type="time" value={dayData.open} onChange={(e) => handleScheduleChange(day, 'open', e.target.value)} className="w-24 text-sm" />
+                        <span className="text-xs text-[var(--brand-text-muted)]">{t('admin.to', 'to')}</span>
+                        <Input type="time" value={dayData.close} onChange={(e) => handleScheduleChange(day, 'close', e.target.value)} className="w-24 text-sm" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           <div className="flex items-center gap-4">
             <Button type="submit" isLoading={saving} size="lg">
-              Save Changes
+              {t('common.save', 'Save Changes')}
             </Button>
             {success && (
-              <span className="text-green-500 font-medium text-sm">Saved successfully!</span>
+              <span className="text-[var(--color-success)] font-medium text-sm">{t('common.saved', 'Saved successfully!')}</span>
             )}
             {error && settings.locationName !== '' && (
-              <span className="text-red-500 text-sm">{error}</span>
+              <span className="text-[var(--color-danger)] text-sm">{error}</span>
             )}
           </div>
         </form>
