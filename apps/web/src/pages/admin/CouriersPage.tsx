@@ -42,6 +42,20 @@ export function CouriersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [courierPositions, setCourierPositions] = useState<Record<string, LngLatLike>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newCourierPhone, setNewCourierPhone] = useState('');
+  const [inviteResult, setInviteResult] = useState('');
+
+  const handleAddCourier = async () => {
+    if (!newCourierPhone) return;
+    try {
+      const res = await apiClient<any>('/owner/courier-invites', { method: 'POST', body: { phone: newCourierPhone } });
+      setInviteResult(res?.link || res?.code || 'Invite created');
+      setNewCourierPhone('');
+      setTimeout(() => setInviteResult(''), 5000);
+      fetchCouriers();
+    } catch { setInviteResult('Failed to create invite'); }
+  };
 
   const tenantId = 't1';
 
@@ -107,9 +121,20 @@ export function CouriersPage() {
           <button onClick={() => exportCSV(filtered, 'couriers.csv')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors hover:bg-[var(--brand-surface-raised)]" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
             <i className="ti ti-download"></i> Export CSV
           </button>
-          <Button>+ Add Courier</Button>
+          <Button onClick={() => setShowAddForm(!showAddForm)}>+ Add Courier</Button>
         </div>
       </div>
+
+      {showAddForm && (
+        <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-xl p-4 flex gap-3 items-end">
+          <div className="flex-1">
+            <label className="text-xs font-medium mb-1 block text-[var(--brand-text-muted)]">Courier Phone</label>
+            <Input value={newCourierPhone} onChange={e => setNewCourierPhone(e.target.value)} placeholder="+355..." />
+          </div>
+          <Button onClick={handleAddCourier} variant="primary">Send Invite</Button>
+          {inviteResult && <span className="text-sm text-green-500 whitespace-nowrap">{inviteResult}</span>}
+        </div>
+      )}
 
       <div className="max-w-sm">
         <Input
