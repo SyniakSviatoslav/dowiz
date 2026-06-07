@@ -111,34 +111,59 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     return reply.status(204).send();
   });
 
-  // GET /api/owner/orders → dashboard snapshot
+  // GET /api/owner/orders → full order history with items
   fastify.get('/api/owner/orders', async (request, reply) => {
     const locId = await getLocationId(request);
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    
+    const statusFilter = (request.query as any)?.status;
+    let statusClause = '';
+    const params: any[] = [locId];
+    if (statusFilter && statusFilter !== 'all') {
+      statusClause = 'AND o.status = $2';
+      params.push(statusFilter);
+    }
+    
     const res = await db.query(
-      `SELECT o.id, o.status, o.created_at, o.total, o.delivery_address,
-              c.name as customer_name, c.phone as customer_phone
+      `SELECT o.id, o.status, o.created_at, o.confirmed_at, o.total, o.subtotal,
+              o.delivery_fee, o.delivery_address, o.payment_method,
+              c.name as customer_name, c.phone as customer_phone,
+              (SELECT jsonb_agg(jsonb_build_object('name', oi.name_snapshot, 'qty', oi.quantity, 'price', oi.price_snapshot))
+               FROM order_items oi WHERE oi.order_id = o.id) as items,
+              EXTRACT(EPOCH FROM (COALESCE(o.confirmed_at, now()) - o.created_at))::int as confirm_seconds,
+              COALESCE(cr.display_name, u.display_name) as courier_name
        FROM orders o
        LEFT JOIN customers c ON c.id = o.customer_id
-       WHERE o.location_id = $1 AND o.status NOT IN ('DELIVERED','CANCELLED','REJECTED')
-       ORDER BY o.created_at DESC LIMIT 20`,
-      [locId]
+       LEFT JOIN courier_assignments ca ON ca.order_id = o.id AND ca.status IN ('accepted','picked_up','delivered')
+       LEFT JOIN users cr ON cr.id = ca.courier_id
+       LEFT JOIN memberships m2 ON m2.user_id = cr.id
+       LEFT JOIN users u ON u.id = m2.user_id
+       WHERE o.location_id = $1 ${statusClause}
+       ORDER BY o.created_at DESC LIMIT 50`,
+      params
     );
+    
     const orders = res.rows.map((r: any) => ({
       id: r.id,
       status: r.status,
       createdAt: r.created_at,
+      confirmedAt: r.confirmed_at,
       total: r.total,
+      subtotal: r.subtotal,
+      deliveryFee: r.delivery_fee,
+      deliveryAddress: r.delivery_address,
+      paymentMethod: r.payment_method,
       customerName: r.customer_name || 'Unknown',
-      shortId: '#' + r.id.toString().substring(0, 4),
-      itemsSummary: '',
-      items: [],
-      itemCount: 0,
       customerPhone: r.customer_phone || '',
-      etaMinutes: null,
-      elapsedSeconds: 0,
-      courierName: null,
+      shortId: '#' + r.id.toString().substring(0, 4),
+      items: r.items || [],
+      itemCount: r.items ? r.items.length : 0,
+      itemsSummary: r.items ? r.items.map((i: any) => `${i.name} x${i.qty}`).join(', ') : '',
+      confirmSeconds: r.confirm_seconds,
+      courierName: r.courier_name || null,
+      elapsedSeconds: Math.floor((Date.now() - new Date(r.created_at).getTime()) / 1000),
     }));
+    
     return reply.send(orders);
   });
 
@@ -147,7 +172,13 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const locId = await getLocationId(request);
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
     const res = await db.query(
-      `SELECT u.id, u.display_name, u.phone, m.status FROM users u JOIN memberships m ON m.user_id = u.id WHERE m.location_id = $1 AND m.role = 'courier'`,
+      `SELECT u.id, COALESCE(u.display_name, u.email) as display_name, u.phone,
+              COALESCE(cs.status, 'offline') as courier_status
+       FROM users u
+       JOIN memberships m ON m.user_id = u.id
+       LEFT JOIN courier_shifts cs ON cs.courier_id = u.id AND cs.status != 'offline'
+       WHERE m.location_id = $1 AND m.role = 'courier'
+       GROUP BY u.id, cs.status`,
       [locId]
     );
     return reply.send(res.rows);
