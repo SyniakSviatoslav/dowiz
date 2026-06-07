@@ -23,16 +23,21 @@ async function run() {
       v_currency_minor_unit int;
       v_version bigint;
       v_name text;
-      v_address text;
       v_phone text;
-      v_hours jsonb;
-      v_geo jsonb;
     BEGIN
-      -- 1. Get Location Info
-      -- The locations table does NOT have address, default_locale, supported_locales, currency_code, currency_minor_unit, public_phone, hours_json, geo.
-      -- We will hardcode default values for those and use what we have.
-      SELECT id, name, phone
-      INTO v_location_id, v_name, v_phone
+      -- 1. Get Location Info from actual DB columns
+      SELECT 
+        id, name, phone,
+        COALESCE(default_locale, 'sq'),
+        COALESCE(supported_locales, ARRAY['sq','en']),
+        COALESCE(currency_code, 'ALL'),
+        COALESCE(currency_minor_unit, 0)
+      INTO 
+        v_location_id, v_name, v_phone,
+        v_def_locale,
+        v_supp_locales,
+        v_currency_code,
+        v_currency_minor_unit
       FROM locations
       WHERE (id::text = p_location_id_or_slug OR slug = p_location_id_or_slug);
 
@@ -40,22 +45,13 @@ async function run() {
         RETURN NULL;
       END IF;
 
-      -- Hardcoded values for missing schema fields
-      v_def_locale := 'uk';
-      v_supp_locales := ARRAY['uk', 'en', 'ru'];
-      v_currency_code := 'UAH';
-      v_currency_minor_unit := 2;
-      v_address := 'Test Address, 123';
-      v_hours := '{"monday": "09:00-22:00"}'::jsonb;
-      v_geo := '{"lat": 0, "lng": 0}'::jsonb;
-
       -- 2. Get Menu Version
       SELECT version INTO v_version FROM menu_versions WHERE location_id = v_location_id;
       IF v_version IS NULL THEN
         v_version := 1;
       END IF;
 
-      -- 3. Build JSON with all locales
+      -- 3. Build JSON with all locales from actual translation tables
       WITH 
       modifiers_json AS (
         SELECT 
@@ -172,10 +168,8 @@ async function run() {
           'location', jsonb_build_object(
             'id', v_location_id,
             'name', v_name,
-            'address', v_address,
             'public_phone', v_phone,
-            'hours', v_hours,
-            'geo', v_geo
+            'fallback_phone', v_phone
           ),
           'categories', COALESCE((SELECT categories FROM categories_json), '[]'::jsonb)
         ) INTO v_result;
@@ -187,7 +181,7 @@ async function run() {
 
   try {
     await client.query(sql);
-    console.log("Function replaced successfully.");
+    console.log("Function replaced successfully with actual DB column values.");
   } catch(e) {
     console.error(e);
   } finally {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Button, Input, EmptyState, CourierLiveMap } from '@deliveryos/ui';
+import { Button, Input, EmptyState, CourierLiveMap, useI18n } from '@deliveryos/ui';
 import type { CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
@@ -31,19 +31,38 @@ const MOCK_POSITIONS: Record<string, LngLatLike> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  online: 'var(--brand-success, #22c55e)',
-  busy: 'var(--brand-warning, #f59e0b)',
+  online: 'var(--color-success, #22c55e)',
+  busy: 'var(--color-warning, #f59e0b)',
   offline: 'var(--brand-text-muted, #a8a8a8)',
 };
 
 export function CouriersPage() {
+  const { t } = useI18n();
   const [couriers, setCouriers] = useState<Courier[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [courierPositions, setCourierPositions] = useState<Record<string, LngLatLike>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newCourierEmail, setNewCourierEmail] = useState('');
+  const [newCourierRole, setNewCourierRole] = useState('courier');
+  const [inviteResult, setInviteResult] = useState('');
 
   const tenantId = 't1';
+
+  const handleAddCourier = async () => {
+    if (!newCourierEmail) return;
+    try {
+      const res = await apiClient<any>(`/owner/locations/${tenantId}/courier-invites`, { 
+        method: 'POST', 
+        body: { role: newCourierRole, email: newCourierEmail, ttl_hours: 48 } 
+      });
+      setInviteResult(res?.deepLink || res?.link || 'Invite created');
+      setNewCourierEmail('');
+      setTimeout(() => setInviteResult(''), 5000);
+      fetchCouriers();
+    } catch { setInviteResult('Failed to create invite'); }
+  };
 
   const fetchCouriers = async () => {
     try {
@@ -98,29 +117,53 @@ export function CouriersPage() {
           className="text-2xl font-bold"
           style={{ fontFamily: 'var(--brand-font-heading)' }}
         >
-          Couriers
+          {t('admin.couriers', 'Couriers')}
         </h2>
         <div className="flex items-center gap-3">
           <div className="bg-[var(--brand-surface-raised)] px-3 py-1 rounded-full text-sm font-medium">
-            {onlineCount} online
+            {onlineCount} {t('admin.online', 'online')}
           </div>
           <button onClick={() => exportCSV(filtered, 'couriers.csv')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors hover:bg-[var(--brand-surface-raised)]" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
-            <i className="ti ti-download"></i> Export CSV
+            <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
           </button>
-          <Button>+ Add Courier</Button>
+          <Button onClick={() => setShowAddForm(!showAddForm)}>+ {t('admin.add_courier', 'Add Courier')}</Button>
         </div>
       </div>
 
+      {showAddForm && (
+        <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-xl p-4 flex gap-3 items-end flex-wrap">
+          <div className="flex-1 min-w-[200px]">
+            <label className="text-xs font-medium mb-1 block text-[var(--brand-text-muted)]">{t('admin.courier_email', 'Courier Email')}</label>
+            <Input type="email" value={newCourierEmail} onChange={e => setNewCourierEmail(e.target.value)} placeholder="courier@example.com" />
+          </div>
+          <div className="w-32">
+            <label className="text-xs font-medium mb-1 block text-[var(--brand-text-muted)]">{t('admin.role', 'Role')}</label>
+            <select value={newCourierRole} onChange={e => setNewCourierRole(e.target.value)}
+              className="w-full h-10 px-3 rounded-lg border text-sm outline-none bg-[var(--brand-surface)]"
+              style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+              <option value="courier">{t('admin.courier_role', 'Courier')}</option>
+              <option value="dispatcher">{t('admin.dispatcher', 'Dispatcher')}</option>
+            </select>
+          </div>
+          <Button onClick={handleAddCourier} variant="primary">{t('admin.send_invite', 'Send Invite')}</Button>
+          {inviteResult && <span className="text-sm w-full mt-2 font-medium" style={{ color: inviteResult === 'Failed to create invite' ? 'var(--color-danger)' : 'var(--color-success)' }}>
+            {inviteResult.startsWith('http') ? (
+              <a href={inviteResult} target="_blank" rel="noreferrer" className="underline break-all">{inviteResult}</a>
+            ) : inviteResult}
+          </span>}
+        </div>
+      )}
+
       <div className="max-w-sm">
         <Input
-          placeholder="Search couriers..."
+          placeholder={t('admin.search_couriers', 'Search couriers...')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
       {error ? (
-        <EmptyState title="Error" description={error} />
+        <EmptyState title={t('common.error', 'Error')} description={error} />
       ) : loading ? (
         <div className="animate-pulse space-y-3">
           {[1, 2, 3].map((i) => (
@@ -131,7 +174,7 @@ export function CouriersPage() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <EmptyState title="No couriers" description="No couriers match your search." />
+        <EmptyState title={t('admin.no_couriers', 'No couriers')} description={t('admin.no_couriers_match', 'No couriers match your search.')} />
       ) : (
         <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] overflow-hidden">
           {filtered.map((c) => (
@@ -162,7 +205,7 @@ export function CouriersPage() {
               <div className="flex items-center gap-3 shrink-0">
                 <div className="text-right hidden sm:block">
                   <div className="text-sm font-medium">{c.deliveriesCompleted}</div>
-                  <div className="text-xs text-[var(--brand-text-muted)]">deliveries</div>
+                  <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.deliveries', 'deliveries')}</div>
                 </div>
                 <span
                   className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize"
@@ -181,7 +224,7 @@ export function CouriersPage() {
           className="text-lg font-semibold mb-3 text-[var(--brand-text)]"
           style={{ fontFamily: 'var(--brand-font-heading)' }}
         >
-          Live Map
+          {t('admin.live_map', 'Live Map')}
         </h3>
         <CourierLiveMap
           className="h-72 w-full rounded-lg"

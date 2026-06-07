@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { formatALL } from '@deliveryos/shared-types';
-import { Button } from '../../index.js';
+import { Button, useI18n } from '../../index.js';
 
 // --- AdminShell ---
 interface AdminShellProps {
@@ -10,10 +10,11 @@ interface AdminShellProps {
   onLogout?: () => void;
 }
 export function AdminShell({ children, currentPath, onNavigate, onLogout }: AdminShellProps) {
+  const { t } = useI18n();
   const navItems = [
-    { path: '/admin', label: 'Live Orders' },
-    { path: '/admin/menu', label: 'Menu Manager' },
-    { path: '/admin/branding', label: 'Theme Settings' },
+    { path: '/admin', label: t('admin.live_orders', 'Live Orders') },
+    { path: '/admin/menu', label: t('admin.menu_manager', 'Menu Manager') },
+    { path: '/admin/branding', label: t('admin.theme_settings', 'Theme Settings') },
   ];
 
   return (
@@ -24,23 +25,20 @@ export function AdminShell({ children, currentPath, onNavigate, onLogout }: Admi
           DeliveryOS Admin
         </h1>
         <nav className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible flex-1">
-          {navItems.map(item => {
-            const isActive = currentPath === item.path || (item.path !== '/admin' && currentPath.startsWith(item.path));
-            return (
-              <button
-                key={item.path}
-                onClick={() => onNavigate(item.path)}
-                className={`text-left px-4 py-2 rounded-[var(--brand-radius-btn)] font-medium transition-colors whitespace-nowrap ${isActive ? 'bg-[var(--brand-primary)] text-white' : 'hover:bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
-              >
-                {item.label}
-              </button>
-            );
-          })}
+          {navItems.map(item => (
+            <button
+              key={item.path}
+              onClick={() => onNavigate(item.path)}
+              className={`w-full text-left px-4 py-2 rounded-lg transition-colors font-medium text-sm ${currentPath === item.path ? 'bg-[var(--brand-primary-light)] text-[var(--brand-primary)]' : 'hover:bg-[var(--brand-surface-raised)]'}`}
+            >
+              {item.label}
+            </button>
+          ))}
         </nav>
         {onLogout && (
-          <div className="hidden md:block mt-auto pt-4 border-t border-[var(--brand-border)]">
-            <button onClick={onLogout} className="text-[var(--brand-text-muted)] hover:text-red-500 font-medium">Log out</button>
-          </div>
+          <button onClick={onLogout} className="mt-auto px-4 py-2 text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger-light)] rounded-lg transition-colors flex items-center gap-2">
+            <i className="ti ti-logout" /> {t('admin.logout', 'Logout')}
+          </button>
         )}
       </div>
       
@@ -62,7 +60,7 @@ export function Toggle({ checked, onChange, label }: ToggleProps) {
   return (
     <label className="flex items-center gap-3 cursor-pointer">
       <div className={`relative w-12 h-6 rounded-full transition-colors ${checked ? 'bg-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)]'}`}>
-        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${checked ? 'translate-x-6' : 'translate-x-0'}`} />
+        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-[var(--color-on-primary)] transition-transform ${checked ? 'translate-x-6' : 'translate-x-0'}`} />
       </div>
       {label && <span className="font-medium text-[var(--brand-text)]">{label}</span>}
     </label>
@@ -104,6 +102,9 @@ export interface AdminOrder {
   id: string;
   status: 'PENDING' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'IN_DELIVERY' | 'DELIVERED' | 'CANCELLED';
   createdAt: string;
+  confirmedAt?: string;
+  readyAt?: string;
+  deliveredAt?: string;
   items: { name: string; quantity: number }[];
   total: number;
   customerName?: string;
@@ -127,6 +128,7 @@ interface OrderCardProps {
   isLoading?: boolean;
 }
 export function OrderCard({ order, onUpdateStatus, isLoading }: OrderCardProps) {
+  const { t } = useI18n();
   const [loadingAction, setLoadingAction] = useState('');
 
   const handleAction = async (status: string) => {
@@ -137,15 +139,27 @@ export function OrderCard({ order, onUpdateStatus, isLoading }: OrderCardProps) 
 
   const getStatusColor = (s: string) => {
     switch (s) {
-      case 'PENDING': return 'bg-yellow-500/20 text-yellow-500 border-yellow-500/30';
-      case 'PREPARING': return 'bg-blue-500/20 text-blue-500 border-blue-500/30';
-      case 'READY': return 'bg-purple-500/20 text-purple-500 border-purple-500/30';
-      case 'IN_DELIVERY': return 'bg-orange-500/20 text-orange-500 border-orange-500/30';
-      case 'DELIVERED': return 'bg-green-500/20 text-green-500 border-green-500/30';
-      case 'CANCELLED': return 'bg-red-500/20 text-red-500 border-red-500/30';
-      default: return 'bg-gray-500/20 text-gray-500 border-gray-500/30';
+      case 'PENDING': return 'bg-[var(--status-pending-bg)] text-[var(--status-pending)] border-[var(--status-pending-border)]';
+      case 'PREPARING': return 'bg-[var(--status-preparing-bg)] text-[var(--status-preparing)] border-[var(--status-preparing-border)]';
+      case 'READY': return 'bg-[var(--status-ready-bg)] text-[var(--status-ready)] border-[var(--status-ready-border)]';
+      case 'IN_DELIVERY': return 'bg-[var(--status-in-delivery-bg)] text-[var(--status-in-delivery)] border-[var(--status-in-delivery-border)]';
+      case 'DELIVERED': return 'bg-[var(--status-delivered-bg)] text-[var(--status-delivered)] border-[var(--status-delivered-border)]';
+      case 'CANCELLED': return 'bg-[var(--status-cancelled-bg)] text-[var(--status-cancelled)] border-[var(--status-cancelled-border)]';
+      default: return 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] border-[var(--brand-border)]';
     }
   };
+
+  const getDeltaMin = (start?: string, end?: string) => {
+    if (!start || !end) return null;
+    const s = new Date(start).getTime();
+    const e = new Date(end).getTime();
+    if (isNaN(s) || isNaN(e)) return null;
+    return Math.floor((e - s) / 60000);
+  };
+
+  const confirmDelta = getDeltaMin(order.createdAt, order.confirmedAt);
+  const prepDelta = getDeltaMin(order.confirmedAt, order.readyAt);
+  const deliveryDelta = getDeltaMin(order.readyAt, order.deliveredAt);
 
   return (
     <div className={`bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4 flex flex-col gap-4 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -154,45 +168,83 @@ export function OrderCard({ order, onUpdateStatus, isLoading }: OrderCardProps) 
       <div className="flex justify-between items-start">
         <div>
           <div className="font-bold text-lg text-[var(--brand-text)]">#{order.id.slice(-4).toUpperCase()}</div>
-          <div className="text-[var(--brand-text-muted)] text-sm">{new Date(order.createdAt).toLocaleTimeString()}</div>
+          <div className="text-[var(--brand-text-muted)] text-sm flex items-center gap-2">
+            {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </div>
         </div>
         <div className={`px-2 py-1 rounded-full text-xs font-bold border ${getStatusColor(order.status)}`}>
           {order.status}
         </div>
       </div>
 
+      {/* Timeline Deltas */}
+      {(confirmDelta != null || prepDelta != null || deliveryDelta != null) && (
+        <div className="flex items-center gap-1 text-[11px] font-medium mt-1">
+          {confirmDelta != null && (
+            <span className="px-1.5 py-0.5 rounded bg-[var(--status-pending-light)] text-[var(--status-pending)] border border-[var(--status-pending-border)]" title={t('admin.confirm_time', 'Confirmation Time')}>
+              {t('admin.confirm_short', 'Confirm')}: {confirmDelta}m
+            </span>
+          )}
+          {prepDelta != null && (
+            <span className="px-1.5 py-0.5 rounded bg-[var(--status-scheduled-light)] text-[var(--status-scheduled)] border border-[var(--status-scheduled-border)]" title={t('admin.prep_time', 'Preparation Time')}>
+              {t('admin.prep_short', 'Prep')}: {prepDelta}m
+            </span>
+          )}
+          {deliveryDelta != null && (
+            <span className="px-1.5 py-0.5 rounded bg-[var(--status-delivered-light)] text-[var(--status-delivered)] border border-[var(--status-delivered-border)]" title={t('admin.delivery_time_hint', 'Delivery Time')}>
+              {t('admin.deliv_short', 'Deliv')}: {deliveryDelta}m
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Signals (Anti-Fake) */}
       <div className="flex gap-2 text-xs">
         {order.signals?.otpVerified ? (
-          <span className="bg-green-500/10 text-green-500 px-2 py-1 rounded">OTP \u2713</span>
+          <span className="bg-[var(--status-delivered-light)] text-[var(--status-delivered)] px-2 py-1 rounded">OTP \u2713</span>
         ) : (
-          <span className="bg-yellow-500/10 text-yellow-600 px-2 py-1 rounded">No OTP</span>
+          <span className="bg-[var(--status-pending-light)] text-[var(--status-pending)] px-2 py-1 rounded">{t('admin.no_otp', 'No OTP')}</span>
         )}
-        <span className={`px-2 py-1 rounded ${order.signals && order.signals.reputationScore < 50 ? 'bg-red-500/10 text-red-500' : 'bg-blue-500/10 text-blue-500'}`}>
-          Rep: {order.signals?.reputationScore ?? 'New'}
+        <span className={`px-2 py-1 rounded ${order.signals && order.signals.reputationScore < 50 ? 'bg-[var(--status-cancelled-light)] text-[var(--status-cancelled)]' : 'bg-[var(--status-info-light)] text-[var(--color-info)]'}`}>
+          {t('admin.rep', 'Rep')}: {order.signals?.reputationScore ?? t('admin.new', 'New')}
         </span>
       </div>
 
       {/* Details */}
       <div className="text-sm space-y-1 text-[var(--brand-text)]">
-        <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">Items:</span> {order.items.length} items ({formatALL(order.total)})</div>
-        {order.customerPhone && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">Phone:</span> {order.customerPhone}</div>}
-        {order.deliveryAddress && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">To:</span> {order.deliveryAddress}</div>}
+        {order.customerName && order.customerName !== 'Unknown' && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.client', 'Client:')}</span> {order.customerName}</div>}
+        {order.customerPhone && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('common.phone', 'Phone:')}</span> {order.customerPhone}</div>}
+        {order.deliveryAddress && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.to', 'To:')}</span> {order.deliveryAddress}</div>}
+        <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.items', 'Items:')}</span> {order.items?.length || 0} {t('admin.items_lower', 'items')} ({formatALL(order.total)})</div>
+        {order.items && order.items.length > 0 && (
+          <div className="ml-16 text-xs space-y-0.5" style={{ color: 'var(--brand-text-muted)' }}>
+            {order.items.map((item: any, i: number) => (
+              <div key={i} className="flex justify-between">
+                <span>{item.name} ×{item.qty || item.quantity}</span>
+                <span>{item.price ? formatALL(item.price * (item.qty || item.quantity)) : ''}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {order.courierName && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.courier', 'Courier:')}</span> {order.courierName}</div>}
+        {order.elapsedSeconds !== undefined && order.elapsedSeconds > 1800 && (
+        <span className="text-[var(--color-danger)] font-bold ml-2">{t('admin.overdue', 'Overdue!')} ({Math.floor(order.elapsedSeconds / 60)} min)</span>
+        )}
       </div>
 
       {/* Actions */}
       <div className="mt-auto pt-4 border-t border-[var(--brand-border)] flex gap-2 overflow-x-auto no-scrollbar">
         {order.status === 'PENDING' && (
           <>
-            <Button size="sm" onClick={() => handleAction('PREPARING')} isLoading={loadingAction === 'PREPARING'}>Accept & Prepare</Button>
-            <Button size="sm" variant="outline" onClick={() => handleAction('CANCELLED')} isLoading={loadingAction === 'CANCELLED'}>Reject</Button>
+            <Button size="sm" onClick={() => handleAction('PREPARING')} isLoading={loadingAction === 'PREPARING'}>{t('admin.accept_prepare', 'Accept & Prepare')}</Button>
+            <Button size="sm" variant="outline" onClick={() => handleAction('CANCELLED')} isLoading={loadingAction === 'CANCELLED'}>{t('common.reject', 'Reject')}</Button>
           </>
         )}
         {order.status === 'PREPARING' && (
-          <Button size="sm" onClick={() => handleAction('READY')} isLoading={loadingAction === 'READY'}>Mark Ready</Button>
+          <Button size="sm" onClick={() => handleAction('READY')} isLoading={loadingAction === 'READY'}>{t('admin.mark_ready', 'Mark Ready')}</Button>
         )}
         {order.status === 'READY' && (
-          <Button size="sm" onClick={() => handleAction('IN_DELIVERY')} isLoading={loadingAction === 'IN_DELIVERY'}>Assign Courier</Button>
+          <Button size="sm" onClick={() => handleAction('IN_DELIVERY')} isLoading={loadingAction === 'IN_DELIVERY'}>{t('admin.assign_courier', 'Assign Courier')}</Button>
         )}
       </div>
     </div>

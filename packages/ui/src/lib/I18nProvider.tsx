@@ -6,14 +6,14 @@ interface LocaleInfo { code: Locale; name: string; displayCode: string; }
 interface I18nContextValue {
   locale: Locale;
   locales: LocaleInfo[];
-  t: (key: string, fallback?: string) => string;
+  t: (key: string, fallback?: string, options?: Record<string, any>) => string;
   setLocale: (locale: Locale) => void;
 }
 
 const I18nContext = createContext<I18nContextValue>({
   locale: 'sq',
   locales: [],
-  t: (k, f) => f || k,
+  t: (k, f, o) => f || k,
   setLocale: () => {},
 });
 
@@ -32,7 +32,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   // Create a fresh t() on every locale change so React detects dependency change
   const t = useCallback(
-    (key: string, fallback?: string) => translate(locale, key, fallback),
+    (key: string, fallback?: string, options?: Record<string, any>) => translate(locale, key, fallback, options),
     [locale],
   );
 

@@ -25,5 +25,12 @@ WORKDIR /app
 # Copy the bundled single-file ESM artifacts
 COPY --from=builder /app/dist /app/dist
 
+# Copy static assets (API public files and Web frontend build)
+COPY --from=builder /app/apps/api/public /app/dist/public
+COPY --from=builder /app/apps/web/dist /app/dist/public
+
+# Install external dependencies that cannot be bundled (native modules or complex SDKs)
+RUN npm install argon2 sharp @aws-sdk/client-s3 @aws-sdk/lib-storage
+
 # The specific script will be provided by Fly [processes] definition
 ENTRYPOINT ["node"]

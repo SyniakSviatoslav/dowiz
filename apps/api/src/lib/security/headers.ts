@@ -53,9 +53,32 @@ export default async function securityHeadersPlugin(fastify: FastifyInstance): P
     if (request.url.startsWith('/api/admin') ||
         request.url.startsWith('/api/owner') ||
         request.url.startsWith('/api/customer') ||
-        request.url.startsWith('/api/courier')) {
+        request.url.startsWith('/api/courier') ||
+        request.url.startsWith('/api/orders') ||
+        request.url.startsWith('/api/telemetry') ||
+        request.url.startsWith('/api/push')) {
       setSecurityHeaders(reply, { isSsr: false });
     }
+    if (request.url.startsWith('/auth/')) {
+      setSecurityHeaders(reply, { isSsr: false });
+    }
+    if (request.url.startsWith('/couriers/')) {
+      setSecurityHeaders(reply, { isSsr: false });
+    }
+  });
+
+  fastify.addHook('onSend', async (request, reply, payload) => {
+    try {
+      if (reply.getHeader('Content-Security-Policy')) return payload;
+      const ct = String(reply.getHeader('content-type') || '');
+      if (ct.includes('text/html') || ct.includes('application/json')) {
+        setSecurityHeaders(reply, { isSsr: ct.includes('text/html') && !request.url.startsWith('/api') });
+      }
+    } catch (err) {
+      // Never break the response due to security header injection
+      console.debug('[security-headers] header injection skipped', err);
+    }
+    return payload;
   });
 
   fastify.addHook('onSend', async (request, reply, payload) => {

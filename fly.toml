@@ -5,8 +5,8 @@ primary_region = "fra"
   dockerfile = "Dockerfile"
 
 [processes]
-  web    = "dist/api/server.js"
-  worker = "dist/worker/index.js"
+  web    = "dist/api/server.cjs"
+  worker = "dist/worker/index.cjs"
 
 [http_service]
   processes = ["web"]

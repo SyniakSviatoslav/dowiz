@@ -7,14 +7,16 @@ const env = loadEnv();
 const kid = env.JWT_KID;
 
 function getPrivateKey(): crypto.KeyObject {
-  const pem = env.JWT_PRIVATE_KEY;
-  if (!pem) throw new Error('JWT_PRIVATE_KEY environment variable is required for RS256 signing');
+  const raw = env.JWT_PRIVATE_KEY;
+  if (!raw) throw new Error('JWT_PRIVATE_KEY environment variable is required for RS256 signing');
+  const pem = raw.replace(/\\n/g, '\n');
   return crypto.createPrivateKey(pem);
 }
 
 function getPublicKey(): crypto.KeyObject {
-  const pem = env.JWT_PUBLIC_KEY;
-  if (!pem) throw new Error('JWT_PUBLIC_KEY environment variable is required for RS256 verification');
+  const raw = env.JWT_PUBLIC_KEY;
+  if (!raw) throw new Error('JWT_PUBLIC_KEY environment variable is required for RS256 verification');
+  const pem = raw.replace(/\\n/g, '\n');
   return crypto.createPublicKey(pem);
 }
 

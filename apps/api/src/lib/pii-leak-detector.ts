@@ -48,7 +48,10 @@ export function detectPiiLeak(input: string, contextLabel: string = 'unknown'): 
   try {
     parsed = JSON.parse(input);
     isJson = true;
-  } catch {}
+  } catch {
+    // Not JSON input — continue with string-level PII scans
+    console.debug('[pii-leak-detector] input is not valid JSON');
+  }
 
   if (isJson && typeof parsed === 'object') {
     scanJsonValue(parsed, '', leaks, contextLabel);

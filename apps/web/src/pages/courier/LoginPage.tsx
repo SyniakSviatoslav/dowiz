@@ -87,7 +87,7 @@ export function LoginPage() {
 
           <form onSubmit={handleActivateInvite} className="space-y-6">
             {error && (
-              <div className="bg-red-500/10 border border-red-500/20 text-red-600 p-3 rounded-[var(--brand-radius-sm)] text-sm">
+              <div className="bg-[var(--status-cancelled-light)] border border-[var(--status-cancelled-border)] text-[var(--color-danger)] p-3 rounded-[var(--brand-radius-sm)] text-sm">
                 {error}
               </div>
             )}
@@ -141,7 +141,7 @@ export function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-6">
           {error && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-600 p-3 rounded-[var(--brand-radius-sm)] text-sm">
+            <div className="bg-[var(--status-cancelled-light)] border border-[var(--status-cancelled-border)] text-[var(--color-danger)] p-3 rounded-[var(--brand-radius-sm)] text-sm">
               {error}
             </div>
           )}

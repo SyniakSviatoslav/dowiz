@@ -20,7 +20,7 @@ test.describe('Admin Orders Page', () => {
 
     // Should render without crashing
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('branding page loads', async ({ page }) => {
@@ -29,7 +29,7 @@ test.describe('Admin Orders Page', () => {
 
     // Should render without crashing  
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
 });

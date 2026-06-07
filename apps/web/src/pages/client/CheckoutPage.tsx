@@ -44,7 +44,10 @@ export function CheckoutPage() {
     setOtpError('');
     try {
       await apiClient('/customer/otp/send', { method: 'POST', body: { phone: verifyPhone } });
-    } catch { }
+    } catch {
+      // OTP send failure — user can retry
+      console.debug('[Checkout] OTP send failed');
+    }
   };
 
   const handleVerifyOTP = async (code: string) => {

@@ -58,7 +58,7 @@ export function HistoryPage() {
     return (
       <div className="flex items-center gap-0.5">
         {[1, 2, 3, 4, 5].map((star) => (
-          <span key={star} className={`text-xs ${star <= rating ? 'text-yellow-500' : 'text-[var(--brand-border)]'}`}>
+          <span key={star} className={`text-xs ${star <= rating ? 'text-[var(--color-warning)]' : 'text-[var(--brand-border)]'}`}>
             &#9733;
           </span>
         ))}

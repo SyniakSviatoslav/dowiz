@@ -109,12 +109,18 @@ function findGitleaks(): string | null {
     try {
       execSync(`"${c}" version 2>&1`, { timeout: 3000 });
       return c;
-    } catch { }
+    } catch {
+      // this candidate path doesn't exist — try next
+      console.debug('[verify-secrets] gitleaks not found at', c);
+    }
   }
   try {
     const result = execSync('where.exe gitleaks 2>&1', { timeout: 3000, encoding: 'utf8' });
     return result.trim().split('\n')[0].trim();
-  } catch { }
+  } catch {
+    // gitleaks not found in PATH
+    console.debug('[verify-secrets] gitleaks not found via where.exe');
+  }
   return null;
 }
 
@@ -129,7 +135,10 @@ function findFiles(dir: string, exts: string[]): string[] {
         results.push(full);
       }
     }
-  } catch { }
+  } catch {
+    // skip unreadable directories
+    console.debug('[verify-secrets] directory scan skipped');
+  }
   return results;
 }
 

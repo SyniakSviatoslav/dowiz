@@ -75,7 +75,9 @@ test.describe('Client Checkout', () => {
       await expect(phoneField.first()).toBeVisible();
     } else {
       // Phone field might be in the OTP modal
-      expect(true).toBeTruthy();
+      const otpModal = page.locator('[role="dialog"], .modal, [class*="otp"]');
+      const hasOtpUI = await otpModal.count() > 0;
+      expect(hasOtpUI || count === 0).toBeTruthy();
     }
   });
 

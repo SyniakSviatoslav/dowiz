@@ -1,1 +1,11 @@
 fly.toml
+**/node_modules
+**/dist
+**/.git
+**/.env
+graphify-out
+tests
+e2e
+.husky
+**/coverage
+.pnpm-store

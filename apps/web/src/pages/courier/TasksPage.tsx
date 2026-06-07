@@ -79,7 +79,7 @@ export function TasksPage() {
       <div className="flex justify-between items-center pb-4 border-b border-[var(--brand-border)]">
         <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Tasks</h1>
         <div className="flex items-center gap-2 text-sm text-[var(--brand-text-muted)]">
-          <div className="w-2 h-2 rounded-full bg-green-500" /> Online
+          <div className="w-2 h-2 rounded-full bg-[var(--color-success)]" /> Online
         </div>
       </div>
 

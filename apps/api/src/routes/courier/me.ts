@@ -5,18 +5,16 @@ import { z } from 'zod';
 import crypto from 'node:crypto';
 import argon2 from 'argon2';
 import { decryptPII } from '../../lib/pii-cipher.js';
+import { maskStr } from '../../lib/pii-mask.js';
 
 export default (async function courierMeRoutes(fastify, opts) {
   const { db } = opts as any;
-
-  // Mask string helper
-  const maskStr = (str: string) => str.length > 4 ? str.substring(0, 2) + '***' + str.substring(str.length - 2) : '***';
 
   fastify.addHook('preHandler', fastify.verifyAuth);
   fastify.addHook('preHandler', fastify.requireRole(['courier']));
 
   // 1. Get Profile
-  fastify.get('/api/courier/me', async (request, reply) => {
+  fastify.get('/me', async (request, reply) => {
     const courierId = request.user!.userId;
     const locationId = request.user!.activeLocationId;
 
@@ -48,7 +46,7 @@ export default (async function courierMeRoutes(fastify, opts) {
   });
 
   // 2. Audit Log
-  fastify.get('/api/courier/me/audit-log', async (request, reply) => {
+  fastify.get('/me/audit-log', async (request, reply) => {
     const courierId = request.user!.userId;
 
     const res = await db.query(
@@ -64,7 +62,7 @@ export default (async function courierMeRoutes(fastify, opts) {
   });
 
   // 3. Change Password
-  fastify.patch('/api/courier/me/password', {
+  fastify.patch('/me/password', {
     schema: {
       body: z.object({
         current_password: z.string().min(1),

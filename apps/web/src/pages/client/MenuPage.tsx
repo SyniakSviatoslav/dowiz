@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ProductCard } from '@deliveryos/ui';
+import { ProductCard, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { useSharedCart } from '../../lib/CartProvider.js';
 
@@ -12,6 +12,7 @@ interface MenuCategory {
 
 export function MenuPage() {
   const { slug } = useParams<{ slug: string }>();
+  const { t } = useI18n();
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>('');
@@ -94,14 +95,14 @@ export function MenuPage() {
         <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.1) 100%)' }} />
         <div className="relative z-10 w-full px-5 pb-5">
           <div className="flex items-center gap-1 text-[13px] font-medium mb-2" style={{ color: 'var(--brand-text-muted)' }}>
-            <span className="inline-flex gap-0.5" style={{ color: '#D97706' }}>
+            <span className="inline-flex gap-0.5" style={{ color: 'var(--color-warning)' }}>
               {[1,2,3,4,5].map(i => <i key={i} className="ti ti-star-filled" style={{ fontSize: '0.8rem' }} />)}
             </span>
             <span style={{ color: 'var(--brand-text)' }}>4.8</span>
-            <span>(124 reviews)</span>
+            <span>({t('client.reviews_count', '124 reviews')})</span>
           </div>
           <h1 className="text-[32px] font-bold text-white" style={{ fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>Dubin & Sushi</h1>
-          <p className="text-[14px] font-medium mt-1" style={{ color: 'rgba(255,255,255,0.8)' }}>Sushi & Noodles &middot; Delivery from 30 min</p>
+          <p className="text-[14px] font-medium mt-1" style={{ color: 'rgba(255,255,255,0.8)' }}>{t('client.menu_subtitle', 'Sushi & Noodles &middot; Delivery from 30 min')}</p>
         </div>
       </section>
 
