@@ -39,6 +39,24 @@ async function run() {
     );
     const courierRealId = courierRes.rows[0].id;
 
+    // Test user for local login (password: test123456)
+    const testUserId = randomUUID();
+    const testUserRes = await pool.query(
+      `INSERT INTO users (id, email, display_name) VALUES ($1, $2, $3)
+       ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name RETURNING id`,
+      [testUserId, 'test@dowiz.com', 'Test Owner']
+    );
+    const testUserRealId = testUserRes.rows[0].id;
+
+    // Assign test user to demo location as owner (use actual existing demo location)
+    const demoLoc = await pool.query(`SELECT id FROM locations WHERE slug = 'demo' LIMIT 1`);
+    if (demoLoc.rows.length > 0) {
+      await pool.query(
+        `INSERT INTO memberships (user_id, location_id, role) VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING`,
+        [testUserRealId, demoLoc.rows[0].id]
+      );
+    }
+
     // Organization
     const orgRes = await pool.query(
       `INSERT INTO organizations (id, name, owner_id) VALUES ($1, $2, $3)
