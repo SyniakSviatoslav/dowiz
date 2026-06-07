@@ -29,10 +29,6 @@ export function AdminShell({ children, activeKey }: AdminShellProps) {
     { key: 'onboarding', label: t('admin.onboarding'), icon: 'ti ti-rocket', href: '/admin/onboarding' },
   ];
 
-export function AdminShell({ children, activeKey }: AdminShellProps) {
-  const embed = useEmbed();
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-
   const asideContent = (
     <>
       <div className="p-4 border-b border-brand-border flex items-center justify-between">
@@ -47,7 +43,7 @@ export function AdminShell({ children, activeKey }: AdminShellProps) {
           </svg>
         </button>
       </div>
-      <nav className="flex-1 p-2 space-y-1">
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
         {NAV_ITEMS.map(item => (
           <Link
             key={item.key}
