@@ -266,7 +266,7 @@ export function SupplyLibraryPage() {
         <div>
           <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.supplies')}</h2>
           <p className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>
-            {foodCount} ing, {condCount} sauces, {pkgCount} pkg, {utCount} utensils
+            {foodCount} {t('supply.ingredient_short', 'ing')}, {condCount} {t('supply.sauces_short', 'sauces')}, {pkgCount} {t('supply.packaging_short', 'pkg')}, {utCount} {t('supply.utensils_short', 'utensils')}
           </p>
         </div>
         <Button onClick={() => { setAdding(true); setEditing(null); }}>
@@ -308,7 +308,7 @@ export function SupplyLibraryPage() {
             return (
               <div key={supply.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 hover:bg-[var(--brand-surface)] slide-in-up`}
                 style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', animationDelay: `${i * 30}ms` }}>
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: `rgba(234,79,22,0.08)` }}>
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--brand-primary-light)' }}>
                   <i className={ico} style={{ fontSize: '1rem', color: icoColor }} />
                 </div>
                 <div className="flex-1 min-w-0">

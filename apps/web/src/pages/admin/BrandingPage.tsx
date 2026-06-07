@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Button, Input, ColorInput, FormField, ProductCard, useI18n } from '@deliveryos/ui';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Button, Input, ColorInput, FormField, useI18n } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
@@ -21,7 +21,7 @@ export function BrandingPage() {
   const [logoDataUrl, setLogoDataUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [previewItems, setPreviewItems] = useState<any[]>([]);
+  const [slug, setSlug] = useState('');
 
   useEffect(() => {
     apiClient<any>('/owner/brand').then(res => {
@@ -30,8 +30,11 @@ export function BrandingPage() {
       if (res.text_color) setConfig(prev => ({ ...prev, text: res.text_color }));
       if (res.logo_url) setLogoUrl(res.logo_url);
     }).catch(() => {});
-    apiClient<any>('/owner/menu/products').then(res => {
-      if (Array.isArray(res)) setPreviewItems(res.slice(0, 8));
+    apiClient<any>('/owner/settings').then(res => {
+      if (res.locationName) {
+        const generated = res.locationName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
+        setSlug(generated);
+      }
     }).catch(() => {});
   }, []);
 
@@ -59,6 +62,18 @@ export function BrandingPage() {
   };
 
   const logoPreview = logoDataUrl || logoUrl;
+
+  const iframeUrl = useMemo(() => {
+    if (!slug) return '';
+    const params = new URLSearchParams();
+    params.set('embed', 'true');
+    params.set('draft', 'true');
+    if (config.primary && !config.primary.startsWith('var(')) params.set('draft_primary', config.primary);
+    if (config.bg && !config.bg.startsWith('var(')) params.set('draft_bg', config.bg);
+    if (config.text && !config.text.startsWith('var(')) params.set('draft_text', config.text);
+    if (logoPreview) params.set('draft_logo', logoPreview);
+    return `https://${slug}.dowiz.org?${params.toString()}`;
+  }, [slug, config.primary, config.bg, config.text, logoPreview]);
 
   return (
     <div className="p-4 max-w-6xl mx-auto flex flex-col lg:flex-row gap-8">
@@ -100,86 +115,39 @@ export function BrandingPage() {
         </form>
       </div>
 
-      {/* Live Preview with real data */}
-      {/* Live Preview with real data */}
+      {/* Live Preview — real client page in iframe */}
       <div className="flex-1 border-l border-[var(--brand-border)] pl-0 lg:pl-8">
         <h3 className="font-semibold text-lg mb-4 text-[var(--brand-text-muted)]">{t('admin.live_preview', 'Live Preview (Client View)')}</h3>
-        <div 
-          className="border border-[var(--brand-border)] rounded-[40px] overflow-hidden w-full max-w-sm mx-auto shadow-2xl relative h-[700px] flex flex-col"
-          style={{ 
-            backgroundColor: config.bg,
-            '--brand-primary': config.primary,
-            '--brand-primary-hover': config.primaryHover,
-            '--brand-primary-light': config.primaryLight,
-            '--brand-bg': config.bg,
-            '--brand-surface': config.surface,
-            '--brand-surface-raised': config.surfaceRaised,
-            '--brand-border': config.border,
-            '--brand-text': config.text,
-            '--brand-text-muted': config.textMuted,
-            '--brand-accent': config.accent,
-          } as React.CSSProperties}
-        >
-          <div className="absolute top-0 inset-x-0 h-6 bg-black flex justify-center items-center z-20">
-            <div className="w-20 h-4 bg-[var(--brand-surface)] border border-[var(--brand-border)] border-t-0 rounded-b-xl" />
+        {iframeUrl ? (
+          <div className="border border-[var(--brand-border)] rounded-[40px] overflow-hidden w-full max-w-sm mx-auto shadow-2xl relative h-[700px]">
+            <div className="absolute top-0 inset-x-0 h-6 bg-black flex justify-center items-center z-20">
+              <div className="w-20 h-4 bg-[var(--brand-surface)] border border-[var(--brand-border)] border-t-0 rounded-b-xl" />
+            </div>
+            <iframe
+              src={iframeUrl}
+              className="w-full h-full border-0"
+              style={{ marginTop: '24px' }}
+              title={t('admin.live_preview', 'Live Preview (Client View)')}
+              loading="lazy"
+              sandbox="allow-scripts allow-same-origin"
+            />
           </div>
-          
-          <div className="flex-1 overflow-y-auto px-4 pb-20 pt-10 no-scrollbar" style={{ color: 'var(--brand-text)' }}>
-            <div className="flex items-center justify-between mb-6">
-              {logoPreview ? (
-                <img src={logoPreview} alt="Logo" className="h-8 object-contain" />
-              ) : (
-                <h1 className="text-xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.restaurant_name', 'Restaurant')}</h1>
-              )}
+        ) : (
+          <div className="border border-[var(--brand-border)] rounded-[40px] overflow-hidden w-full max-w-sm mx-auto shadow-2xl relative h-[700px] flex items-center justify-center"
+            style={{ backgroundColor: config.bg }}>
+            <div className="absolute top-0 inset-x-0 h-6 bg-black flex justify-center items-center z-20">
+              <div className="w-20 h-4 bg-[var(--brand-surface)] border border-[var(--brand-border)] border-t-0 rounded-b-xl" />
             </div>
-            
-            <div className="grid grid-cols-2 gap-3">
-              {previewItems.length > 0 ? (
-                previewItems.map(item => (
-                  <ProductCard 
-                    key={item.id} 
-                    product={{
-                      id: item.id,
-                      name: item.name,
-                      price: item.price,
-                      description: item.description,
-                      image: item.imageUrl,
-                      isAvailable: item.available,
-                      tags: item.category ? [item.category] : [],
-                      taste: item.taste,
-                      allergenStatus: item.allergenStatus
-                    }}
-                    onAdd={() => {}}
-                  />
-                ))
-              ) : (
-                <div className="col-span-2 text-center text-sm mt-10" style={{ color: 'var(--brand-text-muted)' }}>
-                  {t('admin.add_products_preview', 'Add products to the menu to see them here.')}
-                </div>
-              )}
-            </div>
+            <p className="text-sm text-center px-8" style={{ color: config.text || 'var(--brand-text-muted)' }}>
+              {t('admin.branding_preview_hint', 'Complete onboarding to generate your client page URL. The preview will show the real client page with draft branding applied.')}
+            </p>
           </div>
-          
-          {/* Fake Bottom Nav */}
-          <div className="absolute bottom-0 inset-x-0 h-16 border-t flex items-center justify-around px-4" style={{ backgroundColor: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
-            <div className="flex flex-col items-center justify-center opacity-100" style={{ color: 'var(--brand-primary)' }}>
-              <i className="ti ti-smart-home text-xl mb-0.5" />
-              <span className="text-[10px] font-medium">{t('client.home', 'Home')}</span>
-            </div>
-            <div className="flex flex-col items-center justify-center opacity-50" style={{ color: 'var(--brand-text-muted)' }}>
-              <i className="ti ti-search text-xl mb-0.5" />
-              <span className="text-[10px] font-medium">{t('client.search', 'Search')}</span>
-            </div>
-            <div className="flex flex-col items-center justify-center opacity-50" style={{ color: 'var(--brand-text-muted)' }}>
-              <i className="ti ti-shopping-cart text-xl mb-0.5" />
-              <span className="text-[10px] font-medium">{t('client.cart', 'Cart')}</span>
-            </div>
-            <div className="flex flex-col items-center justify-center opacity-50" style={{ color: 'var(--brand-text-muted)' }}>
-              <i className="ti ti-user text-xl mb-0.5" />
-              <span className="text-[10px] font-medium">{t('client.profile', 'Profile')}</span>
-            </div>
-          </div>
-        </div>
+        )}
+        {slug && (
+          <p className="text-xs text-center mt-3" style={{ color: 'var(--brand-text-muted)' }}>
+            {t('admin.client_url', 'Client URL:')} <span className="font-mono">{slug}.dowiz.org</span>
+          </p>
+        )}
       </div>
     </div>
   );

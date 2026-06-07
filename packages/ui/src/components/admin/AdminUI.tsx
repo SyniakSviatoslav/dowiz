@@ -149,6 +149,18 @@ export function OrderCard({ order, onUpdateStatus, isLoading }: OrderCardProps) 
     }
   };
 
+  const getStatusIcon = (s: string) => {
+    switch (s) {
+      case 'PENDING': return 'ti ti-clock';
+      case 'PREPARING': return 'ti ti-chef-hat';
+      case 'READY': return 'ti ti-check';
+      case 'IN_DELIVERY': return 'ti ti-truck-delivery';
+      case 'DELIVERED': return 'ti ti-package';
+      case 'CANCELLED': return 'ti ti-x';
+      default: return 'ti ti-help';
+    }
+  };
+
   const getDeltaMin = (start?: string, end?: string) => {
     if (!start || !end) return null;
     const s = new Date(start).getTime();
@@ -172,26 +184,30 @@ export function OrderCard({ order, onUpdateStatus, isLoading }: OrderCardProps) 
             {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>
-        <div className={`px-2 py-1 rounded-full text-xs font-bold border ${getStatusColor(order.status)}`}>
+        <div className={`px-2.5 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 ${getStatusColor(order.status)}`}>
+          <i className={getStatusIcon(order.status)} style={{ fontSize: '0.75rem' }} />
           {order.status}
         </div>
       </div>
 
       {/* Timeline Deltas */}
       {(confirmDelta != null || prepDelta != null || deliveryDelta != null) && (
-        <div className="flex items-center gap-1 text-[11px] font-medium mt-1">
+        <div className="flex items-center gap-2 text-[11px] font-medium mt-1">
           {confirmDelta != null && (
-            <span className="px-1.5 py-0.5 rounded bg-[var(--status-pending-light)] text-[var(--status-pending)] border border-[var(--status-pending-border)]" title={t('admin.confirm_time', 'Confirmation Time')}>
+            <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--status-pending-light)] text-[var(--status-pending)]" title={t('admin.confirm_time', 'Confirmation Time')}>
+              <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} />
               {t('admin.confirm_short', 'Confirm')}: {confirmDelta}m
             </span>
           )}
           {prepDelta != null && (
-            <span className="px-1.5 py-0.5 rounded bg-[var(--status-scheduled-light)] text-[var(--status-scheduled)] border border-[var(--status-scheduled-border)]" title={t('admin.prep_time', 'Preparation Time')}>
+            <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--status-scheduled-light)] text-[var(--status-scheduled)]" title={t('admin.prep_time', 'Preparation Time')}>
+              <i className="ti ti-chef-hat" style={{ fontSize: '0.7rem' }} />
               {t('admin.prep_short', 'Prep')}: {prepDelta}m
             </span>
           )}
           {deliveryDelta != null && (
-            <span className="px-1.5 py-0.5 rounded bg-[var(--status-delivered-light)] text-[var(--status-delivered)] border border-[var(--status-delivered-border)]" title={t('admin.delivery_time_hint', 'Delivery Time')}>
+            <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--status-delivered-light)] text-[var(--status-delivered)]" title={t('admin.delivery_time_hint', 'Delivery Time')}>
+              <i className="ti ti-truck-delivery" style={{ fontSize: '0.7rem' }} />
               {t('admin.deliv_short', 'Deliv')}: {deliveryDelta}m
             </span>
           )}
@@ -201,11 +217,18 @@ export function OrderCard({ order, onUpdateStatus, isLoading }: OrderCardProps) 
       {/* Signals (Anti-Fake) */}
       <div className="flex gap-2 text-xs">
         {order.signals?.otpVerified ? (
-          <span className="bg-[var(--status-delivered-light)] text-[var(--status-delivered)] px-2 py-1 rounded">OTP \u2713</span>
+          <span className="flex items-center gap-1 bg-[var(--status-delivered-light)] text-[var(--status-delivered)] px-2 py-1 rounded-lg">
+            <i className="ti ti-shield-check" style={{ fontSize: '0.7rem' }} />
+            OTP
+          </span>
         ) : (
-          <span className="bg-[var(--status-pending-light)] text-[var(--status-pending)] px-2 py-1 rounded">{t('admin.no_otp', 'No OTP')}</span>
+          <span className="flex items-center gap-1 bg-[var(--status-pending-light)] text-[var(--status-pending)] px-2 py-1 rounded-lg">
+            <i className="ti ti-shield-x" style={{ fontSize: '0.7rem' }} />
+            {t('admin.no_otp', 'No OTP')}
+          </span>
         )}
-        <span className={`px-2 py-1 rounded ${order.signals && order.signals.reputationScore < 50 ? 'bg-[var(--status-cancelled-light)] text-[var(--status-cancelled)]' : 'bg-[var(--status-info-light)] text-[var(--color-info)]'}`}>
+        <span className={`flex items-center gap-1 px-2 py-1 rounded-lg ${order.signals && order.signals.reputationScore < 50 ? 'bg-[var(--status-cancelled-light)] text-[var(--status-cancelled)]' : 'bg-[var(--status-info-light)] text-[var(--color-info)]'}`}>
+          <i className="ti ti-star" style={{ fontSize: '0.7rem' }} />
           {t('admin.rep', 'Rep')}: {order.signals?.reputationScore ?? t('admin.new', 'New')}
         </span>
       </div>

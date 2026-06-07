@@ -16,6 +16,8 @@ export function DashboardPage() {
   const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
   const [showHint, setShowHint] = useState(() => localStorage.getItem('dos_dash_hint_dismissed') !== '1');
   const { t } = useI18n();
+  const [clientSlug, setClientSlug] = useState('');
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const { play: playPing } = useSound('/sounds/ping.mp3');
   const tenantId = 't1';
@@ -40,7 +42,15 @@ export function DashboardPage() {
     }
   };
 
-  useEffect(() => { fetchOrders(); }, []);
+  useEffect(() => {
+    fetchOrders();
+    apiClient<any>('/owner/settings').then(res => {
+      if (res.locationName) {
+        const generated = res.locationName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
+        setClientSlug(generated);
+      }
+    }).catch(() => {});
+  }, []);
 
   useWebSocket({
     room: `admin:${tenantId}`,
@@ -56,7 +66,7 @@ export function DashboardPage() {
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus as AdminOrder['status'] } : o));
     try {
-      await apiClient(`/owner/orders/${id}/status`, { method: 'PATCH', body: { status: newStatus } });
+      await apiClient(`/orders/${id}/status`, { method: 'PATCH', body: { status: newStatus } });
     } catch {
       fetchOrders();
     }
@@ -150,6 +160,22 @@ export function DashboardPage() {
             <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{viewMode === 'live' ? t('admin.live_orders', 'Live Orders') : t('courier.history', 'Order History')}</h2>
             <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{filteredOrders.length}</p>
           </div>
+          {clientSlug && (
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
+              <i className="ti ti-link text-[var(--brand-primary)]" />
+              <span className="font-mono truncate max-w-[180px]">{clientSlug}.dowiz.org</span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(`https://${clientSlug}.dowiz.org`);
+                  setCopiedLink(true);
+                  setTimeout(() => setCopiedLink(false), 2000);
+                }}
+                className="text-[var(--brand-primary)] hover:underline font-medium shrink-0"
+              >
+                {copiedLink ? t('common.copied', 'Copied!') : t('common.copy', 'Copy')}
+              </button>
+            </div>
+          )}
           <div className="flex bg-[var(--brand-surface)] border rounded-lg overflow-hidden p-0.5" style={{ borderColor: 'var(--brand-border)' }}>
             <button 
               onClick={() => { setViewMode('live'); setStatusFilter('all'); }}

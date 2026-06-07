@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TaskCard, EmptyState } from '@deliveryos/ui';
+import { TaskCard, EmptyState, useI18n } from '@deliveryos/ui';
 import type { CourierTask } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
 
@@ -10,6 +10,7 @@ export function TasksPage() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const { play: playPing } = useSound('/sounds/ping.mp3');
+  const { t } = useI18n();
 
   const courierId = 'c1'; // Mock courier ID for Stage 4
 
@@ -77,9 +78,9 @@ export function TasksPage() {
   return (
     <div className="p-4 space-y-6">
       <div className="flex justify-between items-center pb-4 border-b border-[var(--brand-border)]">
-        <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Tasks</h1>
+        <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('courier.tasks_title', 'Tasks')}</h1>
         <div className="flex items-center gap-2 text-sm text-[var(--brand-text-muted)]">
-          <div className="w-2 h-2 rounded-full bg-[var(--color-success)]" /> Online
+          <div className="w-2 h-2 rounded-full bg-[var(--color-success)]" /> {t('courier.online_status', 'Online')}
         </div>
       </div>
 
@@ -88,9 +89,9 @@ export function TasksPage() {
           <div className="h-48 bg-[var(--brand-surface)] rounded-[var(--brand-radius)]" />
         </div>
       ) : error ? (
-        <EmptyState title="Error" description={error} />
+        <EmptyState title={t('common.error', 'Error')} description={error} />
       ) : tasks.length === 0 ? (
-        <EmptyState title="No active tasks" description="We'll notify you when a new delivery is ready." />
+        <EmptyState title={t('courier.no_tasks', 'No active tasks')} description={t('courier.no_tasks_desc', 'We\'ll notify you when a new delivery is ready.')} />
       ) : (
         <div className="space-y-4">
           {tasks.map(task => (
