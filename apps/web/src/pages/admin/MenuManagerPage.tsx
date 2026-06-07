@@ -605,35 +605,6 @@ export function MenuManagerPage() {
               <Input value={formStock} onChange={e => setFormStock(e.target.value)} placeholder="Leave empty for unlimited" type="number" />
             </div>
 
-            {/* Supplies */}
-            <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.supplies')}</label>
-              <div className="flex flex-wrap gap-1 mb-2">
-                {formIngredients.map((ing, i) => (
-                  <span key={i} className="text-xs px-2 py-0.5 rounded-full flex items-center gap-1" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}>
-                    {ing}
-                    <button onClick={() => setFormIngredients(prev => prev.filter((_, j) => j !== i))} className="hover:text-[var(--color-danger)]">├Ч</button>
-                  </span>
-                ))}
-              </div>
-              <div className="flex gap-1">
-                <select value={newIngredient} onChange={e => setNewIngredient(e.target.value)}
-                  className="flex-1 px-2 py-1.5 text-xs rounded-lg border outline-none"
-                  style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
-                  <option value="">Select from inventory...</option>
-                  {ingredients.filter(i => !formIngredients.includes(i.name)).map(i => (
-                    <option key={i.id} value={i.name}>{i.name} ({i.stock} {i.unit})</option>
-                  ))}
-                </select>
-                <Button size="sm" onClick={() => {
-                  if (newIngredient && !formIngredients.includes(newIngredient)) {
-                    setFormIngredients(prev => [...prev, newIngredient]);
-                    setNewIngredient('');
-                  }
-                }}>+</Button>
-              </div>
-            </div>
-
             {/* Taste Profile */}
             <div>
               <label className="text-xs font-medium mb-2 block" style={{ color: 'var(--brand-text-muted)' }}>Taste Profile <span className="opacity-50">(optional)</span></label>
