@@ -104,7 +104,7 @@ export function AdminShell({ children, activeKey }: AdminShellProps) {
           )}
         </>
       )}
-      <main className="flex-1 overflow-y-auto ${!embed ? 'lg:pt-0 pt-14' : ''}">
+      <main className={'flex-1 overflow-y-auto' + (!embed ? ' lg:pt-0 pt-14' : '')}>
         {children}
       </main>
     </div>
