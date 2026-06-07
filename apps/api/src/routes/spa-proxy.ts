@@ -338,4 +338,46 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     }));
     return reply.send(customers);
   });
+
+  // GET /api/owner/customers/:id/analytics — order history + preferences
+  fastify.get('/api/owner/customers/:id/analytics', async (request, reply) => {
+    const locId = await getLocationId(request);
+    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    const cid = (request.params as any).id;
+
+    const ordersRes = await db.query(
+      `SELECT o.id, o.status, o.total, o.created_at, o.delivery_address,
+              (SELECT jsonb_agg(jsonb_build_object('name', oi.name_snapshot, 'qty', oi.quantity, 'price', oi.price_snapshot))
+               FROM order_items oi WHERE oi.order_id = o.id) as items
+       FROM orders o WHERE o.customer_id = $1 AND o.location_id = $2
+       ORDER BY o.created_at DESC LIMIT 20`,
+      [cid, locId]
+    );
+
+    const prefsRes = await db.query(
+      `SELECT oi.name_snapshot as name, SUM(oi.quantity)::int as total_qty,
+              SUM(oi.price_snapshot * oi.quantity)::int as total_spent
+       FROM order_items oi
+       JOIN orders o ON o.id = oi.order_id
+       WHERE o.customer_id = $1 AND o.location_id = $2
+       GROUP BY oi.name_snapshot
+       ORDER BY total_qty DESC LIMIT 10`,
+      [cid, locId]
+    );
+
+    const heatmapRes = await db.query(
+      `SELECT EXTRACT(DOW FROM o.created_at)::int as dow,
+              EXTRACT(HOUR FROM o.created_at)::int as hour,
+              COUNT(*)::int as cnt
+       FROM orders o WHERE o.customer_id = $1 AND o.location_id = $2
+       GROUP BY dow, hour ORDER BY cnt DESC`,
+      [cid, locId]
+    );
+
+    return reply.send({
+      orders: ordersRes.rows,
+      preferences: prefsRes.rows,
+      heatmap: heatmapRes.rows,
+    });
+  });
 }
