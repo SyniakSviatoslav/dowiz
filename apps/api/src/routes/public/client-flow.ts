@@ -36,7 +36,7 @@ export default (async function clientFlowRoutes(fastify, opts) {
       client.release();
     }
 
-    const csp = `default-src 'self'; img-src 'self' data: https://cdn.dowiz.org; style-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-eval' https://cdn.tailwindcss.com; connect-src 'self' https://cdn.dowiz.org; frame-ancestors ${frameAncestors}`;
+    const csp = `default-src 'self'; img-src 'self' data: https://cdn.dowiz.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; connect-src 'self' https://cdn.dowiz.org; frame-ancestors ${frameAncestors}`;
     reply.header('Content-Security-Policy', csp);
 
     return { nonce, themeData };
