@@ -52,6 +52,7 @@ const MOCK_INGREDIENTS: Ingredient[] = [
 ];
 
 export function MenuManagerPage() {
+  const { t } = useI18n();
   const [categories, setCategories] = useState<Category[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>(MOCK_INGREDIENTS);
   const [loading, setLoading] = useState(true);
