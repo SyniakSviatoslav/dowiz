@@ -324,7 +324,7 @@ export function MenuManagerPage() {
           <option value="unavailable">Stop-listed</option>
         </select>
         <Button onClick={() => setShowIngredients(!showIngredients)} variant="ghost" size="sm">
-          <i className="ti ti-flask" /> {showIngredients ? 'Hide' : 'Ingredients'}
+          <i className="ti ti-packages" /> {showIngredients ? t('common.close') : t('admin.supplies')}
         </Button>
       </div>
 
@@ -332,7 +332,7 @@ export function MenuManagerPage() {
       {showIngredients && (
         <div className="rounded-xl border p-4 space-y-3 slide-in-up" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-sm">Ingredient Inventory</h3>
+            <h3 className="font-semibold text-sm">{t('admin.supplies')}</h3>
             <span className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{ingredients.length} items</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -599,9 +599,9 @@ export function MenuManagerPage() {
               <Input value={formStock} onChange={e => setFormStock(e.target.value)} placeholder="Leave empty for unlimited" type="number" />
             </div>
 
-            {/* Ingredients */}
+            {/* Supplies */}
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>Ingredients</label>
+              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.supplies')}</label>
               <div className="flex flex-wrap gap-1 mb-2">
                 {formIngredients.map((ing, i) => (
                   <span key={i} className="text-xs px-2 py-0.5 rounded-full flex items-center gap-1" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}>

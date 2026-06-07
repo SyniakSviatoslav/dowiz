@@ -264,6 +264,9 @@ importers:
       '@deliveryos/config':
         specifier: workspace:*
         version: link:../config
+      argon2:
+        specifier: ^0.44.0
+        version: 0.44.0
       pg:
         specifier: ^8.21.0
         version: 8.21.0
