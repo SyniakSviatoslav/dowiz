@@ -37,37 +37,25 @@ const HEATMAP_HOURS = [
 ];
 const HOUR_LABELS = ['0-3', '4-7', '8-11', '12-15', '16-19', '20-23'];
 
-function AnimatedBar({ value, maxValue, label, dayLabel, delay }: { value: number; maxValue: number; label: string; dayLabel: string; delay: number }) {
+function SimpleBar({ value, maxValue, label, dayLabel, delay }: { value: number; maxValue: number; label: string; dayLabel: string; delay: number }) {
   const [height, setHeight] = useState(0);
-  const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          setTimeout(() => setHeight((value / maxValue) * 100), delay);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.1 }
-    );
-    if (barRef.current) observer.observe(barRef.current);
-    return () => observer.disconnect();
+    const timer = setTimeout(() => setHeight((value / maxValue) * 100), delay);
+    return () => clearTimeout(timer);
   }, [value, maxValue, delay]);
 
   return (
-    <div ref={barRef} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
-      <span className="text-[10px] font-medium opacity-0 animate-[fadeIn_0.3s_ease-out_forwards]" style={{ color: 'var(--brand-text-muted)', animationDelay: `${delay + 300}ms` }}>
+    <div className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+      <span className="text-[10px] font-medium" style={{ color: 'var(--brand-text-muted)' }}>
         {label}
       </span>
       <div
-        className="w-full rounded-t-md progress-animate"
+        className="w-full rounded-t-md transition-all duration-500 ease-out"
         style={{
           height: `${height}%`,
           minHeight: 4,
           background: 'linear-gradient(to top, var(--brand-primary), var(--brand-primary-hover))',
-          transitionDuration: '0.8s',
-          transitionDelay: `${delay}ms`,
         }}
       />
       <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{dayLabel}</span>
@@ -179,13 +167,18 @@ export function AnalyticsPage() {
       <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{t('admin.revenue_trend', 'Revenue Trend')}</h3>
-          <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
-            {t('admin.total', 'Total:')} {data.chart.reduce((s, c) => s + c.revenue, 0).toLocaleString()} ALL
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
+              {t('admin.total', 'Total:')} {data.chart.reduce((s, c) => s + c.revenue, 0).toLocaleString()} ALL
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'var(--color-success-light)', color: 'var(--color-success)' }}>
+              Avg: {Math.round(data.chart.reduce((s, c) => s + c.revenue, 0) / data.chart.length).toLocaleString()} ALL
+            </span>
+          </div>
         </div>
         <div className="flex items-end gap-2 h-48">
           {data.chart.map((item, idx) => (
-            <AnimatedBar
+            <SimpleBar
               key={item.day}
               value={item.revenue}
               maxValue={maxRevenue}
@@ -215,14 +208,21 @@ export function AnalyticsPage() {
             {data.topProducts.map((p, i) => {
               const firstRevenue = data.topProducts[0]?.revenue ?? p.revenue;
               const barPct = firstRevenue > 0 ? Math.round((p.revenue / firstRevenue) * 100) : 100;
+              const productIcons = ['ti ti-fish', 'ti ti-meat', 'ti ti-salad', 'ti ti-candy', 'ti ti-glass', 'ti ti-soup'];
+              const icon = productIcons[i % productIcons.length];
               return (
                 <div key={i} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors slide-in-right" style={{ animationDelay: `${i * 50}ms` }}>
-                  <span className="text-xs font-bold w-6 text-center shrink-0" style={{ color: i === 0 ? 'var(--brand-primary)' : 'var(--brand-text-muted)' }}>
-                    {i === 0 ? <i className="ti ti-crown" style={{ color: 'var(--color-warning)' }} /> : `#${i + 1}`}
-                  </span>
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--brand-primary-light)' }}>
+                    {i === 0 ? (
+                      <i className="ti ti-crown" style={{ color: 'var(--color-warning)' }} />
+                    ) : (
+                      <i className={icon} style={{ color: 'var(--brand-primary)' }} />
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <div className="text-sm font-medium truncate">{p.name}</div>
+                      {i === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>#1</span>}
                     </div>
                     <div className="h-1 rounded-full" style={{ background: 'var(--brand-border)' }}>
                       <div className="h-full rounded-full progress-animate" style={{ width: `${barPct}%`, background: 'var(--brand-primary)', opacity: 0.3 + (barPct / 100) * 0.7 }} />

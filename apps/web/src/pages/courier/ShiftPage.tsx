@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Button, EmptyState, SkeletonBase } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
 interface ShiftState {
@@ -28,6 +28,7 @@ export function ShiftPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const { t } = useI18n();
 
   const fetchShift = async () => {
     try {
@@ -137,11 +138,11 @@ export function ShiftPage() {
   return (
     <div className="p-4 space-y-6">
       <div className="flex justify-between items-center pb-4 border-b border-[var(--brand-border)]">
-        <h1 className="text-2xl font-bold text-[var(--brand-text)]" style={{ fontFamily: 'var(--brand-font-heading)' }}>Shift</h1>
+        <h1 className="text-2xl font-bold text-[var(--brand-text)]" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('courier.shift_title', 'Shift')}</h1>
         <div className="flex items-center gap-2 text-sm">
           <div className={`w-2 h-2 rounded-full ${shift.isActive ? 'bg-[var(--color-success)] animate-pulse' : 'bg-[var(--brand-text-muted)]'}`} />
           <span className={shift.isActive ? 'text-[var(--color-success)] font-medium' : 'text-[var(--brand-text-muted)]'}>
-            {shift.isActive ? 'On Shift' : 'Offline'}
+            {shift.isActive ? t('courier.on_shift', 'On Shift') : t('courier.offline', 'Offline')}
           </span>
         </div>
       </div>
@@ -156,14 +157,14 @@ export function ShiftPage() {
           </div>
         </div>
       ) : error ? (
-        <EmptyState title="Error" description={error} />
+        <EmptyState title={t('common.error', 'Error')} description={error} />
       ) : (
         <>
           <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-6 text-center">
             {shift.isActive ? (
               <div className="space-y-4">
                 <div className="text-sm font-semibold text-[var(--brand-text-muted)] uppercase tracking-wider">
-                  Current Shift
+                  {t('courier.current_shift', 'Current Shift')}
                 </div>
                 <div className="text-5xl font-black text-[var(--brand-primary)] tabular-nums" style={{ fontFamily: 'var(--font-mono, monospace)' }}>
                   {formatElapsed(shift.elapsedSeconds)}
@@ -178,14 +179,14 @@ export function ShiftPage() {
                   onClick={handleEndShift}
                   isLoading={actionLoading}
                 >
-                  End Shift
+                  {t('courier.end_shift', 'End Shift')}
                 </Button>
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="text-5xl mb-2">{'\u{1F552}'}</div>
                 <div className="text-sm text-[var(--brand-text-muted)]">
-                  You are currently offline. Start your shift to begin receiving delivery tasks.
+                  {t('courier.offline_hint', 'You are currently offline. Start your shift to begin receiving delivery tasks.')}
                 </div>
                 <Button
                   variant="primary"
@@ -194,7 +195,7 @@ export function ShiftPage() {
                   onClick={handleStartShift}
                   isLoading={actionLoading}
                 >
-                  Start Shift
+                  {t('courier.start_shift', 'Start Shift')}
                 </Button>
               </div>
             )}
@@ -202,7 +203,7 @@ export function ShiftPage() {
 
           {stats && (
             <div className="space-y-3">
-              <h2 className="text-lg font-bold text-[var(--brand-text)]">Today's Stats</h2>
+              <h2 className="text-lg font-bold text-[var(--brand-text)]">{t('courier.today_stats', 'Today\'s Stats')}</h2>
               <div className="grid grid-cols-2 gap-3">
                 {statItems.map((item) => (
                   <div

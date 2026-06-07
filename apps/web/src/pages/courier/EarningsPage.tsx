@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { EmptyState, SkeletonBase, StatusBadge } from '@deliveryos/ui';
+import { EmptyState, SkeletonBase, StatusBadge, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
 interface EarningSummary {
@@ -36,6 +36,7 @@ export function EarningsPage() {
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { t } = useI18n();
 
   const fetchEarnings = async () => {
     try {
@@ -60,15 +61,15 @@ export function EarningsPage() {
   }, []);
 
   const summaryCards = summary ? [
-    { label: 'Today', amount: summary.today, icon: '\u2600' },
-    { label: 'This Week', amount: summary.week, icon: '\u{1F4C5}' },
-    { label: 'This Month', amount: summary.month, icon: '\u{1F4B0}' },
+    { label: t('courier.today', 'Today'), amount: summary.today, icon: '\u2600' },
+    { label: t('courier.this_week', 'This Week'), amount: summary.week, icon: '\u{1F4C5}' },
+    { label: t('courier.this_month', 'This Month'), amount: summary.month, icon: '\u{1F4B0}' },
   ] : [];
 
   return (
     <div className="p-4 space-y-6">
       <div className="flex justify-between items-center pb-4 border-b border-[var(--brand-border)]">
-        <h1 className="text-2xl font-bold text-[var(--brand-text)]" style={{ fontFamily: 'var(--brand-font-heading)' }}>Earnings</h1>
+        <h1 className="text-2xl font-bold text-[var(--brand-text)]" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('courier.earnings_title', 'Earnings')}</h1>
       </div>
 
       {loading ? (
@@ -81,7 +82,7 @@ export function EarningsPage() {
           <SkeletonBase className="h-64 rounded-[var(--brand-radius)]" />
         </div>
       ) : error ? (
-        <EmptyState title="Error" description={error} />
+        <EmptyState title={t('common.error', 'Error')} description={error} />
       ) : (
         <>
           <div className="grid grid-cols-3 gap-3">
@@ -99,12 +100,12 @@ export function EarningsPage() {
 
           <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] overflow-hidden">
             <div className="p-4 border-b border-[var(--brand-border)]">
-              <h2 className="font-bold text-[var(--brand-text)]">Payout History</h2>
+              <h2 className="font-bold text-[var(--brand-text)]">{t('courier.payout_history', 'Payout History')}</h2>
             </div>
 
             {payouts.length === 0 ? (
               <div className="p-8">
-                <EmptyState title="No payouts yet" description="Your payouts will appear here once processed." />
+                <EmptyState title={t('courier.no_payouts', 'No payouts yet')} description={t('courier.no_payouts_desc', 'Your payouts will appear here once processed.')} />
               </div>
             ) : (
               <div className="divide-y divide-[var(--brand-border)]">

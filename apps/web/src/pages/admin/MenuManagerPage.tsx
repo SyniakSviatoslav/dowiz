@@ -338,15 +338,15 @@ export function MenuManagerPage() {
                       </div>
                     ) : (
                       products.map((product, idx) => (
-                        <div key={product.id} className="flex items-center gap-3 p-3 bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-xl hover:bg-[var(--brand-surface-raised)] transition-all duration-200 slide-in-up mt-2"
-                          style={{ animationDelay: `${idx * 20}ms` }}>
+                        <div key={product.id} className="flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 hover:bg-[var(--brand-surface)] slide-in-up mt-2"
+                          style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', animationDelay: `${idx * 20}ms` }}>
                           {/* Image or placeholder */}
-                          <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 cursor-pointer"
-                            style={{ background: 'var(--brand-surface-raised)' }}
+                          <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 cursor-pointer flex items-center justify-center"
+                            style={{ background: 'var(--brand-primary-light)' }}
                             onClick={() => setPreviewProduct(product)}>
                             {product.imageUrl
                               ? <img src={product.imageUrl} alt="" className="w-full h-full object-cover" />
-                              : <div className="w-full h-full flex items-center justify-center" style={{ background: 'var(--brand-primary-light)' }}><i className="ti ti-photo text-lg" style={{ color: 'var(--brand-primary)' }} /></div>
+                              : <i className="ti ti-photo" style={{ color: 'var(--brand-primary)' }} />
                             }
                           </div>
 
@@ -381,11 +381,11 @@ export function MenuManagerPage() {
 
                           {/* Actions */}
                           <div className="flex items-center gap-1 shrink-0 ml-2">
-                            <button onClick={() => openEditForm(product)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors" title={t('common.edit')}>
-                              <i className="ti ti-pencil text-[0.85rem]" style={{ color: 'var(--brand-text-muted)' }} />
+                            <button onClick={() => openEditForm(product)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors" title={t('common.edit', 'Edit')}>
+                              <i className="ti ti-edit" style={{ fontSize: '0.85rem', color: 'var(--brand-text-muted)' }} />
                             </button>
-                            <button onClick={() => handleDeleteProduct(cat.id, product.id)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-danger-light)] transition-colors" title={t('common.delete')}>
-                              <i className="ti ti-trash text-[0.85rem]" style={{ color: 'var(--color-danger)' }} />
+                            <button onClick={() => handleDeleteProduct(cat.id, product.id)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-danger-light)] transition-colors" title={t('common.delete', 'Delete')}>
+                              <i className="ti ti-trash" style={{ fontSize: '0.85rem', color: 'var(--brand-text-muted)' }} />
                             </button>
                           </div>
                         </div>

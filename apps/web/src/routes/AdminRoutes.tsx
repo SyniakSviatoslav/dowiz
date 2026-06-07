@@ -10,6 +10,7 @@ import { CRMPage } from '../pages/admin/CRMPage.js';
 import { SettingsPage } from '../pages/admin/SettingsPage.js';
 import { OnboardingPage } from '../pages/admin/OnboardingPage.js';
 import { SupplyLibraryPage } from '../pages/admin/SupplyLibraryPage.js';
+import { FlowTestPage } from '../pages/admin/FlowTestPage.js';
 
 const NAV_ITEMS = [
   { key: 'admin.dashboard', href: '/admin', icon: 'ti ti-layout-dashboard' },
@@ -29,6 +30,8 @@ function AdminLayout() {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [logoClicks, setLogoClicks] = useState(0);
+  const [showFlowTest, setShowFlowTest] = useState(false);
   const isDev = typeof window !== 'undefined' && (sessionStorage.getItem('dos_dev') === '1' || new URLSearchParams(window.location.search).get('dev') === 'true');
   const devSuffix = isDev ? '?dev=true' : '';
 
@@ -39,11 +42,21 @@ function AdminLayout() {
 
   const isActive = (href: string) => location.pathname === href || (href !== '/admin' && location.pathname.startsWith(href));
 
+  const handleLogoClick = () => {
+    const next = logoClicks + 1;
+    setLogoClicks(next);
+    if (next >= 5) {
+      setShowFlowTest(true);
+      setLogoClicks(0);
+    }
+    setTimeout(() => { if (logoClicks < 5) setLogoClicks(0); }, 3000);
+  };
+
   const sidebarWidth = collapsed ? 'w-[56px]' : 'w-56';
 
   const SidebarNav = () => (
     <nav className="flex-1 p-2 space-y-0.5 overflow-auto">
-      {NAV_ITEMS.map(item => (
+      {[...NAV_ITEMS, ...(showFlowTest ? [{ key: 'admin.flow_test', href: '/admin/_flow-test', icon: 'ti ti-flask' }] : [])].map(item => (
         <button
           key={item.href}
               onClick={() => { navTo(item.href); setMobileOpen(false); }}
@@ -62,20 +75,20 @@ function AdminLayout() {
   );
 
   return (
-    <div className="min-h-screen bg-[var(--brand-bg)] text-[var(--brand-text)] flex">
+    <div className="h-screen bg-[var(--brand-bg)] text-[var(--brand-text)] flex overflow-hidden">
       {/* Desktop sidebar */}
       <aside className={`hidden lg:flex flex-col shrink-0 bg-[var(--brand-surface)] border-r border-[var(--brand-border)] sidebar-transition overflow-hidden ${sidebarWidth}`}>
         <div className={`flex items-center border-b border-[var(--brand-border)] ${collapsed ? 'justify-center p-3' : 'justify-between p-4'}`}>
           {!collapsed && (
-            <div className="flex items-center gap-2">
+            <button onClick={handleLogoClick} className="flex items-center gap-2 cursor-pointer select-none">
               <span className="text-xl">🍱</span>
               <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Dowiz</h2>
-            </div>
+            </button>
           )}
           <button
             onClick={() => setCollapsed(c => !c)}
             className="w-7 h-7 flex items-center justify-center rounded-md text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)] hover:text-[var(--brand-text)] transition-colors"
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? t('admin.expand_sidebar', 'Expand sidebar') : t('admin.collapse_sidebar', 'Collapse sidebar')}
           >
             <i className={`ti ${collapsed ? 'ti-chevron-right' : 'ti-chevron-left'} text-sm`} />
           </button>
@@ -127,7 +140,7 @@ function AdminLayout() {
       )}
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto lg:pt-0 pt-14">
+      <main className="flex-1 overflow-y-auto lg:pt-0 pt-14 h-full">
         <Outlet />
       </main>
     </div>
@@ -149,6 +162,7 @@ export function AdminRoutes() {
           <Route path="crm" element={<CRMPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="onboarding" element={<OnboardingPage />} />
+          <Route path="_flow-test" element={<FlowTestPage />} />
         </Route>
       </Routes>
     </ToastProvider>

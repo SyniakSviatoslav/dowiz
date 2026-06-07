@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap } from '@deliveryos/ui';
+import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, useI18n } from '@deliveryos/ui';
 import type { CourierTask, CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient, useGeolocation, useWebSocket } from '../../lib/index.js';
 
@@ -14,6 +14,7 @@ export function DeliveryPage() {
   const [task, setTask] = useState<CourierTask | null>(null);
   const [loading, setLoading] = useState(true);
   const [courierPos, setCourierPos] = useState<LngLatLike>(TIRANA_CENTER);
+  const { t } = useI18n();
 
   const { position, error: geoError } = useGeolocation({
     enableHighAccuracy: true,
@@ -103,7 +104,7 @@ export function DeliveryPage() {
   ];
 
   if (loading) return <div className="p-4"><SkeletonBase className="h-64 w-full" /></div>;
-  if (!task) return <EmptyState title="Not found" description="Delivery task not found." />;
+  if (!task) return <EmptyState title={t('courier.not_found', 'Not found')} description={t('courier.task_not_found', 'Delivery task not found.')} />;
 
   return (
     <div className="flex flex-col h-screen bg-[var(--brand-surface)] text-[var(--brand-text)] relative">
@@ -130,7 +131,7 @@ export function DeliveryPage() {
 
         <div className="absolute top-4 right-4 bg-white/90 p-1.5 rounded-full shadow-md flex gap-2 items-center px-3 z-10">
           <WSStatusDot status={wsStatus === 'disabled' ? 'disconnected' : wsStatus} />
-          {position && <div className="w-2 h-2 rounded-full bg-[var(--color-info)] animate-pulse" title="GPS Active" />}
+          {position && <div className="w-2 h-2 rounded-full bg-[var(--color-info)] animate-pulse" title={t('courier.gps_active', 'GPS Active')} />}
         </div>
       </div>
 
@@ -140,7 +141,7 @@ export function DeliveryPage() {
 
         <div className="flex justify-between items-center">
           <div>
-            <h2 className="text-xl font-bold text-[var(--brand-text)]">Drop-off</h2>
+            <h2 className="text-xl font-bold text-[var(--brand-text)]">{t('courier.dropoff', 'Drop-off')}</h2>
             <div className="text-[var(--brand-text-muted)]">{task.customer.address}</div>
           </div>
           <div className="text-right">
