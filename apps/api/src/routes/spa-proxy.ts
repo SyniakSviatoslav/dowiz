@@ -218,19 +218,33 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   fastify.get('/api/owner/settings', async (request, reply) => {
     const locId = await getLocationId(request);
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const res = await db.query(`SELECT name, phone, delivery_fee_flat, min_order_value, free_delivery_threshold, delivery_radius_km FROM locations WHERE id = $1`, [locId]);
+    const res = await db.query(`SELECT name, phone, delivery_fee_flat, min_order_value, free_delivery_threshold, delivery_radius_km, currency_code, tax_rate FROM locations WHERE id = $1`, [locId]);
     if (!res.rows[0]) return reply.status(404).send({ error: 'Not found' });
-    return reply.send(res.rows[0]);
+    const r = res.rows[0];
+    return reply.send({
+      locationName: r.name,
+      phone: r.phone || '',
+      address: r.public_address || '',
+      deliveryFee: r.delivery_fee_flat || 0,
+      minOrder: r.min_order_value || 0,
+      radiusKm: r.delivery_radius_km || 0,
+      freeDeliveryThreshold: r.free_delivery_threshold || 0,
+      currencyCode: r.currency_code || 'ALL',
+      taxRate: r.tax_rate || 0,
+    });
   });
 
   // PUT /api/owner/settings
   fastify.put('/api/owner/settings', async (request, reply) => {
     const locId = await getLocationId(request);
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const { locationName, phone, address, deliveryFee, minOrder, radiusKm } = request.body as any;
+    const { locationName, phone, address, deliveryFee, minOrder, radiusKm, freeDeliveryThreshold, taxRate } = request.body as any;
     await db.query(
-      `UPDATE locations SET name = COALESCE($1, name), phone = COALESCE($2, phone), delivery_fee_flat = COALESCE($3, delivery_fee_flat), min_order_value = COALESCE($4, min_order_value), delivery_radius_km = COALESCE($5, delivery_radius_km) WHERE id = $6`,
-      [locationName || null, phone || null, deliveryFee ?? null, minOrder ?? null, radiusKm ?? null, locId]
+      `UPDATE locations SET name = COALESCE($1, name), phone = COALESCE($2, phone),
+       delivery_fee_flat = COALESCE($3, delivery_fee_flat), min_order_value = COALESCE($4, min_order_value),
+       delivery_radius_km = COALESCE($5, delivery_radius_km), free_delivery_threshold = COALESCE($6, free_delivery_threshold),
+       tax_rate = COALESCE($7, tax_rate) WHERE id = $8`,
+      [locationName || null, phone || null, deliveryFee ?? null, minOrder ?? null, radiusKm ?? null, freeDeliveryThreshold ?? null, taxRate ?? null, locId]
     );
     return reply.send({ ok: true });
   });
