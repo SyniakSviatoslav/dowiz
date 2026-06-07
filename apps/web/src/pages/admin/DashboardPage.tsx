@@ -18,6 +18,7 @@ export function DashboardPage() {
   const { t } = useI18n();
   const [clientSlug, setClientSlug] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
+  const [readiness, setReadiness] = useState<{ menu: boolean; phone: boolean; address: boolean; couriers: boolean; branding: boolean; placeOrder: boolean }>({ menu: false, phone: false, address: false, couriers: false, branding: false, placeOrder: false });
 
   const { play: playPing } = useSound('/sounds/ping.mp3');
   const tenantId = 't1';
@@ -49,6 +50,23 @@ export function DashboardPage() {
         const generated = res.locationName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
         setClientSlug(generated);
       }
+      // Compute readiness from actual data
+      const r = { menu: false, phone: false, address: false, couriers: false, branding: false, placeOrder: false };
+      r.phone = !!(res.phone && res.phone.length > 5);
+      r.address = !!(res.address && res.address.length > 5);
+      r.branding = !!(res.locationName && res.locationName.length > 2);
+      setReadiness(r);
+    }).catch(() => {});
+    // Check menu + couriers in parallel
+    Promise.all([
+      apiClient<any>('/owner/menu/categories').catch(() => []),
+      apiClient<any>('/owner/couriers').catch(() => []),
+    ]).then(([cats, couriers]) => {
+      setReadiness(prev => ({
+        ...prev,
+        menu: Array.isArray(cats) && cats.length > 0,
+        couriers: Array.isArray(couriers) && couriers.length > 0,
+      }));
     }).catch(() => {});
   }, []);
 
@@ -105,13 +123,12 @@ export function DashboardPage() {
     : ['all', 'DELIVERED', 'CANCELLED'];
 
   const readinessItems = [
-    { label: t('admin.menu', 'Menu'), done: true, icon: 'ti ti-tools-kitchen-2' },
-    { label: t('auth.phone', 'Phone number'), done: true, icon: 'ti ti-phone' },
-    { label: t('checkout.delivery_address', 'Delivery address'), done: true, icon: 'ti ti-map-pin' },
-    { label: t('admin.couriers', 'Couriers'), done: false, icon: 'ti ti-motorbike' },
-    { label: t('admin.branding', 'Branding'), done: true, icon: 'ti ti-palette' },
-    { label: t('supply.allergens', 'Allergens'), done: false, icon: 'ti ti-alert-triangle' },
-    { label: t('checkout.place_order', 'Place order'), done: false, icon: 'ti ti-shopping-cart' },
+    { label: t('admin.menu', 'Menu'), done: readiness.menu, icon: 'ti ti-tools-kitchen-2' },
+    { label: t('auth.phone', 'Phone number'), done: readiness.phone, icon: 'ti ti-phone' },
+    { label: t('checkout.delivery_address', 'Delivery address'), done: readiness.address, icon: 'ti ti-map-pin' },
+    { label: t('admin.couriers', 'Couriers'), done: readiness.couriers, icon: 'ti ti-motorbike' },
+    { label: t('admin.branding', 'Branding'), done: readiness.branding, icon: 'ti ti-palette' },
+    { label: t('checkout.place_order', 'Place order'), done: orders.length > 0, icon: 'ti ti-shopping-cart' },
     { label: t('checkout.payment_method', 'Payment method'), done: true, icon: 'ti ti-cash' },
   ];
   const doneCount = readinessItems.filter(r => r.done).length;

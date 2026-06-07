@@ -502,8 +502,8 @@ async function main() {
   fastify.register(ownerThemeRoutes, { db: pool, storage });
   fastify.register(publicThemeRoutes, { db: pool });
   fastify.register(ownerNotificationRoutes, { db: pool, queue });
-  fastify.register(menuImportRoutes, { db: pool, messageBus, parsers, storage, translation });
-  fastify.register(menuTranslateRoutes, { db: pool, messageBus, translation });
+  fastify.register(menuImportRoutes, { prefix: '/api/owner', db: pool, messageBus, parsers, storage, translation });
+  fastify.register(menuTranslateRoutes, { prefix: '/api/owner', db: pool, messageBus, translation });
   fastify.register(courierAuthRoutes, { db: pool });
   fastify.register(courierMeRoutes, { db: pool });
   fastify.register(ownerCourierRoutes, { db: pool });

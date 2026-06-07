@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Button, Input, EmptyState, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { RecipeEditor } from './RecipeEditor.js';
-import { AllergenEditor, ReadinessIndicator } from './AllergenEditor.js';
 
 
 interface Product {
@@ -16,8 +15,6 @@ interface Product {
 
   stockCount?: number;
   taste?: { spicy?: number; sweet?: number; salty?: number; sour?: number; richness?: number };
-  allergenStatus?: 'unset' | 'none' | 'listed';
-  allergensList?: string[];
 }
 
 interface Category {
@@ -66,8 +63,6 @@ export function MenuManagerPage() {
   const TASTE_LABELS: Record<string, string> = { spicy: 'Spicy', sweet: 'Sweet', salty: 'Salty', sour: 'Sour', richness: 'Richness' };
   const TASTE_ICONS: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
   const [formTaste, setFormTaste] = useState<Record<string, number>>({});
-  const [formAllergenStatus, setFormAllergenStatus] = useState<'unset' | 'none' | 'listed'>('unset');
-  const [formAllergensList, setFormAllergensList] = useState<string[]>([]);
   const [formRecipeLines, setFormRecipeLines] = useState<Array<{supplyId: string; supplyName: string; qty: number; unit: string; kind: string; kcal: number | null; proteinG: number | null; fatG: number | null; carbsG: number | null; allergens: string[]}>>([]);
 
   // Filter/sort state
@@ -112,8 +107,6 @@ export function MenuManagerPage() {
     setFormStock('');
 
     setFormTaste({});
-    setFormAllergenStatus('unset');
-    setFormAllergensList([]);
     setExpandedCat(categoryId);
   };
 
@@ -128,8 +121,6 @@ export function MenuManagerPage() {
     setFormStock(product.stockCount != null ? String(product.stockCount) : '');
 
     setFormTaste(product.taste || {});
-    setFormAllergenStatus(product.allergenStatus || 'unset');
-    setFormAllergensList(product.allergensList || []);
   };
 
   const closeForm = () => {
@@ -163,11 +154,6 @@ export function MenuManagerPage() {
       description: formDesc,
       available: formAvailable,
       imageUrl: formImage || undefined,
-
-      stockCount: stock,
-      taste: Object.keys(formTaste).length > 0 ? formTaste : undefined,
-      allergenStatus: formAllergenStatus,
-      allergensList: formAllergenStatus === 'listed' ? formAllergensList : undefined,
       categoryId: expandedCat,
     };
 
@@ -591,21 +577,6 @@ export function MenuManagerPage() {
 
             {/* BOM Recipe */}
             <RecipeEditor lines={formRecipeLines} onChange={setFormRecipeLines}
-              onBomAllergensChange={(allergens) => {
-                if (allergens.length > 0 && formAllergenStatus === 'unset') {
-                  setFormAllergenStatus('listed');
-                  setFormAllergensList(allergens);
-                }
-              }}
-            />
-
-            {/* Allergen Attestation (replaces inline) */}
-            <AllergenEditor
-              status={formAllergenStatus}
-              declaredAllergens={formAllergensList}
-              bomAllergens={[...new Set(formRecipeLines.flatMap(l => l.allergens))]}
-              onStatusChange={setFormAllergenStatus}
-              onAllergensChange={setFormAllergensList}
             />
 
             {/* Stock count */}
@@ -650,13 +621,6 @@ export function MenuManagerPage() {
                 ))}
               </div>
             </div>
-
-            {/* Readiness indicator */}
-            <ReadinessIndicator checks={[
-              { label: t('admin.name_set', 'Name set'), pass: !!formName.trim() },
-              { label: t('admin.price_set', 'Price set'), pass: !!formPrice && parseInt(formPrice) > 0 },
-              { label: t('admin.allergens_declared', 'Allergens declared'), pass: formAllergenStatus !== 'unset' },
-            ]} />
 
             <label className="flex items-center gap-3 cursor-pointer">
               <input type="checkbox" checked={formAvailable} onChange={e => setFormAvailable(e.target.checked)} className="w-4 h-4 rounded accent-[var(--brand-primary)]" />
