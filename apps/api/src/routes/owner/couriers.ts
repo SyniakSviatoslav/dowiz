@@ -4,13 +4,14 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import argon2 from 'argon2';
-import { requireLocationAccess } from '../../plugins/auth.js';
+import { verifyAuth, requireLocationAccess } from '../../plugins/auth.js';
 import { decryptPII } from '../../lib/pii-cipher.js';
 import { maskStr } from '../../lib/pii-mask.js';
 
 export default (async function ownerCourierRoutes(fastify, opts) {
   const { db } = opts as any;
 
+  fastify.addHook('preValidation', verifyAuth);
   fastify.addHook('preValidation', requireLocationAccess);
 
   // 1. List active members
