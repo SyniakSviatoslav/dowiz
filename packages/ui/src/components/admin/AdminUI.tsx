@@ -175,9 +175,24 @@ export function OrderCard({ order, onUpdateStatus, isLoading }: OrderCardProps) 
 
       {/* Details */}
       <div className="text-sm space-y-1 text-[var(--brand-text)]">
-        <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">Items:</span> {order.items.length} items ({formatALL(order.total)})</div>
+        {order.customerName && order.customerName !== 'Unknown' && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">Client:</span> {order.customerName}</div>}
         {order.customerPhone && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">Phone:</span> {order.customerPhone}</div>}
         {order.deliveryAddress && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">To:</span> {order.deliveryAddress}</div>}
+        <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">Items:</span> {order.items?.length || 0} items ({formatALL(order.total)})</div>
+        {order.items && order.items.length > 0 && (
+          <div className="ml-16 text-xs space-y-0.5" style={{ color: 'var(--brand-text-muted)' }}>
+            {order.items.map((item: any, i: number) => (
+              <div key={i} className="flex justify-between">
+                <span>{item.name} ×{item.qty || item.quantity}</span>
+                <span>{item.price ? formatALL(item.price * (item.qty || item.quantity)) : ''}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {order.courierName && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">Courier:</span> {order.courierName}</div>}
+        {order.elapsedSeconds > 0 && (
+          <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">Time:</span> {Math.floor(order.elapsedSeconds / 60)}m ago</div>
+        )}
       </div>
 
       {/* Actions */}
