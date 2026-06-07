@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { EmptyState, SkeletonBase, StatusBadge } from '@deliveryos/ui';
+import { EmptyState, SkeletonBase, StatusBadge, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
 interface DeliveryHistory {
@@ -27,6 +27,7 @@ export function HistoryPage() {
   const [deliveries, setDeliveries] = useState<DeliveryHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { t } = useI18n();
 
   const fetchHistory = async () => {
     try {
@@ -54,7 +55,7 @@ export function HistoryPage() {
   };
 
   const renderStars = (rating?: number) => {
-    if (!rating) return <span className="text-xs text-[var(--brand-text-muted)]">No rating</span>;
+    if (!rating) return <span className="text-xs text-[var(--brand-text-muted)]">{t('courier.no_rating', 'No rating')}</span>;
     return (
       <div className="flex items-center gap-0.5">
         {[1, 2, 3, 4, 5].map((star) => (
@@ -69,9 +70,9 @@ export function HistoryPage() {
   return (
     <div className="p-4 space-y-6">
       <div className="flex justify-between items-center pb-4 border-b border-[var(--brand-border)]">
-        <h1 className="text-2xl font-bold text-[var(--brand-text)]" style={{ fontFamily: 'var(--brand-font-heading)' }}>History</h1>
+        <h1 className="text-2xl font-bold text-[var(--brand-text)]" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('courier.history_title', 'History')}</h1>
         <div className="text-sm text-[var(--brand-text-muted)]">
-          {deliveries.length} deliveries
+          {deliveries.length} {t('courier.deliveries_count', 'deliveries')}
         </div>
       </div>
 
@@ -82,9 +83,9 @@ export function HistoryPage() {
           ))}
         </div>
       ) : error ? (
-        <EmptyState title="Error" description={error} />
+        <EmptyState title={t('common.error', 'Error')} description={error} />
       ) : deliveries.length === 0 ? (
-        <EmptyState title="No deliveries yet" description="Your completed deliveries will appear here." />
+        <EmptyState title={t('courier.no_deliveries', 'No deliveries yet')} description={t('courier.no_deliveries_desc', 'Your completed deliveries will appear here.')} />
       ) : (
         <div className="space-y-3">
           {deliveries.map((delivery) => (
