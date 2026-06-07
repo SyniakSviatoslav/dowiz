@@ -190,8 +190,8 @@ export function OrderCard({ order, onUpdateStatus, isLoading }: OrderCardProps) 
           </div>
         )}
         {order.courierName && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">Courier:</span> {order.courierName}</div>}
-        {order.elapsedSeconds > 0 && (
-          <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">Time:</span> {Math.floor(order.elapsedSeconds / 60)}m ago</div>
+        {order.elapsedSeconds !== undefined && order.elapsedSeconds > 1800 && (
+        <span className="text-red-500 font-bold ml-2">Overdue! ({Math.floor(order.elapsedSeconds / 60)} min)</span>
         )}
       </div>
 
