@@ -132,7 +132,7 @@ export function FlowTestPage() {
         throw new Error('No couriers available. Add a courier first.');
       }
       addLog(`Assigning courier: ${courierId}...`);
-      await apiClient(`/owner/${locationId}/orders/${newOrderId}/assign-courier`, {
+      await apiClient(`/owner/locations/${locationId}/orders/${newOrderId}/assign-courier`, {
         method: 'POST',
         body: { courierId }
       });

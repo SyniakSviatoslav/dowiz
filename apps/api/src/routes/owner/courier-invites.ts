@@ -4,7 +4,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import argon2 from 'argon2';
-import { requireLocationAccess } from '../../plugins/auth.js';
+import { verifyAuth, requireLocationAccess } from '../../plugins/auth.js';
 
 export default (async function ownerCourierInvitesRoutes(fastify, opts) {
   const { db } = opts as any;
@@ -17,6 +17,7 @@ export default (async function ownerCourierInvitesRoutes(fastify, opts) {
     parallelism: 4
   };
 
+  fastify.addHook('preValidation', verifyAuth);
   fastify.addHook('preValidation', requireLocationAccess);
 
   // 1. Create Invite
