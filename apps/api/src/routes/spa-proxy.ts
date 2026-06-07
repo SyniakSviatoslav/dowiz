@@ -173,7 +173,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
     const res = await db.query(
       `SELECT u.id, COALESCE(u.display_name, u.email) as display_name, u.phone,
-              COALESCE(cs.status, 'offline') as courier_status
+              COALESCE(cs.status, 'offline') as courier_status,
+              (SELECT COUNT(*) FROM courier_assignments ca2 WHERE ca2.courier_id = u.id AND ca2.status = 'delivered') as deliveries_completed
        FROM users u
        JOIN memberships m ON m.user_id = u.id
        LEFT JOIN courier_shifts cs ON cs.courier_id = u.id AND cs.status != 'offline'
@@ -181,7 +182,15 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
        GROUP BY u.id, cs.status`,
       [locId]
     );
-    return reply.send(res.rows);
+    const couriers = res.rows.map((r: any) => ({
+      id: r.id,
+      name: r.display_name || 'Unknown',
+      phone: r.phone || '',
+      status: r.courier_status === 'available' ? 'online' : r.courier_status === 'on_delivery' ? 'busy' : 'offline',
+      deliveriesCompleted: parseInt(r.deliveries_completed) || 0,
+      rating: 0,
+    }));
+    return reply.send(couriers);
   });
 
   // GET /api/owner/brand → theme
