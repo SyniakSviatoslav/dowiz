@@ -21,7 +21,8 @@ async function waitForHealth(url: string, retries = 30) {
       const res = await fetch(url);
       if (res.ok) return true;
     } catch {
-      // ignore
+      // server not ready yet — retry
+      console.debug('[verify-stage9] health check failed, retrying');
     }
     await new Promise(r => setTimeout(r, 500));
   }
@@ -58,9 +59,9 @@ async function main() {
     // 3. Run tests
     await runTests();
     
-    console.log('✅ verify:n2 completed successfully!');
+    console.log('✅ verify:stage9 completed successfully!');
   } catch (err) {
-    console.error('❌ verify:n2 failed:', err);
+    console.error('❌ verify:stage9 failed:', err);
     process.exitCode = 1;
   } finally {
     console.log('Cleaning up processes...');

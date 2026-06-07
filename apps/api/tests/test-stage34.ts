@@ -258,6 +258,9 @@ function findTsFiles(dir: string): string[] {
         results.push(full);
       }
     }
-  } catch { }
+  } catch {
+    // skip unreadable directories
+    console.debug('[test-stage34] skipping unreadable dir');
+  }
   return results;
 }

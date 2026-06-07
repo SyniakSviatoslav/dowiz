@@ -27,6 +27,11 @@
   --color-warning-light: rgba(217, 119, 6, 0.08);
   --color-danger-light: rgba(220, 38, 38, 0.08);
   --color-info-light: rgba(37, 99, 235, 0.08);
+  --color-on-primary: #ffffff;
+  --color-on-success: #ffffff;
+  --color-on-danger: #ffffff;
+  --color-on-warning: #ffffff;
+  --color-on-info: #ffffff;
 
   /* ── Status colors ── */
   --status-pending: #D97706;
@@ -39,6 +44,42 @@
   --status-cancelled: #DC2626;
   --status-scheduled: #7C3AED;
   --status-picked-up: #0D9488;
+
+  /* ── Status badge backgrounds (20% opacity) ── */
+  --status-pending-bg: rgba(217, 119, 6, 0.2);
+  --status-confirmed-bg: rgba(37, 99, 235, 0.2);
+  --status-preparing-bg: rgba(245, 158, 11, 0.2);
+  --status-ready-bg: rgba(13, 148, 136, 0.2);
+  --status-in-delivery-bg: rgba(59, 130, 246, 0.2);
+  --status-delivered-bg: rgba(5, 150, 105, 0.2);
+  --status-rejected-bg: rgba(220, 38, 38, 0.2);
+  --status-cancelled-bg: rgba(220, 38, 38, 0.2);
+  --status-scheduled-bg: rgba(124, 58, 237, 0.2);
+  --status-picked-up-bg: rgba(13, 148, 136, 0.2);
+
+  /* ── Status badge borders (30% opacity) ── */
+  --status-pending-border: rgba(217, 119, 6, 0.3);
+  --status-confirmed-border: rgba(37, 99, 235, 0.3);
+  --status-preparing-border: rgba(245, 158, 11, 0.3);
+  --status-ready-border: rgba(13, 148, 136, 0.3);
+  --status-in-delivery-border: rgba(59, 130, 246, 0.3);
+  --status-delivered-border: rgba(5, 150, 105, 0.3);
+  --status-rejected-border: rgba(220, 38, 38, 0.3);
+  --status-cancelled-border: rgba(220, 38, 38, 0.3);
+  --status-scheduled-border: rgba(124, 58, 237, 0.3);
+  --status-picked-up-border: rgba(13, 148, 136, 0.3);
+
+  /* ── Status badge light backgrounds (10% opacity) ── */
+  --status-pending-light: rgba(217, 119, 6, 0.1);
+  --status-confirmed-light: rgba(37, 99, 235, 0.1);
+  --status-preparing-light: rgba(245, 158, 11, 0.1);
+  --status-ready-light: rgba(13, 148, 136, 0.1);
+  --status-in-delivery-light: rgba(59, 130, 246, 0.1);
+  --status-delivered-light: rgba(5, 150, 105, 0.1);
+  --status-rejected-light: rgba(220, 38, 38, 0.1);
+  --status-cancelled-light: rgba(220, 38, 38, 0.1);
+  --status-scheduled-light: rgba(124, 58, 237, 0.1);
+  --status-picked-up-light: rgba(13, 148, 136, 0.1);
 
   /* ── Spacing ── */
   --space-0: 0px;

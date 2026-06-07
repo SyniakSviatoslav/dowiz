@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap } from '@deliveryos/ui';
+import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, useI18n } from '@deliveryos/ui';
 import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { calcETA } from '@deliveryos/shared-types';
 
 export function OrderStatusPage() {
   const { slug, id } = useParams<{ slug: string, id: string }>();
+  const { t } = useI18n();
   
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -118,13 +119,13 @@ export function OrderStatusPage() {
           <h1 className="text-2xl font-bold text-[var(--brand-text)] mb-1" style={{ fontFamily: 'var(--brand-font-heading)' }}>
             {calcETA(order.createdAt, order.elapsedSeconds || 0)}
           </h1>
-          <p className="text-[var(--brand-text-muted)] text-sm">Estimated arrival</p>
+          <p className="text-[var(--brand-text-muted)] text-sm">{t('client.estimated_arrival', 'Estimated arrival')}</p>
         </div>
 
         <OrderProgress status={order.status} />
 
         <div className="bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4">
-          <h2 className="font-semibold mb-3">Order Details #{order.id.substring(0, 4)}</h2>
+          <h2 className="font-semibold mb-3">{t('client.order_details', 'Order Details #{{id}}', { id: order.id.substring(0, 4) })}</h2>
           <div className="space-y-2 text-sm">
             {order.items?.map((item: any, i: number) => (
               <div key={i} className="flex justify-between">
@@ -134,7 +135,7 @@ export function OrderStatusPage() {
             ))}
           </div>
           <div className="border-t border-[var(--brand-border)] mt-4 pt-4 flex justify-between font-bold">
-            <span>Total</span>
+            <span>{t('client.total', 'Total')}</span>
             <span>{order.total} ALL</span>
           </div>
         </div>

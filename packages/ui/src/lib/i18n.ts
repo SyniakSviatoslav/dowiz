@@ -107,7 +107,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'admin.couriers_live': 'Postieret Live',
     'category.all': 'Te gjitha',
     'language.name': 'Shqip',
-    'supply.ingredients': 'Perberesit',
+    'supply.food': 'Ushqim',
     'supply.sauces': 'Salcat',
     'supply.packaging': 'Ambalazhimi',
     'supply.utensils': 'Veglat',
@@ -250,7 +250,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'admin.couriers_live': 'Couriers Live',
     'category.all': 'All',
     'language.name': 'English',
-    'supply.ingredients': 'Ingredients',
+    'supply.food': 'Food',
     'supply.sauces': 'Sauces',
     'supply.packaging': 'Packaging',
     'supply.utensils': 'Utensils',
@@ -393,7 +393,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'admin.couriers_live': 'Kuriery Live',
     'category.all': 'Vsi',
     'language.name': 'Ukrainska',
-    'supply.ingredients': 'Inhrediienty',
+    'supply.food': 'Yizha',
     'supply.sauces': 'Sousy',
     'supply.packaging': 'Upakovka',
     'supply.utensils': 'Pryladdia',
@@ -440,13 +440,19 @@ const messages: Record<Locale, Record<string, string>> = {
 
 const listeners: Array<() => void> = [];
 
-export function t(key: string, fallback?: string): string {
-  return messages[currentLocale]?.[key] || fallback || key;
+export function t(key: string, fallback?: string, options?: Record<string, any>): string {
+  return translate(currentLocale, key, fallback, options);
 }
 
 // Stateless translation lookup — used by I18nProvider for reactive t()
-export function translate(locale: Locale, key: string, fallback?: string): string {
-  return messages[locale]?.[key] || fallback || key;
+export function translate(locale: Locale, key: string, fallback?: string, options?: Record<string, any>): string {
+  let str = messages[locale]?.[key] || fallback || key;
+  if (options) {
+    for (const [k, v] of Object.entries(options)) {
+      str = str.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), String(v));
+    }
+  }
+  return str;
 }
 
 export function setLocale(locale: Locale): void {

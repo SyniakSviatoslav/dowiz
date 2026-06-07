@@ -96,7 +96,8 @@ test('H1: Adversarial cross-tenant RLS audit', async (t) => {
               [crypto.randomUUID(), tenantBLocationId],
             );
           } catch {
-            // RLS policy violation is fine
+            // RLS policy violation is expected in adversarial test
+            console.debug('[rls-adversarial] expected RLS violation for', table);
           }
           // Verify nothing was inserted
           const check = await client.query(
@@ -191,6 +192,9 @@ function findTsFiles(dir: string): string[] {
         results.push(full);
       }
     }
-  } catch { }
+  } catch {
+    // skip unreadable directories
+    console.debug('[rls-adversarial] skipping unreadable dir');
+  }
   return results;
 }

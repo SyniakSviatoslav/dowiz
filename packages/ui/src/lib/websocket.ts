@@ -119,6 +119,7 @@ export class WsClient {
         }
       } catch {
         // Ignore malformed messages
+        console.debug('[websocket] received malformed message');
       }
     };
   }

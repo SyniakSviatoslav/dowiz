@@ -10,23 +10,40 @@ export default tseslint.config(
       local: localPlugin,
     },
     rules: {
+      // --- Existing rules (kept) ---
       'local/no-raw-sql': 'warn',
-      '@typescript-eslint/no-unused-vars': 'off',
-      '@typescript-eslint/no-explicit-any': 'off',
       'no-useless-escape': 'off',
       'no-empty': 'off',
       '@typescript-eslint/ban-ts-comment': 'off',
-      'prefer-const': 'off',
       'no-undef': 'off',
-      '@typescript-eslint/no-unused-expressions': 'off',
       '@typescript-eslint/no-require-imports': 'off',
-      'no-misleading-character-class': 'off'
+
+      // --- Tightened rules ---
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-explicit-any': 'warn',
+      'prefer-const': 'warn',
+      '@typescript-eslint/no-unused-expressions': 'warn',
+      'no-misleading-character-class': 'warn',
+
+      // --- New programmatic rules ---
+      'local/no-ts-nocheck': 'warn',
+      'local/no-raw-any': 'warn',
+      'local/no-duplicate-import': 'warn',
+      'local/no-empty-catch': 'warn',
+      'local/no-mock-in-prod': 'warn',
     },
   },
   {
     files: ['packages/ui/**', 'apps/web/**', 'tools/eslint-plugin-local/__fixtures__/**'],
     rules: {
       'local/no-hardcoded-color': 'warn',
+      'local/no-hardcoded-tailwind-color': 'warn',
+    },
+  },
+  {
+    files: ['apps/api/src/routes/owner/**', 'apps/api/src/routes/courier/**'],
+    rules: {
+      'local/require-auth-hook': 'warn',
     },
   },
   {

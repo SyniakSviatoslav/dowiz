@@ -1,5 +1,10 @@
 import { useRef, useEffect, useState, useCallback, type ReactNode } from 'react';
 
+function getCSSVar(name: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
 type LngLatLike = [number, number];
 
 interface MapLibreBaseProps {
@@ -97,7 +102,7 @@ export function MapLibreBase({
 
       markers.forEach(m => {
         const el = document.createElement('div');
-        const color = m.color || '#ea4f16';
+        const color = m.color || getCSSVar('--brand-primary', '#ea4f16');
         const label = m.label || '';
         el.style.width = '28px';
         el.style.height = '28px';
@@ -156,7 +161,7 @@ export function MapLibreBase({
         type: 'line',
         source: sourceId,
         layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': '#ea4f16', 'line-width': 4, 'line-opacity': 0.8 },
+        paint: { 'line-color': getCSSVar('--brand-primary', '#ea4f16'), 'line-width': 4, 'line-opacity': 0.8 },
       });
     }
 
@@ -199,14 +204,14 @@ export function MapLibreBase({
         id: sourceId,
         type: 'fill',
         source: sourceId,
-        paint: { 'fill-color': '#ea4f16', 'fill-opacity': 0.15 },
+        paint: { 'fill-color': getCSSVar('--brand-primary', '#ea4f16'), 'fill-opacity': 0.15 },
       });
 
       mapRef.current.addLayer({
         id: `${sourceId}-outline`,
         type: 'line',
         source: sourceId,
-        paint: { 'line-color': '#ea4f16', 'line-width': 2, 'line-opacity': 0.6 },
+        paint: { 'line-color': getCSSVar('--brand-primary', '#ea4f16'), 'line-width': 2, 'line-opacity': 0.6 },
       });
     }
 

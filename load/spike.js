@@ -79,8 +79,9 @@ export function placeOrder() {
       const menu = JSON.parse(menuRes.body);
       locationId = menu.locationId || menu.location_id || '';
       payload.locationId = locationId;
-    } catch { }
-  }
+    } catch {
+      // menu response is not JSON — use fallback locationId
+    }
 
   const headers = { 'Content-Type': 'application/json' };
   if (locationId) {

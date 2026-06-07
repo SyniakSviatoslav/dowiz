@@ -328,7 +328,10 @@ function parseState(raw: any): any {
         data: state.data || {},
       };
     }
-  } catch { /* fall through */ }
+  } catch {
+    // fall through — return default initial state
+    console.debug('[onboarding] failed to parse onboarding state, using defaults');
+  }
   // Default initial state
   return { v: 1, step: 1, completedSteps: [], skippedSteps: [], data: {} };
 }

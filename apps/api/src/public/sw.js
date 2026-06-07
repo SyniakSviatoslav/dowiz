@@ -13,7 +13,10 @@ self.addEventListener('push', (event) => {
   if (event.data) {
     try {
       data = event.data.json();
-    } catch { /* ignore malformed */ }
+    } catch {
+      /* ignore malformed push data — use defaults */
+      console.debug('[sw] malformed push notification data');
+    }
   }
 
   const icon = '/favicon.ico';

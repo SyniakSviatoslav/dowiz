@@ -68,7 +68,10 @@ class DashboardWSClient {
         } else {
           this.onEvent(msg);
         }
-      } catch { /* ignore parse errors */ }
+      } catch {
+        /* ignore parse errors — malformed ws message */
+        console.debug('[dashboard] ws message parse failed');
+      }
     };
 
     this.ws.onclose = () => {
@@ -168,7 +171,10 @@ async function checkDeadChannels(locationId, token) {
     } else {
       banner.classList.add('hidden');
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore — dead channel check is best-effort */
+    console.debug('[dashboard] dead channel check failed');
+  }
 }
 
 async function reEnableChannel(locationId, channel, targetId, token) {
@@ -181,7 +187,10 @@ async function reEnableChannel(locationId, channel, targetId, token) {
     if (res.ok) {
       checkDeadChannels(locationId, token);
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore — channel re-enable is best-effort */
+    console.debug('[dashboard] channel re-enable failed');
+  }
 }
 
 // ─── Dwell Timer ────────────────────────────────────────────────────

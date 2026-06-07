@@ -6,6 +6,7 @@ import argon2 from 'argon2';
 import crypto from 'node:crypto';
 import { encryptPII } from '../../lib/pii-cipher.js';
 import { signAuthToken } from '@deliveryos/platform';
+import { maskStr } from '../../lib/pii-mask.js';
 
 export default (async function courierAuthRoutes(fastify, opts) {
   const { db } = opts as any;
@@ -19,7 +20,7 @@ export default (async function courierAuthRoutes(fastify, opts) {
   };
 
   // 1. Redeem Invite
-  fastify.post('/api/courier/invites/:inviteId/redeem', {
+  fastify.post('/invites/:inviteId/redeem', {
     schema: {
       params: z.object({ inviteId: z.string().uuid() }),
       body: z.object({
@@ -132,11 +133,8 @@ export default (async function courierAuthRoutes(fastify, opts) {
 
       await client.query('COMMIT');
 
-      // Do NOT send plaintext email or phone back in API response body (must be masked)
-      const maskStr = (str: string) => str.length > 4 ? str.substring(0, 2) + '***' + str.substring(str.length - 2) : '***';
-      
       return reply.send({
-        jwt,
+        jwt: tokenStr,
         refreshToken: `${sessionId}.${tokenPlain}`,
         courier: {
           id: courierId,
@@ -154,7 +152,7 @@ export default (async function courierAuthRoutes(fastify, opts) {
   });
 
   // 2. Login
-  fastify.post('/api/courier/login', {
+  fastify.post('/login', {
     schema: {
       body: z.object({
         email: z.string().email().transform(e => e.toLowerCase().trim()),
@@ -257,7 +255,7 @@ export default (async function courierAuthRoutes(fastify, opts) {
   });
 
   // 3. Refresh
-  fastify.post('/api/courier/refresh', {
+  fastify.post('/refresh', {
     schema: {
       body: z.object({
         refresh_token: z.string().min(1)
@@ -377,7 +375,7 @@ export default (async function courierAuthRoutes(fastify, opts) {
   });
 
   // 4. Logout
-  fastify.post('/api/courier/logout', {
+  fastify.post('/logout', {
     schema: {
       body: z.object({
         refresh_token: z.string().min(1)

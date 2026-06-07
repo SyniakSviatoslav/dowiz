@@ -152,7 +152,9 @@ test('H7: Integrity under concurrency', async (t) => {
         if (checks.rowCount === 0) {
           console.log(`  ℹ ${row.table_name}.${row.column_name} has no CHECK constraint`);
         }
-      } catch { }
+      } catch {
+        console.debug('[integrity] CHECK constraint query failed for', row.table_name);
+      }
     }
     assert.ok(true, 'Swept money columns for CHECK constraints');
   });
@@ -175,7 +177,9 @@ test('H7: Integrity under concurrency', async (t) => {
         if (orphans.rows[0].cnt > 0) {
           console.log(`  ⚠ ${fk.table_name}: ${orphans.rows[0].cnt} orphan(s) via ${fk.conname}`);
         }
-      } catch { }
+      } catch {
+        console.debug('[integrity] FK orphan check failed for', fk.conname);
+      }
     }
     assert.ok(true, 'Swept FK orphans');
   });
