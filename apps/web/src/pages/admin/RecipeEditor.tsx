@@ -24,12 +24,14 @@ interface RecipeLine {
 interface RecipeEditorProps {
   lines: RecipeLine[];
   onChange: (lines: RecipeLine[]) => void;
+  onBomAllergensChange?: (allergens: string[]) => void;
 }
 
-export function RecipeEditor({ lines, onChange }: RecipeEditorProps) {
+export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEditorProps) {
   const [search, setSearch] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const [activeKind, setActiveKind] = useState<string>('food_ingredient');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const allSupplies = useMemo(() => loadSupplies().filter(s => s.active), []);
 
@@ -56,27 +58,43 @@ export function RecipeEditor({ lines, onChange }: RecipeEditorProps) {
       if (line.carbsG != null) carbs += line.carbsG;
       line.allergens.forEach(a => bomAllergens.add(a));
     }
-    return { kcal: Math.round(kcal), protein: Math.round(protein), fat: Math.round(fat), carbs: Math.round(carbs), complete, bomAllergens: [...bomAllergens] };
-  }, [lines]);
+    const allergens = [...bomAllergens];
+    // Notify parent about BOM allergens
+    if (onBomAllergensChange) onBomAllergensChange(allergens);
+    return { kcal: Math.round(kcal), protein: Math.round(protein), fat: Math.round(fat), carbs: Math.round(carbs), complete, bomAllergens: allergens };
+  }, [lines, onBomAllergensChange]);
 
-  const addSupply = (supply: ReturnType<typeof loadSupplies>[0]) => {
-    if (lines.some(l => l.supplyId === supply.id)) return;
-    const qty = supply.baseUnit === 'g' || supply.baseUnit === 'ml' ? 100 : 1;
-    const ratio = qty / 100;
-    onChange([...lines, {
-      supplyId: supply.id,
-      supplyName: supply.name,
-      qty,
-      unit: supply.baseUnit,
-      kind: supply.kind,
-      kcal: supply.kcalPer100 != null ? Math.round(supply.kcalPer100 * ratio) : null,
-      proteinG: supply.proteinMgPer100 != null ? Math.round((supply.proteinMgPer100 / 1000) * ratio) : null,
-      fatG: supply.fatMgPer100 != null ? Math.round((supply.fatMgPer100 / 1000) * ratio) : null,
-      carbsG: supply.carbMgPer100 != null ? Math.round((supply.carbMgPer100 / 1000) * ratio) : null,
-      allergens: supply.allergens,
-    }]);
+  const toggleSelect = (supplyId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(supplyId)) next.delete(supplyId); else next.add(supplyId);
+      return next;
+    });
+  };
+
+  const addSelectedSupplies = () => {
+    const toAdd = allSupplies.filter(s => selectedIds.has(s.id) && !lines.some(l => l.supplyId === s.id));
+    if (!toAdd.length) return;
+    const newLines = [...lines];
+    for (const supply of toAdd) {
+      const qty = supply.baseUnit === 'g' || supply.baseUnit === 'ml' ? 100 : 1;
+      const ratio = qty / 100;
+      newLines.push({
+        supplyId: supply.id,
+        supplyName: supply.name,
+        qty,
+        unit: supply.baseUnit,
+        kind: supply.kind,
+        kcal: supply.kcalPer100 != null ? Math.round(supply.kcalPer100 * ratio) : null,
+        proteinG: supply.proteinMgPer100 != null ? Math.round((supply.proteinMgPer100 / 1000) * ratio) : null,
+        fatG: supply.fatMgPer100 != null ? Math.round((supply.fatMgPer100 / 1000) * ratio) : null,
+        carbsG: supply.carbMgPer100 != null ? Math.round((supply.carbMgPer100 / 1000) * ratio) : null,
+        allergens: supply.allergens,
+      });
+    }
+    onChange(newLines);
+    setSelectedIds(new Set());
     setSearch('');
-    setShowPicker(false);
   };
 
   const updateQty = (index: number, newQty: number) => {
@@ -113,7 +131,6 @@ export function RecipeEditor({ lines, onChange }: RecipeEditorProps) {
 
       {showPicker && (
         <div className="p-2 rounded-lg border" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)' }}>
-          {/* Kind tabs */}
           <div className="flex gap-1 mb-2">
             {kinds.map(k => (
               <button key={k} type="button" onClick={() => { setActiveKind(k); setSearch(''); }}
@@ -125,26 +142,37 @@ export function RecipeEditor({ lines, onChange }: RecipeEditorProps) {
             ))}
           </div>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search supplies..."
-            autoFocus className="w-full h-8 px-2 mb-2 rounded text-xs outline-none border"
+            autoFocus className="w-full h-8 px-2 mb-1 rounded text-xs outline-none border"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-          <div className="max-h-36 overflow-y-auto space-y-0.5">
-            {filteredSupplies.map(s => (
-              <button key={s.id} type="button" onClick={() => addSupply(s)}
-                disabled={lines.some(l => l.supplyId === s.id)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-left transition-colors hover:bg-[var(--brand-surface)] disabled:opacity-30"
-                style={{ color: 'var(--brand-text)' }}>
-                <i className={KIND_ICONS[s.kind] || 'ti ti-circle'} style={{ fontSize: '0.65rem', opacity: 0.5 }} />
-                <span className="flex-1 truncate">{s.name}</span>
-                <span className="text-[10px] opacity-40">{s.baseUnit}</span>
-                {s.kcalPer100 != null && <span className="text-[10px] opacity-30">{s.kcalPer100}kcal</span>}
-              </button>
-            ))}
+          <div className="max-h-36 overflow-y-auto space-y-0.5 mb-1">
+            {filteredSupplies.map(s => {
+              const isSelected = selectedIds.has(s.id);
+              const isAlready = lines.some(l => l.supplyId === s.id);
+              return (
+                <button key={s.id} type="button" onClick={() => { if (!isAlready) toggleSelect(s.id); }}
+                  disabled={isAlready}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-left transition-colors hover:bg-[var(--brand-surface)] disabled:opacity-30"
+                  style={{ color: 'var(--brand-text)', background: isSelected ? 'var(--brand-primary-light)' : 'transparent' }}>
+                  <input type="checkbox" checked={isSelected || isAlready} readOnly className="w-3 h-3 accent-[var(--brand-primary)]" />
+                  <span className="flex-1 truncate">{s.name}</span>
+                  <span className="text-[10px] opacity-40">{s.baseUnit}</span>
+                  {s.kcalPer100 != null && <span className="text-[10px] opacity-30">{s.kcalPer100}kcal</span>}
+                </button>
+              );
+            })}
             {filteredSupplies.length === 0 && (
               <p className="text-[10px] p-2 text-center" style={{ color: 'var(--brand-text-muted)' }}>
-                {search ? 'No matches. Try a different kind tab.' : 'No supplies in this category. Add them in Supplies first.'}
+                {search ? 'No matches.' : 'No supplies here. Add in Supplies first.'}
               </p>
             )}
           </div>
+          {selectedIds.size > 0 && (
+            <button type="button" onClick={addSelectedSupplies}
+              className="w-full py-1.5 rounded text-[11px] font-medium text-white active:scale-95 transition-transform"
+              style={{ background: 'var(--brand-primary)' }}>
+              Add {selectedIds.size} selected
+            </button>
+          )}
         </div>
       )}
 
