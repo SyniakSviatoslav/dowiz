@@ -1,17 +1,14 @@
 import { createSessionPool } from '../src/index.js';
 import { randomUUID } from 'crypto';
-import * as argon2 from 'argon2';
 
 async function run() {
   const pool = createSessionPool();
   try {
-    const passwordHash = await argon2.hash('empty123456');
-
     const emptyUserId = randomUUID();
     const userRes = await pool.query(
-      `INSERT INTO users (id, email, display_name, password_hash) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, display_name = EXCLUDED.display_name RETURNING id`,
-      [emptyUserId, 'empty@dowiz.com', 'Empty Client', passwordHash]
+      `INSERT INTO users (id, email, display_name, password_hash) VALUES ($1, $2, $3, NULL)
+       ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name RETURNING id`,
+      [emptyUserId, 'empty@dowiz.com', 'Empty Client']
     );
     const realUserId = userRes.rows[0].id;
 
