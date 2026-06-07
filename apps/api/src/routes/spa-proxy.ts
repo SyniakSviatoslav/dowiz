@@ -298,4 +298,44 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
 
     return reply.send({ success: true, slug, url: `https://${slug}.dowiz.org` });
   });
+
+  function formatRelativeTime(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 4) return `${weeks}w ago`;
+    const months = Math.floor(days / 30);
+    return `${months}mo ago`;
+  }
+
+  // GET /api/owner/customers
+  fastify.get('/api/owner/customers', async (request, reply) => {
+    const locId = await getLocationId(request);
+    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    const res = await db.query(
+      `SELECT c.id, c.name, c.phone, COUNT(o.id)::int as orders,
+              COALESCE(SUM(o.total), 0)::int as ltv,
+              MAX(o.created_at) as last_order_at
+       FROM customers c
+       LEFT JOIN orders o ON o.customer_id = c.id AND o.location_id = $1
+       WHERE c.location_id = $1
+       GROUP BY c.id
+       ORDER BY orders DESC LIMIT 50`,
+      [locId]
+    );
+    const customers = res.rows.map((r: any) => ({
+      id: r.id,
+      name: r.name || 'Unknown',
+      phone: r.phone ? r.phone.substring(0, 8) + '***' : '',
+      orders: r.orders || 0,
+      ltv: r.ltv || 0,
+      lastOrder: r.last_order_at ? formatRelativeTime(r.last_order_at) : 'never',
+    }));
+    return reply.send(customers);
+  });
 }
