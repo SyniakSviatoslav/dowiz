@@ -2,30 +2,32 @@ import { type ReactNode, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useEmbed } from '../../hooks/use-embed.js';
 import { useBrandTheme } from './ThemeProvider.js';
-import { LanguageSwitcher } from '../../lib/I18nProvider.js';
+import { LanguageSwitcher, useI18n } from '../../lib/I18nProvider.js';
 
 interface AdminShellProps {
   children: ReactNode;
   activeKey?: string;
 }
 
-const NAV_ITEMS = [
-  { key: 'dashboard', label: 'Dashboard', icon: 'ti ti-layout-dashboard', href: '/admin/' },
-  { key: 'orders', label: 'Orders', icon: 'ti ti-clipboard-list', href: '/admin/orders' },
-  { key: 'menu', label: 'Menu', icon: 'ti ti-notebook', href: '/admin/menu' },
-  { key: 'couriers', label: 'Couriers', icon: 'ti ti-motorbike', href: '/admin/couriers' },
-  { key: 'analytics', label: 'Analytics', icon: 'ti ti-chart-bar', href: '/admin/analytics' },
-  { key: 'crm', label: 'CRM', icon: 'ti ti-users', href: '/admin/crm' },
-  { key: 'promotions', label: 'Promotions', icon: 'ti ti-ticket', href: '/admin/promotions' },
-  { key: 'ai', label: 'AI Insights', icon: 'ti ti-brain', href: '/admin/ai' },
-  { key: 'staff', label: 'Staff', icon: 'ti ti-user-star', href: '/admin/staff' },
-  { key: 'inventory', label: 'Inventory', icon: 'ti ti-packages', href: '/admin/inventory' },
-  { key: 'payouts', label: 'Payouts', icon: 'ti ti-cash', href: '/admin/payouts' },
-  { key: 'signals', label: 'Signals', icon: 'ti ti-shield-check', href: '/admin/signals' },
-  { key: 'alerts', label: 'Alerts', icon: 'ti ti-bell-ringing', href: '/admin/alerts' },
-  { key: 'branding', label: 'Branding', icon: 'ti ti-palette', href: '/admin/branding' },
-  { key: 'settings', label: 'Settings', icon: 'ti ti-settings', href: '/admin/settings' },
-];
+export function AdminShell({ children, activeKey }: AdminShellProps) {
+  const embed = useEmbed();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { t } = useI18n();
+
+  const NAV_ITEMS = [
+    { key: 'dashboard', label: t('admin.dashboard'), icon: 'ti ti-layout-dashboard', href: '/admin/' },
+    { key: 'orders', label: t('admin.orders'), icon: 'ti ti-clipboard-list', href: '/admin/orders' },
+    { key: 'menu', label: t('admin.menu'), icon: 'ti ti-notebook', href: '/admin/menu' },
+    { key: 'couriers', label: t('admin.couriers'), icon: 'ti ti-motorbike', href: '/admin/couriers' },
+    { key: 'analytics', label: t('admin.analytics'), icon: 'ti ti-chart-bar', href: '/admin/analytics' },
+    { key: 'crm', label: t('admin.crm'), icon: 'ti ti-users', href: '/admin/crm' },
+    { key: 'branding', label: t('admin.branding'), icon: 'ti ti-palette', href: '/admin/branding' },
+    { key: 'supplies', label: t('admin.supplies'), icon: 'ti ti-packages', href: '/admin/supplies' },
+    { key: 'settings', label: t('admin.settings'), icon: 'ti ti-settings', href: '/admin/settings' },
+    { key: 'signals', label: t('admin.signals'), icon: 'ti ti-shield-check', href: '/admin/signals' },
+    { key: 'alerts', label: t('admin.alerts'), icon: 'ti ti-bell-ringing', href: '/admin/alerts' },
+    { key: 'onboarding', label: t('admin.onboarding'), icon: 'ti ti-rocket', href: '/admin/onboarding' },
+  ];
 
 export function AdminShell({ children, activeKey }: AdminShellProps) {
   const embed = useEmbed();
@@ -34,7 +36,7 @@ export function AdminShell({ children, activeKey }: AdminShellProps) {
   const asideContent = (
     <>
       <div className="p-4 border-b border-brand-border flex items-center justify-between">
-        <h2 className="text-lg font-heading font-bold">DeliveryOS</h2>
+        <h2 className="text-lg font-heading font-bold">Dowiz</h2>
         <button
           className="lg:hidden text-brand-text-muted hover:text-brand-text"
           onClick={() => setMobileNavOpen(false)}
@@ -72,15 +74,15 @@ export function AdminShell({ children, activeKey }: AdminShellProps) {
   );
 
   return (
-    <div className="min-h-screen bg-brand-bg text-brand-text font-body flex">
+    <div className="h-screen overflow-hidden bg-brand-bg text-brand-text font-body flex">
       {!embed && (
         <>
-          <aside className="w-64 bg-brand-surface border-r border-brand-border hidden lg:flex flex-col shrink-0">
+          <aside className="w-64 bg-brand-surface border-r border-brand-border hidden lg:flex flex-col shrink-0 h-full">
             {asideContent}
           </aside>
 
           <div className="lg:hidden fixed top-0 left-0 right-0 z-sticky bg-brand-surface border-b border-brand-border px-4 h-14 flex items-center justify-between">
-            <h2 className="text-lg font-heading font-bold">DeliveryOS</h2>
+            <h2 className="text-lg font-heading font-bold">Dowiz</h2>
             <button
               onClick={() => setMobileNavOpen(true)}
               className="text-brand-text-muted hover:text-brand-text"
@@ -102,7 +104,7 @@ export function AdminShell({ children, activeKey }: AdminShellProps) {
           )}
         </>
       )}
-      <main className={`flex-1 flex flex-col ${embed ? '' : 'overflow-auto'} ${!embed ? 'lg:pt-0 pt-14' : ''}`}>
+      <main className="flex-1 overflow-y-auto ${!embed ? 'lg:pt-0 pt-14' : ''}">
         {children}
       </main>
     </div>

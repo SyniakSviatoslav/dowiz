@@ -3,6 +3,21 @@ import { Button, Input, EmptyState, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { RecipeEditor } from './RecipeEditor.js';
 import { AllergenEditor, ReadinessIndicator } from './AllergenEditor.js';
+import { loadSupplies, getSupplyById, getActiveSupplies } from './SupplyLibraryPage.js';
+
+interface Supply {
+  id: string;
+  name: string;
+  unit: string;
+  kind: string;
+  stock: number;
+  minStock: number;
+  allergens: string[];
+  kcal?: number | null;
+  proteinG?: number | null;
+  fatG?: number | null;
+  carbsG?: number | null;
+}
 
 interface Ingredient {
   id: string;
@@ -33,32 +48,33 @@ interface Category {
   products?: Product[];
 }
 
-const MOCK_INGREDIENTS: Ingredient[] = [
-  { id: 'i1', name: 'Salmon fillet', unit: 'kg', stock: 4.5, minStock: 2 },
-  { id: 'i2', name: 'Tuna fillet', unit: 'kg', stock: 3.2, minStock: 2 },
-  { id: 'i3', name: 'Sushi rice', unit: 'kg', stock: 12, minStock: 5 },
-  { id: 'i4', name: 'Nori sheets', unit: 'pcs', stock: 80, minStock: 50 },
-  { id: 'i5', name: 'Avocado', unit: 'pcs', stock: 15, minStock: 10 },
-  { id: 'i6', name: 'Cream cheese', unit: 'kg', stock: 2.5, minStock: 1.5 },
-  { id: 'i7', name: 'Shrimp', unit: 'kg', stock: 3.0, minStock: 1.5 },
-  { id: 'i8', name: 'Cucumber', unit: 'pcs', stock: 20, minStock: 8 },
-  { id: 'i9', name: 'Sesame seeds', unit: 'kg', stock: 1.2, minStock: 0.5 },
-  { id: 'i10', name: 'Spicy mayo', unit: 'L', stock: 2.0, minStock: 0.5 },
-  { id: 'i11', name: 'Eel sauce', unit: 'L', stock: 0.8, minStock: 0.5 },
-  { id: 'i12', name: 'Soy sauce', unit: 'L', stock: 5.0, minStock: 2 },
-  { id: 'i13', name: 'Wasabi', unit: 'kg', stock: 0.4, minStock: 0.2 },
-  { id: 'i14', name: 'Pickled ginger', unit: 'kg', stock: 1.0, minStock: 0.5 },
-  { id: 'i15', name: 'Tempura batter', unit: 'kg', stock: 2.0, minStock: 1 },
-];
+}
 
 export function MenuManagerPage() {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [ingredients, setIngredients] = useState<Ingredient[]>(MOCK_INGREDIENTS);
+  const [supplies, setSupplies] = useState<Supply[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
+  const [showSupplies, setShowSupplies] = useState(false);
+  const [editSupplyId, setEditSupplyId] = useState<string | null>(null);
+  const [editStock, setEditStock] = useState('');
+
+  const { t } = useI18n();
+
+  // Load supplies from localStorage
+  useEffect(() => { setSupplies(loadSupplies()); }, []);
+
+  const updateSupplyStock = (id: string, stock: number) => {
+    setSupplies(prev => {
+      const next = prev.map(s => s.id === id ? { ...s, stock } : s);
+      localStorage.setItem('dos_supplies', JSON.stringify(next));
+      return next;
+    });
+    setEditSupplyId(null);
+  };
 
   // Form state
   const [showForm, setShowForm] = useState(false);
@@ -90,6 +106,8 @@ export function MenuManagerPage() {
   // Ingredient inventory state
   const [editIngredientId, setEditIngredientId] = useState<string | null>(null);
   const [editStock, setEditStock] = useState('');
+
+  const { t } = useI18n();
 
   const fetchCategories = async () => {
     try {
@@ -312,69 +330,70 @@ export function MenuManagerPage() {
         <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
           className="px-3 py-2 rounded-lg border text-sm outline-none"
           style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
-          <option value="name">Name A-Z</option>
-          <option value="price-asc">Price ↑</option>
-          <option value="price-desc">Price ↓</option>
+          <option value="name">{t('menu.sort_name')}</option>
+          <option value="price-asc">{t('menu.sort_price_asc')}</option>
+          <option value="price-desc">{t('menu.sort_price_desc')}</option>
         </select>
         <select value={filterAvailable} onChange={e => setFilterAvailable(e.target.value as any)}
           className="px-3 py-2 rounded-lg border text-sm outline-none"
           style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
-          <option value="all">All items</option>
-          <option value="available">Available</option>
-          <option value="unavailable">Stop-listed</option>
+          <option value="all">{t('menu.filter_all')}</option>
+          <option value="available">{t('menu.filter_available')}</option>
+          <option value="unavailable">{t('menu.filter_stoplisted')}</option>
         </select>
-        <Button onClick={() => setShowIngredients(!showIngredients)} variant="ghost" size="sm">
-          <i className="ti ti-flask" /> {showIngredients ? 'Hide' : 'Ingredients'}
+        <Button onClick={() => setShowSupplies(!showSupplies)} variant="ghost" size="sm">
+          <i className="ti ti-packages" /> {showSupplies ? t('common.close') : t('admin.supplies')}
         </Button>
       </div>
 
-      {/* Ingredient Inventory Panel */}
-      {showIngredients && (
+      {/* Supply Inventory Panel */}
+      {showSupplies && (
         <div className="rounded-xl border p-4 space-y-3 slide-in-up" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-sm">Ingredient Inventory</h3>
-            <span className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{ingredients.length} items</span>
+            <h3 className="font-semibold text-sm">{t('admin.supplies')}</h3>
+            <span className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{supplies.length} {t('common.all')}</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {ingredients.map(ing => {
-              const low = ing.stock <= ing.minStock;
-              const pct = Math.min(100, (ing.stock / Math.max(ing.minStock * 2, 1)) * 100);
+            {supplies.map(sup => {
+              const low = sup.stock <= sup.minStock;
+              const pct = Math.min(100, (sup.stock / Math.max(sup.minStock * 2, 1)) * 100);
               return (
-                <div key={ing.id} className="flex items-center gap-3 p-3 rounded-lg border" style={{ borderColor: low ? 'rgba(217,119,6,0.3)' : 'var(--brand-border)', background: low ? 'rgba(217,119,6,0.05)' : 'var(--brand-surface-raised)' }}>
+                <div key={sup.id} className="flex items-center gap-3 p-3 rounded-lg border" style={{ borderColor: low ? 'rgba(217,119,6,0.3)' : 'var(--brand-border)', background: low ? 'rgba(217,119,6,0.05)' : 'var(--brand-surface-raised)' }}>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{ing.name}</div>
+                    <div className="text-sm font-medium truncate">{sup.name}</div>
                     <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>
-                      {editIngredientId === ing.id ? (
+                      {editSupplyId === sup.id ? (
                         <span className="flex items-center gap-1">
                           <input value={editStock} onChange={e => setEditStock(e.target.value)} type="number"
                             className="w-16 px-1 py-0.5 text-xs rounded border" autoFocus
                             style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                          <span>{ing.unit}</span>
-                          <button onClick={() => handleUpdateStock(ing.id, Number(editStock) || ing.stock)} className="text-[var(--color-success)]">✓</button>
+                          <span>{sup.unit}</span>
+                          <button onClick={() => updateSupplyStock(sup.id, Number(editStock) || sup.stock)} className="text-[var(--color-success)]">✓</button>
                         </span>
                       ) : (
-                        <span onClick={() => { setEditIngredientId(ing.id); setEditStock(String(ing.stock)); }} className="cursor-pointer hover:underline">
-                          {ing.stock} {ing.unit} / min {ing.minStock} {ing.unit}
+                        <span onClick={() => { setEditSupplyId(sup.id); setEditStock(String(sup.stock)); }} className="cursor-pointer hover:underline">
+                          {sup.stock} {sup.unit} / min {sup.minStock} {sup.unit}
                         </span>
                       )}
                     </div>
                   </div>
-                  {low && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: 'var(--color-warning)', color: '#fff' }}>LOW</span>}
+                  {low && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: 'var(--color-warning)', color: '#fff' }}>{t('supply.low_stock')}</span>}
                   <div className="w-12 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--brand-border)' }}>
                     <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: low ? 'var(--color-warning)' : 'var(--color-success)' }} />
                   </div>
                 </div>
               );
             })}
+            {supplies.length === 0 && <div className="col-span-full text-center py-4 text-sm" style={{color:'var(--brand-text-muted)'}}>{t('supply.no_supplies')}</div>}
           </div>
         </div>
       )}
 
       {/* Add Category */}
       <div className="flex gap-2">
-        <Input placeholder="New category..." value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)}
+        <Input placeholder={t('menu.new_category')} value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleAddCategory()} />
-        <Button onClick={handleAddCategory}>Add Category</Button>
+        <Button onClick={handleAddCategory}>{t('menu.add_category')}</Button>
       </div>
 
       {/* Categories & Products */}
@@ -542,7 +561,7 @@ export function MenuManagerPage() {
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
           <div className="relative w-full max-w-md bg-[var(--brand-surface)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 z-10 slide-in-up max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{editingProduct ? 'Edit Item' : 'Add Item'}</h3>
+              <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{editingProduct ? t('menu.edit_item') : t('menu.add_item')}</h3>
               <button onClick={closeForm} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface-raised)]">
                 <i className="ti ti-x" style={{ color: 'var(--brand-text-muted)' }} />
               </button>
