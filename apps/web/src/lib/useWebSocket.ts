@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-const WS_BASE_URL = import.meta.env?.VITE_WS_BASE_URL || 'ws://localhost:3000/ws';
+const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000';
+const WS_BASE_URL = import.meta.env?.VITE_WS_BASE_URL || `${protocol}//${host}/ws`;
 
 export type WSConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'error' | 'disabled';
 
@@ -68,7 +70,8 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
           const data = JSON.parse(event.data);
           onMessageRef.current?.(data);
         } catch {
-          // ignore parse errors
+          // ignore parse errors — malformed ws message
+          console.debug('[useWebSocket] received malformed message');
         }
       };
 
@@ -119,7 +122,10 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
       }
       if (wsRef.current) {
         if (room && wsRef.current.readyState === WebSocket.OPEN) {
-          try { wsRef.current.send(JSON.stringify({ type: 'unsubscribe', room })); } catch {}
+          try { wsRef.current.send(JSON.stringify({ type: 'unsubscribe', room })); } catch {
+            // unsubscribe send may fail if ws is closing — ignore
+            console.debug('[useWebSocket] unsubscribe send failed');
+          }
         }
         wsRef.current.close(1000, 'unmount');
         wsRef.current = null;

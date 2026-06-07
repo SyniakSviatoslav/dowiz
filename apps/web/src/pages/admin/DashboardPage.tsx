@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { OrderCard, EmptyState, CourierLiveMap, HintCard } from '@deliveryos/ui';
+import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n } from '@deliveryos/ui';
 import type { AdminOrder, CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
 
@@ -13,7 +13,9 @@ export function DashboardPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'highest'>('newest');
+  const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
   const [showHint, setShowHint] = useState(() => localStorage.getItem('dos_dash_hint_dismissed') !== '1');
+  const { t } = useI18n();
 
   const { play: playPing } = useSound('/sounds/ping.mp3');
   const tenantId = 't1';
@@ -66,7 +68,13 @@ export function DashboardPage() {
   ], [courierPositions]);
 
   const filteredOrders = useMemo(() => {
-    let result = orders.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED');
+    let result = orders;
+    if (viewMode === 'live') {
+      result = result.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED');
+    } else {
+      result = result.filter(o => o.status === 'DELIVERED' || o.status === 'CANCELLED');
+    }
+
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(o => o.customerName?.toLowerCase().includes(q) || o.shortId?.toLowerCase().includes(q) || o.itemsSummary?.toLowerCase().includes(q));
@@ -80,19 +88,21 @@ export function DashboardPage() {
       return (b.total || 0) - (a.total || 0);
     });
     return result;
-  }, [orders, search, statusFilter, sortBy]);
+  }, [orders, search, statusFilter, sortBy, viewMode]);
 
-  const STATUSES = ['all', 'PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY'];
+  const STATUSES = viewMode === 'live' 
+    ? ['all', 'PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY']
+    : ['all', 'DELIVERED', 'CANCELLED'];
 
   const readinessItems = [
-    { label: 'Menu items', done: true, icon: 'ti ti-tools-kitchen-2' },
-    { label: 'Phone set', done: true, icon: 'ti ti-phone' },
-    { label: 'Delivery zone', done: true, icon: 'ti ti-map-pin' },
-    { label: 'Courier setup', done: false, icon: 'ti ti-motorbike' },
-    { label: 'Branding', done: true, icon: 'ti ti-palette' },
-    { label: 'Allergens declared', done: false, icon: 'ti ti-alert-triangle' },
-    { label: 'Test order placed', done: false, icon: 'ti ti-shopping-cart' },
-    { label: 'Payment setup', done: true, icon: 'ti ti-cash' },
+    { label: t('admin.menu', 'Menu'), done: true, icon: 'ti ti-tools-kitchen-2' },
+    { label: t('auth.phone', 'Phone number'), done: true, icon: 'ti ti-phone' },
+    { label: t('checkout.delivery_address', 'Delivery address'), done: true, icon: 'ti ti-map-pin' },
+    { label: t('admin.couriers', 'Couriers'), done: false, icon: 'ti ti-motorbike' },
+    { label: t('admin.branding', 'Branding'), done: true, icon: 'ti ti-palette' },
+    { label: t('supply.allergens', 'Allergens'), done: false, icon: 'ti ti-alert-triangle' },
+    { label: t('checkout.place_order', 'Place order'), done: false, icon: 'ti ti-shopping-cart' },
+    { label: t('checkout.payment_method', 'Payment method'), done: true, icon: 'ti ti-cash' },
   ];
   const doneCount = readinessItems.filter(r => r.done).length;
   const totalChecks = readinessItems.length;
@@ -110,8 +120,8 @@ export function DashboardPage() {
       {/* Welcome Hint */}
       {showHint && (
         <HintCard
-          title="Welcome to your Dashboard"
-          description="Here you can manage incoming orders, track couriers, and monitor your store readiness. Use the sidebar to navigate between sections."
+          title={t('admin.welcome_dashboard', 'Welcome to your Dashboard')}
+          description={t('admin.dashboard_hint', 'Here you can manage incoming orders, track couriers, and monitor your store readiness. Use the sidebar to navigate between sections.')}
           icon="ti ti-info-circle"
           onDismiss={() => { setShowHint(false); localStorage.setItem('dos_dash_hint_dismissed', '1'); }}
         />
@@ -120,11 +130,11 @@ export function DashboardPage() {
       {/* Quick Stats Row */}
       <div className="grid grid-cols-5 gap-2 stagger-children">
         {[
-          { label: 'Pending', value: stats.pending, color: 'var(--status-pending)' },
-          { label: 'Preparing', value: stats.inProgress, color: 'var(--status-preparing)' },
-          { label: 'Ready', value: stats.ready, color: 'var(--status-ready)' },
-          { label: 'Delivery', value: stats.inDelivery, color: 'var(--status-in-delivery)' },
-          { label: 'Revenue', value: `${(stats.revenue / 1000).toFixed(0)}k`, color: 'var(--brand-primary)' },
+          { label: t('order.pending', 'Pending'), value: stats.pending, color: 'var(--status-pending)' },
+          { label: t('order.preparing', 'Preparing'), value: stats.inProgress, color: 'var(--status-preparing)' },
+          { label: t('order.ready', 'Ready'), value: stats.ready, color: 'var(--status-ready)' },
+          { label: t('order.in_delivery', 'Delivery'), value: stats.inDelivery, color: 'var(--status-in-delivery)' },
+          { label: t('cart.total', 'Revenue'), value: `${(stats.revenue / 1000).toFixed(0)}k`, color: 'var(--brand-primary)' },
         ].map((stat, i) => (
           <div key={stat.label} className="text-center p-3 rounded-xl card-lift" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', border: '1px solid var(--brand-border)' }}>
             <div className="text-2xl font-bold mb-0.5" style={{ color: stat.color }}>{stat.value}</div>
@@ -135,9 +145,21 @@ export function DashboardPage() {
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Live Orders</h2>
-          <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{filteredOrders.length} active</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{viewMode === 'live' ? t('admin.live_orders', 'Live Orders') : t('courier.history', 'Order History')}</h2>
+            <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{filteredOrders.length}</p>
+          </div>
+          <div className="flex bg-[var(--brand-surface)] border rounded-lg overflow-hidden p-0.5" style={{ borderColor: 'var(--brand-border)' }}>
+            <button 
+              onClick={() => { setViewMode('live'); setStatusFilter('all'); }}
+              className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${viewMode === 'live' ? 'bg-[var(--brand-primary)] text-white' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+            >{t('admin.live', 'Live')}</button>
+            <button 
+              onClick={() => { setViewMode('history'); setStatusFilter('all'); }}
+              className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${viewMode === 'history' ? 'bg-[var(--brand-primary)] text-white' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+            >{t('courier.history', 'History')}</button>
+          </div>
         </div>
 
         {/* Search */}
@@ -147,14 +169,14 @@ export function DashboardPage() {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search orders..."
+              placeholder={t('common.search', 'Search...')}
               aria-label="Search orders by name or ID"
               className="pl-9 pr-4 py-2 rounded-lg border text-sm outline-none transition-all duration-200 focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary-light)] w-full sm:w-56"
               style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
             />
           </div>
           <button onClick={() => exportCSV(filteredOrders, 'orders.csv')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97]" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
-            <i className="ti ti-download"></i> Export CSV
+            <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
           </button>
         </div>
       </div>
@@ -169,7 +191,7 @@ export function DashboardPage() {
               aria-pressed={statusFilter === s}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 capitalize ${statusFilter === s ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
             >
-              {s === 'all' ? 'All' : s.replace('_', ' ').toLowerCase()}
+              {s === 'all' ? t('common.all', 'All') : t(`order.${s.toLowerCase()}`, s.replace('_', ' ').toLowerCase())}
             </button>
           ))}
         </div>
@@ -180,15 +202,15 @@ export function DashboardPage() {
           className="px-3 py-1.5 text-xs rounded-lg border outline-none transition-colors"
           style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
         >
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="highest">Highest total</option>
+          <option value="newest">{t('admin.newest_first', 'Newest first')}</option>
+          <option value="oldest">{t('admin.oldest_first', 'Oldest first')}</option>
+          <option value="highest">{t('admin.highest_total', 'Highest total')}</option>
         </select>
       </div>
 
       {/* Orders grid */}
       {error ? (
-        <EmptyState title="Error" description={error} />
+        <EmptyState title={t('common.error', 'Error')} description={error} />
       ) : loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map(i => (
@@ -197,8 +219,8 @@ export function DashboardPage() {
         </div>
       ) : filteredOrders.length === 0 ? (
         <EmptyState
-          title="No active orders"
-          description={search ? 'No orders match your search.' : 'Waiting for incoming orders. Orders will appear here in real time.'}
+          title={t('common.no_data', 'No data')}
+          description={t('common.no_data', 'No data')}
           icon={<i className="ti ti-inbox text-4xl" style={{ color: 'var(--brand-text-muted)', opacity: 0.4 }} />}
         />
       ) : (
@@ -213,7 +235,7 @@ export function DashboardPage() {
       <div>
         <div className="flex items-center gap-2 mb-3">
           <i className="ti ti-map-2 text-lg" style={{ color: 'var(--brand-primary)' }} />
-          <h3 className="text-lg font-semibold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Couriers Live</h3>
+          <h3 className="text-lg font-semibold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.couriers_live', 'Couriers Live')}</h3>
           <span className="w-2 h-2 rounded-full dot-pulse" style={{ backgroundColor: 'var(--color-success)' }} />
         </div>
         <CourierLiveMap className="h-72 w-full rounded-xl border border-glow" couriers={couriersOnMap} center={[19.817, 41.331]} zoom={13} />
@@ -223,7 +245,7 @@ export function DashboardPage() {
       <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
         <div className="flex items-center gap-2 mb-4">
           <i className="ti ti-clipboard-check text-lg" style={{ color: 'var(--brand-primary)' }} />
-          <h3 className="text-sm font-semibold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Store Readiness</h3>
+          <h3 className="text-sm font-semibold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.store_readiness', 'Store Readiness')}</h3>
           <span className="ml-auto text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
             {doneCount}/{totalChecks}
           </span>

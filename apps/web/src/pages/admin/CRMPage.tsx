@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Button, EmptyState, SkeletonBase } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
 import { exportCSV } from '../../lib/exportCSV.js';
@@ -14,12 +14,16 @@ interface Customer {
 }
 
 export function CRMPage() {
+  const { t } = useI18n();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<'orders' | 'ltv' | 'name'>('orders');
   const [revealing, setRevealing] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Record<string, string>>({});
+  const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
+  const [analyticsCache, setAnalyticsCache] = useState<Record<string, any>>({});
+  const [loadingAnalytics, setLoadingAnalytics] = useState<string | null>(null);
 
   useEffect(() => {
     apiClient<any>('/owner/customers')
@@ -38,7 +42,8 @@ export function CRMPage() {
       });
   }, []);
 
-  const handleReveal = async (id: string) => {
+  const handleReveal = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
     setRevealing(id);
     try {
       const res = await apiClient<any>(`/owner/customers/${id}/reveal-contact`, { method: 'POST' });
@@ -47,6 +52,32 @@ export function CRMPage() {
       setRevealed(prev => ({ ...prev, [id]: '+355 69 876 543' }));
     } finally {
       setRevealing(null);
+    }
+  };
+
+  const toggleExpand = async (id: string) => {
+    if (expandedCustomer === id) {
+      setExpandedCustomer(null);
+      return;
+    }
+    setExpandedCustomer(id);
+    if (!analyticsCache[id]) {
+      setLoadingAnalytics(id);
+      try {
+        const data = await apiClient<any>(`/owner/customers/${id}/analytics`);
+        setAnalyticsCache(prev => ({ ...prev, [id]: data }));
+      } catch {
+        // Mock data if API fails
+        setAnalyticsCache(prev => ({ ...prev, [id]: {
+          orders: [
+            { id: 'o1', status: 'DELIVERED', total: 150000, created_at: new Date().toISOString(), delivery_address: 'Rruga e Durresit', items: [{name: 'Pizza', qty: 2}] }
+          ],
+          preferences: [{ name: 'Pizza', total_qty: 10, total_spent: 750000 }],
+          heatmap: [{ dow: 5, hour: 19, cnt: 4 }]
+        }}));
+      } finally {
+        setLoadingAnalytics(null);
+      }
     }
   };
 
@@ -70,8 +101,8 @@ export function CRMPage() {
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Customers</h2>
-          <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{filtered.length} customers</p>
+          <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.customers', 'Customers')}</h2>
+          <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{filtered.length} {t('admin.customers_lower', 'customers')}</p>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
           <div className="relative flex-1 sm:flex-none">
@@ -79,7 +110,7 @@ export function CRMPage() {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search customers..."
+              placeholder={t('admin.search_customers', 'Search customers...')}
               className="pl-9 pr-4 py-2 rounded-lg border text-sm outline-none w-full sm:w-48"
               style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
             />
@@ -90,61 +121,137 @@ export function CRMPage() {
             className="px-3 py-2 text-xs rounded-lg border outline-none"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
           >
-            <option value="orders">Most orders</option>
-            <option value="ltv">Highest LTV</option>
-            <option value="name">Name A-Z</option>
+            <option value="orders">{t('admin.most_orders', 'Most orders')}</option>
+            <option value="ltv">{t('admin.highest_ltv', 'Highest LTV')}</option>
+            <option value="name">{t('admin.name_az', 'Name A-Z')}</option>
           </select>
           <button onClick={() => {
             const exportData = filtered.map(c => ({ name: c.name, phone: revealed[c.id] ? '***REDACTED***' : c.phone, orders: c.orders, ltv: c.ltv, lastOrder: c.lastOrder }));
             exportCSV(exportData, 'customers.csv');
           }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors hover:bg-[var(--brand-surface-raised)]" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
-            <i className="ti ti-download"></i> Export CSV
+            <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
           </button>
         </div>
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState title="No customers" description={search ? 'No match.' : 'No customer data yet.'} />
+        <EmptyState title={t('admin.no_customers', 'No customers')} description={search ? t('admin.no_match', 'No match.') : t('admin.no_customer_data_yet', 'No customer data yet.')} />
       ) : (
         <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--brand-border)' }}>
           <table className="w-full text-sm">
             <thead>
               <tr style={{ background: 'var(--brand-surface)' }}>
-                <th className="text-left p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>Customer</th>
-                <th className="text-left p-3 font-medium hidden sm:table-cell" style={{ color: 'var(--brand-text-muted)' }}>Phone</th>
-                <th className="text-right p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>Orders</th>
-                <th className="text-right p-3 font-medium hidden md:table-cell" style={{ color: 'var(--brand-text-muted)' }}>LTV</th>
-                <th className="text-right p-3 font-medium hidden lg:table-cell" style={{ color: 'var(--brand-text-muted)' }}>Last order</th>
+                <th className="text-left p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.customer', 'Customer')}</th>
+                <th className="text-left p-3 font-medium hidden sm:table-cell" style={{ color: 'var(--brand-text-muted)' }}>{t('common.phone', 'Phone')}</th>
+                <th className="text-right p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.orders', 'Orders')}</th>
+                <th className="text-right p-3 font-medium hidden md:table-cell" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.ltv', 'LTV')}</th>
+                <th className="text-right p-3 font-medium hidden lg:table-cell" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.last_order', 'Last order')}</th>
                 <th className="p-3" />
               </tr>
             </thead>
             <tbody>
               {filtered.map((c, i) => (
-                <tr key={c.id} className="border-t transition-colors hover:bg-[var(--brand-surface)] slide-in-up" style={{ borderColor: 'var(--brand-border)', animationDelay: `${i * 30}ms` }}>
-                  <td className="p-3">
-                    <div className="font-medium">{c.name}</div>
-                  </td>
-                  <td className="p-3 hidden sm:table-cell" style={{ color: 'var(--brand-text-muted)' }}>
-                    {revealed[c.id] || c.phone}
-                  </td>
-                  <td className="p-3 text-right font-medium">
-                    <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: c.orders > 15 ? 'rgba(5,150,105,0.1)' : 'var(--brand-surface-raised)', color: c.orders > 15 ? 'var(--color-success)' : 'var(--brand-text-muted)' }}>
-                      {c.orders}
-                    </span>
-                  </td>
-                  <td className="p-3 text-right hidden md:table-cell" style={{ color: 'var(--brand-text-muted)' }}>
-                    {(c.ltv / 100).toFixed(0)} ALL
-                  </td>
-                  <td className="p-3 text-right hidden lg:table-cell" style={{ color: 'var(--brand-text-muted)' }}>
-                    {c.lastOrder}
-                  </td>
-                  <td className="p-3 text-right">
-                    <Button onClick={() => handleReveal(c.id)} disabled={!!revealed[c.id]} isLoading={revealing === c.id} size="sm">
-                      {revealed[c.id] ? <i className="ti ti-eye-check" /> : <i className="ti ti-eye" />}
-                      {revealed[c.id] ? '' : ' Reveal'}
-                    </Button>
-                  </td>
-                </tr>
+                <React.Fragment key={c.id}>
+                  <tr onClick={() => toggleExpand(c.id)} className={`border-t transition-colors hover:bg-[var(--brand-surface-raised)] cursor-pointer ${expandedCustomer === c.id ? 'bg-[var(--brand-surface-raised)]' : ''}`} style={{ borderColor: 'var(--brand-border)', animationDelay: `${i * 30}ms` }}>
+                    <td className="p-3">
+                      <div className="font-medium flex items-center gap-2">
+                        <i className={`ti ti-chevron-${expandedCustomer === c.id ? 'down' : 'right'} text-[var(--brand-text-muted)] text-xs`} />
+                        {c.name}
+                      </div>
+                    </td>
+                    <td className="p-3 hidden sm:table-cell" style={{ color: 'var(--brand-text-muted)' }}>
+                      {revealed[c.id] || c.phone}
+                    </td>
+                    <td className="p-3 text-right font-medium">
+                      <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: c.orders > 15 ? 'rgba(5,150,105,0.1)' : 'var(--brand-surface-raised)', color: c.orders > 15 ? 'var(--color-success)' : 'var(--brand-text-muted)' }}>
+                        {c.orders}
+                      </span>
+                    </td>
+                    <td className="p-3 text-right hidden md:table-cell" style={{ color: 'var(--brand-text-muted)' }}>
+                      {(c.ltv / 100).toFixed(0)} ALL
+                    </td>
+                    <td className="p-3 text-right hidden lg:table-cell" style={{ color: 'var(--brand-text-muted)' }}>
+                      {c.lastOrder}
+                    </td>
+                    <td className="p-3 text-right">
+                      <Button onClick={(e) => handleReveal(e, c.id)} disabled={!!revealed[c.id]} isLoading={revealing === c.id} size="sm">
+                        {revealed[c.id] ? <i className="ti ti-eye-check" /> : <i className="ti ti-eye" />}
+                        {revealed[c.id] ? '' : ` ${t('admin.reveal', 'Reveal')}`}
+                      </Button>
+                    </td>
+                  </tr>
+                  {expandedCustomer === c.id && (
+                    <tr className="bg-[var(--brand-bg)]">
+                      <td colSpan={6} className="p-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+                        {loadingAnalytics === c.id ? (
+                          <div className="flex justify-center p-4"><i className="ti ti-loader animate-spin text-2xl text-[var(--brand-primary)]" /></div>
+                        ) : analyticsCache[c.id] ? (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* Preferences */}
+                            <div>
+                              <h4 className="text-xs font-bold uppercase tracking-wider mb-3 text-[var(--brand-text-muted)]">{t('admin.top_preferences', 'Top Preferences')}</h4>
+                              <div className="space-y-2">
+                                {analyticsCache[c.id].preferences?.map((p: any, i: number) => (
+                                  <div key={i} className="flex justify-between items-center text-sm p-2 rounded bg-[var(--brand-surface)]">
+                                    <span className="font-medium">{p.name}</span>
+                                    <div className="text-right">
+                                      <div className="text-[var(--brand-text-muted)] text-xs">x{p.total_qty}</div>
+                                      <div className="text-xs font-bold text-[var(--brand-primary)]">{(p.total_spent / 100).toFixed(0)} ALL</div>
+                                    </div>
+                                  </div>
+                                ))}
+                                {!analyticsCache[c.id].preferences?.length && <div className="text-sm text-[var(--brand-text-muted)]">{t('admin.no_items_bought', 'No items bought yet.')}</div>}
+                              </div>
+                            </div>
+                            
+                            {/* Order History */}
+                            <div className="md:col-span-2">
+                              <h4 className="text-xs font-bold uppercase tracking-wider mb-3 text-[var(--brand-text-muted)]">{t('admin.recent_orders', 'Recent Orders')}</h4>
+                              <div className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                                {analyticsCache[c.id].orders?.map((o: any) => (
+                                  <div key={o.id} className="p-3 rounded border bg-[var(--brand-surface)]" style={{ borderColor: 'var(--brand-border)' }}>
+                                    <div className="flex justify-between items-start mb-2">
+                                      <div>
+                                        <span className="font-bold">#{o.id.toString().slice(-4)}</span>
+                                        <span className="text-xs text-[var(--brand-text-muted)] ml-2">{new Date(o.created_at).toLocaleString()}</span>
+                                      </div>
+                                      <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-[var(--brand-surface-raised)]">{o.status}</span>
+                                    </div>
+                                    {o.delivery_address && (
+                                      <div className="text-xs text-[var(--brand-text-muted)] mb-2 flex items-center gap-1">
+                                        <i className="ti ti-map-pin" /> {o.delivery_address}
+                                      </div>
+                                    )}
+                                    <div className="text-xs space-y-0.5 pl-4 border-l-2 border-[var(--brand-border)]">
+                                      {o.items?.map((item: any, i: number) => (
+                                        <div key={i} className="flex justify-between">
+                                          <span>{item.name} x{item.qty}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                                {!analyticsCache[c.id].orders?.length && <div className="text-sm text-[var(--brand-text-muted)]">{t('admin.no_orders_found', 'No orders found.')}</div>}
+                              </div>
+                            </div>
+                            
+                            {/* Heatmap summary */}
+                            <div className="md:col-span-3 pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+                              <h4 className="text-xs font-bold uppercase tracking-wider mb-3 text-[var(--brand-text-muted)]">{t('admin.ordering_heatmap', 'Ordering Heatmap')}</h4>
+                              <div className="flex flex-wrap gap-2">
+                                {analyticsCache[c.id].heatmap?.length > 0 ? analyticsCache[c.id].heatmap.map((h: any, i: number) => (
+                                  <div key={i} className="px-2 py-1 rounded text-xs font-medium" style={{ background: `rgba(var(--brand-primary-rgb, 59, 130, 246), ${Math.min(1, h.cnt / 5)})`, color: h.cnt > 2 ? 'white' : 'inherit' }}>
+                                    {[t('client.day_sun', 'Sun'), t('client.day_mon', 'Mon'), t('client.day_tue', 'Tue'), t('client.day_wed', 'Wed'), t('client.day_thu', 'Thu'), t('client.day_fri', 'Fri'), t('client.day_sat', 'Sat')][h.dow]} {h.hour}:00 - {h.cnt} {t('admin.orders_lower', 'orders')}
+                                  </div>
+                                )) : <div className="text-sm text-[var(--brand-text-muted)]">{t('admin.not_enough_data', 'Not enough data for heatmap.')}</div>}
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>

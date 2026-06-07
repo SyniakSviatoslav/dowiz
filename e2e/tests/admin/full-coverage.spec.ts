@@ -6,35 +6,35 @@ test.describe('Admin Pages — Full Coverage', () => {
     await page.goto('/admin/couriers?dev=true');
     await page.waitForTimeout(4000);
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('analytics page loads with stats', async ({ page }) => {
     await page.goto('/admin/analytics?dev=true');
     await page.waitForTimeout(4000);
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('crm page loads with customer table', async ({ page }) => {
     await page.goto('/admin/crm?dev=true');
     await page.waitForTimeout(3000);
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('settings page loads with form', async ({ page }) => {
     await page.goto('/admin/settings?dev=true');
     await page.waitForTimeout(3000);
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('onboarding page loads with step wizard', async ({ page }) => {
     await page.goto('/admin/onboarding?dev=true');
     await page.waitForTimeout(3000);
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('onboarding step navigation works', async ({ page }) => {

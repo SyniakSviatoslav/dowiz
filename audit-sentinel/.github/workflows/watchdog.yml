@@ -1,0 +1,52 @@
+name: audit-watchdog
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: |
+          cd audit-sentinel
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Run Watchdog
+        run: cd audit-sentinel && pnpm watchdog
+        env:
+          ENV: ${{ vars.AUDIT_ENV || 'staging' }}
+          BASE_URL: ${{ secrets.AUDIT_BASE_URL }}
+          MENU_URL: ${{ secrets.AUDIT_MENU_URL }}
+          SITE_URL: ${{ secrets.AUDIT_SITE_URL }}
+          TEST_TENANT: ${{ secrets.AUDIT_TEST_TENANT || 'demo' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.OPS_TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.OPS_TELEGRAM_CHAT_ID }}
+          AUDIT_AGENT_ENABLED: 'true'
+
+      - name: Trigger Tier-2 on anomaly
+        if: failure()
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.REPO_DISPATCH_TOKEN || secrets.GITHUB_TOKEN }}
+          event-type: watchdog-anomaly
+          client-payload: '{"timestamp":"${{ github.event.head_commit.timestamp }}","run_id":"${{ github.run_id }}"}'
+
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: watchdog-findings-${{ github.run_id }}
+          path: audit-sentinel/findings/
+          retention-days: 7

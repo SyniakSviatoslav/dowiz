@@ -26,7 +26,10 @@ if (isDev) {
     if (isApi) {
       const method = (init?.method || 'GET').toUpperCase();
       let body: unknown;
-      try { if (init?.body) body = JSON.parse(init.body as string); } catch { /* ignore */ }
+      try { if (init?.body) body = JSON.parse(init.body as string); } catch {
+        // body is not JSON — pass through as-is
+        console.debug('[devBootstrap] request body is not JSON');
+      }
       const path = extractPath(url);
       const mock = getMockResponse(method, path, body);
       if (mock) {

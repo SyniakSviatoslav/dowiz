@@ -56,7 +56,9 @@ export function loadSupplies(): SupplyItem[] {
 }
 
 export function saveSupplies(supplies: SupplyItem[]): SupplyItem[] {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(supplies)); } catch {}
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(supplies)); } catch {
+    console.debug('[SupplyLibrary] localStorage write failed');
+  }
   return supplies;
 }
 
@@ -132,26 +134,26 @@ const SupplyForm = ({
       </h3>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>Name</label>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Salmon fillet" className="w-full h-10 px-3 rounded-lg border text-sm outline-none focus:border-[var(--brand-primary)] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+          <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.name', 'Name')}</label>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder={t('admin.eg_salmon', 'e.g. Salmon fillet')} className="w-full h-10 px-3 rounded-lg border text-sm outline-none focus:border-[var(--brand-primary)] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
         </div>
         <div>
-          <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>Category</label>
-          <input value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. Fish, Dairy" className="w-full h-10 px-3 rounded-lg border text-sm outline-none focus:border-[var(--brand-primary)] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+          <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.category', 'Category')}</label>
+          <input value={category} onChange={e => setCategory(e.target.value)} placeholder={t('admin.eg_category', 'e.g. Fish, Dairy')} className="w-full h-10 px-3 rounded-lg border text-sm outline-none focus:border-[var(--brand-primary)] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
         </div>
       </div>
       <div className="flex flex-wrap gap-1">
-        <label className="text-[11px] font-medium block w-full mb-1" style={{ color: 'var(--brand-text-muted)' }}>Type</label>
+        <label className="text-[11px] font-medium block w-full mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.type', 'Type')}</label>
         {(['food_ingredient', 'condiment', 'packaging', 'utensil'] as SupplyKind[]).map(k => (
           <button key={k} type="button" onClick={() => setKind(k)}
             className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-medium transition-all ${kind === k ? 'text-white' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
             style={{ background: kind === k ? 'var(--brand-primary)' : 'var(--brand-surface-raised)' }}>
             <i className={kindIcons[k]} style={{ fontSize: '0.7rem' }} />
-            {k === 'food_ingredient' ? 'Ingredient' : k === 'condiment' ? 'Sauce' : k === 'packaging' ? 'Packaging' : 'Utensil'}
+            {k === 'food_ingredient' ? t('supply.ingredient', 'Ingredient') : k === 'condiment' ? t('supply.sauce', 'Sauce') : k === 'packaging' ? t('supply.packaging', 'Packaging') : t('supply.utensil', 'Utensil')}
           </button>
         ))}
         <div className="w-full sm:w-auto sm:ml-2">
-          <label className="text-[10px] block mb-0.5" style={{ color: 'var(--brand-text-muted)' }}>Unit</label>
+          <label className="text-[10px] block mb-0.5" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.unit', 'Unit')}</label>
           <select value={baseUnit} onChange={e => setBaseUnit(e.target.value)} className="h-8 px-2 rounded-md border text-[10px] outline-none" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
             <option value="g">g</option><option value="ml">ml</option><option value="unit">unit</option>
           </select>
@@ -159,16 +161,16 @@ const SupplyForm = ({
       </div>
       {isFood && (
         <div className="border-t pt-3 space-y-3" style={{ borderColor: 'var(--brand-border)' }}>
-          <label className="text-[11px] font-medium block" style={{ color: 'var(--brand-text-muted)' }}>Nutrition per 100{baseUnit}</label>
+          <label className="text-[11px] font-medium block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.nutrition_per_100', 'Nutrition per 100')}{baseUnit}</label>
           <div className="grid grid-cols-4 gap-2">
-            {[{ label: 'Kcal', val: kcal, set: setKcal, ph: 'kcal' }, { label: 'Protein (g)', val: protein, set: setProtein, ph: '0' }, { label: 'Fat (g)', val: fat, set: setFat, ph: '0' }, { label: 'Carbs (g)', val: carbs, set: setCarbs, ph: '0' }].map(f => (
+            {[{ label: t('admin.kcal', 'Kcal'), val: kcal, set: setKcal, ph: 'kcal' }, { label: t('admin.protein_g', 'Protein (g)'), val: protein, set: setProtein, ph: '0' }, { label: t('admin.fat_g', 'Fat (g)'), val: fat, set: setFat, ph: '0' }, { label: t('admin.carbs_g', 'Carbs (g)'), val: carbs, set: setCarbs, ph: '0' }].map(f => (
               <div key={f.label}>
                 <input value={f.val} onChange={e => f.set(e.target.value)} type="number" placeholder={f.ph} className="w-full h-9 px-2 rounded-lg border text-xs outline-none focus:border-[var(--brand-primary)] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                 <span className="text-[9px] block mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{f.label}</span>
               </div>
             ))}
           </div>
-          <label className="text-[11px] font-medium block" style={{ color: 'var(--brand-text-muted)' }}>Allergens</label>
+          <label className="text-[11px] font-medium block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.allergens', 'Allergens')}</label>
           <div className="flex flex-wrap gap-1">
             {ALL_ALLERGENS.map(a => {
               const active = allergens.includes(a);
@@ -182,7 +184,7 @@ const SupplyForm = ({
         </div>
       )}
       <div className="border-t pt-3" style={{ borderColor: 'var(--brand-border)' }}>
-        <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>Reorder threshold ({baseUnit})</label>
+        <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.reorder_threshold', 'Reorder threshold')} ({baseUnit})</label>
         <input value={threshold} onChange={e => setThreshold(e.target.value)} type="number" className="w-full sm:w-48 h-9 px-3 rounded-lg border text-xs outline-none focus:border-[var(--brand-primary)] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
       </div>
       <div className="flex justify-end gap-2 pt-2">
@@ -252,10 +254,10 @@ export function SupplyLibraryPage() {
   };
   const KINDS: Array<{ key: 'all' | SupplyKind; label: string }> = [
     { key: 'all', label: t('common.all') },
-    { key: 'food_ingredient', label: 'Ingredients' },
-    { key: 'condiment', label: 'Sauces' },
-    { key: 'packaging', label: 'Packaging' },
-    { key: 'utensil', label: 'Utensils' },
+    { key: 'food_ingredient', label: t('admin.ingredients', 'Ingredients') },
+    { key: 'condiment', label: t('admin.sauces', 'Sauces') },
+    { key: 'packaging', label: t('admin.packaging', 'Packaging') },
+    { key: 'utensil', label: t('admin.utensils', 'Utensils') },
   ];
 
   return (
@@ -268,11 +270,11 @@ export function SupplyLibraryPage() {
           </p>
         </div>
         <Button onClick={() => { setAdding(true); setEditing(null); }}>
-          <i className="ti ti-plus" /> Add Supply
+          <i className="ti ti-plus" /> {t('admin.add_supply', 'Add Supply')}
         </Button>
       </div>
 
-      <HintCard title={t('admin.supplies')} description="Ingredients added here appear in product recipe editor. Define once, use everywhere." icon="ti ti-info-circle" />
+      <HintCard title={t('admin.supplies')} description={t('admin.supplies_hint', 'Ingredients added here appear in product recipe editor. Define once, use everywhere.')} icon="ti ti-info-circle" />
 
       {adding && <SupplyForm onSave={handleSave} onCancel={() => setAdding(false)} />}
 
@@ -296,7 +298,7 @@ export function SupplyLibraryPage() {
       {loading ? (
         <div className="space-y-2">{[1,2,3,4,5].map(i => <SkeletonBase key={i} className="h-16 w-full rounded-xl" />)}</div>
       ) : filtered.length === 0 ? (
-        <EmptyState title={t('common.no_data')} description={search ? 'No supplies match.' : 'Add your first supply to start.'} icon={<i className="ti ti-packages text-4xl" style={{ opacity: 0.3 }} />} />
+        <EmptyState title={t('common.no_data')} description={search ? t('admin.no_supplies_match', 'No supplies match.') : t('admin.add_first_supply', 'Add your first supply to start.')} icon={<i className="ti ti-packages text-4xl" style={{ opacity: 0.3 }} />} />
       ) : (
         <div className="space-y-1">
           {editing && <SupplyForm initial={editing} onSave={handleSave} onCancel={() => setEditing(null)} />}
@@ -320,7 +322,7 @@ export function SupplyLibraryPage() {
                     <span>{supply.category}</span><span>·</span><span>{supply.baseUnit}</span>
                     {supply.kcalPer100 && <><span>·</span><span>{supply.kcalPer100} kcal/100{supply.baseUnit}</span></>}
                     {!supply.nutritionConfirmedAt && (supply.kind === 'food_ingredient' || supply.kind === 'condiment') && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)' }}>unconfirmed</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)' }}>{t('admin.unconfirmed', 'unconfirmed')}</span>
                     )}
                   </div>
                   {supply.allergens.length > 0 && (
@@ -330,10 +332,10 @@ export function SupplyLibraryPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => setEditing(supply)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors" title="Edit">
+                  <button onClick={() => setEditing(supply)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors" title={t('common.edit', 'Edit')}>
                     <i className="ti ti-edit" style={{ fontSize: '0.85rem', color: 'var(--brand-text-muted)' }} />
                   </button>
-                  <button onClick={() => handleDelete(supply.id)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-danger-light)] transition-colors" title="Delete">
+                  <button onClick={() => handleDelete(supply.id)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-danger-light)] transition-colors" title={t('common.delete', 'Delete')}>
                     <i className="ti ti-trash" style={{ fontSize: '0.85rem', color: 'var(--brand-text-muted)' }} />
                   </button>
                 </div>

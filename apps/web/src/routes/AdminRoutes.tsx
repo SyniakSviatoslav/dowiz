@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ToastProvider, LanguageSwitcher } from '@deliveryos/ui';
+import { ToastProvider, LanguageSwitcher, useI18n } from '@deliveryos/ui';
 import { DashboardPage } from '../pages/admin/DashboardPage.js';
 import { MenuManagerPage } from '../pages/admin/MenuManagerPage.js';
 import { BrandingPage } from '../pages/admin/BrandingPage.js';
@@ -12,20 +12,21 @@ import { OnboardingPage } from '../pages/admin/OnboardingPage.js';
 import { SupplyLibraryPage } from '../pages/admin/SupplyLibraryPage.js';
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', href: '/admin', icon: 'ti ti-layout-dashboard' },
-  { label: 'Orders', href: '/admin/orders', icon: 'ti ti-clipboard-list' },
-  { label: 'Menu', href: '/admin/menu', icon: 'ti ti-tools-kitchen-2' },
-  { label: 'Supplies', href: '/admin/supplies', icon: 'ti ti-packages' },
-  { label: 'Couriers', href: '/admin/couriers', icon: 'ti ti-motorbike' },
-  { label: 'Analytics', href: '/admin/analytics', icon: 'ti ti-chart-bar' },
-  { label: 'CRM', href: '/admin/crm', icon: 'ti ti-users' },
-  { label: 'Branding', href: '/admin/branding', icon: 'ti ti-palette' },
-  { label: 'Settings', href: '/admin/settings', icon: 'ti ti-settings' },
+  { key: 'admin.dashboard', href: '/admin', icon: 'ti ti-layout-dashboard' },
+  { key: 'admin.orders', href: '/admin/orders', icon: 'ti ti-clipboard-list' },
+  { key: 'admin.menu', href: '/admin/menu', icon: 'ti ti-tools-kitchen-2' },
+  { key: 'admin.supplies', href: '/admin/supplies', icon: 'ti ti-packages' },
+  { key: 'admin.couriers', href: '/admin/couriers', icon: 'ti ti-motorbike' },
+  { key: 'admin.analytics', href: '/admin/analytics', icon: 'ti ti-chart-bar' },
+  { key: 'admin.crm', href: '/admin/crm', icon: 'ti ti-users' },
+  { key: 'admin.branding', href: '/admin/branding', icon: 'ti ti-palette' },
+  { key: 'admin.settings', href: '/admin/settings', icon: 'ti ti-settings' },
 ];
 
 function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const isDev = typeof window !== 'undefined' && (sessionStorage.getItem('dos_dev') === '1' || new URLSearchParams(window.location.search).get('dev') === 'true');
@@ -46,7 +47,7 @@ function AdminLayout() {
         <button
           key={item.href}
               onClick={() => { navTo(item.href); setMobileOpen(false); }}
-          title={collapsed ? item.label : undefined}
+          title={collapsed ? t(item.key) : undefined}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--brand-radius-sm)] text-sm transition-all duration-200 ${
             isActive(item.href)
               ? 'bg-[var(--brand-primary)] text-white font-medium shadow-sm'
@@ -54,7 +55,7 @@ function AdminLayout() {
           }`}
         >
           <i className={`${item.icon} text-[18px] shrink-0 ${collapsed ? 'mx-auto' : ''}`} />
-          {!collapsed && <span className="truncate">{item.label}</span>}
+          {!collapsed && <span className="truncate">{t(item.key)}</span>}
         </button>
       ))}
     </nav>
@@ -83,11 +84,14 @@ function AdminLayout() {
         <div className={`p-2 border-t border-[var(--brand-border)] space-y-1 ${collapsed ? 'text-center' : ''}`}>
           {!collapsed && <div className="px-1"><LanguageSwitcher variant="full" /></div>}
           <button
-            onClick={() => navigate('/')}
+            onClick={() => {
+              localStorage.removeItem('dos_access_token');
+              navigate('/login');
+            }}
             className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)] hover:text-[var(--brand-text)] transition-colors ${collapsed ? 'justify-center' : ''}`}
           >
             <i className="ti ti-logout text-[18px]" />
-            {!collapsed && 'Exit'}
+            {!collapsed && t('auth.logout', 'Exit')}
           </button>
         </div>
       </aside>

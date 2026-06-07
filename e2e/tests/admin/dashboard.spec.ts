@@ -12,7 +12,7 @@ test.describe('Admin Dashboard', () => {
     page.on('pageerror', (err) => errors.push(err.message));
 
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
 
     const criticalErrors = errors.filter(e =>
       !e.includes('favicon') && !e.includes('404') && !e.includes('manifest')
@@ -22,7 +22,7 @@ test.describe('Admin Dashboard', () => {
 
   test('dashboard renders content', async ({ page }) => {
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
     // Content may be minimal during loading or empty state
     expect(body.length).toBeGreaterThan(0);
   });

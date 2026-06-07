@@ -13,9 +13,16 @@ export interface ShellProps {
   cssHash?: string;
   themeVersion?: number;
   locationId?: string;
+  brandPrimary?: string;
+  brandBg?: string;
+  brandText?: string;
 }
 
-export function renderClientShell({ title, slug, scriptUrl, nonce, cssHash, themeVersion, locationId }: ShellProps): string {
+export function renderClientShell({ title, slug, scriptUrl, nonce, cssHash, themeVersion, locationId, brandPrimary, brandBg, brandText }: ShellProps): string {
+  const primary = brandPrimary || '#ea4f16';
+  const bg = brandBg || '#121212';
+  const text = brandText || '#ffffff';
+
   const vdom = html`
     <html lang="en">
       <head>
@@ -32,9 +39,9 @@ export function renderClientShell({ title, slug, scriptUrl, nonce, cssHash, them
         ${cssHash ? html`<link rel="stylesheet" href="/public/locations/${locationId}/theme.css?hash=${cssHash}&v=${themeVersion}" />` : null}
         <style nonce="${nonce}">
           :root {
-            --brand-primary: #e63946;
-            --brand-bg: #f8f9fa;
-            --brand-text: #212529;
+            --brand-primary: ${primary};
+            --brand-bg: ${bg};
+            --brand-text: ${text};
           }
           body {
             font-family: system-ui, sans-serif;

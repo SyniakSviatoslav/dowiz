@@ -1,6 +1,11 @@
 import { useState, useCallback } from 'react';
 import { MapLibreBase, type LngLatLike } from './MapLibreBase.js';
 
+function getCSSVar(name: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
 interface MapWithRadiusProps {
   className?: string;
   initialCenter?: LngLatLike;
@@ -32,7 +37,7 @@ export function MapWithRadius({
     onRadiusChange?.(center, newRadius);
   }, [center, onRadiusChange]);
 
-  const markers = [{ lngLat: center, color: '#ea4f16', label: '📍' }];
+  const markers = [{ lngLat: center, color: getCSSVar('--brand-primary', '#ea4f16'), label: '📍' }];
 
   return (
     <div className="flex flex-col gap-3">
