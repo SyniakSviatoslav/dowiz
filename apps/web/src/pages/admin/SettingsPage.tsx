@@ -62,6 +62,14 @@ export function SettingsPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
+  // Telegram state
+  const [locationId, setLocationId] = useState<string | null>(null);
+  const [tgTargets, setTgTargets] = useState<any[]>([]);
+  const [tgDeepLink, setTgDeepLink] = useState<string | null>(null);
+  const [tgLoading, setTgLoading] = useState(false);
+  const [tgTesting, setTgTesting] = useState(false);
+  const [tgMessage, setTgMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   const fetchSettings = async () => {
     try {
       setLoading(true);
@@ -73,6 +81,7 @@ export function SettingsPage() {
           lat: data.lat || 41.331,
           lng: data.lng || 19.817,
         });
+        if (data.id) setLocationId(data.id);
       } else {
         setSettings(MOCK_SETTINGS);
       }
@@ -90,6 +99,59 @@ export function SettingsPage() {
   useEffect(() => {
     fetchSettings();
   }, []);
+
+  useEffect(() => {
+    if (!locationId) return;
+    fetchTgTargets();
+  }, [locationId]);
+
+  const fetchTgTargets = async () => {
+    if (!locationId) return;
+    try {
+      const res = await apiClient<any>(`/owner/locations/${locationId}/notifications/targets`);
+      setTgTargets(res?.targets || []);
+    } catch { /* ignore */ }
+  };
+
+  const handleTgConnect = async () => {
+    if (!locationId) return;
+    setTgLoading(true);
+    setTgMessage(null);
+    try {
+      const res = await apiClient<any>(`/owner/locations/${locationId}/notifications/telegram/connect-init`, { method: 'POST' });
+      setTgDeepLink(res.deepLink);
+    } catch (err: any) {
+      setTgMessage({ type: 'error', text: err.message || 'Failed to initiate connection' });
+    } finally {
+      setTgLoading(false);
+    }
+  };
+
+  const handleTgTest = async () => {
+    if (!locationId) return;
+    setTgTesting(true);
+    setTgMessage(null);
+    try {
+      await apiClient(`/owner/locations/${locationId}/notifications/test`, { method: 'POST' });
+      setTgMessage({ type: 'success', text: 'Test notification sent! Check your Telegram.' });
+    } catch (err: any) {
+      setTgMessage({ type: 'error', text: err.message || 'Failed to send test' });
+    } finally {
+      setTgTesting(false);
+    }
+  };
+
+  const handleTgToggle = async (targetId: string, currentStatus: string) => {
+    if (!locationId) return;
+    const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
+    try {
+      await apiClient(`/owner/locations/${locationId}/notifications/targets/${targetId}`, {
+        method: 'PUT',
+        body: { status: newStatus }
+      });
+      await fetchTgTargets();
+    } catch { /* ignore */ }
+  };
 
   const handleChange = (field: keyof LocationSettings, value: any) => {
     setSettings((prev) => ({
@@ -289,6 +351,86 @@ export function SettingsPage() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* ── Telegram Notifications ── */}
+          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <i className="ti ti-brand-telegram text-lg" style={{ color: '#0088cc' }} />
+              <h3 className="font-semibold text-sm text-[var(--brand-text-muted)]">
+                {t('admin.telegram_notifications', 'Telegram Notifications')}
+              </h3>
+            </div>
+
+            <p className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('admin.telegram_desc', 'Receive order alerts and manage your restaurant directly from Telegram.')}
+            </p>
+
+            {/* Connected targets */}
+            {tgTargets.length > 0 && (
+              <div className="space-y-2">
+                {tgTargets.map((tgt: any) => (
+                  <div key={tgt.id} className="flex items-center justify-between p-3 rounded-lg border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${tgt.status === 'active' ? 'bg-[var(--color-success)]' : 'bg-[var(--brand-text-muted)]'}`} />
+                      <div>
+                        <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>
+                          {tgt.channel === 'telegram' ? 'Telegram' : tgt.channel}
+                        </div>
+                        <div className="text-[10px] font-mono" style={{ color: 'var(--brand-text-muted)' }}>
+                          {tgt.address?.slice(0, 12)}...
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => handleTgToggle(tgt.id, tgt.status)}
+                        className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${tgt.status === 'active' ? 'bg-[var(--color-success-light)]' : 'bg-[var(--brand-surface-raised)]'}`}
+                        title={tgt.status === 'active' ? t('admin.disable', 'Disable') : t('admin.enable', 'Enable')}>
+                        <i className={`ti ti-${tgt.status === 'active' ? 'check' : 'power'}`} style={{ fontSize: '0.85rem', color: tgt.status === 'active' ? 'var(--color-success)' : 'var(--brand-text-muted)' }} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Deep link flow */}
+            {tgDeepLink && (
+              <div className="p-3 rounded-lg border" style={{ background: 'var(--brand-primary-light)', borderColor: 'var(--brand-primary)' }}>
+                <div className="text-xs font-semibold mb-1.5" style={{ color: 'var(--brand-primary)' }}>
+                  {t('admin.tg_step1', '1. Open this link in Telegram:')}
+                </div>
+                <a href={tgDeepLink} target="_blank" rel="noopener noreferrer"
+                  className="text-sm font-mono underline break-all" style={{ color: 'var(--brand-primary)' }}>
+                  {tgDeepLink}
+                </a>
+                <div className="text-[10px] mt-2" style={{ color: 'var(--brand-text-muted)' }}>
+                  {t('admin.tg_step2', '2. Click Start in the bot. Your Telegram will be connected automatically.')}
+                </div>
+              </div>
+            )}
+
+            {/* Messages */}
+            {tgMessage && (
+              <div className="p-3 rounded-lg text-xs" style={{
+                background: tgMessage.type === 'success' ? 'var(--color-success-light)' : 'var(--color-danger-light)',
+                color: tgMessage.type === 'success' ? 'var(--color-success)' : 'var(--color-danger)'
+              }}>
+                {tgMessage.text}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-2">
+              <Button onClick={handleTgConnect} isLoading={tgLoading} variant="ghost" size="sm">
+                <i className="ti ti-brand-telegram" /> {tgTargets.length > 0 ? t('admin.tg_add_another', 'Add Another') : t('admin.tg_connect', 'Connect Telegram')}
+              </Button>
+              {tgTargets.length > 0 && (
+                <Button onClick={handleTgTest} isLoading={tgTesting} variant="ghost" size="sm">
+                  <i className="ti ti-send" /> {t('admin.tg_test', 'Send Test')}
+                </Button>
+              )}
             </div>
           </div>
 
