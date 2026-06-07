@@ -48,6 +48,19 @@ export function MenuManagerPage() {
   const [formStock, setFormStock] = useState('');
 
   const [saving, setSaving] = useState(false);
+
+  // Import state
+  const [showImport, setShowImport] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importDragOver, setImportDragOver] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importStep, setImportStep] = useState<'upload' | 'preview' | 'done'>('upload');
+  const [importSessionId, setImportSessionId] = useState<string | null>(null);
+  const [importPreview, setImportPreview] = useState<any>(null);
+  const [importMode, setImportMode] = useState<'merge' | 'add_only' | 'replace'>('merge');
+  const [importError, setImportError] = useState('');
+  const [importResult, setImportResult] = useState<any>(null);
+
   // Taste profile (5 axes ├Ч 3 levels)
   const TASTE_AXES = ['spicy', 'sweet', 'salty', 'sour', 'richness'] as const;
   const TASTE_LABELS: Record<string, string> = { spicy: 'Spicy', sweet: 'Sweet', salty: 'Salty', sour: 'Sour', richness: 'Richness' };
@@ -210,6 +223,56 @@ export function MenuManagerPage() {
     }
   };
 
+  // ── PDF Menu Import ──
+  const handleImportUpload = async () => {
+    if (!importFile) return;
+    setImportLoading(true);
+    setImportError('');
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+      formData.append('mode', importMode);
+      const res = await apiClient<any>('/owner/menu/import/preview', { method: 'POST', body: formData });
+      setImportSessionId(res.import_session_id);
+      setImportPreview(res);
+      setImportStep('preview');
+    } catch (err: any) {
+      setImportError(err.message || 'Failed to analyze menu. Make sure the file is a PDF or image.');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleImportCommit = async () => {
+    if (!importSessionId) return;
+    setImportLoading(true);
+    setImportError('');
+    try {
+      const res = await apiClient<any>('/owner/menu/import/commit', {
+        method: 'POST',
+        body: { import_session_id: importSessionId, force: true }
+      });
+      setImportResult(res);
+      setImportStep('done');
+      await fetchCategories();
+    } catch (err: any) {
+      setImportError(err.message || 'Failed to import menu.');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const resetImport = () => {
+    setShowImport(false);
+    setImportFile(null);
+    setImportStep('upload');
+    setImportSessionId(null);
+    setImportPreview(null);
+    setImportMode('merge');
+    setImportError('');
+    setImportResult(null);
+  };
+
   const toggleExpand = async (catId: string) => {
     if (expandedCat === catId) { setExpandedCat(null); return; }
     setExpandedCat(catId);
@@ -264,6 +327,9 @@ export function MenuManagerPage() {
             {categories.length} {t('admin.categories', 'categories')} ┬╖ {totalDishes} {t('admin.dishes_in_stock', 'dishes in stock')}
           </p>
         </div>
+        <Button onClick={() => setShowImport(true)} variant="ghost" size="sm">
+          <i className="ti ti-file-import" /> {t('admin.import_pdf', 'Import PDF')}
+        </Button>
       </div>
 
       {error && (
@@ -310,92 +376,121 @@ export function MenuManagerPage() {
       ) : categories.length === 0 ? (
         <EmptyState title={t('admin.no_categories', 'No categories')} description={t('admin.add_category_desc', 'Add a category above to start.')} />
       ) : (
-        <div className="space-y-2">
-          {categories.map(cat => {
-            const products = getAllProducts(cat.id);
-            return (
-              <div key={cat.id} className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--brand-border)' }}>
-                <button onClick={() => toggleExpand(cat.id)} className="w-full p-4 flex items-center justify-between hover:bg-[var(--brand-surface)] transition-colors text-left">
-                  <div className="flex items-center gap-3">
-                    <i className={`ti text-sm transition-transform ${expandedCat === cat.id ? 'ti-chevron-down' : 'ti-chevron-right'}`} style={{ color: 'var(--brand-text-muted)' }} />
-                    <span className="font-medium">{cat.name}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
-                      {cat.products?.length ?? '...'}
-                    </span>
-                  </div>
-                  <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openAddForm(cat.id); }}>
-                    <i className="ti ti-plus" /> {t('common.add', 'Add')}
-                  </Button>
-                </button>
-
-                {expandedCat === cat.id && (
-                  <div className="border-t" style={{ borderColor: 'var(--brand-border)' }}>
-                    {cat.products === undefined ? (
-                      <div className="p-4 text-center text-sm" style={{ color: 'var(--brand-text-muted)' }}>{t('common.loading', 'Loading...')}</div>
-                    ) : products.length === 0 ? (
-                      <div className="p-4 text-center text-sm" style={{ color: 'var(--brand-text-muted)' }}>
-                        {searchQuery ? t('admin.no_matching_products', 'No matching products.') : t('admin.no_items_yet', 'No items yet. Click Add to create one.')}
-                      </div>
-                    ) : (
-                      products.map((product, idx) => (
-                        <div key={product.id} className="flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 hover:bg-[var(--brand-surface)] slide-in-up mt-2"
-                          style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', animationDelay: `${idx * 20}ms` }}>
-                          {/* Image or placeholder */}
-                          <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 cursor-pointer flex items-center justify-center"
-                            style={{ background: 'var(--brand-primary-light)' }}
-                            onClick={() => setPreviewProduct(product)}>
-                            {product.imageUrl
-                              ? <img src={product.imageUrl} alt="" className="w-full h-full object-cover" />
-                              : <i className="ti ti-photo" style={{ color: 'var(--brand-primary)' }} />
-                            }
+        <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--brand-border)' }}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ background: 'var(--brand-surface)' }}>
+                <th className="text-left p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.product', 'Product')}</th>
+                <th className="text-left p-3 font-medium hidden sm:table-cell" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.category', 'Category')}</th>
+                <th className="text-right p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.price_all', 'Price (ALL)')}</th>
+                <th className="text-center p-3 font-medium hidden md:table-cell" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.stock', 'Stock')}</th>
+                <th className="text-center p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('menu.available', 'Available')}</th>
+                <th className="p-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {categories.map(cat => {
+                const products = getAllProducts(cat.id);
+                if (products.length === 0 && searchQuery) return null;
+                return (
+                  <React.Fragment key={cat.id}>
+                    {/* Category header row */}
+                    <tr style={{ background: 'var(--brand-surface-raised)' }}>
+                      <td colSpan={6} className="px-3 py-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <i className={`ti text-sm cursor-pointer transition-transform ${expandedCat === cat.id ? 'ti-chevron-down' : 'ti-chevron-right'}`}
+                              style={{ color: 'var(--brand-text-muted)' }}
+                              onClick={() => toggleExpand(cat.id)} />
+                            <span className="font-semibold text-sm" style={{ color: 'var(--brand-text)' }}>{cat.name}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: 'var(--brand-surface)', color: 'var(--brand-text-muted)' }}>
+                              {cat.products?.length ?? 0}
+                            </span>
                           </div>
-
-                          {/* Availability toggle */}
-                          <button onClick={() => handleToggleAvailable(cat.id, product)}
-                            className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${product.available ? 'bg-[var(--brand-primary)] border-[var(--brand-primary)]' : 'border-[var(--brand-border)]'}`}
-                            title={product.available ? t('menu.available', 'Available') : t('menu.stop_listed', 'Stop-listed')}>
-                            {product.available && <i className="ti ti-check text-[10px] text-white" />}
-                          </button>
-
-                          {/* Info */}
-                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setPreviewProduct(product)}>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium truncate" style={{ color: 'var(--brand-text)' }}>{product.name}</span>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
-                                PRD
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-3 text-[11px] mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>
-                              {product.description && <span className="truncate">{product.description}</span>}
-                              {product.description && <span>·</span>}
-                              {product.stockCount != null && (
-                                <span className={product.stockCount > 0 ? '' : 'text-[var(--color-danger)] font-medium'}>
-                                  {product.stockCount > 0 ? `${product.stockCount} ${t('menu.in_stock', 'in stock')}` : t('menu.out_of_stock', 'Out of stock')}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Price */}
-                          <span className="text-sm font-semibold shrink-0" style={{ color: 'var(--brand-primary)' }}>{product.price} ALL</span>
-
-                          {/* Actions */}
-                          <div className="flex items-center gap-1 shrink-0 ml-2">
-                            <button onClick={() => openEditForm(product)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors" title={t('common.edit', 'Edit')}>
-                              <i className="ti ti-edit" style={{ fontSize: '0.85rem', color: 'var(--brand-text-muted)' }} />
-                            </button>
-                            <button onClick={() => handleDeleteProduct(cat.id, product.id)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-danger-light)] transition-colors" title={t('common.delete', 'Delete')}>
-                              <i className="ti ti-trash" style={{ fontSize: '0.85rem', color: 'var(--brand-text-muted)' }} />
-                            </button>
-                          </div>
+                          <Button size="sm" variant="ghost" onClick={() => openAddForm(cat.id)}>
+                            <i className="ti ti-plus" /> {t('common.add', 'Add')}
+                          </Button>
                         </div>
+                      </td>
+                    </tr>
+                    {/* Product rows */}
+                    {(expandedCat === cat.id || searchQuery) && (
+                      cat.products === undefined ? (
+                        <tr><td colSpan={6} className="p-4 text-center text-sm" style={{ color: 'var(--brand-text-muted)' }}>{t('common.loading', 'Loading...')}</td></tr>
+                      ) : products.length === 0 ? (
+                        <tr><td colSpan={6} className="p-4 text-center text-sm" style={{ color: 'var(--brand-text-muted)' }}>
+                          {searchQuery ? t('admin.no_matching_products', 'No matching products.') : t('admin.no_items_yet', 'No items yet. Click Add to create one.')}
+                        </td></tr>
+                      ) : products.map((product, idx) => (
+                        <tr key={product.id}
+                          className="border-t transition-colors hover:bg-[var(--brand-surface-raised)] cursor-pointer"
+                          style={{ borderColor: 'var(--brand-border)', animationDelay: `${idx * 30}ms` }}
+                          onClick={() => setPreviewProduct(product)}>
+                          <td className="p-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 flex items-center justify-center"
+                                style={{ background: 'var(--brand-primary-light)' }}>
+                                {product.imageUrl
+                                  ? <img src={product.imageUrl} alt="" className="w-full h-full object-cover" />
+                                  : <i className="ti ti-photo" style={{ color: 'var(--brand-primary)' }} />
+                                }
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium truncate" style={{ color: 'var(--brand-text)' }}>{product.name}</span>
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
+                                    PRD
+                                  </span>
+                                </div>
+                                {product.description && <div className="text-[11px] truncate" style={{ color: 'var(--brand-text-muted)' }}>{product.description}</div>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-3 hidden sm:table-cell" style={{ color: 'var(--brand-text-muted)' }}>
+                            {cat.name}
+                          </td>
+                          <td className="p-3 text-right font-semibold" style={{ color: 'var(--brand-primary)' }}>
+                            {product.price} ALL
+                          </td>
+                          <td className="p-3 text-center hidden md:table-cell">
+                            {product.stockCount != null ? (
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${product.stockCount > 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'}`}
+                                style={{ background: product.stockCount > 0 ? 'var(--color-success-light)' : 'var(--color-danger-light)' }}>
+                                {product.stockCount}
+                              </span>
+                            ) : (
+                              <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>—</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-center">
+                            <button onClick={(e) => { e.stopPropagation(); handleToggleAvailable(cat.id, product); }}
+                              className={`w-5 h-5 rounded border-2 flex items-center justify-center mx-auto transition-colors ${product.available ? 'bg-[var(--brand-primary)] border-[var(--brand-primary)]' : 'border-[var(--brand-border)]'}`}
+                              title={product.available ? t('menu.available', 'Available') : t('menu.stop_listed', 'Stop-listed')}>
+                              {product.available && <i className="ti ti-check text-[10px] text-white" />}
+                            </button>
+                          </td>
+                          <td className="p-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button onClick={(e) => { e.stopPropagation(); openEditForm(product); }}
+                                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--brand-surface)] transition-colors"
+                                title={t('common.edit', 'Edit')}>
+                                <i className="ti ti-edit" style={{ fontSize: '0.85rem', color: 'var(--brand-text-muted)' }} />
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(cat.id, product.id); }}
+                                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-danger-light)] transition-colors"
+                                title={t('common.delete', 'Delete')}>
+                                <i className="ti ti-trash" style={{ fontSize: '0.85rem', color: 'var(--brand-text-muted)' }} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
                       ))
                     )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -573,6 +668,191 @@ export function MenuManagerPage() {
               <Button onClick={handleSaveProduct} isLoading={saving} disabled={!formName.trim() || !formPrice} className="flex-1">
                 {editingProduct ? t('common.save', 'Save Changes') : t('admin.add_item', 'Add Item')}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PDF Import Modal ── */}
+      {showImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="w-full max-w-lg rounded-2xl border shadow-xl overflow-hidden" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+              <div className="flex items-center gap-2">
+                <i className="ti ti-file-import text-lg" style={{ color: 'var(--brand-primary)' }} />
+                <h3 className="font-bold">{t('admin.import_menu', 'Import Menu from PDF')}</h3>
+              </div>
+              <button onClick={resetImport} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--brand-surface)] transition-colors">
+                <i className="ti ti-x" style={{ color: 'var(--brand-text-muted)' }} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* Step: Upload */}
+              {importStep === 'upload' && (
+                <>
+                  {/* Mode selector */}
+                  <div>
+                    <label className="text-[11px] font-medium block mb-1.5" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.import_mode', 'Import Mode')}</label>
+                    <div className="flex gap-2">
+                      {[
+                        { value: 'merge', label: t('admin.import_merge', 'Merge'), desc: t('admin.import_merge_desc', 'Update existing, add new') },
+                        { value: 'add_only', label: t('admin.import_add_only', 'Add Only'), desc: t('admin.import_add_only_desc', 'Never overwrite') },
+                        { value: 'replace', label: t('admin.import_replace', 'Replace'), desc: t('admin.import_replace_desc', 'Delete & recreate') },
+                      ].map(opt => (
+                        <button key={opt.value} onClick={() => setImportMode(opt.value as any)}
+                          className={`flex-1 p-2 rounded-lg border text-left transition-colors ${importMode === opt.value ? 'ring-2 ring-[var(--brand-primary)]' : ''}`}
+                          style={{ background: importMode === opt.value ? 'var(--brand-primary-light)' : 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+                          <div className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>{opt.label}</div>
+                          <div className="text-[10px] mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{opt.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Drop zone */}
+                  <div
+                    onDragOver={e => { e.preventDefault(); setImportDragOver(true); }}
+                    onDragLeave={() => setImportDragOver(false)}
+                    onDrop={e => { e.preventDefault(); setImportDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) setImportFile(f); }}
+                    className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${importDragOver ? 'border-[var(--brand-primary)] bg-[var(--brand-primary-light)]' : 'border-[var(--brand-border)]'}`}
+                    onClick={() => document.getElementById('import-file-input')?.click()}>
+                    <input id="import-file-input" type="file" accept=".pdf,image/*" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) setImportFile(f); }} />
+                    {importFile ? (
+                      <div className="space-y-2">
+                        <i className="ti ti-file-check text-3xl" style={{ color: 'var(--color-success)' }} />
+                        <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>{importFile.name}</div>
+                        <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{(importFile.size / 1024).toFixed(0)} KB</div>
+                        <button onClick={e => { e.stopPropagation(); setImportFile(null); }} className="text-xs underline" style={{ color: 'var(--brand-text-muted)' }}>
+                          {t('common.remove', 'Remove')}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <i className="ti ti-upload text-3xl" style={{ color: 'var(--brand-text-muted)' }} />
+                        <div className="text-sm" style={{ color: 'var(--brand-text)' }}>
+                          {t('admin.import_drop', 'Drop your PDF or menu image here')}
+                        </div>
+                        <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>
+                          {t('admin.import_hint', 'AI will analyze and create categories, items & supplies. Review before saving.')}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {importError && (
+                    <div className="p-3 rounded-lg text-xs" style={{ background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>
+                      {importError}
+                    </div>
+                  )}
+
+                  <Button onClick={handleImportUpload} isLoading={importLoading} disabled={!importFile} className="w-full">
+                    <i className="ti ti-brain" /> {t('admin.analyze_menu', 'Analyze with AI')}
+                  </Button>
+                </>
+              )}
+
+              {/* Step: Preview */}
+              {importStep === 'preview' && importPreview && (
+                <>
+                  <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>
+                    {t('admin.import_preview_title', 'AI parsed your menu. Review before saving:')}
+                  </div>
+
+                  {/* Summary */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { label: t('admin.categories', 'Categories'), value: importPreview.draft_preview?.categories?.length ?? 0, icon: 'ti ti-folder' },
+                      { label: t('admin.products', 'Products'), value: importPreview.draft_preview?.products?.length ?? 0, icon: 'ti ti utensils-crossed' },
+                      { label: t('admin.issues', 'Issues'), value: importPreview.issues?.length ?? 0, icon: 'ti ti-alert-triangle', danger: (importPreview.issues?.length ?? 0) > 0 },
+                    ].map((s, i) => (
+                      <div key={i} className="p-3 rounded-lg border text-center" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+                        <i className={`${s.icon} text-lg`} style={{ color: s.danger ? 'var(--color-danger)' : 'var(--brand-primary)' }} />
+                        <div className="text-lg font-bold" style={{ color: 'var(--brand-text)' }}>{s.value}</div>
+                        <div className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Categories preview */}
+                  {importPreview.draft_preview?.categories?.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-semibold" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.categories', 'Categories')}</div>
+                      {importPreview.draft_preview.categories.map((c: any, i: number) => (
+                        <div key={i} className="flex items-center gap-2 text-sm p-2 rounded-lg" style={{ background: 'var(--brand-surface)' }}>
+                          <i className="ti ti-folder text-xs" style={{ color: 'var(--brand-primary)' }} />
+                          <span style={{ color: 'var(--brand-text)' }}>{c.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Products preview */}
+                  {importPreview.draft_preview?.products?.length > 0 && (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                      <div className="text-[11px] font-semibold" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.products', 'Products')}</div>
+                      {importPreview.draft_preview.products.map((p: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between text-sm p-2 rounded-lg" style={{ background: 'var(--brand-surface)' }}>
+                          <div className="flex items-center gap-2">
+                            <i className="ti ti-package text-xs" style={{ color: 'var(--brand-primary)' }} />
+                            <span style={{ color: 'var(--brand-text)' }}>{p.name}</span>
+                            {p.categoryKey && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
+                                {p.categoryKey}
+                              </span>
+                            )}
+                          </div>
+                          <span className="font-semibold text-xs" style={{ color: 'var(--brand-primary)' }}>{p.price} ALL</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Issues */}
+                  {importPreview.issues?.length > 0 && (
+                    <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
+                      <div className="text-[11px] font-semibold" style={{ color: 'var(--color-danger)' }}>{t('admin.issues', 'Issues')}</div>
+                      {importPreview.issues.map((iss: any, i: number) => (
+                        <div key={i} className="text-xs p-2 rounded" style={{ background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>
+                          {iss.message}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {importError && (
+                    <div className="p-3 rounded-lg text-xs" style={{ background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>
+                      {importError}
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <Button onClick={resetImport} variant="ghost" className="flex-1">{t('common.cancel', 'Cancel')}</Button>
+                    <Button onClick={handleImportCommit} isLoading={importLoading} className="flex-1">
+                      <i className="ti ti-check" /> {t('admin.import_commit', 'Import Menu')}
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {/* Step: Done */}
+              {importStep === 'done' && importResult && (
+                <div className="text-center space-y-4 py-4">
+                  <i className="ti ti-circle-check-filled text-5xl" style={{ color: 'var(--color-success)' }} />
+                  <div>
+                    <div className="text-lg font-bold" style={{ color: 'var(--brand-text)' }}>{t('admin.import_success', 'Menu Imported!')}</div>
+                    <div className="text-sm mt-1" style={{ color: 'var(--brand-text-muted)' }}>
+                      {t('admin.import_result', '{{categories}} categories, {{products}} products created.', {
+                        categories: importResult.counts?.categories ?? 0,
+                        products: importResult.counts?.products ?? 0,
+                      })}
+                    </div>
+                  </div>
+                  <Button onClick={resetImport} className="px-8">{t('common.done', 'Done')}</Button>
+                </div>
+              )}
             </div>
           </div>
         </div>
