@@ -80,7 +80,9 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           `SELECT require_phone_otp FROM locations WHERE id = $1`, [locationId]
         );
         requireOtp = otpCol.rows[0]?.require_phone_otp || false;
-      } catch { /* column may not exist */ }
+      } catch { /* column may not exist — assume OTP not required */
+        console.debug('[orders] require_phone_otp column check failed');
+      }
       if (requireOtp) {
         const otpHeader = request.headers['x-otp-verified'] as string | undefined;
         if (otpHeader) {
@@ -104,6 +106,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
             }
           } catch {
             // Invalid token — P26 does NOT block, E27 may soft-confirm
+            console.debug('[orders] OTP verification failed, proceeding without');
           }
         }
       }
@@ -183,11 +186,32 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         ),
       }));
 
-      // 4b. Compute signals for preflight
+      // 4b. Per-phone order throttle (FX-4) — hard block, not advisory
       const phoneForSignals = cust?.phone || '';
       const phoneHash = phoneForSignals ? crypto.createHash('sha256').update(phoneForSignals.replace(/\D/g, '')).digest('hex') : undefined;
       const clientIpHash = request.ip ? crypto.createHash('sha256').update(request.ip).digest('hex') : undefined;
       const preflightCustomerId = request.user?.role === 'customer' ? request.user.userId : undefined;
+
+      if (phoneHash) {
+        const THROTTLE_WINDOW_SECONDS = 900; // 15 minutes
+        const THROTTLE_MAX_ORDERS = 5;
+        const throttleRes = await client.query(
+          `SELECT COUNT(*)::int AS cnt FROM velocity_events
+           WHERE location_id = $1 AND phone_hash = $2
+             AND kind = 'order_placed'
+             AND window_started_at > now() - ($3 || ' seconds')::interval`,
+          [locationId, phoneHash, String(THROTTLE_WINDOW_SECONDS)],
+        );
+        const recentOrderCount = throttleRes.rows[0]?.cnt ?? 0;
+        if (recentOrderCount >= THROTTLE_MAX_ORDERS) {
+          await client.query('ROLLBACK');
+          return reply.status(429).send({
+            error: 'Too many orders from this phone number. Please try again later.',
+            code: 'PHONE_THROTTLE',
+            retryAfterSeconds: THROTTLE_WINDOW_SECONDS,
+          });
+        }
+      }
 
       const signals = await computeSignals(db, {
         locationId,
@@ -222,6 +246,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           }
         } catch {
           // OTP server check failure — proceed without OTP (E27: not a hard block)
+          console.debug('[orders] OTP server check failed, proceeding without');
         }
       }
 
@@ -506,7 +531,16 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       );
       const order = orderRes.rows[0];
 
-      // 12. Insert Order Items & Modifiers
+      // 12b. Record velocity event (for FX-4 throttle + signal computation)
+      if (phoneHash || clientIpHash) {
+        await client.query(
+          `INSERT INTO velocity_events (location_id, phone_hash, client_ip_hash, kind, window_started_at)
+           VALUES ($1, $2, $3, 'order_placed', $4)`,
+          [locationId, phoneHash || null, clientIpHash || null, new Date().toISOString()],
+        );
+      }
+
+      // 13. Insert Order Items & Modifiers
       for (const row of orderItemRows) {
         const oiRes = await client.query(
           `INSERT INTO order_items (order_id, product_id, name_snapshot, price_snapshot, quantity)

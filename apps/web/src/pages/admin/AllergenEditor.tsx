@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useI18n } from '@deliveryos/ui';
 
 const EU_ALLERGENS = [
   'gluten', 'shellfish', 'eggs', 'fish', 'peanuts', 'soy',
@@ -14,6 +15,7 @@ interface AllergenEditorProps {
 }
 
 export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStatusChange, onAllergensChange }: AllergenEditorProps) {
+  const { t } = useI18n();
   const toggleAllergen = (a: string) => {
     if (declaredAllergens.includes(a)) {
       onAllergensChange(declaredAllergens.filter(x => x !== a));
@@ -24,13 +26,13 @@ export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStat
 
   return (
     <div className="space-y-3">
-      <label className="text-xs font-medium block" style={{ color: 'var(--brand-text-muted)' }}>Allergen Attestation *</label>
+      <label className="text-xs font-medium block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.allergen_attestation', 'Allergen Attestation')} *</label>
 
       {/* Tri-state toggle */}
       <div className="flex rounded-lg p-0.5" style={{ background: 'var(--brand-surface-raised)' }}>
         {(['unset', 'none', 'listed'] as const).map(s => {
           const active = status === s;
-          const labels: Record<string, string> = { unset: 'Not yet', none: 'None', listed: 'Has allergens' };
+          const labels: Record<string, string> = { unset: t('admin.not_yet', 'Not yet'), none: t('admin.none', 'None'), listed: t('admin.has_allergens', 'Has allergens') };
           const colors: Record<string, string> = { unset: 'var(--brand-text-muted)', none: 'var(--color-success)', listed: 'var(--color-warning)' };
           return (
             <button
@@ -42,7 +44,7 @@ export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStat
               }`}
               style={{
                 background: active ? colors[s] : 'transparent',
-                color: active ? '#fff' : 'var(--brand-text-muted)',
+                color: active ? 'var(--color-on-primary)' : 'var(--brand-text-muted)',
               }}
             >
               {labels[s]}
@@ -53,15 +55,15 @@ export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStat
 
       {/* Status message */}
       {status === 'unset' && (
-        <div className="flex items-center gap-2 p-2 rounded-lg text-[11px]" style={{ background: 'rgba(217,119,6,0.08)', color: 'var(--color-warning)' }}>
+        <div className="flex items-center gap-2 p-2 rounded-lg text-[11px]" style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)' }}>
           <i className="ti ti-alert-triangle" />
-          <span>Product cannot be published until allergens are declared.</span>
+          <span>{t('admin.allergen_unset_msg', 'Product cannot be published until allergens are declared.')}</span>
         </div>
       )}
       {status === 'none' && (
-        <div className="flex items-center gap-2 p-2 rounded-lg text-[11px]" style={{ background: 'rgba(5,150,105,0.08)', color: 'var(--color-success)' }}>
+        <div className="flex items-center gap-2 p-2 rounded-lg text-[11px]" style={{ background: 'var(--color-success-light)', color: 'var(--color-success)' }}>
           <i className="ti ti-shield-check" />
-          <span>Confirmed: this product contains no allergens.</span>
+          <span>{t('admin.allergen_none_msg', 'Confirmed: this product contains no allergens.')}</span>
         </div>
       )}
 
@@ -81,7 +83,7 @@ export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStat
                   }`}
                   style={{
                     background: active ? 'var(--color-warning)' : 'var(--brand-border)',
-                    color: active ? '#fff' : 'var(--brand-text-muted)',
+                    color: active ? 'var(--color-on-warning)' : 'var(--brand-text-muted)',
                   }}
                 >
                   {a}
@@ -96,14 +98,14 @@ export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStat
       {bomAllergens && bomAllergens.length > 0 && status !== 'unset' && (
         <div className="flex flex-wrap items-start gap-1">
           {bomAllergens.filter(a => !declaredAllergens.includes(a)).length > 0 && (
-            <div className="flex items-center gap-1.5 p-2 rounded-lg text-[10px] w-full" style={{ background: 'rgba(217,119,6,0.06)', color: 'var(--color-warning)', border: '1px dashed rgba(217,119,6,0.3)' }}>
+            <div className="flex items-center gap-1.5 p-2 rounded-lg text-[10px] w-full" style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)', border: '1px dashed var(--status-pending-border)' }}>
               <i className="ti ti-info-circle shrink-0" />
               <span>
-                Recipe contains undeclared allergens:{' '}
+                {t('admin.undeclared_allergens', 'Recipe contains undeclared allergens:')}{' '}
                 {bomAllergens.filter(a => !declaredAllergens.includes(a)).map(a => (
                   <span key={a} className="font-semibold mx-0.5">{a}</span>
                 ))}
-                . Please review — this is advisory only and does not block publishing.
+                . {t('admin.undeclared_advisory', 'Please review — this is advisory only and does not block publishing.')}
               </span>
             </div>
           )}
@@ -118,19 +120,20 @@ export function ReadinessIndicator({
 }: {
   checks: Array<{ label: string; pass: boolean; action?: string; onAction?: () => void }>;
 }) {
+  const { t } = useI18n();
   const passed = checks.filter(c => c.pass).length;
   const total = checks.length;
   const isReady = passed === total;
 
   return (
     <div className="p-3 rounded-lg border" style={{
-      background: isReady ? 'rgba(5,150,105,0.06)' : 'rgba(217,119,6,0.04)',
+      background: isReady ? 'var(--color-success-light)' : 'var(--color-warning-light)',
       borderColor: isReady ? 'var(--color-success)' : 'var(--color-warning)',
     }}>
       <div className="flex items-center gap-2 mb-2">
         <i className={`${isReady ? 'ti ti-circle-check' : 'ti ti-alert-triangle'}`} style={{ color: isReady ? 'var(--color-success)' : 'var(--color-warning)', fontSize: '0.9rem' }} />
         <span className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>
-          {isReady ? 'Ready to publish' : `${total - passed} item${total - passed > 1 ? 's' : ''} remaining`}
+          {isReady ? t('admin.ready_to_publish', 'Ready to publish') : `${total - passed} ${t('admin.items_remaining', 'items remaining')}`}
         </span>
         <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
           {passed}/{total}

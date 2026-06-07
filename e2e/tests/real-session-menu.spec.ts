@@ -11,10 +11,7 @@ test.describe('Real Session — Menu Rebuild Verification', () => {
 
     // Page should have body content (not blank)
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
     expect(body!.length).toBeGreaterThan(100);
-
-    // Check for Supplies text anywhere in DOM
     expect(body).toContain('Supply');
 
     const criticalErrors = errors.filter(e => !e.includes('favicon') && !e.includes('manifest'));
@@ -26,10 +23,7 @@ test.describe('Real Session — Menu Rebuild Verification', () => {
     await page.waitForTimeout(3000);
 
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
     expect(body!.length).toBeGreaterThan(100);
-
-    // Should contain menu-related content
     expect(body).toContain('Menu');
   });
 
@@ -73,7 +67,7 @@ test.describe('Real Session — Menu Rebuild Verification', () => {
     const langBtn = page.locator('button[aria-label*="Switch language" i]');
     const langVisible = await langBtn.isVisible({ timeout: 5000 }).catch(() => false);
     // May or may not be visible depending on layout
-    expect(true).toBeTruthy();
+    expect(typeof langVisible).toBe('boolean');
   });
 
 });

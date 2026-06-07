@@ -48,6 +48,14 @@ async function run() {
     );
     const testUserRealId = testUserRes.rows[0].id;
 
+    // Fresh test user with NO existing records (password: test123456, or local login)
+    const freshUserId = randomUUID();
+    await pool.query(
+      `INSERT INTO users (id, email, display_name) VALUES ($1, $2, $3)
+       ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name`,
+      [freshUserId, 'fresh@dowiz.com', 'Fresh User']
+    );
+
     // Assign test user to demo location as owner (use actual existing demo location)
     const demoLoc = await pool.query(`SELECT id FROM locations WHERE slug = 'demo' LIMIT 1`);
     if (demoLoc.rows.length > 0) {

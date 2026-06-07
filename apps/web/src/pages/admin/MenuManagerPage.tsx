@@ -1,16 +1,9 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button, Input, EmptyState, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { RecipeEditor } from './RecipeEditor.js';
 import { AllergenEditor, ReadinessIndicator } from './AllergenEditor.js';
 
-interface Ingredient {
-  id: string;
-  name: string;
-  unit: string;
-  stock: number;
-  minStock: number;
-}
 
 interface Product {
   id: string;
@@ -20,7 +13,7 @@ interface Product {
   available: boolean;
   categoryId: string;
   imageUrl?: string;
-  ingredients?: string[];
+
   stockCount?: number;
   taste?: { spicy?: number; sweet?: number; salty?: number; sour?: number; richness?: number };
   allergenStatus?: 'unset' | 'none' | 'listed';
@@ -33,28 +26,11 @@ interface Category {
   products?: Product[];
 }
 
-const MOCK_INGREDIENTS: Ingredient[] = [
-  { id: 'i1', name: 'Salmon fillet', unit: 'kg', stock: 4.5, minStock: 2 },
-  { id: 'i2', name: 'Tuna fillet', unit: 'kg', stock: 3.2, minStock: 2 },
-  { id: 'i3', name: 'Sushi rice', unit: 'kg', stock: 12, minStock: 5 },
-  { id: 'i4', name: 'Nori sheets', unit: 'pcs', stock: 80, minStock: 50 },
-  { id: 'i5', name: 'Avocado', unit: 'pcs', stock: 15, minStock: 10 },
-  { id: 'i6', name: 'Cream cheese', unit: 'kg', stock: 2.5, minStock: 1.5 },
-  { id: 'i7', name: 'Shrimp', unit: 'kg', stock: 3.0, minStock: 1.5 },
-  { id: 'i8', name: 'Cucumber', unit: 'pcs', stock: 20, minStock: 8 },
-  { id: 'i9', name: 'Sesame seeds', unit: 'kg', stock: 1.2, minStock: 0.5 },
-  { id: 'i10', name: 'Spicy mayo', unit: 'L', stock: 2.0, minStock: 0.5 },
-  { id: 'i11', name: 'Eel sauce', unit: 'L', stock: 0.8, minStock: 0.5 },
-  { id: 'i12', name: 'Soy sauce', unit: 'L', stock: 5.0, minStock: 2 },
-  { id: 'i13', name: 'Wasabi', unit: 'kg', stock: 0.4, minStock: 0.2 },
-  { id: 'i14', name: 'Pickled ginger', unit: 'kg', stock: 1.0, minStock: 0.5 },
-  { id: 'i15', name: 'Tempura batter', unit: 'kg', stock: 2.0, minStock: 1 },
-];
+
 
 export function MenuManagerPage() {
   const { t } = useI18n();
   const [categories, setCategories] = useState<Category[]>([]);
-  const [ingredients, setIngredients] = useState<Ingredient[]>(MOCK_INGREDIENTS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -70,10 +46,8 @@ export function MenuManagerPage() {
   const [formAvailable, setFormAvailable] = useState(true);
   const [formImage, setFormImage] = useState<string | null>(null);
   const [formStock, setFormStock] = useState('');
-  const [formIngredients, setFormIngredients] = useState<string[]>([]);
-  const [newIngredient, setNewIngredient] = useState('');
+
   const [saving, setSaving] = useState(false);
-  const [showIngredients, setShowIngredients] = useState(false);
   // Taste profile (5 axes ├Ч 3 levels)
   const TASTE_AXES = ['spicy', 'sweet', 'salty', 'sour', 'richness'] as const;
   const TASTE_LABELS: Record<string, string> = { spicy: 'Spicy', sweet: 'Sweet', salty: 'Salty', sour: 'Sour', richness: 'Richness' };
@@ -88,9 +62,6 @@ export function MenuManagerPage() {
   const [sortBy, setSortBy] = useState<'name' | 'price-asc' | 'price-desc'>('name');
   const [filterAvailable, setFilterAvailable] = useState<'all' | 'available' | 'unavailable'>('all');
 
-  // Ingredient inventory state
-  const [editIngredientId, setEditIngredientId] = useState<string | null>(null);
-  const [editStock, setEditStock] = useState('');
 
   const fetchCategories = async () => {
     try {
@@ -126,7 +97,7 @@ export function MenuManagerPage() {
     setFormAvailable(true);
     setFormImage(null);
     setFormStock('');
-    setFormIngredients([]);
+
     setFormTaste({});
     setFormAllergenStatus('unset');
     setFormAllergensList([]);
@@ -142,7 +113,7 @@ export function MenuManagerPage() {
     setFormAvailable(product.available);
     setFormImage(product.imageUrl || null);
     setFormStock(product.stockCount != null ? String(product.stockCount) : '');
-    setFormIngredients(product.ingredients || []);
+
     setFormTaste(product.taste || {});
     setFormAllergenStatus(product.allergenStatus || 'unset');
     setFormAllergensList(product.allergensList || []);
@@ -152,7 +123,7 @@ export function MenuManagerPage() {
     setShowForm(false);
     setEditingProduct(null);
     setFormName(''); setFormPrice(''); setFormDesc('');
-    setFormImage(null); setFormStock(''); setFormIngredients([]);
+    setFormImage(null); setFormStock('');
     setSaving(false);
   };
 
@@ -175,12 +146,11 @@ export function MenuManagerPage() {
 
     setSaving(true);
     const product = {
-      id: editingProduct?.id || `p_${Date.now()}`,
       name: formName, price,
       description: formDesc,
       available: formAvailable,
       imageUrl: formImage || undefined,
-      ingredients: formIngredients,
+
       stockCount: stock,
       taste: Object.keys(formTaste).length > 0 ? formTaste : undefined,
       allergenStatus: formAllergenStatus,
@@ -188,32 +158,33 @@ export function MenuManagerPage() {
       categoryId: expandedCat,
     };
 
-    // Optimistic update — update UI immediately
-    setCategories(prev => prev.map(c => {
-      if (c.id !== expandedCat) return c;
-      const prods = c.products || [];
-      if (editingProduct) return { ...c, products: prods.map(p => p.id === editingProduct.id ? { ...p, ...product } : p) };
-      return { ...c, products: [...prods, product] };
-    }));
-    closeForm();
-
     try {
       if (editingProduct) {
         await apiClient(`/owner/menu/products/${editingProduct.id}`, { method: 'PATCH', body: product });
       } else {
         await apiClient('/owner/menu/products', { method: 'POST', body: product });
       }
+      closeForm();
+      await fetchCategories();
+      // Also expand the category and refetch products
+      const prods = await apiClient<any>(`/owner/menu/products?category_id=${expandedCat}`);
+      setCategories(prev => prev.map(c => c.id === expandedCat ? { ...c, products: Array.isArray(prods) ? prods : [] } : c));
     } catch {
-      // Revert on error: refetch
-      fetchCategories();
+      alert(t('common.error_save', 'Failed to save product.'));
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDeleteProduct = async (catId: string, productId: string) => {
-    try { await apiClient(`/owner/menu/products/${productId}`, { method: 'DELETE' }); } catch {}
-    setCategories(prev => prev.map(c =>
-      c.id === catId ? { ...c, products: (c.products || []).filter(p => p.id !== productId) } : c
-    ));
+    try { 
+      await apiClient(`/owner/menu/products/${productId}`, { method: 'DELETE' }); 
+      setCategories(prev => prev.map(c =>
+        c.id === catId ? { ...c, products: (c.products || []).filter(p => p.id !== productId) } : c
+      ));
+    } catch {
+      alert(t('common.error_delete', 'Failed to delete.'));
+    }
   };
 
   const handleToggleAvailable = async (catId: string, product: Product) => {
@@ -222,15 +193,21 @@ export function MenuManagerPage() {
       if (c.id !== catId) return c;
       return { ...c, products: (c.products || []).map(p => p.id === product.id ? updated : p) };
     }));
-    try { await apiClient(`/owner/menu/products/${product.id}`, { method: 'PATCH', body: { available: updated.available } }); } catch {}
+    try { await apiClient(`/owner/menu/products/${product.id}`, { method: 'PATCH', body: { available: updated.available } }); } catch {
+      console.debug('[MenuManager] failed to toggle product availability');
+    }
   };
 
   const handleAddCategory = async () => {
     const name = newCategoryName.trim();
     if (!name) return;
-    setCategories(prev => [...prev, { id: `c_${Date.now()}`, name, products: [] }]);
     setNewCategoryName('');
-    try { await apiClient('/owner/menu/categories', { method: 'POST', body: { name } }); } catch {}
+    try { 
+      await apiClient('/owner/menu/categories', { method: 'POST', body: { name } }); 
+      await fetchCategories();
+    } catch {
+      alert(t('common.error_save', 'Failed to save category.'));
+    }
   };
 
   const toggleExpand = async (catId: string) => {
@@ -247,11 +224,6 @@ export function MenuManagerPage() {
     }
   };
 
-  // тФАтФА Ingredient inventory management тФАтФА
-  const handleUpdateStock = (id: string, newStock: number) => {
-    setIngredients(prev => prev.map(i => i.id === id ? { ...i, stock: newStock } : i));
-    setEditIngredientId(null);
-  };
 
   // тФАтФА Filtered/sorted products тФАтФА
   const getAllProducts = (catId: string): Product[] => {
@@ -281,29 +253,23 @@ export function MenuManagerPage() {
     return count;
   }, [categories]);
 
-  const lowStockIngredients = ingredients.filter(i => i.stock <= i.minStock);
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Menu Manager</h2>
+          <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.menu_manager', 'Menu Manager')}</h2>
           <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>
-            {categories.length} categories ┬╖ {totalDishes} dishes in stock
-            {lowStockIngredients.length > 0 && (
-              <span className="ml-2 px-1.5 py-0.5 rounded text-xs" style={{ background: 'rgba(217,119,6,0.15)', color: 'var(--color-warning)' }}>
-                {lowStockIngredients.length} low stock
-              </span>
-            )}
+            {categories.length} {t('admin.categories', 'categories')} ┬╖ {totalDishes} {t('admin.dishes_in_stock', 'dishes in stock')}
           </p>
         </div>
       </div>
 
       {error && (
-        <div className="p-3 rounded-lg text-sm flex items-center justify-between" style={{ background: 'rgba(220,38,38,0.1)', color: 'var(--color-danger)' }}>
+        <div className="p-3 rounded-lg text-sm flex items-center justify-between" style={{ background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>
           {error}
-          <button onClick={fetchCategories} className="underline ml-3 shrink-0">Retry</button>
+          <button onClick={fetchCategories} className="underline ml-3 shrink-0">{t('common.retry', 'Retry')}</button>
         </div>
       )}
 
@@ -311,83 +277,38 @@ export function MenuManagerPage() {
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--brand-text-muted)' }} />
-          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search products..."
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder={t('admin.search_products', 'Search products...')}
             className="w-full pl-9 pr-4 py-2 rounded-lg border text-sm outline-none"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
         </div>
         <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
           className="px-3 py-2 rounded-lg border text-sm outline-none"
           style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
-          <option value="name">Name A-Z</option>
-          <option value="price-asc">Price тЖС</option>
-          <option value="price-desc">Price тЖУ</option>
+          <option value="name">{t('admin.name_az', 'Name A-Z')}</option>
+          <option value="price-asc">{t('admin.price_asc', 'Price тЖС')}</option>
+          <option value="price-desc">{t('admin.price_desc', 'Price тЖУ')}</option>
         </select>
         <select value={filterAvailable} onChange={e => setFilterAvailable(e.target.value as any)}
           className="px-3 py-2 rounded-lg border text-sm outline-none"
           style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
-          <option value="all">All items</option>
-          <option value="available">Available</option>
-          <option value="unavailable">Stop-listed</option>
+          <option value="all">{t('admin.all_items', 'All items')}</option>
+          <option value="available">{t('menu.available', 'Available')}</option>
+          <option value="unavailable">{t('menu.stop_listed', 'Stop-listed')}</option>
         </select>
-        <Button onClick={() => setShowIngredients(!showIngredients)} variant="ghost" size="sm">
-          <i className="ti ti-packages" /> {showIngredients ? t('common.close') : t('admin.supplies')}
-        </Button>
       </div>
-
-      {/* Ingredient Inventory Panel */}
-      {showIngredients && (
-        <div className="rounded-xl border p-4 space-y-3 slide-in-up" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-sm">{t('admin.supplies')}</h3>
-            <span className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{ingredients.length} items</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {ingredients.map(ing => {
-              const low = ing.stock <= ing.minStock;
-              const pct = Math.min(100, (ing.stock / Math.max(ing.minStock * 2, 1)) * 100);
-              return (
-                <div key={ing.id} className="flex items-center gap-3 p-3 rounded-lg border" style={{ borderColor: low ? 'rgba(217,119,6,0.3)' : 'var(--brand-border)', background: low ? 'rgba(217,119,6,0.05)' : 'var(--brand-surface-raised)' }}>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{ing.name}</div>
-                    <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>
-                      {editIngredientId === ing.id ? (
-                        <span className="flex items-center gap-1">
-                          <input value={editStock} onChange={e => setEditStock(e.target.value)} type="number"
-                            className="w-16 px-1 py-0.5 text-xs rounded border" autoFocus
-                            style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                          <span>{ing.unit}</span>
-                          <button onClick={() => handleUpdateStock(ing.id, Number(editStock) || ing.stock)} className="text-[var(--color-success)]">тЬУ</button>
-                        </span>
-                      ) : (
-                        <span onClick={() => { setEditIngredientId(ing.id); setEditStock(String(ing.stock)); }} className="cursor-pointer hover:underline">
-                          {ing.stock} {ing.unit} / min {ing.minStock} {ing.unit}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {low && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: 'var(--color-warning)', color: '#fff' }}>LOW</span>}
-                  <div className="w-12 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--brand-border)' }}>
-                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: low ? 'var(--color-warning)' : 'var(--color-success)' }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Add Category */}
       <div className="flex gap-2">
-        <Input placeholder="New category..." value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)}
+        <Input placeholder={t('admin.new_category', 'New category...')} value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleAddCategory()} />
-        <Button onClick={handleAddCategory}>Add Category</Button>
+        <Button onClick={handleAddCategory}>{t('admin.add_category', 'Add Category')}</Button>
       </div>
 
       {/* Categories & Products */}
       {loading ? (
         <div className="space-y-3">{ [1,2,3].map(i => <div key={i} className="h-12 shimmer rounded-lg" />) }</div>
       ) : categories.length === 0 ? (
-        <EmptyState title="No categories" description="Add a category above to start." />
+        <EmptyState title={t('admin.no_categories', 'No categories')} description={t('admin.add_category_desc', 'Add a category above to start.')} />
       ) : (
         <div className="space-y-2">
           {categories.map(cat => {
@@ -403,52 +324,53 @@ export function MenuManagerPage() {
                     </span>
                   </div>
                   <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openAddForm(cat.id); }}>
-                    <i className="ti ti-plus" /> Add
+                    <i className="ti ti-plus" /> {t('common.add', 'Add')}
                   </Button>
                 </button>
 
                 {expandedCat === cat.id && (
                   <div className="border-t" style={{ borderColor: 'var(--brand-border)' }}>
                     {cat.products === undefined ? (
-                      <div className="p-4 text-center text-sm" style={{ color: 'var(--brand-text-muted)' }}>Loading...</div>
+                      <div className="p-4 text-center text-sm" style={{ color: 'var(--brand-text-muted)' }}>{t('common.loading', 'Loading...')}</div>
                     ) : products.length === 0 ? (
                       <div className="p-4 text-center text-sm" style={{ color: 'var(--brand-text-muted)' }}>
-                        {searchQuery ? 'No matching products.' : 'No items yet. Click Add to create one.'}
+                        {searchQuery ? t('admin.no_matching_products', 'No matching products.') : t('admin.no_items_yet', 'No items yet. Click Add to create one.')}
                       </div>
                     ) : (
                       products.map((product, idx) => (
-                        <div key={product.id} className="flex items-center gap-3 p-3 border-t hover:bg-[var(--brand-surface)] transition-colors slide-in-up"
-                          style={{ borderColor: 'var(--brand-border)', animationDelay: `${idx * 20}ms` }}>
+                        <div key={product.id} className="flex items-center gap-3 p-3 bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-xl hover:bg-[var(--brand-surface-raised)] transition-all duration-200 slide-in-up mt-2"
+                          style={{ animationDelay: `${idx * 20}ms` }}>
                           {/* Image or placeholder */}
                           <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 cursor-pointer"
                             style={{ background: 'var(--brand-surface-raised)' }}
                             onClick={() => setPreviewProduct(product)}>
                             {product.imageUrl
                               ? <img src={product.imageUrl} alt="" className="w-full h-full object-cover" />
-                              : <div className="w-full h-full flex items-center justify-center"><i className="ti ti-photo text-lg" style={{ color: 'var(--brand-border)' }} /></div>
+                              : <div className="w-full h-full flex items-center justify-center" style={{ background: 'var(--brand-primary-light)' }}><i className="ti ti-photo text-lg" style={{ color: 'var(--brand-primary)' }} /></div>
                             }
                           </div>
 
                           {/* Availability toggle */}
                           <button onClick={() => handleToggleAvailable(cat.id, product)}
                             className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${product.available ? 'bg-[var(--brand-primary)] border-[var(--brand-primary)]' : 'border-[var(--brand-border)]'}`}
-                            title={product.available ? 'Available тАФ click to stop-list' : 'Stop-listed тАФ click to enable'}>
+                            title={product.available ? t('menu.available', 'Available') : t('menu.stop_listed', 'Stop-listed')}>
                             {product.available && <i className="ti ti-check text-[10px] text-white" />}
                           </button>
 
                           {/* Info */}
                           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setPreviewProduct(product)}>
-                            <div className="font-medium text-sm truncate">{product.name}</div>
-                            <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--brand-text-muted)' }}>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium truncate" style={{ color: 'var(--brand-text)' }}>{product.name}</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
+                                PRD
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 text-[11px] mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>
                               {product.description && <span className="truncate">{product.description}</span>}
-                              {product.ingredients && product.ingredients.length > 0 && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--brand-surface-raised)' }}>
-                                  {product.ingredients.length} ingredients
-                                </span>
-                              )}
+                              {product.description && <span>·</span>}
                               {product.stockCount != null && (
-                                <span className={product.stockCount > 0 ? '' : 'text-[var(--color-danger)]'}>
-                                  {product.stockCount > 0 ? `${product.stockCount} in stock` : 'Out of stock'}
+                                <span className={product.stockCount > 0 ? '' : 'text-[var(--color-danger)] font-medium'}>
+                                  {product.stockCount > 0 ? `${product.stockCount} ${t('menu.in_stock', 'in stock')}` : t('menu.out_of_stock', 'Out of stock')}
                                 </span>
                               )}
                             </div>
@@ -458,12 +380,14 @@ export function MenuManagerPage() {
                           <span className="text-sm font-semibold shrink-0" style={{ color: 'var(--brand-primary)' }}>{product.price} ALL</span>
 
                           {/* Actions */}
-                          <button onClick={() => openEditForm(product)} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface-raised)]" title="Edit">
-                            <i className="ti ti-pencil text-sm" style={{ color: 'var(--brand-text-muted)' }} />
-                          </button>
-                          <button onClick={() => handleDeleteProduct(cat.id, product.id)} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-red-500/10" title="Delete">
-                            <i className="ti ti-trash text-sm" style={{ color: 'var(--color-danger)' }} />
-                          </button>
+                          <div className="flex items-center gap-1 shrink-0 ml-2">
+                            <button onClick={() => openEditForm(product)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors" title={t('common.edit')}>
+                              <i className="ti ti-pencil text-[0.85rem]" style={{ color: 'var(--brand-text-muted)' }} />
+                            </button>
+                            <button onClick={() => handleDeleteProduct(cat.id, product.id)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-danger-light)] transition-colors" title={t('common.delete')}>
+                              <i className="ti ti-trash text-[0.85rem]" style={{ color: 'var(--color-danger)' }} />
+                            </button>
+                          </div>
                         </div>
                       ))
                     )}
@@ -490,7 +414,7 @@ export function MenuManagerPage() {
               </button>
               {!previewProduct.available && (
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                  <span className="px-3 py-1 rounded-lg text-sm font-medium bg-white/90 text-black">Stop-listed</span>
+                  <span className="px-3 py-1 rounded-lg text-sm font-medium bg-white/90 text-black">{t('menu.stop_listed', 'Stop-listed')}</span>
                 </div>
               )}
             </div>
@@ -503,39 +427,22 @@ export function MenuManagerPage() {
                 <span className="text-xl font-black shrink-0" style={{ color: 'var(--brand-primary)' }}>{previewProduct.price} ALL</span>
               </div>
 
-              {previewProduct.ingredients && previewProduct.ingredients.length > 0 && (
-                <div>
-                  <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--brand-text-muted)' }}>Ingredients</div>
-                  <div className="flex flex-wrap gap-1">
-                    {previewProduct.ingredients.map(ing => {
-                      const inv = ingredients.find(i => i.name.toLowerCase() === ing.toLowerCase());
-                      const low = inv && inv.stock <= inv.minStock;
-                      return (
-                        <span key={ing} className={`text-[10px] px-2 py-0.5 rounded-full ${low ? 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]' : ''}`}
-                          style={!low ? { background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' } : undefined}
-                          title={inv ? `${inv.stock} ${inv.unit} in stock (min ${inv.minStock})` : ing}>
-                          {ing} {low && 'тЪа'}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+
 
               {previewProduct.stockCount != null && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>In stock:</span>
+                  <span className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.in_stock_label', 'In stock:')}</span>
                   <span className={`text-sm font-bold ${previewProduct.stockCount === 0 ? 'text-[var(--color-danger)]' : 'text-[var(--color-success)]'}`}>
-                    {previewProduct.stockCount === 0 ? 'Out of stock' : `${previewProduct.stockCount} available today`}
+                    {previewProduct.stockCount === 0 ? t('menu.out_of_stock', 'Out of stock') : `${previewProduct.stockCount} ${t('admin.available_today', 'available today')}`}
                   </span>
                 </div>
               )}
 
               <div className="flex gap-2 pt-2">
                 <Button onClick={() => { setPreviewProduct(null); openEditForm(previewProduct); }} size="sm" className="flex-1">
-                  <i className="ti ti-pencil" /> Edit
+                  <i className="ti ti-pencil" /> {t('common.edit', 'Edit')}
                 </Button>
-                <Button onClick={() => setPreviewProduct(null)} variant="ghost" size="sm">Close</Button>
+                <Button onClick={() => setPreviewProduct(null)} variant="ghost" size="sm">{t('common.close', 'Close')}</Button>
               </div>
             </div>
           </div>
@@ -548,7 +455,7 @@ export function MenuManagerPage() {
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
           <div className="relative w-full max-w-md bg-[var(--brand-surface)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 z-10 slide-in-up max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{editingProduct ? 'Edit Item' : 'Add Item'}</h3>
+              <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{editingProduct ? t('admin.edit_item', 'Edit Item') : t('admin.add_item', 'Add Item')}</h3>
               <button onClick={closeForm} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface-raised)]">
                 <i className="ti ti-x" style={{ color: 'var(--brand-text-muted)' }} />
               </button>
@@ -556,7 +463,7 @@ export function MenuManagerPage() {
 
             {/* Photo */}
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>Photo</label>
+              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.photo', 'Photo')}</label>
               <div className="flex items-start gap-3">
                 <label className="flex flex-col items-center justify-center w-20 h-20 rounded-lg border-2 border-dashed cursor-pointer hover:border-[var(--brand-primary)] transition-colors shrink-0"
                   style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)' }}>
@@ -567,24 +474,24 @@ export function MenuManagerPage() {
                 <div className="text-xs space-y-1" style={{ color: 'var(--brand-text-muted)' }}>
                   <p>4:3 ratio, max 5 MB</p>
                   <p>JPG, PNG, WebP</p>
-                  {formImage && <button onClick={() => setFormImage(null)} className="text-[var(--color-danger)] underline">Remove</button>}
+                  {formImage && <button onClick={() => setFormImage(null)} className="text-[var(--color-danger)] underline">{t('common.remove', 'Remove')}</button>}
                 </div>
               </div>
             </div>
 
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>Name *</label>
+              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.name', 'Name')} *</label>
               <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="e.g. Margherita Pizza" autoFocus />
             </div>
 
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>Price (ALL) *</label>
+              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.price_all', 'Price (ALL)')} *</label>
               <Input value={formPrice} onChange={e => setFormPrice(e.target.value)} placeholder="600" type="number" />
             </div>
 
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>Description</label>
-              <Input value={formDesc} onChange={e => setFormDesc(e.target.value)} placeholder="Short description..." />
+              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.description', 'Description')}</label>
+              <Input value={formDesc} onChange={e => setFormDesc(e.target.value)} placeholder={t('admin.short_description', 'Short description...')} />
             </div>
 
             {/* BOM Recipe */}
@@ -608,19 +515,19 @@ export function MenuManagerPage() {
 
             {/* Stock count */}
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>Available today (pieces)</label>
-              <Input value={formStock} onChange={e => setFormStock(e.target.value)} placeholder="Leave empty for unlimited" type="number" />
+              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.available_today_pieces', 'Available today (pieces)')}</label>
+              <Input value={formStock} onChange={e => setFormStock(e.target.value)} placeholder={t('admin.leave_empty_unlimited', 'Leave empty for unlimited')} type="number" />
             </div>
 
             {/* Taste Profile */}
             <div>
-              <label className="text-xs font-medium mb-2 block" style={{ color: 'var(--brand-text-muted)' }}>Taste Profile <span className="opacity-50">(optional)</span></label>
+              <label className="text-xs font-medium mb-2 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.taste_profile', 'Taste Profile')} <span className="opacity-50">({t('admin.optional', 'optional')})</span></label>
               <div className="space-y-1.5">
                 {TASTE_AXES.map(axis => (
                   <div key={axis} className="flex items-center gap-2">
                     <span className="text-xs w-20 shrink-0 inline-flex items-center gap-1" style={{ color: 'var(--brand-text-muted)' }}>
                       <i className={TASTE_ICONS[axis] || 'ti ti-circle'} style={{ fontSize: '0.65rem' }} />
-                      {TASTE_LABELS[axis]}
+                      {t(`admin.taste_${axis}`, TASTE_LABELS[axis])}
                     </span>
                     <div className="flex gap-0.5 flex-1">
                       {[1, 2, 3].map(level => {
@@ -635,11 +542,11 @@ export function MenuManagerPage() {
                             }`}
                             style={{
                               background: active ? `hsl(${axis === 'spicy' ? 10 : axis === 'sweet' ? 35 : axis === 'salty' ? 200 : axis === 'sour' ? 70 : 30}, ${level * 25}%, ${60 - level * 5}%)` : 'var(--brand-surface-raised)',
-                              color: active ? '#fff' : 'var(--brand-text-muted)',
+                              color: active ? 'var(--color-on-primary)' : 'var(--brand-text-muted)',
                             }}
-                            title={`${TASTE_LABELS[axis] || axis}: ${level === 1 ? 'Low' : level === 2 ? 'Medium' : 'High'}`}
+                            title={`${TASTE_LABELS[axis] || axis}: ${level === 1 ? t('admin.taste_low', 'Low') : level === 2 ? t('admin.taste_medium', 'Medium') : t('admin.taste_high', 'High')}`}
                           >
-                            {level === 1 ? 'Low' : level === 2 ? 'Med' : 'High'}
+                            {level === 1 ? t('admin.taste_low', 'Low') : level === 2 ? t('admin.taste_med', 'Med') : t('admin.taste_high', 'High')}
                           </button>
                         );
                       })}
@@ -651,20 +558,20 @@ export function MenuManagerPage() {
 
             {/* Readiness indicator */}
             <ReadinessIndicator checks={[
-              { label: 'Name set', pass: !!formName.trim() },
-              { label: 'Price set', pass: !!formPrice && parseInt(formPrice) > 0 },
-              { label: 'Allergens declared', pass: formAllergenStatus !== 'unset' },
+              { label: t('admin.name_set', 'Name set'), pass: !!formName.trim() },
+              { label: t('admin.price_set', 'Price set'), pass: !!formPrice && parseInt(formPrice) > 0 },
+              { label: t('admin.allergens_declared', 'Allergens declared'), pass: formAllergenStatus !== 'unset' },
             ]} />
 
             <label className="flex items-center gap-3 cursor-pointer">
               <input type="checkbox" checked={formAvailable} onChange={e => setFormAvailable(e.target.checked)} className="w-4 h-4 rounded accent-[var(--brand-primary)]" />
-              <span className="text-sm">Available for order</span>
+              <span className="text-sm">{t('admin.available_for_order', 'Available for order')}</span>
             </label>
 
             <div className="flex gap-3 pt-2">
-              <Button onClick={closeForm} variant="ghost" className="flex-1">Cancel</Button>
+              <Button onClick={closeForm} variant="ghost" className="flex-1">{t('common.cancel', 'Cancel')}</Button>
               <Button onClick={handleSaveProduct} isLoading={saving} disabled={!formName.trim() || !formPrice} className="flex-1">
-                {editingProduct ? 'Save Changes' : 'Add Item'}
+                {editingProduct ? t('common.save', 'Save Changes') : t('admin.add_item', 'Add Item')}
               </Button>
             </div>
           </div>

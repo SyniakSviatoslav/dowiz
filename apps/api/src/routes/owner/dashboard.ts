@@ -54,7 +54,10 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
           cursorClause = ` AND o.created_at < $${params.length + 1}`;
           params.push(decoded.createdAt);
         }
-      } catch { /* invalid cursor */ }
+      } catch {
+        // invalid cursor — ignore, will use no cursor filter
+        console.debug('[dashboard] invalid cursor, ignoring');
+      }
     }
 
     const limitIdx = params.length + 1;
@@ -105,9 +108,13 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
     const hasMore = ordersRes.rows.length > limit;
     const orders = (hasMore ? ordersRes.rows.slice(0, limit) : ordersRes.rows).map((row: any) => {
       let preflight = null;
-      try { preflight = typeof row.preflight === 'string' ? JSON.parse(row.preflight) : row.preflight; } catch {}
+      try { preflight = typeof row.preflight === 'string' ? JSON.parse(row.preflight) : row.preflight; } catch {
+        console.debug('[dashboard] failed to parse preflight for order', row.id);
+      }
       let metadata = null;
-      try { metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata; } catch {}
+      try { metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata; } catch {
+        console.debug('[dashboard] failed to parse metadata for order', row.id);
+      }
       return {
         orderId: row.id,
         status: row.status,
@@ -319,6 +326,18 @@ async function transitionOrder(db: any, messageBus: any, orderId: string, user: 
     if (newStatus === 'CONFIRMED') {
       res = await client.query(
         `UPDATE orders SET status = $1, confirmed_at = now(), timeout_at = NULL
+         WHERE id = $2 AND status = $3 RETURNING id`,
+        [newStatus, orderId, currentStatus],
+      );
+    } else if (newStatus === 'READY') {
+      res = await client.query(
+        `UPDATE orders SET status = $1, ready_at = now()
+         WHERE id = $2 AND status = $3 RETURNING id`,
+        [newStatus, orderId, currentStatus],
+      );
+    } else if (newStatus === 'DELIVERED') {
+      res = await client.query(
+        `UPDATE orders SET status = $1, delivered_at = now()
          WHERE id = $2 AND status = $3 RETURNING id`,
         [newStatus, orderId, currentStatus],
       );

@@ -21,8 +21,9 @@ export async function fetchFallbackConfig(locationId: string): Promise<FallbackC
       cachedConfig = { ...DEFAULT_CONFIG, ...data };
       return cachedConfig!;
     }
-  } catch {
+  } catch (e) {
     // network error, use defaults
+    console.debug('[fallback-phone] fetch failed, using defaults', e);
   }
   return DEFAULT_CONFIG;
 }

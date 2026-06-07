@@ -20,7 +20,10 @@ async function cleanupTempFiles() {
     const files = await fs.readdir(tempDir);
     await Promise.all(files.map(f => fs.unlink(path.join(tempDir, f)).catch(() => {})));
     console.log(`[Shutdown] Cleaned up ${files.length} temporary backup files`);
-  } catch { /* directory doesn't exist */ }
+  } catch {
+    // directory doesn't exist — nothing to clean up
+    console.debug('[shutdown] temp backup dir not found, skipping cleanup');
+  }
 }
 
 export function setupShutdown(fastify: FastifyInstance, pool: Pool, messageBus: MessageBus, queue?: QueueProvider) {
@@ -33,7 +36,10 @@ export function setupShutdown(fastify: FastifyInstance, pool: Pool, messageBus: 
 
     // 1. Forward SIGTERM to child processes (e.g., pg_dump)
     for (const cp of childProcesses) {
-      try { cp.kill('SIGTERM'); } catch {}
+      try { cp.kill('SIGTERM'); } catch {
+        // process may have already exited
+        console.debug('[shutdown] failed to send SIGTERM to child process');
+      }
     }
 
     // 2. Stop accepting new HTTP requests

@@ -20,7 +20,7 @@ test.describe('Courier Tasks', () => {
     await page.waitForTimeout(3000);
 
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
   test('no cookies on courier pages', async ({ page }) => {
@@ -34,7 +34,7 @@ test.describe('Courier Tasks', () => {
     await page.waitForTimeout(3000);
 
     const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    expect(body!.length).toBeGreaterThan(0);
   });
 
 });

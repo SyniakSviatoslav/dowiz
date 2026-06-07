@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { loadSupplies } from './SupplyLibraryPage.js';
+import { useI18n } from '@deliveryos/ui';
 
 const KIND_ICONS: Record<string, string> = {
   food_ingredient: 'ti ti-meat',
@@ -28,6 +29,7 @@ interface RecipeEditorProps {
 }
 
 export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEditorProps) {
+  const { t } = useI18n();
   const [search, setSearch] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const [activeKind, setActiveKind] = useState<string>('food_ingredient');
@@ -121,11 +123,11 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-medium" style={{ color: 'var(--brand-text-muted)' }}>Recipe (BOM) — per serving</label>
+        <label className="text-xs font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.recipe_bom', 'Recipe (BOM) — per serving')}</label>
         <button type="button" onClick={() => setShowPicker(!showPicker)}
           className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors hover:bg-[var(--brand-surface-raised)] active:scale-95"
           style={{ color: 'var(--brand-primary)', border: '1px solid var(--brand-primary)' }}>
-          <i className="ti ti-plus" style={{ fontSize: '0.7rem' }} /> Add ingredient
+          <i className="ti ti-plus" style={{ fontSize: '0.7rem' }} /> {t('admin.add_supply', 'Add supply')}
         </button>
       </div>
 
@@ -137,11 +139,11 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
                 className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-all ${activeKind === k ? 'text-white' : 'text-[var(--brand-text-muted)]'}`}
                 style={{ background: activeKind === k ? 'var(--brand-primary)' : 'var(--brand-surface)' }}>
                 <i className={KIND_ICONS[k] || 'ti ti-circle'} style={{ fontSize: '0.65rem' }} />
-                {k === 'food_ingredient' ? 'Ingredients' : k === 'condiment' ? 'Sauces' : k === 'packaging' ? 'Packaging' : 'Utensils'}
+                {k === 'food_ingredient' ? t('supply.food') : k === 'condiment' ? t('supply.sauces') : k === 'packaging' ? t('supply.packaging') : t('supply.utensils')}
               </button>
             ))}
           </div>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search supplies..."
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search')}
             autoFocus className="w-full h-8 px-2 mb-1 rounded text-xs outline-none border"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
           <div className="max-h-36 overflow-y-auto space-y-0.5 mb-1">
@@ -162,7 +164,7 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
             })}
             {filteredSupplies.length === 0 && (
               <p className="text-[10px] p-2 text-center" style={{ color: 'var(--brand-text-muted)' }}>
-                {search ? 'No matches.' : 'No supplies here. Add in Supplies first.'}
+                {search ? t('admin.no_matches', 'No matches.') : t('admin.no_supplies_add_first', 'No supplies here. Add in Supplies first.')}
               </p>
             )}
           </div>
@@ -170,7 +172,7 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
             <button type="button" onClick={addSelectedSupplies}
               className="w-full py-1.5 rounded text-[11px] font-medium text-white active:scale-95 transition-transform"
               style={{ background: 'var(--brand-primary)' }}>
-              Add {selectedIds.size} selected
+              {t('common.add', 'Add')} {selectedIds.size} {t('common.selected', 'selected')}
             </button>
           )}
         </div>
@@ -187,7 +189,7 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
                 <i className={KIND_ICONS[line.kind] || 'ti ti-circle'} style={{ fontSize: '0.65rem', color: s && hasNutrition ? 'var(--color-success)' : 'var(--brand-text-muted)' }} />
                 <span className="text-xs flex-1 truncate">{line.supplyName}</span>
                 {!hasNutrition && (
-                  <span className="text-[9px] px-1 rounded" style={{ color: 'var(--color-warning)', background: 'var(--color-warning-light)' }}>no data</span>
+                  <span className="text-[9px] px-1 rounded" style={{ color: 'var(--color-warning)', background: 'var(--color-warning-light)' }}>{t('common.no_data', 'no data')}</span>
                 )}
                 <div className="flex items-center gap-1">
                   <button type="button" onClick={() => updateQty(i, line.qty - step(line.unit))}
@@ -217,15 +219,15 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
           <div className="flex items-center gap-1.5 mb-2">
             <i className="ti ti-chart-donut text-xs" style={{ color: nutrition.complete ? 'var(--color-success)' : 'var(--brand-text-muted)' }} />
             <span className="text-[10px] font-semibold" style={{ color: nutrition.complete ? 'var(--color-success)' : 'var(--brand-text-muted)' }}>
-              {nutrition.complete ? 'Nutrition per serving' : 'Incomplete — some ingredients lack nutrition data'}
+              {nutrition.complete ? t('admin.nutrition_per_serving', 'Nutrition per serving') : t('admin.incomplete_nutrition', 'Incomplete — some supplies lack nutrition data')}
             </span>
           </div>
           <div className="grid grid-cols-4 gap-2 text-center">
             {[
-              { label: 'Kcal', value: nutrition.kcal || '—', color: 'var(--brand-primary)' },
-              { label: 'Protein', value: nutrition.protein ? `${nutrition.protein}g` : '—', color: 'var(--color-info)' },
-              { label: 'Fat', value: nutrition.fat ? `${nutrition.fat}g` : '—', color: 'var(--color-warning)' },
-              { label: 'Carbs', value: nutrition.carbs ? `${nutrition.carbs}g` : '—', color: 'var(--color-success)' },
+              { label: t('admin.kcal', 'Kcal'), value: nutrition.kcal || '—', color: 'var(--brand-primary)' },
+              { label: t('admin.protein', 'Protein'), value: nutrition.protein ? `${nutrition.protein}g` : '—', color: 'var(--color-info)' },
+              { label: t('admin.fat', 'Fat'), value: nutrition.fat ? `${nutrition.fat}g` : '—', color: 'var(--color-warning)' },
+              { label: t('admin.carbs', 'Carbs'), value: nutrition.carbs ? `${nutrition.carbs}g` : '—', color: 'var(--color-success)' },
             ].map(n => (
               <div key={n.label} className="p-1.5 rounded" style={{ background: 'var(--brand-surface)' }}>
                 <div className="text-sm font-bold" style={{ color: n.color }}>{n.value}</div>
@@ -235,7 +237,7 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
           </div>
           {nutrition.bomAllergens.length > 0 && (
             <div className="flex items-center gap-1 mt-2 flex-wrap">
-              <span className="text-[9px]" style={{ color: 'var(--brand-text-muted)' }}>BOM:</span>
+              <span className="text-[9px]" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.bom_label', 'BOM:')}</span>
               {nutrition.bomAllergens.map(a => (
                 <span key={a} className="px-1.5 py-0.5 rounded-full text-[9px] font-medium"
                   style={{ background: 'rgba(217,119,6,0.1)', color: 'var(--color-warning)' }}>{a}</span>

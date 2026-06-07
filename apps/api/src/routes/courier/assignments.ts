@@ -12,7 +12,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
   fastify.addHook('preValidation', fastify.requireRole(['courier']));
 
   // 1. Get assignments
-  fastify.get('/api/courier/me/assignments', async (request: any, reply: any) => {
+  fastify.get('/me/assignments', async (request: any, reply: any) => {
     const courierId = request.user.sub;
     const locationId = request.user.activeLocationId;
 
@@ -35,7 +35,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
   });
 
   // 2. Accept Assignment
-  fastify.post('/api/courier/assignments/:id/accept', {
+  fastify.post('/assignments/:id/accept', {
     schema: {
       params: z.object({ id: z.string().uuid() })
     }
@@ -92,7 +92,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
   });
 
   // 3. Reject Assignment
-  fastify.post('/api/courier/assignments/:id/reject', {
+  fastify.post('/assignments/:id/reject', {
     schema: {
       params: z.object({ id: z.string().uuid() })
     }
@@ -153,7 +153,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
   });
 
   // 4. Picked up
-  fastify.post('/api/courier/assignments/:id/picked-up', {
+  fastify.post('/assignments/:id/picked-up', {
     schema: {
       params: z.object({ id: z.string().uuid() })
     }
@@ -201,7 +201,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
   });
 
   // 5. Delivered
-  fastify.post('/api/courier/assignments/:id/delivered', {
+  fastify.post('/assignments/:id/delivered', {
     schema: {
       params: z.object({ id: z.string().uuid() }),
       body: z.object({
@@ -270,7 +270,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
   });
 
   // 6. Cancel
-  fastify.post('/api/courier/assignments/:id/cancel', {
+  fastify.post('/assignments/:id/cancel', {
     schema: {
       params: z.object({ id: z.string().uuid() }),
       body: z.object({

@@ -76,6 +76,7 @@ export default async function securityHeadersPlugin(fastify: FastifyInstance): P
       }
     } catch (err) {
       // Never break the response due to security header injection
+      console.debug('[security-headers] header injection skipped', err);
     }
     return payload;
   });

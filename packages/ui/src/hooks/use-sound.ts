@@ -24,9 +24,10 @@ export function useSound(customSounds?: Partial<Record<SoundType, string>>) {
         audioRef.current.src = src;
         audioRef.current.currentTime = 0;
         audioRef.current.play().catch(() => {});
-      } catch {
-        // Audio not supported or autoplay blocked
-      }
+    } catch {
+      // Audio not supported or autoplay blocked
+      console.debug('[use-sound] audio playback failed');
+    }
     },
     [sounds],
   );

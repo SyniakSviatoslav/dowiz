@@ -100,7 +100,8 @@ class AuthService {
         headers: { Authorization: `Bearer ${token}` },
       });
     } catch {
-      // Ignore logout errors
+      // Ignore logout errors — tokens already cleared locally
+      console.debug('[auth] server logout request failed');
     }
   }
 

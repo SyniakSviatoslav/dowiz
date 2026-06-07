@@ -36,7 +36,7 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
               borderRadius: 'var(--brand-radius)',
               border: 'none',
               background: 'var(--brand-primary)',
-              color: '#fff',
+              color: 'var(--color-on-primary)',
               cursor: 'pointer',
             }}
           >
@@ -97,7 +97,7 @@ function NotFound() {
     <div className="min-h-screen flex flex-col items-center justify-center gap-4">
       <h1 className="text-6xl font-bold">404</h1>
       <p>Faqja nuk u gjet / Page not found</p>
-      <a href="/" className="text-blue-500 hover:underline">Return home</a>
+      <a href="/" className="text-[var(--color-info)] hover:underline">Return home</a>
     </div>
   );
 }

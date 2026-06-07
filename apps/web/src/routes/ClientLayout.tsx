@@ -24,24 +24,36 @@ function ClientLayoutInner() {
       setTimeout(() => setIsBouncing(false), 400);
     };
     window.addEventListener('dos:bounceCart', handleBounce);
-    return () => window.removeEventListener('dos:bounceCart', handleBounce);
-  }, []);
+    
+    // Handle embed mode
+    const isEmbed = new URLSearchParams(window.location.search).get('embed') === 'true';
+    if (isEmbed) {
+      document.body.classList.add('embed-mode');
+    } else {
+      document.body.classList.remove('embed-mode');
+    }
+    
+    return () => {
+      window.removeEventListener('dos:bounceCart', handleBounce);
+      document.body.classList.remove('embed-mode');
+    };
+  }, [location.search]);
 
   useEffect(() => {
     if (!slug) return;
     apiClient<any>(`/public/theme/${slug}`)
       .then((res: any) => {
         setTheme({
-          primary: res.primaryColor || '#ea4f16',
-          primaryHover: '#d44310',
-          primaryLight: 'rgba(234, 79, 22, 0.12)',
-          accent: '#2a2a2a',
-          bg: res.bgColor || '#121212',
-          surface: '#1e1e1e',
-          surfaceRaised: '#2a2a2a',
-          text: res.textColor || '#ffffff',
-          textMuted: '#a8a8a8',
-          border: '#2c2c2c',
+          primary: res.primaryColor || 'var(--brand-primary)',
+          primaryHover: 'var(--brand-primary-hover)',
+          primaryLight: 'var(--brand-primary-light)',
+          accent: 'var(--brand-accent)',
+          bg: res.bgColor || 'var(--brand-bg)',
+          surface: 'var(--brand-surface)',
+          surfaceRaised: 'var(--brand-surface-raised)',
+          text: res.textColor || 'var(--brand-text)',
+          textMuted: 'var(--brand-text-muted)',
+          border: 'var(--brand-border)',
         });
       })
       .catch(() => setTheme(null));

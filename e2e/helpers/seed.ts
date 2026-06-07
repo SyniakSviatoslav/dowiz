@@ -7,32 +7,9 @@
 
 const API_BASE = process.env.API_BASE_URL || 'http://localhost:3000/api';
 
-export interface SeedLocation {
-  slug: string;
-  name: string;
-  locationId: string;
-}
-
 export interface SeedOrder {
   orderId: string;
   status: string;
-}
-
-/**
- * Seed a test location with menu data.
- */
-export async function seedLocation(slug: string): Promise<SeedLocation> {
-  try {
-    const res = await fetch(`${API_BASE}/dev/seed/location`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug, name: `Test ${slug}` }),
-    });
-    if (res.ok) return await res.json() as SeedLocation;
-  } catch {
-    // Dev seed may not be available — use mock data
-  }
-  return { slug, name: `Test ${slug}`, locationId: 'loc_test_1' };
 }
 
 /**
@@ -47,7 +24,8 @@ export async function seedOrder(locationId: string): Promise<SeedOrder> {
     });
     if (res.ok) return await res.json() as SeedOrder;
   } catch {
-    // Fallback
+    // Fallback to test defaults
+    console.debug('[e2e:seed] seed endpoint unavailable, using test defaults');
   }
   return { orderId: 'o_test_1', status: 'PENDING' };
 }

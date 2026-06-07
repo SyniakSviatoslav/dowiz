@@ -6,12 +6,10 @@ import crypto from 'node:crypto';
 import argon2 from 'argon2';
 import { requireLocationAccess } from '../../plugins/auth.js';
 import { decryptPII } from '../../lib/pii-cipher.js';
+import { maskStr } from '../../lib/pii-mask.js';
 
 export default (async function ownerCourierRoutes(fastify, opts) {
   const { db } = opts as any;
-
-  // Mask string helper
-  const maskStr = (str: string) => str.length > 4 ? str.substring(0, 2) + '***' + str.substring(str.length - 2) : '***';
 
   fastify.addHook('preValidation', requireLocationAccess);
 

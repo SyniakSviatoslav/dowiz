@@ -273,7 +273,7 @@ export function OTPModal({ isOpen, onClose, phone, onSendOTP, onVerifyOTP }: OTP
               placeholder="+355 6X XXX XXXX"
               error={!!error}
             />
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
             <Button className="w-full" onClick={handleSend} isLoading={loading}>Send Code</Button>
           </>
         ) : (
@@ -288,7 +288,7 @@ export function OTPModal({ isOpen, onClose, phone, onSendOTP, onVerifyOTP }: OTP
               className="text-center text-2xl tracking-widest"
               error={!!error}
             />
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
             <Button className="w-full" onClick={handleVerify} isLoading={loading} disabled={code.length !== 4}>Verify & Complete Order</Button>
           </>
         )}

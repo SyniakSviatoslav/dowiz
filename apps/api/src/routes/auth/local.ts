@@ -74,6 +74,7 @@ export default (async function localAuthRoutes(fastify, opts) {
         );
       } catch {
         // auth_refresh_tokens table may not exist — continue without refresh token
+        console.debug('[auth] refresh token insert failed, table may not exist');
       }
 
       return { access_token: accessToken, refresh_token: refreshToken };
