@@ -31,8 +31,8 @@ const MOCK_POSITIONS: Record<string, LngLatLike> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  online: 'var(--brand-success, #22c55e)',
-  busy: 'var(--brand-warning, #f59e0b)',
+  online: 'var(--color-success, #22c55e)',
+  busy: 'var(--color-warning, #f59e0b)',
   offline: 'var(--brand-text-muted, #a8a8a8)',
 };
 
