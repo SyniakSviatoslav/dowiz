@@ -21,9 +21,10 @@ export function LoginPage() {
     try {
       const res = await apiClient<any>('/auth/local/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password })
+        body: { email, password }
       });
-      sessionStorage.setItem('dos_token', res.access_token);
+      sessionStorage.setItem('dos_access_token', res.access_token);
+      localStorage.setItem('dos_access_token', res.access_token);
       navigate('/admin');
     } catch (err: any) {
       setError(err.status === 401 ? 'Invalid email or password.' : 'Login failed.');
@@ -35,7 +36,8 @@ export function LoginPage() {
   const handleDevLogin = async () => {
     try {
       const res = await apiClient<any>('/dev/mock-auth', { method: 'POST' });
-      sessionStorage.setItem('dos_token', res.access_token);
+      sessionStorage.setItem('dos_access_token', res.access_token);
+      localStorage.setItem('dos_access_token', res.access_token);
       navigate('/admin');
     } catch (err: any) {
       setError('Dev login failed.');
