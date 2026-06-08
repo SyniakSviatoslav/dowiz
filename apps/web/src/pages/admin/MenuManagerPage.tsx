@@ -210,16 +210,23 @@ export function MenuManagerPage() {
     }
   };
 
+  const MAX_IMPORT_SIZE = 10 * 1024 * 1024; // 10MB
+
   // ── PDF Menu Import ──
   const handleImportUpload = async () => {
     if (!importFile) return;
+    if (importFile.size > MAX_IMPORT_SIZE) {
+      setImportError(`File too large (max ${MAX_IMPORT_SIZE / 1024 / 1024}MB).`);
+      setImportLoading(false);
+      return;
+    }
     setImportLoading(true);
     setImportError('');
     try {
       const formData = new FormData();
       formData.append('file', importFile);
       formData.append('mode', importMode);
-      const res = await apiClient<any>('/owner/menu/import/preview', { method: 'POST', body: formData });
+      const res = await apiClient<any>('/owner/menu/import/preview', { method: 'POST', body: formData, timeout: 120000 });
       setImportSessionId(res.import_session_id);
       setImportPreview(res);
       setImportStep('preview');

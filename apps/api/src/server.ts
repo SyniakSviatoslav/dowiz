@@ -456,7 +456,8 @@ async function main() {
   fastify.decorate('redis', redis);
 
   await fastify.register(multipart, {
-    limits: { fileSize: 5 * 1024 * 1024 }
+    limits: { fileSize: 10 * 1024 * 1024 },
+    throwFileSizeLimit: true,
   });
 
   await fastify.register(fastifyRateLimit, {
