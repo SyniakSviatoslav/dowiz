@@ -56,6 +56,7 @@ import { LoginPage } from './pages/admin/LoginPage.js';
 const ClientRoutes = lazy(() => import('./routes/ClientRoutes.js').then(m => ({ default: m.ClientRoutes })));
 const AdminRoutes = lazy(() => import('./routes/AdminRoutes.js').then(m => ({ default: m.AdminRoutes })));
 const CourierRoutes = lazy(() => import('./routes/CourierRoutes.js').then(m => ({ default: m.CourierRoutes })));
+const CourierInvitePage = lazy(() => import('./pages/courier/CourierInvitePage.js').then(m => ({ default: m.CourierInvitePage })));
 
 function LoadingFallback() {
   return (
@@ -80,6 +81,7 @@ function App() {
                 <Route path="/s/:slug/*" element={<ClientRoutes />} />
                 <Route path="/admin/*" element={<AdminRoutes />} />
                 <Route path="/courier/*" element={<CourierRoutes />} />
+                <Route path="/courier-invite/:inviteId" element={<CourierInvitePage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

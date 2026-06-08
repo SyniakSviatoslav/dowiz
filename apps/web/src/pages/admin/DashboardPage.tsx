@@ -21,7 +21,7 @@ export function DashboardPage() {
   const [readiness, setReadiness] = useState<{ menu: boolean; phone: boolean; address: boolean; couriers: boolean; branding: boolean; placeOrder: boolean }>({ menu: false, phone: false, address: false, couriers: false, branding: false, placeOrder: false });
 
   const { play: playPing } = useSound('/sounds/ping.mp3');
-  const tenantId = 't1';
+  const [tenantId, setTenantId] = useState('');
 
   const fetchOrders = async () => {
     try {
@@ -46,6 +46,7 @@ export function DashboardPage() {
   useEffect(() => {
     fetchOrders();
     apiClient<any>('/owner/settings').then(res => {
+      if (res.id) setTenantId(res.id);
       if (res.locationName) {
         const generated = res.locationName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
         setClientSlug(generated);

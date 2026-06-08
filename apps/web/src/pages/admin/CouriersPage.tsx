@@ -46,22 +46,48 @@ export function CouriersPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newCourierEmail, setNewCourierEmail] = useState('');
   const [newCourierRole, setNewCourierRole] = useState('courier');
-  const [inviteResult, setInviteResult] = useState('');
+  const [inviteResult, setInviteResult] = useState<{ link: string; code: string } | null>(null);
+  const [inviteError, setInviteError] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [locationId, setLocationId] = useState('');
 
-  const tenantId = 't1';
+  useEffect(() => {
+    apiClient<any>('/owner/settings').then(res => {
+      if (res.id) setLocationId(res.id);
+    }).catch(() => {});
+  }, []);
 
   const handleAddCourier = async () => {
-    if (!newCourierEmail) return;
+    if (!newCourierEmail || !locationId) return;
+    setInviteError('');
+    setInviteResult(null);
+    setCopied(false);
     try {
-      const res = await apiClient<any>(`/owner/locations/${tenantId}/courier-invites`, { 
+      const res = await apiClient<any>(`/owner/locations/${locationId}/courier-invites`, { 
         method: 'POST', 
         body: { role: newCourierRole, email: newCourierEmail, ttl_hours: 48 } 
       });
-      setInviteResult(res?.deepLink || res?.link || 'Invite created');
-      setNewCourierEmail('');
-      setTimeout(() => setInviteResult(''), 5000);
-      fetchCouriers();
-    } catch { setInviteResult('Failed to create invite'); }
+      if (res?.deepLink || res?.link) {
+        setInviteResult({
+          link: res.deepLink || res.link,
+          code: res.code || '',
+        });
+        setNewCourierEmail('');
+        fetchCouriers();
+      } else {
+        setInviteError('Failed to create invite');
+      }
+    } catch { 
+      setInviteError('Failed to create invite'); 
+    }
+  };
+
+  const handleCopyInvite = () => {
+    if (!inviteResult) return;
+    const text = `Ftesë për Korrier / Courier Invite:\nLink: ${inviteResult.link}\nCode: ${inviteResult.code}`;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 3000);
   };
 
   const fetchCouriers = async () => {
@@ -146,11 +172,57 @@ export function CouriersPage() {
             </select>
           </div>
           <Button onClick={handleAddCourier} variant="primary">{t('admin.send_invite', 'Send Invite')}</Button>
-          {inviteResult && <span className="text-sm w-full mt-2 font-medium" style={{ color: inviteResult === 'Failed to create invite' ? 'var(--color-danger)' : 'var(--color-success)' }}>
-            {inviteResult.startsWith('http') ? (
-              <a href={inviteResult} target="_blank" rel="noreferrer" className="underline break-all">{inviteResult}</a>
-            ) : inviteResult}
-          </span>}
+
+          {inviteError && (
+            <div className="w-full mt-2 text-sm font-medium px-3 py-2 rounded-lg border border-[var(--status-cancelled-border)] bg-[var(--status-cancelled-light)] text-[var(--color-danger)]">
+              {inviteError}
+            </div>
+          )}
+
+          {inviteResult && (
+            <div className="w-full mt-3 p-4 rounded-xl border border-[var(--status-confirmed-border)] bg-[var(--status-confirmed-light)] space-y-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-success)] mb-1">
+                  Ftesa u Krijua / Invite Created
+                </p>
+                <p className="text-xs text-[var(--brand-text-muted)]">
+                  Dërgoji këtë link dhe kod korrierit. Kodi nuk shfaqet më kurrë / Send the link and code to the courier. The code is never shown again.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-[var(--brand-text-muted)] block mb-1">Link</label>
+                <div className="flex gap-2 items-center">
+                  <a 
+                    href={inviteResult.link} 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className="flex-1 px-3 py-2 text-xs font-mono break-all rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-text)] hover:bg-[var(--brand-surface-raised)] truncate"
+                  >
+                    {inviteResult.link}
+                  </a>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-[var(--brand-text-muted)] block mb-1">
+                  Kodi i Sigurisë / Security Code (16 chars)
+                </label>
+                <code className="block px-3 py-2 text-lg font-mono tracking-widest text-center font-bold rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-text)] select-all">
+                  {inviteResult.code}
+                </code>
+              </div>
+
+              <Button
+                onClick={handleCopyInvite}
+                variant="primary"
+                className="w-full"
+                size="sm"
+              >
+                {copied ? '✓ U Kopjua / Copied!' : '📋 Kopjo Detajet / Copy Link & Code'}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

@@ -793,6 +793,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
     } catch (err: unknown) {
       const error = err as Record<string, unknown>;
       if (error.statusCode) {
+        request.log.warn({ orderId: id, targetStatus: newStatus, error: error.error, code: error.code }, 'Status update rejected');
         return reply.status(error.statusCode as number).send({ error: error.error as string, code: error.code as string });
       }
       request.log.error(error);
