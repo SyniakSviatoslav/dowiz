@@ -14,7 +14,7 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
 
       const [res, locRes] = await Promise.all([
         server.db.query(`SELECT read_public_menu($1, $2) as menu`, [locationIdOrSlug, locale]),
-        server.db.query(`SELECT id FROM locations WHERE id::text = $1 OR slug = $1`, [locationIdOrSlug]),
+        server.db.query(`SELECT id, name FROM locations WHERE id::text = $1 OR slug = $1`, [locationIdOrSlug]),
       ]);
 
       const menu = res.rows[0]?.menu;
@@ -23,6 +23,7 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
       }
 
       menu.location_id = menu.locationId = locRes.rows[0]?.id || null;
+      menu.location_name = locRes.rows[0]?.name || '';
 
       reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
       reply.header('X-Menu-Version', menu.menu_version.toString());

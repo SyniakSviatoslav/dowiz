@@ -22,7 +22,6 @@ export default (async function menuImportRoutes(fastify, opts) {
   fastify.post('/menu/import/preview', {
     preHandler: [fastify.verifyAuth, fastify.requireRole(['owner'])],
     config: {
-      bodyLimit: 10 * 1024 * 1024, // 10 MB for multipart file uploads
       rateLimit: {
         max: 5,
         timeWindow: '1 minute'
