@@ -33,9 +33,13 @@ export default (async function menuImportRoutes(fastify, opts) {
     if (!locationId) return reply.status(401).send({ error: 'Unauthorized' });
     
     // Read multipart
-    const data = await request.file({ limits: { fileSize: 5 * 1024 * 1024 } });
+    const data = await request.file({ limits: { fileSize: 10 * 1024 * 1024 } });
     if (!data) {
       return reply.status(400).send({ error: 'Missing file' });
+    }
+
+    if (data.file.truncated) {
+      return reply.status(413).send({ error: 'File exceeds maximum size of 10MB' });
     }
 
     const buffer = await data.toBuffer();
