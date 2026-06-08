@@ -16,21 +16,9 @@ const subscribePushSchema = z.object({
 export default (async function ownerPushRoutes(fastify, opts) {
   const { db } = opts as any;
 
-  fastify.addHook('onRequest', async (request, reply) => {
-    try {
-      await request.jwtVerify();
-      const user = request.user as any;
-      if (user.role !== 'owner') return reply.status(403).send({ error: 'Owner only' });
-      const params = request.params as any;
-      if (params.locationId) {
-        if (!user.activeLocationId || user.activeLocationId !== params.locationId) {
-          return reply.status(404).send({ error: 'Not found' });
-        }
-      }
-    } catch {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
-  });
+  fastify.addHook('onRequest', fastify.verifyAuth);
+  fastify.addHook('onRequest', fastify.requireRole(['owner']));
+  fastify.addHook('onRequest', fastify.requireLocationAccess);
 
   // ─── Register owner push subscription ─────────────────────────────
   fastify.post('/:locationId/push/subscribe', {

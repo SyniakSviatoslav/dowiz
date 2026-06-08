@@ -11,6 +11,7 @@ declare module 'fastify' {
   interface FastifyInstance {
     verifyAuth: any;
     requireRole: (roles: AuthToken['role'][]) => any;
+    requireLocationAccess: any;
   }
 }
 
@@ -87,4 +88,5 @@ export default fp(async (fastify) => {
   fastify.decorateRequest('user', null);
   fastify.decorate('verifyAuth', verifyAuth);
   fastify.decorate('requireRole', requireRole);
+  fastify.decorate('requireLocationAccess', requireLocationAccess);
 });

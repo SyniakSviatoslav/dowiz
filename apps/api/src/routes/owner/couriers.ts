@@ -20,7 +20,8 @@ export default (async function ownerCourierRoutes(fastify, opts) {
     
     // We get couriers for this location
     const res = await db.query(
-      `SELECT c.id, c.email_encrypted, c.phone_encrypted, c.full_name_encrypted, c.status, c.last_login_at, cl.role 
+      `SELECT c.id, c.email_encrypted, c.phone_encrypted, c.full_name_encrypted, c.status, c.last_login_at, cl.role,
+              (SELECT COUNT(*) FROM courier_assignments ca WHERE ca.courier_id = c.id AND ca.status = 'delivered') as deliveries_completed
        FROM couriers c
        JOIN courier_locations cl ON c.id = cl.courier_id
        WHERE cl.location_id = $1`,
@@ -39,7 +40,9 @@ export default (async function ownerCourierRoutes(fastify, opts) {
         last_login_at: row.last_login_at,
         full_name: fullName,
         masked_email: maskStr(emailPlain),
-        masked_phone: phonePlain ? maskStr(phonePlain) : null
+        masked_phone: phonePlain ? maskStr(phonePlain) : null,
+        deliveries_completed: parseInt(row.deliveries_completed) || 0,
+        rating: 0
       };
     });
 
@@ -120,7 +123,7 @@ export default (async function ownerCourierRoutes(fastify, opts) {
     
     const client = await db.connect();
     try {
-      await client.query(`SET LOCAL app.current_tenant = $1`, [locationId]);
+      await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
 
       const res = await client.query(`
         SELECT 
@@ -167,6 +170,50 @@ export default (async function ownerCourierRoutes(fastify, opts) {
     } finally {
       client.release();
     }
+  });
+
+  // 5. Per-courier detail (shifts, earnings, history)
+  fastify.get('/api/owner/locations/:locationId/couriers/:courierId/details', async (request, reply) => {
+    const { locationId, courierId } = request.params as { locationId: string; courierId: string };
+
+    const [shiftsRes, earningsRes, historyRes] = await Promise.all([
+      db.query(
+        `SELECT id, status, started_at, ended_at, last_heartbeat_at
+         FROM courier_shifts
+         WHERE courier_id = $1 AND location_id = $2
+         ORDER BY started_at DESC LIMIT 10`,
+        [courierId, locationId]
+      ),
+      db.query(
+        `SELECT
+           COALESCE(SUM(CASE WHEN a.delivered_at >= CURRENT_DATE THEN a.cash_amount ELSE 0 END), 0) AS today,
+           COALESCE(SUM(CASE WHEN a.delivered_at >= date_trunc('week', CURRENT_DATE) THEN a.cash_amount ELSE 0 END), 0) AS week,
+           COALESCE(SUM(CASE WHEN a.delivered_at >= date_trunc('month', CURRENT_DATE) THEN a.cash_amount ELSE 0 END), 0) AS month,
+           COUNT(CASE WHEN a.delivered_at >= CURRENT_DATE THEN 1 END) AS today_deliveries,
+           COUNT(CASE WHEN a.delivered_at >= date_trunc('month', CURRENT_DATE) THEN 1 END) AS month_deliveries
+         FROM courier_assignments a
+         JOIN orders o ON o.id = a.order_id
+         WHERE a.courier_id = $1 AND o.location_id = $2 AND a.status = 'delivered'`,
+        [courierId, locationId]
+      ),
+      db.query(
+        `SELECT a.id, a.order_id, a.status, a.assigned_at, a.accepted_at, a.picked_up_at, a.delivered_at, a.cash_amount,
+                o.total, o.currency_code, o.delivery_address,
+                c.name AS customer_name, c.phone AS customer_phone
+         FROM courier_assignments a
+         JOIN orders o ON o.id = a.order_id
+         JOIN customers c ON c.id = o.customer_id
+         WHERE a.courier_id = $1 AND o.location_id = $2
+         ORDER BY a.created_at DESC LIMIT 20`,
+        [courierId, locationId]
+      )
+    ]);
+
+    return reply.send({
+      shifts: shiftsRes.rows,
+      earnings: earningsRes.rows[0] || { today: 0, week: 0, month: 0, today_deliveries: 0, month_deliveries: 0 },
+      history: historyRes.rows
+    });
   });
 
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;

@@ -6,17 +6,8 @@ import { z } from 'zod';
 export default (async function courierSettlementRoutes(fastify, opts) {
   const { db } = opts as any;
 
-  // Courier auth hook
-  fastify.addHook('onRequest', async (request, reply) => {
-    try {
-      await request.jwtVerify();
-      if ((request.user as any).role !== 'courier') {
-        return reply.status(403).send({ error: 'Courier only' });
-      }
-    } catch (err) {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
-  });
+  fastify.addHook('onRequest', fastify.verifyAuth);
+  fastify.addHook('onRequest', fastify.requireRole(['courier']));
 
   // GET /api/courier/me/payouts
   fastify.get('/me/payouts', {
@@ -32,7 +23,7 @@ export default (async function courierSettlementRoutes(fastify, opts) {
     // Set RLS context
     const activeLocationId = (request.user as any).activeLocationId;
     if (activeLocationId) {
-      await db.query(`SET LOCAL app.current_tenant = $1`, [activeLocationId]);
+      await db.query(`SET LOCAL app.current_tenant = '${activeLocationId}'`);
     }
 
     let sql = `
@@ -66,7 +57,7 @@ export default (async function courierSettlementRoutes(fastify, opts) {
 
     const activeLocationId = (request.user as any).activeLocationId;
     if (activeLocationId) {
-      await db.query(`SET LOCAL app.current_tenant = $1`, [activeLocationId]);
+      await db.query(`SET LOCAL app.current_tenant = '${activeLocationId}'`);
     }
 
     const payoutRes = await db.query(`
@@ -82,7 +73,7 @@ export default (async function courierSettlementRoutes(fastify, opts) {
 
     // Set RLS context for items query too
     if (activeLocationId) {
-      await db.query(`SET LOCAL app.current_tenant = $1`, [activeLocationId]);
+      await db.query(`SET LOCAL app.current_tenant = '${activeLocationId}'`);
     }
 
     // Fetch masked items

@@ -18,7 +18,8 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
 
     const client = await db.connect();
     try {
-      await client.query(`SET LOCAL app.current_tenant = $1`, [locationId]);
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
       
       const res = await client.query(`
         SELECT id, order_id, status, assigned_at, accepted_at, picked_up_at, delivered_at, cash_collected, cash_amount
@@ -28,7 +29,11 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
         ORDER BY created_at DESC
       `, [courierId, locationId]);
 
+      await client.query('COMMIT');
       return reply.send({ success: true, assignments: res.rows });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
     } finally {
       client.release();
     }
@@ -49,7 +54,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-      await client.query(`SET LOCAL app.current_tenant = $1`, [locationId]);
+      await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
 
       const res = await client.query(`
         SELECT order_id, assigned_at FROM courier_assignments 
@@ -104,7 +109,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-      await client.query(`SET LOCAL app.current_tenant = $1`, [locationId]);
+      await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
 
       const res = await client.query(`
         SELECT order_id, shift_id FROM courier_assignments 
@@ -165,7 +170,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-      await client.query(`SET LOCAL app.current_tenant = $1`, [locationId]);
+      await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
 
       const res = await client.query(`
         SELECT order_id FROM courier_assignments 
@@ -218,7 +223,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-      await client.query(`SET LOCAL app.current_tenant = $1`, [locationId]);
+      await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
 
       const res = await client.query(`
         SELECT ca.order_id, ca.shift_id, o.total 
@@ -288,7 +293,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-      await client.query(`SET LOCAL app.current_tenant = $1`, [locationId]);
+      await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
 
       const res = await client.query(`
         SELECT order_id, shift_id, assigned_at FROM courier_assignments 

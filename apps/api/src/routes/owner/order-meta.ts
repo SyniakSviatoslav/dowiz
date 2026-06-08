@@ -6,15 +6,9 @@ import { z } from 'zod';
 export default (async function ownerOrderMetaRoutes(fastify, opts) {
   const { db } = opts as any;
 
-  fastify.addHook('onRequest', async (request, reply) => {
-    try {
-      await request.jwtVerify();
-      const user = request.user as any;
-      if (user.role !== 'owner') return reply.status(403).send({ error: 'Owner only' });
-    } catch {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
-  });
+  fastify.addHook('onRequest', fastify.verifyAuth);
+  fastify.addHook('onRequest', fastify.requireRole(['owner']));
+  fastify.addHook('onRequest', fastify.requireLocationAccess);
 
   // ─── Patch order metadata (test_order flag, etc.) ─────────────────
   fastify.patch('/:locationId/orders/:orderId/metadata', {

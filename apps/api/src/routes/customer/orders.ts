@@ -10,16 +10,8 @@ export default (async function customerOrderRoutes(fastify, opts) {
   const { db, messageBus } = opts as any;
 
   // Ensure this is only accessible to authenticated customers
-  fastify.addHook('onRequest', async (request, reply) => {
-    try {
-      await request.jwtVerify();
-      if ((request.user as any).role !== 'customer') {
-        return reply.status(403).send({ error: 'Customer only' });
-      }
-    } catch (err) {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
-  });
+  fastify.addHook('onRequest', fastify.verifyAuth);
+  fastify.addHook('onRequest', fastify.requireRole(['customer']));
 
   fastify.post('/orders/:orderId/cancel', {
     schema: {

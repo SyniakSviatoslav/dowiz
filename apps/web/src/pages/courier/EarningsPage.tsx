@@ -17,20 +17,6 @@ interface Payout {
   reference: string;
 }
 
-const MOCK_SUMMARY: EarningSummary = {
-  today: 4500,
-  week: 28500,
-  month: 112000,
-  currency: 'ALL'
-};
-
-const MOCK_PAYOUTS: Payout[] = [
-  { id: 'pay_001', date: '2026-06-01', amount: 28000, status: 'PAID', reference: 'Bank Transfer #T-8821' },
-  { id: 'pay_002', date: '2026-05-25', amount: 31500, status: 'PAID', reference: 'Bank Transfer #T-8742' },
-  { id: 'pay_003', date: '2026-05-18', amount: 24000, status: 'PAID', reference: 'Bank Transfer #T-8660' },
-  { id: 'pay_004', date: '2026-06-04', amount: 4500, status: 'PENDING', reference: 'Bank Transfer #T-8912' }
-];
-
 export function EarningsPage() {
   const [summary, setSummary] = useState<EarningSummary | null>(null);
   const [payouts, setPayouts] = useState<Payout[]>([]);
@@ -42,15 +28,19 @@ export function EarningsPage() {
     try {
       setLoading(true);
       const data = await apiClient<any>('/courier/me/earnings');
-      setSummary(data?.summary || MOCK_SUMMARY);
-      setPayouts(Array.isArray(data?.payouts) ? data.payouts : MOCK_PAYOUTS);
-    } catch (err: any) {
-      if (err.status === 404) {
-        setSummary(MOCK_SUMMARY);
-        setPayouts(MOCK_PAYOUTS);
+      if (data?.summary) {
+        setSummary({
+          today: data.summary.today,
+          week: data.summary.week,
+          month: data.summary.month,
+          currency: data.summary.currency || 'ALL',
+        });
+        setPayouts(Array.isArray(data?.payouts) ? data.payouts : []);
       } else {
-        setError('Failed to fetch earnings data');
+        setError('Unexpected response format');
       }
+    } catch (err: any) {
+      setError('Failed to fetch earnings data');
     } finally {
       setLoading(false);
     }

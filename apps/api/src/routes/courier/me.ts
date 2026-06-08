@@ -15,7 +15,7 @@ export default (async function courierMeRoutes(fastify, opts) {
 
   // 1. Get Profile
   fastify.get('/me', async (request, reply) => {
-    const courierId = request.user!.userId;
+    const courierId = request.user!.sub;
     const locationId = request.user!.activeLocationId;
 
     const res = await db.query(
@@ -31,14 +31,17 @@ export default (async function courierMeRoutes(fastify, opts) {
     }
 
     const row = res.rows[0];
-    const emailPlain = decryptPII(row.email_encrypted);
-    const phonePlain = row.phone_encrypted ? decryptPII(row.phone_encrypted) : null;
-    const fullName = decryptPII(row.full_name_encrypted);
+    let emailPlain: string | null = null;
+    let phonePlain: string | null = null;
+    let fullName: string | null = null;
+    try { emailPlain = decryptPII(row.email_encrypted); } catch (e) { request.log.error({ err: e }, 'decryptPII email failed'); }
+    try { phonePlain = row.phone_encrypted ? decryptPII(row.phone_encrypted) : null; } catch (e) { request.log.error({ err: e }, 'decryptPII phone failed'); }
+    try { fullName = decryptPII(row.full_name_encrypted); } catch (e) { request.log.error({ err: e }, 'decryptPII fullName failed'); }
 
     return reply.send({
       id: courierId,
-      full_name: fullName,
-      masked_email: maskStr(emailPlain),
+      full_name: fullName ?? '(decryption failed)',
+      masked_email: emailPlain ? maskStr(emailPlain) : '(decryption failed)',
       masked_phone: phonePlain ? maskStr(phonePlain) : null,
       last_login_at: row.last_login_at,
       active_location: { id: locationId, role: row.role }
@@ -47,7 +50,7 @@ export default (async function courierMeRoutes(fastify, opts) {
 
   // 2. Audit Log
   fastify.get('/me/audit-log', async (request, reply) => {
-    const courierId = request.user!.userId;
+    const courierId = request.user!.sub;
 
     const res = await db.query(
       `SELECT action, actor_kind, created_at 
@@ -62,16 +65,20 @@ export default (async function courierMeRoutes(fastify, opts) {
   });
 
   // 3. Change Password
-  fastify.patch('/me/password', {
-    schema: {
-      body: z.object({
-        current_password: z.string().min(1),
-        new_password: z.string().min(12)
-      }).strict()
+  fastify.patch('/me/password', async (request, reply) => {
+    // Manual Zod parsing to avoid AJV compilation failures
+    const bodySchema = z.object({
+      current_password: z.string().min(1),
+      new_password: z.string().min(12)
+    }).strict();
+
+    const result = bodySchema.safeParse(request.body);
+    if (!result.success) {
+      return reply.status(400).send({ error: 'Validation failed', details: result.error.format() });
     }
-  }, async (request, reply) => {
-    const { current_password, new_password } = request.body;
-    const courierId = request.user!.userId;
+
+    const { current_password, new_password } = result.data;
+    const courierId = request.user!.sub;
     const locationId = request.user!.activeLocationId;
     const ipHash = crypto.createHash('sha256').update(request.ip).digest('hex');
     const uaHash = crypto.createHash('sha256').update(request.headers['user-agent'] || '').digest('hex');
@@ -124,4 +131,91 @@ export default (async function courierMeRoutes(fastify, opts) {
     }
   });
 
+  // 4. Earnings Summary
+  fastify.get('/me/earnings', async (request, reply) => {
+    const courierId = request.user!.sub;
+    const locationId = request.user!.activeLocationId;
+
+    const today = await db.query(`
+      SELECT COALESCE(SUM(cash_amount), 0) AS amount, COUNT(*)::int AS deliveries
+      FROM courier_assignments
+      WHERE courier_id = $1 AND status = 'delivered'
+        AND delivered_at >= CURRENT_DATE
+        AND location_id = $2
+    `, [courierId, locationId]);
+
+    const week = await db.query(`
+      SELECT COALESCE(SUM(cash_amount), 0) AS amount, COUNT(*)::int AS deliveries
+      FROM courier_assignments
+      WHERE courier_id = $1 AND status = 'delivered'
+        AND delivered_at >= date_trunc('week', CURRENT_DATE)
+        AND location_id = $2
+    `, [courierId, locationId]);
+
+    const month = await db.query(`
+      SELECT COALESCE(SUM(cash_amount), 0) AS amount, COUNT(*)::int AS deliveries
+      FROM courier_assignments
+      WHERE courier_id = $1 AND status = 'delivered'
+        AND delivered_at >= date_trunc('month', CURRENT_DATE)
+        AND location_id = $2
+    `, [courierId, locationId]);
+
+    const payouts = await db.query(`
+      SELECT id, total_earned AS amount, status, period_start, period_end, created_at
+      FROM courier_payouts
+      WHERE courier_id = $1
+      ORDER BY created_at DESC
+      LIMIT 20
+    `, [courierId]);
+
+    return reply.send({
+      summary: {
+        today: parseInt(today.rows[0].amount),
+        today_deliveries: today.rows[0].deliveries,
+        week: parseInt(week.rows[0].amount),
+        week_deliveries: week.rows[0].deliveries,
+        month: parseInt(month.rows[0].amount),
+        month_deliveries: month.rows[0].deliveries,
+        currency: 'ALL',
+      },
+      payouts: payouts.rows.map((p: any) => ({
+        id: p.id,
+        date: p.period_end || p.created_at,
+        amount: parseInt(p.amount),
+        status: p.status,
+        reference: `Payout ${p.period_start?.slice(0, 10) || ''} - ${p.period_end?.slice(0, 10) || ''}`,
+      })),
+    });
+  });
+
+  // 5. Delivery History
+  fastify.get('/me/history', async (request, reply) => {
+    const courierId = request.user!.sub;
+
+    const res = await db.query(`
+      SELECT a.id, a.order_id, a.status, a.delivered_at, a.cash_amount,
+             o.total, o.delivery_fee, o.created_at,
+             c.name AS customer_name,
+             l.name AS location_name
+      FROM courier_assignments a
+      JOIN orders o ON o.id = a.order_id
+      JOIN customers c ON c.id = o.customer_id
+      JOIN locations l ON l.id = o.location_id
+      WHERE a.courier_id = $1 AND a.status IN ('delivered', 'cancelled')
+      ORDER BY a.delivered_at DESC NULLS LAST, a.created_at DESC
+      LIMIT 50
+    `, [courierId]);
+
+    return reply.send(res.rows.map((row: any) => ({
+      id: row.id,
+      orderId: row.order_id,
+      date: row.delivered_at || row.created_at,
+      restaurant: row.location_name,
+      customerAddress: row.customer_name,
+      amount: parseInt(row.cash_amount) || parseInt(row.total) || 0,
+      status: row.status === 'delivered' ? 'DELIVERED' : row.status === 'cancelled' ? 'CANCELLED' : row.status,
+      rating: null,
+      feedback: null,
+    })));
+  });
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;

@@ -24,8 +24,14 @@ export function createOperationalPool(): pg.Pool {
   });
 
   // FX-9: statement_timeout for operational queries — kill slow queries fast
+  // DB Role Guardrail: Prevent operational pool from connecting as superuser (which bypasses RLS)
   pool.on('connect', async (client) => {
     await client.query("SET statement_timeout = '10s'");
+    const res = await client.query('SELECT current_user');
+    if (res.rows[0].current_user === 'postgres') {
+      client.release(true); // Destroy the connection
+      throw new Error("SECURITY FAULT: Operational pool connected as 'postgres' superuser. This bypasses RLS. Use a dedicated restricted role.");
+    }
   });
 
   return pool;

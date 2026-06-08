@@ -6,6 +6,8 @@ interface ShiftState {
   isActive: boolean;
   startedAt: string | null;
   elapsedSeconds: number;
+  shiftId: string | null;
+  status: string | null;
 }
 
 interface ShiftStats {
@@ -15,15 +17,8 @@ interface ShiftStats {
   onlineTime: string;
 }
 
-const MOCK_STATS: ShiftStats = {
-  deliveries: 8,
-  earnings: 4500,
-  distance: 24.5,
-  onlineTime: '4h 32m'
-};
-
 export function ShiftPage() {
-  const [shift, setShift] = useState<ShiftState>({ isActive: false, startedAt: null, elapsedSeconds: 0 });
+  const [shift, setShift] = useState<ShiftState>({ isActive: false, startedAt: null, elapsedSeconds: 0, shiftId: null, status: null });
   const [stats, setStats] = useState<ShiftStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -37,20 +32,13 @@ export function ShiftPage() {
       setShift({
         isActive: data?.isActive ?? false,
         startedAt: data?.startedAt ?? null,
-        elapsedSeconds: data?.elapsedSeconds ?? 0
+        elapsedSeconds: data?.elapsedSeconds ?? 0,
+        shiftId: data?.shiftId ?? null,
+        status: data?.status ?? null
       });
       setStats(data?.stats || null);
     } catch (err: any) {
-      if (err.status === 404) {
-        setShift({
-          isActive: false,
-          startedAt: null,
-          elapsedSeconds: 0
-        });
-        setStats(MOCK_STATS);
-      } else {
-        setError('Failed to fetch shift data');
-      }
+      setError('Failed to fetch shift data');
     } finally {
       setLoading(false);
     }
@@ -91,20 +79,14 @@ export function ShiftPage() {
     try {
       const data = await apiClient<any>('/courier/me/shift/start', { method: 'POST' });
       setShift({
-        isActive: true,
-        startedAt: new Date().toISOString(),
-        elapsedSeconds: 0
+        isActive: data?.isActive ?? true,
+        startedAt: data?.startedAt ?? new Date().toISOString(),
+        elapsedSeconds: data?.elapsedSeconds ?? 0,
+        shiftId: data?.shiftId ?? null,
+        status: data?.status ?? null
       });
     } catch (err: any) {
-      if (err.status === 404) {
-        setShift({
-          isActive: true,
-          startedAt: new Date().toISOString(),
-          elapsedSeconds: 0
-        });
-      } else {
-        setError('Failed to start shift');
-      }
+      setError('Failed to start shift');
     } finally {
       setActionLoading(false);
     }
@@ -114,15 +96,10 @@ export function ShiftPage() {
     setActionLoading(true);
     try {
       await apiClient<any>('/courier/me/shift/end', { method: 'POST' });
-      setShift({ isActive: false, startedAt: null, elapsedSeconds: 0 });
+      setShift({ isActive: false, startedAt: null, elapsedSeconds: 0, shiftId: null, status: null });
       fetchShift();
     } catch (err: any) {
-      if (err.status === 404) {
-        setShift({ isActive: false, startedAt: null, elapsedSeconds: 0 });
-        fetchShift();
-      } else {
-        setError('Failed to end shift');
-      }
+      setError('Failed to end shift');
     } finally {
       setActionLoading(false);
     }
