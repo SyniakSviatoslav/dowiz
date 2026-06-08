@@ -119,7 +119,10 @@ async function main() {
       reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     }
     reply.header('X-Content-Type-Options', 'nosniff');
-    reply.header('X-Frame-Options', 'SAMEORIGIN');
+    // Allow iframe embedding when embed=true (widget embeds on restaurant websites)
+    if (!request.url.includes('embed=true')) {
+      reply.header('X-Frame-Options', 'SAMEORIGIN');
+    }
     reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
   });
 
@@ -503,7 +506,7 @@ async function main() {
   fastify.addHook('onRoute', (routeOptions) => {
     if (!routeOptions.config) routeOptions.config = {};
     if (!(routeOptions.config as any).bodyLimit) {
-      (routeOptions.config as any).bodyLimit = 256 * 1024; // 256 KB default
+      (routeOptions.config as any).bodyLimit = 1024 * 1024; // 1 MB default
     }
   });
   fastify.register(authRoutes);
