@@ -38,22 +38,27 @@ export function FlowTestPage() {
   // Load data for selectors
   useEffect(() => {
     (async () => {
+      let loc = locationId;
       try {
         const locRes = await apiClient<any>('/owner/settings');
-        if (locRes?.id) setLocations([{ id: locRes.id, name: locRes.name || 'Default' }]);
-        if (locRes?.id && !locationId) setLocationId(locRes.id);
+        if (locRes?.id) {
+          setLocations([{ id: locRes.id, name: locRes.name || 'Default' }]);
+          if (!loc) { loc = locRes.id; setLocationId(locRes.id); }
+        }
       } catch { /* ignore */ }
       try {
-        const menuRes = await apiClient<any>('/owner/menu');
-        const allProducts = (menuRes?.categories || []).flatMap((c: any) => (c.products || []).map((p: any) => ({ ...p, categoryName: c.name })));
+        const menuRes = await apiClient<any>('/owner/menu/products');
+        const allProducts = Array.isArray(menuRes) ? menuRes : (menuRes?.products || []);
         setProducts(allProducts);
         if (allProducts.length > 0 && !productId) setProductId(allProducts[0].id);
       } catch { /* ignore */ }
       try {
-        const courRes = await apiClient<any>('/owner/couriers');
-        const list = Array.isArray(courRes) ? courRes : [];
-        setCouriers(list);
-        if (list.length > 0 && !courierId) setCourierId(list[0].id);
+        if (loc) {
+          const courRes = await apiClient<any>(`/owner/locations/${loc}/couriers`);
+          const list = Array.isArray(courRes) ? courRes : [];
+          setCouriers(list);
+          if (list.length > 0 && !courierId) setCourierId(list[0].id);
+        }
       } catch { /* ignore */ }
     })();
   }, []);

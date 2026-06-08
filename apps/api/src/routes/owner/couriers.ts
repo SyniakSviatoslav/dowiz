@@ -15,12 +15,8 @@ export default (async function ownerCourierRoutes(fastify, opts) {
   fastify.addHook('preValidation', requireLocationAccess);
 
   // 1. List active members
-  fastify.get('/api/owner/locations/:locationId/couriers', {
-    schema: {
-      params: z.object({ locationId: z.string().uuid() })
-    }
-  }, async (request, reply) => {
-    const { locationId } = request.params;
+  fastify.get('/api/owner/locations/:locationId/couriers', async (request, reply) => {
+    const { locationId } = request.params as { locationId: string };
     
     // We get couriers for this location
     const res = await db.query(
@@ -51,17 +47,11 @@ export default (async function ownerCourierRoutes(fastify, opts) {
   });
 
   // 2. Update courier (status, role)
-  fastify.patch('/api/owner/locations/:locationId/couriers/:courierId', {
-    schema: {
-      params: z.object({ locationId: z.string().uuid(), courierId: z.string().uuid() }),
-      body: z.object({
-        status: z.enum(['active', 'suspended', 'deactivated']).optional(),
-        role: z.enum(['courier', 'dispatcher']).optional()
-      }).strict()
-    }
-  }, async (request, reply) => {
-    const { locationId, courierId } = request.params;
-    const { status, role } = request.body;
+  fastify.patch('/api/owner/locations/:locationId/couriers/:courierId', async (request, reply) => {
+    const { locationId, courierId } = request.params as { locationId: string; courierId: string };
+    const body = request.body as any;
+    const status = body?.status;
+    const role = body?.role;
     const ownerId = request.user!.userId;
     const ipHash = crypto.createHash('sha256').update(request.ip).digest('hex');
     const uaHash = crypto.createHash('sha256').update(request.headers['user-agent'] || '').digest('hex');
@@ -125,12 +115,8 @@ export default (async function ownerCourierRoutes(fastify, opts) {
   });
 
   // 4. Live Map Data
-  fastify.get('/api/owner/locations/:locationId/couriers/live', {
-    schema: {
-      params: z.object({ locationId: z.string().uuid() })
-    }
-  }, async (request, reply) => {
-    const { locationId } = request.params;
+  fastify.get('/api/owner/locations/:locationId/couriers/live', async (request, reply) => {
+    const { locationId } = request.params as { locationId: string };
     
     const client = await db.connect();
     try {

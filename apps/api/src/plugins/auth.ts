@@ -44,6 +44,9 @@ export const requireRole = (roles: AuthToken['role'][]) => {
 export const requireLocationAccess = async (request: FastifyRequest, reply: FastifyReply) => {
   const { locationId } = request.params as { locationId?: string };
   if (!locationId) return reply.status(400).send({ error: 'Missing location_id parameter' });
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(locationId)) {
+    return reply.status(400).send({ error: 'Invalid location_id format' });
+  }
 
   const user = request.user;
   if (!user) return reply.status(401).send({ error: 'Unauthorized' });
@@ -68,8 +71,8 @@ export const requireLocationAccess = async (request: FastifyRequest, reply: Fast
 
   try {
     const res = await pool.query(
-      `SELECT 1 FROM locations WHERE id = $1 AND owner_id = $2`,
-      [locationId, user.userId] // Correct owner check
+      `SELECT 1 FROM memberships WHERE location_id = $1 AND user_id = $2 AND role = 'owner'`,
+      [locationId, user.userId]
     );
     if (res.rowCount === 0) {
       return reply.status(404).send({ error: 'Not found' });

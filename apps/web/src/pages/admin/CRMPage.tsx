@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Button, EmptyState, SkeletonBase, useI18n } from '@deliveryos/ui';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/index.js';
 
 import { exportCSV } from '../../lib/exportCSV.js';
@@ -15,6 +16,7 @@ interface Customer {
 
 export function CRMPage() {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -24,6 +26,7 @@ export function CRMPage() {
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
   const [analyticsCache, setAnalyticsCache] = useState<Record<string, any>>({});
   const [loadingAnalytics, setLoadingAnalytics] = useState<string | null>(null);
+  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
 
   useEffect(() => {
     apiClient<any>('/owner/customers')
