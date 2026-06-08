@@ -125,8 +125,12 @@ async function main() {
 
   fastify.addHook('onSend', async (_request, reply, payload) => {
     const ct = reply.getHeader('content-type');
-    if (ct && String(ct).startsWith('text/html')) {
+    if (!ct) return;
+    const type = String(ct);
+    if (type.startsWith('text/html')) {
       reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else if (type === 'text/css' || type === 'application/javascript' || type.startsWith('text/javascript')) {
+      reply.header('Cache-Control', 'public, max-age=31536000, immutable');
     }
   });
 
@@ -152,11 +156,6 @@ async function main() {
     prefix: '/',
     cacheControl: true,
     maxAge: '365d',
-    setHeaders: (res, filePath) => {
-      if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      }
-    },
   });
 
   // Subdomain routing middleware
