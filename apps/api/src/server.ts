@@ -145,13 +145,22 @@ async function main() {
     root: path.join(dirName, '..', 'public'),
     prefix: '/',
     cacheControl: true,
-    setHeaders: (res, filePath) => {
-      if (filePath.endsWith('.html')) {
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      } else if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      }
-    },
+    maxAge: '365d',
+  });
+
+  // Override cache headers after fastify-static's send() applies maxAge.
+  // Note: for directly-served static files, fastify-static may pipe to res directly
+  // bypassing onSend. The SPA fallback (setNotFoundHandler) uses reply.sendFile()
+  // which DOES trigger onSend for HTML routes.
+  fastify.addHook('onSend', async (_request, reply, payload) => {
+    const ct = reply.getHeader('content-type');
+    if (!ct) return;
+    const type = String(ct);
+    if (type.startsWith('text/html')) {
+      reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else if (type === 'text/css' || type === 'application/javascript' || type.startsWith('text/javascript')) {
+      reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+    }
   });
 
   // Subdomain routing middleware
