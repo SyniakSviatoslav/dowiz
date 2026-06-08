@@ -71,7 +71,7 @@ export function BrandingPage() {
     if (config.primary && !config.primary.startsWith('var(')) params.set('draft_primary', config.primary);
     if (config.bg && !config.bg.startsWith('var(')) params.set('draft_bg', config.bg);
     if (config.text && !config.text.startsWith('var(')) params.set('draft_text', config.text);
-    if (logoPreview) params.set('draft_logo', logoPreview);
+    // Logo excluded from URL — base64 data URLs cause 431 (header too large)
     return `https://${slug}.dowiz.org?${params.toString()}`;
   }, [slug, config.primary, config.bg, config.text, logoPreview]);
 
