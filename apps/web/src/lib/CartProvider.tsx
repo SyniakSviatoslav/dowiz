@@ -56,7 +56,9 @@ export function CartProvider({ children, locationId }: { children: React.ReactNo
 
   const addItem = useCallback((item: CartItem) => {
     setItems(prev => {
-      const idx = prev.findIndex(i => i.productId === item.productId);
+      const key = (i: CartItem) => `${i.productId}_${JSON.stringify(i.options || {})}`;
+      const itemKey = key(item);
+      const idx = prev.findIndex(i => key(i) === itemKey);
       if (idx >= 0) {
         return prev.map((existing, i) => i === idx ? { ...existing, quantity: existing.quantity + item.quantity } : existing);
       }

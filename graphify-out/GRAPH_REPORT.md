@@ -1,16 +1,16 @@
-# Graph Report - dowiz  (2026-06-07)
+# Graph Report - dowiz  (2026-06-08)
 
 ## Corpus Check
-- 786 files · ~1,054,933 words
+- 644 files · ~380,676 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 5889 nodes · 6226 edges · 636 communities (570 shown, 66 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 82 edges (avg confidence: 0.8)
+- 5972 nodes · 6324 edges · 630 communities (569 shown, 61 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 94 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b785ed1c`
+- Built from commit: `dc5192cd`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -422,7 +422,6 @@
 - [[_COMMUNITY_Community 405|Community 405]]
 - [[_COMMUNITY_Community 406|Community 406]]
 - [[_COMMUNITY_Community 407|Community 407]]
-- [[_COMMUNITY_Community 408|Community 408]]
 - [[_COMMUNITY_Community 409|Community 409]]
 - [[_COMMUNITY_Community 410|Community 410]]
 - [[_COMMUNITY_Community 411|Community 411]]
@@ -445,7 +444,6 @@
 - [[_COMMUNITY_Community 430|Community 430]]
 - [[_COMMUNITY_Community 431|Community 431]]
 - [[_COMMUNITY_Community 432|Community 432]]
-- [[_COMMUNITY_Community 433|Community 433]]
 - [[_COMMUNITY_Community 434|Community 434]]
 - [[_COMMUNITY_Community 435|Community 435]]
 - [[_COMMUNITY_Community 436|Community 436]]
@@ -469,14 +467,12 @@
 - [[_COMMUNITY_Community 454|Community 454]]
 - [[_COMMUNITY_Community 455|Community 455]]
 - [[_COMMUNITY_Community 456|Community 456]]
-- [[_COMMUNITY_Community 457|Community 457]]
 - [[_COMMUNITY_Community 458|Community 458]]
 - [[_COMMUNITY_Community 459|Community 459]]
 - [[_COMMUNITY_Community 460|Community 460]]
 - [[_COMMUNITY_Community 461|Community 461]]
 - [[_COMMUNITY_Community 462|Community 462]]
 - [[_COMMUNITY_Community 463|Community 463]]
-- [[_COMMUNITY_Community 464|Community 464]]
 - [[_COMMUNITY_Community 465|Community 465]]
 - [[_COMMUNITY_Community 467|Community 467]]
 - [[_COMMUNITY_Community 468|Community 468]]
@@ -494,7 +490,6 @@
 - [[_COMMUNITY_Community 480|Community 480]]
 - [[_COMMUNITY_Community 481|Community 481]]
 - [[_COMMUNITY_Community 482|Community 482]]
-- [[_COMMUNITY_Community 483|Community 483]]
 - [[_COMMUNITY_Community 484|Community 484]]
 - [[_COMMUNITY_Community 485|Community 485]]
 - [[_COMMUNITY_Community 486|Community 486]]
@@ -529,18 +524,16 @@
 ## God Nodes (most connected - your core abstractions)
 1. `scripts` - 44 edges
 2. `createSessionPool()` - 34 edges
-3. `useI18n()` - 26 edges
-4. `runRestoreVerify()` - 23 edges
-5. `t()` - 23 edges
-6. `DeliveryOS — Technical & Architecture Reference` - 22 edges
-7. `MemoryService` - 21 edges
-8. `1. Client Surface (/s/:slug)` - 21 edges
-9. `apiClient()` - 20 edges
+3. `useI18n()` - 32 edges
+4. `t()` - 30 edges
+5. `runRestoreVerify()` - 23 edges
+6. `apiClient()` - 22 edges
+7. `DeliveryOS — Technical & Architecture Reference` - 22 edges
+8. `MemoryService` - 21 edges
+9. `1. Client Surface (/s/:slug)` - 21 edges
 10. `DeliveryOS — Product Context` - 20 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `verifyAuth()` --calls--> `verifyAuthToken()`  [INFERRED]
-  apps/api/src/plugins/auth.ts → packages/platform/src/auth/jwt.ts
 - `main()` --calls--> `createOperationalPool()`  [INFERRED]
   apps/api/tests/test-stage11.ts → packages/db/src/index.ts
 - `main()` --calls--> `createOperationalPool()`  [INFERRED]
@@ -549,8 +542,10 @@
   apps/api/tests/test-stage13.ts → packages/db/src/index.ts
 - `setup()` --calls--> `createSessionPool()`  [INFERRED]
   apps/api/tests/phase5/rls-adversarial.test.ts → packages/db/src/index.ts
+- `main()` --calls--> `createOperationalPool()`  [INFERRED]
+  apps/api/src/server.ts → packages/db/src/index.ts
 
-## Communities (636 total, 66 thin omitted)
+## Communities (630 total, 61 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.50
@@ -614,11 +609,11 @@ Nodes (27): 10. Theme presets (6 curated), 11. White-label by plan, 12. Embed wi
 
 ### Community 19 - "Community 19"
 Cohesion: 0.04
-Nodes (23): { db }, locations, { db }, params, correlationStore, generateCorrelationId(), getFastifyLoggerConfig(), logger (+15 more)
+Nodes (24): { db }, locations, { db }, params, correlationStore, generateCorrelationId(), getFastifyLoggerConfig(), logger (+16 more)
 
 ### Community 20 - "Community 20"
-Cohesion: 0.09
-Nodes (22): Active skills, DeliveryOS — Agent Context, Non-negotiable rules, Reference documents, What this project is, What we are building, 10. Common commands, 11. Reference documents (deep dive when needed) (+14 more)
+Cohesion: 0.08
+Nodes (24): Active skills, DeliveryOS — Agent Context, Non-negotiable rules, Reference documents, What this project is, What we are building, 10. Common commands, 11. Reference documents (deep dive when needed) (+16 more)
 
 ### Community 21 - "Community 21"
 Cohesion: 0.04
@@ -638,7 +633,7 @@ Nodes (42): 1. Color, 2. Typography, 3. Spacing (4px base unit), 4. Layout, 5. C
 
 ### Community 25 - "Community 25"
 Cohesion: 0.06
-Nodes (31): ConfirmDialog(), ConfirmDialogProps, ConfirmOptions, useConfirm(), CourierLiveMap(), CourierLiveMapProps, CourierOnMap, LngLatLike (+23 more)
+Nodes (34): ConfirmDialog(), ConfirmDialogProps, ConfirmOptions, useConfirm(), CourierLiveMap(), CourierLiveMapProps, CourierOnMap, getCSSVar() (+26 more)
 
 ### Community 26 - "Community 26"
 Cohesion: 0.10
@@ -661,8 +656,8 @@ Cohesion: 0.06
 Nodes (33): dependencies, argon2, @aws-sdk/client-s3, @aws-sdk/lib-storage, @deliveryos/config, @deliveryos/db, @deliveryos/domain, @deliveryos/platform (+25 more)
 
 ### Community 31 - "Community 31"
-Cohesion: 0.07
-Nodes (27): generateOpaqueToken(), generateOtpCode(), hashOtpCode(), hashPhone(), maskPhone(), verifyOtpCode(), code, content (+19 more)
+Cohesion: 0.09
+Nodes (21): code, content, cookies, custId, env, files, found, glob (+13 more)
 
 ### Community 32 - "Community 32"
 Cohesion: 0.09
@@ -673,8 +668,8 @@ Cohesion: 0.06
 Nodes (27): addBtn, addButtons, btn, criticalErrors, desktopAside, drawer, els, emptyStateEl (+19 more)
 
 ### Community 34 - "Community 34"
-Cohesion: 0.14
-Nodes (25): AdminShell(), OrderCard(), AllergenEditor(), AllergenEditorProps, EU_ALLERGENS, ReadinessIndicator(), AnalyticsPage(), BrandingPage() (+17 more)
+Cohesion: 0.13
+Nodes (28): AdminShell(), OrderCard(), AllergenEditor(), AllergenEditorProps, EU_ALLERGENS, ReadinessIndicator(), AnalyticsPage(), BrandingPage() (+20 more)
 
 ### Community 35 - "Community 35"
 Cohesion: 0.07
@@ -737,32 +732,32 @@ Cohesion: 0.16
 Nodes (19): backupAdminRoutes(), acquireLock(), alertFailure(), BackupRecord, cleanupTempDir(), decryptBackup(), downloadFromR2(), getR2Config() (+11 more)
 
 ### Community 50 - "Community 50"
-Cohesion: 0.12
-Nodes (11): RESERVED, DeliveryHistory, HistoryPage(), MOCK_HISTORY, MOCK_STATS, ShiftPage(), ShiftState, ShiftStats (+3 more)
+Cohesion: 0.07
+Nodes (19): FlowStep, INITIAL_STEPS, RESERVED, EarningSummary, MOCK_PAYOUTS, MOCK_SUMMARY, Payout, DeliveryHistory (+11 more)
 
 ### Community 51 - "Community 51"
 Cohesion: 0.09
 Nodes (21): `anonymization_audit_log` (append-only), Anonymization Scope, Architecture, Audit, Authentication & Authorization, code:block1 (┌───────────────────────────────────────────────────────────), code:sql (-- Guard clause at the start of each customer anonymization), code:sql (SELECT * FROM anonymization_audit_log) (+13 more)
 
 ### Community 52 - "Community 52"
-Cohesion: 0.09
-Nodes (19): ALERTS, CATEGORIES, COURIER_ASSIGNMENTS, COURIER_EARNINGS, COURIER_HISTORY, COURIER_SHIFTS, COURIERS, CUSTOMERS (+11 more)
+Cohesion: 0.04
+Nodes (34): isApi, method, mock, paramDev, path, PROXIED_PREFIXES, ALERTS, CATEGORIES (+26 more)
 
 ### Community 53 - "Community 53"
-Cohesion: 0.11
-Nodes (13): DeliveryPage(), MOCK_CUSTOMER, MOCK_RESTAURANT, TIRANA_CENTER, LoginPage(), TasksPage(), useGeolocation(), useGeoStream() (+5 more)
+Cohesion: 0.15
+Nodes (10): OrderStatusPage(), DeliveryPage(), MOCK_CUSTOMER, MOCK_RESTAURANT, TIRANA_CENTER, TasksPage(), useWebSocket(), UseWebSocketOptions (+2 more)
 
 ### Community 54 - "Community 54"
 Cohesion: 0.09
 Nodes (21): 8 Findings — 1 Critical, 4 High, 3 Medium, code:sql (USING (location_id = current_setting('app.location_id', true), code:sql (USING (location_id IN (SELECT app_member_location_ids()))), code:sql (USING (location_id IN (SELECT app_member_location_ids()))), code:sql (ALTER TABLE customer_devices ENABLE ROW LEVEL SECURITY;), code:json ("verify:n2": "tsx --env-file=.env scripts/verify-n2.ts",), code:sql (USING (customer_id = (current_setting('request.jwt.claim.sub), 🔴 CRITICAL (+13 more)
 
 ### Community 55 - "Community 55"
-Cohesion: 0.11
-Nodes (18): maskName(), maskPhone(), alerts, { db, messageBus, queue }, decoded, { locationId }, params, user (+10 more)
+Cohesion: 0.18
+Nodes (10): auditLogs, createRequestSchema, { db, messageBus, queue }, decoded, listQuerySchema, { locationId }, params, requests (+2 more)
 
 ### Community 56 - "Community 56"
-Cohesion: 0.17
-Nodes (14): env, getPrivateKey(), getPublicKey(), issueCustomerToken(), signAuthToken(), verifyAuthToken(), withTenant(), Env (+6 more)
+Cohesion: 0.15
+Nodes (15): env, getPrivateKey(), getPublicKey(), issueCustomerToken(), signAuthToken(), verifyAuthToken(), withTenant(), Env (+7 more)
 
 ### Community 57 - "Community 57"
 Cohesion: 0.10
@@ -801,12 +796,12 @@ Cohesion: 0.20
 Nodes (15): CartItem, clearCart(), getCart(), getCartKey(), saveCart(), removeItem(), updateQty(), addToCart() (+7 more)
 
 ### Community 66 - "Community 66"
-Cohesion: 0.16
-Nodes (14): { db }, emailPlain, fullName, hashOptions, ipHash, uaHash, decryptPII(), encryptPII() (+6 more)
+Cohesion: 0.30
+Nodes (9): decryptPII(), encryptPII(), getKey(), isLegacyBase64(), c1, c2, cipher, decrypted (+1 more)
 
 ### Community 67 - "Community 67"
-Cohesion: 0.12
-Nodes (14): code, { db }, emailHash, hashOptions, ipHash, uaHash, couriers, { db } (+6 more)
+Cohesion: 0.09
+Nodes (21): body, code, { db }, email, emailHash, hashOptions, ipHash, { locationId } (+13 more)
 
 ### Community 68 - "Community 68"
 Cohesion: 0.20
@@ -837,8 +832,8 @@ Cohesion: 0.11
 Nodes (9): env, runTests(), env, runTests(), main(), main(), main(), env (+1 more)
 
 ### Community 75 - "Community 75"
-Cohesion: 0.13
-Nodes (10): CheckoutPage(), DeliveryType, MenuCategory, MenuPage(), OrderStatusPage(), CartContext, CartContextType, CartProvider() (+2 more)
+Cohesion: 0.14
+Nodes (10): CheckoutPage(), DeliveryType, MenuCategory, MenuPage(), CartContext, CartContextType, CartProvider(), useSharedCart() (+2 more)
 
 ### Community 76 - "Community 76"
 Cohesion: 0.11
@@ -854,15 +849,15 @@ Nodes (18): devDependencies, cross-env, dotenv, esbuild, eslint, eslint-plugin-l
 
 ### Community 79 - "Community 79"
 Cohesion: 0.15
-Nodes (10): useEmbed(), AdminShell(), AdminShellProps, ClientShell(), ClientShellProps, CourierShell(), CourierShellProps, EmbedShell() (+2 more)
+Nodes (11): useEmbed(), AdminShell(), AdminShellProps, ClientShell(), ClientShellProps, CourierShell(), CourierShellProps, EmbedShell() (+3 more)
 
 ### Community 80 - "Community 80"
 Cohesion: 0.11
 Nodes (18): 2.10 Owner Branding — `14-admin-branding.html`, 2.11 Owner Onboarding — `17-onboarding.html`, 2.12 Owner Login — `29-admin-login.html`, 2.13 Owner Staff — `30-admin-staff.html`, 2.14 Owner Inventory — `31-admin-inventory.html`, 2.15 Owner Payouts — `32-admin-payouts.html`, 2.16 Order WS Status Debug — `40-order-ws-status.html`, 2.17 Owner Order Card Component — `41-owner-order-card.html` (+10 more)
 
 ### Community 81 - "Community 81"
-Cohesion: 0.18
-Nodes (15): currentLocale, getLocale(), getLocales(), listeners, Locale, messages, setLocale(), subscribeToLocale() (+7 more)
+Cohesion: 0.19
+Nodes (14): currentLocale, getLocale(), getLocales(), listeners, Locale, messages, setLocale(), subscribeToLocale() (+6 more)
 
 ### Community 82 - "Community 82"
 Cohesion: 0.18
@@ -876,25 +871,29 @@ Nodes (16): A1. API Route Inventory (121 registered + 8 unregistered), A2. WebSo
 Cohesion: 0.12
 Nodes (16): Branding, Common Schemas (reused across endpoints), Contract Schema File Index, Courier (prefix: `/api/courier`), Couriers, Customer (prefix: `/api/customer`), Dashboard & Orders, DeliveryOS Contract Map (+8 more)
 
+### Community 85 - "Community 85"
+Cohesion: 0.13
+Nodes (3): MemoryService, NotificationDispatcher, NotificationWorker
+
 ### Community 86 - "Community 86"
 Cohesion: 0.18
 Nodes (8): ConflictError, IllegalTransitionError, SameStatusError, ScaffoldDisabledError, ORDER_STATUSES, OrderStatus, SCAFFOLD_STATUSES, TRANSITIONS
 
 ### Community 87 - "Community 87"
-Cohesion: 0.16
+Cohesion: 0.15
 Nodes (10): AnalyticsData, CONSUMPTION_DATA, HEATMAP_HOURS, HOUR_LABELS, Courier, MOCK_COURIERS, MOCK_POSITIONS, STATUS_COLORS (+2 more)
 
 ### Community 88 - "Community 88"
-Cohesion: 0.15
-Nodes (8): PiiRedaction, PiiRedactor, initSentry(), PII_KEYS, piiRedactor, SENSITIVE_FIELDS, redactor, res
+Cohesion: 0.32
+Nodes (4): PiiRedaction, PiiRedactor, redactor, res
 
 ### Community 89 - "Community 89"
 Cohesion: 0.14
 Nodes (9): buckets, checkIpRateLimit(), checkRateLimit(), checkTenantRateLimit(), DEFAULT_OPTS, inflightCounts, RateLimitOpts, STRICT_OPTS (+1 more)
 
 ### Community 90 - "Community 90"
-Cohesion: 0.12
-Nodes (13): activeDeliveries, assignId, counts, { db, messageBus, queue }, decoded, { locationId }, { locationId, orderId }, { orderId } (+5 more)
+Cohesion: 0.08
+Nodes (21): activeDeliveries, assignId, body, counts, cursor, { db, messageBus, queue }, decoded, limit (+13 more)
 
 ### Community 91 - "Community 91"
 Cohesion: 0.12
@@ -913,8 +912,8 @@ Cohesion: 0.12
 Nodes (15): code:bash (# 1. Check health), code:bash (# 1. Identify the last known-good commit), code:block3 (🛑 Rollback initiated at <timestamp>), Communication Template, Emergency Contacts, Phase 1: Assess (2 min), Phase 2: Execute Rollback (5 min), Phase 3: Verify (3 min) (+7 more)
 
 ### Community 95 - "Community 95"
-Cohesion: 0.20
-Nodes (7): ApiClient, ApiClientConfig, ApiClientError, buildUrl(), combineAbortSignals(), handleResponse(), RequestOpts
+Cohesion: 0.12
+Nodes (15): code:block1 (1. CLASSIFY query type:), code:block2 (1. VERIFY: fact is confirmed (not hypothesis)), code:json ({), Dedup Rules, DeliveryOS — Memory Communication Layer, Graph Freshness, Implementation Check (No-MCP), Phase 2: Engine Alignment (+7 more)
 
 ### Community 96 - "Community 96"
 Cohesion: 0.12
@@ -940,10 +939,6 @@ Nodes (14): background_color, categories, description, display, icons, name, ori
 Cohesion: 0.13
 Nodes (13): body, { db, messageBus, queue }, initState, { locationId }, { locationId, stepNum }, locId, params, REQUIRED_WITH_DEFAULTS (+5 more)
 
-### Community 102 - "Community 102"
-Cohesion: 0.20
-Nodes (3): NotificationDispatcher, DwellEscalationWorker, env
-
 ### Community 103 - "Community 103"
 Cohesion: 0.13
 Nodes (13): content, envExample, files, hasPlaceholders, hasRealKey, lines, mig, migFiles (+5 more)
@@ -961,8 +956,8 @@ Cohesion: 0.13
 Nodes (9): CancelOrderBody, PushResponse, PushSubscriptionBody, LocationResponse, UpdateLocationBody, SSRQueryParams, TELEMETRY_ACTIONS, TelemetryBody (+1 more)
 
 ### Community 107 - "Community 107"
-Cohesion: 0.13
-Nodes (14): 10. Known Audit Limitations, 1. Overview & Scope, 2. Stack & Shims, 3. Data Model, 4. Flow Diagrams, 5. Security Posture, 6. Required Actions Before Pilot, 7. Verdict — Per-Area GO / NO-GO (+6 more)
+Cohesion: 0.10
+Nodes (20): 10. Known Audit Limitations, 1. Overview & Scope, 2. Stack & Shims, 3. Data Model, 4. Flow Diagrams, 5. Security Posture, 5. Security Posture (re-verified 2026-06-07), 6. Required Actions Before Pilot (+12 more)
 
 ### Community 108 - "Community 108"
 Cohesion: 0.13
@@ -1033,12 +1028,12 @@ Cohesion: 0.15
 Nodes (12): background_color, categories, description, display, icons, name, orientation, prefer_related_applications (+4 more)
 
 ### Community 126 - "Community 126"
-Cohesion: 0.19
-Nodes (4): RetryPolicy, adapter, policy, NotificationWorker
+Cohesion: 0.14
+Nodes (13): A. API route / endpoint change, B. Frontend component / page change, C. Shared package / utility change, D. Database migration change, E. E2E test change, Phase 1: Understand the change (30s), Phase 2: Research checklist (by change type), Phase 3: Before committing (+5 more)
 
 ### Community 127 - "Community 127"
-Cohesion: 0.15
-Nodes (11): { db }, emailEncrypted, emailHash, familyId, fullNameEncrypted, hashOptions, ipHash, newTokenPlain (+3 more)
+Cohesion: 0.12
+Nodes (15): bodySchema, { db }, emailEncrypted, emailHash, familyId, fullNameEncrypted, hashOptions, { inviteId } (+7 more)
 
 ### Community 128 - "Community 128"
 Cohesion: 0.15
@@ -1049,8 +1044,8 @@ Cohesion: 0.15
 Nodes (11): content, env, files, isReadOnlyPublic, lines, moreLines, pool, READ_ONLY_PUBLIC (+3 more)
 
 ### Community 130 - "Community 130"
-Cohesion: 0.15
-Nodes (12): b1, b2, body, db, env, fastify, idempotency_key, mockMessageBus (+4 more)
+Cohesion: 0.05
+Nodes (32): bodyResult, bodySchema, center, { db, messageBus }, env, maxDist, result, rLat (+24 more)
 
 ### Community 131 - "Community 131"
 Cohesion: 0.15
@@ -1088,6 +1083,10 @@ Nodes (12): dependencies, devDependencies, typescript, main, name, private, scri
 Cohesion: 0.15
 Nodes (12): compilerOptions, declaration, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, module, moduleResolution, noUncheckedIndexedAccess (+4 more)
 
+### Community 140 - "Community 140"
+Cohesion: 0.11
+Nodes (16): PRESET_NAMES, ThemeContext, ThemeProvider(), AuthService, AuthState, AuthUser, decodeJwt(), isExpired() (+8 more)
+
 ### Community 141 - "Community 141"
 Cohesion: 0.15
 Nodes (13): code:bash (# Latest daily backup), code:bash (pnpm backup:drill --full), code:bash (pnpm backup:list), Env Vars (Stage 32), Full DR Drill, List Backups, Owner UI, Quick Reference (+5 more)
@@ -1097,8 +1096,8 @@ Cohesion: 0.23
 Nodes (10): KIND_ICONS, RecipeEditorProps, RecipeLine, defaultSupplies(), getActiveSupplies(), getSupplyById(), loadSupplies(), saveSupplies() (+2 more)
 
 ### Community 143 - "Community 143"
-Cohesion: 0.30
-Nodes (3): calculateNaiveETASeconds(), CourierEventsWorker, haversineDistanceKm()
+Cohesion: 0.20
+Nodes (6): generateOpaqueToken(), generateOtpCode(), hashOtpCode(), hashPhone(), maskPhone(), verifyOtpCode()
 
 ### Community 144 - "Community 144"
 Cohesion: 0.17
@@ -1161,12 +1160,12 @@ Cohesion: 0.20
 Nodes (10): confirmOrder(), setStep(), fetchOrderData(), metaLocation, metaSlug, pathParts, renderApp(), style (+2 more)
 
 ### Community 159 - "Community 159"
-Cohesion: 0.24
-Nodes (9): center, { db, messageBus }, env, maxDist, rLat, rLng, distanceKm(), isWithinGeofence() (+1 more)
+Cohesion: 0.20
+Nodes (8): bodySchema, { db }, emailPlain, fullName, hashOptions, ipHash, result, uaHash
 
 ### Community 160 - "Community 160"
-Cohesion: 0.25
-Nodes (5): applyTax(), assertNonNegative(), computeLineTotal(), roundHalfUp(), OrderRouteOptions
+Cohesion: 0.22
+Nodes (8): Criteria 1: One fact, one canonical store, Criterion 2: Zero contradictory facts reachable as current, Criterion 3: JIT retrieval vs dump, Criterion 4: Write protocol (dedup + verified-only + schema), Criterion 5: Supersession (old out of active retrieval, history preserved), DeliveryOS — Memory Unification Verification, Known Gaps (Not Blocking), Output Files
 
 ### Community 161 - "Community 161"
 Cohesion: 0.18
@@ -1216,6 +1215,10 @@ Nodes (10): 1. Read Flood — Public Menu, 2. Burst Orders — Single Tenant, 3.
 Cohesion: 0.18
 Nodes (10): addBtn, cards, criticalErrors, enEl, errors, fab, firstCat, headerCount (+2 more)
 
+### Community 173 - "Community 173"
+Cohesion: 0.15
+Nodes (5): TelegramAdapter, RetryPolicy, adapter, policy, TelegramPoller
+
 ### Community 174 - "Community 174"
 Cohesion: 0.24
 Nodes (7): html, renderClientShell(), ShellProps, { db }, html, paramsSchema, { slug }
@@ -1249,12 +1252,12 @@ Cohesion: 0.20
 Nodes (9): Alert Contacts, Monitor 1: API Health Check, Monitor 2: Public Menu (Tenant), Monitor 3: Landing Page, Monitor 4: SSL Certificate, Overview, Response SLA, Setup Instructions (+1 more)
 
 ### Community 182 - "Community 182"
-Cohesion: 0.31
-Nodes (7): PRESET_NAMES, ThemeContext, ThemeProvider(), applyBrandTheme(), BrandConfig, getPresetConfig(), PRESETS
+Cohesion: 0.25
+Nodes (7): Canonical Store Ownership, code:block1 (Agent query), code:block2 (v3.1 Architecture ─── supersedes ─── v2/v3 on infra), DeliveryOS — MEMORY-MAP, Phase 0: Conflict & Overlap Log, Retrieval Decision Tree, Supersession Chain
 
 ### Community 183 - "Community 183"
 Cohesion: 0.20
-Nodes (6): authFailed, cacheHit, options, p95Trend, rateLimited, serverError
+Nodes (7): authFailed, cacheHit, multiTenantRead, options, p95Trend, rateLimited, serverError
 
 ### Community 185 - "Community 185"
 Cohesion: 0.20
@@ -1917,8 +1920,8 @@ Cohesion: 0.22
 Nodes (8): addBtn, cards, criticalErrors, errors, fab, fabIcon, langBtn, starIcons
 
 ### Community 352 - "Community 352"
-Cohesion: 0.28
-Nodes (7): AuthState, AuthUser, isExpired(), JwtPayload, Listener, UserRole, BrandPreset
+Cohesion: 0.29
+Nodes (3): PII_KEYS, piiRedactor, SENSITIVE_FIELDS
 
 ### Community 353 - "Community 353"
 Cohesion: 0.22
@@ -1937,8 +1940,8 @@ Cohesion: 0.25
 Nodes (5): AdminOrder, AdminShellProps, ColorInputProps, OrderCardProps, ToggleProps
 
 ### Community 358 - "Community 358"
-Cohesion: 0.25
-Nodes (6): isApi, method, mock, paramDev, path, PROXIED_PREFIXES
+Cohesion: 0.29
+Nodes (6): DeliveryOS — Context Index, Freshness, Quick Lookup, Retrieval Priority, Stores Overview, Write Protocol
 
 ### Community 359 - "Community 359"
 Cohesion: 0.25
@@ -1961,8 +1964,8 @@ Cohesion: 0.25
 Nodes (7): { db, messageBus }, items, { locationId }, params, payouts, user, worker
 
 ### Community 366 - "Community 366"
-Cohesion: 0.25
-Nodes (7): { db, messageBus }, decoded, KIND_VALUES, { locationId }, params, signals, user
+Cohesion: 0.11
+Nodes (17): maskName(), maskPhone(), maskStr(), alerts, { db, messageBus, queue }, decoded, { locationId }, params (+9 more)
 
 ### Community 367 - "Community 367"
 Cohesion: 0.39
@@ -2052,10 +2055,6 @@ Nodes (6): compilerOptions, allowSyntheticDefaultImports, outDir, rootDir, exten
 Cohesion: 0.33
 Nodes (4): RetryOpts, TimeoutError, withTimeout(), withTimeoutFallback()
 
-### Community 391 - "Community 391"
-Cohesion: 0.29
-Nodes (3): AdminRoutes, ClientRoutes, CourierRoutes
-
 ### Community 392 - "Community 392"
 Cohesion: 0.29
 Nodes (6): BusinessHours, CursorPagination, DegradationStatus, DeliveryPolygon, FallbackConfig, GeoPoint
@@ -2108,17 +2107,13 @@ Nodes (5): { db }, { email, password }, familyId, refreshToken, refreshTokenHash
 Cohesion: 0.33
 Nodes (5): cancelWindowMs, { db, messageBus }, env, now, outForDeliveryAt
 
-### Community 408 - "Community 408"
-Cohesion: 0.33
-Nodes (5): EarningsPage(), EarningSummary, MOCK_PAYOUTS, MOCK_SUMMARY, Payout
-
 ### Community 409 - "Community 409"
 Cohesion: 0.33
 Nodes (5): compilerOptions, outDir, rootDir, extends, include
 
 ### Community 411 - "Community 411"
-Cohesion: 0.33
-Nodes (4): backBtns, inputs, phoneField, submitBtn
+Cohesion: 0.29
+Nodes (5): backBtns, inputs, otpModal, phoneField, submitBtn
 
 ### Community 412 - "Community 412"
 Cohesion: 0.33
@@ -2195,10 +2190,6 @@ Nodes (5): children, main(), runProcess(), runTests(), waitForHealth()
 ### Community 432 - "Community 432"
 Cohesion: 0.33
 Nodes (5): compilerOptions, module, moduleResolution, extends, include
-
-### Community 433 - "Community 433"
-Cohesion: 0.50
-Nodes (4): enableDevApiMock(), PROXIED_PREFIXES, getMockResponse(), matchRoute()
 
 ### Community 434 - "Community 434"
 Cohesion: 0.40
@@ -2328,25 +2319,29 @@ Nodes (3): CategoryResponse, CreateCategoryBody, UpdateCategoryBody
 Cohesion: 0.50
 Nodes (3): ActiveOrderSummary, DashboardCounts, DashboardSnapshotResponse
 
+### Community 484 - "Community 484"
+Cohesion: 0.40
+Nodes (4): a, r, responseToCache, url
+
 ## Knowledge Gaps
-- **3276 isolated node(s):** `fs`, `content`, `content`, `get-hash.sh script`, `files` (+3271 more)
+- **3348 isolated node(s):** `fs`, `content`, `content`, `get-hash.sh script`, `files` (+3343 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **66 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **61 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `main()` connect `Community 19` to `Community 68`, `Community 390`, `Community 361`, `Community 42`, `Community 143`, `Community 49`, `Community 82`, `Community 405`, `Community 407`, `Community 440`, `Community 88`?**
+- **Why does `main()` connect `Community 19` to `Community 130`, `Community 68`, `Community 390`, `Community 361`, `Community 42`, `Community 49`, `Community 82`, `Community 405`, `Community 407`, `Community 440`?**
   _High betweenness centrality (0.010) - this node is a cross-community bridge._
 - **Why does `createSessionPool()` connect `Community 42` to `Community 129`, `Community 66`, `Community 440`, `Community 74`, `Community 428`, `Community 429`, `Community 49`, `Community 145`, `Community 147`, `Community 184`, `Community 56`, `Community 187`?**
-  _High betweenness centrality (0.008) - this node is a cross-community bridge._
+  _High betweenness centrality (0.009) - this node is a cross-community bridge._
 - **Why does `createOperationalPool()` connect `Community 42` to `Community 480`, `Community 74`, `Community 49`, `Community 82`, `Community 19`, `Community 56`?**
   _High betweenness centrality (0.005) - this node is a cross-community bridge._
 - **Are the 19 inferred relationships involving `createSessionPool()` (e.g. with `runTests()` and `runRestoreVerify()`) actually correct?**
   _`createSessionPool()` has 19 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 21 inferred relationships involving `useI18n()` (e.g. with `AdminShell()` and `OrderCard()`) actually correct?**
-  _`useI18n()` has 21 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 27 inferred relationships involving `useI18n()` (e.g. with `AdminShell()` and `OrderCard()`) actually correct?**
+  _`useI18n()` has 27 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 28 inferred relationships involving `t()` (e.g. with `AdminShell()` and `OrderCard()`) actually correct?**
+  _`t()` has 28 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `fs`, `content`, `content` to the rest of the system?**
-  _3277 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Community 5` be split into smaller, more focused modules?**
-  _Cohesion score 0.125 - nodes in this community are weakly interconnected._
+  _3349 weakly-connected nodes found - possible documentation gaps or missing edges._

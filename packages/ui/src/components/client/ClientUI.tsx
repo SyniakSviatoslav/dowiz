@@ -281,15 +281,15 @@ export function OTPModal({ isOpen, onClose, phone, onSendOTP, onVerifyOTP }: OTP
             <p className="text-sm text-[var(--brand-text-muted)]">Code sent to {currentPhone}. <button className="text-[var(--brand-primary)] underline" onClick={() => setStep('phone')}>Edit</button></p>
             <Input 
               type="text" 
-              maxLength={4}
+              maxLength={6}
               value={code} 
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCode(e.target.value)} 
-              placeholder="0000"
+              placeholder="000000"
               className="text-center text-2xl tracking-widest"
               error={!!error}
             />
             {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
-            <Button className="w-full" onClick={handleVerify} isLoading={loading} disabled={code.length !== 4}>Verify & Complete Order</Button>
+            <Button className="w-full" onClick={handleVerify} isLoading={loading} disabled={code.length !== 6}>Verify & Complete Order</Button>
           </>
         )}
       </div>

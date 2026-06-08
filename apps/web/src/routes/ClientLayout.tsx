@@ -65,12 +65,10 @@ function ClientLayoutInner() {
   return (
     <ThemeProvider theme={theme || undefined}>
       <div className="min-h-screen bg-[var(--brand-bg)] text-[var(--brand-text)] font-sans pb-24">
-        {isMenuPage && (
-          <header className="sticky top-0 z-50 h-[56px] bg-[var(--brand-bg)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] flex items-center px-4">
-            <h1 className="text-[16px] font-bold flex-1 truncate" style={{ fontFamily: 'var(--brand-font-heading)' }}>Dubin &amp; Sushi</h1>
-            <LanguageSwitcher variant="compact" />
-          </header>
-        )}
+        <header className="sticky top-0 z-50 h-[56px] bg-[var(--brand-bg)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] flex items-center px-4">
+          <h1 className="text-[16px] font-bold flex-1 truncate" style={{ fontFamily: 'var(--brand-font-heading)' }}>Dubin &amp; Sushi</h1>
+          <LanguageSwitcher variant="full" />
+        </header>
         <Outlet />
         <CartFAB itemsCount={itemsCount} total={total} onClick={() => setCartOpen(true)} isBouncing={isBouncing} />
         <CartDrawer

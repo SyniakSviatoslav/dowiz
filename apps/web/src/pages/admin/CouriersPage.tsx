@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Button, Input, EmptyState, CourierLiveMap, useI18n } from '@deliveryos/ui';
 import type { CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
@@ -14,21 +14,18 @@ interface Courier {
   rating: number;
 }
 
-const MOCK_COURIERS: Courier[] = [
-  { id: 'cu1', name: 'Ardit Kola', phone: '+355691234567', status: 'busy', deliveriesCompleted: 342, rating: 4.8 },
-  { id: 'cu2', name: 'Blerim Hoxha', phone: '+355692345678', status: 'online', deliveriesCompleted: 189, rating: 4.5 },
-  { id: 'cu3', name: 'Elira Shehu', phone: '+355693456789', status: 'online', deliveriesCompleted: 76, rating: 4.2 },
-  { id: 'cu4', name: 'Genti Mema', phone: '+355694567890', status: 'offline', deliveriesCompleted: 515, rating: 4.9 },
-  { id: 'cu5', name: 'Denisa Leka', phone: '+355695678901', status: 'busy', deliveriesCompleted: 231, rating: 4.6 },
-];
+interface HistoryItem {
+  id: string; order_id: string; status: string;
+  assigned_at: string; accepted_at: string | null; picked_up_at: string | null; delivered_at: string | null;
+  cash_amount: number; total: number; currency_code: string; delivery_address: string | null;
+  customer_name: string; customer_phone: string | null;
+}
 
-const MOCK_POSITIONS: Record<string, LngLatLike> = {
-  cu1: [19.820, 41.333],
-  cu2: [19.810, 41.329],
-  cu3: [19.815, 41.336],
-  cu4: [19.805, 41.325],
-  cu5: [19.825, 41.338],
-};
+interface CourierDetails {
+  shifts: Array<{ id: string; status: string; started_at: string; ended_at: string | null }>;
+  earnings: { today: number; week: number; month: number; today_deliveries: number; month_deliveries: number };
+  history: HistoryItem[];
+}
 
 const STATUS_COLORS: Record<string, string> = {
   online: 'var(--color-success, #22c55e)',
@@ -50,12 +47,33 @@ export function CouriersPage() {
   const [inviteError, setInviteError] = useState('');
   const [copied, setCopied] = useState(false);
   const [locationId, setLocationId] = useState('');
+  const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
+  const [courierDetails, setCourierDetails] = useState<CourierDetails | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
 
   useEffect(() => {
     apiClient<any>('/owner/settings').then(res => {
       if (res.id) setLocationId(res.id);
     }).catch(() => {});
   }, []);
+
+  const fetchDetails = async (courierId: string) => {
+    if (selectedCourier === courierId) {
+      setSelectedCourier(null);
+      setCourierDetails(null);
+      return;
+    }
+    setSelectedCourier(courierId);
+    setDetailsLoading(true);
+    try {
+      const data = await apiClient<any>(`/owner/locations/${locationId}/couriers/${courierId}/details`);
+      setCourierDetails(data);
+    } catch {
+      setCourierDetails(null);
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
 
   const handleAddCourier = async () => {
     if (!newCourierEmail || !locationId) return;
@@ -90,30 +108,35 @@ export function CouriersPage() {
     setTimeout(() => setCopied(false), 3000);
   };
 
-  const fetchCouriers = async () => {
+  const fetchCouriers = useCallback(async () => {
+    if (!locationId) return;
     try {
       setLoading(true);
-      const data = await apiClient<any>('/owner/couriers');
-      if (Array.isArray(data) && data.length > 0) {
-        setCouriers(data);
+      const data = await apiClient<any>(`/owner/locations/${locationId}/couriers`);
+      const list = data?.couriers;
+      if (Array.isArray(list) && list.length > 0) {
+        setCouriers(list.map((c: any) => ({
+          id: c.id,
+          name: c.full_name || 'Unknown',
+          phone: c.masked_phone || '',
+          status: c.status === 'active' || c.status === 'available' ? 'online' : c.status === 'on_delivery' ? 'busy' : 'offline',
+          deliveriesCompleted: c.deliveries_completed || 0,
+          rating: c.rating || 0,
+        })));
       } else {
-        setCouriers(MOCK_COURIERS);
+        setCouriers([]);
       }
-    } catch (err: any) {
-      if (err.status === 404) {
-        setCouriers(MOCK_COURIERS);
-        setCourierPositions(MOCK_POSITIONS);
-      } else {
-        setError('Failed to load couriers');
-      }
+      setError('');
+    } catch {
+      setError('Failed to load couriers');
     } finally {
       setLoading(false);
     }
-  };
+  }, [locationId]);
 
   useEffect(() => {
-    fetchCouriers();
-  }, []);
+    if (locationId) fetchCouriers();
+  }, [locationId, fetchCouriers]);
 
   const filtered = couriers.filter(
     (c) =>
@@ -129,7 +152,7 @@ export function CouriersPage() {
         .split(' ')
         .map((n) => n[0])
         .join(''),
-      lngLat: courierPositions[c.id] || MOCK_POSITIONS[c.id] || [19.817, 41.331],
+      lngLat: courierPositions[c.id] || [19.817, 41.331],
       status: c.status === 'offline' ? 'offline' : c.status === 'busy' ? 'busy' : 'online',
     }));
   }, [filtered, courierPositions]);
@@ -250,42 +273,121 @@ export function CouriersPage() {
       ) : (
         <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] overflow-hidden">
           {filtered.map((c) => (
-            <div
-              key={c.id}
-              className="p-4 border-b border-[var(--brand-border)] last:border-b-0 flex items-center justify-between gap-3"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
-                  style={{
-                    backgroundColor:
-                      c.status === 'offline'
-                        ? 'var(--brand-text-muted, #a8a8a8)'
-                        : 'var(--brand-primary)',
-                  }}
-                >
-                  {c.name
-                    .split(' ')
-                    .map((n) => n[0])
-                    .join('')}
+            <div key={c.id}>
+              <div
+                className="p-4 border-b border-[var(--brand-border)] flex items-center justify-between gap-3 cursor-pointer hover:bg-[var(--brand-surface-raised)] transition-colors"
+                onClick={() => fetchDetails(c.id)}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
+                    style={{
+                      backgroundColor:
+                        c.status === 'offline'
+                          ? 'var(--brand-text-muted, #a8a8a8)'
+                          : 'var(--brand-primary)',
+                    }}
+                  >
+                    {c.name
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{c.name}</div>
+                    <div className="text-xs text-[var(--brand-text-muted)]">{c.phone}</div>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <div className="font-medium truncate">{c.name}</div>
-                  <div className="text-xs text-[var(--brand-text-muted)]">{c.phone}</div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-right hidden sm:block">
+                    <div className="text-sm font-medium">{c.deliveriesCompleted}</div>
+                    <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.deliveries', 'deliveries')}</div>
+                  </div>
+                  <span
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize"
+                    style={{ backgroundColor: `${STATUS_COLORS[c.status]}20`, color: STATUS_COLORS[c.status] }}
+                  >
+                    {c.status}
+                  </span>
+                  <i className={`ti ${selectedCourier === c.id ? 'ti-chevron-up' : 'ti-chevron-down'} text-sm text-[var(--brand-text-muted)]`} />
                 </div>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <div className="text-right hidden sm:block">
-                  <div className="text-sm font-medium">{c.deliveriesCompleted}</div>
-                  <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.deliveries', 'deliveries')}</div>
+              {selectedCourier === c.id && (
+                <div className="p-4 border-b border-[var(--brand-border)] bg-[var(--brand-surface-raised)]/50">
+                  {detailsLoading ? (
+                    <div className="animate-pulse space-y-2">
+                      <div className="h-4 bg-[var(--brand-surface)] rounded w-1/3" />
+                      <div className="h-4 bg-[var(--brand-surface)] rounded w-1/2" />
+                    </div>
+                  ) : courierDetails ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="p-3 rounded-lg bg-[var(--brand-surface)] border border-[var(--brand-border)] text-center">
+                          <div className="text-lg font-bold" style={{ color: 'var(--brand-primary)' }}>{courierDetails.earnings.today.toLocaleString()} ALL</div>
+                          <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.earnings_today', 'Today')} ({courierDetails.earnings.today_deliveries} {t('admin.deliveries', 'deliveries')})</div>
+                        </div>
+                        <div className="p-3 rounded-lg bg-[var(--brand-surface)] border border-[var(--brand-border)] text-center">
+                          <div className="text-lg font-bold">{courierDetails.earnings.week.toLocaleString()} ALL</div>
+                          <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.earnings_week', 'This Week')}</div>
+                        </div>
+                        <div className="p-3 rounded-lg bg-[var(--brand-surface)] border border-[var(--brand-border)] text-center">
+                          <div className="text-lg font-bold">{courierDetails.earnings.month.toLocaleString()} ALL</div>
+                          <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.earnings_month', 'This Month')} ({courierDetails.earnings.month_deliveries} {t('admin.deliveries', 'deliveries')})</div>
+                        </div>
+                      </div>
+
+                      {courierDetails.history.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2">{t('admin.recent_deliveries', 'Recent Deliveries')}</h4>
+                          <div className="space-y-2 max-h-64 overflow-auto">
+                            {courierDetails.history.map(h => (
+                              <div key={h.id} className="px-3 py-2 rounded-lg bg-[var(--brand-surface)] border border-[var(--brand-border)] text-sm">
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                  <span className="text-xs font-mono text-[var(--brand-text-muted)]">#{h.order_id.slice(0, 8)}</span>
+                                  <span className="font-medium">{h.total?.toLocaleString()} {h.currency_code}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-[var(--brand-text-muted)]">
+                                  <i className="ti ti-user" /> {h.customer_name}
+                                  {h.customer_phone && <><span>·</span><i className="ti ti-phone" /> {h.customer_phone}</>}
+                                </div>
+                                {h.delivery_address && (
+                                  <div className="flex items-center gap-1 text-xs text-[var(--brand-text-muted)] mt-0.5">
+                                    <i className="ti ti-map-pin" /> {h.delivery_address}
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-2 text-[11px] text-[var(--brand-text-muted)] mt-1.5 pt-1.5 border-t border-[var(--brand-border)]">
+                                  <span className="font-medium" style={{ color: 'var(--brand-text)' }}>{t('admin.timing', 'Timing')}:</span>
+                                  <span>{t('admin.assigned', 'Assigned')} {new Date(h.assigned_at).toLocaleString()}</span>
+                                  {h.accepted_at && <><span>·</span><span>{t('admin.accepted', 'Accepted')} {new Date(h.accepted_at).toLocaleString()}</span></>}
+                                  {h.picked_up_at && <><span>·</span><span>{t('admin.picked_up', 'Picked up')} {new Date(h.picked_up_at).toLocaleString()}</span></>}
+                                  {h.delivered_at && <><span>·</span><span>{t('admin.delivered', 'Delivered')} {new Date(h.delivered_at).toLocaleString()}</span></>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {courierDetails.shifts.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2">{t('admin.recent_shifts', 'Recent Shifts')}</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {courierDetails.shifts.slice(0, 5).map(s => (
+                              <span key={s.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
+                                style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'available' ? 'bg-[var(--color-success)]' : s.status === 'on_delivery' ? 'bg-[var(--color-warning)]' : 'bg-[var(--brand-text-muted)]'}`} />
+                                {s.status} {s.started_at ? new Date(s.started_at).toLocaleDateString() : ''}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-[var(--brand-text-muted)]">{t('common.error', 'Failed to load details')}</div>
+                  )}
                 </div>
-                <span
-                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize"
-                  style={{ backgroundColor: `${STATUS_COLORS[c.status]}20`, color: STATUS_COLORS[c.status] }}
-                >
-                  {c.status}
-                </span>
-              </div>
+              )}
             </div>
           ))}
         </div>

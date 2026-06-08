@@ -55,7 +55,7 @@ export function FlowTestPage() {
       try {
         if (loc) {
           const courRes = await apiClient<any>(`/owner/locations/${loc}/couriers`);
-          const list = Array.isArray(courRes) ? courRes : [];
+          const list = courRes?.couriers || [];
           setCouriers(list);
           if (list.length > 0 && !courierId) setCourierId(list[0].id);
         }
@@ -137,43 +137,52 @@ export function FlowTestPage() {
         throw new Error('No couriers available. Add a courier first.');
       }
       addLog(`Assigning courier: ${courierId}...`);
-      await apiClient(`/owner/locations/${locationId}/orders/${newOrderId}/assign-courier`, {
+      const assignRes = await apiClient<any>(`/owner/locations/${locationId}/orders/${newOrderId}/assign-courier`, {
         method: 'POST',
         body: { courierId }
       });
       updateStep('assign', { status: 'done', result: courierId });
-      addLog('Courier assigned, order → IN_DELIVERY');
-      await new Promise(r => setTimeout(r, 800));
+      addLog(`Courier assigned: status=${assignRes.status}, assignmentId=${assignRes.id}`);
+      await new Promise(r => setTimeout(r, 500));
 
-      // Step 6: Pickup (courier picks up — simulate via courier assignment endpoint)
+      // Verify after assign
+      const verify1 = await apiClient<any>(`/owner/locations/${locationId}/orders/${newOrderId}/verify`);
+      addLog(`VERIFY: order.status=${verify1.order?.status}, items=${verify1.items?.length}, assignments=${verify1.assignments?.length}, audit=${verify1.auditLogs?.length}`);
+      await new Promise(r => setTimeout(r, 500));
+
+      // Step 6: Pickup (owner proxy)
       updateStep('pickup', { status: 'active' });
-      addLog('Looking for courier assignment...');
-      const assignments = await apiClient<any>('/courier/me/assignments');
-      const myAssignment = Array.isArray(assignments) ? assignments.find((a: any) => a.order_id === newOrderId) : null;
-      if (myAssignment) {
-        await apiClient(`/courier/assignments/${myAssignment.id}/picked-up`, { method: 'POST', body: {} });
-        addLog('Courier picked up order');
-      } else {
-        addLog('No assignment found (courier may not be logged in), simulating...');
-        await new Promise(r => setTimeout(r, 1000));
-      }
-      updateStep('pickup', { status: 'done' });
-      await new Promise(r => setTimeout(r, 800));
+      addLog('Picking up order (owner proxy)...');
+      const pickupRes = await apiClient<any>(`/owner/locations/${locationId}/orders/${newOrderId}/pickup`, {
+        method: 'POST',
+        body: {}
+      });
+      updateStep('pickup', { status: 'done', result: pickupRes.status });
+      addLog(`Pickup done: assignmentStatus=${pickupRes.status}, courierId=${pickupRes.courierId}`);
+      await new Promise(r => setTimeout(r, 500));
 
-      // Step 7: Deliver
+      // Verify after pickup
+      const verify2 = await apiClient<any>(`/owner/locations/${locationId}/orders/${newOrderId}/verify`);
+      const assign = verify2.assignments?.[0];
+      addLog(`VERIFY: order.status=${verify2.order?.status}, assign.status=${assign?.status}, picked_up_at=${assign?.picked_up_at ? '✓' : '✗'}`);
+      await new Promise(r => setTimeout(r, 500));
+
+      // Step 7: Deliver (owner proxy)
       updateStep('deliver', { status: 'active' });
-      if (myAssignment) {
-        await apiClient(`/courier/assignments/${myAssignment.id}/delivered`, {
-          method: 'POST',
-          body: { cash_collected: true, cash_amount: 800 }
-        });
-        addLog('Courier delivered order, cash collected');
-      } else {
-        addLog('Simulating delivery...');
-        await new Promise(r => setTimeout(r, 1000));
-      }
-      updateStep('deliver', { status: 'done' });
-      addLog('Delivery completed!');
+      addLog('Delivering order (owner proxy)...');
+      const deliverRes = await apiClient<any>(`/owner/locations/${locationId}/orders/${newOrderId}/deliver`, {
+        method: 'POST',
+        body: { cash_collected: true }
+      });
+      updateStep('deliver', { status: 'done', result: deliverRes.status });
+      addLog(`Delivered: status=${deliverRes.status}, cash=${deliverRes.cashAmount}, shift now available`);
+      await new Promise(r => setTimeout(r, 500));
+
+      // Final verify
+      const verify3 = await apiClient<any>(`/owner/locations/${locationId}/orders/${newOrderId}/verify`);
+      const finalOrder = verify3.order;
+      const finalAssign = verify3.assignments?.[0];
+      addLog(`FINAL VERIFY: order=${finalOrder?.status}, assign=${finalAssign?.status}, delivered_at=${finalAssign?.delivered_at ? '✓' : '✗'}, courier_shift=${finalAssign?.shift_status}, total=${finalOrder?.total}, items=${verify3.items?.length}, logs=${verify3.auditLogs?.length}`);
       addLog('--- FLOW TEST PASSED ---');
     } catch (err: any) {
       const activeStep = steps.find(s => s.status === 'active');
@@ -240,7 +249,7 @@ export function FlowTestPage() {
           <select value={courierId} onChange={e => setCourierId(e.target.value)}
             className="w-full text-sm rounded-lg px-3 py-2 border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
             {couriers.length === 0 && <option value="">None available</option>}
-            {couriers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.status})</option>)}
+            {couriers.map(c => <option key={c.id} value={c.id}>{c.full_name || c.name} ({c.status})</option>)}
           </select>
         </div>
       </div>

@@ -9,8 +9,17 @@ import { withTenant } from '@deliveryos/platform';
 export default (async function menuImportRoutes(fastify, opts) {
   const { db, messageBus, parsers, storage } = opts as any;
 
+  async function getLocationId(user: any): Promise<string | null> {
+    if (!user?.userId) return null;
+    const res = await db.query(
+      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+      [user.userId]
+    );
+    return res.rows.length > 0 ? res.rows[0].location_id : null;
+  }
+
   // ─── POST /preview ───────────────────────────────────────────────────
-  fastify.post('/locations/:id/menu/import/preview', {
+  fastify.post('/menu/import/preview', {
     preHandler: [fastify.verifyAuth, fastify.requireRole(['owner'])],
     config: {
       rateLimit: {
@@ -19,8 +28,9 @@ export default (async function menuImportRoutes(fastify, opts) {
       }
     }
   }, async (request, reply) => {
-    const { id: locationId } = request.params as { id: string };
     const user = request.user!;
+    const locationId = await getLocationId(user);
+    if (!locationId) return reply.status(401).send({ error: 'Unauthorized' });
     
     // Read multipart
     const data = await request.file({ limits: { fileSize: 5 * 1024 * 1024 } });
@@ -67,12 +77,12 @@ export default (async function menuImportRoutes(fastify, opts) {
     let source = 'csv';
     let kind = 'csv';
     const mime = data.mimetype;
+    if (mime === 'application/pdf') {
+      return reply.status(400).send({ error: 'PDF import is not supported yet. Please upload a CSV or Excel file.' });
+    }
     if (mime.startsWith('image/')) {
       source = 'ai-ocr';
       kind = 'image';
-    } else if (mime === 'application/pdf') {
-      source = 'ai-ocr';
-      kind = 'pdf';
     } else if (data.fields.source && 'value' in data.fields.source) {
       source = String(data.fields.source.value);
     }
@@ -143,7 +153,7 @@ export default (async function menuImportRoutes(fastify, opts) {
   });
 
   // ─── POST /commit ────────────────────────────────────────────────────
-  fastify.post('/locations/:id/menu/import/commit', {
+  fastify.post('/menu/import/commit', {
     preHandler: [fastify.verifyAuth, fastify.requireRole(['owner'])],
     schema: {
       body: z.object({
@@ -153,9 +163,9 @@ export default (async function menuImportRoutes(fastify, opts) {
       }).strict()
     }
   }, async (request, reply) => {
-    const { id: locationId } = request.params as { id: string };
-    const { import_session_id, commit_token, force } = request.body;
     const user = request.user!;
+    const locationId = await getLocationId(user);
+    if (!locationId) return reply.status(401).send({ error: 'Unauthorized' });
     
     const finalCommitToken = commit_token || crypto.randomUUID();
 

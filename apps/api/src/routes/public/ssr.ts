@@ -42,16 +42,17 @@ export default (async function ssrRoutes(fastify, opts) {
 
         // Fetch theme
         const themeRes = await client.query(`
-          SELECT t.css_hash, t.version, lt.frame_ancestors 
-          FROM location_themes lt 
-          LEFT JOIN theme_versions t ON lt.location_id = t.location_id 
-          WHERE lt.location_id = (SELECT id FROM locations WHERE slug = $1) 
+          SELECT t.css_hash, t.version, lt.frame_ancestors, lt.logo_url
+          FROM location_themes lt
+          LEFT JOIN theme_versions t ON lt.location_id = t.location_id
+          WHERE lt.location_id = (SELECT id FROM locations WHERE slug = $1)
           ORDER BY t.version DESC NULLS LAST LIMIT 1
         `, [slug]);
         const theme = themeRes.rows[0];
         const cssHash = theme?.css_hash || '';
         const themeVersion = theme?.version || 0;
         const frameAncestors = theme?.frame_ancestors?.join(' ') || "'self'";
+        const logoUrl = theme?.logo_url || '';
 
         const nonce = crypto.randomBytes(16).toString('base64');
 
@@ -63,7 +64,7 @@ export default (async function ssrRoutes(fastify, opts) {
           htmlOutput = cached.html;
         } else {
           // Render HTML
-          htmlOutput = renderMenuPage(menuData, slug);
+          htmlOutput = renderMenuPage(menuData, slug, logoUrl);
 
           // PII check
           const leaks = detectPiiLeak(htmlOutput);

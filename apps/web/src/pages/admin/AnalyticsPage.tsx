@@ -11,30 +11,22 @@ interface AnalyticsData {
   avgOrderValue: { value: number; trend: string };
   deliveryTime: { avg: number; trend: string };
   chart: Array<{ day: string; revenue: number }>;
-  topProducts: Array<{ name: string; orders: number; revenue: number }>;
+  topProducts: Array<{ name: string; orders: number; revenue: number; imageUrl?: string }>;
   geoLocations?: Array<{ lat: number; lng: number }>;
+  heatmap?: Array<{ day: string; hours: number[]; products: string[][] }>;
 }
 
-const CONSUMPTION_DATA = [
-  { name: 'Salmon fillet', consumed: 12.5, unit: 'kg', ordered: 8, pct: 85 },
-  { name: 'Sushi rice', consumed: 28, unit: 'kg', ordered: 4, pct: 65 },
-  { name: 'Nori sheets', consumed: 240, unit: 'pcs', ordered: 60, pct: 50 },
-  { name: 'Avocado', consumed: 35, unit: 'pcs', ordered: 10, pct: 40 },
-  { name: 'Cream cheese', consumed: 6.2, unit: 'kg', ordered: 3, pct: 70 },
-  { name: 'Spicy mayo', consumed: 4.5, unit: 'L', ordered: 2, pct: 30 },
-  { name: 'Takeout boxes', consumed: 126, unit: 'pcs', ordered: 126, pct: 100 },
-  { name: 'Chopsticks', consumed: 252, unit: 'pairs', ordered: 126, pct: 100 },
-];
+interface ProductOrder {
+  id: string;
+  total: number;
+  currency_code: string;
+  created_at: string;
+  status: string;
+  customer_name: string;
+  quantity: number;
+  price: number;
+}
 
-const HEATMAP_HOURS = [
-  { day: 'Mon', hours: [2, 1, 4, 8, 6, 3] },
-  { day: 'Tue', hours: [1, 2, 3, 7, 5, 4] },
-  { day: 'Wed', hours: [3, 2, 5, 9, 8, 2] },
-  { day: 'Thu', hours: [2, 3, 4, 6, 7, 5] },
-  { day: 'Fri', hours: [4, 3, 6, 10, 12, 8] },
-  { day: 'Sat', hours: [5, 4, 8, 14, 16, 10] },
-  { day: 'Sun', hours: [6, 5, 7, 12, 10, 6] },
-];
 const HOUR_LABELS = ['0-3', '4-7', '8-11', '12-15', '16-19', '20-23'];
 
 function SimpleBar({ value, maxValue, label, dayLabel, delay }: { value: number; maxValue: number; label: string; dayLabel: string; delay: number }) {
@@ -71,6 +63,19 @@ export function AnalyticsPage() {
   const [copied, setCopied] = useState(false);
 
   const [error, setError] = useState(false);
+  const CONSUMPTION_DATA = [
+    { name: 'Salmon fillet', consumed: 12.5, unit: 'kg', ordered: 8, pct: 85 },
+    { name: 'Sushi rice', consumed: 28, unit: 'kg', ordered: 4, pct: 65 },
+    { name: 'Nori sheets', consumed: 240, unit: 'pcs', ordered: 60, pct: 50 },
+    { name: 'Avocado', consumed: 35, unit: 'pcs', ordered: 10, pct: 40 },
+    { name: 'Cream cheese', consumed: 6.2, unit: 'kg', ordered: 3, pct: 70 },
+    { name: 'Spicy mayo', consumed: 4.5, unit: 'L', ordered: 2, pct: 30 },
+    { name: 'Takeout boxes', consumed: 126, unit: 'pcs', ordered: 126, pct: 100 },
+    { name: 'Chopsticks', consumed: 252, unit: 'pcs', ordered: 126, pct: 100 },
+  ];
+  const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
+  const [productOrders, setProductOrders] = useState<ProductOrder[]>([]);
+  const [productOrdersLoading, setProductOrdersLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -83,13 +88,31 @@ export function AnalyticsPage() {
       });
   }, [period]);
 
+  const toggleProduct = async (name: string) => {
+    if (expandedProduct === name) {
+      setExpandedProduct(null);
+      setProductOrders([]);
+      return;
+    }
+    setExpandedProduct(name);
+    setProductOrdersLoading(true);
+    try {
+      const data = await apiClient<any>(`/owner/analytics/product-orders?name=${encodeURIComponent(name)}`);
+      setProductOrders(Array.isArray(data) ? data : []);
+    } catch {
+      setProductOrders([]);
+    } finally {
+      setProductOrdersLoading(false);
+    }
+  };
+
   const handleCopyReorder = useCallback(() => {
-    const list = ['Salmon fillet', 'Sushi rice', 'Nori sheets', 'Avocado', 'Cream cheese', 'Spicy mayo', 'Takeout boxes', 'Chopsticks'].join('\n');
+    const list = data?.topProducts?.map(p => p.name).join('\n') || '';
     navigator.clipboard.writeText(list).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     });
-  }, []);
+  }, [data]);
 
   if (loading) return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
@@ -107,7 +130,16 @@ export function AnalyticsPage() {
   if (!data) return <EmptyState title={t('admin.no_data', 'No data')} description={t('admin.analytics_empty', 'Analytics will appear here.')} icon={<i className="ti ti-chart-bar text-4xl opacity-30" />} />;
 
   const maxRevenue = Math.max(...data.chart.map(c => c.revenue), 1);
-  const heatmapMax = Math.max(...HEATMAP_HOURS.flatMap(d => d.hours), 1);
+  const heatmapData = data.heatmap || [
+    { day: 'Mon', hours: [0,0,0,0,0,0], products: [[],[],[],[],[],[]] },
+    { day: 'Tue', hours: [0,0,0,0,0,0], products: [[],[],[],[],[],[]] },
+    { day: 'Wed', hours: [0,0,0,0,0,0], products: [[],[],[],[],[],[]] },
+    { day: 'Thu', hours: [0,0,0,0,0,0], products: [[],[],[],[],[],[]] },
+    { day: 'Fri', hours: [0,0,0,0,0,0], products: [[],[],[],[],[],[]] },
+    { day: 'Sat', hours: [0,0,0,0,0,0], products: [[],[],[],[],[],[]] },
+    { day: 'Sun', hours: [0,0,0,0,0,0], products: [[],[],[],[],[],[]] },
+  ];
+  const heatmapMax = Math.max(...heatmapData.flatMap(d => d.hours), 1);
 
   const statCards = [
     { label: t('admin.revenue', 'Revenue'), value: `${(data.revenue.today / 100).toFixed(0)}k ALL`, trend: data.revenue.trend, icon: 'ti ti-wallet', colorVar: '--color-success' },
@@ -208,32 +240,69 @@ export function AnalyticsPage() {
             {data.topProducts.map((p, i) => {
               const firstRevenue = data.topProducts[0]?.revenue ?? p.revenue;
               const barPct = firstRevenue > 0 ? Math.round((p.revenue / firstRevenue) * 100) : 100;
-              const productIcons = ['ti ti-fish', 'ti ti-meat', 'ti ti-salad', 'ti ti-candy', 'ti ti-glass', 'ti ti-soup'];
-              const icon = productIcons[i % productIcons.length];
+              const isExpanded = expandedProduct === p.name;
               return (
-                <div key={i} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors slide-in-right" style={{ animationDelay: `${i * 50}ms` }}>
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--brand-primary-light)' }}>
-                    {i === 0 ? (
-                      <i className="ti ti-crown" style={{ color: 'var(--color-warning)' }} />
-                    ) : (
-                      <i className={icon} style={{ color: 'var(--brand-primary)' }} />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="text-sm font-medium truncate">{p.name}</div>
-                      {i === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>#1</span>}
+                <div key={p.name}>
+                  <div
+                    className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors slide-in-right cursor-pointer"
+                    style={{ animationDelay: `${i * 50}ms` }}
+                    onClick={() => toggleProduct(p.name)}
+                  >
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 overflow-hidden" style={{ background: 'var(--brand-primary-light)' }}>
+                      {p.imageUrl ? (
+                        <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
+                      ) : i === 0 ? (
+                        <i className="ti ti-crown" style={{ color: 'var(--color-warning)' }} />
+                      ) : (
+                        <i className="ti ti-tools-kitchen-2" style={{ color: 'var(--brand-primary)' }} />
+                      )}
                     </div>
-                    <div className="h-1 rounded-full" style={{ background: 'var(--brand-border)' }}>
-                      <div className="h-full rounded-full progress-animate" style={{ width: `${barPct}%`, background: 'var(--brand-primary)', opacity: 0.3 + (barPct / 100) * 0.7 }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="text-sm font-medium truncate">{p.name}</div>
+                        {i === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>#1</span>}
+                      </div>
+                      <div className="h-1 rounded-full" style={{ background: 'var(--brand-border)' }}>
+                        <div className="h-full rounded-full progress-animate" style={{ width: `${barPct}%`, background: 'var(--brand-primary)', opacity: 0.3 + (barPct / 100) * 0.7 }} />
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{p.orders} {t('admin.orders', 'orders').toLowerCase()}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between mt-1">
-                      <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{p.orders} {t('admin.orders', 'orders').toLowerCase()}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-sm font-semibold text-right" style={{ color: 'var(--brand-primary)' }}>
+                        {p.revenue.toLocaleString()} ALL
+                      </div>
+                      <i className={`ti ${isExpanded ? 'ti-chevron-up' : 'ti-chevron-down'} text-xs text-[var(--brand-text-muted)]`} />
                     </div>
                   </div>
-                  <div className="text-sm font-semibold text-right shrink-0" style={{ color: 'var(--brand-primary)' }}>
-                    {p.revenue.toLocaleString()} ALL
-                  </div>
+                  {isExpanded && (
+                    <div className="px-3 pb-2">
+                      {productOrdersLoading ? (
+                        <div className="animate-pulse space-y-2 py-2">
+                          {[1,2,3].map(j => <div key={j} className="h-8 bg-[var(--brand-surface)] rounded" />)}
+                        </div>
+                      ) : productOrders.length === 0 ? (
+                        <div className="text-xs py-2 text-center" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.no_orders', 'No orders found')}</div>
+                      ) : (
+                        <div className="max-h-48 overflow-auto space-y-1 pt-1">
+                          {productOrders.map(o => (
+                            <div key={o.id} className="flex items-center justify-between px-3 py-2 rounded-lg text-xs" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="font-mono text-[10px] text-[var(--brand-text-muted)]">{o.id.slice(0, 8)}</span>
+                                <span className="truncate">{o.customer_name}</span>
+                                <span className="text-[10px] px-1 py-0.5 rounded" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>x{o.quantity}</span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-medium">{o.price.toLocaleString()} ALL</span>
+                                <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{new Date(o.created_at).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -324,27 +393,39 @@ export function AnalyticsPage() {
               </tr>
             </thead>
             <tbody>
-              {HEATMAP_HOURS.map(row => (
+              {heatmapData.map(row => (
                 <tr key={row.day}>
                   <td className="text-left font-medium py-1 pr-3" style={{ color: 'var(--brand-text)' }}>{row.day}</td>
-                  {row.hours.map((count, ci) => (
-                    <td key={ci} className="p-0.5">
-                      <div
-                        className="rounded-sm transition-all duration-300 hover:scale-110"
-                        title={`${row.day} ${HOUR_LABELS[ci]}: ${count} orders`}
-                        style={{
-                          minHeight: 28,
-                          minWidth: 32,
-                          background: count === heatmapMax
-                            ? 'color-mix(in srgb, var(--brand-primary) 90%, transparent)'
-                            : count > 0
-                              ? `color-mix(in srgb, var(--brand-primary) ${Math.round((0.1 + (count / heatmapMax) * 0.8) * 100)}%, transparent)`
-                              : 'var(--brand-surface-raised)',
-                          ...(count === heatmapMax ? { border: '1px solid var(--brand-primary)', boxShadow: '0 0 8px color-mix(in srgb, var(--brand-primary) 30%, transparent)' } : {}),
-                        }}
-                      />
-                    </td>
-                  ))}
+                  {row.hours.map((count, ci) => {
+                    const products = row.products?.[ci] || [];
+                    const productList = products.length > 0 ? products.slice(0, 5).join(', ') + (products.length > 5 ? ` +${products.length - 5} more` : '') : '';
+                    return (
+                      <td key={ci} className="p-0.5 relative group">
+                        <div
+                          className="rounded-sm transition-all duration-300 hover:scale-110 cursor-default"
+                          title={productList ? `${row.day} ${HOUR_LABELS[ci]}: ${count} orders\nProducts: ${productList}` : `${row.day} ${HOUR_LABELS[ci]}: ${count} orders`}
+                          style={{
+                            minHeight: 28,
+                            minWidth: 32,
+                            background: count === heatmapMax
+                              ? 'color-mix(in srgb, var(--brand-primary) 90%, transparent)'
+                              : count > 0
+                                ? `color-mix(in srgb, var(--brand-primary) ${Math.round((0.1 + (count / heatmapMax) * 0.8) * 100)}%, transparent)`
+                                : 'var(--brand-surface-raised)',
+                            ...(count === heatmapMax ? { border: '1px solid var(--brand-primary)', boxShadow: '0 0 8px color-mix(in srgb, var(--brand-primary) 30%, transparent)' } : {}),
+                          }}
+                        >
+                          {count > 0 && (
+                            <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded text-[10px] whitespace-nowrap z-10 pointer-events-none shadow-lg"
+                              style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}>
+                              <div className="font-semibold">{count} {count === 1 ? 'order' : 'orders'}</div>
+                              {productList && <div className="text-[var(--brand-text-muted)] max-w-[200px] truncate">{productList}</div>}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>

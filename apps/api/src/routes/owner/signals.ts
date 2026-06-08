@@ -10,17 +10,9 @@ const KIND_VALUES = ['no_show_recent', 'velocity_rapid', 'velocity_high_volume',
 export default (async function ownerSignalRoutes(fastify, opts) {
   const { db, messageBus } = opts as any;
 
-  fastify.addHook('onRequest', async (request, reply) => {
-    try {
-      await request.jwtVerify();
-      const user = request.user as any;
-      if (user.role !== 'owner') return reply.status(403).send({ error: 'Owner only' });
-      const { locationId } = request.params as any;
-      if (!locationId || !user.activeLocationId || user.activeLocationId !== locationId) return reply.status(404).send({ error: 'Not found' });
-    } catch {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
-  });
+  fastify.addHook('onRequest', fastify.verifyAuth);
+  fastify.addHook('onRequest', fastify.requireRole(['owner']));
+  fastify.addHook('onRequest', fastify.requireLocationAccess);
 
   // ─── List Signals ────────────────────────────────────────────────
   fastify.get('/:locationId/signals', {

@@ -20,6 +20,7 @@ interface Product {
 interface Category {
   id: string;
   name: string;
+  product_count?: number;
   products?: Product[];
 }
 
@@ -390,7 +391,7 @@ export function MenuManagerPage() {
                               onClick={() => toggleExpand(cat.id)} />
                             <span className="font-semibold text-sm" style={{ color: 'var(--brand-text)' }}>{cat.name}</span>
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: 'var(--brand-surface)', color: 'var(--brand-text-muted)' }}>
-                              {cat.products?.length ?? 0}
+                              {cat.product_count ?? cat.products?.length ?? 0}
                             </span>
                           </div>
                           <Button size="sm" variant="ghost" onClick={() => openAddForm(cat.id)}>

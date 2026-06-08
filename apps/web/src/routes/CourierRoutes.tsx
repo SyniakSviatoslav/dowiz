@@ -37,7 +37,7 @@ function CourierLayout() {
       </div>
       <div className="flex items-center justify-between px-4 h-12 bg-[var(--brand-surface)] border-b border-[var(--brand-border)] shrink-0">
         <span className="text-sm font-semibold">Courier</span>
-        <LanguageSwitcher variant="compact" />
+        <LanguageSwitcher variant="full" />
       </div>
       <div className="embed-hidden sticky bottom-0 left-0 right-0 h-16 bg-[var(--brand-surface)] border-t border-[var(--brand-border)] flex items-center justify-around z-50">
         {TABS.map(tab => {
