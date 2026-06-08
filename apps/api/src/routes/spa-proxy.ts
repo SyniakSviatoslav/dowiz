@@ -80,12 +80,13 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   fastify.post('/api/owner/menu/products', async (request, reply) => {
     const locId = await getLocationId(request);
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const { name, price, description, available, category_id, image_key, imageUrl } = request.body as any;
+    const { name, price, description, available, category_id, categoryId, image_key, imageUrl } = request.body as any;
+    const finalCategoryId = category_id ?? categoryId;
     const finalImageKey = image_key ?? imageUrl ?? null;
     const id = crypto.randomUUID();
     await db.query(
       `INSERT INTO products (id, location_id, category_id, name, price, description, is_available, image_key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [id, locId, category_id, name, price || 0, description || null, available !== false, finalImageKey]
+      [id, locId, finalCategoryId, name, price || 0, description || null, available !== false, finalImageKey]
     );
     return reply.status(201).send({ id, name, price });
   });
@@ -95,7 +96,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const locId = await getLocationId(request);
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
     const pid = (request.params as any).productId;
-    const { name, price, description, available, category_id, image_key, imageUrl } = request.body as any;
+    const { name, price, description, available, category_id, categoryId, image_key, imageUrl } = request.body as any;
+    const finalCategoryId = category_id ?? categoryId;
     const finalImageKey = image_key ?? imageUrl;
     const sets: string[] = [];
     const vals: any[] = [];
@@ -104,7 +106,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     if (price !== undefined) { sets.push(`price = $${idx++}`); vals.push(price); }
     if (description !== undefined) { sets.push(`description = $${idx++}`); vals.push(description); }
     if (available !== undefined) { sets.push(`is_available = $${idx++}`); vals.push(available); }
-    if (category_id !== undefined) { sets.push(`category_id = $${idx++}`); vals.push(category_id); }
+    if (finalCategoryId !== undefined) { sets.push(`category_id = $${idx++}`); vals.push(finalCategoryId); }
     if (finalImageKey !== undefined) { sets.push(`image_key = $${idx++}`); vals.push(finalImageKey); }
     if (sets.length === 0) return reply.status(400).send({ error: 'No fields to update' });
     vals.push(pid, locId);
@@ -337,6 +339,27 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       rating: 0,
     }));
     return reply.send(couriers);
+  });
+
+  // GET /api/public/theme/:slug → public theme JSON (for SPA)
+  fastify.get('/api/public/theme/:slug', async (request, reply) => {
+    const slug = (request.params as any).slug;
+    const locRes = await db.query(`SELECT id, name FROM locations WHERE slug = $1`, [slug]);
+    if (locRes.rows.length === 0) return reply.status(404).send({ error: 'Not found' });
+    const locId = locRes.rows[0].id;
+    const locName = locRes.rows[0].name;
+    const themeRes = await db.query(
+      `SELECT primary_color, bg_color, text_color, logo_url FROM location_themes WHERE location_id = $1`,
+      [locId]
+    );
+    const t = themeRes.rows[0] || {};
+    return reply.send({
+      primaryColor: t.primary_color || null,
+      bgColor: t.bg_color || null,
+      textColor: t.text_color || null,
+      logoUrl: t.logo_url || null,
+      locationName: locName,
+    });
   });
 
   // GET /api/owner/brand → theme

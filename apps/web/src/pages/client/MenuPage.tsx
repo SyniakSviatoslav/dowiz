@@ -44,6 +44,7 @@ interface MenuResponse {
   default_locale: string;
   supported_locales: string[];
   currency: { code: string; minor_unit: number } | string;
+  location_name?: string;
   categories: MenuCategory[];
 }
 
@@ -81,26 +82,9 @@ export function MenuPage() {
         if (cats[0]) setActiveTab(cats[0].id);
         setLoading(false);
       } catch (err) {
-        const mockCategories: MenuCategory[] = [
-          {
-            id: 'cat-sushi', name: 'Sushi', sort_order: 0, products: [
-              { id: 'p1', name: 'Spicy Tuna Roll', description: 'Fresh tuna, spicy mayo, scallions, sesame.', price: 320, available: false, modifier_groups: [] },
-              { id: 'p2', name: 'Salmon Avocado Roll', description: 'Fresh salmon, avocado, cream cheese.', price: 380, available: true, modifier_groups: [] },
-              { id: 'p3', name: 'Dragon Roll', description: 'Eel, cucumber, avocado, eel sauce.', price: 420, available: true, modifier_groups: [] },
-              { id: 'p4', name: 'Shrimp Tempura Roll', description: 'Crispy shrimp, avocado, spicy mayo.', price: 390, available: true, modifier_groups: [] },
-              { id: 'p7', name: 'Crunchy Roll', description: 'Tempura bits, crab, cream cheese.', price: 360, available: true, modifier_groups: [] },
-            ]
-          },
-          {
-            id: 'cat-ramen', name: 'Ramen', sort_order: 1, products: [
-              { id: 'p5', name: 'Tonkotsu Ramen', description: 'Rich pork broth, chashu, soft egg, noodles.', price: 350, available: true, modifier_groups: [] },
-              { id: 'p6', name: 'Spicy Miso Ramen', description: 'Miso broth, spicy ground pork, corn, scallions.', price: 330, available: true, modifier_groups: [] },
-            ]
-          }
-        ];
+        console.error('[MenuPage] Failed to load menu:', err);
         setMenu(null);
-        setData(mockCategories);
-        if (mockCategories[0]) setActiveTab(mockCategories[0].id);
+        setData([]);
         setLoading(false);
       }
     }
@@ -237,8 +221,8 @@ export function MenuPage() {
             <span style={{ color: 'var(--brand-text)' }}>4.8</span>
             <span>({t('client.reviews_count', '124 reviews')})</span>
           </div>
-          <h1 className="text-[32px] font-bold text-white" style={{ fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>Dubin & Sushi</h1>
-          <p className="text-[14px] font-medium mt-1" style={{ color: 'rgba(255,255,255,0.8)' }}>{t('client.menu_subtitle', 'Sushi & Noodles &middot; Delivery from 30 min')}</p>
+          <h1 className="text-[32px] font-bold text-white" style={{ fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>{menu?.location_name || t('client.menu', 'Menu')}</h1>
+          <p className="text-[14px] font-medium mt-1" style={{ color: 'rgba(255,255,255,0.8)' }}>{t('client.menu_subtitle', 'Delivery from 30 min')}</p>
         </div>
       </section>
 
