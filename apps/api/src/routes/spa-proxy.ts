@@ -283,13 +283,14 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   fastify.get('/api/owner/settings', async (request, reply) => {
     const locId = await getLocationId(request);
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const res = await db.query(`SELECT name, phone, address, delivery_fee_flat, min_order_value, free_delivery_threshold, delivery_radius_km, currency_code, tax_rate, lat, lng, hours_json FROM locations WHERE id = $1`, [locId]);
+    const res = await db.query(`SELECT id, name, phone, delivery_fee_flat, min_order_value, free_delivery_threshold, delivery_radius_km, currency_code, tax_rate, lat, lng FROM locations WHERE id = $1`, [locId]);
     if (!res.rows[0]) return reply.status(404).send({ error: 'Not found' });
     const r = res.rows[0];
     return reply.send({
+      id: r.id,
       locationName: r.name,
       phone: r.phone || '',
-      address: r.address || '',
+      address: '',
       deliveryFee: r.delivery_fee_flat || 0,
       minOrder: r.min_order_value || 0,
       radiusKm: r.delivery_radius_km || 0,
@@ -298,7 +299,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       taxRate: r.tax_rate || 0,
       lat: r.lat,
       lng: r.lng,
-      hoursJson: r.hours_json || null,
+      hoursJson: null,
     });
   });
 
@@ -308,11 +309,11 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
     const { locationName, phone, address, deliveryFee, minOrder, radiusKm, freeDeliveryThreshold, taxRate, lat, lng, hoursJson } = request.body as any;
     await db.query(
-      `UPDATE locations SET name = COALESCE($1, name), phone = COALESCE($2, phone), address = COALESCE($3, address),
-       delivery_fee_flat = COALESCE($4, delivery_fee_flat), min_order_value = COALESCE($5, min_order_value),
-       delivery_radius_km = COALESCE($6, delivery_radius_km), free_delivery_threshold = COALESCE($7, free_delivery_threshold),
-       tax_rate = COALESCE($8, tax_rate), lat = COALESCE($9, lat), lng = COALESCE($10, lng), hours_json = COALESCE($11, hours_json) WHERE id = $12`,
-      [locationName || null, phone || null, address || null, deliveryFee ?? null, minOrder ?? null, radiusKm ?? null, freeDeliveryThreshold ?? null, taxRate ?? null, lat ?? null, lng ?? null, hoursJson ?? null, locId]
+      `UPDATE locations SET name = COALESCE($1, name), phone = COALESCE($2, phone),
+       delivery_fee_flat = COALESCE($3, delivery_fee_flat), min_order_value = COALESCE($4, min_order_value),
+       delivery_radius_km = COALESCE($5, delivery_radius_km), free_delivery_threshold = COALESCE($6, free_delivery_threshold),
+       tax_rate = COALESCE($7, tax_rate), lat = COALESCE($8, lat), lng = COALESCE($9, lng) WHERE id = $10`,
+      [locationName || null, phone || null, deliveryFee ?? null, minOrder ?? null, radiusKm ?? null, freeDeliveryThreshold ?? null, taxRate ?? null, lat ?? null, lng ?? null, locId]
     );
     return reply.send({ ok: true });
   });

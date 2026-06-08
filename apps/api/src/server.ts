@@ -165,7 +165,7 @@ async function main() {
           // It's a tenant subdomain, rewrite URL internally to /s/:slug
           // Preserve query strings
           const urlObj = new URL(request.url, `http://${request.hostname}`);
-          request.url = `/s/${slug}${urlObj.search}`;
+          request.raw.url = `/s/${slug}${urlObj.search}`;
         }
       }
     }

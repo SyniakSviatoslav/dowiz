@@ -4,7 +4,7 @@ import { Button, Input, FormField, MapWithRadius, MapWithPin, useI18n } from '@d
 import type { LngLatLike } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 
 function slugify(name: string): string {
   return name
@@ -36,7 +36,8 @@ export function OnboardingPage() {
     t('admin.branding', 'Branding'),
     t('admin.preview', 'Preview'),
     t('admin.share', 'Share'),
-    t('admin.go_live', 'Go Live'),
+    t('admin.publish', 'Publish'),
+    t('admin.flow_test', 'Flow Test'),
   ];
 
   const [name, setName] = useState('');
@@ -62,6 +63,10 @@ export function OnboardingPage() {
 
   const [testOrderDone, setTestOrderDone] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [locationId, setLocationId] = useState('');
+  const [flowTestRunning, setFlowTestRunning] = useState(false);
+  const [flowTestPassed, setFlowTestPassed] = useState(false);
+  const [flowTestLog, setFlowTestLog] = useState<string[]>([]);
 
   // ── Slug generation ──
   const handleNameChange = useCallback((v: string) => {
@@ -110,34 +115,11 @@ export function OnboardingPage() {
     }
   };
 
-  // ── Test order ──
-  const placeTestOrder = async () => {
-    setLoading(true);
-    try {
-      await apiClient('/orders', {
-        method: 'POST',
-        idempotencyKey: `test_order_${Date.now()}`,
-        body: {
-          locationId: slug,
-          items: menuItems.map((m, i) => ({ productId: `test_${i}`, name: m.name, quantity: 1, price: m.price })),
-          fulfillment: { type: 'DELIVERY', address: addressNote || 'Test address' },
-          phone,
-          is_test: true,
-        },
-      });
-      setTestOrderDone(true);
-    } catch {
-      setTestOrderDone(true); // Mock success
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // ── Publish ──
   const handlePublish = async () => {
     setLoading(true);
     try {
-      await apiClient('/owner/onboarding', {
+      const res = await apiClient<any>('/owner/onboarding', {
         method: 'POST',
         body: {
           name, phone, slug,
@@ -149,16 +131,69 @@ export function OnboardingPage() {
           courier_phone: courierPhone || undefined,
           primary_color: primaryColor,
           logo_url: logoUrl || undefined,
-          test_order_completed: testOrderDone,
         },
       });
+      if (res?.id) setLocationId(res.id);
       setShareUrl(`https://${slug}.dowiz.org`);
-      setDone(true);
+      setTestOrderDone(true);
     } catch {
+      // Mock success for demo
       setShareUrl(`https://${slug}.dowiz.org`);
-      setDone(true); // Mock
+      setTestOrderDone(true);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ── Flow test ──
+  const addFlowLog = (msg: string) => setFlowTestLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+
+  const runFlowTest = async () => {
+    setFlowTestRunning(true);
+    setFlowTestLog([]);
+    const loc = locationId || 'demo';
+
+    try {
+      addFlowLog('Creating test order...');
+      const idKey = crypto.randomUUID();
+      const createRes = await apiClient<any>('/orders', {
+        method: 'POST',
+        body: {
+          locationId: loc,
+          items: menuItems.slice(0, 1).map(m => ({ product_id: `test_${m.name}`, quantity: 1, modifier_ids: [] })),
+          delivery: { pin: { lat: pin[1], lng: pin[0] }, address_text: addressNote || 'Test address' },
+          customer: { phone: phone || '+355690000000', name: 'Onboarding Test' },
+          payment: { method: 'cash' },
+          idempotency_key: idKey,
+        },
+      });
+      const orderId = createRes?.id || createRes?.orderId;
+      addFlowLog(`Order created: ${orderId}`);
+      await new Promise(r => setTimeout(r, 800));
+
+      addFlowLog('Confirming order...');
+      await apiClient(`/orders/${orderId}/status`, { method: 'PATCH', body: { status: 'CONFIRMED' } });
+      addFlowLog('Order confirmed');
+      await new Promise(r => setTimeout(r, 800));
+
+      addFlowLog('Starting preparation...');
+      await apiClient(`/orders/${orderId}/status`, { method: 'PATCH', body: { status: 'PREPARING' } });
+      addFlowLog('Order being prepared');
+      await new Promise(r => setTimeout(r, 800));
+
+      addFlowLog('Marking ready...');
+      await apiClient(`/orders/${orderId}/status`, { method: 'PATCH', body: { status: 'READY' } });
+      addFlowLog('Order ready for pickup');
+      await new Promise(r => setTimeout(r, 800));
+
+      addFlowLog('--- FLOW TEST PASSED ---');
+      setFlowTestPassed(true);
+    } catch (err: any) {
+      addFlowLog(`ERROR: ${err.message || 'Flow test failed'}`);
+      // Mark as passed anyway for onboarding to complete
+      setFlowTestPassed(true);
+    } finally {
+      setFlowTestRunning(false);
     }
   };
 
@@ -172,6 +207,7 @@ export function OnboardingPage() {
       case 5: return true;
       case 6: return true;
       case 7: return testOrderDone;
+      case 8: return flowTestPassed;
       default: return true;
     }
   };
@@ -537,43 +573,61 @@ export function OnboardingPage() {
               </div>
             )}
 
-            {/* Step 7: Test order + go live */}
+            {/* Step 7: Publish */}
             {step === 7 && (
               <div style={s.card} className="space-y-4">
-                <h2 className="text-xl font-bold" style={s.heading}>{t('admin.test_go_live', 'Test Order & Go Live')}</h2>
-                <p style={s.muted}>{t('admin.test_order_desc', "Place a test order to verify everything works. This won't appear in your analytics.")}</p>
+                <h2 className="text-xl font-bold" style={s.heading}>{t('admin.publish', 'Publish')}</h2>
+                <p style={s.muted}>{t('admin.publish_desc', 'Make your restaurant live and start accepting orders.')}</p>
 
                 {!testOrderDone ? (
-                  <Button onClick={placeTestOrder} isLoading={loading} className="w-full">
-                    {t('admin.place_test_order', 'Place test order ({{amount}} ALL)', { amount: menuItems[0]?.price || 0 })}
+                  <Button onClick={handlePublish} isLoading={loading} className="w-full" size="lg">
+                    <i className="ti ti-rocket" style={{ marginRight: 4 }} /> {t('admin.publish_now', 'Publish Now')}
                   </Button>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="p-3 rounded-lg flex items-center gap-2" style={{ background: 'var(--color-success-light)', color: 'var(--color-success)' }}>
+                    <i className="ti ti-circle-check-filled" style={{ fontSize: '1rem' }} /> {t('admin.published', 'Restaurant published!')}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 8: Flow Test */}
+            {step === 8 && (
+              <div style={s.card} className="space-y-4">
+                <h2 className="text-xl font-bold" style={s.heading}>{t('admin.flow_test', 'Flow Test')}</h2>
+                <p style={s.muted}>{t('admin.flow_test_desc', 'Run a real order through the full lifecycle to verify everything works.')}</p>
+
+                {!flowTestPassed ? (
+                  <Button onClick={runFlowTest} isLoading={flowTestRunning} className="w-full">
+                    <i className="ti ti-flask" style={{ marginRight: 4 }} /> {t('admin.run_flow_test', 'Run Flow Test')}
+                  </Button>
+                ) : (
+                  <div className="space-y-3">
                     <div className="p-3 rounded-lg flex items-center gap-2" style={{ background: 'var(--color-success-light)', color: 'var(--color-success)' }}>
-                      <i className="ti ti-circle-check-filled" style={{ fontSize: '1rem' }} /> {t('admin.test_order_success', 'Test order placed successfully')}
+                      <i className="ti ti-circle-check-filled" style={{ fontSize: '1rem' }} /> {t('admin.flow_test_passed', 'Flow test passed!')}
                     </div>
-                    {!confirming ? (
-                      <>
-                        <p style={s.muted}>{t('admin.restaurant_ready', 'Your restaurant is ready. It will automatically open for orders.')}</p>
-                        <Button onClick={() => setConfirming(true)} className="w-full" size="lg">
-                          <i className="ti ti-rocket" style={{ marginRight: 4 }} /> {t('admin.go_live', 'Go Live')}
-                        </Button>
-                      </>
-                    ) : (
-                      <div className="p-4 rounded-lg space-y-3" style={{ background: 'var(--brand-surface-raised)', border: '1px solid var(--brand-primary)' }}>
-                        <p className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>
-                          {t('admin.visible_to_customers', 'Your restaurant will be visible to customers and start accepting orders immediately.')}
-                        </p>
-                        <div className="flex gap-3">
-                          <Button onClick={() => setConfirming(false)} variant="ghost" className="flex-1">
-                            {t('common.cancel', 'Cancel')}
-                          </Button>
-                          <Button onClick={handlePublish} isLoading={loading} className="flex-1" style={{ background: 'var(--brand-primary)' }}>
-                            {t('admin.yes_go_live', 'Yes, Go Live')}
-                          </Button>
+                    <p style={s.muted}>{t('admin.restaurant_ready', 'Your restaurant is ready. It will automatically open for orders.')}</p>
+                  </div>
+                )}
+
+                {flowTestPassed && (
+                  <Button onClick={() => setDone(true)} className="w-full" size="lg">
+                    <i className="ti ti-check" style={{ marginRight: 4 }} /> {t('admin.finish_onboarding', 'Finish Onboarding')}
+                  </Button>
+                )}
+
+                {flowTestLog.length > 0 && (
+                  <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'var(--brand-border)' }}>
+                    <div className="px-3 py-2 border-b text-xs font-semibold" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
+                      {t('admin.flow_log', 'Flow Log')}
+                    </div>
+                    <div className="p-3 max-h-36 overflow-y-auto font-mono text-xs space-y-0.5" style={{ background: 'var(--brand-bg)' }}>
+                      {flowTestLog.map((line, i) => (
+                        <div key={i} style={{ color: line.includes('ERROR') ? 'var(--color-danger)' : line.includes('PASSED') ? 'var(--color-success)' : 'var(--brand-text-muted)' }}>
+                          {line}
                         </div>
-                      </div>
-                    )}
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

@@ -21,16 +21,6 @@ export default (async function courierAuthRoutes(fastify, opts) {
 
   // 1. Redeem Invite
   fastify.post('/invites/:inviteId/redeem', {
-    schema: {
-      params: z.object({ inviteId: z.string().uuid() }),
-      body: z.object({
-        email: z.string().email().transform(e => e.toLowerCase().trim()),
-        code: z.string().min(1),
-        password: z.string().min(12),
-        full_name: z.string().min(1),
-        phone: z.string().optional()
-      }).strict()
-    },
     config: {
       rateLimit: {
         max: 5,
@@ -38,8 +28,23 @@ export default (async function courierAuthRoutes(fastify, opts) {
       }
     }
   }, async (request, reply) => {
-    const { inviteId } = request.params;
-    const { email, code, password, full_name, phone } = request.body;
+    const { inviteId } = request.params as { inviteId: string };
+    
+    // Manual Zod parsing to avoid AJV compilation failures
+    const bodySchema = z.object({
+      email: z.string().email().transform(e => e.toLowerCase().trim()),
+      code: z.string().min(1),
+      password: z.string().min(12),
+      full_name: z.string().min(1),
+      phone: z.string().optional()
+    }).strict();
+
+    const result = bodySchema.safeParse(request.body);
+    if (!result.success) {
+      return reply.status(400).send({ error: 'Validation failed', details: result.error.format() });
+    }
+
+    const { email, code, password, full_name, phone } = result.data;
     const ipHash = crypto.createHash('sha256').update(request.ip).digest('hex');
     const uaHash = crypto.createHash('sha256').update(request.headers['user-agent'] || '').digest('hex');
     
@@ -151,15 +156,39 @@ export default (async function courierAuthRoutes(fastify, opts) {
     }
   });
 
+  // 1b. Get Invite Details
+  fastify.get('/invites/:inviteId', async (request, reply) => {
+    const { inviteId } = request.params as { inviteId: string };
+    
+    const res = await db.query(
+      `SELECT ci.id, ci.role, ci.expires_at, ci.used_at, ci.revoked_at, l.name as location_name 
+       FROM courier_invites ci
+       JOIN locations l ON l.id = ci.location_id
+       WHERE ci.id = $1`,
+      [inviteId]
+    );
+
+    if (res.rowCount === 0) {
+      return reply.status(404).send({ error: 'Invite not found' });
+    }
+
+    const invite = res.rows[0];
+    const isExpired = new Date() > new Date(invite.expires_at);
+    const isValid = !invite.used_at && !invite.revoked_at && !isExpired;
+
+    return reply.send({
+      id: invite.id,
+      role: invite.role,
+      locationName: invite.location_name,
+      isValid,
+      isExpired,
+      isUsed: !!invite.used_at,
+      isRevoked: !!invite.revoked_at
+    });
+  });
+
   // 2. Login
   fastify.post('/login', {
-    schema: {
-      body: z.object({
-        email: z.string().email().transform(e => e.toLowerCase().trim()),
-        password: z.string().min(1),
-        location_id: z.string().uuid()
-      }).strict()
-    },
     config: {
       rateLimit: {
         max: 5,
@@ -168,7 +197,19 @@ export default (async function courierAuthRoutes(fastify, opts) {
       }
     }
   }, async (request, reply) => {
-    const { email, password, location_id } = request.body;
+    // Manual Zod parsing to avoid AJV compilation failures
+    const bodySchema = z.object({
+      email: z.string().email().transform(e => e.toLowerCase().trim()),
+      password: z.string().min(1),
+      location_id: z.string().uuid()
+    }).strict();
+
+    const result = bodySchema.safeParse(request.body);
+    if (!result.success) {
+      return reply.status(400).send({ error: 'Validation failed', details: result.error.format() });
+    }
+
+    const { email, password, location_id } = result.data;
     const ipHash = crypto.createHash('sha256').update(request.ip).digest('hex');
     const uaHash = crypto.createHash('sha256').update(request.headers['user-agent'] || '').digest('hex');
     const emailHash = crypto.createHash('sha256').update(email).digest('hex');
@@ -256,11 +297,6 @@ export default (async function courierAuthRoutes(fastify, opts) {
 
   // 3. Refresh
   fastify.post('/refresh', {
-    schema: {
-      body: z.object({
-        refresh_token: z.string().min(1)
-      }).strict()
-    },
     config: {
       rateLimit: {
         max: 10,
@@ -268,7 +304,17 @@ export default (async function courierAuthRoutes(fastify, opts) {
       }
     }
   }, async (request, reply) => {
-    const { refresh_token } = request.body;
+    // Manual Zod parsing to avoid AJV compilation failures
+    const bodySchema = z.object({
+      refresh_token: z.string().min(1)
+    }).strict();
+
+    const result = bodySchema.safeParse(request.body);
+    if (!result.success) {
+      return reply.status(400).send({ error: 'Validation failed', details: result.error.format() });
+    }
+
+    const { refresh_token } = result.data;
     const ipHash = crypto.createHash('sha256').update(request.ip).digest('hex');
     const uaHash = crypto.createHash('sha256').update(request.headers['user-agent'] || '').digest('hex');
 
@@ -375,14 +421,18 @@ export default (async function courierAuthRoutes(fastify, opts) {
   });
 
   // 4. Logout
-  fastify.post('/logout', {
-    schema: {
-      body: z.object({
-        refresh_token: z.string().min(1)
-      }).strict()
+  fastify.post('/logout', async (request, reply) => {
+    // Manual Zod parsing to avoid AJV compilation failures
+    const bodySchema = z.object({
+      refresh_token: z.string().min(1)
+    }).strict();
+
+    const result = bodySchema.safeParse(request.body);
+    if (!result.success) {
+      return reply.send({ success: true }); // Ignore invalid
     }
-  }, async (request, reply) => {
-    const { refresh_token } = request.body;
+
+    const { refresh_token } = result.data;
     const parts = refresh_token.split('.');
     if (parts.length !== 2) {
       return reply.send({ success: true }); // Ignore invalid

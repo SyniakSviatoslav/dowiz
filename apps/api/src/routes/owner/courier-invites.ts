@@ -21,24 +21,15 @@ export default (async function ownerCourierInvitesRoutes(fastify, opts) {
   fastify.addHook('preValidation', requireLocationAccess);
 
   // 1. Create Invite
-  fastify.post('/api/owner/locations/:locationId/courier-invites', {
-    schema: {
-      params: z.object({ locationId: z.string().uuid() }),
-      body: z.object({
-        role: z.enum(['courier', 'dispatcher']),
-        email: z.string().email().transform(e => e.toLowerCase().trim()),
-        ttl_hours: z.number().int().min(1).max(168).optional().default(48)
-      }).strict()
-    },
-    config: {
-      rateLimit: {
-        max: 10,
-        timeWindow: '1 hour'
-      }
+  fastify.post('/api/owner/locations/:locationId/courier-invites', async (request, reply) => {
+    const { locationId } = request.params as { locationId: string };
+    const body = request.body as any;
+    if (!body?.role || !body?.email) {
+      return reply.status(400).send({ error: 'role and email are required' });
     }
-  }, async (request, reply) => {
-    const { locationId } = request.params;
-    const { role, email, ttl_hours } = request.body;
+    const role = body.role;
+    const email = String(body.email).toLowerCase().trim();
+    const ttl_hours = Number(body.ttl_hours) || 48;
     const ownerId = request.user!.userId;
     const ipHash = crypto.createHash('sha256').update(request.ip).digest('hex');
     const uaHash = crypto.createHash('sha256').update(request.headers['user-agent'] || '').digest('hex');
@@ -68,7 +59,9 @@ export default (async function ownerCourierInvitesRoutes(fastify, opts) {
 
       await client.query('COMMIT');
 
-      const deepLink = `https://dowiz.org/courier-invite/${invite.id}`;
+      const host = request.headers.host || 'dowiz.fly.dev';
+      const protocol = host.includes('localhost') ? 'http' : 'https';
+      const deepLink = `${protocol}://${host}/courier-invite/${invite.id}`;
 
       return reply.send({
         inviteId: invite.id,
@@ -85,12 +78,8 @@ export default (async function ownerCourierInvitesRoutes(fastify, opts) {
   });
 
   // 2. List Active Invites
-  fastify.get('/api/owner/locations/:locationId/courier-invites', {
-    schema: {
-      params: z.object({ locationId: z.string().uuid() })
-    }
-  }, async (request, reply) => {
-    const { locationId } = request.params;
+  fastify.get('/api/owner/locations/:locationId/courier-invites', async (request, reply) => {
+    const { locationId } = request.params as { locationId: string };
     
     const res = await db.query(
       `SELECT id, role, expires_at, created_at 
@@ -103,12 +92,8 @@ export default (async function ownerCourierInvitesRoutes(fastify, opts) {
   });
 
   // 3. Revoke Invite
-  fastify.delete('/api/owner/locations/:locationId/courier-invites/:inviteId', {
-    schema: {
-      params: z.object({ locationId: z.string().uuid(), inviteId: z.string().uuid() })
-    }
-  }, async (request, reply) => {
-    const { locationId, inviteId } = request.params;
+  fastify.delete('/api/owner/locations/:locationId/courier-invites/:inviteId', async (request, reply) => {
+    const { locationId, inviteId } = request.params as { locationId: string; inviteId: string };
     const ownerId = request.user!.userId;
     const ipHash = crypto.createHash('sha256').update(request.ip).digest('hex');
     const uaHash = crypto.createHash('sha256').update(request.headers['user-agent'] || '').digest('hex');
