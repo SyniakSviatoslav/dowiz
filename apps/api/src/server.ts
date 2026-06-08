@@ -109,6 +109,7 @@ async function main() {
   const fastify = Fastify({
     logger: getFastifyLoggerConfig(),
     maxHeaderSize: 32768,
+    bodyLimit: 10 * 1024 * 1024, // 10 MB (multipart uploads need it)
   });
 
   fastify.setValidatorCompiler(validatorCompiler);
@@ -502,13 +503,8 @@ async function main() {
     });
   });
 
-  // P1-7 / FX-7: Body limit — prevent OOM on small instance
-  fastify.addHook('onRoute', (routeOptions) => {
-    if (!routeOptions.config) routeOptions.config = {};
-    if (!(routeOptions.config as any).bodyLimit) {
-      (routeOptions.config as any).bodyLimit = 1024 * 1024; // 1 MB default
-    }
-  });
+  // P1-7 / FX-7: Body limit — Fastify constructor sets 10MB default (above).
+  // Individual routes can override via route config if needed.
   fastify.register(authRoutes);
   const { default: localAuthRoutes } = await import('./routes/auth/local.js');
   // localAuthRoutes registered inline below for reliability

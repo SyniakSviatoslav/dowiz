@@ -39,10 +39,15 @@ function ClientLayoutInner() {
     };
   }, [location.search]);
 
+  const [locationName, setLocationName] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+
   useEffect(() => {
     if (!slug) return;
     apiClient<any>(`/public/theme/${slug}`)
       .then((res: any) => {
+        setLocationName(res.locationName || '');
+        setLogoUrl(res.logoUrl || '');
         setTheme({
           primary: res.primaryColor || 'var(--brand-primary)',
           primaryHover: 'var(--brand-primary-hover)',
@@ -65,8 +70,11 @@ function ClientLayoutInner() {
   return (
     <ThemeProvider theme={theme || undefined}>
       <div className="min-h-screen bg-[var(--brand-bg)] text-[var(--brand-text)] font-sans pb-24">
-        <header className="sticky top-0 z-50 h-[56px] bg-[var(--brand-bg)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] flex items-center px-4">
-          <h1 className="text-[16px] font-bold flex-1 truncate" style={{ fontFamily: 'var(--brand-font-heading)' }}>Dubin &amp; Sushi</h1>
+        <header className="sticky top-0 z-50 h-[56px] bg-[var(--brand-bg)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] flex items-center px-4 gap-3">
+          {logoUrl ? (
+            <img src={logoUrl} alt="" className="h-8 w-8 rounded object-contain shrink-0" />
+          ) : null}
+          <h1 className="text-[16px] font-bold flex-1 truncate" style={{ fontFamily: 'var(--brand-font-heading)' }}>{locationName || t('client.menu', 'Menu')}</h1>
           <LanguageSwitcher variant="full" />
         </header>
         <Outlet />
