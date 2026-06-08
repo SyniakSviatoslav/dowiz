@@ -80,11 +80,12 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   fastify.post('/api/owner/menu/products', async (request, reply) => {
     const locId = await getLocationId(request);
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const { name, price, description, available, category_id, image_key } = request.body as any;
+    const { name, price, description, available, category_id, image_key, imageUrl } = request.body as any;
+    const finalImageKey = image_key ?? imageUrl ?? null;
     const id = crypto.randomUUID();
     await db.query(
       `INSERT INTO products (id, location_id, category_id, name, price, description, is_available, image_key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [id, locId, category_id, name, price || 0, description || null, available !== false, image_key || null]
+      [id, locId, category_id, name, price || 0, description || null, available !== false, finalImageKey]
     );
     return reply.status(201).send({ id, name, price });
   });
@@ -94,7 +95,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const locId = await getLocationId(request);
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
     const pid = (request.params as any).productId;
-    const { name, price, description, available, category_id, image_key } = request.body as any;
+    const { name, price, description, available, category_id, image_key, imageUrl } = request.body as any;
+    const finalImageKey = image_key ?? imageUrl;
     const sets: string[] = [];
     const vals: any[] = [];
     let idx = 1;
@@ -103,7 +105,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     if (description !== undefined) { sets.push(`description = $${idx++}`); vals.push(description); }
     if (available !== undefined) { sets.push(`is_available = $${idx++}`); vals.push(available); }
     if (category_id !== undefined) { sets.push(`category_id = $${idx++}`); vals.push(category_id); }
-    if (image_key !== undefined) { sets.push(`image_key = $${idx++}`); vals.push(image_key); }
+    if (finalImageKey !== undefined) { sets.push(`image_key = $${idx++}`); vals.push(finalImageKey); }
     if (sets.length === 0) return reply.status(400).send({ error: 'No fields to update' });
     vals.push(pid, locId);
     await db.query(`UPDATE products SET ${sets.join(', ')} WHERE id = $${idx++} AND location_id = $${idx++}`, vals);
