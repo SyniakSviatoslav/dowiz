@@ -6,7 +6,7 @@ import { buildJsonLd } from './jsonld-builder.js';
 
 const html = htm.bind(h);
 
-export function renderMenuPage(data: any, slug: string): string {
+export function renderMenuPage(data: any, slug: string, logoUrl?: string): string {
   const defaultLocale = data.default_locale;
   const isEmbed = false; // Determined client-side usually, but we could pass it down
 
@@ -165,8 +165,14 @@ export function renderMenuPage(data: any, slug: string): string {
       <body class="relative min-h-screen pb-20">
         <!-- Sticky Header -->
         <header class="sticky top-0 z-50 h-[56px] bg-[var(--brand-surface)] border-b border-[var(--brand-border)] px-4 flex items-center justify-between no-fixed w-full" style="backdrop-filter:blur(12px)">
-          <div class="font-bold text-[20px]" style="color:var(--brand-primary);font-family:var(--brand-font-heading)" ...${localizedAttrs({ [defaultLocale]: data.location.name })}>
-            ${data.location.name}
+          <div class="flex items-center gap-2">
+            ${logoUrl ? html`
+              <img src="${logoUrl}" alt="${data.location.name}" class="h-8 w-auto rounded" />
+            ` : html`
+              <div class="font-bold text-[20px]" style="color:var(--brand-primary);font-family:var(--brand-font-heading)" ...${localizedAttrs({ [defaultLocale]: data.location.name })}>
+                ${data.location.name}
+              </div>
+            `}
           </div>
           <button class="relative p-2 rounded-full transition-colors" style="color:var(--brand-text)" aria-label="Cart" onclick="window.DowizMenu.toggleClosedOverlay()">
             <i class="ti ti-shopping-cart text-[24px]"></i>
@@ -177,9 +183,14 @@ export function renderMenuPage(data: any, slug: string): string {
         <!-- Hero Section -->
         <section class="relative w-full h-[240px] flex items-end overflow-hidden" style="background:linear-gradient(160deg,var(--brand-surface-raised) 0%,var(--brand-accent) 60%,var(--brand-primary) 100%)">
           <div class="absolute inset-0 hero-overlay"></div>
-          <div class="relative z-10 w-full px-5 pb-5">
-            <h1 class="text-[32px] font-bold text-white" style="font-family:var(--brand-font-heading);text-shadow:0 2px 12px rgba(0,0,0,0.5)" ...${localizedAttrs({ [defaultLocale]: data.location.name })}>${data.location.name}</h1>
-            <p class="text-[14px] font-medium mt-1" style="color:rgba(255,255,255,0.8)">${data.location.address}</p>
+          <div class="relative z-10 w-full px-5 pb-5 flex items-end gap-4">
+            ${logoUrl ? html`
+              <img src="${logoUrl}" alt="${data.location.name}" class="h-20 w-20 rounded-full object-cover border-2" style="border-color:rgba(255,255,255,0.3)" />
+            ` : null}
+            <div>
+              <h1 class="text-[32px] font-bold text-white" style="font-family:var(--brand-font-heading);text-shadow:0 2px 12px rgba(0,0,0,0.5)" ...${localizedAttrs({ [defaultLocale]: data.location.name })}>${data.location.name}</h1>
+              <p class="text-[14px] font-medium mt-1" style="color:rgba(255,255,255,0.8)">${data.location.address}</p>
+            </div>
           </div>
         </section>
 

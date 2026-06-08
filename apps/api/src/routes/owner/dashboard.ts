@@ -1,8 +1,8 @@
 // @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { z } from 'zod';
 import { maskName, maskPhone } from '../../lib/pii-mask.js';
+import { decryptPII } from '../../lib/pii-cipher.js';
 import crypto from 'node:crypto';
 
 const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED', 'CANCELLED', 'REJECTED'] as const;
@@ -10,39 +10,26 @@ const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVE
 export default (async function ownerDashboardRoutes(fastify, opts) {
   const { db, messageBus, queue } = opts as any;
 
-  fastify.addHook('onRequest', async (request, reply) => {
-    try {
-      await request.jwtVerify();
-      const user = request.user as any;
-      if (user.role !== 'owner') return reply.status(403).send({ error: 'Owner only' });
-      const { locationId } = request.params as any;
-      if (!locationId || !user.activeLocationId || user.activeLocationId !== locationId) return reply.status(404).send({ error: 'Not found' });
-    } catch {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
-  });
+  fastify.addHook('onRequest', fastify.verifyAuth);
+  fastify.addHook('onRequest', fastify.requireRole(['owner']));
+  fastify.addHook('onRequest', fastify.requireLocationAccess);
 
   // ─── Snapshot ──────────────────────────────────────────────────────
-  fastify.get('/:locationId/dashboard/snapshot', {
-    schema: {
-      params: z.object({ locationId: z.string().uuid() }),
-      querystring: z.object({
-        status: z.string().optional(),
-        limit: z.coerce.number().int().min(1).max(100).default(100),
-        cursor: z.string().optional(),
-      }),
-    },
-  }, async (request, reply) => {
-    const { locationId } = request.params;
-    const { status, limit, cursor } = request.query;
+  fastify.get('/:locationId/dashboard/snapshot', {}, async (request, reply) => {
+    const p = request.params as any;
+    const q = request.query as any;
+    const locationId = p.locationId;
+    const status = q?.status as string | undefined;
+    const limit = Math.min(Math.max(parseInt(q?.limit) || 100, 1), 100);
+    const cursor = q?.cursor as string | undefined;
 
-    const params: any[] = [locationId];
+    const queryParams: any[] = [locationId];
     let statusFilter = '';
     if (status) {
       const statuses = status.split(',').map(s => s.trim().toUpperCase()).filter(s => VALID_STATUSES.includes(s as any));
       if (statuses.length > 0) {
         statusFilter = ` AND o.status IN (${statuses.map((_, i) => `$${i + 2}`).join(',')})`;
-        params.push(...statuses);
+        queryParams.push(...statuses);
       }
     }
 
@@ -51,8 +38,8 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
       try {
         const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString());
         if (decoded.createdAt) {
-          cursorClause = ` AND o.created_at < $${params.length + 1}`;
-          params.push(decoded.createdAt);
+          cursorClause = ` AND o.created_at < $${queryParams.length + 1}`;
+          queryParams.push(decoded.createdAt);
         }
       } catch {
         // invalid cursor — ignore, will use no cursor filter
@@ -60,8 +47,8 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
       }
     }
 
-    const limitIdx = params.length + 1;
-    params.push(limit + 1);
+    const limitIdx = queryParams.length + 1;
+    queryParams.push(limit + 1);
 
     const orderSql = `
       SELECT o.id, o.status, o.total, o.currency_code, o.created_at, o.confirmed_at,
@@ -84,7 +71,7 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
     `;
 
     const [ordersRes, countsRes, deliveryRes] = await Promise.all([
-      db.query(orderSql, params),
+      db.query(orderSql, queryParams),
       db.query(countSql, [locationId]),
       db.query(`
         SELECT o.id AS order_id, o.status,
@@ -136,8 +123,6 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
     const counts: Record<string, number> = {};
     for (const s of VALID_STATUSES) counts[s] = 0;
     for (const row of countsRes.rows) counts[row.status] = row.cnt;
-
-    const { decryptPII } = await import('../../lib/pii-cipher.js');
 
     const activeDeliveries = deliveryRes.rows.map((row: any) => {
       const name = row.full_name_encrypted ? decryptPII(row.full_name_encrypted) : null;
@@ -205,12 +190,10 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
   // ─── Reject ────────────────────────────────────────────────────────
   fastify.post('/:locationId/orders/:orderId/reject', {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-    schema: {
-      body: z.object({ reason: z.string().max(500).optional() }),
-    },
   }, async (request, reply) => {
     const { orderId } = request.params as any;
-    const { reason } = request.body;
+    const body = request.body as any;
+    const reason = body?.reason as string | undefined;
     const user = request.user as any;
     const result = await transitionOrder(db, messageBus, orderId, user, 'REJECTED', reason);
     return reply.status(200).send(result);
@@ -219,12 +202,13 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
   // ─── Assign Courier ────────────────────────────────────────────────
   fastify.post('/:locationId/orders/:orderId/assign-courier', {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
-    schema: {
-      body: z.object({ courierId: z.string().uuid() }),
-    },
   }, async (request, reply) => {
     const { locationId, orderId } = request.params as any;
-    const { courierId } = request.body;
+    const body = request.body as any;
+    const courierId = body?.courierId;
+    if (!courierId || typeof courierId !== 'string') {
+      return reply.status(400).send({ error: 'courierId is required' });
+    }
 
     const client = await db.connect();
     try {
@@ -237,8 +221,8 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
       if (orderCheck.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
 
       const order = orderCheck.rows[0];
-      if (order.status !== 'CONFIRMED' && order.status !== 'PREPARING') {
-        return reply.status(409).send({ error: 'Order must be CONFIRMED or PREPARING to assign courier' });
+      if (order.status !== 'CONFIRMED' && order.status !== 'PREPARING' && order.status !== 'READY') {
+        return reply.status(409).send({ error: 'Order must be CONFIRMED, PREPARING, or READY to assign courier' });
       }
 
       const courierCheck = await client.query(
@@ -250,21 +234,59 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
       if (courierCheck.rowCount === 0) return reply.status(404).send({ error: 'Courier not found in this location' });
 
       const busyCheck = await client.query(
-        `SELECT id FROM courier_assignments
-         WHERE courier_id = $1 AND status IN ('accepted', 'picked_up') LIMIT 1`,
+        `SELECT ca.id, ca.shift_id, ca.order_id, o.status AS order_status
+         FROM courier_assignments ca
+         JOIN orders o ON o.id = ca.order_id
+         WHERE ca.courier_id = $1 AND ca.status IN ('accepted', 'picked_up') LIMIT 1`,
         [courierId],
       );
-      if (busyCheck.rowCount > 0) return reply.status(409).send({ error: 'Courier is already on a delivery' });
+      if (busyCheck.rowCount > 0) {
+        const old = busyCheck.rows[0];
+        await client.query(
+          `UPDATE courier_assignments SET status = 'cancelled', cancelled_at = now(), cancellation_reason = 'owner_reassigned'
+           WHERE id = $1`,
+          [old.id],
+        );
+        await client.query(
+          `UPDATE courier_shifts SET status = 'available' WHERE id = $1`,
+          [old.shift_id],
+        );
+        if (old.order_status === 'IN_DELIVERY') {
+          await client.query(
+          `UPDATE orders SET status = 'READY', courier_id = NULL WHERE id = $1`,
+            [old.order_id],
+          );
+        }
+        await client.query(
+          `INSERT INTO courier_audit_log (courier_id, location_id, action, actor_kind, actor_id)
+           VALUES ($1, $2, 'assignment.owner_reassigned', 'owner', $3)`,
+          [courierId, locationId, (request as any).user.sub],
+        );
+      }
 
-      const shiftCheck = await client.query(
+      let shiftCheck = await client.query(
         `SELECT id FROM courier_shifts
-         WHERE courier_id = $1 AND status = 'available' AND location_id = $2
+         WHERE courier_id = $1 AND status IN ('available', 'on_delivery') AND location_id = $2
          ORDER BY started_at DESC LIMIT 1`,
         [courierId, locationId],
       );
-      if (shiftCheck.rowCount === 0) return reply.status(409).send({ error: 'Courier has no active shift' });
-
-      const shiftId = shiftCheck.rows[0].id;
+      let shiftId: string;
+      if (shiftCheck.rowCount === 0) {
+        const newShift = await client.query(
+          `INSERT INTO courier_shifts (courier_id, location_id, status, started_at, last_heartbeat_at)
+           VALUES ($1, $2, 'on_delivery', now(), now())
+           RETURNING id`,
+          [courierId, locationId],
+        );
+        shiftId = newShift.rows[0].id;
+        await client.query(
+          `INSERT INTO courier_audit_log (courier_id, location_id, action, actor_kind, actor_id)
+           VALUES ($1, $2, 'shift.auto_started', 'owner', $3)`,
+          [courierId, locationId, (request as any).user.sub],
+        );
+      } else {
+        shiftId = shiftCheck.rows[0].id;
+      }
       const assignId = crypto.randomUUID();
 
       await client.query(
@@ -299,6 +321,236 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
       client.release();
     }
   });
+
+  // ─── Pickup (owner proxy for courier) ──────────────────────────────
+  fastify.post('/:locationId/orders/:orderId/pickup', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const { locationId, orderId } = request.params as any;
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+
+      const orderCheck = await client.query(
+        `SELECT id, status FROM orders WHERE id = $1 AND location_id = $2 FOR UPDATE`,
+        [orderId, locationId],
+      );
+      if (orderCheck.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (orderCheck.rows[0].status !== 'IN_DELIVERY') {
+        return reply.status(409).send({ error: 'Order must be IN_DELIVERY to pick up' });
+      }
+
+      const assignmentRes = await client.query(
+        `SELECT id, courier_id, shift_id, status FROM courier_assignments
+         WHERE order_id = $1 AND status IN ('accepted') FOR UPDATE`,
+        [orderId],
+      );
+      if (assignmentRes.rowCount === 0) {
+        return reply.status(409).send({ error: 'No accepted assignment found for this order' });
+      }
+
+      const { id: assignmentId, courierId, shiftId } = assignmentRes.rows[0];
+
+      await client.query(
+        `UPDATE courier_assignments SET status = 'picked_up', picked_up_at = now() WHERE id = $1`,
+        [assignmentId],
+      );
+
+      await client.query(
+        `INSERT INTO courier_audit_log (courier_id, location_id, action, actor_kind, actor_id)
+         VALUES ($1, $2, 'order.picked_up', 'owner', $3)`,
+        [courierId, locationId, (request as any).user.sub],
+      );
+
+      await client.query('COMMIT');
+
+      await messageBus.publish(`order:${orderId}`, {
+        type: 'order.picked_up', orderId, locationId, timestamp: new Date().toISOString(),
+      });
+
+      return reply.send({
+        success: true,
+        assignmentId,
+        orderId,
+        courierId,
+        status: 'picked_up',
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
+  // ─── Deliver (owner proxy for courier) ─────────────────────────────
+  fastify.post('/:locationId/orders/:orderId/deliver', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const { locationId, orderId } = request.params as any;
+    const body = request.body as any;
+    const cashCollected = body?.cash_collected ?? true;
+    const cashAmount = body?.cash_amount;
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+
+      const orderCheck = await client.query(
+        `SELECT id, status, total FROM orders WHERE id = $1 AND location_id = $2 FOR UPDATE`,
+        [orderId, locationId],
+      );
+      if (orderCheck.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (orderCheck.rows[0].status !== 'IN_DELIVERY') {
+        return reply.status(409).send({ error: 'Order must be IN_DELIVERY to deliver' });
+      }
+
+      const finalCashAmount = cashAmount ?? orderCheck.rows[0].total;
+
+      const assignmentRes = await client.query(
+        `SELECT id, courier_id, shift_id, status FROM courier_assignments
+         WHERE order_id = $1 AND status IN ('accepted', 'picked_up') FOR UPDATE`,
+        [orderId],
+      );
+      if (assignmentRes.rowCount === 0) {
+        return reply.status(409).send({ error: 'No active assignment found for this order' });
+      }
+
+      const { id: assignmentId, courierId, shiftId } = assignmentRes.rows[0];
+
+      await client.query(
+        `UPDATE courier_assignments
+         SET status = 'delivered', delivered_at = now(), cash_collected = $1, cash_amount = $2
+         WHERE id = $3`,
+        [cashCollected, cashCollected ? finalCashAmount : null, assignmentId],
+      );
+
+      await client.query(
+        `UPDATE courier_shifts SET status = 'available' WHERE id = $1`,
+        [shiftId],
+      );
+
+      await client.query(
+        `UPDATE orders SET status = 'DELIVERED', delivered_at = now() WHERE id = $1`,
+        [orderId],
+      );
+
+      await client.query(
+        `INSERT INTO courier_audit_log (courier_id, location_id, action, actor_kind, actor_id)
+         VALUES ($1, $2, 'order.delivered', 'owner', $3)`,
+        [courierId, locationId, (request as any).user.sub],
+      );
+
+      await client.query('COMMIT');
+
+      await messageBus.publish(`order:${orderId}`, {
+        type: 'order.delivered', orderId, locationId, courierId,
+        cashCollected, cashAmount: finalCashAmount, timestamp: new Date().toISOString(),
+      });
+
+      return reply.send({
+        success: true,
+        assignmentId,
+        orderId,
+        courierId,
+        status: 'delivered',
+        cashCollected,
+        cashAmount: finalCashAmount,
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
+  // ─── Verify order state ────────────────────────────────────────────
+  fastify.get('/:locationId/orders/:orderId/verify', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const { locationId, orderId } = request.params as any;
+
+    const [orderRes, itemsRes, assignmentsRes, auditRes] = await Promise.all([
+      db.query(`
+        SELECT o.id, o.status, o.created_at, o.confirmed_at, o.ready_at, o.delivered_at,
+               o.total, o.subtotal, o.delivery_fee, o.currency_code,
+               o.payment_method, o.payment_outcome,
+               o.courier_id, o.location_id,
+               c.name AS customer_name, c.phone AS customer_phone
+        FROM orders o
+        LEFT JOIN customers c ON c.id = o.customer_id
+        WHERE o.id = $1 AND o.location_id = $2
+      `, [orderId, locationId]),
+      db.query(`
+        SELECT oi.id, oi.product_id, oi.quantity, oi.price_snapshot AS unit_price, (oi.price_snapshot * oi.quantity) AS subtotal,
+               p.name AS product_name, p.price AS product_current_price
+        FROM order_items oi
+        LEFT JOIN products p ON p.id = oi.product_id
+        WHERE oi.order_id = $1
+      `, [orderId]),
+      db.query(`
+        SELECT a.id, a.order_id, a.courier_id, a.shift_id, a.status,
+               a.assigned_at, a.accepted_at, a.picked_up_at, a.delivered_at,
+               a.cash_collected, a.cash_amount,
+               c.full_name_encrypted, c.phone_encrypted, c.status AS courier_status,
+               s.status AS shift_status, s.started_at AS shift_started_at
+        FROM courier_assignments a
+        JOIN couriers c ON c.id = a.courier_id
+        LEFT JOIN courier_shifts s ON s.id = a.shift_id
+        WHERE a.order_id = $1
+        ORDER BY a.created_at DESC
+      `, [orderId]),
+      db.query(`
+        SELECT action, actor_kind, actor_id, created_at
+        FROM courier_audit_log
+        WHERE courier_id IN (
+          SELECT courier_id FROM courier_assignments WHERE order_id = $1
+        )
+        ORDER BY created_at ASC
+      `, [orderId]),
+    ]);
+
+    if (orderRes.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+
+    const order = orderRes.rows[0];
+    const items = itemsRes.rows;
+    const assignments = assignmentsRes.rows.map((a: any) => {
+      const courierName = a.full_name_encrypted ? decryptPII(a.full_name_encrypted) : null;
+      const courierPhone = a.phone_encrypted ? decryptPII(a.phone_encrypted) : null;
+      return {
+        id: a.id,
+        order_id: a.order_id,
+        courier_id: a.courier_id,
+        shift_id: a.shift_id,
+        status: a.status,
+        assigned_at: a.assigned_at,
+        accepted_at: a.accepted_at,
+        picked_up_at: a.picked_up_at,
+        delivered_at: a.delivered_at,
+        cash_collected: a.cash_collected,
+        cash_amount: a.cash_amount,
+        courier_name_masked: courierName ? maskName(courierName) : null,
+        courier_phone_masked: courierPhone ? maskPhone(courierPhone) : null,
+        courier_status: a.courier_status,
+        shift_status: a.shift_status,
+        shift_started_at: a.shift_started_at,
+      };
+    });
+    const auditLogs = auditRes.rows;
+
+    return reply.send({
+      order: {
+        ...order,
+        customer_name_masked: maskName(order.customer_name),
+        customer_phone_masked: maskPhone(order.customer_phone),
+      },
+      items,
+      assignments,
+      auditLogs,
+    });
+  });
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;
 
 async function transitionOrder(db: any, messageBus: any, orderId: string, user: any, newStatus: string, reason?: string) {
@@ -313,7 +565,8 @@ async function transitionOrder(db: any, messageBus: any, orderId: string, user: 
     const currentStatus = cur.rows[0].status;
     const locationId = cur.rows[0].location_id;
 
-    if (!user.activeLocationId || user.activeLocationId !== locationId) {
+    // Owner tokens don't have activeLocationId — location access verified by requireLocationAccess hook
+    if (user.role !== 'owner' && (!user.activeLocationId || user.activeLocationId !== locationId)) {
       throw { statusCode: 404, error: 'Not found' };
     }
 

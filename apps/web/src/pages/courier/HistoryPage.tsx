@@ -14,15 +14,6 @@ interface DeliveryHistory {
   feedback?: string;
 }
 
-const MOCK_HISTORY: DeliveryHistory[] = [
-  { id: 'h_001', orderId: 'ORD-1024', date: '2026-06-03T14:30:00', restaurant: 'Burger King', customerAddress: 'Rruga e Elbasanit 12', amount: 1200, status: 'DELIVERED', rating: 5, feedback: 'Fast delivery!' },
-  { id: 'h_002', orderId: 'ORD-1018', date: '2026-06-03T12:15:00', restaurant: 'Pizza Roma', customerAddress: 'Bulevardi Zogu I', amount: 1800, status: 'DELIVERED', rating: 4 },
-  { id: 'h_003', orderId: 'ORD-1007', date: '2026-06-02T20:45:00', restaurant: 'Sushi Master', customerAddress: 'Rruga Myslym Shyri', amount: 2500, status: 'DELIVERED', rating: 5, feedback: 'Very polite courier' },
-  { id: 'h_004', orderId: 'ORD-0995', date: '2026-06-02T18:00:00', restaurant: 'KFC Toptani', customerAddress: 'Sheshi Skenderbej', amount: 1500, status: 'DELIVERED', rating: 3 },
-  { id: 'h_005', orderId: 'ORD-0982', date: '2026-06-01T13:20:00', restaurant: 'Burger King', customerAddress: 'Blloku', amount: 1100, status: 'CANCELLED' },
-  { id: 'h_006', orderId: 'ORD-0970', date: '2026-05-31T19:10:00', restaurant: 'Pizza Roma', customerAddress: 'Komuna e Parisit', amount: 2000, status: 'DELIVERED', rating: 5 },
-];
-
 export function HistoryPage() {
   const [deliveries, setDeliveries] = useState<DeliveryHistory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,13 +24,9 @@ export function HistoryPage() {
     try {
       setLoading(true);
       const data = await apiClient<any>('/courier/me/history');
-      setDeliveries(Array.isArray(data) ? data : MOCK_HISTORY);
+      setDeliveries(Array.isArray(data) ? data : []);
     } catch (err: any) {
-      if (err.status === 404) {
-        setDeliveries(MOCK_HISTORY);
-      } else {
-        setError('Failed to fetch delivery history');
-      }
+      setError('Failed to fetch delivery history');
     } finally {
       setLoading(false);
     }

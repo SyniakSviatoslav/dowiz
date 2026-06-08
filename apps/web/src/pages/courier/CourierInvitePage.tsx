@@ -37,7 +37,7 @@ export function CourierInvitePage() {
     setLoadingInvite(true);
     setInviteError('');
 
-    apiClient<any>(`/invites/${inviteId}`)
+    apiClient<any>(`/courier/auth/invites/${inviteId}`)
       .then((data) => {
         setInviteData(data);
         if (!data.isValid) {
@@ -68,7 +68,7 @@ export function CourierInvitePage() {
     setSubmitting(true);
 
     try {
-      const data = await apiClient<any>(`/invites/${inviteId}/redeem`, {
+      const data = await apiClient<any>(`/courier/auth/invites/${inviteId}/redeem`, {
         method: 'POST',
         body: {
           email,

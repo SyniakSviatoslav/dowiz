@@ -18,23 +18,9 @@ export function TasksPage() {
     try {
       setLoading(true);
       const data = await apiClient<any>('/courier/me/assignments');
-      setTasks(Array.isArray(data) ? data : []);
+      setTasks(data?.success && Array.isArray(data.assignments) ? data.assignments : []);
     } catch (err: any) {
-      if (err.status === 404) {
-        // Fallback Mock
-        setTasks([
-          {
-            id: 't_101',
-            status: 'READY',
-            restaurant: { name: 'Burger King', address: 'Blloku, Tirana' },
-            customer: { address: 'Rruga e Elbasanit 12', phone: '+355 69 123 4567' },
-            total: 120000,
-            eta: '10 min'
-          }
-        ]);
-      } else {
-        setError('Failed to fetch tasks');
-      }
+      setError('Failed to fetch tasks');
     } finally {
       setLoading(false);
     }

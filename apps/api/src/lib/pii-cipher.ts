@@ -1,33 +1,47 @@
 // @ts-nocheck
 import crypto from 'node:crypto';
 
-// The key must be exactly 32 bytes (256 bits) for AES-256-GCM.
-// We expect it to be provided as a base64 string in env.
-let ENCRYPTION_KEY: Buffer | null = null;
+const GLOBAL_PII_KEY_VAR = 'DOWIZ_PII_ENCRYPTION_KEY_BUFFER';
 
 function getKey(): Buffer {
-  if (ENCRYPTION_KEY) return ENCRYPTION_KEY;
+  const cached = (globalThis as any)[GLOBAL_PII_KEY_VAR];
+  if (cached && Buffer.isBuffer(cached) && cached.length === 32) return cached;
+  
   const envKey = process.env.COURIER_PII_ENCRYPTION_KEY;
   if (!envKey) {
     throw new Error('Missing COURIER_PII_ENCRYPTION_KEY environment variable. Required for PII encryption.');
   }
   const keyBuf = Buffer.from(envKey, 'base64');
   if (keyBuf.length !== 32) {
-    throw new Error('COURIER_PII_ENCRYPTION_KEY must be exactly 32 bytes when decoded from base64.');
+    throw new Error('COURIER_PII_ENCRYPTION_KEY must be exactly 32 bytes when decoded from base64. Got: ' + keyBuf.length + ' bytes');
   }
-  ENCRYPTION_KEY = keyBuf;
-  return ENCRYPTION_KEY;
+  (globalThis as any)[GLOBAL_PII_KEY_VAR] = keyBuf;
+  return keyBuf;
 }
 
 const ALGORITHM = 'aes-256-gcm';
-const IV_LENGTH = 12; // 96 bits is recommended for GCM
+const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 
+// Base64 alphabet for detecting legacy (base64-string-in-bytea) format
+const BASE64_REGEX = /^[A-Za-z0-9+/=]+$/;
+
 /**
- * Encrypts a plaintext string into a Buffer containing: [IV (12 bytes)] + [Ciphertext] + [Auth Tag (16 bytes)]
+ * Detects whether a Buffer is a legacy base64-encoded string stored in a bytea column.
+ * Old format: encryptPII returned base64 string → inserted into bytea → pg returns Buffer of ASCII chars
+ * New format: encryptPII returns raw binary Buffer → inserted into bytea → pg returns Buffer of binary data
  */
-export function encryptPII(plaintext: string): string {
-  if (!plaintext) return '';
+function isLegacyBase64(buf: Buffer): boolean {
+  const asString = buf.toString('utf8');
+  return BASE64_REGEX.test(asString);
+}
+
+/**
+ * Encrypts plaintext into a raw binary Buffer: [IV (12)] + [Ciphertext] + [AuthTag (16)]
+ * Stored directly in PostgreSQL bytea columns.
+ */
+export function encryptPII(plaintext: string): Buffer {
+  if (!plaintext) return Buffer.alloc(0);
   
   const key = getKey();
   const iv = crypto.randomBytes(IV_LENGTH);
@@ -37,21 +51,36 @@ export function encryptPII(plaintext: string): string {
   encrypted = Buffer.concat([encrypted, cipher.final()]);
   const authTag = cipher.getAuthTag();
   
-  // Format: IV + Ciphertext + AuthTag
-  return Buffer.concat([iv, encrypted, authTag]).toString('base64');
+  return Buffer.concat([iv, encrypted, authTag]);
 }
 
 /**
- * Decrypts a Buffer containing [IV] + [Ciphertext] + [Auth Tag] back into plaintext.
+ * Decrypts bytea/Buffer or base64 string back into plaintext.
+ * Handles both:
+ * - New format: raw binary Buffer (IV + ciphertext + authTag)
+ * - Legacy format: base64 string stored in bytea → pg returns Buffer of ASCII chars
+ * - String input: base64 encoded (for non-pg callers)
  */
-export function decryptPII(ciphertextBase64: string | null): string | null {
-  if (!ciphertextBase64) return null;
+export function decryptPII(ciphertext: Buffer | string | null): string | null {
+  if (!ciphertext) return null;
   
   const key = getKey();
-  const ciphertextBuf = Buffer.from(ciphertextBase64, 'base64');
+  let ciphertextBuf: Buffer;
+  
+  if (typeof ciphertext === 'string') {
+    ciphertextBuf = Buffer.from(ciphertext, 'base64');
+  } else {
+    // Buffer from pg (bytea column)
+    // Check for legacy format: base64 string stored as raw ASCII bytes in bytea
+    if (isLegacyBase64(ciphertext)) {
+      ciphertextBuf = Buffer.from(ciphertext.toString('utf8'), 'base64');
+    } else {
+      ciphertextBuf = ciphertext;
+    }
+  }
   
   if (ciphertextBuf.length < IV_LENGTH + AUTH_TAG_LENGTH) {
-    throw new Error('Invalid ciphertext length');
+    throw new Error('Invalid ciphertext length: ' + ciphertextBuf.length);
   }
   
   const iv = ciphertextBuf.subarray(0, IV_LENGTH);

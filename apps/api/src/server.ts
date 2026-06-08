@@ -108,6 +108,7 @@ async function main() {
 
   const fastify = Fastify({
     logger: getFastifyLoggerConfig(),
+    maxHeaderSize: 32768,
   });
 
   fastify.setValidatorCompiler(validatorCompiler);
@@ -148,7 +149,7 @@ async function main() {
       if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       } else if (filePath.endsWith('.html')) {
-        res.setHeader('Cache-Control', 'public, max-age=0');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       }
     },
   });
@@ -450,6 +451,19 @@ async function main() {
     timeWindow: '1 minute'
   });
 
+  // Allow POST with Content-Type: application/json but empty body
+  fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    if (!body || body.trim() === '') {
+      done(null, {});
+    } else {
+      try {
+        done(null, JSON.parse(body));
+      } catch (e: any) {
+          done(e);
+      }
+    }
+  });
+
   fastify.register(authPlugin);
   fastify.register(securityHeadersPlugin);
   fastify.register(healthRoutes, { db: pool, messageBus });
@@ -504,8 +518,8 @@ async function main() {
   fastify.register(ownerNotificationRoutes, { db: pool, queue });
   fastify.register(menuImportRoutes, { prefix: '/api/owner', db: pool, messageBus, parsers, storage, translation });
   fastify.register(menuTranslateRoutes, { prefix: '/api/owner', db: pool, messageBus, translation });
-  fastify.register(courierAuthRoutes, { db: pool });
-  fastify.register(courierMeRoutes, { db: pool });
+  fastify.register(courierAuthRoutes, { prefix: '/api/courier/auth', db: pool });
+  fastify.register(courierMeRoutes, { prefix: '/api/courier', db: pool });
   fastify.register(ownerCourierRoutes, { db: pool });
   fastify.register(ownerCourierInvitesRoutes, { db: pool });
   fastify.register(customerOrderRoutes, { prefix: '/api/customer', db: pool, messageBus });

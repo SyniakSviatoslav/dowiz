@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\eslint.config.js": {
-    "mtime": 1780673594.5765765,
-    "ast_hash": "8b06f7fb8600122171d2a9659db6447f",
+    "mtime": 1780845979.2048206,
+    "ast_hash": "01c551fdc3dca203f4cbe56ad88c3720",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\fix.js": {
@@ -275,8 +275,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\public\\sw.js": {
-    "mtime": 1780833251.962947,
-    "ast_hash": "3f8b295e70652d1e64fdd53e1755c8f0",
+    "mtime": 1780869030.8884807,
+    "ast_hash": "15d2aec124dc14abcb77386fa1fe9439",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\index.ts": {
@@ -290,13 +290,13 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\server.ts": {
-    "mtime": 1780705130.5309062,
-    "ast_hash": "5bf2f3f4e04e5d6b4cd469c48aa6c2a9",
+    "mtime": 1780946685.2623076,
+    "ast_hash": "68eb6509a48fdd971d786a1a9c786ea1",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\shutdown.ts": {
-    "mtime": 1780672637.9080794,
-    "ast_hash": "9ef2ad03a36b7c423ac8b6875cb11ac9",
+    "mtime": 1780847530.8113513,
+    "ast_hash": "f6218bb49926bb6f97a06da19144238b",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\websocket.ts": {
@@ -355,8 +355,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\client\\shared\\fallback-phone.ts": {
-    "mtime": 1780672637.8798676,
-    "ast_hash": "2ebda0e64e44e7c13f37090e677deb6b",
+    "mtime": 1780847400.161063,
+    "ast_hash": "1bbe29a78b0e6d8ac7b4f57aadc1153d",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\client\\status\\app.ts": {
@@ -435,18 +435,18 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\pii-cipher.ts": {
-    "mtime": 1780672637.8878784,
-    "ast_hash": "634ccd30be8a7529df4bd34dc7f17bae",
+    "mtime": 1780937148.5047495,
+    "ast_hash": "889652ef461bbc7a3e4d607db2ef7a2c",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\pii-leak-detector.ts": {
-    "mtime": 1780672637.8878784,
-    "ast_hash": "d417106d4ef64032f38b97f75033b2bc",
+    "mtime": 1780847870.1220102,
+    "ast_hash": "e966ccdf011a996e41dbf1542c24a682",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\pii-mask.ts": {
-    "mtime": 1780672637.8878784,
-    "ast_hash": "2232c62f4e43081ac0f7edb553002a6c",
+    "mtime": 1780846619.0236914,
+    "ast_hash": "482c83f5dcfe9381ccb4aa912f505c99",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\pii-redactor.ts": {
@@ -500,8 +500,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\security\\headers.ts": {
-    "mtime": 1780699335.1032834,
-    "ast_hash": "722130e18b417e8c5423c851ce9a8d29",
+    "mtime": 1780847402.1362913,
+    "ast_hash": "9902d2927297ddbb65d6da02c00b6d0e",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\signals\\compute.ts": {
@@ -560,8 +560,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\plugins\\auth.ts": {
-    "mtime": 1780672637.897955,
-    "ast_hash": "dd414ba5bf30c01d635c187d2863625e",
+    "mtime": 1780947630.565225,
+    "ast_hash": "93bb48ee226d4ffdb2c874ed0102ed36",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\public\\manifest.json": {
@@ -570,13 +570,13 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\public\\sw.js": {
-    "mtime": 1780431332.6139958,
-    "ast_hash": "75f1da280facb22f85a3e1f483654f3c",
+    "mtime": 1780847874.0782707,
+    "ast_hash": "212280b204b022fb1d0f8cb8e19c185c",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\public\\admin\\dashboard.js": {
-    "mtime": 1780476666.2475407,
-    "ast_hash": "38a3f3d769a71622e38c0ef25e98d69c",
+    "mtime": 1780847873.837357,
+    "ast_hash": "ca0e90078352807173455703c5e81ffd",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\public\\admin\\push-utils.js": {
@@ -600,13 +600,13 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\orders.ts": {
-    "mtime": 1780700674.9730673,
-    "ast_hash": "b6cb3f1e3a8125c1ff2b72e5900fa478",
+    "mtime": 1780858379.6092043,
+    "ast_hash": "e253b68a41992c43f83f3b5eb63ca8f3",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\spa-proxy.ts": {
-    "mtime": 1780835822.946604,
-    "ast_hash": "e8ab77d9f97ac08092997e6f4cfcb5c3",
+    "mtime": 1780858587.1679726,
+    "ast_hash": "7a84fc031ffc4d2814c62ca7b043a412",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\admin\\backups.ts": {
@@ -620,38 +620,38 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\auth\\local.ts": {
-    "mtime": 1780828978.4546087,
-    "ast_hash": "3d317ac5a9cb9f56601e33eb53ebad8a",
+    "mtime": 1780847502.4586875,
+    "ast_hash": "0e14137abd0093be4e66729ee0fb87cc",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\courier\\assignments.ts": {
-    "mtime": 1780672637.897955,
-    "ast_hash": "d1bef9f87dec134854083c821d24fc5a",
+    "mtime": 1780940510.6312592,
+    "ast_hash": "7bbf034bab7b179b8be9e0d49057ae62",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\courier\\auth.ts": {
-    "mtime": 1780672637.897955,
-    "ast_hash": "bccfc8b015ad87ccf530a0d0d0d6f12e",
+    "mtime": 1780940141.681532,
+    "ast_hash": "c75e04e2ce4c3fec725727bbfee29447",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\courier\\me.ts": {
-    "mtime": 1780672637.897955,
-    "ast_hash": "73360c62eea517a588c6bd6c7e77209b",
+    "mtime": 1780937349.9815555,
+    "ast_hash": "9e7e588dd52793bc8fa0d416452130f8",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\courier\\settlements.ts": {
-    "mtime": 1780672637.897955,
-    "ast_hash": "8a8586a2d1904a667ee146dfeadf3851",
+    "mtime": 1780947652.342247,
+    "ast_hash": "8e9bb4bdb0a9de7bfc143d5af9a5aadb",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\courier\\shifts.ts": {
-    "mtime": 1780672637.897955,
-    "ast_hash": "f617e988e6faf7caf9bf2ff2839ed940",
+    "mtime": 1780940935.0181024,
+    "ast_hash": "05a62a2edf9021c44b82c2b7d22038d9",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\customer\\orders.ts": {
-    "mtime": 1780672637.897955,
-    "ast_hash": "1c78e9a0650692b28376fa1f4d1a0f40",
+    "mtime": 1780947651.1132655,
+    "ast_hash": "872db37fef6c42877f3f5057854741dc",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\customer\\otp.ts": {
@@ -670,8 +670,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\alerts.ts": {
-    "mtime": 1780672637.9029744,
-    "ast_hash": "ca9a662da5bb9f78c8abb9abf133e92b",
+    "mtime": 1780947637.1524465,
+    "ast_hash": "b46d2639f7b9a6e7257a77e10ad8d9b2",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\categories.ts": {
@@ -680,33 +680,33 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\courier-invites.ts": {
-    "mtime": 1780672637.9029744,
-    "ast_hash": "d419bd81f680659a679f54ae50f3059a",
+    "mtime": 1780862141.0007107,
+    "ast_hash": "f4d3e05abb94d48c273dc1e219063e57",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\couriers.ts": {
-    "mtime": 1780672637.9029744,
-    "ast_hash": "9aee00c4b575db93dc3f251060663196",
+    "mtime": 1780943917.301916,
+    "ast_hash": "7b45474c101741194094f5404c52bf64",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\dashboard.ts": {
-    "mtime": 1780835771.5753815,
-    "ast_hash": "179b3e4554b77b5b191b794f8f45ab81",
+    "mtime": 1780948109.2548132,
+    "ast_hash": "4b99f01a4351e16b413d83338b1d4d65",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\dwell-settings.ts": {
-    "mtime": 1780672637.9029744,
-    "ast_hash": "039593c86faaca82475ef8d65a18adb6",
+    "mtime": 1780947638.6958404,
+    "ast_hash": "827fcaf5ce92e9c8ef022fa81827058a",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\fallback.ts": {
-    "mtime": 1780672637.9029744,
-    "ast_hash": "1c091a6a88aa8a2cc1b4ea38904a90ba",
+    "mtime": 1780947640.0797946,
+    "ast_hash": "a8e63b4a95f21bf61f9a0f887a65e137",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\gdpr.ts": {
-    "mtime": 1780672637.9029744,
-    "ast_hash": "2ddc5af58b9adc3540b66d005e745786",
+    "mtime": 1780947641.4403515,
+    "ast_hash": "6904ea5e87e4640ca1839a8a56fcfb97",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\locations.ts": {
@@ -735,13 +735,13 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\onboarding.ts": {
-    "mtime": 1780672637.9080794,
-    "ast_hash": "09b405e45bdfb9c51857c121bb276960",
+    "mtime": 1780947643.024578,
+    "ast_hash": "3a5aecb3750a8cba71e4d2eed7a8b780",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\order-meta.ts": {
-    "mtime": 1780672637.9080794,
-    "ast_hash": "088ffdfc9902e8e74e3cb741d5785817",
+    "mtime": 1780947644.1525412,
+    "ast_hash": "95cdc85d84ea92292e46d23240d78321",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\products.ts": {
@@ -750,23 +750,23 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\push.ts": {
-    "mtime": 1780672637.9080794,
-    "ast_hash": "4c4d6fed52798f66a0a9d0cca842b4be",
+    "mtime": 1780947645.5992777,
+    "ast_hash": "34634cfb50bae5b1bd97e02f3f948a97",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\reveal-contact.ts": {
-    "mtime": 1780672637.9080794,
-    "ast_hash": "1d8e404ec64267d8dbb04334971fa8d4",
+    "mtime": 1780947646.9536777,
+    "ast_hash": "36e3f638cacd23a869f40e1c57abec50",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\settlements.ts": {
-    "mtime": 1780672637.9080794,
-    "ast_hash": "392a456f22ec63d85ea60dce12694aa8",
+    "mtime": 1780947648.5466235,
+    "ast_hash": "8d71e5745c06b78523307389c3d61a61",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\signals.ts": {
-    "mtime": 1780672637.9080794,
-    "ast_hash": "b2bdec8b644b55c44b89c37e124ae22e",
+    "mtime": 1780947649.9435678,
+    "ast_hash": "35e65f93b99770448f7a90465e5dfd7b",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\themes.ts": {
@@ -775,8 +775,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\public\\client-flow.ts": {
-    "mtime": 1780672637.9080794,
-    "ast_hash": "8bee5d377c07fa20be4b47629a76b1bf",
+    "mtime": 1780869560.1888134,
+    "ast_hash": "8675a6312ae97e61bf051198f2f6f0aa",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\public\\fallback-config.ts": {
@@ -800,8 +800,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\public\\ssr.ts": {
-    "mtime": 1780672637.9080794,
-    "ast_hash": "f60f9bf3fbfa8fcd0acf7bca2cfa273b",
+    "mtime": 1780869551.8704827,
+    "ast_hash": "9e6a8dd7e8b393124dcaae8fe2116053",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\public\\telemetry.ts": {
@@ -850,8 +850,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\workers\\dwell-escalation.ts": {
-    "mtime": 1780672613.7252636,
-    "ast_hash": "2f5975c4e2e0174c2245119d6944c413",
+    "mtime": 1780847538.5215368,
+    "ast_hash": "05e9992bf3e318b10ba1e74c49076540",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\workers\\dwell-monitor.ts": {
@@ -895,8 +895,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\workers\\backup\\backup-verify.ts": {
-    "mtime": 1780672613.7199898,
-    "ast_hash": "650165b1c5081b6d02974e7732cce4f6",
+    "mtime": 1780847591.5212903,
+    "ast_hash": "0a3625df4c5655bf460886b878090848",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\workers\\backup\\dump.ts": {
@@ -1070,13 +1070,13 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\tests\\test-stage34.ts": {
-    "mtime": 1780477230.6125355,
-    "ast_hash": "57ef07b50e73fa1df46e53425bc7797b",
+    "mtime": 1780847688.3739562,
+    "ast_hash": "79371dbdabdfe1fbb1e3578c7f18ce5f",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\tests\\test-stage35.ts": {
-    "mtime": 1780477885.2822745,
-    "ast_hash": "463e93f83cba07c096be3194948de8ca",
+    "mtime": 1780847680.5463128,
+    "ast_hash": "27f4d85b3e7bee550b6da47fc1d3be67",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\tests\\test-stage7.ts": {
@@ -1105,8 +1105,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\tests\\phase5\\integrity.test.ts": {
-    "mtime": 1780477066.8337383,
-    "ast_hash": "f95b548b3745e0b30cee75f206757265",
+    "mtime": 1780847633.750219,
+    "ast_hash": "2b03c93b4430a7893183920f2748490e",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\tests\\phase5\\jwt-rotation.test.ts": {
@@ -1115,8 +1115,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\tests\\phase5\\rls-adversarial.test.ts": {
-    "mtime": 1780477016.965022,
-    "ast_hash": "ce57d114c9a2af3b7a8c99ea9656c6c4",
+    "mtime": 1780847808.1492639,
+    "ast_hash": "bbe3eec96e8cfcfdfbfcd744b11c22fd",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\package.json": {
@@ -1160,8 +1160,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\main.tsx": {
-    "mtime": 1780693462.4601388,
-    "ast_hash": "7117a3eb26846aedb0e7c3e7f03dcff2",
+    "mtime": 1780932180.6199164,
+    "ast_hash": "4e573371e027110364851ec7bbdedbb8",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\maplibre-shim.ts": {
@@ -1175,13 +1175,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\api\\devBootstrap.ts": {
-    "mtime": 1780588853.6447494,
-    "ast_hash": "32d8b6f1db52205ea2b8b3c1f8ece4ed",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\api\\devInterceptor.ts": {
-    "mtime": 1780510184.8947363,
-    "ast_hash": "a540df1b6d851734a15805a56b626c21",
+    "mtime": 1780847874.9723017,
+    "ast_hash": "dd06a4bed59dc33257d95f71acec0ea4",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\api\\mockData.ts": {
@@ -1190,8 +1185,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\lib\\apiClient.ts": {
-    "mtime": 1780693303.939392,
-    "ast_hash": "8348a412640a900b6cdaf6cac26b7f8f",
+    "mtime": 1780847696.8143241,
+    "ast_hash": "4aecb2a6d823c642e91c915418ea4a6d",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\lib\\CartProvider.tsx": {
@@ -1210,63 +1205,58 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\lib\\index.ts": {
-    "mtime": 1780529988.1363704,
-    "ast_hash": "cffd3f110a16cad8bd4274974691f45a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\lib\\useCart.ts": {
-    "mtime": 1780585831.4790256,
-    "ast_hash": "a5d86d3dd4a9a49882081dbb7de9572a",
+    "mtime": 1780846669.1554244,
+    "ast_hash": "786b5da60f99cde15b5b5571ae7b22e6",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\lib\\useWebSocket.ts": {
-    "mtime": 1780693310.9985929,
-    "ast_hash": "9158a07263874d540efcf4937fe8f027",
+    "mtime": 1780847895.818547,
+    "ast_hash": "9aeb3a2f4e88e0e07574c57c4043384f",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\AllergenEditor.tsx": {
-    "mtime": 1780836697.7123775,
-    "ast_hash": "bfbed3bf146b22c81cfe1a7bafb09a4d",
+    "mtime": 1780848009.2947602,
+    "ast_hash": "fb70057f9cb56acf78e01362a23d8842",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\AnalyticsPage.tsx": {
-    "mtime": 1780836367.9873536,
-    "ast_hash": "57ff750af27e460c733066359125291c",
+    "mtime": 1780853706.3666832,
+    "ast_hash": "435427c82ac552f95d1c38b504d50ad7",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\BrandingPage.tsx": {
-    "mtime": 1780836922.5584216,
-    "ast_hash": "bd06b22f6e552870e586d2674a660375",
+    "mtime": 1780851018.7831936,
+    "ast_hash": "fbc0511718ddb66210a86c575307df45",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\CouriersPage.tsx": {
-    "mtime": 1780836508.1725495,
-    "ast_hash": "65f72861d050d00cbbec51a4ec9a98ea",
+    "mtime": 1780943845.0778985,
+    "ast_hash": "6269460a64735064d049b80a6cbc6e7d",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\CRMPage.tsx": {
-    "mtime": 1780836549.5172043,
-    "ast_hash": "87446b50d68f370e6aa4a6ec7b83c829",
+    "mtime": 1780855108.8705587,
+    "ast_hash": "c46a2bc85d51076bde3172f1c1608dd4",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\DashboardPage.tsx": {
-    "mtime": 1780836723.50606,
-    "ast_hash": "9e7749602ad7557257f8cb434c432312",
+    "mtime": 1780859170.8201208,
+    "ast_hash": "efbdad7867fcf7a63123facb1acf7509",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\LoginPage.tsx": {
-    "mtime": 1780836797.997672,
-    "ast_hash": "f739863fc1ab983284528554f0de6bfb",
+    "mtime": 1780847537.6455414,
+    "ast_hash": "2008df8614053f324f13eafcba9c751d",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\MenuManagerPage.tsx": {
-    "mtime": 1780836638.2668912,
-    "ast_hash": "3ca37486546d73a29811e45177575084",
+    "mtime": 1780857322.6806378,
+    "ast_hash": "ddf5f82c44a02dacf3d572c650520cba",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\OnboardingPage.tsx": {
-    "mtime": 1780836909.0360992,
-    "ast_hash": "9de5a331d600953476bf85a13050fad1",
+    "mtime": 1780859368.6821404,
+    "ast_hash": "6e6528d8bf4b234fcdc6e1f41d68caae",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\RecipeEditor.tsx": {
@@ -1275,23 +1265,23 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\SettingsPage.tsx": {
-    "mtime": 1780836268.360119,
-    "ast_hash": "fc2ab1bf83b6b80d92ca66171751bdf3",
+    "mtime": 1780855800.3442137,
+    "ast_hash": "fc5a512a7ed35a86395121fd85fedd99",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\SupplyLibraryPage.tsx": {
-    "mtime": 1780836771.6937408,
-    "ast_hash": "819a572d01466e4718bdcee5da62aef3",
+    "mtime": 1780851265.6328506,
+    "ast_hash": "7e66dabb7f7c1e13398f503335090279",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\client\\CheckoutPage.tsx": {
-    "mtime": 1780836974.2866068,
-    "ast_hash": "1908ef9782b052223ebe7394c6952242",
+    "mtime": 1780847746.3707345,
+    "ast_hash": "a7b48f96c6e655a35e4e26f6a97c255e",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\client\\MenuPage.tsx": {
-    "mtime": 1780836962.505103,
-    "ast_hash": "f53b5aecf8555a906c428ef4353849bb",
+    "mtime": 1780847626.1759925,
+    "ast_hash": "e467d7793f61fffc5cde0ec2c80b0077",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\client\\OrderStatusPage.tsx": {
@@ -1300,43 +1290,43 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\courier\\DeliveryPage.tsx": {
-    "mtime": 1780671665.7495315,
-    "ast_hash": "1a2d92d3e4bc1b5e8943cabc2bc9a460",
+    "mtime": 1780851210.3657196,
+    "ast_hash": "aba761879f7bef043ad83897c676a859",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\courier\\EarningsPage.tsx": {
-    "mtime": 1780576232.0831406,
-    "ast_hash": "12a1fba2c09e9d89dee191b1bc5b19bd",
+    "mtime": 1780851143.416502,
+    "ast_hash": "e3e23ac5d3b3a09d667dda3f32ddcb08",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\courier\\HistoryPage.tsx": {
-    "mtime": 1780576254.6387813,
-    "ast_hash": "157f4fdde0f0f9002eabe827989263b8",
+    "mtime": 1780851096.7543225,
+    "ast_hash": "42adeb4a958c515b9e0054e38c641457",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\courier\\LoginPage.tsx": {
-    "mtime": 1780596681.620453,
-    "ast_hash": "d14d19d18d9df2db995fed7b0b205fae",
+    "mtime": 1780941203.474083,
+    "ast_hash": "ba3bdd3950b559521c72c3238b45a132",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\courier\\ShiftPage.tsx": {
-    "mtime": 1780576281.024243,
-    "ast_hash": "0ae258ff4e7f5fc0795f7248ca42cdbc",
+    "mtime": 1780941245.0572002,
+    "ast_hash": "ea633db0518ed66e220cc9330d0410b6",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\courier\\TasksPage.tsx": {
-    "mtime": 1780588860.1124554,
-    "ast_hash": "70831b29dce112319152fe4092f4d903",
+    "mtime": 1780941249.6947021,
+    "ast_hash": "bcb96dcd685242158d96d1ca4c7dc62d",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\routes\\AdminRoutes.tsx": {
-    "mtime": 1780833480.3671045,
-    "ast_hash": "f0596a03c95d1150056647907394b590",
+    "mtime": 1780851347.6769228,
+    "ast_hash": "a0e5fb9e68ebe8e98ad5eb3e9784b4be",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\routes\\ClientLayout.tsx": {
-    "mtime": 1780832022.8130424,
-    "ast_hash": "0e25c459dde1892b9091dfde2ac0c23d",
+    "mtime": 1780847421.4334035,
+    "ast_hash": "caa81b42cc05707601aa15feb3cec7ca",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\routes\\ClientRoutes.tsx": {
@@ -1520,13 +1510,13 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\helpers\\api.ts": {
-    "mtime": 1780535738.6971264,
-    "ast_hash": "9931f12b2261d64654250f5edc72eb5a",
+    "mtime": 1780846761.0368843,
+    "ast_hash": "1d7cacb8124aeebf6134c249eb4e4be2",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\helpers\\auth.ts": {
-    "mtime": 1780535725.0004249,
-    "ast_hash": "961add86c74c3fe6fea7069ca92ee79b",
+    "mtime": 1780847759.3446205,
+    "ast_hash": "3b0e53c4bf53aad7f6ffbdafc873238f",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\helpers\\geo.ts": {
@@ -1535,8 +1525,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\helpers\\seed.ts": {
-    "mtime": 1780535756.616692,
-    "ast_hash": "0a0238915667b524fbf62f9003ec1f72",
+    "mtime": 1780847759.8278203,
+    "ast_hash": "94171dbc6c594cf2a7c12d94232b5877",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\helpers\\ws.ts": {
@@ -1550,18 +1540,18 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\cross-cutting.spec.ts": {
-    "mtime": 1780589189.2057676,
-    "ast_hash": "604a5fc872ef9bdb617c5570b290af86",
+    "mtime": 1780846818.5379672,
+    "ast_hash": "a671d0548274885d9271b581f77b9966",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\embed-mode.spec.ts": {
-    "mtime": 1780589176.827646,
-    "ast_hash": "619078f2095b2b42ce863340a659d78f",
+    "mtime": 1780846690.4798722,
+    "ast_hash": "3b799df73b79217bf0dfa16231492bfd",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\error-handling.spec.ts": {
-    "mtime": 1780589170.3756933,
-    "ast_hash": "ed8165a36c71b62b2b2191a95f73f10e",
+    "mtime": 1780846817.5722213,
+    "ast_hash": "d4a8ddcf2413d65f821a258e72a7916b",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\live-smoke.spec.ts": {
@@ -1570,8 +1560,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\maps.spec.ts": {
-    "mtime": 1780583763.1893206,
-    "ast_hash": "80907ed65fb807cf4bb8bb2a1580cf06",
+    "mtime": 1780846819.3278587,
+    "ast_hash": "c02372bd672104b678ae282a8c11d33a",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\onboarding-e2e.spec.ts": {
@@ -1580,8 +1570,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\real-session-menu.spec.ts": {
-    "mtime": 1780664813.4680023,
-    "ast_hash": "0987cc3130a779f835b45b45ff99806d",
+    "mtime": 1780846727.8400705,
+    "ast_hash": "048c7c6556f6894725a1ea930e05c070",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\smoke.spec.ts": {
@@ -1590,18 +1580,18 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\ui-polish.spec.ts": {
-    "mtime": 1780658437.897531,
-    "ast_hash": "fb6aa4bf59d41fb82c1348f1593ca34b",
+    "mtime": 1780847772.6274924,
+    "ast_hash": "4c852a2282de0830d93bcfd4619a2ddb",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\admin\\dashboard.spec.ts": {
-    "mtime": 1780577338.4273024,
-    "ast_hash": "1246ce4bbd829e4777ec2f7d1af16aec",
+    "mtime": 1780846820.856883,
+    "ast_hash": "46b96e901cbeb44d49ea2f33c487c859",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\admin\\full-coverage.spec.ts": {
-    "mtime": 1780581615.8677752,
-    "ast_hash": "d9dd5e2c3ce7ec20b5c57b6c3f5a76a3",
+    "mtime": 1780846820.0419364,
+    "ast_hash": "331284610c7e9696515d24cd17c076f2",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\admin\\menu-manager.spec.ts": {
@@ -1610,8 +1600,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\admin\\orders.spec.ts": {
-    "mtime": 1780536906.8059814,
-    "ast_hash": "5bb494ab3ada61d8564ad2d901e1cbcb",
+    "mtime": 1780846823.0462534,
+    "ast_hash": "82c5efa89d279f6414d8fcdb43f4c61f",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\client\\cart.spec.ts": {
@@ -1620,33 +1610,33 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\client\\checkout.spec.ts": {
-    "mtime": 1780585962.8954792,
-    "ast_hash": "39d051dc5df0b0fd7f7fcb5fca075f4c",
+    "mtime": 1780846693.1475077,
+    "ast_hash": "86eb561ea67a3873dd7c94e9abaf4631",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\client\\menu.spec.ts": {
-    "mtime": 1780585952.6808393,
-    "ast_hash": "45b4833b60ea159585ceea3cb80fe061",
+    "mtime": 1780846695.5218036,
+    "ast_hash": "e296bc0b40989fc410faf832e07df508",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\client\\status.spec.ts": {
-    "mtime": 1780536628.700084,
-    "ast_hash": "a9cf9be56f41d7af6b66ef0efd13da3a",
+    "mtime": 1780846823.6781526,
+    "ast_hash": "e46e1e788bffe1d89626422fc8d6b8ab",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\courier\\full-coverage.spec.ts": {
-    "mtime": 1780576419.2904782,
-    "ast_hash": "d1a10953ce7226ebfa438c3e469c0cfd",
+    "mtime": 1780846821.597952,
+    "ast_hash": "9d87b413e081b4e1e41cb6678f7a27b0",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\courier\\tasks.spec.ts": {
-    "mtime": 1780536910.600881,
-    "ast_hash": "1b319c394e844ed654679a2b97d4fe19",
+    "mtime": 1780846822.3137877,
+    "ast_hash": "75cc110dc63c1d599dc4012ca8fc72c9",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\load\\spike.js": {
-    "mtime": 1780477050.6161566,
-    "ast_hash": "7576d1f098f7181090ad48484f32d7e0",
+    "mtime": 1780847780.9971688,
+    "ast_hash": "50171e0dd9aff76e7b26973c6b38c7f5",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\config\\package.json": {
@@ -2060,8 +2050,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\db\\src\\index.ts": {
-    "mtime": 1780593800.6663167,
-    "ast_hash": "e8a0009e9b9357a9e8697328db27ca99",
+    "mtime": 1780848933.927553,
+    "ast_hash": "cfd1d8f9f679d3fccf33e7a54c5eb024",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\db\\src\\verify-db.ts": {
@@ -2325,13 +2315,13 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\Status.tsx": {
-    "mtime": 1780661436.1168668,
-    "ast_hash": "4414b15f066096578e094b0327fd4871",
+    "mtime": 1780847188.4062667,
+    "ast_hash": "18b8ee3aa9fbaa236a17124a79022b04",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\admin\\AdminUI.tsx": {
-    "mtime": 1780836432.192441,
-    "ast_hash": "d5009aa9ea7667ae1524ac759e07fdb4",
+    "mtime": 1780851789.2923863,
+    "ast_hash": "339f771831620862752b9cd810e9694f",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\atoms\\Button.tsx": {
@@ -2370,13 +2360,13 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\client\\ClientUI.tsx": {
-    "mtime": 1780663171.1935315,
-    "ast_hash": "2cb40fbf330019ace4c64c1d82f29dec",
+    "mtime": 1780847249.8911421,
+    "ast_hash": "379e9211d953f3951513bb80aff5d2cf",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\courier\\CourierUI.tsx": {
-    "mtime": 1780671663.6969762,
-    "ast_hash": "f8d91f71f3fae7197774a9a0eb78560f",
+    "mtime": 1780847220.831802,
+    "ast_hash": "ba351c487c37d978b4b988c6e3232177",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\layout\\AdminShell.tsx": {
@@ -2420,8 +2410,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\molecules\\CourierLiveMap.tsx": {
-    "mtime": 1780597973.8720734,
-    "ast_hash": "0004909d4f1afdf6bca8e28aec6402cd",
+    "mtime": 1780847275.9218433,
+    "ast_hash": "eb9526846e759fc7dd164d95195ba8f5",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\molecules\\Drawer.tsx": {
@@ -2435,18 +2425,18 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\molecules\\MapLibreBase.tsx": {
-    "mtime": 1780597543.4399638,
-    "ast_hash": "5f22ddb78120d131b03b906253f50f35",
+    "mtime": 1780847332.2658134,
+    "ast_hash": "d546b3b4b1ed35685bc3776bd73c5f5d",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\molecules\\MapWithPin.tsx": {
-    "mtime": 1780661470.9318838,
-    "ast_hash": "c383340acb84f180de055b919a7bad37",
+    "mtime": 1780847397.702854,
+    "ast_hash": "f565f621dfe832bb796a033b3c72f413",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\molecules\\MapWithRadius.tsx": {
-    "mtime": 1780575956.5961711,
-    "ast_hash": "cdde277cd9ae902f28c2e967f13b90e9",
+    "mtime": 1780847409.5438817,
+    "ast_hash": "34dbfd99c7485258d3fed9cbfe02f914",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\molecules\\Modal.tsx": {
@@ -2475,8 +2465,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\hooks\\use-cart.ts": {
-    "mtime": 1780507015.1645074,
-    "ast_hash": "a05ad78dbc52f261d49f85db08294b74",
+    "mtime": 1780847781.0888896,
+    "ast_hash": "951ad720f5eeab3073f8db0ebca0b7db",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\hooks\\use-embed.ts": {
@@ -2500,8 +2490,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\hooks\\use-sound.ts": {
-    "mtime": 1780502623.599574,
-    "ast_hash": "2c30d7fead0d95e6d727596733c9bc86",
+    "mtime": 1780847781.2484536,
+    "ast_hash": "92b4af39572c924c2058251827330851",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\hooks\\use-voice-order.ts": {
@@ -2509,29 +2499,24 @@
     "ast_hash": "48472afe66aa6ebf01c3c947923ea7f1",
     "semantic_hash": ""
   },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\lib\\api-client.ts": {
-    "mtime": 1780511842.5188553,
-    "ast_hash": "397400cd8524e43047dbfd2e5daa8ff5",
-    "semantic_hash": ""
-  },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\lib\\auth.ts": {
-    "mtime": 1780502671.9747853,
-    "ast_hash": "c21212739c6eef47b2e356b8b5288065",
+    "mtime": 1780847781.6153662,
+    "ast_hash": "49e953181bc033c3c429a92752daa2a4",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\lib\\i18n.ts": {
-    "mtime": 1780831290.9253902,
-    "ast_hash": "3e8c08c92f54d461136fb7a72ceaf105",
+    "mtime": 1780855955.5976856,
+    "ast_hash": "7171e49a465661c98726e7738f74369b",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\lib\\I18nProvider.tsx": {
-    "mtime": 1780664997.3427553,
-    "ast_hash": "89c7cb2cab2d0f30776434164b63f288",
+    "mtime": 1780848502.35538,
+    "ast_hash": "e5ef796ce732bc561707f4045310d31f",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\lib\\websocket.ts": {
-    "mtime": 1780502169.2849195,
-    "ast_hash": "ade11bf9748b2026d5ce7c6aeb0a21f2",
+    "mtime": 1780847782.7474217,
+    "ast_hash": "ce4518dcdaeaf6c26739467922339a92",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\lib\\__tests__\\i18n.test.ts": {
@@ -2605,18 +2590,18 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\scripts\\verify-n2.ts": {
-    "mtime": 1780427315.67558,
-    "ast_hash": "8890e1f3759451fceaba49ed74bfd5ec",
+    "mtime": 1780847895.8816218,
+    "ast_hash": "f3dfab6ab3c86df2ed109dfc827b9096",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\scripts\\verify-stage10.ts": {
-    "mtime": 1780407173.2047293,
-    "ast_hash": "00974ff255c525e9eab6cdb9fd86631d",
+    "mtime": 1780847934.972419,
+    "ast_hash": "9e401e951ef04623874c30c2a28f1b39",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\scripts\\verify-stage9.ts": {
-    "mtime": 1780401935.8095121,
-    "ast_hash": "c84cfd4f17c1fc190e3639f2ce9f1c34",
+    "mtime": 1780847939.864715,
+    "ast_hash": "026503897ed1d0bd763c229b18ff2cff",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\spikes\\stage3-queue\\h1-install.ts": {
@@ -2720,8 +2705,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\tools\\eslint-plugin-local\\src\\index.js": {
-    "mtime": 1780257121.7001784,
-    "ast_hash": "20b035e5600feba9101b57682c7a4bd4",
+    "mtime": 1780845968.9124088,
+    "ast_hash": "ef373c802c8523f8f1420599f005ac49",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\tools\\eslint-plugin-local\\__fixtures__\\bad-color.tsx": {
@@ -2745,8 +2730,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\AGENTS.md": {
-    "mtime": 1780838506.6337974,
-    "ast_hash": "b89c05b9b383911a2d3a3604aecd6e61",
+    "mtime": 1780848290.6114028,
+    "ast_hash": "b4feff27669dcd83f0caeee25810c160",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\CONVENTIONS.md": {
@@ -2755,8 +2740,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\DeliveryOS-As-Built-Summary-v1.md": {
-    "mtime": 1780592364.3282113,
-    "ast_hash": "8f61276e9997edfbe9ccfc1244bb7f70",
+    "mtime": 1780845130.607399,
+    "ast_hash": "a0d2a4d8a4bd3c631c4e71d3eb605082",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\DEPLOYMENT-FIXES.md": {
@@ -3360,743 +3345,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\index.html": {
-    "mtime": 1780833459.7140474,
-    "ast_hash": "1943204a6fd9fbc0099fbb04f6a7279a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-4fe22-Logout-protects-admin-pages-desktop\\error-context.md": {
-    "mtime": 1780836305.6748445,
-    "ast_hash": "36dee5d0034e232d3d9e7a732eb72cc6",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-4fe22-Logout-protects-admin-pages-tablet\\error-context.md": {
-    "mtime": 1780834843.7954109,
-    "ast_hash": "281abbef058d08b06f827eff88456458",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-1e132-er-visible-on-client-header-desktop\\error-context.md": {
-    "mtime": 1780836348.7191062,
-    "ast_hash": "4ff517c2f6f2e50e2cad6f8c2236e6dd",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-1e132-er-visible-on-client-header-tablet\\error-context.md": {
-    "mtime": 1780834891.7295024,
-    "ast_hash": "4ff517c2f6f2e50e2cad6f8c2236e6dd",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-2d38a--products-with-Tabler-icons-desktop\\error-context.md": {
-    "mtime": 1780836331.248182,
-    "ast_hash": "43df9b2d671fb996ac44b419f3868341",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-2d38a--products-with-Tabler-icons-mobile\\error-context.md": {
-    "mtime": 1780833489.5572214,
-    "ast_hash": "43df9b2d671fb996ac44b419f3868341",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-2d38a--products-with-Tabler-icons-tablet\\error-context.md": {
-    "mtime": 1780834871.933967,
-    "ast_hash": "43df9b2d671fb996ac44b419f3868341",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-ad-099cc-ttons-have-accessible-names-mobile\\error-context.md": {
-    "mtime": 1780834125.2154224,
-    "ast_hash": "34d7f7b4842ace3402ccbe72f0f76eba",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-ad-099cc-ttons-have-accessible-names-tablet\\error-context.md": {
-    "mtime": 1780835578.9323778,
-    "ast_hash": "c3dec2d1a25b9f8700d4e62a7602d4e3",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-in-2cde5-ssible-names-on-client-menu-desktop\\error-context.md": {
-    "mtime": 1780836609.701743,
-    "ast_hash": "3f79c3dfed5cf20067683af07cc53096",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-in-2cde5-ssible-names-on-client-menu-mobile\\error-context.md": {
-    "mtime": 1780834102.404755,
-    "ast_hash": "3f79c3dfed5cf20067683af07cc53096",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-in-2cde5-ssible-names-on-client-menu-tablet\\error-context.md": {
-    "mtime": 1780835555.2868319,
-    "ast_hash": "3f79c3dfed5cf20067683af07cc53096",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-search-input-has-aria-label-mobile\\error-context.md": {
-    "mtime": 1780834142.8446546,
-    "ast_hash": "aae86b55b7f15d5ade3d62179749a64b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-search-input-has-aria-label-tablet\\error-context.md": {
-    "mtime": 1780835597.151163,
-    "ast_hash": "f76f57a13a474c89d2f203b48a153561",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--22776-crements-with-multiple-adds-desktop\\error-context.md": {
-    "mtime": 1780836743.8385768,
-    "ast_hash": "f06cd326605a8abd6eb840cccb6ba782",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--22776-crements-with-multiple-adds-mobile\\error-context.md": {
-    "mtime": 1780834342.456118,
-    "ast_hash": "f06cd326605a8abd6eb840cccb6ba782",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--22776-crements-with-multiple-adds-tablet\\error-context.md": {
-    "mtime": 1780835803.174319,
-    "ast_hash": "f06cd326605a8abd6eb840cccb6ba782",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--42762-ith-count-after-adding-item-desktop\\error-context.md": {
-    "mtime": 1780836698.1994293,
-    "ast_hash": "98932cb21716a90d0767f8b7aca4cdc8",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--42762-ith-count-after-adding-item-mobile\\error-context.md": {
-    "mtime": 1780834297.466914,
-    "ast_hash": "98932cb21716a90d0767f8b7aca4cdc8",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--42762-ith-count-after-adding-item-tablet\\error-context.md": {
-    "mtime": 1780835756.651342,
-    "ast_hash": "98932cb21716a90d0767f8b7aca4cdc8",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--79b89-ion-class-applied-after-add-desktop\\error-context.md": {
-    "mtime": 1780836721.1093001,
-    "ast_hash": "c1e5a12db95e6f701d01e5c2171298bf",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--79b89-ion-class-applied-after-add-mobile\\error-context.md": {
-    "mtime": 1780834319.9684985,
-    "ast_hash": "c1e5a12db95e6f701d01e5c2171298bf",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--79b89-ion-class-applied-after-add-tablet\\error-context.md": {
-    "mtime": 1780835780.1544764,
-    "ast_hash": "c1e5a12db95e6f701d01e5c2171298bf",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-hidden-when-cart-is-empty-desktop\\error-context.md": {
-    "mtime": 1780836675.1382341,
-    "ast_hash": "b08915f59f8554897501b3ccdef9614b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-hidden-when-cart-is-empty-mobile\\error-context.md": {
-    "mtime": 1780834274.969552,
-    "ast_hash": "b08915f59f8554897501b3ccdef9614b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-hidden-when-cart-is-empty-tablet\\error-context.md": {
-    "mtime": 1780835733.6473415,
-    "ast_hash": "b08915f59f8554897501b3ccdef9614b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-opens-cart-drawer-on-click-desktop\\error-context.md": {
-    "mtime": 1780836766.5001347,
-    "ast_hash": "3d96aa6de39adc2322713ae7fc2effd7",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-opens-cart-drawer-on-click-mobile\\error-context.md": {
-    "mtime": 1780834365.0316672,
-    "ast_hash": "3d96aa6de39adc2322713ae7fc2effd7",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-opens-cart-drawer-on-click-tablet\\error-context.md": {
-    "mtime": 1780835826.4596584,
-    "ast_hash": "3d96aa6de39adc2322713ae7fc2effd7",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--7232b-ss-gets-dark-mode-overrides-mobile\\error-context.md": {
-    "mtime": 1780833775.5373678,
-    "ast_hash": "e03e033e33a13e6c3d9ce5accff696d3",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--7232b-ss-gets-dark-mode-overrides-tablet\\error-context.md": {
-    "mtime": 1780835222.6992185,
-    "ast_hash": "c5f9552c0cf43ee73c8ba28bf94852f9",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--99015-h-prefers-color-scheme-dark-mobile\\error-context.md": {
-    "mtime": 1780833752.7175298,
-    "ast_hash": "026995645a985fa257b5b53c77bb25b8",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--99015-h-prefers-color-scheme-dark-tablet\\error-context.md": {
-    "mtime": 1780835199.1429193,
-    "ast_hash": "630983f3ec07f1be0fda061e98eebf6e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--a7b18-h-prefers-color-scheme-dark-mobile\\error-context.md": {
-    "mtime": 1780833707.1645248,
-    "ast_hash": "102ef1a08ff9c914eee0f491f38c37a9",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--a7b18-h-prefers-color-scheme-dark-tablet\\error-context.md": {
-    "mtime": 1780835152.3573925,
-    "ast_hash": "d3cb6895e1901be17e557a27e7f5a0fe",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--ae526-ss-gets-dark-mode-overrides-mobile\\error-context.md": {
-    "mtime": 1780833729.9491599,
-    "ast_hash": "7c6583e6fc330112e2eaf75ff8b2e6c7",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--ae526-ss-gets-dark-mode-overrides-tablet\\error-context.md": {
-    "mtime": 1780835175.8154905,
-    "ast_hash": "2781a6ddf3ac12b4bfb05ce1a9571d31",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-4380d-ss-gets-dark-mode-overrides-mobile\\error-context.md": {
-    "mtime": 1780833821.0964625,
-    "ast_hash": "727bac83ffd7fdb52e1da5a65084752e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-4380d-ss-gets-dark-mode-overrides-tablet\\error-context.md": {
-    "mtime": 1780835269.1951926,
-    "ast_hash": "1c290114d67dae0101c131ab1a6d0902",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-a6f31-h-prefers-color-scheme-dark-mobile\\error-context.md": {
-    "mtime": 1780833798.2867565,
-    "ast_hash": "54105c5ddd838c5fc72e31891560994a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-a6f31-h-prefers-color-scheme-dark-tablet\\error-context.md": {
-    "mtime": 1780835245.9620795,
-    "ast_hash": "54105c5ddd838c5fc72e31891560994a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-99bc4-ss-gets-dark-mode-overrides-desktop\\error-context.md": {
-    "mtime": 1780836456.42828,
-    "ast_hash": "964fbb865c3b4a39ef6b0f0081ecfa53",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-99bc4-ss-gets-dark-mode-overrides-mobile\\error-context.md": {
-    "mtime": 1780833684.416592,
-    "ast_hash": "964fbb865c3b4a39ef6b0f0081ecfa53",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-99bc4-ss-gets-dark-mode-overrides-tablet\\error-context.md": {
-    "mtime": 1780835128.793561,
-    "ast_hash": "964fbb865c3b4a39ef6b0f0081ecfa53",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-d990e-h-prefers-color-scheme-dark-desktop\\error-context.md": {
-    "mtime": 1780836433.308701,
-    "ast_hash": "357eaa5308371b3529ece9f626e0728a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-d990e-h-prefers-color-scheme-dark-mobile\\error-context.md": {
-    "mtime": 1780833661.8878565,
-    "ast_hash": "357eaa5308371b3529ece9f626e0728a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-d990e-h-prefers-color-scheme-dark-tablet\\error-context.md": {
-    "mtime": 1780835104.5708067,
-    "ast_hash": "357eaa5308371b3529ece9f626e0728a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-5271e-ler-icons-instead-of-emojis-mobile\\error-context.md": {
-    "mtime": 1780833912.0725944,
-    "ast_hash": "7b28d97ffb0ddb4a15c301a68e2178a6",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-5271e-ler-icons-instead-of-emojis-tablet\\error-context.md": {
-    "mtime": 1780835363.243816,
-    "ast_hash": "7b28d97ffb0ddb4a15c301a68e2178a6",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-72391-ler-icons-instead-of-emojis-mobile\\error-context.md": {
-    "mtime": 1780833866.5474198,
-    "ast_hash": "9d7db7f6154e8621caebc14e0dbd9059",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-72391-ler-icons-instead-of-emojis-tablet\\error-context.md": {
-    "mtime": 1780835315.7921274,
-    "ast_hash": "9d7541d0189674ec6fe51e1cc05037cd",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-bbb30-ler-icons-instead-of-emojis-mobile\\error-context.md": {
-    "mtime": 1780833889.3077047,
-    "ast_hash": "f5e3fd9505faeeddd9900204f2c831f1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-bbb30-ler-icons-instead-of-emojis-tablet\\error-context.md": {
-    "mtime": 1780835339.7835429,
-    "ast_hash": "4bef1099e1c366892f2aef4b577cc873",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-C-ea542-ler-icons-instead-of-emojis-desktop\\error-context.md": {
-    "mtime": 1780836492.1189077,
-    "ast_hash": "708061f9be99a6976505ce14d5abcc4a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-C-ea542-ler-icons-instead-of-emojis-mobile\\error-context.md": {
-    "mtime": 1780833843.6477098,
-    "ast_hash": "708061f9be99a6976505ce14d5abcc4a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-C-ea542-ler-icons-instead-of-emojis-tablet\\error-context.md": {
-    "mtime": 1780835292.3374937,
-    "ast_hash": "708061f9be99a6976505ce14d5abcc4a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-empty-cart-drawer-shows-empty-message-desktop\\error-context.md": {
-    "mtime": 1780836586.9305065,
-    "ast_hash": "95f2ecf9fcc83de21bec69aa129c3420",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-empty-cart-drawer-shows-empty-message-mobile\\error-context.md": {
-    "mtime": 1780834079.908309,
-    "ast_hash": "95f2ecf9fcc83de21bec69aa129c3420",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-empty-cart-drawer-shows-empty-message-tablet\\error-context.md": {
-    "mtime": 1780835532.2629838,
-    "ast_hash": "95f2ecf9fcc83de21bec69aa129c3420",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-3cbef-efers-reduced-motion-reduce-mobile\\error-context.md": {
-    "mtime": 1780833982.0310366,
-    "ast_hash": "444728233bcd57550ebeb0cb5d4cc148",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-3cbef-efers-reduced-motion-reduce-tablet\\error-context.md": {
-    "mtime": 1780835433.9765162,
-    "ast_hash": "bf34b4c1ee3409c928babac7fc93c798",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-5fe9f-efers-reduced-motion-reduce-mobile\\error-context.md": {
-    "mtime": 1780834007.7067392,
-    "ast_hash": "321eb1ecf8e9ca0868268917cca1df39",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-5fe9f-efers-reduced-motion-reduce-tablet\\error-context.md": {
-    "mtime": 1780835457.249774,
-    "ast_hash": "963fd252c287c73080e3def303f6d7a0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-6740c-efers-reduced-motion-reduce-mobile\\error-context.md": {
-    "mtime": 1780833959.1787684,
-    "ast_hash": "ba5786ecfdc01bdac73b8f2be3f6d658",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-6740c-efers-reduced-motion-reduce-tablet\\error-context.md": {
-    "mtime": 1780835410.4482553,
-    "ast_hash": "5046eb47a0a82c9faaee44580a13afb9",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-C-fe2fa-efers-reduced-motion-reduce-desktop\\error-context.md": {
-    "mtime": 1780836524.4828615,
-    "ast_hash": "45f38dc02594ef6fef248d208b4a20fc",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-C-fe2fa-efers-reduced-motion-reduce-mobile\\error-context.md": {
-    "mtime": 1780833934.5734918,
-    "ast_hash": "45f38dc02594ef6fef248d208b4a20fc",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-C-fe2fa-efers-reduced-motion-reduce-tablet\\error-context.md": {
-    "mtime": 1780835387.0055816,
-    "ast_hash": "45f38dc02594ef6fef248d208b4a20fc",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-28da4-ders-at-tablet-width-768px--desktop\\error-context.md": {
-    "mtime": 1780836983.1740177,
-    "ast_hash": "1e67c8e046152d995f2425cf63f89a1d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-28da4-ders-at-tablet-width-768px--mobile\\error-context.md": {
-    "mtime": 1780834580.8809068,
-    "ast_hash": "5cb9a239183fd29772c2d206859f6f73",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-28da4-ders-at-tablet-width-768px--tablet\\error-context.md": {
-    "mtime": 1780836043.2194052,
-    "ast_hash": "5cb9a239183fd29772c2d206859f6f73",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-3d173-ders-at-tablet-width-768px--desktop\\error-context.md": {
-    "mtime": 1780836881.7456486,
-    "ast_hash": "e4039405b1141cb259487dcf08d2ac55",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-3d173-ders-at-tablet-width-768px--mobile\\error-context.md": {
-    "mtime": 1780834481.1456213,
-    "ast_hash": "d0020feafb45390f7932060b0a5ab350",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-3d173-ders-at-tablet-width-768px--tablet\\error-context.md": {
-    "mtime": 1780835944.437436,
-    "ast_hash": "55d9610df00be200aea3a9b4f3cc59da",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-57c11-rs-at-desktop-width-1280px--desktop\\error-context.md": {
-    "mtime": 1780836835.0997026,
-    "ast_hash": "809ba3cefac4af0a536fff3a46ef6fa2",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-57c11-rs-at-desktop-width-1280px--mobile\\error-context.md": {
-    "mtime": 1780834434.805979,
-    "ast_hash": "809ba3cefac4af0a536fff3a46ef6fa2",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-57c11-rs-at-desktop-width-1280px--tablet\\error-context.md": {
-    "mtime": 1780835896.090692,
-    "ast_hash": "809ba3cefac4af0a536fff3a46ef6fa2",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-580d0-ders-at-tablet-width-768px--desktop\\error-context.md": {
-    "mtime": 1780836934.4016252,
-    "ast_hash": "b281cb7e3d6f8a6ee80add2930e9940f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-580d0-ders-at-tablet-width-768px--mobile\\error-context.md": {
-    "mtime": 1780834530.0651474,
-    "ast_hash": "dc38d7a1a8c6b8402de5b0e85503c3aa",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-580d0-ders-at-tablet-width-768px--tablet\\error-context.md": {
-    "mtime": 1780835993.8987913,
-    "ast_hash": "7ae48d2333f3e283fd4d2ba2646cfabd",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6c12c-ders-at-mobile-width-390px--desktop\\error-context.md": {
-    "mtime": 1780836858.377216,
-    "ast_hash": "07803c807c869b2725c260f189503a02",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6c12c-ders-at-mobile-width-390px--mobile\\error-context.md": {
-    "mtime": 1780834458.244655,
-    "ast_hash": "e44bd2149c30bd8b8f21cba46bf6af64",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6c12c-ders-at-mobile-width-390px--tablet\\error-context.md": {
-    "mtime": 1780835920.4227755,
-    "ast_hash": "84bc9b7b3fe3ad5ddcbe9e0652e7802b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6da39-id-adapts-to-viewport-width-mobile\\error-context.md": {
-    "mtime": 1780834613.0553644,
-    "ast_hash": "a37e0e94f62a07030451a57cb722ef45",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6da39-id-adapts-to-viewport-width-tablet\\error-context.md": {
-    "mtime": 1780836076.2369652,
-    "ast_hash": "a37e0e94f62a07030451a57cb722ef45",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-8a410-ders-at-tablet-width-768px--desktop\\error-context.md": {
-    "mtime": 1780836812.352949,
-    "ast_hash": "9409e509500012c8d16713294dfc0cb3",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-8a410-ders-at-tablet-width-768px--mobile\\error-context.md": {
-    "mtime": 1780834411.3698158,
-    "ast_hash": "9409e509500012c8d16713294dfc0cb3",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-8a410-ders-at-tablet-width-768px--tablet\\error-context.md": {
-    "mtime": 1780835872.8882506,
-    "ast_hash": "9409e509500012c8d16713294dfc0cb3",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-a761d-ders-at-mobile-width-390px--desktop\\error-context.md": {
-    "mtime": 1780836910.9886816,
-    "ast_hash": "2a0a19a9ea527ce092a0940228117590",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-a761d-ders-at-mobile-width-390px--mobile\\error-context.md": {
-    "mtime": 1780834507.0786467,
-    "ast_hash": "6852720bca2b09ca6e63ac61d7c0455a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-a761d-ders-at-mobile-width-390px--tablet\\error-context.md": {
-    "mtime": 1780835970.4232616,
-    "ast_hash": "f3838b7ff6df6fd3e0a2ad4eea498d42",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d39eb-ders-at-mobile-width-390px--desktop\\error-context.md": {
-    "mtime": 1780836959.5560572,
-    "ast_hash": "22487baa1bc01aadac81fb0322091969",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d39eb-ders-at-mobile-width-390px--mobile\\error-context.md": {
-    "mtime": 1780834555.4939172,
-    "ast_hash": "0071b3232933ca9022a130c7577c04d5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d39eb-ders-at-mobile-width-390px--tablet\\error-context.md": {
-    "mtime": 1780836019.6015022,
-    "ast_hash": "0071b3232933ca9022a130c7577c04d5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d42db-ders-at-mobile-width-390px--desktop\\error-context.md": {
-    "mtime": 1780836789.2957752,
-    "ast_hash": "f85290dcd0779b61f33a2a6f5cb6653c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d42db-ders-at-mobile-width-390px--mobile\\error-context.md": {
-    "mtime": 1780834388.4975438,
-    "ast_hash": "f85290dcd0779b61f33a2a6f5cb6653c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d42db-ders-at-mobile-width-390px--tablet\\error-context.md": {
-    "mtime": 1780835849.823668,
-    "ast_hash": "f85290dcd0779b61f33a2a6f5cb6653c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-6bcd7-ws-SkeletonBase-during-load-mobile\\error-context.md": {
-    "mtime": 1780834052.2840285,
-    "ast_hash": "d2610eb017fa6033627caf3780181e01",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-6bcd7-ws-SkeletonBase-during-load-tablet\\error-context.md": {
-    "mtime": 1780835503.019662,
-    "ast_hash": "d2610eb017fa6033627caf3780181e01",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-ea972-skeleton-blocks-during-load-desktop\\error-context.md": {
-    "mtime": 1780836553.5555441,
-    "ast_hash": "b09f5ace5ae8cdf02b7af6a3a91e263e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-ea972-skeleton-blocks-during-load-mobile\\error-context.md": {
-    "mtime": 1780834030.2501578,
-    "ast_hash": "b09f5ace5ae8cdf02b7af6a3a91e263e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-ea972-skeleton-blocks-during-load-tablet\\error-context.md": {
-    "mtime": 1780835480.3273804,
-    "ast_hash": "b09f5ace5ae8cdf02b7af6a3a91e263e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--1c9f1-oads-without-console-errors-mobile\\error-context.md": {
-    "mtime": 1780834745.667105,
-    "ast_hash": "faa05765e25ad9304b8df9cbf58145ea",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--1c9f1-oads-without-console-errors-tablet\\error-context.md": {
-    "mtime": 1780836209.770367,
-    "ast_hash": "2531fe50a60cb8e6667207b7a3583272",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--61ffe-CSS-theme-variables-defined-mobile\\error-context.md": {
-    "mtime": 1780834716.671104,
-    "ast_hash": "545b1e8fcb82e51d6fa486e636b15540",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--61ffe-CSS-theme-variables-defined-tablet\\error-context.md": {
-    "mtime": 1780836180.9533744,
-    "ast_hash": "dbf892ea63ffd9842c7af3957ef71910",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--96130-CSS-theme-variables-defined-mobile\\error-context.md": {
-    "mtime": 1780834768.387484,
-    "ast_hash": "ceda6a270d50fde5dafd2ae51fff22a0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--96130-CSS-theme-variables-defined-tablet\\error-context.md": {
-    "mtime": 1780836233.3322296,
-    "ast_hash": "ce891cb1fa1596bac28a2bee464623c5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--aa665-CSS-theme-variables-defined-mobile\\error-context.md": {
-    "mtime": 1780834664.1204095,
-    "ast_hash": "fd43d72a96eb0143c3ecfdb6828edbde",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--aa665-CSS-theme-variables-defined-tablet\\error-context.md": {
-    "mtime": 1780836128.3476715,
-    "ast_hash": "fd43d72a96eb0143c3ecfdb6828edbde",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--b67dc-oads-without-console-errors-mobile\\error-context.md": {
-    "mtime": 1780834797.899984,
-    "ast_hash": "94f91922ad8f1a29f74588e7005bce10",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--b67dc-oads-without-console-errors-tablet\\error-context.md": {
-    "mtime": 1780836261.966822,
-    "ast_hash": "da738e2539f4d84f13154c25249a491b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--c563b-oads-without-console-errors-mobile\\error-context.md": {
-    "mtime": 1780834693.1864932,
-    "ast_hash": "2ebab6f64a122a2563dc0286ab4d26fd",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--c563b-oads-without-console-errors-tablet\\error-context.md": {
-    "mtime": 1780836157.3950906,
-    "ast_hash": "446bf56560e004db06b2cd316570e082",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--d3009-CSS-theme-variables-defined-mobile\\error-context.md": {
-    "mtime": 1780834821.1649137,
-    "ast_hash": "ccb53d38a8ddc5bc4531824e14616dd9",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--d3009-CSS-theme-variables-defined-tablet\\error-context.md": {
-    "mtime": 1780836287.1995945,
-    "ast_hash": "e1f43a20667d44126bf9dadd013ab384",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--ea5ab-oads-without-console-errors-mobile\\error-context.md": {
-    "mtime": 1780834640.8340302,
-    "ast_hash": "a61b6986f4e79c201526582c974b7a3a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--ea5ab-oads-without-console-errors-tablet\\error-context.md": {
-    "mtime": 1780836105.0303204,
-    "ast_hash": "a61b6986f4e79c201526582c974b7a3a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Adm-88466-rd-uses-ti-ti--icon-classes-mobile\\error-context.md": {
-    "mtime": 1780834188.9988923,
-    "ast_hash": "c99d6e43ac4af6b2f6ccb94e6b189e0e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Adm-88466-rd-uses-ti-ti--icon-classes-tablet\\error-context.md": {
-    "mtime": 1780835643.77714,
-    "ast_hash": "de4c6b3899e0112e29d1c07c823ad582",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-adm-dcadd-Tabler-icons-for-navigation-mobile\\error-context.md": {
-    "mtime": 1780834252.4346128,
-    "ast_hash": "47e473ffc512da835e332b8cd6b7b1a8",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-adm-dcadd-Tabler-icons-for-navigation-tablet\\error-context.md": {
-    "mtime": 1780835710.507864,
-    "ast_hash": "a9475a02e1b1f070a0bcec2070377411",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Admin-Orders-uses-ti-ti--icon-classes-mobile\\error-context.md": {
-    "mtime": 1780834212.0173333,
-    "ast_hash": "c944b7793bc7eba82dde8372d2b81cac",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Admin-Orders-uses-ti-ti--icon-classes-tablet\\error-context.md": {
-    "mtime": 1780835669.0073364,
-    "ast_hash": "030e9277bb269ea29776954c52a7ca60",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Analytics-uses-ti-ti--icon-classes-mobile\\error-context.md": {
-    "mtime": 1780834234.8948212,
-    "ast_hash": "eadbfff9fb0b8ecc3498dda1b18a4baa",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Analytics-uses-ti-ti--icon-classes-tablet\\error-context.md": {
-    "mtime": 1780835692.2978218,
-    "ast_hash": "01d37b7dcb8ae5dc73fc89bc66606320",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Client-Menu-uses-ti-ti--icon-classes-desktop\\error-context.md": {
-    "mtime": 1780836639.7667172,
-    "ast_hash": "02e2409581de12069ca0f8c2ced657ab",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Client-Menu-uses-ti-ti--icon-classes-mobile\\error-context.md": {
-    "mtime": 1780834165.7042203,
-    "ast_hash": "02e2409581de12069ca0f8c2ced657ab",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Client-Menu-uses-ti-ti--icon-classes-tablet\\error-context.md": {
-    "mtime": 1780835620.4571333,
-    "ast_hash": "02e2409581de12069ca0f8c2ced657ab",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5a687-h-after-rapid-theme-cycling-mobile\\error-context.md": {
-    "mtime": 1780833639.3444295,
-    "ast_hash": "4cff0b3a76ec1427f0278f7ecc2e3af2",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5a687-h-after-rapid-theme-cycling-tablet\\error-context.md": {
-    "mtime": 1780835081.495679,
-    "ast_hash": "3c0b3778930276805b71b6c64635005b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5de22-h-after-rapid-theme-cycling-mobile\\error-context.md": {
-    "mtime": 1780833592.1883774,
-    "ast_hash": "0ed9058874efb3ecd45e12036b7b0a3a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5de22-h-after-rapid-theme-cycling-tablet\\error-context.md": {
-    "mtime": 1780835034.8724053,
-    "ast_hash": "8ad03bae1f791780fbba6845009870c0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-ea001-h-after-rapid-theme-cycling-mobile\\error-context.md": {
-    "mtime": 1780833546.6190388,
-    "ast_hash": "d4edb185ce6cfab245dde5016b41a76e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-ea001-h-after-rapid-theme-cycling-tablet\\error-context.md": {
-    "mtime": 1780834987.3818002,
-    "ast_hash": "9a7d37f1097d23dad2ec4de2f8356c59",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9ca34--Menu-changes-CSS-variables-desktop\\error-context.md": {
-    "mtime": 1780836371.3449802,
-    "ast_hash": "58eee9689ea50ca82aa7492d60dafa52",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9ca34--Menu-changes-CSS-variables-mobile\\error-context.md": {
-    "mtime": 1780833477.6135626,
-    "ast_hash": "58eee9689ea50ca82aa7492d60dafa52",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9ca34--Menu-changes-CSS-variables-tablet\\error-context.md": {
-    "mtime": 1780834915.302341,
-    "ast_hash": "58eee9689ea50ca82aa7492d60dafa52",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9cdb2-ytics-changes-CSS-variables-mobile\\error-context.md": {
-    "mtime": 1780833616.5980966,
-    "ast_hash": "b83bbedd275d3d1bf542ca0f84ba2699",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9cdb2-ytics-changes-CSS-variables-tablet\\error-context.md": {
-    "mtime": 1780835058.178828,
-    "ast_hash": "1a9994f6ea769b78d3ec3b73a2a005ab",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-a441b-rders-changes-CSS-variables-mobile\\error-context.md": {
-    "mtime": 1780833569.4169643,
-    "ast_hash": "4b96c8a524319d1fcd422535f5a834b5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-a441b-rders-changes-CSS-variables-tablet\\error-context.md": {
-    "mtime": 1780835011.2492917,
-    "ast_hash": "cfdfda6a3229d1ae4012ae3a0376b4e6",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-C-c1888-h-after-rapid-theme-cycling-desktop\\error-context.md": {
-    "mtime": 1780836394.1302073,
-    "ast_hash": "afef05944a512572c0a2b45ebf99e8e2",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-C-c1888-h-after-rapid-theme-cycling-mobile\\error-context.md": {
-    "mtime": 1780833500.7043698,
-    "ast_hash": "afef05944a512572c0a2b45ebf99e8e2",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-C-c1888-h-after-rapid-theme-cycling-tablet\\error-context.md": {
-    "mtime": 1780834939.212409,
-    "ast_hash": "afef05944a512572c0a2b45ebf99e8e2",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-fad7e-board-changes-CSS-variables-mobile\\error-context.md": {
-    "mtime": 1780833523.6822224,
-    "ast_hash": "5462ccae4cf434b0b44c6187b591ef75",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-fad7e-board-changes-CSS-variables-tablet\\error-context.md": {
-    "mtime": 1780834963.3306794,
-    "ast_hash": "f14e57de39455af50e7b2788a4dd8888",
+    "mtime": 1780948260.971601,
+    "ast_hash": "d9ae46841392e0effbc6b6c896f9868e",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\assets\\references\\ref-01-wolt-menu.png": {
@@ -4135,2128 +3385,68 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\onboarding-loaded.png": {
-    "mtime": 1780836297.0554395,
-    "ast_hash": "9d153f214d6058fa49081a9ee56b0e86",
+    "mtime": 1780944124.5236833,
+    "ast_hash": "8780f4567091b9e1bacd8333ac2b72f4",
     "semantic_hash": ""
   },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\013ccc30bf7bfaee7a0310ad8b153b640dfa0393.png": {
-    "mtime": 1780833459.6724403,
-    "ast_hash": "35fd32f86a884de9adf14a7090a41079",
+  "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\FlowTestPage.tsx": {
+    "mtime": 1780946417.92707,
+    "ast_hash": "33d942f8b7bd3485825a1aaa59575347",
     "semantic_hash": ""
   },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\3f1d6e2f256482db77c299dda2ffc0fcfe1ad28c.png": {
-    "mtime": 1780833459.6689007,
-    "ast_hash": "a1343b949662dde20c8b56219e252ce3",
+  "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\courier\\CourierInvitePage.tsx": {
+    "mtime": 1780933672.3117962,
+    "ast_hash": "961e4e333c7615536244376f5a29a2e8",
     "semantic_hash": ""
   },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\42deded42a451a1997574bea702107184b7a510a.png": {
-    "mtime": 1780833459.685489,
-    "ast_hash": "c38479ced413a7805ddcb87be58e5948",
+  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\.last-run.json": {
+    "mtime": 1780948260.973601,
+    "ast_hash": "f196824657d8858bc7fa44eecbba38b1",
     "semantic_hash": ""
   },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\56745f3e5d732262e75b2aa0d9f14f7f7c165ec6.png": {
-    "mtime": 1780833459.675455,
-    "ast_hash": "652ad1e31b55fd69ea2618141297641a",
+  "C:\\Users\\Dell5\\Documents\\dowiz\\CONTEXT-INDEX.md": {
+    "mtime": 1780948543.3761907,
+    "ast_hash": "fb160052e5beffc957b744521c44e35e",
     "semantic_hash": ""
   },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\748f55422f3f19c26e2a9b57444fafd0144e8085.png": {
-    "mtime": 1780833459.6520379,
-    "ast_hash": "f093d9d1c6c399dd304a9ef546dcdbb1",
+  "C:\\Users\\Dell5\\Documents\\dowiz\\MEMORY-MAP.md": {
+    "mtime": 1780948529.0957007,
+    "ast_hash": "229ae3a7dbaa7b14ce9a2837478176a0",
     "semantic_hash": ""
   },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\77d7bb84d418db35d6aa1aaec0651520a9e60f00.png": {
-    "mtime": 1780833459.6788385,
-    "ast_hash": "237b7e04ee45afb6e64fc49d77cbce81",
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\rules\\research-first.md": {
+    "mtime": 1780848262.1839995,
+    "ast_hash": "7f9479650cd1d261ab61e4e99803054b",
     "semantic_hash": ""
   },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\9912b234a2d87efab0c9c3f6cf725f4bf8774990.png": {
-    "mtime": 1780833459.6561487,
-    "ast_hash": "d5ee243c358a8ff5c3fa05d14cbef73d",
+  "C:\\Users\\Dell5\\Documents\\dowiz\\docs\\memory-communication-layer.md": {
+    "mtime": 1780948566.8960998,
+    "ast_hash": "546c62cda01c9a38a8b7cadf35e4a0b9",
     "semantic_hash": ""
   },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\bed15665dfa58b31cbf37f01336a32e7938865cc.png": {
-    "mtime": 1780833459.6638074,
-    "ast_hash": "e386e240fb7a4d9f78ee6de3d06ae31d",
+  "C:\\Users\\Dell5\\Documents\\dowiz\\docs\\memory-unification-verification.md": {
+    "mtime": 1780948585.6459718,
+    "ast_hash": "dca40088ea79d7e4f842ee3b5e55d5b8",
     "semantic_hash": ""
   },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\efa03b5f4b503f0ede03a62a2fc0d65f4b7328be.png": {
-    "mtime": 1780833459.6829655,
-    "ast_hash": "2512a8034f02b40e455848bd397677b7",
+  "C:\\Users\\Dell5\\Documents\\dowiz\\image copy.png": {
+    "mtime": 1780859897.7694376,
+    "ast_hash": "cbcb38a33c78b78defc2cb7d49b8841b",
     "semantic_hash": ""
   },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\f1726e8b6161119c80966422e6e354ef00a70998.png": {
-    "mtime": 1780833459.659149,
-    "ast_hash": "e64586d9fabfcbc48cda25d5d857071c",
+  "C:\\Users\\Dell5\\Documents\\dowiz\\image.png": {
+    "mtime": 1780859468.3580093,
+    "ast_hash": "1e1a35642a42552f60696ebd72d4bfa9",
     "semantic_hash": ""
   },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\fd9bebdaf099ea2575042f1b3f8939a5df45f0ef.png": {
-    "mtime": 1780833459.6475892,
-    "ast_hash": "f71ba9dbdd878e52df9dab5b64fc4126",
+  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\proof-admin-couriers-live-data.png": {
+    "mtime": 1780944262.357725,
+    "ast_hash": "70879018e629ede1a99f5bd839c5b1e5",
     "semantic_hash": ""
   },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-1f20b-tep-2-Onboarding-page-loads-desktop\\test-finished-1.png": {
-    "mtime": 1780836297.1460881,
-    "ast_hash": "9d153f214d6058fa49081a9ee56b0e86",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-1f20b-tep-2-Onboarding-page-loads-tablet\\test-finished-1.png": {
-    "mtime": 1780834833.2602565,
-    "ast_hash": "93d0ff08a521088d0aff504ae3c03554",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-4fe22-Logout-protects-admin-pages-desktop\\test-failed-1.png": {
-    "mtime": 1780836305.4986365,
-    "ast_hash": "463ffe7632cca8a6a95642443ff96f2a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-4fe22-Logout-protects-admin-pages-tablet\\test-failed-1.png": {
-    "mtime": 1780834843.5636196,
-    "ast_hash": "94a967426eb1cedde7e2e9a3ccc10d18",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-a1b5e-an-re-login-preserves-state-desktop\\test-finished-1.png": {
-    "mtime": 1780836302.4214056,
-    "ast_hash": "c3f481e4cad7943671e05bfa1b205144",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-a1b5e-an-re-login-preserves-state-tablet\\test-finished-1.png": {
-    "mtime": 1780834839.4241464,
-    "ast_hash": "6bb57da0e7350b3cbc037c311f3aace4",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-b3a1f-login-with-test-credentials-desktop\\test-finished-1.png": {
-    "mtime": 1780836290.2360158,
-    "ast_hash": "248e89feaa1df428a131205073621a3f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-b3a1f-login-with-test-credentials-tablet\\test-finished-1.png": {
-    "mtime": 1780834825.0053887,
-    "ast_hash": "66157bb1a30036074d99c60a81618f81",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-b793c--admin-pages-are-accessible-desktop\\test-finished-1.png": {
-    "mtime": 1780836293.3532465,
-    "ast_hash": "db80c94d6e1e708547f65767c3a78dd9",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-b793c--admin-pages-are-accessible-tablet\\test-finished-1.png": {
-    "mtime": 1780834828.9552605,
-    "ast_hash": "8e3238bccaa3d0fc593aac22f04bf6b6",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-1e132-er-visible-on-client-header-desktop\\test-failed-1.png": {
-    "mtime": 1780836347.849582,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-1e132-er-visible-on-client-header-tablet\\test-failed-1.png": {
-    "mtime": 1780834890.4775615,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-28388-fication-Menu-Manager-loads-desktop\\test-finished-1.png": {
-    "mtime": 1780836314.5674245,
-    "ast_hash": "ed53aeb0fb31564ecd64e2838ffc268a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-28388-fication-Menu-Manager-loads-tablet\\test-finished-1.png": {
-    "mtime": 1780834854.4075823,
-    "ast_hash": "b3970634ce020054417f675411a1b7a1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-2d38a--products-with-Tabler-icons-desktop\\test-failed-1.png": {
-    "mtime": 1780836330.3093436,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-2d38a--products-with-Tabler-icons-mobile\\test-failed-1.png": {
-    "mtime": 1780833488.6947274,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-2d38a--products-with-Tabler-icons-tablet\\test-failed-1.png": {
-    "mtime": 1780834870.6348538,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-cea23-n-Supply-Library-page-loads-desktop\\test-finished-1.png": {
-    "mtime": 1780836310.6129763,
-    "ast_hash": "e10c20c67e7a60bd8a10a2a74ab598b0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-cea23-n-Supply-Library-page-loads-tablet\\test-finished-1.png": {
-    "mtime": 1780834849.3359063,
-    "ast_hash": "e25adc4a977962f6a449250e21926522",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-ad-099cc-ttons-have-accessible-names-desktop\\test-finished-1.png": {
-    "mtime": 1780836614.0406632,
-    "ast_hash": "3af9dff22eaa12e442915fc72fcd543c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-ad-099cc-ttons-have-accessible-names-mobile\\test-failed-1.png": {
-    "mtime": 1780834124.3264313,
-    "ast_hash": "40fe4f17e0270e92e52777001f2d245a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-ad-099cc-ttons-have-accessible-names-tablet\\test-failed-1.png": {
-    "mtime": 1780835577.2302058,
-    "ast_hash": "29337e275cd9dc949c935f2a418ecc36",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-in-2cde5-ssible-names-on-client-menu-desktop\\test-failed-1.png": {
-    "mtime": 1780836608.6702764,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-in-2cde5-ssible-names-on-client-menu-mobile\\test-failed-1.png": {
-    "mtime": 1780834101.5481725,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-in-2cde5-ssible-names-on-client-menu-tablet\\test-failed-1.png": {
-    "mtime": 1780835553.8875687,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-search-input-has-aria-label-desktop\\test-finished-1.png": {
-    "mtime": 1780836617.6053197,
-    "ast_hash": "89517b9665a932de464173ebbf6c0ee5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-search-input-has-aria-label-mobile\\test-failed-1.png": {
-    "mtime": 1780834142.1677558,
-    "ast_hash": "e62634e11948f613f844f7cb70f89587",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-search-input-has-aria-label-tablet\\test-failed-1.png": {
-    "mtime": 1780835595.91213,
-    "ast_hash": "9b4e8fb1fdc1707f50af59214a1d3a8c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--22776-crements-with-multiple-adds-desktop\\test-failed-1.png": {
-    "mtime": 1780836742.7690673,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--22776-crements-with-multiple-adds-mobile\\test-failed-1.png": {
-    "mtime": 1780834341.6092906,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--22776-crements-with-multiple-adds-tablet\\test-failed-1.png": {
-    "mtime": 1780835801.7442658,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--42762-ith-count-after-adding-item-desktop\\test-failed-1.png": {
-    "mtime": 1780836697.0308285,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--42762-ith-count-after-adding-item-mobile\\test-failed-1.png": {
-    "mtime": 1780834296.6117518,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--42762-ith-count-after-adding-item-tablet\\test-failed-1.png": {
-    "mtime": 1780835755.233705,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--79b89-ion-class-applied-after-add-desktop\\test-failed-1.png": {
-    "mtime": 1780836720.0584326,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--79b89-ion-class-applied-after-add-mobile\\test-failed-1.png": {
-    "mtime": 1780834319.0799508,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--79b89-ion-class-applied-after-add-tablet\\test-failed-1.png": {
-    "mtime": 1780835778.4583137,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-hidden-when-cart-is-empty-desktop\\test-failed-1.png": {
-    "mtime": 1780836673.7347362,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-hidden-when-cart-is-empty-mobile\\test-failed-1.png": {
-    "mtime": 1780834274.072059,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-hidden-when-cart-is-empty-tablet\\test-failed-1.png": {
-    "mtime": 1780835732.190768,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-opens-cart-drawer-on-click-desktop\\test-failed-1.png": {
-    "mtime": 1780836765.4623458,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-opens-cart-drawer-on-click-mobile\\test-failed-1.png": {
-    "mtime": 1780834364.0373917,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-opens-cart-drawer-on-click-tablet\\test-failed-1.png": {
-    "mtime": 1780835825.0354395,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--7232b-ss-gets-dark-mode-overrides-desktop\\test-finished-1.png": {
-    "mtime": 1780836466.5177608,
-    "ast_hash": "8d68a2af88e4c04d373d457ad3d88311",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--7232b-ss-gets-dark-mode-overrides-mobile\\test-failed-1.png": {
-    "mtime": 1780833774.6166515,
-    "ast_hash": "5cd5da5ae9b10854f4803424474c6fd0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--7232b-ss-gets-dark-mode-overrides-tablet\\test-failed-1.png": {
-    "mtime": 1780835221.1365204,
-    "ast_hash": "da3830229e59b3a9a3407a8579695e83",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--99015-h-prefers-color-scheme-dark-desktop\\test-finished-1.png": {
-    "mtime": 1780836464.5991275,
-    "ast_hash": "819fdc589383261075bc264c8079704c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--99015-h-prefers-color-scheme-dark-mobile\\test-failed-1.png": {
-    "mtime": 1780833751.8707283,
-    "ast_hash": "41a2bbe2dd2e9f96180722978daefeff",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--99015-h-prefers-color-scheme-dark-tablet\\test-failed-1.png": {
-    "mtime": 1780835197.719006,
-    "ast_hash": "535ec783fe14ee96c1b9e66e7300bc7b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--a7b18-h-prefers-color-scheme-dark-desktop\\test-finished-1.png": {
-    "mtime": 1780836460.235088,
-    "ast_hash": "068e7628b7898bf26fff68ce4fd72804",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--a7b18-h-prefers-color-scheme-dark-mobile\\test-failed-1.png": {
-    "mtime": 1780833706.3321166,
-    "ast_hash": "41daea54faa6dc88328fe3f5514043fa",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--a7b18-h-prefers-color-scheme-dark-tablet\\test-failed-1.png": {
-    "mtime": 1780835150.877056,
-    "ast_hash": "18cf4ad70fb45cc2e46dfd210e1c640f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--ae526-ss-gets-dark-mode-overrides-desktop\\test-finished-1.png": {
-    "mtime": 1780836462.1528547,
-    "ast_hash": "11c64b6e3f5d25305d2d10f3052e4a84",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--ae526-ss-gets-dark-mode-overrides-mobile\\test-failed-1.png": {
-    "mtime": 1780833729.0557034,
-    "ast_hash": "3a97ec533fadbe060989185f18c223f1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--ae526-ss-gets-dark-mode-overrides-tablet\\test-failed-1.png": {
-    "mtime": 1780835174.3499393,
-    "ast_hash": "39be0f3f9cb8908cf6458628cef8793b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-4380d-ss-gets-dark-mode-overrides-desktop\\test-finished-1.png": {
-    "mtime": 1780836470.2657886,
-    "ast_hash": "b5752c3d3ffe1032e37c229740686d6d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-4380d-ss-gets-dark-mode-overrides-mobile\\test-failed-1.png": {
-    "mtime": 1780833820.3011515,
-    "ast_hash": "4e9178f4864a51df1c153606e3e98634",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-4380d-ss-gets-dark-mode-overrides-tablet\\test-failed-1.png": {
-    "mtime": 1780835267.908275,
-    "ast_hash": "9a56e358da0407603b82c1705d0792e5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-a6f31-h-prefers-color-scheme-dark-desktop\\test-finished-1.png": {
-    "mtime": 1780836468.5358944,
-    "ast_hash": "480d784f5abc4d8d646c1a80edd3e1de",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-a6f31-h-prefers-color-scheme-dark-mobile\\test-failed-1.png": {
-    "mtime": 1780833797.4691486,
-    "ast_hash": "4e9178f4864a51df1c153606e3e98634",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-a6f31-h-prefers-color-scheme-dark-tablet\\test-failed-1.png": {
-    "mtime": 1780835244.646102,
-    "ast_hash": "9a56e358da0407603b82c1705d0792e5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-99bc4-ss-gets-dark-mode-overrides-desktop\\test-failed-1.png": {
-    "mtime": 1780836455.1705108,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-99bc4-ss-gets-dark-mode-overrides-mobile\\test-failed-1.png": {
-    "mtime": 1780833683.5379832,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-99bc4-ss-gets-dark-mode-overrides-tablet\\test-failed-1.png": {
-    "mtime": 1780835126.789871,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-d990e-h-prefers-color-scheme-dark-desktop\\test-failed-1.png": {
-    "mtime": 1780836431.792832,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-d990e-h-prefers-color-scheme-dark-mobile\\test-failed-1.png": {
-    "mtime": 1780833660.9824882,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-d990e-h-prefers-color-scheme-dark-tablet\\test-failed-1.png": {
-    "mtime": 1780835103.1327376,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-5271e-ler-icons-instead-of-emojis-desktop\\test-finished-1.png": {
-    "mtime": 1780836502.5513318,
-    "ast_hash": "f773d4fb9a979479844774f57e9f944d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-5271e-ler-icons-instead-of-emojis-mobile\\test-failed-1.png": {
-    "mtime": 1780833911.264691,
-    "ast_hash": "4e9178f4864a51df1c153606e3e98634",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-5271e-ler-icons-instead-of-emojis-tablet\\test-failed-1.png": {
-    "mtime": 1780835361.9471858,
-    "ast_hash": "9a56e358da0407603b82c1705d0792e5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-72391-ler-icons-instead-of-emojis-desktop\\test-finished-1.png": {
-    "mtime": 1780836496.2875967,
-    "ast_hash": "c77d37bcffb0a8ce8a75810adb4a033c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-72391-ler-icons-instead-of-emojis-mobile\\test-failed-1.png": {
-    "mtime": 1780833865.651681,
-    "ast_hash": "ee6903e84ff4ad34f978a7aa45f29433",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-72391-ler-icons-instead-of-emojis-tablet\\test-failed-1.png": {
-    "mtime": 1780835314.2876914,
-    "ast_hash": "9e0588a6b1d34076fc5f75648332fdf1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-bbb30-ler-icons-instead-of-emojis-desktop\\test-finished-1.png": {
-    "mtime": 1780836499.4267786,
-    "ast_hash": "f891fdb6a8a39ce66250d7d6b5ad5b82",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-bbb30-ler-icons-instead-of-emojis-mobile\\test-failed-1.png": {
-    "mtime": 1780833888.4649065,
-    "ast_hash": "e9923407f33cd40b4722f50b340f1521",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-bbb30-ler-icons-instead-of-emojis-tablet\\test-failed-1.png": {
-    "mtime": 1780835337.780974,
-    "ast_hash": "e7b02e3a021e6c0611fb276b49e3b73c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-C-ea542-ler-icons-instead-of-emojis-desktop\\test-failed-1.png": {
-    "mtime": 1780836490.910208,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-C-ea542-ler-icons-instead-of-emojis-mobile\\test-failed-1.png": {
-    "mtime": 1780833842.7898173,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-C-ea542-ler-icons-instead-of-emojis-tablet\\test-failed-1.png": {
-    "mtime": 1780835290.844311,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-emp-51b20--shows-EmptyState-component-desktop\\test-finished-1.png": {
-    "mtime": 1780836564.837713,
-    "ast_hash": "bdcf5906e6e57dc49ab6fa7967bd9e52",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-emp-51b20--shows-EmptyState-component-mobile\\test-finished-1.png": {
-    "mtime": 1780834058.2451725,
-    "ast_hash": "e930856c016da74aa9f494c339ff0674",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-emp-51b20--shows-EmptyState-component-tablet\\test-finished-1.png": {
-    "mtime": 1780835509.2267919,
-    "ast_hash": "8c9c68a23139c5f29610fc039c56f991",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-empty-cart-drawer-shows-empty-message-desktop\\test-failed-1.png": {
-    "mtime": 1780836585.6164086,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-empty-cart-drawer-shows-empty-message-mobile\\test-failed-1.png": {
-    "mtime": 1780834078.9864879,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-empty-cart-drawer-shows-empty-message-tablet\\test-failed-1.png": {
-    "mtime": 1780835530.156768,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-3cbef-efers-reduced-motion-reduce-desktop\\test-finished-1.png": {
-    "mtime": 1780836529.6458988,
-    "ast_hash": "aa1fb103058b294fb8ffc3e6e654c0c9",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-3cbef-efers-reduced-motion-reduce-mobile\\test-failed-1.png": {
-    "mtime": 1780833981.1928296,
-    "ast_hash": "a8e1099ae756b25698480dda82b63765",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-3cbef-efers-reduced-motion-reduce-tablet\\test-failed-1.png": {
-    "mtime": 1780835432.361592,
-    "ast_hash": "5b526601e234c9f9eb841f11a340d963",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-5fe9f-efers-reduced-motion-reduce-desktop\\test-finished-1.png": {
-    "mtime": 1780836531.817137,
-    "ast_hash": "dcc7b57a9c38b99d126c809dd01eadc0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-5fe9f-efers-reduced-motion-reduce-mobile\\test-failed-1.png": {
-    "mtime": 1780834006.892538,
-    "ast_hash": "eade813899e01c58ad6cccd8f3e0718a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-5fe9f-efers-reduced-motion-reduce-tablet\\test-failed-1.png": {
-    "mtime": 1780835455.9185705,
-    "ast_hash": "b1be08c6c67ebae2f1bf00fee1d8129f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-6740c-efers-reduced-motion-reduce-desktop\\test-finished-1.png": {
-    "mtime": 1780836527.604766,
-    "ast_hash": "73f5d804ed489d6ff9b5cb8477a163c1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-6740c-efers-reduced-motion-reduce-mobile\\test-failed-1.png": {
-    "mtime": 1780833958.3522444,
-    "ast_hash": "5be79c697b5325a3f9b4aa360f37561f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-6740c-efers-reduced-motion-reduce-tablet\\test-failed-1.png": {
-    "mtime": 1780835408.9114537,
-    "ast_hash": "0b395e53875bfedd3c5d638c503c9d16",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-C-fe2fa-efers-reduced-motion-reduce-desktop\\test-failed-1.png": {
-    "mtime": 1780836523.1309738,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-C-fe2fa-efers-reduced-motion-reduce-mobile\\test-failed-1.png": {
-    "mtime": 1780833933.7150922,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-C-fe2fa-efers-reduced-motion-reduce-tablet\\test-failed-1.png": {
-    "mtime": 1780835385.1052113,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-28da4-ders-at-tablet-width-768px--desktop\\test-failed-1.png": {
-    "mtime": 1780836981.7029748,
-    "ast_hash": "9a56e358da0407603b82c1705d0792e5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-28da4-ders-at-tablet-width-768px--mobile\\test-failed-1.png": {
-    "mtime": 1780834579.4268594,
-    "ast_hash": "f036b1985f34d75bf3f7706d3f0db3f0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-28da4-ders-at-tablet-width-768px--tablet\\test-failed-1.png": {
-    "mtime": 1780836041.5420866,
-    "ast_hash": "9a56e358da0407603b82c1705d0792e5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-3d173-ders-at-tablet-width-768px--desktop\\test-failed-1.png": {
-    "mtime": 1780836880.5326552,
-    "ast_hash": "99597a33f22f509dba418db0662103c6",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-3d173-ders-at-tablet-width-768px--mobile\\test-failed-1.png": {
-    "mtime": 1780834480.2420864,
-    "ast_hash": "1ec152e640157dea337d12cde9bba234",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-3d173-ders-at-tablet-width-768px--tablet\\test-failed-1.png": {
-    "mtime": 1780835942.7340496,
-    "ast_hash": "2e9f27401bf2a30a95a298589a702a7e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-57c11-rs-at-desktop-width-1280px--desktop\\test-failed-1.png": {
-    "mtime": 1780836834.03433,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-57c11-rs-at-desktop-width-1280px--mobile\\test-failed-1.png": {
-    "mtime": 1780834433.1934102,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-57c11-rs-at-desktop-width-1280px--tablet\\test-failed-1.png": {
-    "mtime": 1780835894.5022488,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-580d0-ders-at-tablet-width-768px--desktop\\test-failed-1.png": {
-    "mtime": 1780836933.0151732,
-    "ast_hash": "1eccfa13ee3d5da0c740a386dbc7e585",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-580d0-ders-at-tablet-width-768px--mobile\\test-failed-1.png": {
-    "mtime": 1780834529.1143298,
-    "ast_hash": "8d2a83a021d6446ccf5b6ea4bc2bb375",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-580d0-ders-at-tablet-width-768px--tablet\\test-failed-1.png": {
-    "mtime": 1780835992.39762,
-    "ast_hash": "35f1595b4695b95bc2b6941def8d9c7b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6c12c-ders-at-mobile-width-390px--desktop\\test-failed-1.png": {
-    "mtime": 1780836857.0201325,
-    "ast_hash": "1b0c89b0e6e1d776e1095f7aa4364b73",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6c12c-ders-at-mobile-width-390px--mobile\\test-failed-1.png": {
-    "mtime": 1780834456.8677711,
-    "ast_hash": "1c1efe6c910681d7251e64fca063355b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6c12c-ders-at-mobile-width-390px--tablet\\test-failed-1.png": {
-    "mtime": 1780835918.0721262,
-    "ast_hash": "3e3f35b821a12260b526c2e6f323cf72",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6da39-id-adapts-to-viewport-width-mobile\\test-failed-1.png": {
-    "mtime": 1780834612.095069,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6da39-id-adapts-to-viewport-width-tablet\\test-failed-1.png": {
-    "mtime": 1780836074.448395,
-    "ast_hash": "d54c2e954f8d4d7e80e01bdcf4e7bada",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-7f8fb-rs-at-desktop-width-1280px--desktop\\test-finished-1.png": {
-    "mtime": 1780836937.4962845,
-    "ast_hash": "d79ba0d910e4459eb390296af241a7ba",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-7f8fb-rs-at-desktop-width-1280px--mobile\\test-finished-1.png": {
-    "mtime": 1780834533.3065279,
-    "ast_hash": "0f119a9ce661805e3b6487a44753f9bf",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-7f8fb-rs-at-desktop-width-1280px--tablet\\test-finished-1.png": {
-    "mtime": 1780835997.0837176,
-    "ast_hash": "02bb0fa4cb31cbc7b5d146a2cbc1f79f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-8a410-ders-at-tablet-width-768px--desktop\\test-failed-1.png": {
-    "mtime": 1780836811.1388023,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-8a410-ders-at-tablet-width-768px--mobile\\test-failed-1.png": {
-    "mtime": 1780834410.156681,
-    "ast_hash": "a916e430f71550113d5e57610bce9f44",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-8a410-ders-at-tablet-width-768px--tablet\\test-failed-1.png": {
-    "mtime": 1780835871.4632707,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-9e1a6-rs-at-desktop-width-1280px--desktop\\test-finished-1.png": {
-    "mtime": 1780836986.2980032,
-    "ast_hash": "49156e4e96a0b806b2f6f046be627bf0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-9e1a6-rs-at-desktop-width-1280px--mobile\\test-finished-1.png": {
-    "mtime": 1780834584.4869337,
-    "ast_hash": "8406f8ff7d9b970be1a58d0fede8f31b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-9e1a6-rs-at-desktop-width-1280px--tablet\\test-finished-1.png": {
-    "mtime": 1780836046.4166028,
-    "ast_hash": "4eda6340bc8c0bba97d3929ce134e6c7",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-a761d-ders-at-mobile-width-390px--desktop\\test-failed-1.png": {
-    "mtime": 1780836909.467857,
-    "ast_hash": "eda30fd07bb81d48d8359c849fd41c60",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-a761d-ders-at-mobile-width-390px--mobile\\test-failed-1.png": {
-    "mtime": 1780834505.5723536,
-    "ast_hash": "6fd682cd571ba2690c0a67b6246cd9fa",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-a761d-ders-at-mobile-width-390px--tablet\\test-failed-1.png": {
-    "mtime": 1780835968.6013646,
-    "ast_hash": "fa5c08f750ab3c5b730cdfe3a93a8c3c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-b7a62-on-desktop-hidden-on-mobile-desktop\\test-finished-1.png": {
-    "mtime": 1780836993.2944758,
-    "ast_hash": "8c4f8c735810188065285d44caae004d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-b7a62-on-desktop-hidden-on-mobile-mobile\\test-finished-1.png": {
-    "mtime": 1780834591.4128213,
-    "ast_hash": "c87632c79d48e1f920bc9210cef8f2c3",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-b7a62-on-desktop-hidden-on-mobile-tablet\\test-finished-1.png": {
-    "mtime": 1780836053.4011323,
-    "ast_hash": "705e21100dd967fbd5e5439a8da41260",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d39eb-ders-at-mobile-width-390px--desktop\\test-failed-1.png": {
-    "mtime": 1780836958.3293047,
-    "ast_hash": "8bc76be41b4ef57e4ccd21789c17010f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d39eb-ders-at-mobile-width-390px--mobile\\test-failed-1.png": {
-    "mtime": 1780834554.189149,
-    "ast_hash": "4e9178f4864a51df1c153606e3e98634",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d39eb-ders-at-mobile-width-390px--tablet\\test-failed-1.png": {
-    "mtime": 1780836017.976681,
-    "ast_hash": "8bc76be41b4ef57e4ccd21789c17010f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d42db-ders-at-mobile-width-390px--desktop\\test-failed-1.png": {
-    "mtime": 1780836788.1793578,
-    "ast_hash": "d54c2e954f8d4d7e80e01bdcf4e7bada",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d42db-ders-at-mobile-width-390px--mobile\\test-failed-1.png": {
-    "mtime": 1780834386.9325006,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d42db-ders-at-mobile-width-390px--tablet\\test-failed-1.png": {
-    "mtime": 1780835848.0734136,
-    "ast_hash": "d54c2e954f8d4d7e80e01bdcf4e7bada",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-f40e4-rs-at-desktop-width-1280px--desktop\\test-finished-1.png": {
-    "mtime": 1780836886.779496,
-    "ast_hash": "b697a6805abac5678de79f756154ff1a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-f40e4-rs-at-desktop-width-1280px--mobile\\test-finished-1.png": {
-    "mtime": 1780834484.741889,
-    "ast_hash": "c686f24ef420d8775d0c52193db1f53b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-f40e4-rs-at-desktop-width-1280px--tablet\\test-finished-1.png": {
-    "mtime": 1780835947.7022932,
-    "ast_hash": "62c509a2481f2ba9ffffc101aa808683",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-6bcd7-ws-SkeletonBase-during-load-desktop\\test-finished-1.png": {
-    "mtime": 1780836560.0030463,
-    "ast_hash": "fc896f25ad37951b9775e666a59bce11",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-6bcd7-ws-SkeletonBase-during-load-mobile\\test-failed-1.png": {
-    "mtime": 1780834051.634645,
-    "ast_hash": "4e9178f4864a51df1c153606e3e98634",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-6bcd7-ws-SkeletonBase-during-load-tablet\\test-failed-1.png": {
-    "mtime": 1780835502.0109186,
-    "ast_hash": "9a56e358da0407603b82c1705d0792e5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-7cf83-immer-skeletons-during-load-desktop\\test-finished-1.png": {
-    "mtime": 1780836558.5176215,
-    "ast_hash": "f783458ee11a8f9d1acdaa4747d59e4d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-7cf83-immer-skeletons-during-load-mobile\\test-finished-1.png": {
-    "mtime": 1780834035.2251856,
-    "ast_hash": "c3d646fcd2d126841d581a5df1ad042a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-7cf83-immer-skeletons-during-load-tablet\\test-finished-1.png": {
-    "mtime": 1780835485.4704902,
-    "ast_hash": "41b233c97a8fb1279a1f59f0abc85864",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-ea972-skeleton-blocks-during-load-desktop\\test-failed-1.png": {
-    "mtime": 1780836552.3940272,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-ea972-skeleton-blocks-during-load-mobile\\test-failed-1.png": {
-    "mtime": 1780834029.3905542,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-ea972-skeleton-blocks-during-load-tablet\\test-failed-1.png": {
-    "mtime": 1780835478.8847597,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--1c9f1-oads-without-console-errors-mobile\\test-failed-1.png": {
-    "mtime": 1780834743.7987294,
-    "ast_hash": "6871453a00404aa41177423dbc0a974b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--1c9f1-oads-without-console-errors-tablet\\test-failed-1.png": {
-    "mtime": 1780836207.8994095,
-    "ast_hash": "d6fa23b6f322087786604640c800b9eb",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--61ffe-CSS-theme-variables-defined-mobile\\test-failed-1.png": {
-    "mtime": 1780834715.1751547,
-    "ast_hash": "b6f20c3390a647ff70dd43a137b1ccb4",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--61ffe-CSS-theme-variables-defined-tablet\\test-failed-1.png": {
-    "mtime": 1780836179.3381107,
-    "ast_hash": "a57ebdd64813cdd2f89ff48defbfdba1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--96130-CSS-theme-variables-defined-mobile\\test-failed-1.png": {
-    "mtime": 1780834767.5939028,
-    "ast_hash": "7c03fe80a2b6aab2a28c04c9a78eafe0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--96130-CSS-theme-variables-defined-tablet\\test-failed-1.png": {
-    "mtime": 1780836231.6653976,
-    "ast_hash": "2c3415b104e9f03291ef3d04910f5d90",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--aa665-CSS-theme-variables-defined-mobile\\test-failed-1.png": {
-    "mtime": 1780834662.4505024,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--aa665-CSS-theme-variables-defined-tablet\\test-failed-1.png": {
-    "mtime": 1780836126.6631522,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--b67dc-oads-without-console-errors-mobile\\test-failed-1.png": {
-    "mtime": 1780834796.9684324,
-    "ast_hash": "4e9178f4864a51df1c153606e3e98634",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--b67dc-oads-without-console-errors-tablet\\test-failed-1.png": {
-    "mtime": 1780836260.332017,
-    "ast_hash": "9a56e358da0407603b82c1705d0792e5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--c563b-oads-without-console-errors-mobile\\test-failed-1.png": {
-    "mtime": 1780834691.1987154,
-    "ast_hash": "9893e94a4a294c5959e46184fcbc728a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--c563b-oads-without-console-errors-tablet\\test-failed-1.png": {
-    "mtime": 1780836155.3144197,
-    "ast_hash": "8d7aa4f1fe98c7bd3056b6a5a4cb02dc",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--d3009-CSS-theme-variables-defined-mobile\\test-failed-1.png": {
-    "mtime": 1780834820.270679,
-    "ast_hash": "4e9178f4864a51df1c153606e3e98634",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--d3009-CSS-theme-variables-defined-tablet\\test-failed-1.png": {
-    "mtime": 1780836285.7873619,
-    "ast_hash": "9a56e358da0407603b82c1705d0792e5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--ea5ab-oads-without-console-errors-mobile\\test-failed-1.png": {
-    "mtime": 1780834639.7670085,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--ea5ab-oads-without-console-errors-tablet\\test-failed-1.png": {
-    "mtime": 1780836102.9392412,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Adm-88466-rd-uses-ti-ti--icon-classes-desktop\\test-finished-1.png": {
-    "mtime": 1780836643.9623177,
-    "ast_hash": "ec370595799e212608c7eafe76b58cb2",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Adm-88466-rd-uses-ti-ti--icon-classes-mobile\\test-failed-1.png": {
-    "mtime": 1780834188.0313115,
-    "ast_hash": "d3f96640111f3e5621157df3b70bd197",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Adm-88466-rd-uses-ti-ti--icon-classes-tablet\\test-failed-1.png": {
-    "mtime": 1780835642.3283896,
-    "ast_hash": "1463cc2062683099d5120a4e2d488d05",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-adm-dcadd-Tabler-icons-for-navigation-desktop\\test-finished-1.png": {
-    "mtime": 1780836653.1264231,
-    "ast_hash": "ef7e3be85021c1b86f890a19b2f92cb1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-adm-dcadd-Tabler-icons-for-navigation-mobile\\test-failed-1.png": {
-    "mtime": 1780834251.782248,
-    "ast_hash": "c10fa2f602c7400159f787ec77965042",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-adm-dcadd-Tabler-icons-for-navigation-tablet\\test-failed-1.png": {
-    "mtime": 1780835709.2812068,
-    "ast_hash": "1d52cc4236854a35bd116739675f1538",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Admin-Orders-uses-ti-ti--icon-classes-desktop\\test-finished-1.png": {
-    "mtime": 1780836647.1003058,
-    "ast_hash": "f4b73e5deae5996ccd58e96900993481",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Admin-Orders-uses-ti-ti--icon-classes-mobile\\test-failed-1.png": {
-    "mtime": 1780834210.9214325,
-    "ast_hash": "f2c15d2b599ab9591cdc6a8a0bb16395",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Admin-Orders-uses-ti-ti--icon-classes-tablet\\test-failed-1.png": {
-    "mtime": 1780835667.598882,
-    "ast_hash": "532c85ffb9a854ccadc830719c1f56ca",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Analytics-uses-ti-ti--icon-classes-desktop\\test-finished-1.png": {
-    "mtime": 1780836650.1461945,
-    "ast_hash": "4a5653a533c4a1d41f5190ea96fd8e93",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Analytics-uses-ti-ti--icon-classes-mobile\\test-failed-1.png": {
-    "mtime": 1780834234.054456,
-    "ast_hash": "4e9178f4864a51df1c153606e3e98634",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Analytics-uses-ti-ti--icon-classes-tablet\\test-failed-1.png": {
-    "mtime": 1780835690.994157,
-    "ast_hash": "9a56e358da0407603b82c1705d0792e5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Client-Menu-uses-ti-ti--icon-classes-desktop\\test-failed-1.png": {
-    "mtime": 1780836638.3053372,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Client-Menu-uses-ti-ti--icon-classes-mobile\\test-failed-1.png": {
-    "mtime": 1780834164.5842502,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Client-Menu-uses-ti-ti--icon-classes-tablet\\test-failed-1.png": {
-    "mtime": 1780835618.982345,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5a687-h-after-rapid-theme-cycling-desktop\\test-finished-1.png": {
-    "mtime": 1780836411.2277935,
-    "ast_hash": "42f02053755b90c0bacdf5496e097e5d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5a687-h-after-rapid-theme-cycling-mobile\\test-failed-1.png": {
-    "mtime": 1780833638.5237954,
-    "ast_hash": "4e9178f4864a51df1c153606e3e98634",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5a687-h-after-rapid-theme-cycling-tablet\\test-failed-1.png": {
-    "mtime": 1780835080.184445,
-    "ast_hash": "9a56e358da0407603b82c1705d0792e5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5de22-h-after-rapid-theme-cycling-desktop\\test-finished-1.png": {
-    "mtime": 1780836406.119422,
-    "ast_hash": "4ecc10e2328835db9cf639e76982431f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5de22-h-after-rapid-theme-cycling-mobile\\test-failed-1.png": {
-    "mtime": 1780833591.3194506,
-    "ast_hash": "269af76affa1c283bd9c13fb527c98cc",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5de22-h-after-rapid-theme-cycling-tablet\\test-failed-1.png": {
-    "mtime": 1780835033.357848,
-    "ast_hash": "c2b3ce07b4cc069dc42b5d821878dbb5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-ea001-h-after-rapid-theme-cycling-desktop\\test-finished-1.png": {
-    "mtime": 1780836400.8275354,
-    "ast_hash": "9e8cca23450760688db392955db91790",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-ea001-h-after-rapid-theme-cycling-mobile\\test-failed-1.png": {
-    "mtime": 1780833545.7335105,
-    "ast_hash": "45117160aaa7256d47e840cb23b5eff4",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-ea001-h-after-rapid-theme-cycling-tablet\\test-failed-1.png": {
-    "mtime": 1780834985.7617993,
-    "ast_hash": "4d980077975f6d8f2fbcdc22a9ae040d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9ca34--Menu-changes-CSS-variables-desktop\\test-failed-1.png": {
-    "mtime": 1780836370.3090527,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9ca34--Menu-changes-CSS-variables-mobile\\test-failed-1.png": {
-    "mtime": 1780833477.551356,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9ca34--Menu-changes-CSS-variables-tablet\\test-failed-1.png": {
-    "mtime": 1780834913.583048,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9cdb2-ytics-changes-CSS-variables-desktop\\test-finished-1.png": {
-    "mtime": 1780836409.3276806,
-    "ast_hash": "b4fdc62e93399ce594fa4927ac804f3a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9cdb2-ytics-changes-CSS-variables-mobile\\test-failed-1.png": {
-    "mtime": 1780833615.8107321,
-    "ast_hash": "4e9178f4864a51df1c153606e3e98634",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9cdb2-ytics-changes-CSS-variables-tablet\\test-failed-1.png": {
-    "mtime": 1780835056.8585956,
-    "ast_hash": "9a56e358da0407603b82c1705d0792e5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-a441b-rders-changes-CSS-variables-desktop\\test-finished-1.png": {
-    "mtime": 1780836404.2568605,
-    "ast_hash": "3ae0f7711b657882474477d936b8da32",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-a441b-rders-changes-CSS-variables-mobile\\test-failed-1.png": {
-    "mtime": 1780833568.546824,
-    "ast_hash": "4b813f642f80565ec26301026ba3414d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-a441b-rders-changes-CSS-variables-tablet\\test-failed-1.png": {
-    "mtime": 1780835009.6596086,
-    "ast_hash": "915f2fc32316926fc16915db695db1ce",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-C-c1888-h-after-rapid-theme-cycling-desktop\\test-failed-1.png": {
-    "mtime": 1780836393.0242524,
-    "ast_hash": "de672eca1e0890be52f9596e7a730175",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-C-c1888-h-after-rapid-theme-cycling-mobile\\test-failed-1.png": {
-    "mtime": 1780833499.380674,
-    "ast_hash": "7be56f8a25b3e44d08c9993f5589497c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-C-c1888-h-after-rapid-theme-cycling-tablet\\test-failed-1.png": {
-    "mtime": 1780834937.310517,
-    "ast_hash": "b88520f6bcba4cea32b5328778162932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-fad7e-board-changes-CSS-variables-desktop\\test-finished-1.png": {
-    "mtime": 1780836398.8947372,
-    "ast_hash": "cbd0f07298fafc7a5048976cefe3d8d6",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-fad7e-board-changes-CSS-variables-mobile\\test-failed-1.png": {
-    "mtime": 1780833522.691896,
-    "ast_hash": "9c3c2100f650dc7dd83ce3c5f9c4b065",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-fad7e-board-changes-CSS-variables-tablet\\test-failed-1.png": {
-    "mtime": 1780834961.7150092,
-    "ast_hash": "d455d5d31cba4773569c58e82a6eeeb6",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\3b2250660171255ee0118c6242a8f175d3b8406f.webm": {
-    "mtime": 1780833459.6496353,
-    "ast_hash": "323c29b6a8ef8038f1f1ffba6c6b8880",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\3b2f406de5786f48f4c871493e655cef9003515e.webm": {
-    "mtime": 1780833459.6611478,
-    "ast_hash": "760306fc2c542a433296ee11af44a258",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\42c1f0c62d2860e9774e262e19bc25629048285a.webm": {
-    "mtime": 1780833459.677837,
-    "ast_hash": "13326780b5e3ee2227e3922429ca640d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\8e0ca0d6533860fc6aac666426dc3a6bd10eae3f.webm": {
-    "mtime": 1780833459.6844869,
-    "ast_hash": "fbb2a8138e3b0649138e95155bd27e5b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\b13f067ee2eba9e6f4a4657aab6f6c437533d077.webm": {
-    "mtime": 1780833459.6665936,
-    "ast_hash": "b6f80a1a3f55adf3c2a716125ab02a17",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\c18dd56327ab141bdeab37088e15afa403bfab78.webm": {
-    "mtime": 1780833459.6803534,
-    "ast_hash": "f3a3b7bef44f50ff5aa4d0dfde969aca",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\c829da03aec15d647ad8d4b9d1a7f208b8af649e.webm": {
-    "mtime": 1780833459.6571486,
-    "ast_hash": "25728fc6d840e82ce798adf56bb39a1d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\da68cc5d99bb40f93500c18d4eedd8788aa9b41d.webm": {
-    "mtime": 1780833459.6744506,
-    "ast_hash": "dc9c3268574ecdbf56337513a32d91d9",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\e2a3beda6df554b3b84932076d9528c5f23c8ae8.webm": {
-    "mtime": 1780833459.670757,
-    "ast_hash": "082a21c6e9410f74db7966ef26cf7bb4",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\html-report\\data\\f35328a93dee358cb1fee022637d6ae121b4b278.webm": {
-    "mtime": 1780833459.6541479,
-    "ast_hash": "2aadc921ff8baf2191ad2f4073d8155d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\.playwright-artifacts-149\\page@4187c62c37768f6a3e98a02eb07036d0.webm": {
-    "mtime": 1780836986.4037802,
-    "ast_hash": "abc12bfd8851273eb422b12ea056791c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\.playwright-artifacts-149\\page@69b4347e5d29f040ce195711510df1b5.webm": {
-    "mtime": 1780836993.562096,
-    "ast_hash": "9bd5c8826c0e650b3a668f83cb8e3811",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-1f20b-tep-2-Onboarding-page-loads-desktop\\video.webm": {
-    "mtime": 1780836297.3714192,
-    "ast_hash": "9dba74125915297a6667c20c8d616b88",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-1f20b-tep-2-Onboarding-page-loads-tablet\\video.webm": {
-    "mtime": 1780834833.618417,
-    "ast_hash": "5287a3a359b7f09fd107fa9d2f5223ce",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-4fe22-Logout-protects-admin-pages-desktop\\video.webm": {
-    "mtime": 1780836305.6450167,
-    "ast_hash": "d5d2ec5d2a9bb648e775a6f9e4bed806",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-4fe22-Logout-protects-admin-pages-tablet\\video.webm": {
-    "mtime": 1780834843.7585163,
-    "ast_hash": "a4bed3708c286f0da71afc866423e1cd",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-b3a1f-login-with-test-credentials-desktop\\video.webm": {
-    "mtime": 1780836290.3518846,
-    "ast_hash": "d7ea4a91749b89dac305973e9cf4ba7a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-b3a1f-login-with-test-credentials-tablet\\video.webm": {
-    "mtime": 1780834825.1403844,
-    "ast_hash": "a84e68de0e48dd67f1461a3c93e095e1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-b793c--admin-pages-are-accessible-desktop\\video.webm": {
-    "mtime": 1780836293.5323071,
-    "ast_hash": "0cd6d237c44f85986aaf842551787626",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\onboarding-e2e-E2E-Login-\u2192-b793c--admin-pages-are-accessible-tablet\\video.webm": {
-    "mtime": 1780834829.1039503,
-    "ast_hash": "ac78a3d49748ae0cfc09a1b328b8ec56",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-1e132-er-visible-on-client-header-desktop\\video.webm": {
-    "mtime": 1780836348.6875377,
-    "ast_hash": "6b0e7dcbc1977302df1d1043e84de53e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-1e132-er-visible-on-client-header-tablet\\video.webm": {
-    "mtime": 1780834891.6996007,
-    "ast_hash": "e24fc984132eb0c425fd0c0225776fa2",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-28388-fication-Menu-Manager-loads-desktop\\video.webm": {
-    "mtime": 1780836314.8399055,
-    "ast_hash": "9e75122c08606e9f56470821e328d1fe",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-28388-fication-Menu-Manager-loads-tablet\\video.webm": {
-    "mtime": 1780834854.7545748,
-    "ast_hash": "2de4f77f85617af9765930828662e3f2",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-2d38a--products-with-Tabler-icons-desktop\\video.webm": {
-    "mtime": 1780836331.2216752,
-    "ast_hash": "d9f84312fe59869c6f9350b7a320a56c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-2d38a--products-with-Tabler-icons-mobile\\video.webm": {
-    "mtime": 1780833489.5209804,
-    "ast_hash": "94278bd66bfc2fa0309a307f451c02fb",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-2d38a--products-with-Tabler-icons-tablet\\video.webm": {
-    "mtime": 1780834871.90248,
-    "ast_hash": "eb0c17b8a99317516864f03969540691",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-cea23-n-Supply-Library-page-loads-desktop\\video.webm": {
-    "mtime": 1780836310.8652573,
-    "ast_hash": "a66eea5c9a4760e81d2ad2786dddd37e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\real-session-menu-Real-Ses-cea23-n-Supply-Library-page-loads-tablet\\video.webm": {
-    "mtime": 1780834849.6725435,
-    "ast_hash": "3cd9e509a717696741d2822a3bcb8080",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-ad-099cc-ttons-have-accessible-names-desktop\\video.webm": {
-    "mtime": 1780836614.2346764,
-    "ast_hash": "a4f352871b4c559e0d77036216365b41",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-ad-099cc-ttons-have-accessible-names-mobile\\video.webm": {
-    "mtime": 1780834125.1840305,
-    "ast_hash": "1d877aa56005cbee0e6eb8410a03c468",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-ad-099cc-ttons-have-accessible-names-tablet\\video.webm": {
-    "mtime": 1780835578.8797748,
-    "ast_hash": "fb7c29df16623b73d562a5fa18827f1c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-in-2cde5-ssible-names-on-client-menu-desktop\\video.webm": {
-    "mtime": 1780836609.669628,
-    "ast_hash": "b165e7e345cf2651c323b3d5ec307099",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-in-2cde5-ssible-names-on-client-menu-mobile\\video.webm": {
-    "mtime": 1780834102.3718429,
-    "ast_hash": "c16ea5417ab60b5bb04f7cde18ca28ac",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-in-2cde5-ssible-names-on-client-menu-tablet\\video.webm": {
-    "mtime": 1780835555.2623823,
-    "ast_hash": "00abf67ceb8f001797c8ef24c6403384",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-search-input-has-aria-label-desktop\\video.webm": {
-    "mtime": 1780836617.8375251,
-    "ast_hash": "c54c29f62db7ed273e3e51dc6d1e6fe4",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-search-input-has-aria-label-mobile\\video.webm": {
-    "mtime": 1780834142.806976,
-    "ast_hash": "7d18e58990e8e33647974b7f547f1264",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Accessibility-search-input-has-aria-label-tablet\\video.webm": {
-    "mtime": 1780835597.118437,
-    "ast_hash": "66780100ad6098fba610f91ad5dfdf36",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--22776-crements-with-multiple-adds-desktop\\video.webm": {
-    "mtime": 1780836743.813489,
-    "ast_hash": "a81efba5185f4b6675af5f236a72a9c9",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--22776-crements-with-multiple-adds-mobile\\video.webm": {
-    "mtime": 1780834342.423499,
-    "ast_hash": "f5096f6062cf08f123e8fc15474cb9ed",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--22776-crements-with-multiple-adds-tablet\\video.webm": {
-    "mtime": 1780835803.1363316,
-    "ast_hash": "5361707e64b4ad35e39d7bf15e9320d1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--42762-ith-count-after-adding-item-desktop\\video.webm": {
-    "mtime": 1780836698.1659417,
-    "ast_hash": "59149d4dfb96afd041db22ac52e13252",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--42762-ith-count-after-adding-item-mobile\\video.webm": {
-    "mtime": 1780834297.4450297,
-    "ast_hash": "d8cb121eda738e964ec5c214c7b9ad36",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--42762-ith-count-after-adding-item-tablet\\video.webm": {
-    "mtime": 1780835756.6240587,
-    "ast_hash": "39ab6da9c3cb05615b62083441ac1388",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--79b89-ion-class-applied-after-add-desktop\\video.webm": {
-    "mtime": 1780836721.0665753,
-    "ast_hash": "da1def6dd9002d63741956f9f23e53d4",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--79b89-ion-class-applied-after-add-mobile\\video.webm": {
-    "mtime": 1780834319.939342,
-    "ast_hash": "f99a5afaa0f1eea9de045ca78f0b792c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB--79b89-ion-class-applied-after-add-tablet\\video.webm": {
-    "mtime": 1780835780.1245196,
-    "ast_hash": "b19e5a79a05999b1550b64b0625283cc",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-hidden-when-cart-is-empty-desktop\\video.webm": {
-    "mtime": 1780836675.1144576,
-    "ast_hash": "ba4fea4bbf75a08f3b9215960bead189",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-hidden-when-cart-is-empty-mobile\\video.webm": {
-    "mtime": 1780834274.942607,
-    "ast_hash": "b6e40279a75a0898dd310174e01cdb0c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-hidden-when-cart-is-empty-tablet\\video.webm": {
-    "mtime": 1780835733.6195748,
-    "ast_hash": "c0567c66647905e0285bd15a55d892e7",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-opens-cart-drawer-on-click-desktop\\video.webm": {
-    "mtime": 1780836766.474567,
-    "ast_hash": "adb61cc886adf7112c2574cbb6639565",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-opens-cart-drawer-on-click-mobile\\video.webm": {
-    "mtime": 1780834365.0066693,
-    "ast_hash": "359330bb0c1f70cadc57803d4c6a10d5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-CartFAB-CartFAB-opens-cart-drawer-on-click-tablet\\video.webm": {
-    "mtime": 1780835826.4298265,
-    "ast_hash": "7ff5a0c4420b63fa4f5bc9eeed1099dd",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--7232b-ss-gets-dark-mode-overrides-desktop\\video.webm": {
-    "mtime": 1780836466.6683688,
-    "ast_hash": "26650e1e28db9aee278f57b19142c147",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--7232b-ss-gets-dark-mode-overrides-mobile\\video.webm": {
-    "mtime": 1780833775.5071793,
-    "ast_hash": "2a13f2706ea391654fbc841e4aab8cde",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--7232b-ss-gets-dark-mode-overrides-tablet\\video.webm": {
-    "mtime": 1780835222.6678278,
-    "ast_hash": "995727b22ed69193b560134b81bce949",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--99015-h-prefers-color-scheme-dark-desktop\\video.webm": {
-    "mtime": 1780836464.7528644,
-    "ast_hash": "8c603b7e5b8abaa008a219bf50ddcfd0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--99015-h-prefers-color-scheme-dark-mobile\\video.webm": {
-    "mtime": 1780833752.6865287,
-    "ast_hash": "7b768df4ef6add06145bb2f6be642262",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--99015-h-prefers-color-scheme-dark-tablet\\video.webm": {
-    "mtime": 1780835199.1120956,
-    "ast_hash": "855858897f86921eb896af4a5b07d1c4",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--a7b18-h-prefers-color-scheme-dark-desktop\\video.webm": {
-    "mtime": 1780836460.4295645,
-    "ast_hash": "6d829d0bed63b2a7df355784689a0c85",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--a7b18-h-prefers-color-scheme-dark-mobile\\video.webm": {
-    "mtime": 1780833707.1354196,
-    "ast_hash": "8750f732901dde2445b9530b6eaad4c7",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--a7b18-h-prefers-color-scheme-dark-tablet\\video.webm": {
-    "mtime": 1780835152.3211806,
-    "ast_hash": "d5f1639d653525b2e17308d3259ed124",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--ae526-ss-gets-dark-mode-overrides-desktop\\video.webm": {
-    "mtime": 1780836462.3372192,
-    "ast_hash": "6d959cdff6d3d964d71726948c9ab0e9",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--ae526-ss-gets-dark-mode-overrides-mobile\\video.webm": {
-    "mtime": 1780833729.9147851,
-    "ast_hash": "465060d2d6010a666e8f540e9b9df65d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Admin--ae526-ss-gets-dark-mode-overrides-tablet\\video.webm": {
-    "mtime": 1780835175.7761145,
-    "ast_hash": "e5487ad70406cb63ead59d2fd2e55531",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-4380d-ss-gets-dark-mode-overrides-desktop\\video.webm": {
-    "mtime": 1780836470.4326627,
-    "ast_hash": "63d700d909bb7c5eb21063e02001ec59",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-4380d-ss-gets-dark-mode-overrides-mobile\\video.webm": {
-    "mtime": 1780833821.0669286,
-    "ast_hash": "aa0c3594bf27a749af54007c3b3eb2da",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-4380d-ss-gets-dark-mode-overrides-tablet\\video.webm": {
-    "mtime": 1780835269.1555574,
-    "ast_hash": "e9082d8b4efbebad5e853491278baa47",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-a6f31-h-prefers-color-scheme-dark-desktop\\video.webm": {
-    "mtime": 1780836468.7304442,
-    "ast_hash": "bc2585127556f8bc3c67be89bfb1219a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-a6f31-h-prefers-color-scheme-dark-mobile\\video.webm": {
-    "mtime": 1780833798.2460737,
-    "ast_hash": "e1711ec049881be6134f70689f8fff70",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Analyt-a6f31-h-prefers-color-scheme-dark-tablet\\video.webm": {
-    "mtime": 1780835245.9245114,
-    "ast_hash": "2bb0b77b81b9592bc4c33bfa40f326ef",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-99bc4-ss-gets-dark-mode-overrides-desktop\\video.webm": {
-    "mtime": 1780836456.3918676,
-    "ast_hash": "4259ee635fbb3289288a5d146dd3fb91",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-99bc4-ss-gets-dark-mode-overrides-mobile\\video.webm": {
-    "mtime": 1780833684.3913155,
-    "ast_hash": "e3b7874fb50ba100dd90e1ac3e38c74f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-99bc4-ss-gets-dark-mode-overrides-tablet\\video.webm": {
-    "mtime": 1780835128.764041,
-    "ast_hash": "81420a703326404c927d280290a04f1e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-d990e-h-prefers-color-scheme-dark-desktop\\video.webm": {
-    "mtime": 1780836433.2779436,
-    "ast_hash": "f50f516b5bc69c7e0c5c46e0ff55c56f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-d990e-h-prefers-color-scheme-dark-mobile\\video.webm": {
-    "mtime": 1780833661.858521,
-    "ast_hash": "09149be4eae6786cf84fdc705fbe4963",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Dark-Mode-Client-d990e-h-prefers-color-scheme-dark-tablet\\video.webm": {
-    "mtime": 1780835104.5371776,
-    "ast_hash": "fd81bf249b3a1367d9f1cccd328db0b1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-5271e-ler-icons-instead-of-emojis-desktop\\video.webm": {
-    "mtime": 1780836502.6641853,
-    "ast_hash": "ee15782de92dbca8fae3e6da13a7cda1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-5271e-ler-icons-instead-of-emojis-mobile\\video.webm": {
-    "mtime": 1780833912.0268083,
-    "ast_hash": "d391ec4afcaa2fb40cccbbd5b4c1b686",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-5271e-ler-icons-instead-of-emojis-tablet\\video.webm": {
-    "mtime": 1780835363.2075005,
-    "ast_hash": "7388a2365d4ebd3fb7c0f25358cbee66",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-72391-ler-icons-instead-of-emojis-desktop\\video.webm": {
-    "mtime": 1780836496.5028975,
-    "ast_hash": "775e13c6c0ad01fd0eec3dd334060a35",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-72391-ler-icons-instead-of-emojis-mobile\\video.webm": {
-    "mtime": 1780833866.5151181,
-    "ast_hash": "e6d94feee52021814a18f3b383614c2e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-72391-ler-icons-instead-of-emojis-tablet\\video.webm": {
-    "mtime": 1780835315.755297,
-    "ast_hash": "819f8ba1847258a8b5e541393f93114e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-bbb30-ler-icons-instead-of-emojis-desktop\\video.webm": {
-    "mtime": 1780836499.632911,
-    "ast_hash": "aeaa9029ab001563c4108e0109d533da",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-bbb30-ler-icons-instead-of-emojis-mobile\\video.webm": {
-    "mtime": 1780833889.274158,
-    "ast_hash": "3ce4fb553aa0a6dda42ce725ce3414a9",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-A-bbb30-ler-icons-instead-of-emojis-tablet\\video.webm": {
-    "mtime": 1780835339.745005,
-    "ast_hash": "0183f0b439cc3116d3a7eaf46d3958ca",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-C-ea542-ler-icons-instead-of-emojis-desktop\\video.webm": {
-    "mtime": 1780836492.0870895,
-    "ast_hash": "faebe0bb713c27cca79b7b05917490a1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-C-ea542-ler-icons-instead-of-emojis-mobile\\video.webm": {
-    "mtime": 1780833843.6185484,
-    "ast_hash": "ca728cade62ca1d5efc7b9bd90a6af7f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Emoji-Free-DOM-C-ea542-ler-icons-instead-of-emojis-tablet\\video.webm": {
-    "mtime": 1780835292.3106675,
-    "ast_hash": "6518b30ad0b0c0cc63713fb6023de215",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-emp-51b20--shows-EmptyState-component-desktop\\video.webm": {
-    "mtime": 1780836565.1168535,
-    "ast_hash": "1e6db3cae2d08b28fed2a9534989832c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-emp-51b20--shows-EmptyState-component-mobile\\video.webm": {
-    "mtime": 1780834058.490053,
-    "ast_hash": "3f53190e69aea398801af020eb21dee0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-emp-51b20--shows-EmptyState-component-tablet\\video.webm": {
-    "mtime": 1780835509.633639,
-    "ast_hash": "7d846c8b1acd77e2216c807ee612c348",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-empty-cart-drawer-shows-empty-message-desktop\\video.webm": {
-    "mtime": 1780836586.9038002,
-    "ast_hash": "014ea2f593a21866910478a78c9c2cc4",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-empty-cart-drawer-shows-empty-message-mobile\\video.webm": {
-    "mtime": 1780834079.8857596,
-    "ast_hash": "8861323ab84972924fdbb925d46dcb52",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Empty-States-empty-cart-drawer-shows-empty-message-tablet\\video.webm": {
-    "mtime": 1780835532.2362719,
-    "ast_hash": "5655242287e0436826c9b445db8ac21d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-3cbef-efers-reduced-motion-reduce-desktop\\video.webm": {
-    "mtime": 1780836529.8034747,
-    "ast_hash": "7825b6260e5c3415bcb6578dda2f4138",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-3cbef-efers-reduced-motion-reduce-mobile\\video.webm": {
-    "mtime": 1780833982.0022733,
-    "ast_hash": "b02cba7febfb88b4085f6f3b117dc280",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-3cbef-efers-reduced-motion-reduce-tablet\\video.webm": {
-    "mtime": 1780835433.9365337,
-    "ast_hash": "a9a2016ae243b66eda74d8868273ba6c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-5fe9f-efers-reduced-motion-reduce-desktop\\video.webm": {
-    "mtime": 1780836531.9192572,
-    "ast_hash": "bf324f0dab2650d8cc7b8d6d18baee20",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-5fe9f-efers-reduced-motion-reduce-mobile\\video.webm": {
-    "mtime": 1780834007.6767974,
-    "ast_hash": "83d24b16b6398ba2bcd4d567a5bf8ad3",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-5fe9f-efers-reduced-motion-reduce-tablet\\video.webm": {
-    "mtime": 1780835457.2122452,
-    "ast_hash": "d2d2e6fa09a342fabfe92ead2319e800",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-6740c-efers-reduced-motion-reduce-desktop\\video.webm": {
-    "mtime": 1780836527.7602148,
-    "ast_hash": "0354637332320ef9379317bd54713b88",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-6740c-efers-reduced-motion-reduce-mobile\\video.webm": {
-    "mtime": 1780833959.1494606,
-    "ast_hash": "bae51b4fbecb6a9f38ce39a5da6ad16b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-A-6740c-efers-reduced-motion-reduce-tablet\\video.webm": {
-    "mtime": 1780835410.4153588,
-    "ast_hash": "c4defeb4314e77b8b2b16e11d0aa341b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-C-fe2fa-efers-reduced-motion-reduce-desktop\\video.webm": {
-    "mtime": 1780836524.454864,
-    "ast_hash": "a11df226de7952fd3f0ccbd16ac92c7d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-C-fe2fa-efers-reduced-motion-reduce-mobile\\video.webm": {
-    "mtime": 1780833934.5424027,
-    "ast_hash": "42d8434e6b3e7c9686b288dc7790d931",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Reduced-Motion-C-fe2fa-efers-reduced-motion-reduce-tablet\\video.webm": {
-    "mtime": 1780835386.9788847,
-    "ast_hash": "ba3331b311e8cbfbddd36485401edbe0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-28da4-ders-at-tablet-width-768px--desktop\\video.webm": {
-    "mtime": 1780836983.142936,
-    "ast_hash": "d9c63ff4a1d8569d09530843c4365fe2",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-28da4-ders-at-tablet-width-768px--mobile\\video.webm": {
-    "mtime": 1780834580.837701,
-    "ast_hash": "5ebae82b1f0ac6435a693d332e1f4917",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-28da4-ders-at-tablet-width-768px--tablet\\video.webm": {
-    "mtime": 1780836043.1854248,
-    "ast_hash": "c171176276be3f69e9a9b4e25f4afa7e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-3d173-ders-at-tablet-width-768px--desktop\\video.webm": {
-    "mtime": 1780836881.716835,
-    "ast_hash": "d422bd1dffdb8cc4bbd9cb1e7e7233ba",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-3d173-ders-at-tablet-width-768px--mobile\\video.webm": {
-    "mtime": 1780834481.107616,
-    "ast_hash": "d37dec00edface9884dc17b929c55570",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-3d173-ders-at-tablet-width-768px--tablet\\video.webm": {
-    "mtime": 1780835944.402522,
-    "ast_hash": "ca55cd7d971c8061d22574dd744accc7",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-57c11-rs-at-desktop-width-1280px--desktop\\video.webm": {
-    "mtime": 1780836835.068437,
-    "ast_hash": "1c36078164e82b0a1aefb11d9f39e548",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-57c11-rs-at-desktop-width-1280px--mobile\\video.webm": {
-    "mtime": 1780834434.7723837,
-    "ast_hash": "24cac936b4ffd065e4d032a61add509b",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-57c11-rs-at-desktop-width-1280px--tablet\\video.webm": {
-    "mtime": 1780835896.0602713,
-    "ast_hash": "0b1625628fe72e53dc78cfc83de5acc4",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-580d0-ders-at-tablet-width-768px--desktop\\video.webm": {
-    "mtime": 1780836934.3689086,
-    "ast_hash": "bcb510b63a56591a7f4e64bfe94c2470",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-580d0-ders-at-tablet-width-768px--mobile\\video.webm": {
-    "mtime": 1780834530.0305927,
-    "ast_hash": "c557c554afb68713db2f20203d6d3932",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-580d0-ders-at-tablet-width-768px--tablet\\video.webm": {
-    "mtime": 1780835993.8417053,
-    "ast_hash": "adccdea5e82b96b950bb58405dcef200",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6c12c-ders-at-mobile-width-390px--desktop\\video.webm": {
-    "mtime": 1780836858.3420286,
-    "ast_hash": "bb2548c6fc2879bb896de8285bd27163",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6c12c-ders-at-mobile-width-390px--mobile\\video.webm": {
-    "mtime": 1780834458.2100291,
-    "ast_hash": "0d7589cc771cddc02a5daf5d15f7cc5f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6c12c-ders-at-mobile-width-390px--tablet\\video.webm": {
-    "mtime": 1780835920.3864746,
-    "ast_hash": "8df43c895f1aa2b57a75a454b2366415",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6da39-id-adapts-to-viewport-width-mobile\\video.webm": {
-    "mtime": 1780834613.0245128,
-    "ast_hash": "5c6d6cd44bbdc7e2dd2d635b237d0810",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-6da39-id-adapts-to-viewport-width-tablet\\video.webm": {
-    "mtime": 1780836076.2087314,
-    "ast_hash": "37ce51859aa913e5b7363b11fcdb59e1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-7f8fb-rs-at-desktop-width-1280px--desktop\\video.webm": {
-    "mtime": 1780836937.6171405,
-    "ast_hash": "5927dd0f432332a71c472074af939933",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-7f8fb-rs-at-desktop-width-1280px--mobile\\video.webm": {
-    "mtime": 1780834533.380984,
-    "ast_hash": "c415236543dec8a51ed1a78e4e33db92",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-7f8fb-rs-at-desktop-width-1280px--tablet\\video.webm": {
-    "mtime": 1780835997.2482533,
-    "ast_hash": "37cc5b78182587d0dbb04c6c4e69ea14",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-8a410-ders-at-tablet-width-768px--desktop\\video.webm": {
-    "mtime": 1780836812.319644,
-    "ast_hash": "1b327ca7be90c35a78ff12719f00ed83",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-8a410-ders-at-tablet-width-768px--mobile\\video.webm": {
-    "mtime": 1780834411.3259673,
-    "ast_hash": "5e4cd72553cba6baccea84f2ecce872c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-8a410-ders-at-tablet-width-768px--tablet\\video.webm": {
-    "mtime": 1780835872.856172,
-    "ast_hash": "0309f3860934efea4f9b9f6a30568636",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-9e1a6-rs-at-desktop-width-1280px--desktop\\video.webm": {
-    "mtime": 1780836986.4037802,
-    "ast_hash": "abc12bfd8851273eb422b12ea056791c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-9e1a6-rs-at-desktop-width-1280px--mobile\\video.webm": {
-    "mtime": 1780834584.5618658,
-    "ast_hash": "a45c0fe5c17628824f1078b86762a21d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-9e1a6-rs-at-desktop-width-1280px--tablet\\video.webm": {
-    "mtime": 1780836046.5598917,
-    "ast_hash": "e945ffad76ab43e2c58cabc565bd3aeb",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-a761d-ders-at-mobile-width-390px--desktop\\video.webm": {
-    "mtime": 1780836910.958451,
-    "ast_hash": "8b6fd84ed344049ba060660e396497c0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-a761d-ders-at-mobile-width-390px--mobile\\video.webm": {
-    "mtime": 1780834507.0350585,
-    "ast_hash": "60c910344f2329dc23c0b118f7be0a77",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-a761d-ders-at-mobile-width-390px--tablet\\video.webm": {
-    "mtime": 1780835970.3906984,
-    "ast_hash": "189eff37b674d99a080b74d3e7539187",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-b7a62-on-desktop-hidden-on-mobile-desktop\\video.webm": {
-    "mtime": 1780836993.562096,
-    "ast_hash": "9bd5c8826c0e650b3a668f83cb8e3811",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-b7a62-on-desktop-hidden-on-mobile-mobile\\video.webm": {
-    "mtime": 1780834591.6119466,
-    "ast_hash": "64ee90e0de8147340ca5df49fa01f1bf",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-b7a62-on-desktop-hidden-on-mobile-tablet\\video.webm": {
-    "mtime": 1780836053.975832,
-    "ast_hash": "144fc7c12c72a46fd63f6d5324d64e4d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d39eb-ders-at-mobile-width-390px--desktop\\video.webm": {
-    "mtime": 1780836959.5316613,
-    "ast_hash": "21d2cb1a1b8b23b1076d0d3e4f1bc94f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d39eb-ders-at-mobile-width-390px--mobile\\video.webm": {
-    "mtime": 1780834555.462009,
-    "ast_hash": "f805e9169442cbd676111c65811728c4",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d39eb-ders-at-mobile-width-390px--tablet\\video.webm": {
-    "mtime": 1780836019.5758715,
-    "ast_hash": "5388bbcb41949c6aa72ead81af286d74",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d42db-ders-at-mobile-width-390px--desktop\\video.webm": {
-    "mtime": 1780836789.2644763,
-    "ast_hash": "efbe0c1585463921bcde74df701cf524",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d42db-ders-at-mobile-width-390px--mobile\\video.webm": {
-    "mtime": 1780834388.4678748,
-    "ast_hash": "a824a66538449d4110b249855f291d0f",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-d42db-ders-at-mobile-width-390px--tablet\\video.webm": {
-    "mtime": 1780835849.798826,
-    "ast_hash": "83ac1aed723b32527852dd41614b3e65",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-f40e4-rs-at-desktop-width-1280px--desktop\\video.webm": {
-    "mtime": 1780836886.8860743,
-    "ast_hash": "b9e1ef234a95915daad2c08ec0baa8e4",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-f40e4-rs-at-desktop-width-1280px--mobile\\video.webm": {
-    "mtime": 1780834484.823857,
-    "ast_hash": "ce94ca93872ba5de6572e01dd3de086e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Responsive-Layou-f40e4-rs-at-desktop-width-1280px--tablet\\video.webm": {
-    "mtime": 1780835947.8539724,
-    "ast_hash": "8d01513fddd497e723a19dd95b94ef69",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-6bcd7-ws-SkeletonBase-during-load-desktop\\video.webm": {
-    "mtime": 1780836560.110873,
-    "ast_hash": "f804a823fb44af245d1d9682d287946d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-6bcd7-ws-SkeletonBase-during-load-mobile\\video.webm": {
-    "mtime": 1780834052.256264,
-    "ast_hash": "0c5d8b081c6a88bc5325e96c635faa73",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-6bcd7-ws-SkeletonBase-during-load-tablet\\video.webm": {
-    "mtime": 1780835502.9851546,
-    "ast_hash": "4838c7e54be9bd90a21b8a7025aa4cf9",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-7cf83-immer-skeletons-during-load-desktop\\video.webm": {
-    "mtime": 1780836558.7257986,
-    "ast_hash": "e30a689ee08b489702b4e9fa1e2fecfa",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-7cf83-immer-skeletons-during-load-mobile\\video.webm": {
-    "mtime": 1780834035.3981266,
-    "ast_hash": "c1df90a432284034490d0b68d1223e6a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-7cf83-immer-skeletons-during-load-tablet\\video.webm": {
-    "mtime": 1780835485.7916107,
-    "ast_hash": "e948077bbeeff1a6cc3413f567fea6e9",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-ea972-skeleton-blocks-during-load-desktop\\video.webm": {
-    "mtime": 1780836553.5264356,
-    "ast_hash": "1b6d72662c404e87a06dbd9650910fd6",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-ea972-skeleton-blocks-during-load-mobile\\video.webm": {
-    "mtime": 1780834030.2239122,
-    "ast_hash": "7fdb5371f482b6b4fea4d2c6a36cc4df",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Skeleton-Loading-ea972-skeleton-blocks-during-load-tablet\\video.webm": {
-    "mtime": 1780835480.2844355,
-    "ast_hash": "c653939e8d979274e26dce142f4c8dd0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--1c9f1-oads-without-console-errors-mobile\\video.webm": {
-    "mtime": 1780834745.625233,
-    "ast_hash": "9a951d95262f0ec387efef49055a6bb3",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--1c9f1-oads-without-console-errors-tablet\\video.webm": {
-    "mtime": 1780836209.7374926,
-    "ast_hash": "71b11ae55774344aab226a2b3c9dc69a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--61ffe-CSS-theme-variables-defined-mobile\\video.webm": {
-    "mtime": 1780834716.622136,
-    "ast_hash": "ff220d5406cc0feda20e0b927d2763a6",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--61ffe-CSS-theme-variables-defined-tablet\\video.webm": {
-    "mtime": 1780836180.9220674,
-    "ast_hash": "af163e6fe98102bf11cf6f9984f59d85",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--96130-CSS-theme-variables-defined-mobile\\video.webm": {
-    "mtime": 1780834768.357471,
-    "ast_hash": "3ff63bf734f4b7cce8b194c20963f3ea",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--96130-CSS-theme-variables-defined-tablet\\video.webm": {
-    "mtime": 1780836233.2975988,
-    "ast_hash": "a297654aca8f11fe1f2735c049b461e5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--aa665-CSS-theme-variables-defined-mobile\\video.webm": {
-    "mtime": 1780834664.085208,
-    "ast_hash": "e2df8fc61f042ae8623c310f9c4caf6d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--aa665-CSS-theme-variables-defined-tablet\\video.webm": {
-    "mtime": 1780836128.2956758,
-    "ast_hash": "d37ad1697593dde9f28644097ac55bee",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--b67dc-oads-without-console-errors-mobile\\video.webm": {
-    "mtime": 1780834797.8726752,
-    "ast_hash": "8b411e93a4a0da751e10514e2ca0d307",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--b67dc-oads-without-console-errors-tablet\\video.webm": {
-    "mtime": 1780836261.9392266,
-    "ast_hash": "d8e6c59a5565ad6d90bc0cb9dd1d6cb1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--c563b-oads-without-console-errors-mobile\\video.webm": {
-    "mtime": 1780834693.1430657,
-    "ast_hash": "4ad11426337cb5c9fb18e116156c211e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--c563b-oads-without-console-errors-tablet\\video.webm": {
-    "mtime": 1780836157.3628771,
-    "ast_hash": "1bfa1d145863edbfcacaa3b5d45ce681",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--d3009-CSS-theme-variables-defined-mobile\\video.webm": {
-    "mtime": 1780834821.137118,
-    "ast_hash": "3943c2850ede92dd39abca1df29404f8",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--d3009-CSS-theme-variables-defined-tablet\\video.webm": {
-    "mtime": 1780836287.1628597,
-    "ast_hash": "04c2bf6c0b25842ecd3ddf5870fd2d82",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--ea5ab-oads-without-console-errors-mobile\\video.webm": {
-    "mtime": 1780834640.7936473,
-    "ast_hash": "b7420b360972964f7153169e2495866a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Smoke-\ufffd-all-key--ea5ab-oads-without-console-errors-tablet\\video.webm": {
-    "mtime": 1780836105.0028896,
-    "ast_hash": "61c0aab8f1bd663fe6d63fa50976239e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Adm-88466-rd-uses-ti-ti--icon-classes-desktop\\video.webm": {
-    "mtime": 1780836644.1442368,
-    "ast_hash": "ab629d7a10024eda6f9163c9fd121545",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Adm-88466-rd-uses-ti-ti--icon-classes-mobile\\video.webm": {
-    "mtime": 1780834188.9694474,
-    "ast_hash": "d8193a81ea603a18c26fcb70bf43c7c1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Adm-88466-rd-uses-ti-ti--icon-classes-tablet\\video.webm": {
-    "mtime": 1780835643.7455344,
-    "ast_hash": "c8583fb686602248336f9a8abbeffcb4",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-adm-dcadd-Tabler-icons-for-navigation-desktop\\video.webm": {
-    "mtime": 1780836653.2883167,
-    "ast_hash": "118a8521ee50cec51cb309b5857dca53",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-adm-dcadd-Tabler-icons-for-navigation-mobile\\video.webm": {
-    "mtime": 1780834252.4070795,
-    "ast_hash": "9e1f52493d17f3cde34d0f0a6a441f14",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-adm-dcadd-Tabler-icons-for-navigation-tablet\\video.webm": {
-    "mtime": 1780835710.4719892,
-    "ast_hash": "74a565f72c4d16058ba2746354319cbc",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Admin-Orders-uses-ti-ti--icon-classes-desktop\\video.webm": {
-    "mtime": 1780836647.3012352,
-    "ast_hash": "b91be0ce02f4952078d3c959922c90ba",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Admin-Orders-uses-ti-ti--icon-classes-mobile\\video.webm": {
-    "mtime": 1780834211.9870846,
-    "ast_hash": "e1046c05dd01f921dc2f83c6753f17e2",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Admin-Orders-uses-ti-ti--icon-classes-tablet\\video.webm": {
-    "mtime": 1780835668.9755983,
-    "ast_hash": "bb16dd9796b3fdedbc5f194378e3350d",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Analytics-uses-ti-ti--icon-classes-desktop\\video.webm": {
-    "mtime": 1780836650.2501833,
-    "ast_hash": "3b116f72d85948d83c9912bcb1d81bc1",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Analytics-uses-ti-ti--icon-classes-mobile\\video.webm": {
-    "mtime": 1780834234.8614185,
-    "ast_hash": "25f6223703e52ade8bce404e839fedb0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Analytics-uses-ti-ti--icon-classes-tablet\\video.webm": {
-    "mtime": 1780835692.2627306,
-    "ast_hash": "c0b3c90501c876a0a76a0f5cc952abc7",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Client-Menu-uses-ti-ti--icon-classes-desktop\\video.webm": {
-    "mtime": 1780836639.7417963,
-    "ast_hash": "45e310f741c1d0a900f601638ad69b43",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Client-Menu-uses-ti-ti--icon-classes-mobile\\video.webm": {
-    "mtime": 1780834165.669299,
-    "ast_hash": "623b9c390bfacf7e47b62c5b09ae2ec9",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Tabler-Icons-Client-Menu-uses-ti-ti--icon-classes-tablet\\video.webm": {
-    "mtime": 1780835620.4250658,
-    "ast_hash": "63d33dc5c111144a98f275d0531fe813",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5a687-h-after-rapid-theme-cycling-desktop\\video.webm": {
-    "mtime": 1780836411.340596,
-    "ast_hash": "159c88785426b1bb2740d2efec51507c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5a687-h-after-rapid-theme-cycling-mobile\\video.webm": {
-    "mtime": 1780833639.3173847,
-    "ast_hash": "aa7e7132bcec2c11620fe28c07bc4404",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5a687-h-after-rapid-theme-cycling-tablet\\video.webm": {
-    "mtime": 1780835081.4654331,
-    "ast_hash": "43b9c1f1a05a9db6d809f4a19cc2106a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5de22-h-after-rapid-theme-cycling-desktop\\video.webm": {
-    "mtime": 1780836406.2439668,
-    "ast_hash": "79330e9ae65a1d93e745118f523acfb7",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5de22-h-after-rapid-theme-cycling-mobile\\video.webm": {
-    "mtime": 1780833592.1487257,
-    "ast_hash": "7b124f62750a8ebace737b3030a2eae5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-5de22-h-after-rapid-theme-cycling-tablet\\video.webm": {
-    "mtime": 1780835034.831649,
-    "ast_hash": "a0d2b3c0557bbedfcbe7e5ae60ee97e5",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-ea001-h-after-rapid-theme-cycling-desktop\\video.webm": {
-    "mtime": 1780836400.9435291,
-    "ast_hash": "b3a499a2dfeabb84e33cea6cb2ff35d6",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-ea001-h-after-rapid-theme-cycling-mobile\\video.webm": {
-    "mtime": 1780833546.5797458,
-    "ast_hash": "486109dd437b999a3b0038e773803e7e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-A-ea001-h-after-rapid-theme-cycling-tablet\\video.webm": {
-    "mtime": 1780834987.349665,
-    "ast_hash": "ba27509f080719ac0c48348150a12c98",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9ca34--Menu-changes-CSS-variables-desktop\\video.webm": {
-    "mtime": 1780836371.3185773,
-    "ast_hash": "6bc5a2709dad61389a80cc2d0a9810c7",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9ca34--Menu-changes-CSS-variables-tablet\\video.webm": {
-    "mtime": 1780834915.2697322,
-    "ast_hash": "6340c48dfecf1a960b7fa0e8de9ceac0",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9cdb2-ytics-changes-CSS-variables-desktop\\video.webm": {
-    "mtime": 1780836409.461977,
-    "ast_hash": "8c78f5acb4cfaac36898ebfd9dbc5568",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9cdb2-ytics-changes-CSS-variables-mobile\\video.webm": {
-    "mtime": 1780833616.5698514,
-    "ast_hash": "75696683d603e31d83db451b4eaae77c",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-9cdb2-ytics-changes-CSS-variables-tablet\\video.webm": {
-    "mtime": 1780835058.1217854,
-    "ast_hash": "c57b7a2c3cbcc992c69864bcdc5604ef",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-a441b-rders-changes-CSS-variables-desktop\\video.webm": {
-    "mtime": 1780836404.3675065,
-    "ast_hash": "c3ab1d2effd76e70bf5127a2bf2c605e",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-a441b-rders-changes-CSS-variables-mobile\\video.webm": {
-    "mtime": 1780833569.386471,
-    "ast_hash": "0cb69da511417b302ed7369284fedc93",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-a441b-rders-changes-CSS-variables-tablet\\video.webm": {
-    "mtime": 1780835011.2113228,
-    "ast_hash": "4895259df1cdbbcd66a7abb270aab173",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-C-c1888-h-after-rapid-theme-cycling-desktop\\video.webm": {
-    "mtime": 1780836394.100477,
-    "ast_hash": "e18e44dec27d72e23e60222c9630f8a3",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-C-c1888-h-after-rapid-theme-cycling-mobile\\video.webm": {
-    "mtime": 1780833500.6657815,
-    "ast_hash": "24ad3cce847bde7f2c5ff17a508cbe30",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-C-c1888-h-after-rapid-theme-cycling-tablet\\video.webm": {
-    "mtime": 1780834939.1860425,
-    "ast_hash": "d3da75d2041f660fc033ddeccb3da23a",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-fad7e-board-changes-CSS-variables-desktop\\video.webm": {
-    "mtime": 1780836398.9769247,
-    "ast_hash": "9878b7f853cdb709d8d2cb2db044de32",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-fad7e-board-changes-CSS-variables-mobile\\video.webm": {
-    "mtime": 1780833523.6457949,
-    "ast_hash": "f96a9fb5f2b6e0a0f7430115fea81aea",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\test-results\\ui-polish-Theme-Switcher-c-fad7e-board-changes-CSS-variables-tablet\\video.webm": {
-    "mtime": 1780834963.2969093,
-    "ast_hash": "501430f1523297ac902ac52b65d0c317",
+  "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\artifacts\\proof-admin-couriers-page.png": {
+    "mtime": 1780944262.2531972,
+    "ast_hash": "70879018e629ede1a99f5bd839c5b1e5",
     "semantic_hash": ""
   }
 }

@@ -26,21 +26,8 @@ export default (async function onboardingRoutes(fastify, opts) {
   const { db, messageBus, queue } = opts as any;
 
   // ─── Auth hook for all routes ─────────────────────────────────────
-  fastify.addHook('onRequest', async (request, reply) => {
-    try {
-      await request.jwtVerify();
-      const user = request.user as any;
-      if (user.role !== 'owner') return reply.status(403).send({ error: 'Owner only' });
-      const params = request.params as any;
-      if (params.locationId) {
-        if (!user.activeLocationId || user.activeLocationId !== params.locationId) {
-          return reply.status(404).send({ error: 'Not found' });
-        }
-      }
-    } catch {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
-  });
+  fastify.addHook('onRequest', fastify.verifyAuth);
+  fastify.addHook('onRequest', fastify.requireRole(['owner']));
 
   // ─── Start / create location ──────────────────────────────────────
   fastify.post('/onboarding/start', {

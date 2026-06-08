@@ -131,9 +131,8 @@ export default (async function courierAuthRoutes(fastify, opts) {
       const tokenStr = await signAuthToken({
         sub: courierId,
         role: 'courier',
-        sessionId,
-        familyId,
-        activeLocationId: invite.location_id
+        activeLocationId: invite.location_id,
+        jti: sessionId
       } as any, '14d');
 
       await client.query('COMMIT');
@@ -199,25 +198,26 @@ export default (async function courierAuthRoutes(fastify, opts) {
   }, async (request, reply) => {
     // Manual Zod parsing to avoid AJV compilation failures
     const bodySchema = z.object({
-      email: z.string().email().transform(e => e.toLowerCase().trim()),
+      email: z.string().min(1).transform(e => e.toLowerCase().trim()),
       password: z.string().min(1),
-      location_id: z.string().uuid()
-    }).strict();
+      location_id: z.string().uuid().optional()
+    });
 
     const result = bodySchema.safeParse(request.body);
     if (!result.success) {
       return reply.status(400).send({ error: 'Validation failed', details: result.error.format() });
     }
 
-    const { email, password, location_id } = result.data;
+    const { email: emailOrPhone, password, location_id } = result.data;
     const ipHash = crypto.createHash('sha256').update(request.ip).digest('hex');
     const uaHash = crypto.createHash('sha256').update(request.headers['user-agent'] || '').digest('hex');
-    const emailHash = crypto.createHash('sha256').update(email).digest('hex');
+    const emailHash = crypto.createHash('sha256').update(emailOrPhone).digest('hex');
+    const phoneHash = crypto.createHash('sha256').update(emailOrPhone).digest('hex');
 
     const client = await db.connect();
     try {
       const courierRes = await client.query(
-        `SELECT id, password_hash, status FROM couriers WHERE email_hash = $1`,
+        `SELECT id, password_hash, status FROM couriers WHERE email_hash = $1 OR phone_hash = $1`,
         [emailHash]
       );
 
@@ -231,11 +231,16 @@ export default (async function courierAuthRoutes(fastify, opts) {
 
       const validPassword = await argon2.verify(courier.password_hash, password);
       if (!validPassword) {
-        // Log failed attempt
+        // Log failed attempt (use provided location_id or first assigned)
+        const failLocRes = location_id ? { rows: [{ location_id: location_id }] } : await client.query(
+          `SELECT location_id FROM courier_locations WHERE courier_id = $1 ORDER BY created_at ASC LIMIT 1`,
+          [courier.id]
+        );
+        const failLocationId = failLocRes.rows[0]?.location_id || '00000000-0000-0000-0000-000000000000';
         await client.query(
           `INSERT INTO courier_audit_log (courier_id, location_id, action, actor_kind, actor_id, ip_hash, user_agent_hash)
            VALUES ($1, $2, 'login.failed', 'courier', $1, $3, $4)`,
-          [courier.id, location_id, ipHash, uaHash]
+          [courier.id, failLocationId, ipHash, uaHash]
         );
         return reply.status(401).send({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
       }
@@ -244,13 +249,29 @@ export default (async function courierAuthRoutes(fastify, opts) {
         return reply.status(403).send({ error: 'Courier deactivated', code: 'COURIER_DEACTIVATED' });
       }
 
-      // Check membership
-      const membershipRes = await client.query(
-        `SELECT role FROM courier_locations WHERE courier_id = $1 AND location_id = $2`,
-        [courier.id, location_id]
-      );
-      if (membershipRes.rowCount === 0) {
-        return reply.status(403).send({ error: 'Not authorized for this location', code: 'NOT_AUTHORIZED_FOR_LOCATION' });
+      // Resolve location: use provided or default to first assigned
+      let effectiveLocationId = location_id;
+      let role = 'courier';
+
+      if (effectiveLocationId) {
+        const membershipRes = await client.query(
+          `SELECT role FROM courier_locations WHERE courier_id = $1 AND location_id = $2`,
+          [courier.id, effectiveLocationId]
+        );
+        if (membershipRes.rowCount === 0) {
+          return reply.status(403).send({ error: 'Not authorized for this location', code: 'NOT_AUTHORIZED_FOR_LOCATION' });
+        }
+        role = membershipRes.rows[0].role;
+      } else {
+        const firstLocRes = await client.query(
+          `SELECT location_id, role FROM courier_locations WHERE courier_id = $1 ORDER BY added_at ASC LIMIT 1`,
+          [courier.id]
+        );
+        if (firstLocRes.rowCount === 0) {
+          return reply.status(403).send({ error: 'No location assigned', code: 'NO_LOCATION_ASSIGNED' });
+        }
+        effectiveLocationId = firstLocRes.rows[0].location_id;
+        role = firstLocRes.rows[0].role;
       }
 
       await client.query('BEGIN');
@@ -262,7 +283,7 @@ export default (async function courierAuthRoutes(fastify, opts) {
       await client.query(
         `INSERT INTO courier_audit_log (courier_id, location_id, action, actor_kind, actor_id, ip_hash, user_agent_hash)
          VALUES ($1, $2, 'login.success', 'courier', $1, $3, $4)`,
-        [courier.id, location_id, ipHash, uaHash]
+        [courier.id, effectiveLocationId, ipHash, uaHash]
       );
 
       // Issue JWT and Session
@@ -273,20 +294,25 @@ export default (async function courierAuthRoutes(fastify, opts) {
       const sessionRes = await client.query(
         `INSERT INTO courier_sessions (courier_id, family_id, token_hash, active_location_id, expires_at, ip_hash, user_agent_hash)
          VALUES ($1, $2, $3, $4, now() + interval '30 days', $5, $6) RETURNING id`,
-        [courier.id, familyId, tokenHash, location_id, ipHash, uaHash]
+        [courier.id, familyId, tokenHash, effectiveLocationId, ipHash, uaHash]
       );
       const sessionId = sessionRes.rows[0].id;
 
       const jwt = await signAuthToken({
         role: 'courier',
-        userId: courier.id,
-        activeLocationId: location_id,
+        sub: courier.id,
+        activeLocationId: effectiveLocationId,
         jti: sessionId
-      }, '24h');
+      } as any, '24h');
 
       await client.query('COMMIT');
 
-      return reply.send({ jwt, refreshToken: `${sessionId}.${tokenPlain}` });
+      return reply.send({
+        jwt,
+        refreshToken: `${sessionId}.${tokenPlain}`,
+        activeLocationId: effectiveLocationId,
+        role
+      });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
@@ -404,10 +430,10 @@ export default (async function courierAuthRoutes(fastify, opts) {
 
       const jwt = await signAuthToken({
         role: 'courier',
-        userId: session.courier_id,
+        sub: session.courier_id,
         activeLocationId: session.active_location_id,
         jti: newSessionId
-      }, '24h');
+      } as any, '24h');
 
       await client.query('COMMIT');
 
