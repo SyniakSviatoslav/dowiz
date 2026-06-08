@@ -123,6 +123,13 @@ async function main() {
     reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
   });
 
+  fastify.addHook('onSend', async (_request, reply, payload) => {
+    const ct = reply.getHeader('content-type');
+    if (ct && String(ct).startsWith('text/html')) {
+      reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  });
+
   // P34: Strict CORS — restrictive default; public routes override via hook
   fastify.register(fastifyCors, {
     origin: (origin: string, cb: any) => {
@@ -144,12 +151,10 @@ async function main() {
     root: path.join(dirName, '..', 'public'),
     prefix: '/',
     cacheControl: true,
-    maxAge: '30d',
+    maxAge: '365d',
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      } else if (filePath.endsWith('.html')) {
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       }
     },
   });
