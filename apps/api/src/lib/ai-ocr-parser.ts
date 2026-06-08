@@ -3,6 +3,7 @@ import type { MenuParserProvider, ParserInputType } from '../ports.js';
 import type { CanonicalMenuDraft, ParseIssue, ParseResult } from '@deliveryos/shared-types';
 import { PiiRedactor } from './pii-redactor.js';
 import Tesseract from 'tesseract.js';
+import pdfParse from 'pdf-parse';
 import crypto from 'crypto';
 import { z } from 'zod';
 
@@ -49,29 +50,47 @@ export class AiOcrParser implements MenuParserProvider {
   private piiRedactor = new PiiRedactor();
 
   async parse(input: ParserInputType): Promise<ParseResult> {
-    if (input.kind !== 'image') throw new Error('AiOcrParser currently supports images only'); // PDF would be extended here
-
     const issues: ParseIssue[] = [];
     const t0 = Date.now();
 
-    // 1. OCR
     let rawText = '';
-    let ocrConfidence = 0;
-    try {
-      // In a real prod environment we'd use a singleton worker pool.
-      const result = await Tesseract.recognize(input.bytes, 'sqi+eng', {
-        logger: m => {} // suppress logs
-      });
-      rawText = result.data.text;
-      ocrConfidence = result.data.confidence / 100.0;
-    } catch (e: any) {
-      issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `OCR Failed: ${e.message}`, severity: 'error' });
-      return this.fallbackError(issues);
-    }
-    const ocrMs = Date.now() - t0;
+    let ocrConfidence = 1;
+    let ocrMs = 0;
 
-    if (ocrConfidence < 0.4) {
-      issues.push({ rowNumber: 1, code: 'OCR_LOW_QUALITY' as any, message: 'Image quality is poor, results may be inaccurate.', severity: 'warning' });
+    if (input.kind === 'pdf') {
+      // Extract text directly from PDF, skip OCR
+      try {
+        const pdfData = await pdfParse(input.bytes);
+        rawText = pdfData.text;
+      } catch (e: any) {
+        issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `PDF parse failed: ${e.message}`, severity: 'error' });
+        return this.fallbackError(issues);
+      }
+      ocrMs = Date.now() - t0;
+
+      if (!rawText.trim()) {
+        issues.push({ rowNumber: 1, code: 'OCR_LOW_QUALITY' as any, message: 'PDF contained no extractable text.', severity: 'error' });
+        return this.fallbackError(issues);
+      }
+    } else if (input.kind === 'image') {
+      // 1. OCR
+      try {
+        const result = await Tesseract.recognize(input.bytes, 'sqi+eng', {
+          logger: m => {}
+        });
+        rawText = result.data.text;
+        ocrConfidence = result.data.confidence / 100.0;
+      } catch (e: any) {
+        issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `OCR Failed: ${e.message}`, severity: 'error' });
+        return this.fallbackError(issues);
+      }
+      ocrMs = Date.now() - t0;
+
+      if (ocrConfidence < 0.4) {
+        issues.push({ rowNumber: 1, code: 'OCR_LOW_QUALITY' as any, message: 'Image quality is poor, results may be inaccurate.', severity: 'warning' });
+      }
+    } else {
+      throw new Error(`AiOcrParser does not support kind: ${input.kind}`);
     }
 
     // 2. PII Redaction

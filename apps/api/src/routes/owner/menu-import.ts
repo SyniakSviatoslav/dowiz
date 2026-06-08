@@ -82,9 +82,9 @@ export default (async function menuImportRoutes(fastify, opts) {
     let kind = 'csv';
     const mime = data.mimetype;
     if (mime === 'application/pdf') {
-      return reply.status(400).send({ error: 'PDF import is not supported yet. Please upload a CSV or Excel file.' });
-    }
-    if (mime.startsWith('image/')) {
+      source = 'ai-ocr';
+      kind = 'pdf';
+    } else if (mime.startsWith('image/')) {
       source = 'ai-ocr';
       kind = 'image';
     } else if (data.fields.source && 'value' in data.fields.source) {
