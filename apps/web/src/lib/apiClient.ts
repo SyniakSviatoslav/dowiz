@@ -42,10 +42,15 @@ export const apiClient = async <T extends z.ZodType>(
   // Temporary auth token retrieval from localStorage (mock)
   const token = typeof window !== 'undefined' ? localStorage.getItem('dos_access_token') : null;
 
+  const isFormData = body instanceof FormData;
+
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...customHeaders,
   };
+
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -59,7 +64,7 @@ export const apiClient = async <T extends z.ZodType>(
     const response = await fetch(`${API_BASE}${endpoint}`, {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
       signal: controller.signal,
     });
 
