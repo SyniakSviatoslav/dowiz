@@ -158,7 +158,7 @@ async function main() {
     const type = String(ct);
     if (type.startsWith('text/html')) {
       reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
-    } else if (type === 'text/css' || type === 'application/javascript' || type.startsWith('text/javascript')) {
+    } else if (type.startsWith('text/css') || type.startsWith('application/javascript') || type.startsWith('text/javascript')) {
       reply.header('Cache-Control', 'public, max-age=31536000, immutable');
     }
   });
