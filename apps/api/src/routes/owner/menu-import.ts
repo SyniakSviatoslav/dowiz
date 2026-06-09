@@ -170,7 +170,8 @@ export default (async function menuImportRoutes(fastify, opts) {
     const user = request.user!;
     const locationId = await getLocationId(user);
     if (!locationId) return reply.status(401).send({ error: 'Unauthorized' });
-    
+
+    const { import_session_id, commit_token, force } = request.body as any;
     const finalCommitToken = commit_token || crypto.randomUUID();
 
     try {
