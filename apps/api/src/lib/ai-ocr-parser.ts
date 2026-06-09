@@ -59,6 +59,11 @@ export class AiOcrParser implements MenuParserProvider {
     if (input.kind === 'pdf') {
       // Extract text directly from PDF, skip OCR
       try {
+        // Pre-load worker module onto globalThis to prevent pdfjs-dist from
+        // doing its own dynamic import("./pdf.worker.mjs") which fails in
+        // esbuild-bundled environments (worker file is not on disk at runtime).
+        const workerMod = await import('pdfjs-dist/build/pdf.worker.mjs');
+        (globalThis as any).pdfjsWorker = workerMod;
         const pdfjs = await import('pdfjs-dist');
         const doc = await pdfjs.getDocument({ data: new Uint8Array(input.bytes) }).promise;
         const pages: string[] = [];
