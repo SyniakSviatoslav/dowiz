@@ -3,7 +3,6 @@ import type { MenuParserProvider, ParserInputType } from '../ports.js';
 import type { CanonicalMenuDraft, ParseIssue, ParseResult } from '@deliveryos/shared-types';
 import { PiiRedactor } from './pii-redactor.js';
 import Tesseract from 'tesseract.js';
-import pdfParse from 'pdf-parse';
 import crypto from 'crypto';
 import { z } from 'zod';
 
@@ -60,6 +59,8 @@ export class AiOcrParser implements MenuParserProvider {
     if (input.kind === 'pdf') {
       // Extract text directly from PDF, skip OCR
       try {
+        const pdfModule = await import('pdf-parse');
+        const pdfParse = pdfModule.default || pdfModule;
         const pdfData = await pdfParse(input.bytes);
         rawText = pdfData.text;
       } catch (e: any) {
