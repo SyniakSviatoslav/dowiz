@@ -59,10 +59,16 @@ export class AiOcrParser implements MenuParserProvider {
     if (input.kind === 'pdf') {
       // Extract text directly from PDF, skip OCR
       try {
-        const pdfModule = await import('pdf-parse');
-        const pdfParse = pdfModule.default || pdfModule;
-        const pdfData = await pdfParse(input.bytes);
-        rawText = pdfData.text;
+        const pdfjs = await import('pdfjs-dist');
+        const doc = await pdfjs.getDocument({ data: new Uint8Array(input.bytes) }).promise;
+        const pages: string[] = [];
+        for (let i = 1; i <= doc.numPages; i++) {
+          const page = await doc.getPage(i);
+          const content = await page.getTextContent();
+          pages.push(content.items.map((item: any) => item.str).join(' '));
+        }
+        await doc.destroy();
+        rawText = pages.join('\n\n');
       } catch (e: any) {
         issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `PDF parse failed: ${e.message}`, severity: 'error' });
         return this.fallbackError(issues);
@@ -108,7 +114,7 @@ export class AiOcrParser implements MenuParserProvider {
 
     // Using mock in CI
     if (llmModel === 'mock') {
-      return this.mockResult(input.config);
+      return this.mockResult(input.config, issues);
     }
 
     let llmResponse = '';
@@ -201,7 +207,7 @@ export class AiOcrParser implements MenuParserProvider {
     };
   }
 
-  private mockResult(config: any): ParseResult {
+  private mockResult(config: any, preIssues: ParseIssue[] = []): ParseResult {
     return {
       draft: {
         categories: [{ externalKey: 'cat1', name: 'Pizzas' }],
@@ -210,8 +216,8 @@ export class AiOcrParser implements MenuParserProvider {
         }],
         modifierGroups: [], modifiers: [], links: [], translations: []
       },
-      issues: [],
-      summary: { valid: 1, errors: 0, warnings: 0, mode: 'merge', low_confidence_count: 0 }
+      issues: preIssues,
+      summary: { valid: 1, errors: 0, warnings: preIssues.length, mode: 'merge', low_confidence_count: 0 }
     };
   }
 }
