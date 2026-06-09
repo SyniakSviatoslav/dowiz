@@ -5,7 +5,7 @@ import { createOperationalPool } from '@deliveryos/db';
 import { RedisMessageBus, PgBossQueueProvider } from '@deliveryos/platform';
 import Redis from 'ioredis';
 import pg from 'pg';
-import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
+import type { ZodTypeAny } from 'zod';
 import healthRoutes from './routes/health.js';
 import authRoutes from './routes/auth.js';
 import courierRoutes from './routes/couriers.js';
@@ -112,8 +112,28 @@ async function main() {
     bodyLimit: 10 * 1024 * 1024, // 10 MB (multipart uploads need it)
   });
 
-  fastify.setValidatorCompiler(validatorCompiler);
-  fastify.setSerializerCompiler(serializerCompiler);
+  // Custom validator/serializer compilers for Zod v3 compat.
+  // fastify-type-provider-zod@6.x requires Zod v4 (peerDep zod>=4.1.5),
+  // but we use Zod v3.25.x. Use Zod's native safeParse instead.
+  fastify.setValidatorCompiler(({ schema }) => {
+    return (data) => {
+      const result = (schema as ZodTypeAny).safeParse(data);
+      if (!result.success) {
+        return { error: result.error };
+      }
+      return { value: result.data };
+    };
+  });
+  fastify.setSerializerCompiler(({ schema }) => {
+    const zodSchema = schema as ZodTypeAny;
+    return (data) => {
+      const result = zodSchema.safeParse(data);
+      if (!result.success) {
+        throw new Error(String(result.error));
+      }
+      return JSON.stringify(result.data);
+    };
+  });
 
   fastify.addHook('onRequest', async (request, reply) => {
     if (process.env.NODE_ENV === 'production') {
