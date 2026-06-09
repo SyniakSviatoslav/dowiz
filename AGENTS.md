@@ -1,6 +1,6 @@
 # DeliveryOS / dowiz — Agent Context
 
-> Last updated: 2026-06-07 · Source of truth: `DeliveryOS-As-Built-Summary-v1.md` (2026-06-04)
+> Last updated: 2026-06-09 · Source of truth: `DeliveryOS-As-Built-Summary-v1.md` (2026-06-04)
 > Reading this file is mandatory. Skip everything else until a router below tells you otherwise.
 
 ## 1. What this is (TL;DR — 30s read)
@@ -29,11 +29,12 @@ docs/
   phase4/     anti-fake, OTP, signals-ui, dashboard, security
   phase5/     anonymizer, GDPR, retention-policy, backup, launch-checklist
   adr/        Architecture decision records
+  harness/    Harness self-improvement: model-rotation.md, failure-mode-ledger.md, episodes/
 e2e/          Playwright (92 tests × 3 breakpoints = 276)
 migrations/   node-pg-migrate (delegates to packages/db/migrations)
 .agents/
-  rules/      always-on rules (design-system.md, graphify.md)
-  workflows/  graphify.md
+  rules/      always-on rules (design-system.md, graphify.md, research-first.md, harness-self-improvement.md)
+  workflows/  graphify.md, harness-self-improvement (via .agents/rules/harness-self-improvement.md)
   skills/     deliveryos-theme, component-builder, screen-builder, deliveryos-ui
 graphify-out/ Knowledge graph (run `graphify query "..."` before raw grep)
 src/screens/  Static HTML mockups (legacy design reference only)
@@ -59,6 +60,7 @@ src/screens/  Static HTML mockups (legacy design reference only)
 | QA web app + fix bugs | `qa` (writes fixes) or `qa-only` (report only) | |
 | Generate / update docs | `document-generate` or `document-release` | |
 | Configure opencode itself | `customize-opencode` | Only for `.opencode/`, agents, MCP |
+| Improve the harness (rules, skills, tools, gates, memory) | harness-self-improvement | Always-on rule at `.agents/rules/harness-self-improvement.md`. Failure-mode ledger at `docs/harness/failure-mode-ledger.md`. |
 
 ## 4. Memory protocol (mempalace — `wing: dowiz`, 3099 drawers already)
 
@@ -180,3 +182,4 @@ npx playwright test                         # e2e (chromium × 3 breakpoints)
 - `docs/DeliveryOS-Context-Handoff-v4_5.md` — latest product context
 - `docs/DeliveryOS-Service-Build-Plan-v4_4.md` — build plan
 - `.agents/skills/*/SKILL.md` — load via skill router (§3)
+- `docs/harness/` — model-rotation registry, failure-mode ledger, episode store
