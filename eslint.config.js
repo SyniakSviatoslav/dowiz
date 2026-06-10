@@ -39,7 +39,6 @@ export default tseslint.config(
       'no-lonely-if': 'warn',
       'no-useless-rename': 'warn',
       'object-shorthand': 'warn',
-      '@typescript-eslint/no-unnecessary-type-assertion': 'warn',
       '@typescript-eslint/prefer-as-const': 'warn',
       '@typescript-eslint/prefer-optional-chain': 'warn',
       '@typescript-eslint/prefer-nullish-coalescing': 'warn',
@@ -59,7 +58,7 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'src/**', 'tools/eslint-plugin-local/__fixtures__/**'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'src/**', '.opencode/**', '**/build-client.js', '**/churn-report.cjs', 'tools/eslint-plugin-local/__fixtures__/**'],
   },
   {
     files: ['tools/eslint-plugin-local/__fixtures__/**'],

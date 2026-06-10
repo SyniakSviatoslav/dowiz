@@ -3,10 +3,10 @@ import type { MigrationBuilder } from 'node-pg-migrate';
 export async function up(pgm: MigrationBuilder): Promise<void> {
   // Add required fields
   pgm.sql(`
-    ALTER TABLE orders
-      DROP COLUMN IF EXISTS cash_pay_with,
-      ADD COLUMN cash_pay_with boolean NOT NULL DEFAULT false,
-      ADD COLUMN currency_code text NOT NULL DEFAULT 'ALL',
+ALTER TABLE orders
+  DROP COLUMN IF EXISTS cash_pay_with,
+  ADD COLUMN cash_pay_with integer,
+  ADD COLUMN currency_code text NOT NULL DEFAULT 'ALL',
       ADD COLUMN menu_version bigint NOT NULL DEFAULT 0,
       ADD COLUMN client_menu_version bigint,
       ADD COLUMN request_hash text NOT NULL DEFAULT 'legacy';

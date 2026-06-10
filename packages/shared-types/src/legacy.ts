@@ -1,6 +1,34 @@
 import { z } from 'zod';
 
-// ─── Order Item Input ────────────────────────────────────────────────
+export const DropoffPreference = z.enum([
+  'hand_to_me',
+  'leave_at_door',
+  'meet_outside',
+  'meet_in_lobby',
+]);
+export type DropoffPreference = z.infer<typeof DropoffPreference>;
+
+export const SubstitutionDefault = z.enum([
+  'replace_similar',
+  'remove_refund',
+  'cancel_order',
+  'contact_me',
+]);
+export type SubstitutionDefault = z.infer<typeof SubstitutionDefault>;
+
+export const OrderPreferences = z.object({
+  dropoff: z.object({
+    preference: DropoffPreference.optional(),
+    note: z.string().max(200).optional(),
+    entrance: z.string().max(100).optional(),
+    floor: z.number().int().min(1).max(50).optional(),
+    apartment: z.string().max(100).optional(),
+    code: z.string().max(20).optional(),
+  }).optional(),
+  substitution: SubstitutionDefault.optional(),
+}).strict();
+export type OrderPreferences = z.infer<typeof OrderPreferences>;
+
 export const OrderItemInput = z.object({
   product_id: z.string().uuid(),
   quantity: z.number().int().positive().max(99),
@@ -8,31 +36,34 @@ export const OrderItemInput = z.object({
 }).strict();
 export type OrderItemInput = z.infer<typeof OrderItemInput>;
 
-// ─── Create Order Input ──────────────────────────────────────────────
-export const CreateOrderInput = z.object({
-  locationId: z.string().uuid(),
-  type: z.literal('delivery'),
-  items: z.array(OrderItemInput).min(1),
-  customer: z.object({
-    phone: z.string().min(6).max(20).optional(),
-    name: z.string().min(1).max(120).optional(),
-  }).strict().optional(),
-  delivery: z.object({
-    pin: z.object({
-      lat: z.number().min(-90).max(90),
-      lng: z.number().min(-180).max(180),
+  // ─── Create Order Input ──────────────────────────────────────────────
+  export const CreateOrderInput = z.object({
+    locationId: z.string().uuid(),
+    type: z.literal('delivery'),
+    items: z.array(OrderItemInput).min(1),
+    customer: z.object({
+      phone: z.string().min(6).max(20).optional(),
+      name: z.string().min(1).max(120).optional(),
+    }).strict().optional(),
+    delivery: z.object({
+      pin: z.object({
+        lat: z.number().min(-90).max(90),
+        lng: z.number().min(-180).max(180),
+      }).strict(),
+      address_text: z.string().min(1).max(500).optional(),
     }).strict(),
-    address_text: z.string().min(1).max(500).optional(),
-  }).strict(),
-  payment: z.object({
-    method: z.literal('cash'),
-  }).strict(),
-  cash_pay_with: z.number().int().positive().optional(),
-  idempotency_key: z.string().uuid(),
-  // Preflight (E27)
-  acknowledged_codes: z.array(z.string()).max(10).optional().default([]),
-  otp_code: z.string().length(6).regex(/^\d{6}$/).optional(),
-}).strict();
+    payment: z.object({
+      method: z.literal('cash'),
+    }).strict(),
+    cash_pay_with: z.number().int().positive().optional(),
+    delivery_instructions: z.string().max(500).optional(),
+    prefs: OrderPreferences.optional(),
+    idempotency_key: z.string().uuid(),
+    // Preflight (E27)
+    acknowledged_codes: z.array(z.string()).max(10).optional().default([]),
+    otp_code: z.string().length(6).regex(/^\d{6}$/).optional(),
+  }).strict();
+
 export type CreateOrderInput = z.infer<typeof CreateOrderInput>;
 
 // ─── Order Status ────────────────────────────────────────────────────
@@ -74,6 +105,7 @@ export const OrderResponse = z.object({
   status: OrderStatusEnum,
   type: z.literal('delivery'),
   deliveryAddress: z.string().nullable(),
+  deliveryInstructions: z.string().nullable(),
   subtotal: z.number().int(),
   total: z.number().int(),
   paymentMethod: z.literal('cash'),
@@ -83,6 +115,27 @@ export const OrderResponse = z.object({
   items: z.array(OrderItemResponse),
 }).strict();
 export type OrderResponse = z.infer<typeof OrderResponse>;
+
+// ─── Customer Order Status Response (CR-5) ───────────────────────────
+export const CustomerOrderStatusResponse = z.object({
+  id: z.string().uuid(),
+  status: OrderStatusEnum,
+  deliveryAddress: z.string().nullable(),
+  deliveryInstructions: z.string().nullable(),
+  total: z.number().int(),
+  items: z.array(OrderItemResponse),
+  createdAt: z.string(),
+  etaMinutes: z.number().int().nullable(),
+  courierName: z.string().nullable(),
+  courierPhoneMasked: z.string().nullable(),
+  courierPosition: z.object({
+    lat: z.number(),
+    lng: z.number(),
+  }).nullable(),
+  deliveryLat: z.number().nullable(),
+  deliveryLng: z.number().nullable(),
+}).strict();
+export type CustomerOrderStatusResponse = z.infer<typeof CustomerOrderStatusResponse>;
 
 // ─── AuthToken ───────────────────────────────────────────────────────
 const AuthBase = { sub: z.string().uuid(), iat: z.number().int(), exp: z.number().int(), kid: z.string() };

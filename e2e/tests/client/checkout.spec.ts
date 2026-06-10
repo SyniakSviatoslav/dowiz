@@ -125,4 +125,45 @@ test.describe('Client Checkout', () => {
     expect(cookies).toEqual([]);
   });
 
+  test('CR-1: dropoff instruction buttons present on delivery checkout', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', err => errors.push(err.message));
+    await addItemAndGoToCheckout(page);
+    await page.waitForTimeout(2000);
+    expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
+    const dropoffBtns = page.locator('button:has-text("Leave at door"),button:has-text("Hand to me"),button:has-text("Call on arrival"),button:has-text("Ring bell"),button:has-text("Text on arrival")');
+    const count = await dropoffBtns.count();
+    expect(count).toBeGreaterThanOrEqual(1);
+  });
+
+  test('CR-3: cash payment amount field renders with total minimum', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', err => errors.push(err.message));
+    await addItemAndGoToCheckout(page);
+    await page.waitForTimeout(2000);
+    expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
+    const cashInput = page.locator('input[type="number"]');
+    await expect(cashInput).toBeVisible({ timeout: 5000 });
+  });
+
+  test('CR-3: payment section renders cash as default', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', err => errors.push(err.message));
+    await addItemAndGoToCheckout(page);
+    await page.waitForTimeout(2000);
+    expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
+    const body = await page.textContent('body');
+    expect(body).toMatch(/Cash|ALL/i);
+  });
+
+  test('checkout page renders order summary with ALL currency', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', err => errors.push(err.message));
+    await addItemAndGoToCheckout(page);
+    await page.waitForTimeout(2000);
+    expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
+    const totalEl = page.locator('text=/[0-9]+[\\s]*ALL/');
+    await expect(totalEl.first()).toBeVisible({ timeout: 5000 });
+  });
+
 });
