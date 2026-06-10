@@ -14,7 +14,7 @@ export default defineConfig({
     trace: 'on-first-retry',
     video: 'on',
     screenshot: 'on',
-    headless: false,
+    headless: true,
     actionTimeout: 10000,
     navigationTimeout: 15000,
   },
