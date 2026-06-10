@@ -1,27 +1,60 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, useI18n } from '@deliveryos/ui';
+import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, useI18n, useToast } from '@deliveryos/ui';
 import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { calcETA } from '@deliveryos/shared-types';
 
+const STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Order placed',
+  CONFIRMED: 'Order confirmed',
+  PREPARING: 'Preparing your order',
+  READY: 'Order ready',
+  IN_DELIVERY: 'On the way!',
+  DELIVERED: 'Delivered',
+  REJECTED: 'Order rejected',
+  CANCELLED: 'Order cancelled',
+};
+
+const STATUS_VARIANTS: Record<string, 'info' | 'success' | 'warning' | 'error'> = {
+  PENDING: 'info',
+  CONFIRMED: 'info',
+  PREPARING: 'info',
+  READY: 'warning',
+  IN_DELIVERY: 'success',
+  DELIVERED: 'success',
+  REJECTED: 'error',
+  CANCELLED: 'error',
+};
+
 export function OrderStatusPage() {
   const { slug, id } = useParams<{ slug: string, id: string }>();
   const { t } = useI18n();
-  
+  const { showToast } = useToast();
+  const prevStatusRef = useRef<string>('');
+  const lastWsMsgRef = useRef<number>(Date.now());
+  const watchIdRef = useRef<number | null>(null);
+
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [courierPos, setCourierPos] = useState<LngLatLike>([19.817, 41.331]);
+  const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
+  const [sharingLocation, setSharingLocation] = useState(false);
 
-  // 1. Initial snapshot fetch
   const fetchOrder = async () => {
     try {
       const data = await apiClient<any>(`/customer/orders/${id}/status`);
       setOrder(data);
+      if (data.courierPosition) {
+        setCourierPos([data.courierPosition.lng, data.courierPosition.lat]);
+      }
+      if (data.etaMinutes != null) {
+        setEtaMinutes(data.etaMinutes);
+      }
     } catch (err: any) {
-      if (err.status === 404) {
-        // Mock fallback for Stage 2
+      // eslint-disable-next-line
+      if (err?.status === 404) {
         setOrder({
           id,
           status: 'PREPARING',
@@ -46,16 +79,50 @@ export function OrderStatusPage() {
     if (id) fetchOrder();
   }, [id]);
 
-  // 2. WebSocket Subscription
-  const { status: wsStatus } = useWebSocket({
-    room: `order:${id}`,
-    onMessage: (msg) => {
-      if (msg.type === 'order_updated') {
-        setOrder((prev: any) => ({ ...prev, ...msg.payload }));
+  // Watchdog: resync if no WS message for 30s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (Date.now() - lastWsMsgRef.current > 30000) {
+        fetchOrder();
       }
-      if (msg.type === 'courier_position') {
-        const { lng, lat } = msg.payload;
-        setCourierPos([lng, lat]);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [id]);
+
+  const { status: wsStatus, sendMessage } = useWebSocket({
+    room: `order:${id}`,
+    onMessage: (msg: any) => {
+      lastWsMsgRef.current = Date.now();
+
+      // Direct protocol messages
+      if (msg.type === 'error') return;
+
+      // Wrapped messageBus messages: { room, data: { type, payload } }
+      if (!msg.data) return;
+      const inner = msg.data;
+
+      if (inner.type === 'order.courier_updated') {
+        const p = inner.payload;
+        if (p.position) {
+          setCourierPos([p.position.lng, p.position.lat]);
+        }
+        if (p.etaSeconds != null) {
+          setEtaMinutes(Math.ceil(p.etaSeconds / 60));
+        }
+        if (p.courierName) {
+          setOrder((prev: any) => ({ ...prev, courier_name: p.courierName }));
+        }
+        if (p.phoneMasked) {
+          setOrder((prev: any) => ({ ...prev, courier_phone: p.phoneMasked }));
+        }
+        if (p.status === 'delivered') {
+          setOrder((prev: any) => ({ ...prev, status: 'DELIVERED' }));
+        }
+        return;
+      }
+
+      if (inner.type === 'order.status' && inner.status) {
+        setOrder((prev: any) => ({ ...prev, status: inner.status }));
       }
     },
     onReconnect: () => {
@@ -63,22 +130,84 @@ export function OrderStatusPage() {
     }
   });
 
+  // Toast on status change
+  useEffect(() => {
+    if (!order?.status) return;
+    if (order.status === prevStatusRef.current) return;
+    prevStatusRef.current = order.status;
+    const label = STATUS_LABELS[order.status] || order.status;
+    const variant = STATUS_VARIANTS[order.status] || 'info';
+    showToast(label, variant);
+  }, [order?.status, showToast]);
+
+  // CR-6: Auto-stop sharing on DELIVERED
+  useEffect(() => {
+    if (order?.status === 'DELIVERED' && watchIdRef.current != null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+      setSharingLocation(false);
+    }
+  }, [order?.status]);
+
+  // CR-6: Cleanup geolocation on unmount
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current != null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
+
+  const startSharing = useCallback(() => {
+    if (!navigator.geolocation) return;
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        sendMessage({
+          type: 'client_location',
+          payload: { lat: pos.coords.latitude, lng: pos.coords.longitude }
+        });
+      },
+      () => {
+        setSharingLocation(false);
+        watchIdRef.current = null;
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+    setSharingLocation(true);
+  }, [sendMessage]);
+
+  const stopSharing = useCallback(() => {
+    if (watchIdRef.current != null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    sendMessage({ type: 'client_location_stop' });
+    setSharingLocation(false);
+  }, [sendMessage]);
+
   const couriers: CourierOnMap[] = useMemo(() => {
-    if (order?.courier_name) {
+    if (order?.courierName) {
       return [{
         id: 'c1',
-        name: order.courier_name,
-        initials: (order.courier_name || 'C').charAt(0).toUpperCase(),
+        name: order.courierName,
+        initials: (order.courierName || 'C').charAt(0).toUpperCase(),
         lngLat: courierPos,
         status: 'busy',
       }];
     }
     return [];
-  }, [order?.courier_name, courierPos]);
+  }, [order?.courierName, courierPos]);
 
-  const destPin: LngLatLike = order?.delivery_lat
-    ? [order.delivery_lng || 19.817, order.delivery_lat || 41.331]
+  const destPin: LngLatLike = order?.deliveryLat
+    ? [order.deliveryLng || 19.817, order.deliveryLat || 41.331]
     : [19.817, 41.331];
+
+  const isInDelivery = order?.status === 'IN_DELIVERY';
+  const displayEta = etaMinutes != null
+    ? `${etaMinutes} min`
+    : order?.createdAt
+      ? calcETA(order.createdAt, order.elapsedSeconds || 0)
+      : '';
 
   if (loading) {
     return <div className="p-6 space-y-4"><SkeletonBase className="h-40 w-full" /></div>;
@@ -104,12 +233,12 @@ export function OrderStatusPage() {
         </div>
       </div>
 
-      {/* Screen-reader accessible courier status (non-visual map alternative) */}
-      {order?.courier_name && (
+      {/* Screen-reader accessible courier status */}
+      {order?.courierName && (
         <div className="sr-only" role="status" aria-live="polite">
-          Courier {order.courier_name} is delivering your order.
-          {order.eta_minutes ? ` Approximately ${order.eta_minutes} minutes away.` : ''}
-          {order.delivery_address ? ` Delivering to ${order.delivery_address}.` : ''}
+          Courier {order.courierName} is delivering your order.
+          {etaMinutes ? ` Approximately ${etaMinutes} minutes away.` : ''}
+          {order.deliveryAddress ? ` Delivering to ${order.deliveryAddress}.` : ''}
         </div>
       )}
 
@@ -117,12 +246,45 @@ export function OrderStatusPage() {
         
         <div className="text-center">
           <h1 className="text-2xl font-bold text-[var(--brand-text)] mb-1" style={{ fontFamily: 'var(--brand-font-heading)' }}>
-            {calcETA(order.createdAt, order.elapsedSeconds || 0)}
+            {displayEta}
           </h1>
           <p className="text-[var(--brand-text-muted)] text-sm">{t('client.estimated_arrival', 'Estimated arrival')}</p>
         </div>
 
         <OrderProgress status={order.status} />
+
+        {/* CR-6: Share my location (visible during IN_DELIVERY) */}
+        {isInDelivery && (
+          <div className="flex flex-col gap-2">
+            {sharingLocation ? (
+              <div className="flex items-center gap-3 bg-[var(--color-success)]/10 border border-[var(--color-success)]/30 rounded-[var(--brand-radius)] p-3">
+                <div className="w-3 h-3 rounded-full bg-[var(--color-success)] animate-pulse shrink-0" />
+                <div className="flex-1 text-sm">
+                  <div className="font-semibold text-[var(--color-success)]">
+                    {t('client.sharing_location', 'Sharing your location')}
+                  </div>
+                  <div className="text-xs text-[var(--brand-text-muted)]">
+                    {t('client.sharing_location_note', 'Courier can see your live position')}
+                  </div>
+                </div>
+                <button
+                  onClick={stopSharing}
+                  className="text-xs px-2.5 py-1.5 rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-text)]"
+                >
+                  {t('client.stop_sharing', 'Stop')}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={startSharing}
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-[var(--brand-radius)] bg-[var(--brand-primary)] text-[var(--color-on-primary)] font-semibold text-sm"
+              >
+                <span>📍</span>
+                <span>{t('client.share_location', 'Share my location with courier')}</span>
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4">
           <h2 className="font-semibold mb-3">{t('client.order_details', 'Order Details #{{id}}', { id: order.id.substring(0, 4) })}</h2>
