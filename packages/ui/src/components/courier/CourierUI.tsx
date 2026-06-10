@@ -50,6 +50,7 @@ export interface CourierTask {
   customer: { address: string; phone?: string; instructions?: string; lat?: number; lng?: number; };
   total: number;
   eta: string;
+  cashPayWith?: number | null;
 }
 
 interface TaskCardProps {
