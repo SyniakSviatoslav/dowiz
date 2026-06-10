@@ -10,7 +10,7 @@ export default defineConfig({
   expect: { timeout: 10000 },
 
   use: {
-    baseURL: process.env.VITE_BASE_URL || 'http://localhost:5173',
+    baseURL: process.env.VITE_BASE_URL || 'https://dowiz.fly.dev',
     trace: 'on-first-retry',
     video: 'on',
     screenshot: 'on',

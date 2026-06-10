@@ -174,11 +174,12 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
         </div>
 
         {hasTaste && (
-          <div className="flex gap-1">
+          <div className="flex gap-1.5 flex-wrap">
             {Object.entries(product.taste!).filter(([, v]) => v > 0).map(([axis, level]) => (
-              <span key={axis} className="inline-flex items-center gap-0.5 text-[9px] leading-tight" style={{ color: 'var(--brand-text-muted)' }} title={`${TASTE_LABELS[axis] || axis}: ${level}/3`}>
-                <i className={TASTE_ICONS[axis] || 'ti ti-circle'} style={{ fontSize: '0.6rem' }} />
-                {level}
+              <span key={axis} className="inline-flex items-center gap-0.5" style={{ color: 'var(--brand-text-muted)' }} title={`${TASTE_LABELS[axis] || axis}`}>
+                {Array.from({ length: level }).map((_, i) => (
+                  <i key={i} className={TASTE_ICONS[axis] || 'ti ti-circle'} style={{ fontSize: '0.6rem' }} />
+                ))}
               </span>
             ))}
           </div>

@@ -66,6 +66,14 @@ const EnvSchema = z.object({
   RESTORE_VERIFY_CRON: z.string().default('0 4 * * *'),
   RESTORE_VERIFY_FULL_HASH: z.enum(['true', 'false']).default('false'),
   RESTORE_POOL_SIZE: z.coerce.number().int().positive().default(2),
+  // AI OCR — Groq
+  GROQ_API_KEY: z.string().optional(),
+  GROQ_MODEL: z.string().optional(),
+  // AI OCR — OpenAI
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().optional(),
+  LLM_ADAPTER: z.string().optional(),
+  LLM_PROVIDER: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

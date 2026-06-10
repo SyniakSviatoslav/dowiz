@@ -555,6 +555,32 @@ export function MenuPage() {
                 )}
               </div>
 
+              {/* Taste Section */}
+              {(() => {
+                const taste = getAttr(detailProduct, 'taste');
+                if (!taste || typeof taste !== 'object') return null;
+                const entries = Object.entries(taste).filter(([, v]) => (v as number) > 0);
+                if (!entries.length) return null;
+                const icons: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
+                return (
+                  <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)' }}>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
+                      <i className="ti ti-flask" /> {t('common.taste', 'Taste')}
+                    </h3>
+                    <div className="flex flex-wrap gap-x-4 gap-y-2">
+                      {entries.map(([axis, level]) => (
+                        <span key={axis} className="inline-flex items-center gap-1 text-sm" style={{ color: 'var(--brand-text-muted)' }}>
+                          <i className={icons[axis] || 'ti ti-circle'} style={{ fontSize: '0.75rem' }} />
+                          {Array.from({ length: level as number }).map((_, i) => (
+                            <i key={i} className={icons[axis] || 'ti ti-circle'} style={{ fontSize: '0.65rem' }} />
+                          ))}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Nutrition Section */}
               {(bomToNutrition(detailProduct).kcal > 0) && (
                 <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)' }}>

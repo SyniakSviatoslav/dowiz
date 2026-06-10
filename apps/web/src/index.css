@@ -42,16 +42,36 @@ body {
   }
 }
 
+/* Consistent scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--brand-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--brand-text-muted);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--brand-border) transparent;
+}
+
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 .product-card {
-  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  box-shadow: 0 2px 12px color-mix(in srgb, #000 30%, transparent);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03);
 }
 .product-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 32px color-mix(in srgb, var(--brand-primary) 8%, transparent);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--brand-text) 6%, transparent), 0 2px 8px color-mix(in srgb, var(--brand-text) 3%, transparent);
 }
 
 .skeleton-block {
