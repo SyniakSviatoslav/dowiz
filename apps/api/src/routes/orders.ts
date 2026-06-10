@@ -9,6 +9,11 @@ import crypto from 'crypto';
 import { applyTax, assertNonNegative, computeLineTotal } from '../lib/money.js';
 import { distanceKm } from '../lib/geo.js';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUUID(id: string): boolean {
+  return UUID_RE.test(id);
+}
+
 interface OrderRouteOptions {
   db: Pool;
   messageBus: MessageBus;
@@ -49,7 +54,13 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
   fastify.post('/orders', {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
   }, async (request, reply) => {
-    const input = CreateOrderInput.parse(request.body);
+    let input;
+    try {
+      input = CreateOrderInput.parse(request.body);
+    } catch (err: any) {
+      const issues = err?.issues?.map((i: any) => i.message).join('; ');
+      return reply.status(400).send({ code: 400, error: issues || 'Validation error' });
+    }
     const { locationId, items, customer: cust, delivery, idempotency_key, cash_pay_with } = input;
 
     const client = await db.connect();
@@ -639,6 +650,9 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
   // ─── GET /orders/:id ───────────────────────────────────────────────
   fastify.get('/orders/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
+    if (!isValidUUID(id)) {
+      return reply.status(400).send({ error: 'Invalid order ID format' });
+    }
     const user = request.user;
     let locationId: string | null = null;
 

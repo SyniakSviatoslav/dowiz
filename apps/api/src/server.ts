@@ -16,6 +16,7 @@ import modifierGroupRoutes from './routes/owner/modifier-groups.js';
 import locationRoutes from './routes/owner/locations.js';
 import publicMenuRoutes from './routes/public/menu.js';
 import ssrRoutes from './routes/public/ssr.js';
+import brandingPreviewRoutes from './routes/public/branding-preview.js';
 import seoRoutes from './routes/public/seo.js';
 import clientFlowRoutes from './routes/public/client-flow.js';
 import pwaRoutes from './routes/public/pwa.js';
@@ -502,8 +503,30 @@ async function main() {
   fastify.register(securityHeadersPlugin);
   fastify.register(healthRoutes, { db: pool, messageBus });
 
+  // Auth-guarded path prefixes return 401 (not 404) for unauthenticated requests
+  const AUTH_PREFIXES = ['/api/owner/', '/api/courier/', '/api/customer/'];
+  fastify.addHook('onRequest', async (request, reply) => {
+    if (request.method === 'OPTIONS') return;
+    const url = request.url.split('?')[0];
+    if (AUTH_PREFIXES.some(p => url.startsWith(p))) {
+      const token = request.headers.authorization;
+      if (!token || !token.startsWith('Bearer ')) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+    }
+  });
+
   // P1-6 / FX-6: Custom error handler — never leak internals
   fastify.setErrorHandler((error, request, reply) => {
+    // Zod validation errors → 400
+    if (error.validation) {
+      const issues = error.validation.map((v: any) => v.message || `${v.instancePath || v.dataPath} ${v.keyword}`).join('; ');
+      return reply.status(400).send({
+        code: 400,
+        error: issues || 'Validation error',
+      });
+    }
+
     const statusCode = error.statusCode || 500;
     const correlationId = (request as any).correlationId || 'unknown';
 
@@ -537,6 +560,7 @@ async function main() {
   fastify.register(locationRoutes);
   fastify.register(publicMenuRoutes);
   fastify.register(ssrRoutes, { db: pool });
+  fastify.register(brandingPreviewRoutes);
   fastify.register(seoRoutes, { db: pool });
   fastify.register(clientFlowRoutes, { db: pool });
   fastify.register(pwaRoutes, { db: pool });
@@ -633,7 +657,7 @@ async function main() {
   });
 
   // SPA proxy — maps React SPA URL patterns to real backend routes
-  fastify.register(spaProxyRoutes, { db: pool });
+  fastify.register(spaProxyRoutes, { db: pool, storage });
   // P32 — Backup admin routes
   const { default: backupAdminRoutes } = await import('./routes/admin/backups.js');
   fastify.register(backupAdminRoutes, { prefix: '/api/admin', db: pool, queue });
@@ -641,9 +665,14 @@ async function main() {
   const { default: fallbackAdminRoutes } = await import('./routes/admin/fallback.js');
   fastify.register(fallbackAdminRoutes, { prefix: '/api/admin', db: pool });
 
-  // SPA Fallback: Serve index.html for unknown HTML requests (enables client-side routing)
+  // SPA Fallback: Serve index.html for unknown GET requests matching SPA route patterns
+  const SPA_ROUTES = ['/admin', '/courier', '/dashboard', '/s/', '/login'];
   fastify.setNotFoundHandler((request, reply) => {
-    if (request.method === 'GET' && request.headers.accept?.includes('text/html')) {
+    if (
+      request.method === 'GET' &&
+      (request.headers.accept?.includes('text/html') ||
+        SPA_ROUTES.some(prefix => request.url === prefix || request.url.startsWith(prefix + '/')))
+    ) {
       return reply.sendFile('index.html');
     }
     reply.status(404).send({ error: 'Not found', path: request.url });

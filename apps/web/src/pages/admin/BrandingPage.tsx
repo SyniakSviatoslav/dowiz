@@ -31,7 +31,9 @@ export function BrandingPage() {
       if (res.logo_url) setLogoUrl(res.logo_url);
     }).catch(() => {});
     apiClient<any>('/owner/settings').then(res => {
-      if (res.locationName) {
+      if (res.slug) {
+        setSlug(res.slug);
+      } else if (res.locationName) {
         const generated = res.locationName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
         setSlug(generated);
       }
@@ -72,7 +74,7 @@ export function BrandingPage() {
     if (config.bg && !config.bg.startsWith('var(')) params.set('draft_bg', config.bg);
     if (config.text && !config.text.startsWith('var(')) params.set('draft_text', config.text);
     // Logo excluded from URL — base64 data URLs cause 431 (header too large)
-    return `https://${slug}.dowiz.org?${params.toString()}`;
+    return `/branding-preview/${slug}?${params.toString()}`;
   }, [slug, config.primary, config.bg, config.text, logoPreview]);
 
   return (
@@ -144,9 +146,14 @@ export function BrandingPage() {
           </div>
         )}
         {slug && (
-          <p className="text-xs text-center mt-3" style={{ color: 'var(--brand-text-muted)' }}>
-            {t('admin.client_url', 'Client URL:')} <span className="font-mono">{slug}.dowiz.org</span>
-          </p>
+          <>
+            <p className="text-xs text-center mt-3" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('admin.client_url', 'Client URL:')} <span className="font-mono">{slug}.dowiz.org</span>
+            </p>
+            <p className="text-[10px] text-center mt-1 opacity-60" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('admin.branding_preview_note', 'Preview loads client page with draft colors')}
+            </p>
+          </>
         )}
       </div>
     </div>

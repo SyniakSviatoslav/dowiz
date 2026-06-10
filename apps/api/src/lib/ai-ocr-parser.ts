@@ -44,6 +44,106 @@ const llmSchema = z.object({
   }))
 });
 
+// ── LLM Adapter ─────────────────────────────────────────────────────
+type LlmProvider = 'ollama' | 'groq' | 'openai' | 'mock';
+
+function detectProvider(model: string): LlmProvider {
+  if (model === 'mock') return 'mock';
+  const env = (process.env.LLM_ADAPTER || '').toLowerCase();
+  if (env === 'groq') return 'groq';
+  if (env === 'openai') return 'openai';
+  if (env === 'ollama') return 'ollama';
+  if (process.env.GROQ_API_KEY) return 'groq';
+  if (process.env.OPENAI_API_KEY) return 'openai';
+  return 'ollama';
+}
+
+async function callLlm(provider: LlmProvider, prompt: string, model: string, timeoutMs: number): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    if (provider === 'groq') {
+      const apiKey = process.env.GROQ_API_KEY || '';
+      const endpoint = process.env.GROQ_ENDPOINT || 'https://api.groq.com/openai/v1/chat/completions';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'You are a menu data extraction assistant. Return ONLY valid JSON matching the requested schema. No markdown, no commentary.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.1,
+          response_format: { type: 'json_object' },
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`Groq ${res.status}: ${errBody.slice(0, 200)}`);
+      }
+      const data = await res.json() as any;
+      const content = data?.choices?.[0]?.message?.content;
+      if (!content) throw new Error('Groq returned empty content');
+      return content;
+
+    } else if (provider === 'openai') {
+      const apiKey = process.env.OPENAI_API_KEY || '';
+      const endpoint = process.env.OPENAI_ENDPOINT || 'https://api.openai.com/v1/chat/completions';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'You are a menu data extraction assistant. Return ONLY valid JSON matching the requested schema. No markdown, no commentary.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.1,
+          response_format: { type: 'json_object' },
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`OpenAI ${res.status}: ${errBody.slice(0, 200)}`);
+      }
+      const data = await res.json() as any;
+      const content = data?.choices?.[0]?.message?.content;
+      if (!content) throw new Error('OpenAI returned empty content');
+      return content;
+
+    } else {
+      // Ollama
+      const endpoint = process.env.LLM_ENDPOINT || 'http://localhost:11434/api/generate';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          prompt,
+          stream: false,
+          format: 'json',
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`Ollama ${res.status}: ${res.statusText}`);
+      const data = await res.json() as any;
+      return data.response;
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export class AiOcrParser implements MenuParserProvider {
   readonly id = 'ai-ocr';
   private piiRedactor = new PiiRedactor();
@@ -114,33 +214,26 @@ export class AiOcrParser implements MenuParserProvider {
     const t1 = Date.now();
 
     // 3. LLM Extraction
-    const llmEndpoint = process.env.LLM_ENDPOINT || 'http://localhost:11434/api/generate';
     const llmModel = process.env.LLM_PROVIDER || 'llama3.1:8b-instruct';
+    const provider = detectProvider(llmModel);
 
-    // Using mock in CI
-    if (llmModel === 'mock') {
+    if (provider === 'mock') {
       return this.mockResult(input.config, issues);
     }
+
+    const modelForProvider = provider === 'groq'
+      ? (process.env.GROQ_MODEL || 'llama-3.1-8b-instruct')
+      : provider === 'openai'
+        ? (process.env.OPENAI_MODEL || 'gpt-4o-mini')
+        : llmModel;
 
     let llmResponse = '';
     try {
       const prompt = `Extract the menu structure from the following text into a JSON object matching the requested schema. Ensure prices are in the standard minor unit integer format (multiply by 10^${input.config.currencyMinorUnit || 0}). Currency should be ${input.config.expectedCurrency || 'ALL'}. Do not write anything other than JSON.\n\n${redactedText}`;
 
-      const res = await fetch(llmEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: llmModel,
-          prompt,
-          stream: false,
-          format: 'json'
-        })
-      });
-      if (!res.ok) throw new Error(`LLM Error: ${res.statusText}`);
-      const data = await res.json() as any;
-      llmResponse = data.response;
+      llmResponse = await callLlm(provider, prompt, modelForProvider, 120000);
     } catch (e: any) {
-      issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `LLM Failed: ${e.message}`, severity: 'error' });
+      issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `LLM Failed (${provider}): ${e.message}`, severity: 'error' });
       return this.fallbackError(issues);
     }
     const llmMs = Date.now() - t1;

@@ -31,6 +31,18 @@ export default tseslint.config(
       'local/no-duplicate-import': 'warn',
       'local/no-empty-catch': 'warn',
       'local/no-mock-in-prod': 'warn',
+
+      // --- Karpathy P2: Simplicity rules (warn-only, no CI block) ---
+      'max-depth': ['warn', 4],
+      'max-nested-callbacks': ['warn', 3],
+      'max-params': ['warn', 4],
+      'no-lonely-if': 'warn',
+      'no-useless-rename': 'warn',
+      'object-shorthand': 'warn',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'warn',
+      '@typescript-eslint/prefer-as-const': 'warn',
+      '@typescript-eslint/prefer-optional-chain': 'warn',
+      '@typescript-eslint/prefer-nullish-coalescing': 'warn',
     },
   },
   {
