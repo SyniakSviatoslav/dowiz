@@ -2,32 +2,41 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Client Order Status', () => {
 
-  test('order status page loads with mock order data', async ({ page }) => {
+  test('order status page loads with order content', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', err => errors.push(err.message));
     await page.goto('/s/test-slug/order/o_mock_123?dev=true');
     await page.waitForTimeout(3000);
-
-    // Should show some order-related content
+    expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
     const body = await page.textContent('body');
-    expect(body!.length).toBeGreaterThan(0);
+    expect(body.length).toBeGreaterThan(200);
+    expect(/order|status|received|preparing|ready|delivered|total/i.test(body)).toBe(true);
   });
 
-  test('status timeline shows steps', async ({ page }) => {
+  test('status timeline shows progression steps', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', err => errors.push(err.message));
     await page.goto('/s/test-slug/order/o_mock_123?dev=true');
     await page.waitForTimeout(2000);
-
-    // Look for status-related elements
-    const steps = await page.locator('text=/received|preparing|ready|on the way|delivered/i').count();
-    // May or may not render depending on mock data
-    expect(steps).toBeGreaterThanOrEqual(0);
+    expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
+    const statusSteps = page.locator('text=/received|preparing|ready|on the way|delivered/i');
+    const stepCount = await statusSteps.count();
+    expect(stepCount).toBeGreaterThanOrEqual(1);
+    expect(stepCount).toBeLessThanOrEqual(5);
   });
 
   test('order not found shows appropriate message', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', err => errors.push(err.message));
     await page.goto('/s/test-slug/order/nonexistent?dev=true');
     await page.waitForTimeout(2000);
-
-    // Should not crash, should show some content
+    const criticalErrors = errors.filter(e =>
+      !e.includes('favicon') && !e.includes('404')
+    );
+    expect(criticalErrors, `JS errors: ${criticalErrors.join('; ')}`).toEqual([]);
     const body = await page.textContent('body');
-    expect(body!.length).toBeGreaterThan(0);
+    expect(body.length).toBeGreaterThan(100);
+    expect(/not found|error|unavailable|order|status/i.test(body)).toBe(true);
   });
 
   test('no cookies are set on status page', async ({ page }) => {

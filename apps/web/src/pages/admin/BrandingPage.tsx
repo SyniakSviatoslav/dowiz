@@ -148,8 +148,26 @@ export function BrandingPage() {
         {slug && (
           <>
             <p className="text-xs text-center mt-3" style={{ color: 'var(--brand-text-muted)' }}>
-              {t('admin.client_url', 'Client URL:')} <span className="font-mono">{slug}.dowiz.org</span>
+              {t('admin.client_url', 'Client URL:')}
             </p>
+            <div className="flex items-center justify-center gap-2 mt-1">
+              <a
+                href={`https://dowiz.fly.dev/s/${slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-xs text-[var(--brand-primary)] hover:underline"
+              >
+                https://dowiz.fly.dev/s/{slug}
+              </a>
+              <button
+                type="button"
+                onClick={() => { navigator.clipboard.writeText(`https://dowiz.fly.dev/s/${slug}`); }}
+                className="text-[10px] text-[var(--brand-text-muted)] hover:text-[var(--brand-primary)] underline"
+                title={t('common.copy', 'Copy')}
+              >
+                {t('common.copy', 'Copy')}
+              </button>
+            </div>
             <p className="text-[10px] text-center mt-1 opacity-60" style={{ color: 'var(--brand-text-muted)' }}>
               {t('admin.branding_preview_note', 'Preview loads client page with draft colors')}
             </p>

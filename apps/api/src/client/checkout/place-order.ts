@@ -13,7 +13,7 @@ export interface PlaceOrderPayload {
     pin: { lat: number; lng: number } | null;
     address_text?: string;
   };
-  cash_pay_with: boolean;
+  cash_pay_with: number | null;
   items: Array<{
     product_id: string;
     quantity: number;
