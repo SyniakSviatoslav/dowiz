@@ -62,6 +62,12 @@ export function MenuPage() {
     return (p.attributes as Record<string, any>)[key];
   };
 
+  const extractLineAllergens = (line: any): string[] => {
+    if (Array.isArray(line.allergens)) return line.allergens;
+    if (typeof line.allergens === 'string' && line.allergens) return line.allergens.split(',').map((s: string) => s.trim()).filter(Boolean);
+    return [];
+  };
+
   const bomToNutrition = (p: Product) => {
     const bom = getAttr(p, 'bom');
     if (!Array.isArray(bom) || bom.length === 0) return { kcal: 0, protein: 0, fat: 0, carbs: 0, allergens: [], ingredients: [] };
@@ -73,7 +79,7 @@ export function MenuPage() {
       if (typeof line.proteinG === 'number') protein += line.proteinG;
       if (typeof line.fatG === 'number') fat += line.fatG;
       if (typeof line.carbsG === 'number') carbs += line.carbsG;
-      if (Array.isArray(line.allergens)) line.allergens.forEach((a: string) => allergens.add(a));
+      extractLineAllergens(line).forEach((a: string) => allergens.add(a));
       if (line.supplyName && line.kind !== 'packaging' && line.kind !== 'utensil') ingredients.push(line.supplyName);
     }
     return { kcal: Math.round(kcal), protein: Math.round(protein), fat: Math.round(fat), carbs: Math.round(carbs), allergens: Array.from(allergens), ingredients };
@@ -123,7 +129,7 @@ export function MenuPage() {
     for (const cat of data) for (const p of cat.products) {
       const bom = getAttr(p, 'bom');
       if (Array.isArray(bom)) for (const line of bom) {
-        if (Array.isArray(line.allergens)) for (const a of line.allergens) set.add(a);
+        extractLineAllergens(line).forEach(a => set.add(a));
       }
     }
     return Array.from(set).sort();
