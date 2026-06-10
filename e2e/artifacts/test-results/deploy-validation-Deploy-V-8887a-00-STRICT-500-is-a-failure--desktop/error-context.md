@@ -114,7 +114,7 @@ Received: 500
   187 |   });
   188 | 
   189 |   test('6.2 — image upload with auth returns 200 (STRICT: 500 is a failure)', async ({ request }) => {
-  190 |     const fakePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  190 |     const fakePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFklEQVQYV2P8z8BQz0BFwMgwakChAAB0VQx8W6je5QAAAABJRU5ErkJggg==', 'base64');
   191 |     const res = await request.post(`${BASE}/api/owner/menu/products/${createdProductId}/image`, {
   192 |       headers: { Authorization: `Bearer ${authToken}` },
   193 |       multipart: {
@@ -124,7 +124,7 @@ Received: 500
 > 197 |     expect(res.status()).toBe(200);
       |                          ^ Error: expect(received).toBe(expected) // Object.is equality
   198 |     const body = await res.json();
-  199 |     expect(body.imageUrl).toBeTruthy();
+  199 |     expect(body.imageUrl || body.imageKey).toBeTruthy();
   200 |   });
   201 | 
   202 |   // ── 7. Menu import AI — LLM adapter detection (strict: no 500) ──────
