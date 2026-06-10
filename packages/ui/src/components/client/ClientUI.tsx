@@ -17,47 +17,82 @@ interface ProductCardProps {
     id: string; name: string; description?: string; price: number; image?: string;
     isAvailable: boolean; tags?: string[];
     taste?: Record<string, number>;
-    allergenStatus?: string;
+    allergens?: string[];
     kcal?: number | null;
     protein?: number | null;
     fat?: number | null;
     carbs?: number | null;
+    ingredients?: string[];
   };
   onAdd: (e: React.MouseEvent) => void;
+  onClick?: (e: React.MouseEvent) => void;
 }
 
 const TASTE_ICONS: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
+const TASTE_LABELS: Record<string, string> = { spicy: 'Spicy', sweet: 'Sweet', salty: 'Salty', sour: 'Sour', richness: 'Rich' };
+const ALLERGEN_COLORS: Record<string, { bg: string; text: string }> = {
+  gluten: { bg: 'rgba(234,179,8,0.12)', text: '#a16207' },
+  dairy: { bg: 'rgba(59,130,246,0.12)', text: '#1d4ed8' },
+  eggs: { bg: 'rgba(234,179,8,0.12)', text: '#a16207' },
+  soy: { bg: 'rgba(34,197,94,0.12)', text: '#15803d' },
+  nuts: { bg: 'rgba(249,115,22,0.12)', text: '#c2410c' },
+  peanuts: { bg: 'rgba(249,115,22,0.12)', text: '#c2410c' },
+  shellfish: { bg: 'rgba(239,68,68,0.12)', text: '#b91c1c' },
+  fish: { bg: 'rgba(6,182,212,0.12)', text: '#0e7490' },
+  sesame: { bg: 'rgba(168,85,247,0.12)', text: '#7e22ce' },
+};
 
-export function ProductCard({ product, onAdd }: ProductCardProps) {
+function getAllergenStyle(allergen: string) {
+  const key = allergen.toLowerCase();
+  return ALLERGEN_COLORS[key] || { bg: 'rgba(107,114,128,0.12)', text: '#374151' };
+}
+
+export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
+  const hasAllergens = product.allergens && product.allergens.length > 0;
+  const hasIngredients = product.ingredients && product.ingredients.length > 0;
+  const hasTaste = product.taste && Object.keys(product.taste).length > 0;
+  const hasNutrition = product.kcal != null;
+  const allergens = product.allergens || [];
+  const ingredients = product.ingredients || [];
+
   return (
     <article 
-      className={`product-card rounded-xl flex flex-col cursor-pointer overflow-hidden border transition-all duration-150 ease-in-out ${
-        product.isAvailable ? 'hover:-translate-y-1 hover:shadow-xl active:scale-[0.97]' : 'opacity-55'
+      className={`product-card rounded-xl flex flex-col cursor-pointer overflow-hidden border transition-all duration-150 ease-in-out h-full ${
+        product.isAvailable ? 'hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98]' : 'opacity-55'
       }`}
       style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}
+      onClick={onClick}
     >
       <div 
         className="w-full aspect-[4/3] flex items-center justify-center relative overflow-hidden" 
         style={{ background: 'var(--brand-surface-raised)' }}
       >
         {product.image ? (
-          <img src={product.image} alt={product.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+          <img src={product.image} alt={product.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
         ) : (
           <div className="flex flex-col items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
             <i className="ti ti-tools-kitchen-2 text-4xl opacity-25" />
           </div>
         )}
-        {product.allergenStatus === 'none' && (
-          <div className="absolute top-2 left-2 z-10">
-            <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-md flex items-center gap-1" style={{ background: 'rgba(5,150,105,0.15)', color: 'var(--color-success)' }}>
-              <i className="ti ti-circle-check" style={{ fontSize: '0.6rem' }} />
-              No allergens
+        {hasAllergens && (
+          <div className="absolute top-1.5 left-1.5 z-10 flex gap-0.5">
+            <span className="text-[8px] font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-0.5" style={{ background: 'rgba(220,38,38,0.15)', color: 'var(--color-danger)' }}>
+              <i className="ti ti-alert-triangle" style={{ fontSize: '0.55rem' }} />
+              {allergens.length === 1 ? allergens[0] : `${allergens.length}`}
             </span>
           </div>
         )}
-        {product.kcal != null && (
-          <div className="absolute top-2 right-2 z-10">
-            <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-md flex items-center gap-1" style={{ background: 'rgba(0,0,0,0.55)', color: '#fff' }}>
+        {!hasAllergens && product.isAvailable && (
+          <div className="absolute top-1.5 left-1.5 z-10">
+            <span className="text-[8px] font-medium px-1.5 py-0.5 rounded-md flex items-center gap-0.5" style={{ background: 'rgba(5,150,105,0.12)', color: 'var(--color-success)' }}>
+              <i className="ti ti-circle-check" style={{ fontSize: '0.55rem' }} />
+              Clean
+            </span>
+          </div>
+        )}
+        {hasNutrition && (
+          <div className="absolute top-1.5 right-1.5 z-10">
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-1" style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
               <i className="ti ti-flame" style={{ fontSize: '0.6rem' }} />
               {product.kcal}
             </span>
@@ -74,16 +109,16 @@ export function ProductCard({ product, onAdd }: ProductCardProps) {
           </>
         )}
       </div>
-      <div className="p-3 flex flex-col flex-1 gap-1.5">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="font-semibold text-sm leading-tight line-clamp-2 flex-1" style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
+      <div className="p-2.5 flex flex-col flex-1 gap-1 min-h-0">
+        <div className="flex items-start justify-between gap-1.5">
+          <h3 className="font-semibold text-[13px] leading-tight line-clamp-2 flex-1" style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
           <button 
-            className={`shrink-0 w-[36px] h-[36px] flex items-center justify-center text-white rounded-full transition-all duration-150 ease-in-out mt-0.5 ${
+            className={`shrink-0 w-[32px] h-[32px] flex items-center justify-center text-white rounded-full transition-all duration-150 ease-in-out mt-0.5 ${
               product.isAvailable 
                 ? 'hover:brightness-110 hover:scale-110 active:scale-[0.88]' 
                 : 'opacity-30 cursor-not-allowed'
             }`}
-            style={{ background: 'var(--brand-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}
+            style={{ background: 'var(--brand-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -92,40 +127,58 @@ export function ProductCard({ product, onAdd }: ProductCardProps) {
             disabled={!product.isAvailable}
             aria-label="Add to cart"
           >
-            <i className="ti ti-plus text-base leading-none" />
+            <i className="ti ti-plus text-sm leading-none" />
           </button>
         </div>
         {product.description && (
-          <p className="text-[11px] leading-snug line-clamp-2" style={{ color: 'var(--brand-text-muted)' }}>
+          <p className="text-[10px] leading-snug line-clamp-2" style={{ color: 'var(--brand-text-muted)' }}>
             {product.description}
           </p>
         )}
+
+        {hasIngredients && (
+          <div className="flex gap-0.5 flex-wrap">
+            {ingredients.slice(0, 4).map((ing, i) => (
+              <span key={i} className="px-1 py-0 rounded text-[9px] leading-tight" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
+                {ing}
+              </span>
+            ))}
+            {ingredients.length > 4 && <span className="text-[9px]" style={{ color: 'var(--brand-text-muted)' }}>+{ingredients.length - 4}</span>}
+          </div>
+        )}
+
+        {hasAllergens && (
+          <div className="flex gap-0.5 flex-wrap">
+            {allergens.map(a => {
+              const s = getAllergenStyle(a);
+              return (
+                <span key={a} className="px-1 py-0 rounded text-[8px] font-semibold uppercase leading-tight" style={{ background: s.bg, color: s.text }}>
+                  {a}
+                </span>
+              );
+            })}
+          </div>
+        )}
+
         <div className="flex items-center justify-between mt-auto pt-1">
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-bold text-base" style={{ color: 'var(--brand-primary)' }}>{formatALL(product.price)}</span>
-            {(product.protein != null || product.fat != null || product.carbs != null) && (
-              <span className="text-[9px]" style={{ color: 'var(--brand-text-muted)' }}>
-                {product.protein != null && <span className="opacity-60">P{product.protein} </span>}
-                {product.fat != null && <span className="opacity-60">F{product.fat}</span>}
+          <div className="flex items-baseline gap-1">
+            <span className="font-bold text-sm" style={{ color: 'var(--brand-primary)' }}>{formatALL(product.price)}</span>
+            {hasNutrition && (
+              <span className="text-[8px]" style={{ color: 'var(--brand-text-muted)' }}>
+                {product.kcal}kcal
+                {product.protein != null && <span className="opacity-60"> · P{product.protein}g</span>}
+                {product.fat != null && <span className="opacity-60"> · F{product.fat}g</span>}
               </span>
             )}
           </div>
         </div>
-        {product.tags && product.tags.length > 0 && (
-          <div className="flex gap-1 flex-wrap">
-            {product.tags.slice(0, 3).map(tag => (
-              <span key={tag} className="px-1.5 py-0.5 rounded-md text-[9px] leading-tight" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
-                {tag}
-              </span>
-            ))}
-            {product.tags.length > 3 && <span className="text-[9px]" style={{ color: 'var(--brand-text-muted)' }}>+{product.tags.length - 3}</span>}
-          </div>
-        )}
-        {product.taste && Object.keys(product.taste).length > 0 && (
+
+        {hasTaste && (
           <div className="flex gap-1">
-            {Object.entries(product.taste).map(([axis, level]) => (
-              <span key={axis} className="inline-flex items-center gap-0.5 text-[9px] leading-tight opacity-50" title={`${axis}: ${level}/3`}>
-                <i className={TASTE_ICONS[axis] || 'ti ti-circle'} style={{ fontSize: '0.6rem' }} />{level}
+            {Object.entries(product.taste!).filter(([, v]) => v > 0).map(([axis, level]) => (
+              <span key={axis} className="inline-flex items-center gap-0.5 text-[9px] leading-tight" style={{ color: 'var(--brand-text-muted)' }} title={`${TASTE_LABELS[axis] || axis}: ${level}/3`}>
+                <i className={TASTE_ICONS[axis] || 'ti ti-circle'} style={{ fontSize: '0.6rem' }} />
+                {level}
               </span>
             ))}
           </div>
