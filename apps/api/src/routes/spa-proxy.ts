@@ -245,14 +245,19 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const data = await request.file();
     if (!data) return reply.status(400).send({ error: 'No file uploaded' });
     const buffer = await data.toBuffer();
-    const sharp = (await import('sharp')).default;
-    const processed = await sharp(buffer)
-      .resize({ width: 800, height: 800, fit: 'inside' })
-      .withMetadata(false)
-      .webp({ quality: 82 })
-      .toBuffer();
+    let processed: Buffer;
+    try {
+      const sharp = (await import('sharp')).default;
+      processed = await sharp(buffer)
+        .resize({ width: 800, height: 800, fit: 'inside' })
+        .withMetadata(false)
+        .webp({ quality: 82 })
+        .toBuffer();
+    } catch (sharpErr: any) {
+      return reply.status(400).send({ error: 'Invalid image file', detail: sharpErr.message });
+    }
     const key = `products/${locId}/${pid}.webp`;
-    if (storage) await storage.put(key, processed);
+    await storage.put(key, processed);
     const imageUrl = `https://cdn.dowiz.org/${key}`;
     await db.query(`UPDATE products SET image_key = $1 WHERE id = $2 AND location_id = $3`, [key, pid, locId]);
     return reply.send({ imageUrl, imageKey: key });
