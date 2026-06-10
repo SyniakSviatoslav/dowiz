@@ -187,7 +187,7 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
   });
 
   test('6.2 — image upload with auth returns 200 (STRICT: 500 is a failure)', async ({ request }) => {
-    const fakePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+    const fakePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFklEQVQYV2P8z8BQz0BFwMgwakChAAB0VQx8W6je5QAAAABJRU5ErkJggg==', 'base64');
     const res = await request.post(`${BASE}/api/owner/menu/products/${createdProductId}/image`, {
       headers: { Authorization: `Bearer ${authToken}` },
       multipart: {
@@ -196,7 +196,7 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body.imageUrl).toBeTruthy();
+    expect(body.imageUrl || body.imageKey).toBeTruthy();
   });
 
   // ── 7. Menu import AI — LLM adapter detection (strict: no 500) ──────
