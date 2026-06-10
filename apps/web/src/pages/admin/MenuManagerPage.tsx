@@ -3,6 +3,36 @@ import { Button, Input, EmptyState, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { RecipeEditor } from './RecipeEditor.js';
 
+const ALLERGEN_COLORS: Record<string, { bg: string; text: string }> = {
+  gluten: { bg: 'rgba(234,179,8,0.12)', text: '#a16207' },
+  dairy: { bg: 'rgba(59,130,246,0.12)', text: '#1d4ed8' },
+  eggs: { bg: 'rgba(234,179,8,0.12)', text: '#a16207' },
+  soy: { bg: 'rgba(34,197,94,0.12)', text: '#15803d' },
+  nuts: { bg: 'rgba(249,115,22,0.12)', text: '#c2410c' },
+  peanuts: { bg: 'rgba(249,115,22,0.12)', text: '#c2410c' },
+  shellfish: { bg: 'rgba(239,68,68,0.12)', text: '#b91c1c' },
+  fish: { bg: 'rgba(6,182,212,0.12)', text: '#0e7490' },
+  sesame: { bg: 'rgba(168,85,247,0.12)', text: '#7e22ce' },
+};
+
+function getProductAllergens(product: Product): string[] {
+  const set = new Set<string>();
+  if (product.recipeLines) {
+    for (const line of product.recipeLines) {
+      if (Array.isArray(line.allergens)) line.allergens.forEach(a => set.add(a));
+    }
+  }
+  if (product.attributes && typeof product.attributes === 'object') {
+    const bom = (product.attributes as any).bom;
+    if (Array.isArray(bom)) {
+      for (const line of bom) {
+        if (Array.isArray(line.allergens)) line.allergens.forEach((a: string) => set.add(a));
+      }
+    }
+  }
+  return Array.from(set).sort();
+}
+
 
 interface Product {
   id: string;
@@ -472,6 +502,19 @@ export function MenuManagerPage() {
                                   </span>
                                 </div>
                                 {product.description && <div className="text-[11px] truncate" style={{ color: 'var(--brand-text-muted)' }}>{product.description}</div>}
+                                {getProductAllergens(product).length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {getProductAllergens(product).map(a => {
+                                      const s = ALLERGEN_COLORS[a.toLowerCase()] || { bg: 'rgba(107,114,128,0.12)', text: '#374151' };
+                                      return (
+                                        <span key={a} className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-tight"
+                                          style={{ background: s.bg, color: s.text }}>
+                                          {a}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -560,6 +603,20 @@ export function MenuManagerPage() {
                   <span className={`text-sm font-bold ${previewProduct.stockCount === 0 ? 'text-[var(--color-danger)]' : 'text-[var(--color-success)]'}`}>
                     {previewProduct.stockCount === 0 ? t('menu.out_of_stock', 'Out of stock') : `${previewProduct.stockCount} ${t('admin.available_today', 'available today')}`}
                   </span>
+                </div>
+              )}
+
+              {getProductAllergens(previewProduct).length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {getProductAllergens(previewProduct).map(a => {
+                    const s = ALLERGEN_COLORS[a.toLowerCase()] || { bg: 'rgba(107,114,128,0.12)', text: '#374151' };
+                    return (
+                      <span key={a} className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                        style={{ background: s.bg, color: s.text }}>
+                        {a}
+                      </span>
+                    );
+                  })}
                 </div>
               )}
 

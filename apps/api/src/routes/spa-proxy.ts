@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyInstance } from 'fastify';
 import { jwtVerify } from 'jose';
 import { loadEnv } from '@deliveryos/config';
@@ -132,6 +131,11 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   const CDN_BASE = 'https://cdn.dowiz.org';
 
   function mapProductRow(r: any): any {
+    const bom: any[] = r.attributes?.bom ?? [];
+    const allergens = new Set<string>();
+    for (const line of bom) {
+      if (Array.isArray(line.allergens)) line.allergens.forEach((a: string) => allergens.add(a));
+    }
     return {
       id: r.id,
       name: r.name,
@@ -147,7 +151,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       imageKey: r.image_key,
       stockCount: r.attributes?.stock_count ?? null,
       taste: r.attributes?.taste ?? null,
-      recipeLines: r.attributes?.bom ?? null,
+      recipeLines: bom.length ? bom : null,
+      allergens: allergens.size ? Array.from(allergens).sort() : null,
       attributes: r.attributes || null,
     };
   }
@@ -250,7 +255,6 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       const sharp = (await import('sharp')).default;
       processed = await sharp(buffer)
         .resize({ width: 800, height: 800, fit: 'inside' })
-        .withMetadata(false)
         .webp({ quality: 82 })
         .toBuffer();
     } catch (sharpErr: any) {
@@ -300,7 +304,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     );
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const chart = weekdays.map(day => {
-      const match = chartRows.find(r => r.day === day);
+      const match = chartRows.find((r: any) => r.day === day);
       return { day, revenue: match ? match.revenue : 0 };
     });
     const { rows: heatmapRows } = await db.query(

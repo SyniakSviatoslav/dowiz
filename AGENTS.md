@@ -154,7 +154,7 @@ Use `graphify-out/GRAPH_REPORT.md` only for broad architecture overview.
 | # | Item | Status | Evidence |
 |---|---|---|---|
 | 1 | Courier routes (assignments + shifts) registered in `server.ts` | ✅ FIXED | `server.ts:527-528` — both registered with prefix `/api/courier` |
-| 2 | No per-phone order throttle (FX-4) | 🔴 STILL BROKEN | `orders.ts:50` — only global IP rate limit (10/min), no phone-based throttle |
+| 2 | No per-phone order throttle (FX-4) | ✅ FIXED | `orders.ts:200-224` — 15min window, max 5 orders, 429 + retryAfterSeconds |
 | 3 | Operational pool connects as `postgres` superuser — RLS bypassed | ⚠️ CONFIG ISSUE | `packages/db/src/index.ts` — uses `***REDACTED***` env var; code does not hardcode role, but no guardrail prevents superuser connection |
 | 4 | Theme/notification owner routes lack auth | ✅ FIXED | `owner/themes.ts:12-13`, `owner/notifications.ts:11-12` — both have `verifyAuth` + `requireRole(['owner'])` hooks |
 | 5 | Idempotency dedup missing `location_id` scope (FX-5) | ✅ FIXED | `orders.ts:286-287,301,529-531` — all 3 ops scope by `location_id` |
@@ -167,7 +167,7 @@ Use `graphify-out/GRAPH_REPORT.md` only for broad architecture overview.
 | 12 | MenuPage reads `attributes.kcal` but data is in `attributes.bom[].kcal` | ✅ FIXED | `MenuPage.tsx` — `bomToNutrition()` aggregates from `bom[]`; `attrEntries` filters `bom`/`stock_count` |
 | 13 | `ai-ocr-parser.ts` default Groq model `llama3.1:8b-instruct` (Ollama fmt) | ✅ FIXED | Default now `llama-3.1-8b-instruct` (Groq format); reads `GROQ_MODEL` env var |
 
-**Remaining blockers: per-phone throttle (FX-4) + DB role guardrail.** Security posture: HOLDS 12 · WEAK 3 · BROKEN 1.
+**Remaining blockers: DB role guardrail only.** Security posture: HOLDS 13 · WEAK 1 · BROKEN 0.
 
 ## 10. Common commands
 
