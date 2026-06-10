@@ -6,41 +6,58 @@ import Tesseract from 'tesseract.js';
 import crypto from 'crypto';
 import { z } from 'zod';
 
+function coerceNum() {
+  return z.preprocess((v) => {
+    if (typeof v === 'string') { const n = Number(v); return isNaN(n) ? v : n; }
+    return v;
+  }, z.number());
+}
+function coerceStr() {
+  return z.preprocess((v) => typeof v === 'number' ? String(v) : v, z.string());
+}
+function coerceBool() {
+  return z.preprocess((v) => {
+    if (typeof v === 'string') return v === 'true' || v === '1';
+    if (typeof v === 'number') return v !== 0;
+    return v;
+  }, z.boolean());
+}
+
 const llmSchema = z.object({
   categories: z.array(z.object({
-    externalKey: z.string(),
+    externalKey: coerceStr(),
     name: z.string()
   })),
   products: z.array(z.object({
-    externalKey: z.string(),
-    categoryKey: z.string(),
+    externalKey: coerceStr(),
+    categoryKey: coerceStr(),
     name: z.string(),
-    description: z.string().optional(),
-    price: z.number(),
+    description: z.string().nullable().optional(),
+    price: coerceNum(),
     currency: z.string(),
-    available: z.boolean(),
+    available: coerceBool(),
     attributesJson: z.record(z.unknown()).optional(),
-    imageKey: z.string().optional()
+    imageKey: z.string().nullable().optional()
   })),
   modifierGroups: z.array(z.object({
-    externalKey: z.string(),
+    externalKey: coerceStr(),
     name: z.string(),
-    minSelect: z.number(),
-    maxSelect: z.number(),
-    required: z.boolean()
+    minSelect: coerceNum(),
+    maxSelect: coerceNum(),
+    required: coerceBool()
   })),
   modifiers: z.array(z.object({
-    externalKey: z.string(),
-    groupKey: z.string(),
+    externalKey: coerceStr(),
+    groupKey: coerceStr(),
     name: z.string(),
-    priceDelta: z.number(),
-    available: z.boolean(),
-    sortOrder: z.number().optional()
+    priceDelta: coerceNum(),
+    available: coerceBool(),
+    sortOrder: coerceNum().optional()
   })),
   links: z.array(z.object({
-    productKey: z.string(),
-    groupKey: z.string(),
-    sortOrder: z.number()
+    productKey: coerceStr(),
+    groupKey: coerceStr(),
+    sortOrder: coerceNum()
   }))
 });
 
@@ -230,7 +247,7 @@ export class AiOcrParser implements MenuParserProvider {
     let llmResponse = '';
     try {
       const currency = input.config.expectedCurrency || 'ALL';
-      const prompt = `Extract the menu structure from the following text into a JSON object. Use EXACTLY this format:
+      const prompt = `Extract the menu structure from the menu text below into a JSON object. Use EXACTLY this schema — field names, types, and nesting must match:
 
 {
   "categories": [{ "externalKey": "cat1", "name": "Category Name" }],
@@ -239,19 +256,23 @@ export class AiOcrParser implements MenuParserProvider {
       "externalKey": "prod1",
       "categoryKey": "cat1",
       "name": "Product Name",
-      "description": "optional description",
-      "price": 1000,
+      "description": "optional description or null",
+      "price": 50000,
       "currency": "${currency}",
       "available": true
     }
   ],
   "modifierGroups": [],
   "modifiers": [],
-  "links": [],
-  "translations": []
+  "links": []
 }
 
-Prices must be integers in minor unit (e.g., 500 ALL = 50000). Currency is ${currency}. Output ONLY valid JSON, no markdown, no explanations.\n\n${redactedText}`;
+Rules:
+- "price" must be a JSON NUMBER (int), NOT a string. Price in ${currency} minor unit (e.g. 500 ALL = 50000).
+- "available" must be a JSON BOOLEAN (true/false), NOT a string.
+- "externalKey", "categoryKey" must be JSON STRINGS.
+- Omit "description" and "imageKey" if not present (do not include with null value).
+- Output ONLY valid JSON object, no markdown, no commentary.\n\n${redactedText}`;
 
       llmResponse = await callLlm(provider, prompt, modelForProvider, 120000);
     } catch (e: any) {
@@ -271,7 +292,8 @@ Prices must be integers in minor unit (e.g., 500 ALL = 50000). Currency is ${cur
 
     const validation = llmSchema.safeParse(parsedJson);
     if (!validation.success) {
-      issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: 'LLM returned invalid schema', severity: 'error' });
+      const firstErr = validation.error.errors[0];
+      issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `LLM returned invalid schema: ${firstErr?.path?.join('.') || 'root'} → ${firstErr?.message}`, severity: 'error' });
       return this.fallbackError(issues);
     }
 
