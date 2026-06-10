@@ -215,19 +215,38 @@ export function MenuPage() {
     return (p.attributes as Record<string, any>)[key];
   };
 
+  const ALLERGEN_COLORS: Record<string, { bg: string; text: string }> = {
+    gluten: { bg: 'rgba(234,179,8,0.12)', text: '#a16207' },
+    dairy: { bg: 'rgba(59,130,246,0.12)', text: '#1d4ed8' },
+    eggs: { bg: 'rgba(234,179,8,0.12)', text: '#a16207' },
+    soy: { bg: 'rgba(34,197,94,0.12)', text: '#15803d' },
+    nuts: { bg: 'rgba(249,115,22,0.12)', text: '#c2410c' },
+    peanuts: { bg: 'rgba(249,115,22,0.12)', text: '#c2410c' },
+    shellfish: { bg: 'rgba(239,68,68,0.12)', text: '#b91c1c' },
+    fish: { bg: 'rgba(6,182,212,0.12)', text: '#0e7490' },
+    sesame: { bg: 'rgba(168,85,247,0.12)', text: '#7e22ce' },
+  };
+
+  function getAllergenStyle(allergen: string) {
+    const key = allergen.toLowerCase();
+    return ALLERGEN_COLORS[key] || { bg: 'rgba(107,114,128,0.12)', text: '#374151' };
+  }
+
   const bomToNutrition = (p: Product) => {
     const bom = getAttr(p, 'bom');
-    if (!Array.isArray(bom) || bom.length === 0) return {};
+    if (!Array.isArray(bom) || bom.length === 0) return { kcal: 0, protein: 0, fat: 0, carbs: 0, allergens: [], ingredients: [] };
     let kcal = 0, protein = 0, fat = 0, carbs = 0;
     const allergens = new Set<string>();
+    const ingredients: string[] = [];
     for (const line of bom) {
       if (typeof line.kcal === 'number') kcal += line.kcal;
       if (typeof line.proteinG === 'number') protein += line.proteinG;
       if (typeof line.fatG === 'number') fat += line.fatG;
       if (typeof line.carbsG === 'number') carbs += line.carbsG;
       if (Array.isArray(line.allergens)) line.allergens.forEach((a: string) => allergens.add(a));
+      if (line.supplyName && line.kind !== 'packaging' && line.kind !== 'utensil') ingredients.push(line.supplyName);
     }
-    return { kcal: Math.round(kcal), protein: Math.round(protein), fat: Math.round(fat), carbs: Math.round(carbs), allergens: Array.from(allergens) };
+    return { kcal: Math.round(kcal), protein: Math.round(protein), fat: Math.round(fat), carbs: Math.round(carbs), allergens: Array.from(allergens), ingredients };
   };
 
   const attrEntries = (p: Product): [string, any][] => {
@@ -328,23 +347,27 @@ export function MenuPage() {
                 {category.name}
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 px-4">
-                {category.products.map(product => (
-                  <div key={product.id} onClick={() => handleProductClick(product)}>
-                    <ProductCard product={{
-                      id: product.id,
-                      name: product.name,
-                      description: product.description,
-                      price: product.price,
-                      image: getImageUrl(product) || undefined,
-                      isAvailable: product.available,
-                      kcal: bomToNutrition(product).kcal || undefined,
-                      protein: bomToNutrition(product).protein || undefined,
-                      fat: bomToNutrition(product).fat || undefined,
-                      carbs: bomToNutrition(product).carbs || undefined,
-                      tags: bomToNutrition(product).allergens?.length ? bomToNutrition(product).allergens : undefined,
-                      allergenStatus: bomToNutrition(product).allergens?.length ? 'listed' : undefined,
-                      taste: getAttr(product, 'taste'),
-                    }}                     onAdd={(e) => {
+{category.products.map(product => {
+                      const nutrition = bomToNutrition(product);
+                      return (
+                    <div key={product.id}>
+                      <ProductCard product={{
+                        id: product.id,
+                        name: product.name,
+                        description: product.description,
+                        price: product.price,
+                        image: getImageUrl(product) || undefined,
+                        isAvailable: product.available,
+                        kcal: nutrition.kcal || undefined,
+                        protein: nutrition.protein || undefined,
+                        fat: nutrition.fat || undefined,
+                        carbs: nutrition.carbs || undefined,
+                        allergens: nutrition.allergens.length ? nutrition.allergens : undefined,
+                        ingredients: nutrition.ingredients.length ? nutrition.ingredients : undefined,
+                        taste: getAttr(product, 'taste'),
+                      }}
+                      onClick={() => handleProductClick(product)}
+                      onAdd={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       if (!product.available) return;
@@ -354,13 +377,14 @@ export function MenuPage() {
                       } else {
                         handleProductClick(product);
                       }
-                    }} />
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))
-        )}
+}} />
+                    </div>
+                    );
+                  })}
+               </div>
+             </section>
+           ))
+         )}
       </main>
 
       {/* Product Detail Modal */}
@@ -394,14 +418,14 @@ export function MenuPage() {
               >
                 <i className="ti ti-x text-xl" />
               </button>
-              {detailProduct.available && bomToNutrition(detailProduct).kcal != null && (
+              {detailProduct.available && bomToNutrition(detailProduct).kcal > 0 && (
                 <div className="absolute bottom-3 left-3 z-10">
                   <span className="text-[10px] font-medium px-2 py-1 rounded-md flex items-center gap-1.5" style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
                     <i className="ti ti-flame" style={{ fontSize: '0.7rem' }} />
                     {bomToNutrition(detailProduct).kcal} kcal
-                    {bomToNutrition(detailProduct).protein != null && <span className="opacity-70">· P{bomToNutrition(detailProduct).protein}g</span>}
-                    {bomToNutrition(detailProduct).fat != null && <span className="opacity-70">· F{bomToNutrition(detailProduct).fat}g</span>}
-                    {bomToNutrition(detailProduct).carbs != null && <span className="opacity-70">· C{bomToNutrition(detailProduct).carbs}g</span>}
+                    {bomToNutrition(detailProduct).protein > 0 && <span className="opacity-70">· P{bomToNutrition(detailProduct).protein}g</span>}
+                    {bomToNutrition(detailProduct).fat > 0 && <span className="opacity-70">· F{bomToNutrition(detailProduct).fat}g</span>}
+                    {bomToNutrition(detailProduct).carbs > 0 && <span className="opacity-70">· C{bomToNutrition(detailProduct).carbs}g</span>}
                   </span>
                 </div>
               )}
@@ -438,7 +462,7 @@ export function MenuPage() {
               </div>
 
               {/* Nutrition Section */}
-              {(bomToNutrition(detailProduct).kcal != null || bomToNutrition(detailProduct).protein != null || bomToNutrition(detailProduct).fat != null || bomToNutrition(detailProduct).carbs != null) && (
+              {(bomToNutrition(detailProduct).kcal > 0) && (
                 <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)' }}>
                   <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
                     <i className="ti ti-report-analytics" /> {t('client.nutrition', 'Nutrition')}
@@ -449,7 +473,7 @@ export function MenuPage() {
                       { label: 'Protein', value: bomToNutrition(detailProduct).protein, unit: 'g', icon: 'ti ti-droplet' },
                       { label: 'Fat', value: bomToNutrition(detailProduct).fat, unit: 'g', icon: 'ti ti-droplet-half' },
                       { label: 'Carbs', value: bomToNutrition(detailProduct).carbs, unit: 'g', icon: 'ti ti-droplet-filled' },
-                    ].map(n => n.value != null && (
+                    ].map(n => n.value > 0 && (
                       <div key={n.label} className="flex flex-col items-center gap-1">
                         <i className={n.icon} style={{ fontSize: '1rem', color: 'var(--brand-text-muted)' }} />
                         <span className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{n.value}</span>
@@ -460,16 +484,33 @@ export function MenuPage() {
                 </div>
               )}
 
-              {/* Attributes Section */}
-              {attrEntries(detailProduct).length > 0 && (
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
-                    <i className="ti ti-info-circle" /> {t('client.details', 'Details')}
+              {(bomToNutrition(detailProduct).allergens.length > 0) && (
+                <div className="rounded-xl p-4" style={{ background: 'rgba(220,38,38,0.06)', borderColor: 'rgba(220,38,38,0.15)', borderWidth: 1 }}>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
+                    <i className="ti ti-alert-triangle" /> {t('client.allergens', 'Allergens')}
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
-                    {attrEntries(detailProduct).map(([key, val]) => (
-                      <span key={key} className="text-[10px] font-medium px-2 py-1 rounded-md" style={{ background: 'var(--brand-surface)', color: 'var(--brand-text-muted)' }}>
-                        {key.replace(/_/g, ' ')}: <span style={{ color: 'var(--brand-text)' }}>{String(val)}</span>
+                    {bomToNutrition(detailProduct).allergens.map(a => {
+                      const s = getAllergenStyle(a);
+                      return (
+                        <span key={a} className="px-2 py-0.5 rounded font-semibold text-[10px] uppercase" style={{ background: s.bg, color: s.text }}>
+                          {a}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {(bomToNutrition(detailProduct).ingredients.length > 0) && (
+                <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)' }}>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
+                    <i className="ti ti-list-check" /> {t('client.ingredients', 'Ingredients')}
+                  </h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {bomToNutrition(detailProduct).ingredients.map((ing, i) => (
+                      <span key={i} className="text-[11px] px-2 py-0.5 rounded-md" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}>
+                        {ing}
                       </span>
                     ))}
                   </div>
