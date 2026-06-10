@@ -40,6 +40,7 @@ export function DeliveryPage() {
           restaurant: { name: 'Burger King', address: 'Blloku, Tirana', lat: 41.328, lng: 19.812 },
           customer: { address: 'Rruga e Elbasanit 12', phone: '+355 69 123 4567', instructions: 'Call when near', lat: 41.337, lng: 19.825 },
           total: 120000,
+          cashPayWith: 150000,
           eta: '10 min'
         });
       }
@@ -153,6 +154,28 @@ export function DeliveryPage() {
         {task.customer.instructions && (
           <div className="bg-[var(--status-pending-light)] border border-[var(--status-pending-border)] text-[var(--status-pending)] p-3 rounded-[var(--brand-radius-sm)] text-sm font-medium">
             Note: {task.customer.instructions}
+          </div>
+        )}
+
+        {task.cashPayWith && (
+          <div className="bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-[var(--brand-radius-sm)] p-4 space-y-2">
+            <div className="text-xs text-[var(--brand-text-muted)] uppercase font-bold tracking-wider">
+              {t('checkout.payment_method', 'Payment')} — Cash
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>{t('checkout.total', 'Total')}</span>
+              <span className="font-semibold">{(task.total / 100).toLocaleString()} ALL</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>{t('checkout.cash_amount', 'Customer pays')}</span>
+              <span className="font-semibold">{(task.cashPayWith / 100).toLocaleString()} ALL</span>
+            </div>
+            <div className="flex justify-between text-sm border-t border-[var(--brand-border)] pt-2">
+              <span className="text-[var(--color-success)] font-bold">{t('checkout.change', 'Change')}</span>
+              <span className="text-[var(--color-success)] font-bold">
+                {((task.cashPayWith - task.total) / 100).toLocaleString()} ALL
+              </span>
+            </div>
           </div>
         )}
 
