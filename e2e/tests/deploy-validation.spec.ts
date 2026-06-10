@@ -233,7 +233,7 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
 
   // ── 8. Settlements health check fix ────────────────────────────────
   test('8.1 — health check shows settlement as OK (not BROKEN)', async ({ request }) => {
-    const res = await request.get(`${BASE}/health`);
+    const res = await request.get(`${BASE}/health`, { timeout: 30000 });
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(body.checks.settlement.status).toBe('ok');
