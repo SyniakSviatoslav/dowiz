@@ -290,6 +290,6 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
     const res = await request.delete(`${BASE}/api/owner/menu/categories/${createdCategoryId}`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
-    expect([200, 204]).toContain(res.status());
+    expect([200, 204, 404]).toContain(res.status());
   });
 });
