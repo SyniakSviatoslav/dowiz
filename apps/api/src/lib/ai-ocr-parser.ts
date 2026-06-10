@@ -45,7 +45,7 @@ const llmSchema = z.object({
     minSelect: coerceNum(),
     maxSelect: coerceNum(),
     required: coerceBool()
-  })),
+  })).optional().default([]),
   modifiers: z.array(z.object({
     externalKey: coerceStr(),
     groupKey: coerceStr(),
@@ -53,12 +53,12 @@ const llmSchema = z.object({
     priceDelta: coerceNum(),
     available: coerceBool(),
     sortOrder: coerceNum().optional()
-  })),
+  })).optional().default([]),
   links: z.array(z.object({
     productKey: coerceStr(),
     groupKey: coerceStr(),
     sortOrder: coerceNum()
-  }))
+  })).optional().default([])
 });
 
 // ── LLM Adapter ─────────────────────────────────────────────────────
