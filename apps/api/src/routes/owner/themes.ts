@@ -133,7 +133,7 @@ export default (async function ownerThemeRoutes(fastify, opts) {
     
     // Assuming storage provider has upload method
     if (storage) {
-       await storage.upload(key, processed, 'image/webp');
+       await storage.put(key, processed);
     }
 
     const client = await db.connect();

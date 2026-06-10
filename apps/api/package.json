@@ -10,6 +10,7 @@
     "dev": "concurrently \"node build-client.js --watch\" \"tsx --env-file=../../.env src/server.ts\"",
     "test:ai-ocr": "node --env-file=../../.env --test --import tsx tests/ai-ocr-parser.test.ts",
     "test:phase2": "node --test --import tsx tests/test-phase2.ts",
+    "test:spa-proxy": "node --test --import tsx tests/spa-proxy.test.ts",
     "verify:n2:phase2": "tsx tests/verify-n2.ts",
     "test:e2e:phase2": "playwright test e2e/phase2.spec.ts"
   },

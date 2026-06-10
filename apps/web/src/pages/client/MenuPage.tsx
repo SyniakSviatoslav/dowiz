@@ -204,64 +204,100 @@ export function MenuPage() {
 
   const getImageUrl = (product: Product): string | null => {
     if (!product.image_key) return null;
+    if (product.image_key.startsWith('data:') || product.image_key.startsWith('http://') || product.image_key.startsWith('https://')) {
+      return product.image_key;
+    }
     return `https://cdn.dowiz.org/${product.image_key}`;
   };
 
+  const getAttr = (p: Product, key: string): any => {
+    if (!p.attributes || typeof p.attributes !== 'object') return undefined;
+    return (p.attributes as Record<string, any>)[key];
+  };
+
+  const bomToNutrition = (p: Product) => {
+    const bom = getAttr(p, 'bom');
+    if (!Array.isArray(bom) || bom.length === 0) return {};
+    let kcal = 0, protein = 0, fat = 0, carbs = 0;
+    const allergens = new Set<string>();
+    for (const line of bom) {
+      if (typeof line.kcal === 'number') kcal += line.kcal;
+      if (typeof line.proteinG === 'number') protein += line.proteinG;
+      if (typeof line.fatG === 'number') fat += line.fatG;
+      if (typeof line.carbsG === 'number') carbs += line.carbsG;
+      if (Array.isArray(line.allergens)) line.allergens.forEach((a: string) => allergens.add(a));
+    }
+    return { kcal: Math.round(kcal), protein: Math.round(protein), fat: Math.round(fat), carbs: Math.round(carbs), allergens: Array.from(allergens) };
+  };
+
+  const attrEntries = (p: Product): [string, any][] => {
+    if (!p.attributes || typeof p.attributes !== 'object') return [];
+    return Object.entries(p.attributes as Record<string, any>).filter(([k]) => !['kcal', 'protein', 'fat', 'carbs', 'allergens', 'tags', 'taste', 'bom', 'stock_count'].includes(k));
+  };
+
   return (
-    <div className="relative min-h-screen pb-20">
+    <div className="relative min-h-screen pb-28">
 
       {/* Hero Section */}
-      <section className="relative w-full h-[240px] flex items-end overflow-hidden" style={{ background: 'linear-gradient(160deg, var(--brand-surface-raised) 0%, var(--brand-accent) 60%, var(--brand-primary) 100%)' }}>
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.1) 100%)' }} />
-        <div className="relative z-10 w-full px-5 pb-5">
-          <div className="flex items-center gap-1 text-[13px] font-medium mb-2" style={{ color: 'var(--brand-text-muted)' }}>
+      <section className="relative w-full h-[200px] flex items-end overflow-hidden" style={{ background: 'linear-gradient(160deg, var(--brand-surface-raised) 0%, var(--brand-accent) 60%, var(--brand-primary) 100%)' }}>
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.05) 100%)' }} />
+        <div className="absolute inset-0 opacity-[0.04] bg-[radial-gradient(circle_at_30%_50%,#fff_0%,transparent_60%)]" />
+        <div className="relative z-10 w-full px-5 pb-4">
+          <div className="flex items-center gap-1.5 text-[12px] font-medium mb-1.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
             <span className="inline-flex gap-0.5" style={{ color: 'var(--color-warning)' }}>
-              {[1,2,3,4,5].map(i => <i key={i} className="ti ti-star-filled" style={{ fontSize: '0.8rem' }} />)}
+              {[1,2,3,4,5].map(i => <i key={i} className="ti ti-star-filled" style={{ fontSize: '0.7rem' }} />)}
             </span>
-            <span style={{ color: 'var(--brand-text)' }}>4.8</span>
-            <span>({t('client.reviews_count', '124 reviews')})</span>
+            <span style={{ color: '#fff', fontWeight: 600 }}>4.8</span>
+            <span className="opacity-70">(124)</span>
+            <span className="mx-1.5 opacity-40">·</span>
+            <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} />
+            <span>30 min</span>
           </div>
-          <h1 className="text-[32px] font-bold text-white" style={{ fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>{menu?.location_name || t('client.menu', 'Menu')}</h1>
-          <p className="text-[14px] font-medium mt-1" style={{ color: 'rgba(255,255,255,0.8)' }}>{t('client.menu_subtitle', 'Delivery from 30 min')}</p>
+          <h1 className="text-[26px] font-bold leading-tight text-white" style={{ fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 16px rgba(0,0,0,0.4)' }}>
+            {menu?.location_name || t('client.menu', 'Menu')}
+          </h1>
         </div>
       </section>
 
       {/* Category Nav */}
-      <nav className="sticky top-[56px] z-40 h-[48px] border-b w-full" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
-        <div className="h-full overflow-x-auto hide-scrollbar flex items-center text-[14px]">
+      <nav className="sticky top-0 z-40 h-[44px] border-b w-full" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+        <div className="h-full overflow-x-auto hide-scrollbar flex items-center gap-1 px-2 text-[13px]">
           {loading ? (
-            <div className="flex gap-4 px-4 h-full items-center">
-              <div className="w-16 h-4 skeleton-block" />
-              <div className="w-16 h-4 skeleton-block" />
-              <div className="w-16 h-4 skeleton-block" />
+            <div className="flex gap-4 px-2 h-full items-center">
+              <div className="w-14 h-3.5 skeleton-block" />
+              <div className="w-14 h-3.5 skeleton-block" />
+              <div className="w-14 h-3.5 skeleton-block" />
             </div>
           ) : (
-            categories.map(cat => (
-              <button 
-                key={cat.id}
-                onClick={() => handleScrollTo(cat.id)}
-                role="tab"
-                aria-selected={activeTab === cat.id}
-                className="h-full flex items-center px-4 whitespace-nowrap font-medium transition-colors border-b-2"
-                style={{ 
-                  color: activeTab === cat.id ? 'var(--brand-primary)' : 'var(--brand-text-muted)',
-                  borderColor: activeTab === cat.id ? 'var(--brand-primary)' : 'transparent',
-                  fontWeight: activeTab === cat.id ? 600 : 500
-                }}
-              >
-                {cat.name}
-              </button>
-            ))
+            categories.map(cat => {
+              const count = cat.products.filter(p => p.available).length;
+              return (
+                <button 
+                  key={cat.id}
+                  onClick={() => handleScrollTo(cat.id)}
+                  role="tab"
+                  aria-selected={activeTab === cat.id}
+                  className="h-full flex items-center gap-1.5 px-3.5 whitespace-nowrap font-medium transition-all border-b-2"
+                  style={{ 
+                    color: activeTab === cat.id ? 'var(--brand-primary)' : 'var(--brand-text-muted)',
+                    borderColor: activeTab === cat.id ? 'var(--brand-primary)' : 'transparent',
+                  }}
+                >
+                  {cat.name}
+                  <span className="text-[10px] opacity-50">({count})</span>
+                </button>
+              );
+            })
           )}
         </div>
       </nav>
 
       {/* Menu Content */}
-      <main className="max-w-7xl mx-auto pt-4">
+      <main className="max-w-5xl mx-auto pt-4">
         {loading ? (
-          <div className="px-4 mt-4 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+          <div className="px-4 grid grid-cols-2 md:grid-cols-3 gap-3">
             {[1,2,3,4,5,6].map(i => (
-              <div key={i} className="rounded-[12px] overflow-hidden border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+              <div key={i} className="rounded-xl overflow-hidden border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
                 <div className="w-full aspect-[4/3] skeleton-block rounded-none" />
                 <div className="p-3">
                   <div className="h-3 w-3/4 skeleton-block mb-3" />
@@ -269,11 +305,16 @@ export function MenuPage() {
                   <div className="h-2 w-4/5 skeleton-block mb-4" />
                   <div className="flex justify-between items-center pt-2">
                     <div className="h-4 w-16 skeleton-block" />
-                    <div className="w-8 h-8 rounded-full skeleton-block" />
+                    <div className="w-9 h-9 rounded-full skeleton-block" />
                   </div>
                 </div>
               </div>
             ))}
+          </div>
+        ) : !categories.length ? (
+          <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+            <i className="ti ti-tools-kitchen-2 text-5xl opacity-20 mb-3" style={{ color: 'var(--brand-text-muted)' }} />
+            <p className="text-sm font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('client.empty_menu', 'Menu unavailable')}</p>
           </div>
         ) : (
           categories.map(category => (
@@ -281,12 +322,12 @@ export function MenuPage() {
               key={category.id} 
               id={category.id} 
               ref={el => { sectionRefs.current[category.id] = el }}
-              className="mb-10 scroll-mt-[120px]"
+              className="mb-7 scroll-mt-[100px]"
             >
-              <h2 className="text-[22px] font-bold px-4 mb-4" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
+              <h2 className="text-lg font-bold px-4 mb-3" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
                 {category.name}
               </h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 px-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 px-4">
                 {category.products.map(product => (
                   <div key={product.id} onClick={() => handleProductClick(product)}>
                     <ProductCard product={{
@@ -296,6 +337,13 @@ export function MenuPage() {
                       price: product.price,
                       image: getImageUrl(product) || undefined,
                       isAvailable: product.available,
+                      kcal: bomToNutrition(product).kcal || undefined,
+                      protein: bomToNutrition(product).protein || undefined,
+                      fat: bomToNutrition(product).fat || undefined,
+                      carbs: bomToNutrition(product).carbs || undefined,
+                      tags: bomToNutrition(product).allergens?.length ? bomToNutrition(product).allergens : undefined,
+                      allergenStatus: bomToNutrition(product).allergens?.length ? 'listed' : undefined,
+                      taste: getAttr(product, 'taste'),
                     }}                     onAdd={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -317,9 +365,9 @@ export function MenuPage() {
 
       {/* Product Detail Modal */}
       {detailProduct && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={closeDetail}>
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center backdrop-blur-sm transition-opacity duration-300" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={closeDetail}>
           <div 
-            className="w-full md:max-w-lg max-h-[85vh] overflow-auto rounded-t-2xl md:rounded-2xl" 
+            className="w-full md:max-w-lg max-h-[85vh] overflow-auto rounded-t-2xl md:rounded-2xl shadow-2xl animate-slide-up" 
             style={{ background: 'var(--brand-bg)' }}
             onClick={e => e.stopPropagation()}
           >
@@ -334,130 +382,201 @@ export function MenuPage() {
                 />
               ) : (
                 <div className="flex flex-col items-center gap-2" style={{ color: 'var(--brand-text-muted)' }}>
-                  <i className="ti ti-tools-kitchen-2 text-4xl opacity-40" />
-                  <span className="text-sm font-medium">{detailProduct.name}</span>
+                  <i className="ti ti-tools-kitchen-2 text-5xl opacity-30" />
+                  <span className="text-sm font-medium opacity-60">{detailProduct.name}</span>
                 </div>
               )}
               <button 
-                className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center"
+                className="absolute top-4 right-4 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center backdrop-blur-md active:scale-[0.95] transition-transform"
                 style={{ background: 'rgba(0,0,0,0.5)', color: 'white' }}
                 onClick={closeDetail}
+                aria-label="Close"
               >
-                <i className="ti ti-x text-lg" />
+                <i className="ti ti-x text-xl" />
               </button>
+              {detailProduct.available && bomToNutrition(detailProduct).kcal != null && (
+                <div className="absolute bottom-3 left-3 z-10">
+                  <span className="text-[10px] font-medium px-2 py-1 rounded-md flex items-center gap-1.5" style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
+                    <i className="ti ti-flame" style={{ fontSize: '0.7rem' }} />
+                    {bomToNutrition(detailProduct).kcal} kcal
+                    {bomToNutrition(detailProduct).protein != null && <span className="opacity-70">· P{bomToNutrition(detailProduct).protein}g</span>}
+                    {bomToNutrition(detailProduct).fat != null && <span className="opacity-70">· F{bomToNutrition(detailProduct).fat}g</span>}
+                    {bomToNutrition(detailProduct).carbs != null && <span className="opacity-70">· C{bomToNutrition(detailProduct).carbs}g</span>}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Content */}
             <div className="p-5 space-y-5">
-              {/* Name & Price */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <h2 className="text-xl font-bold" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{detailProduct.name}</h2>
-                  {!detailProduct.available && (
-                    <span className="inline-block mt-1 text-[11px] font-semibold px-2 py-0.5 rounded" style={{ background: 'var(--color-danger-light, rgba(239,68,68,0.1))', color: 'var(--color-danger)' }}>
-                      {t('client.unavailable', 'Unavailable')}
-                    </span>
-                  )}
-                  {detailProduct.description && (
-                    <p className="text-sm mt-1.5" style={{ color: 'var(--brand-text-muted)' }}>{detailProduct.description}</p>
-                  )}
+              {/* Name, Description, Price */}
+              <div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      {t('client.recommended', '') && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1" style={{ background: 'rgba(234,79,22,0.1)', color: 'var(--brand-primary)' }}>
+                          <i className="ti ti-flame" style={{ fontSize: '0.6rem' }} />
+                          {t('client.popular', 'Popular')}
+                        </span>
+                      )}
+                    </div>
+                    <h2 className="text-xl font-bold leading-tight" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{detailProduct.name}</h2>
+                    {!detailProduct.available && (
+                      <span className="inline-block mt-1.5 text-[10px] font-semibold px-2 py-0.5 rounded" style={{ background: 'rgba(220,38,38,0.1)', color: 'var(--color-danger)' }}>
+                        {t('client.unavailable', 'Unavailable')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xl font-black whitespace-nowrap shrink-0" style={{ color: 'var(--brand-primary)' }}>
+                    {(detailProduct.price + calcModifierDelta()).toLocaleString()} {getCurrency(menu)}
+                  </div>
                 </div>
-                <div className="text-xl font-black whitespace-nowrap" style={{ color: 'var(--brand-primary)' }}>
-                  {(detailProduct.price + calcModifierDelta()).toLocaleString()} ALL
-                </div>
+                {detailProduct.description && (
+                  <p className="text-sm mt-2 leading-relaxed" style={{ color: 'var(--brand-text-muted)' }}>{detailProduct.description}</p>
+                )}
               </div>
 
-              {/* Attributes */}
-              {detailProduct.attributes && typeof detailProduct.attributes === 'object' && Object.keys(detailProduct.attributes).length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {Object.entries(detailProduct.attributes).map(([key, val]) => (
-                    <span key={key} className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
-                      {key.replace(/_/g, ' ')}: {String(val)}
-                    </span>
-                  ))}
+              {/* Nutrition Section */}
+              {(bomToNutrition(detailProduct).kcal != null || bomToNutrition(detailProduct).protein != null || bomToNutrition(detailProduct).fat != null || bomToNutrition(detailProduct).carbs != null) && (
+                <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)' }}>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
+                    <i className="ti ti-report-analytics" /> {t('client.nutrition', 'Nutrition')}
+                  </h3>
+                  <div className="grid grid-cols-4 gap-3 text-center">
+                    {[
+                      { label: 'Calories', value: bomToNutrition(detailProduct).kcal, unit: 'kcal', icon: 'ti ti-flame' },
+                      { label: 'Protein', value: bomToNutrition(detailProduct).protein, unit: 'g', icon: 'ti ti-droplet' },
+                      { label: 'Fat', value: bomToNutrition(detailProduct).fat, unit: 'g', icon: 'ti ti-droplet-half' },
+                      { label: 'Carbs', value: bomToNutrition(detailProduct).carbs, unit: 'g', icon: 'ti ti-droplet-filled' },
+                    ].map(n => n.value != null && (
+                      <div key={n.label} className="flex flex-col items-center gap-1">
+                        <i className={n.icon} style={{ fontSize: '1rem', color: 'var(--brand-text-muted)' }} />
+                        <span className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{n.value}</span>
+                        <span className="text-[9px] font-medium" style={{ color: 'var(--brand-text-muted)' }}>{n.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Attributes Section */}
+              {attrEntries(detailProduct).length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
+                    <i className="ti ti-info-circle" /> {t('client.details', 'Details')}
+                  </h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {attrEntries(detailProduct).map(([key, val]) => (
+                      <span key={key} className="text-[10px] font-medium px-2 py-1 rounded-md" style={{ background: 'var(--brand-surface)', color: 'var(--brand-text-muted)' }}>
+                        {key.replace(/_/g, ' ')}: <span style={{ color: 'var(--brand-text)' }}>{String(val)}</span>
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
 
               {/* Modifier Groups */}
-              {(detailProduct.modifier_groups || []).map(group => (
-                <div key={group.id}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{group.name}</span>
-                    {group.required && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-danger-light, rgba(239,68,68,0.1))', color: 'var(--color-danger)' }}>
-                        {t('client.required', 'Required')}
-                      </span>
-                    )}
-                    {group.max_select > 1 && (
-                      <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
-                        {t('client.up_to', 'Up to')} {group.max_select}
-                      </span>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    {group.modifiers.filter(m => m.available).map(mod => {
-                      const selected = modifierGroupSelection[group.id] || [];
-                      const isSelected = selected.includes(mod.id);
-                      return (
-                        <button
-                          key={mod.id}
-                          onClick={() => toggleModifier(group.id, mod.id, group)}
-                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all ${
-                            isSelected ? 'ring-2' : ''
-                          }`}
-                          style={{
-                            background: isSelected ? 'var(--brand-primary-light, var(--brand-surface-raised))' : 'var(--brand-surface)',
-                            borderColor: isSelected ? 'var(--brand-primary)' : 'var(--brand-border)',
-                            color: 'var(--brand-text)',
-                            border: '1px solid',
-                          }}
-                        >
-                          <span>{mod.name}</span>
-                          {mod.price_delta > 0 ? (
-                            <span className="text-xs font-medium" style={{ color: 'var(--brand-primary)' }}>+{mod.price_delta.toLocaleString()} ALL</span>
-                          ) : (
-                            <span className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('client.included', 'Included')}</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {group.modifiers.filter(m => !m.available).length > 0 && (
-                    <div className="mt-1 text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
-                      {group.modifiers.filter(m => !m.available).length} {t('client.unavailable_options', 'options unavailable')}
+              {(detailProduct.modifier_groups || []).length > 0 && (
+                <div className="border-t pt-5" style={{ borderColor: 'var(--brand-border)' }}>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
+                    <i className="ti ti-settings" /> {t('client.customize', 'Customize')}
+                  </h3>
+                  {(detailProduct.modifier_groups || []).map(group => (
+                    <div key={group.id} className="mb-4 last:mb-0">
+                      <div className="flex items-center gap-2 mb-2.5">
+                        <span className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{group.name}</span>
+                        {group.required && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ background: 'rgba(220,38,38,0.08)', color: 'var(--color-danger)' }}>
+                            {t('client.required', 'Required')}
+                          </span>
+                        )}
+                        {group.max_select > 1 && (
+                          <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
+                            up to {group.max_select}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {group.modifiers.filter(m => m.available).map(mod => {
+                          const selected = modifierGroupSelection[group.id] || [];
+                          const isSelected = selected.includes(mod.id);
+                          return (
+                            <button
+                              key={mod.id}
+                              onClick={() => toggleModifier(group.id, mod.id, group)}
+                              className={`px-3.5 py-2 rounded-[10px] text-[13px] font-medium transition-all active:scale-[0.97] border ${
+                                isSelected ? 'border-2' : ''
+                              }`}
+                              style={{
+                                background: isSelected ? 'var(--brand-primary-light, var(--brand-surface-raised))' : 'var(--brand-surface)',
+                                borderColor: isSelected ? 'var(--brand-primary)' : 'var(--brand-border)',
+                                color: isSelected ? 'var(--brand-primary)' : 'var(--brand-text)',
+                              }}
+                            >
+                              {mod.name}
+                              {mod.price_delta > 0 && (
+                                <span className="ml-1 text-[11px]" style={{ color: isSelected ? 'var(--brand-primary)' : 'var(--brand-text-muted)' }}>
+                                  +{mod.price_delta.toLocaleString()}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  )}
+                  ))}
                 </div>
-              ))}
+              )}
+
+              {/* Modifier Summary */}
+              {Object.values(modifierGroupSelection).some(s => s.length > 0) && (
+                <div className="text-[11px] leading-relaxed px-1" style={{ color: 'var(--brand-text-muted)' }}>
+                  <span className="font-medium" style={{ color: 'var(--brand-text)' }}>Selected:</span>{' '}
+                  {Object.entries(modifierGroupSelection).map(([gid, selectedIds]) => {
+                    const group = (detailProduct.modifier_groups || []).find(g => g.id === gid);
+                    if (!group || selectedIds.length === 0) return null;
+                    return selectedIds.map(sid => group.modifiers.find(m => m.id === sid)?.name).filter(Boolean).join(', ');
+                  }).filter(Boolean).join(' · ')}
+                </div>
+              )}
 
               {/* Quantity + Add to Cart */}
-              <div className="flex items-center gap-4 pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-                <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 pt-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+                <div className="flex items-center gap-2 rounded-xl p-1" style={{ background: 'var(--brand-surface)' }}>
                   <button 
                     onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-medium transition-colors active:scale-95"
-                    style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
+                    className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium transition-colors hover:opacity-80 active:scale-90"
+                    style={{ color: 'var(--brand-text)' }}
+                    aria-label="Decrease quantity"
                   >
-                    -
+                    <i className="ti ti-minus" />
                   </button>
-                  <span className="text-lg font-semibold w-8 text-center" style={{ color: 'var(--brand-text)' }}>{quantity}</span>
+                  <span className="text-base font-semibold w-8 text-center" style={{ color: 'var(--brand-text)' }}>{quantity}</span>
                   <button 
                     onClick={() => setQuantity(q => q + 1)}
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-medium transition-colors active:scale-95"
-                    style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
+                    className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium transition-colors hover:opacity-80 active:scale-90"
+                    style={{ color: 'var(--brand-text)' }}
+                    aria-label="Increase quantity"
                   >
-                    +
+                    <i className="ti ti-plus" />
                   </button>
                 </div>
                 <button
                   onClick={handleAddDetail}
                   disabled={!canAdd()}
-                  className="flex-1 h-12 rounded-xl text-white font-semibold text-sm transition-all active:scale-[0.98] disabled:opacity-40"
-                  style={{ background: detailProduct.available ? 'var(--brand-primary)' : 'var(--brand-text-muted)' }}
+                  className="flex-1 h-[48px] rounded-xl text-white font-bold text-[15px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-center gap-2"
+                  style={{ background: detailProduct.available ? 'var(--brand-primary)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
-                  {detailProduct.available
-                    ? `${t('client.add_to_cart', 'Add to Cart')} · ${((detailProduct.price + calcModifierDelta()) * quantity).toLocaleString()} ${getCurrency(menu)}`
-                    : t('client.unavailable', 'Unavailable')}
+                  {detailProduct.available ? (
+                    <>
+                      <span>{t('client.add_to_cart', 'Add to Cart')}</span>
+                      <span className="opacity-50 font-normal">·</span>
+                      <span className="font-bold">{(detailProduct.price + calcModifierDelta()) * quantity} {getCurrency(menu)}</span>
+                    </>
+                  ) : (
+                    t('client.unavailable', 'Unavailable')
+                  )}
                 </button>
               </div>
             </div>

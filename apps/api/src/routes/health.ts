@@ -136,8 +136,8 @@ export default async function healthRoutes(
     // ── 6. Settlement (Degraded) ────────────────────────────────────
     const settlementResult = await withTimeout(
       opts.db.query(
-        `SELECT MAX(period_end) AS last_period_end
-         FROM settlements WHERE status = 'generated' LIMIT 1`,
+        `SELECT MAX(created_at) AS last_period_end
+         FROM settlement_audit_log WHERE action = 'generated' LIMIT 1`,
       ),
       'settlement',
       true
