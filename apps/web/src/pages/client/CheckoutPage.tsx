@@ -7,6 +7,44 @@ import { useSharedCart } from '../../lib/CartProvider.js';
 
 const isDevMode = () => typeof window !== 'undefined' && sessionStorage.getItem('dos_dev') === '1';
 
+async function requestPushPermission(_slug: string) {
+  if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if (Notification.permission === 'granted') return;
+  if (Notification.permission === 'denied') return;
+  const result = await Notification.requestPermission();
+  if (result !== 'granted') return;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    const publicKeyRes: any = await apiClient('/api/push/vapid-public-key');
+    const publicKey: string | undefined = publicKeyRes?.publicKey;
+    if (!publicKey) return;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey) as any,
+    });
+    const p256dhKey = sub.getKey('p256dh');
+    const authKey = sub.getKey('auth');
+    if (!p256dhKey || !authKey) return;
+    await apiClient('/api/customer/push/subscribe', {
+      method: 'POST',
+      body: {
+        endpoint: sub.endpoint,
+        keys: { p256dh: btoa(String.fromCharCode(...new Uint8Array(p256dhKey))), auth: btoa(String.fromCharCode(...new Uint8Array(authKey))) },
+        opted_in: true,
+      },
+    });
+  } catch {
+    // Push subscription is best-effort
+  }
+}
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from(rawData.split('').map((c) => c.charCodeAt(0)));
+}
+
 type DeliveryType = 'delivery' | 'pickup' | 'scheduled';
 
 async function sha256Hex(input: string): Promise<string> {
@@ -31,7 +69,6 @@ export function CheckoutPage() {
 
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('delivery');
   const [address, setAddress] = useState('');
-  const [instructions, setInstructions] = useState('');
   const [phone, setPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [isOTPOpen, setOTPOpen] = useState(false);
@@ -40,6 +77,8 @@ export function CheckoutPage() {
   const [locationId, setLocationId] = useState<string | null>(null);
   const [currency, setCurrency] = useState('ALL');
   const [cashAmount, setCashAmount] = useState<number>(0);
+  const [instructionOption, setInstructionOption] = useState<string>('');
+  const [instructionCustom, setInstructionCustom] = useState<string>('');
 
   const otpTokenRef = useRef<string>('');
   const verifiedTokenRef = useRef<string>('');
@@ -54,6 +93,18 @@ export function CheckoutPage() {
       .catch(() => {
         console.debug('[Checkout] failed to load location info');
       });
+    try {
+      const saved = localStorage.getItem(`dos_last_delivery_${slug}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.lat && parsed.lng) {
+          setPinLocation([parsed.lng, parsed.lat]);
+        }
+        if (parsed.address) {
+          setAddress(parsed.address);
+        }
+      }
+    } catch { /* ignore corrupt localStorage */ }
   }, [slug]);
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -149,8 +200,21 @@ export function CheckoutPage() {
           cash_pay_with: cashAmount > 0 ? cashAmount : undefined,
           idempotency_key: idempotencyKey,
           acknowledged_codes: [],
+          delivery_instructions: instructionOption
+            ? instructionCustom
+              ? `${instructionOption}: ${instructionCustom}`
+              : instructionOption
+            : undefined,
         },
       });
+      try {
+        localStorage.setItem(`dos_last_delivery_${slug}`, JSON.stringify({
+          lat: (pinLocation as [number, number])?.[1] || 41.331,
+          lng: (pinLocation as [number, number])?.[0] || 19.817,
+          address,
+        }));
+      } catch { /* localStorage may be full or blocked */ }
+      requestPushPermission(slug!);
       clearCart();
       navigate(`/s/${slug}/order/${orderRes.id}`);
     } catch {
@@ -224,8 +288,28 @@ export function CheckoutPage() {
                 </div>
               </div>
               <div>
-                <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.notes')}</label>
-                <input value={instructions} onChange={e => setInstructions(e.target.value)} placeholder={t('checkout.notes')} className="w-full h-[48px] px-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.dropoff_instructions', 'Dropoff instructions')}</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {['Leave at door', 'Call on arrival', 'Ring bell', 'Hand to me', 'Text on arrival'].map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setInstructionOption(instructionOption === opt ? '' : opt)}
+                      className="px-3 py-1.5 text-[12px] rounded-[20px] border transition-all active:scale-95"
+                      style={{
+                        background: instructionOption === opt ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
+                        borderColor: instructionOption === opt ? 'var(--brand-primary)' : 'var(--brand-border)',
+                        color: instructionOption === opt ? '#fff' : 'var(--brand-text)',
+                      }}
+                    >{opt}</button>
+                  ))}
+                </div>
+                {instructionOption && (
+                  <div className="relative">
+                    <i className="ti ti-edit absolute left-3 top-1/2 -translate-y-1/2 text-lg" style={{ color: 'var(--brand-text-muted)' }} />
+                    <input value={instructionCustom} onChange={e => setInstructionCustom(e.target.value)} placeholder={t('checkout.extra_notes', 'Extra notes...')} className="w-full h-[44px] pl-10 pr-3 outline-none text-[13px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                  </div>
+                )}
               </div>
             </div>
           )}

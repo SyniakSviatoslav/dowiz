@@ -28,6 +28,7 @@ function mapOrderRow(row: Record<string, unknown>) {
     status: row.status,
     type: row.type,
     deliveryAddress: row.delivery_address,
+    deliveryInstructions: row.delivery_instructions,
     subtotal: row.subtotal,
     total: row.total,
     paymentMethod: row.payment_method,
@@ -61,7 +62,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       const issues = err?.issues?.map((i: any) => i.message).join('; ');
       return reply.status(400).send({ code: 400, error: issues || 'Validation error' });
     }
-    const { locationId, items, customer: cust, delivery, idempotency_key, cash_pay_with: cashPayWith } = input;
+    const { locationId, items, customer: cust, delivery, idempotency_key, cash_pay_with: cashPayWith, delivery_instructions: rawInstructions } = input;
 
     const client = await db.connect();
     try {
@@ -531,16 +532,18 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           subtotal, delivery_fee, tax_total, discount_total, total, 
           payment_method, cash_pay_with, currency_code, 
           menu_version, client_menu_version, request_hash, timeout_at,
+          delivery_instructions,
           metadata,
           preflight
          )
-         VALUES ($1, $2, 'delivery', 'PENDING', $3, $4, $5, $6, $7, $8, $9, $10, 'cash', $11, $12, $13, $14, $15, $16, $17, $18)
+         VALUES ($1, $2, 'delivery', 'PENDING', $3, $4, $5, $6, $7, $8, $9, $10, 'cash', $11, $12, $13, $14, $15, $16, $17, $18, $19)
          RETURNING id, status, subtotal, total, created_at::text, timeout_at::text`,
         [
           locationId, resolvedCustomerId, delivery.address_text || null, delivery.pin.lat, delivery.pin.lng,
           subtotal, deliveryFee, taxTotal, discountTotal, total,
           cashPayWith ?? null, location.currency_code, 
           menuVersion, input.client_menu_version || null, requestHash, timeoutAt,
+          rawInstructions || null,
           JSON.stringify({ otp_verified: otpServerVerified, client_ip_hash: clientIpHash }),
           preflightMeta,
         ]
@@ -630,6 +633,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         status: order.status,
         subtotal,
         total,
+        deliveryInstructions: rawInstructions || null,
         createdAt: order.created_at,
         preflight: {
           outcome: 'clean',

@@ -88,6 +88,44 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
           if (members) {
             members.delete(member);
           }
+          return;
+        }
+
+        // CR-6: Relay client location to couriers in the same order room
+        if (msg.type === 'client_location' && user!.role === 'customer') {
+          const { lat, lng } = msg.payload || {};
+          if (typeof lat === 'number' && typeof lng === 'number' &&
+              lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            const orderRoom = `order:${user!.orderId}`;
+            const members = rooms.get(orderRoom);
+            if (members) {
+              const relay = JSON.stringify({
+                type: 'client_location',
+                payload: { lat, lng, timestamp: Date.now() }
+              });
+              for (const m of members) {
+                if (m.user.role === 'courier' && m.ws.readyState === WebSocket.OPEN) {
+                  m.ws.send(relay);
+                }
+              }
+            }
+          }
+          return;
+        }
+
+        // CR-6: Stop client location sharing
+        if (msg.type === 'client_location_stop' && user!.role === 'customer') {
+          const orderRoom = `order:${user!.orderId}`;
+          const members = rooms.get(orderRoom);
+          if (members) {
+            const relay = JSON.stringify({ type: 'client_location_stop' });
+            for (const m of members) {
+              if (m.user.role === 'courier' && m.ws.readyState === WebSocket.OPEN) {
+                m.ws.send(relay);
+              }
+            }
+          }
+          return;
         }
 
       } catch (err) {

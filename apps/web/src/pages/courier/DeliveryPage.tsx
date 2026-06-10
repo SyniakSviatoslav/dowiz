@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, useI18n } from '@deliveryos/ui';
+import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, useI18n, useGeolocation } from '@deliveryos/ui';
 import type { CourierTask, CourierOnMap, LngLatLike } from '@deliveryos/ui';
-import { apiClient, useGeolocation, useWebSocket } from '../../lib/index.js';
+import { apiClient, useWebSocket } from '../../lib/index.js';
 
 const TIRANA_CENTER: LngLatLike = [19.817, 41.331];
 const MOCK_RESTAURANT: LngLatLike = [19.812, 41.328];
@@ -14,6 +14,7 @@ export function DeliveryPage() {
   const [task, setTask] = useState<CourierTask | null>(null);
   const [loading, setLoading] = useState(true);
   const [courierPos, setCourierPos] = useState<LngLatLike>(TIRANA_CENTER);
+  const [clientLocation, setClientLocation] = useState<LngLatLike | null>(null);
   const { t } = useI18n();
 
   const { position, error: geoError } = useGeolocation({
@@ -24,7 +25,7 @@ export function DeliveryPage() {
 
   useEffect(() => {
     if (position) {
-      setCourierPos([position.coords.longitude, position.coords.latitude]);
+      setCourierPos([position.lng, position.lat]);
     }
   }, [position]);
 
@@ -55,7 +56,17 @@ export function DeliveryPage() {
 
   const { status: wsStatus, sendMessage } = useWebSocket({
     room: `order:${id}`,
-    onMessage: () => {}
+    onMessage: (msg: any) => {
+      if (msg.type === 'client_location' && msg.payload) {
+        const { lat, lng } = msg.payload;
+        if (typeof lat === 'number' && typeof lng === 'number') {
+          setClientLocation([lng, lat]);
+        }
+      }
+      if (msg.type === 'client_location_stop') {
+        setClientLocation(null);
+      }
+    }
   });
 
   useEffect(() => {
@@ -63,11 +74,11 @@ export function DeliveryPage() {
       sendMessage({
         type: 'location_update',
         payload: {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          heading: position.coords.heading,
-          speed: position.coords.speed,
-          timestamp: position.timestamp
+          lat: position.lat,
+          lng: position.lng,
+          heading: position.heading,
+          speed: position.speed,
+          timestamp: Date.now()
         }
       });
     }
@@ -115,6 +126,7 @@ export function DeliveryPage() {
           className="h-full w-full"
           couriers={couriers}
           destinationPin={destPin}
+          clientLocation={clientLocation || undefined}
           routeLine={routeLine}
           center={courierPos}
           zoom={14}
