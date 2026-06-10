@@ -39,6 +39,7 @@ export function CheckoutPage() {
   const [pinLocation, setPinLocation] = useState<LngLatLike | null>(null);
   const [locationId, setLocationId] = useState<string | null>(null);
   const [currency, setCurrency] = useState('ALL');
+  const [cashAmount, setCashAmount] = useState<number>(0);
 
   const otpTokenRef = useRef<string>('');
   const verifiedTokenRef = useRef<string>('');
@@ -145,7 +146,7 @@ export function CheckoutPage() {
             address_text: address || undefined,
           },
           payment: { method: 'cash' },
-          cash_pay_with: false,
+          cash_pay_with: cashAmount > 0 ? cashAmount : undefined,
           idempotency_key: idempotencyKey,
           acknowledged_codes: [],
         },
@@ -249,15 +250,46 @@ export function CheckoutPage() {
 
         <div className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
           <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.payment_method')}</h2>
-          <div className="border rounded-[8px] p-3 flex items-center justify-between mb-4" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-primary)' }}>
-            <div className="flex items-center gap-3">
-              <i className="ti ti-cash text-xl" style={{ color: 'var(--brand-primary)' }} />
-              <div>
-                <div className="text-[14px] font-bold" style={{ color: 'var(--brand-text)' }}>{t('checkout.cash')}</div>
-                <div className="text-[12px]" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.place_order')}</div>
+          <div className="border rounded-[8px] p-3 mb-3" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-primary)' }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <i className="ti ti-cash text-xl" style={{ color: 'var(--brand-primary)' }} />
+                <div>
+                  <div className="text-[14px] font-bold" style={{ color: 'var(--brand-text)' }}>{t('checkout.cash')}</div>
+                  <div className="text-[12px]" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.place_order')}</div>
+                </div>
               </div>
+              <i className="ti ti-check" style={{ color: 'var(--brand-primary)' }} />
             </div>
-            <i className="ti ti-check" style={{ color: 'var(--brand-primary)' }} />
+            <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+              <label className="text-[12px] font-semibold mb-1.5 block" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.cash_amount', 'Cash amount')}</label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-bold" style={{ color: 'var(--brand-text-muted)' }}>ALL</span>
+                  <input
+                    type="number"
+                    min={total}
+                    value={cashAmount || ''}
+                    onChange={e => setCashAmount(parseInt(e.target.value) || 0)}
+                    className="w-full h-[44px] pl-11 pr-3 outline-none text-[14px] font-bold border rounded-[8px] transition-colors"
+                    style={{ background: 'var(--brand-surface)', borderColor: cashAmount > 0 && cashAmount < total ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }}
+                    placeholder={String(total)}
+                  />
+                </div>
+              </div>
+              {cashAmount > 0 && (
+                <div className="flex justify-between text-[13px] mt-2 px-1">
+                  {cashAmount >= total ? (
+                    <>
+                      <span style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.change', 'Change')}</span>
+                      <span className="font-bold" style={{ color: 'var(--brand-primary)' }}>{cashAmount - total} ALL</span>
+                    </>
+                  ) : (
+                    <span style={{ color: 'var(--color-danger)' }}>{t('checkout.cash_amount_too_low', 'Amount must be at least')} {total} ALL</span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

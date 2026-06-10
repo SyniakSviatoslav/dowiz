@@ -9,3 +9,10 @@ dev-hub.html
 # MemPalace per-project files (issue #185)
 mempalace.yaml
 entities.json
+
+# Test / E2E artifacts
+test-results/
+e2e/artifacts/
+e2e/e2e/
+*.last-run.json
+menu-sq.pdf

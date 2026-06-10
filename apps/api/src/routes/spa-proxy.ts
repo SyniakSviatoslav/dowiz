@@ -261,9 +261,17 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       return reply.status(400).send({ error: 'Invalid image file', detail: sharpErr.message });
     }
     const key = `products/${locId}/${pid}.webp`;
-    await storage.put(key, processed);
     const imageUrl = `https://cdn.dowiz.org/${key}`;
-    await db.query(`UPDATE products SET image_key = $1 WHERE id = $2 AND location_id = $3`, [key, pid, locId]);
+    try {
+      await storage.put(key, processed);
+    } catch (putErr: any) {
+      return reply.status(500).send({ error: 'Failed to store image', detail: putErr.message });
+    }
+    try {
+      await db.query(`UPDATE products SET image_key = $1, image_url = $2 WHERE id = $3 AND location_id = $4`, [key, imageUrl, pid, locId]);
+    } catch (dbErr: any) {
+      return reply.status(500).send({ error: 'Failed to update product record', detail: dbErr.message });
+    }
     return reply.send({ imageUrl, imageKey: key });
   });
 

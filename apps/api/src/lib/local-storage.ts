@@ -11,8 +11,8 @@ export class LocalFsStorageProvider implements StorageProvider {
   }
 
   async put(key: string, data: Buffer, ttlSeconds?: number): Promise<void> {
-    await fs.mkdir(this.baseDir, { recursive: true });
     const filePath = path.join(this.baseDir, key);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, data);
     // Note: ttlSeconds is ignored in local fs as cleanup is done via cron/pg-boss elsewhere
   }

@@ -61,7 +61,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       const issues = err?.issues?.map((i: any) => i.message).join('; ');
       return reply.status(400).send({ code: 400, error: issues || 'Validation error' });
     }
-    const { locationId, items, customer: cust, delivery, idempotency_key, cash_pay_with } = input;
+    const { locationId, items, customer: cust, delivery, idempotency_key, cash_pay_with: cashPayWith } = input;
 
     const client = await db.connect();
     try {
@@ -144,7 +144,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         items: canonicalItems,
         pin: { lat: lat_rounded_5, lng: lng_rounded_5 },
         address_text: delivery.address_text || null,
-        cash_pay_with: cash_pay_with || false,
+        cash_pay_with: cashPayWith || null,
         currency_code: location.currency_code,
         menu_version: menuVersion,
         customer_id: customerId
@@ -499,6 +499,11 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       const total = subtotal + deliveryFee + taxTotal - discountTotal;
       assertNonNegative(total);
 
+      if (cashPayWith !== undefined && cashPayWith < total) {
+        await client.query('ROLLBACK');
+        return reply.status(422).send({ code: 'CASH_AMOUNT_TOO_LOW', error: `Cash amount must be at least ${total}` });
+      }
+
       // 10. Upsert Customer (if requested, otherwise anonymous logic)
       let resolvedCustomerId = null;
       if (cust && cust.phone) {
@@ -534,7 +539,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         [
           locationId, resolvedCustomerId, delivery.address_text || null, delivery.pin.lat, delivery.pin.lng,
           subtotal, deliveryFee, taxTotal, discountTotal, total,
-          cash_pay_with || false, location.currency_code, 
+          cashPayWith ?? null, location.currency_code, 
           menuVersion, input.client_menu_version || null, requestHash, timeoutAt,
           JSON.stringify({ otp_verified: otpServerVerified, client_ip_hash: clientIpHash }),
           preflightMeta,

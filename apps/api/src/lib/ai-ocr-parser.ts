@@ -222,14 +222,36 @@ export class AiOcrParser implements MenuParserProvider {
     }
 
     const modelForProvider = provider === 'groq'
-      ? (process.env.GROQ_MODEL || 'llama-3.1-8b-instruct')
+      ? (process.env.GROQ_MODEL || 'llama-3.1-8b-instant')
       : provider === 'openai'
         ? (process.env.OPENAI_MODEL || 'gpt-4o-mini')
         : llmModel;
 
     let llmResponse = '';
     try {
-      const prompt = `Extract the menu structure from the following text into a JSON object matching the requested schema. Ensure prices are in the standard minor unit integer format (multiply by 10^${input.config.currencyMinorUnit || 0}). Currency should be ${input.config.expectedCurrency || 'ALL'}. Do not write anything other than JSON.\n\n${redactedText}`;
+      const currency = input.config.expectedCurrency || 'ALL';
+      const prompt = `Extract the menu structure from the following text into a JSON object. Use EXACTLY this format:
+
+{
+  "categories": [{ "externalKey": "cat1", "name": "Category Name" }],
+  "products": [
+    {
+      "externalKey": "prod1",
+      "categoryKey": "cat1",
+      "name": "Product Name",
+      "description": "optional description",
+      "price": 1000,
+      "currency": "${currency}",
+      "available": true
+    }
+  ],
+  "modifierGroups": [],
+  "modifiers": [],
+  "links": [],
+  "translations": []
+}
+
+Prices must be integers in minor unit (e.g., 500 ALL = 50000). Currency is ${currency}. Output ONLY valid JSON, no markdown, no explanations.\n\n${redactedText}`;
 
       llmResponse = await callLlm(provider, prompt, modelForProvider, 120000);
     } catch (e: any) {

@@ -27,7 +27,7 @@ export const CreateOrderInput = z.object({
   payment: z.object({
     method: z.literal('cash'),
   }).strict(),
-  cash_pay_with: z.boolean().optional(),
+  cash_pay_with: z.number().int().positive().optional(),
   idempotency_key: z.string().uuid(),
   // Preflight (E27)
   acknowledged_codes: z.array(z.string()).max(10).optional().default([]),
