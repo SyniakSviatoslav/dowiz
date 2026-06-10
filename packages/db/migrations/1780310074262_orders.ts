@@ -34,6 +34,7 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
       payment_method payment_method NOT NULL DEFAULT 'cash',
       payment_outcome payment_outcome NOT NULL DEFAULT 'pending',
       cash_pay_with integer,
+      preferences jsonb NOT NULL DEFAULT '{}'
       timeout_at timestamptz,
       scheduled_at timestamptz,
       pickup_code text,
