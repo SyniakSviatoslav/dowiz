@@ -267,6 +267,8 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
     expect(found.taste.spicy).toBe(3);
     expect(found.recipeLines.length).toBe(3);
     expect(found.stockCount).toBe(42);
+    expect(found.allergens).toBeTruthy();
+    expect(found.allergens).toContain('soy');
   });
 
   // ── 12. Theme endpoint resolves with slug from settings ─────────────
