@@ -1,5 +1,6 @@
 import React from 'react';
 import type { InputHTMLAttributes, ButtonHTMLAttributes } from 'react';
+import { formatALL } from '../utils/index.js';
 
 // --- Button ---
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -100,8 +101,8 @@ export function BrandLogo({ name, logoUrl }: { name: string; logoUrl?: string | 
 
 // --- PriceDisplay ---
 export function PriceDisplay({ amount }: { amount: number }) {
-  // G5: Prices are pre-calculated by server. formatALL formats integer ALL.
-  return <span className="font-semibold">{amount} ALL</span>;
+  // G5: Prices are pre-calculated by server. formatALL formats integer as ALL minor units → display.
+  return <span className="font-semibold">{formatALL(amount)}</span>;
 }
 
 // --- StatusBadge ---
