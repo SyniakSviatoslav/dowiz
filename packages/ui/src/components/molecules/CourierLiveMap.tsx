@@ -18,6 +18,7 @@ interface CourierLiveMapProps {
   className?: string;
   couriers?: CourierOnMap[];
   destinationPin?: LngLatLike;
+  clientLocation?: LngLatLike;
   routeLine?: LngLatLike[];
   center?: LngLatLike;
   zoom?: number;
@@ -27,6 +28,7 @@ export function CourierLiveMap({
   className = 'h-64 w-full rounded-lg',
   couriers = [],
   destinationPin,
+  clientLocation,
   routeLine,
   center = [19.817, 41.331],
   zoom = 13,
@@ -50,6 +52,15 @@ export function CourierLiveMap({
       lngLat: destinationPin,
       color: getCSSVar('--color-info', '#2563EB'),
       label: '🏠',
+    });
+  }
+
+  if (clientLocation) {
+    markers.push({
+      id: 'client-live',
+      lngLat: clientLocation,
+      color: getCSSVar('--color-success', '#059669'),
+      label: '📍',
     });
   }
 
