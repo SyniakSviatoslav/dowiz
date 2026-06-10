@@ -128,7 +128,42 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     return reply.status(201).send(res.rows[0]);
   });
 
-  const CDN_BASE = 'https://cdn.dowiz.org';
+  // DELETE /api/owner/menu/categories/:id
+  fastify.delete('/api/owner/menu/categories/:id', async (request, reply) => {
+    const locId = await getLocationId(request);
+    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    const { id } = request.params as { id: string };
+    const prodRes = await db.query(
+      `SELECT id FROM products WHERE category_id = $1 AND location_id = $2 LIMIT 1`,
+      [id, locId]
+    );
+    if (prodRes.rowCount && prodRes.rowCount > 0) {
+      return reply.status(409).send({ error: 'Category contains products. Move or delete them first.' });
+    }
+    const res = await db.query(
+      `DELETE FROM categories WHERE id = $1 AND location_id = $2 RETURNING id`,
+      [id, locId]
+    );
+    if (res.rowCount === 0) return reply.status(404).send({ error: 'Category not found' });
+    return reply.status(204).send();
+  });
+
+  const APP_BASE = process.env.APP_BASE_URL || 'https://dowiz.fly.dev';
+
+  // Serve product images from local storage (CDN placeholder until Cloudflare R2 is set up)
+  fastify.get('/images/products/:locId/:filename', async (request, reply) => {
+    const { locId, filename } = request.params as { locId: string; filename: string };
+    const key = `products/${locId}/${filename}`;
+    try {
+      const buf = await storage.get(key);
+      if (!buf) return reply.status(404).send({ error: 'Image not found' });
+      reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+      reply.header('Content-Type', 'image/webp');
+      return reply.send(buf);
+    } catch {
+      return reply.status(404).send({ error: 'Image not found' });
+    }
+  });
 
   function mapProductRow(r: any): any {
     const bom: any[] = r.attributes?.bom ?? [];
@@ -146,7 +181,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       imageUrl: r.image_key
         ? r.image_key.startsWith('http://') || r.image_key.startsWith('https://') || r.image_key.startsWith('data:')
           ? r.image_key
-          : `${CDN_BASE}/${r.image_key}`
+          : `${APP_BASE}/images/${r.image_key}`
         : null,
       imageKey: r.image_key,
       stockCount: r.attributes?.stock_count ?? null,
@@ -261,7 +296,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       return reply.status(400).send({ error: 'Invalid image file', detail: sharpErr.message });
     }
     const key = `products/${locId}/${pid}.webp`;
-    const imageUrl = `https://cdn.dowiz.org/${key}`;
+    const imageUrl = `${APP_BASE}/images/${key}`;
     try {
       await storage.put(key, processed);
     } catch (putErr: any) {

@@ -247,19 +247,26 @@ export class AiOcrParser implements MenuParserProvider {
     let llmResponse = '';
     try {
       const currency = input.config.expectedCurrency || 'ALL';
-      const prompt = `Extract the menu structure from the menu text below into a JSON object. Use EXACTLY this schema — field names, types, and nesting must match:
+      const prompt = `Extract the complete menu structure from the text below. Return ONLY valid JSON matching this schema:
 
 {
-  "categories": [{ "externalKey": "cat1", "name": "Category Name" }],
+  "categories": [{ "externalKey": "cat1", "name": "Appetizers" }],
   "products": [
     {
       "externalKey": "prod1",
       "categoryKey": "cat1",
-      "name": "Product Name",
-      "description": "optional description or null",
-      "price": 50000,
+      "name": "Margherita Pizza",
+      "description": "Tomato sauce, mozzarella, fresh basil on thin crust",
+      "price": 800,
       "currency": "${currency}",
-      "available": true
+      "available": true,
+      "attributesJson": {
+        "bom": [
+          { "name": "Tomato sauce", "quantity": "100g", "allergens": [] },
+          { "name": "Mozzarella", "quantity": "120g", "allergens": ["dairy"] },
+          { "name": "Basil", "quantity": "5 leaves", "allergens": [] }
+        ]
+      }
     }
   ],
   "modifierGroups": [],
@@ -267,12 +274,12 @@ export class AiOcrParser implements MenuParserProvider {
   "links": []
 }
 
-Rules:
-- "price" must be a JSON NUMBER (int), NOT a string. Price in ${currency} minor unit (e.g. 500 ALL = 50000).
-- "available" must be a JSON BOOLEAN (true/false), NOT a string.
-- "externalKey", "categoryKey" must be JSON STRINGS.
-- Omit "description" and "imageKey" if not present (do not include with null value).
-- Output ONLY valid JSON object, no markdown, no commentary.\n\n${redactedText}`;
+CRITICAL RULES:
+1. PRICE: Every product MUST have a price. Extract the visible price in minor unit (e.g. "800 Lek" → 800, "1200 ALL" → 1200). If a price appears in the text but is unclear, provide your best estimate. NEVER omit price — it is required.
+2. INGREDIENTS: If ingredients are listed in the menu text, add them to "attributesJson.bom" as an array of objects with "name" (string), "quantity" (string, optional), and "allergens" (string array of common allergens: dairy, eggs, nuts, soy, gluten, shellfish, fish).
+3. DESCRIPTION: Include the product description if present. Combine ingredient list into a description if no separate description exists.
+4. TYPES: "price" must be a NUMBER, "available" must be BOOLEAN, "externalKey"/"categoryKey" must be STRINGS.
+5. FORMAT: Output ONLY the JSON object. No markdown fences, no commentary.\n\n${redactedText}`;
 
       llmResponse = await callLlm(provider, prompt, modelForProvider, 120000);
     } catch (e: any) {
