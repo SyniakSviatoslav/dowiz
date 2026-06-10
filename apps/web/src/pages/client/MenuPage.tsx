@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { ProductCard, useI18n } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
@@ -67,8 +67,54 @@ export function MenuPage() {
   const [modifierGroupSelection, setModifierGroupSelection] = useState<Record<string, string[]>>({});
   const [quantity, setQuantity] = useState(1);
   const [imageLoadError, setImageLoadError] = useState(false);
+  const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc' | 'name'>('default');
+  const [filterAllergen, setFilterAllergen] = useState<string | null>(null);
 
   const categories = data;
+
+  const displayCategories = useMemo(() => {
+    if (sortBy === 'default' && !filterAllergen) return categories;
+    const all: (Product & { _catId: string; _catName: string })[] = [];
+    for (const cat of categories) {
+      for (const p of cat.products) {
+        all.push({ ...p, _catId: cat.id, _catName: cat.name });
+      }
+    }
+    const filtered = filterAllergen
+      ? all.filter(p => bomToNutrition(p).allergens.includes(filterAllergen))
+      : all;
+    const sorted = sortBy === 'default' ? filtered
+      : sortBy === 'price-asc' ? [...filtered].sort((a, b) => a.price - b.price)
+      : sortBy === 'price-desc' ? [...filtered].sort((a, b) => b.price - a.price)
+      : [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+    const groups: MenuCategory[] = [];
+    for (const p of sorted) {
+      const g = groups.find(g => g.id === p._catId);
+      if (g) g.products.push(p);
+      else groups.push({ id: p._catId, name: p._catName, sort_order: 0, products: [p] });
+    }
+    return groups;
+  }, [categories, sortBy, filterAllergen]);
+
+  const allAllergens = useMemo(() => {
+    const set = new Set<string>();
+    for (const cat of data) for (const p of cat.products) {
+      const bom = getAttr(p, 'bom');
+      if (Array.isArray(bom)) for (const line of bom) {
+        if (Array.isArray(line.allergens)) for (const a of line.allergens) set.add(a);
+      }
+    }
+    return Array.from(set).sort();
+  }, [data]);
+
+  const allTasteAxes = useMemo(() => {
+    const set = new Set<string>();
+    for (const cat of data) for (const p of cat.products) {
+      const taste = getAttr(p, 'taste');
+      if (taste && typeof taste === 'object') for (const k of Object.keys(taste)) if ((taste as any)[k] > 0) set.add(k);
+    }
+    return Array.from(set);
+  }, [data]);
 
   useEffect(() => {
     async function load() {
@@ -311,6 +357,48 @@ export function MenuPage() {
         </div>
       </nav>
 
+      {/* Sort & Filter Bar */}
+      {!loading && (allAllergens.length > 0 || sortBy !== 'default') && (
+        <div className="sticky top-[44px] z-30 border-b px-4 py-2 flex items-center gap-2 overflow-x-auto hide-scrollbar" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-text-muted)' }}>
+              <i className="ti ti-arrows-sort" style={{ fontSize: '0.7rem' }} />
+            </span>
+            {(['default', 'price-asc', 'price-desc', 'name'] as const).map(mode => (
+              <button key={mode} onClick={() => setSortBy(mode)}
+                className="px-2 py-0.5 rounded-md text-[10px] font-medium transition-all whitespace-nowrap"
+                style={{
+                  background: sortBy === mode ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
+                  color: sortBy === mode ? '#fff' : 'var(--brand-text-muted)',
+                }}
+              >
+                {mode === 'default' ? '·' : mode === 'price-asc' ? '↑ Price' : mode === 'price-desc' ? '↓ Price' : 'A-Z'}
+              </button>
+            ))}
+          </div>
+          {allAllergens.length > 0 && (
+            <div className="h-4 w-px shrink-0" style={{ background: 'var(--brand-border)' }} />
+          )}
+          <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
+            {allAllergens.map(a => {
+              const s = getAllergenStyle(a);
+              return (
+                <button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)}
+                  className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase whitespace-nowrap transition-all"
+                  style={{
+                    background: filterAllergen === a ? s.text : s.bg,
+                    color: filterAllergen === a ? '#fff' : s.text,
+                    opacity: filterAllergen && filterAllergen !== a ? 0.3 : 1,
+                  }}
+                >
+                  {a}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Menu Content */}
       <main className="max-w-5xl mx-auto pt-4">
         {loading ? (
@@ -335,8 +423,8 @@ export function MenuPage() {
             <i className="ti ti-tools-kitchen-2 text-5xl opacity-20 mb-3" style={{ color: 'var(--brand-text-muted)' }} />
             <p className="text-sm font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('client.empty_menu', 'Menu unavailable')}</p>
           </div>
-        ) : (
-          categories.map(category => (
+) : (
+          displayCategories.map(category => (
             <section 
               key={category.id} 
               id={category.id} 
@@ -347,27 +435,27 @@ export function MenuPage() {
                 {category.name}
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 px-4">
-{category.products.map(product => {
-                      const nutrition = bomToNutrition(product);
-                      return (
-                    <div key={product.id}>
-                      <ProductCard product={{
-                        id: product.id,
-                        name: product.name,
-                        description: product.description,
-                        price: product.price,
-                        image: getImageUrl(product) || undefined,
-                        isAvailable: product.available,
-                        kcal: nutrition.kcal || undefined,
-                        protein: nutrition.protein || undefined,
-                        fat: nutrition.fat || undefined,
-                        carbs: nutrition.carbs || undefined,
-                        allergens: nutrition.allergens.length ? nutrition.allergens : undefined,
-                        ingredients: nutrition.ingredients.length ? nutrition.ingredients : undefined,
-                        taste: getAttr(product, 'taste'),
-                      }}
-                      onClick={() => handleProductClick(product)}
-                      onAdd={(e) => {
+                {category.products.map(product => {
+                  const nutrition = bomToNutrition(product);
+                  return (
+                  <div key={product.id}>
+                    <ProductCard product={{
+                      id: product.id,
+                      name: product.name,
+                      description: product.description,
+                      price: product.price,
+                      image: getImageUrl(product) || undefined,
+                      isAvailable: product.available,
+                      kcal: nutrition.kcal || undefined,
+                      protein: nutrition.protein || undefined,
+                      fat: nutrition.fat || undefined,
+                      carbs: nutrition.carbs || undefined,
+                      allergens: nutrition.allergens.length ? nutrition.allergens : undefined,
+                      ingredients: nutrition.ingredients.length ? nutrition.ingredients : undefined,
+                      taste: getAttr(product, 'taste'),
+                    }}
+                    onClick={() => handleProductClick(product)}
+                    onAdd={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       if (!product.available) return;
@@ -377,15 +465,15 @@ export function MenuPage() {
                       } else {
                         handleProductClick(product);
                       }
-}} />
-                    </div>
-                    );
-                  })}
-               </div>
-             </section>
-           ))
-         )}
-      </main>
+                    }} />
+                  </div>
+                  );
+                })}
+              </div>
+            </section>
+          ))
+        )}
+       </main>
 
       {/* Product Detail Modal */}
       {detailProduct && (

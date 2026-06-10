@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -18,7 +17,7 @@ export default (async function ownerThemeRoutes(fastify, opts) {
       params: z.object({ locationId: z.string().uuid() })
     }
   }, async (request, reply) => {
-    const { locationId } = request.params;
+    const { locationId } = request.params as { locationId: string };
     const client = await db.connect();
     try {
       const res = await client.query(`SELECT * FROM location_themes WHERE location_id = $1`, [locationId]);
@@ -55,15 +54,15 @@ export default (async function ownerThemeRoutes(fastify, opts) {
       }).strict()
     }
   }, async (request, reply) => {
-    const { locationId } = request.params;
-    const updates = request.body;
+    const { locationId } = request.params as { locationId: string };
+    const updates = request.body as Record<string, unknown>;
     
     const client = await db.connect();
     try {
       await client.query('BEGIN');
 
       // Update location_themes
-      const fields = Object.keys(updates);
+      const fields = Object.keys(updates as object);
       if (fields.length > 0) {
         const setClauses = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
         const values = fields.map(f => (updates as any)[f]);
@@ -125,7 +124,6 @@ export default (async function ownerThemeRoutes(fastify, opts) {
     // Process with sharp: strip EXIF, resize
     const processed = await sharp(buffer)
       .resize({ width: 512, height: 512, fit: 'inside' })
-      .withMetadata(false) // Strip EXIF/PII
       .webp({ quality: 80 })
       .toBuffer();
 
