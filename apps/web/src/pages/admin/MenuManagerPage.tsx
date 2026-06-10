@@ -275,6 +275,16 @@ export function MenuManagerPage() {
     }
   };
 
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (!confirm(t('admin.confirm_delete_category', 'Delete this category? Products in it will need to be moved or deleted first.'))) return;
+    try {
+      await apiClient(`/owner/menu/categories/${categoryId}`, { method: 'DELETE' });
+      setCategories(prev => prev.filter(c => c.id !== categoryId));
+    } catch (err: any) {
+      alert(err.message || t('common.error_delete', 'Failed to delete.'));
+    }
+  };
+
   const MAX_IMPORT_SIZE = 10 * 1024 * 1024; // 10MB
 
   // ── PDF Menu Import ──
@@ -466,9 +476,15 @@ export function MenuManagerPage() {
                               {cat.product_count ?? cat.products?.length ?? 0}
                             </span>
                           </div>
-                          <Button size="sm" variant="ghost" onClick={() => openAddForm(cat.id)}>
-                            <i className="ti ti-plus" /> {t('common.add', 'Add')}
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button size="sm" variant="ghost" onClick={() => handleDeleteCategory(cat.id)} title={t('common.delete', 'Delete')} disabled={((cat.product_count ?? cat.products?.length ?? 0) > 0)}
+                              style={((cat.product_count ?? cat.products?.length ?? 0) > 0) ? { opacity: 0.3, cursor: 'not-allowed' } : {}}>
+                              <i className="ti ti-trash" />
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => openAddForm(cat.id)}>
+                              <i className="ti ti-plus" /> {t('common.add', 'Add')}
+                            </Button>
+                          </div>
                         </div>
                       </td>
                     </tr>
