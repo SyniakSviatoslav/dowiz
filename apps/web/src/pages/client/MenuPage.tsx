@@ -57,6 +57,28 @@ const getCurrency = (m: MenuResponse | null): string => {
 export function MenuPage() {
   const { slug } = useParams<{ slug: string }>();
   const { t } = useI18n();
+  const getAttr = (p: Product, key: string): any => {
+    if (!p.attributes || typeof p.attributes !== 'object') return undefined;
+    return (p.attributes as Record<string, any>)[key];
+  };
+
+  const bomToNutrition = (p: Product) => {
+    const bom = getAttr(p, 'bom');
+    if (!Array.isArray(bom) || bom.length === 0) return { kcal: 0, protein: 0, fat: 0, carbs: 0, allergens: [], ingredients: [] };
+    let kcal = 0, protein = 0, fat = 0, carbs = 0;
+    const allergens = new Set<string>();
+    const ingredients: string[] = [];
+    for (const line of bom) {
+      if (typeof line.kcal === 'number') kcal += line.kcal;
+      if (typeof line.proteinG === 'number') protein += line.proteinG;
+      if (typeof line.fatG === 'number') fat += line.fatG;
+      if (typeof line.carbsG === 'number') carbs += line.carbsG;
+      if (Array.isArray(line.allergens)) line.allergens.forEach((a: string) => allergens.add(a));
+      if (line.supplyName && line.kind !== 'packaging' && line.kind !== 'utensil') ingredients.push(line.supplyName);
+    }
+    return { kcal: Math.round(kcal), protein: Math.round(protein), fat: Math.round(fat), carbs: Math.round(carbs), allergens: Array.from(allergens), ingredients };
+  };
+
   const [menu, setMenu] = useState<MenuResponse | null>(null);
   const [data, setData] = useState<MenuCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -256,11 +278,6 @@ export function MenuPage() {
     return `https://cdn.dowiz.org/${product.image_key}`;
   };
 
-  const getAttr = (p: Product, key: string): any => {
-    if (!p.attributes || typeof p.attributes !== 'object') return undefined;
-    return (p.attributes as Record<string, any>)[key];
-  };
-
   const ALLERGEN_COLORS: Record<string, { bg: string; text: string }> = {
     gluten: { bg: 'rgba(234,179,8,0.12)', text: '#a16207' },
     dairy: { bg: 'rgba(59,130,246,0.12)', text: '#1d4ed8' },
@@ -276,23 +293,6 @@ export function MenuPage() {
   function getAllergenStyle(allergen: string) {
     const key = allergen.toLowerCase();
     return ALLERGEN_COLORS[key] || { bg: 'rgba(107,114,128,0.12)', text: '#374151' };
-  }
-
-  const bomToNutrition = (p: Product) => {
-    const bom = getAttr(p, 'bom');
-    if (!Array.isArray(bom) || bom.length === 0) return { kcal: 0, protein: 0, fat: 0, carbs: 0, allergens: [], ingredients: [] };
-    let kcal = 0, protein = 0, fat = 0, carbs = 0;
-    const allergens = new Set<string>();
-    const ingredients: string[] = [];
-    for (const line of bom) {
-      if (typeof line.kcal === 'number') kcal += line.kcal;
-      if (typeof line.proteinG === 'number') protein += line.proteinG;
-      if (typeof line.fatG === 'number') fat += line.fatG;
-      if (typeof line.carbsG === 'number') carbs += line.carbsG;
-      if (Array.isArray(line.allergens)) line.allergens.forEach((a: string) => allergens.add(a));
-      if (line.supplyName && line.kind !== 'packaging' && line.kind !== 'utensil') ingredients.push(line.supplyName);
-    }
-    return { kcal: Math.round(kcal), protein: Math.round(protein), fat: Math.round(fat), carbs: Math.round(carbs), allergens: Array.from(allergens), ingredients };
   };
 
   const attrEntries = (p: Product): [string, any][] => {
