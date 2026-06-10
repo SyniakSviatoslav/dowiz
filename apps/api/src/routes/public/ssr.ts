@@ -23,13 +23,25 @@ export default (async function ssrRoutes(fastify, opts) {
             .send(`<!DOCTYPE html><html><head><meta name="robots" content="noindex"><link rel="canonical" href="/"><title>404 Not Found</title></head><body><h1>Faqja nuk u gjet / Page not found</h1></body></html>`);
         }
 
-        const themeRes = await client.query(`
-          SELECT lt.frame_ancestors
-          FROM location_themes lt
-          WHERE lt.location_id = (SELECT id FROM locations WHERE slug = $1)
-          LIMIT 1
-        `, [slug]);
-        const frameAncestors = themeRes.rows[0]?.frame_ancestors?.join(' ') || "'self'";
+        const queryURL = request.url;
+        const isEmbed = queryURL.includes('embed=true');
+        let frameAncestors = "'self'";
+        if (isEmbed) {
+          frameAncestors = '*';
+        } else {
+          const themeRes = await client.query(`
+            SELECT lt.frame_ancestors
+            FROM location_themes lt
+            WHERE lt.location_id = (SELECT id FROM locations WHERE slug = $1)
+            LIMIT 1
+          `, [slug]);
+          frameAncestors = themeRes.rows[0]?.frame_ancestors?.join(' ') || "'self'";
+        }
+
+        const menuVersion = menuData?.version || menuData?.menu_version;
+        if (menuVersion) {
+          reply.header('X-Menu-Version', String(menuVersion));
+        }
 
         const csp = `default-src 'self'; img-src 'self' data: https://cdn.dowiz.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; connect-src 'self' https://cdn.dowiz.org https://cdn.jsdelivr.net; frame-ancestors ${frameAncestors}`;
 

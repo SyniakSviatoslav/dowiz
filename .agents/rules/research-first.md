@@ -73,7 +73,30 @@ Ask yourself:
 
 ---
 
-### Phase 4: After committing
+### Phase 4: Write test cases for any data-mutating change
+
+**AUTOMATIC — do not skip.** Any change that:
+- Adds/modifies a PATCH, PUT, POST, or DELETE endpoint
+- Changes a Zod schema or validation rule
+- Alters how data is stored or returned
+- Fixes a bug in a data-mutating endpoint
+
+MUST include a test suite that verifies:
+1. **Create → verify**: POST valid data, assert response contains all saved fields (not just `{ ok: true }`)
+2. **Update → verify**: PATCH each field individually, assert response confirms the change
+3. **Invalid data rejection**: POST/PATCH with bad data, assert 400 error with message
+4. **Unknown fields rejection**: POST/PATCH with `.strict()` extra fields, assert rejection
+5. **Data URL rejection**: If an image field exists, test that `data:` and `blob:` URLs are rejected with a clear error
+6. **FE ↔ BE contract validation**: For any form submission flow, verify that every field the FE collect/sends in the payload is accepted by the BE schema, and that the BE response includes those fields. Document the full field list in the test.
+
+**Test location**: 
+- Unit: `apps/api/tests/<endpoint-name>.test.ts` using `node --test --import tsx`
+- E2E schema contract: `apps/api/e2e/api-integrity.spec.ts` — add test cases there
+- FE-BE mapping: Validate FE Product/interface fields against BE response schema
+**Run command**: `pnpm --filter api test:<name>`
+**Verification**: Tests must pass before the change is considered complete.
+
+### Phase 5: After committing
 
 - [ ] Run `graphify update .` — update the knowledge graph
 - [ ] File drawer if the change introduces a new pattern or decision

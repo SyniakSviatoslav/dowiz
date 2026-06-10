@@ -79,6 +79,7 @@ function App() {
                 <Route path="/" element={<Navigate to="/login" replace />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/s/:slug/*" element={<ClientRoutes />} />
+                <Route path="/branding-preview/:slug/*" element={<ClientRoutes />} />
                 <Route path="/admin/*" element={<AdminRoutes />} />
                 <Route path="/courier/*" element={<CourierRoutes />} />
                 <Route path="/courier-invite/:inviteId" element={<CourierInvitePage />} />

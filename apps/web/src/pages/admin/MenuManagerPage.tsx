@@ -15,6 +15,8 @@ interface Product {
 
   stockCount?: number;
   taste?: { spicy?: number; sweet?: number; salty?: number; sour?: number; richness?: number };
+  recipeLines?: Array<{ supplyId: string; supplyName: string; qty: number; unit: string; kind: string; kcal: number | null; proteinG: number | null; fatG: number | null; carbsG: number | null; allergens: string[] }>;
+  attributes?: Record<string, unknown>;
 }
 
 interface Category {
@@ -46,6 +48,7 @@ export function MenuManagerPage() {
   const [formStock, setFormStock] = useState('');
 
   const [saving, setSaving] = useState(false);
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
 
   // Import state
   const [showImport, setShowImport] = useState(false);
@@ -122,24 +125,32 @@ export function MenuManagerPage() {
     setFormStock(product.stockCount != null ? String(product.stockCount) : '');
 
     setFormTaste(product.taste || {});
+    setFormRecipeLines(product.recipeLines || []);
   };
 
   const closeForm = () => {
     setShowForm(false);
     setEditingProduct(null);
     setFormName(''); setFormPrice(''); setFormDesc('');
-    setFormImage(null); setFormStock('');
+    setFormImage(null); setFormStock(''); setPendingImageFile(null);
     setSaving(false);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUploadAndSave = async (e: React.ChangeEvent<HTMLInputElement>, existingProductId?: string): Promise<string | null> => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { alert('Only image files (JPG, PNG, WebP)'); return; }
-    if (file.size > 5 * 1024 * 1024) { alert('Max 5 MB'); return; }
-    const reader = new FileReader();
-    reader.onload = () => setFormImage(reader.result as string);
-    reader.readAsDataURL(file);
+    if (!file) return null;
+    if (!file.type.startsWith('image/')) { alert('Only image files (JPG, PNG, WebP)'); return null; }
+    if (file.size > 5 * 1024 * 1024) { alert('Max 5 MB'); return null; }
+    const formData = new FormData();
+    formData.append('file', file);
+    const pid = existingProductId || '__new__';
+    try {
+      const data = await apiClient<any>(`/owner/menu/products/${pid}/image`, { method: 'POST', body: formData, timeout: 30000 });
+      return data.imageUrl || null;
+    } catch {
+      alert('Image upload failed. Save product first, then upload image.');
+      return null;
+    }
   };
 
   const handleSaveProduct = async () => {
@@ -150,23 +161,38 @@ export function MenuManagerPage() {
     if (stock !== undefined && (isNaN(stock) || stock < 0)) return;
 
     setSaving(true);
-    const product = {
-      name: formName, price,
-      description: formDesc,
+    const hasTaste = Object.keys(formTaste).length > 0;
+    const hasRecipeLines = formRecipeLines.length > 0;
+    const product: Record<string, any> = {
+      name: formName.trim(), price,
+      description: formDesc || undefined,
       available: formAvailable,
-      imageUrl: formImage || undefined,
       categoryId: expandedCat,
+      taste: hasTaste ? formTaste : undefined,
+      stockCount: stock,
+      recipeLines: hasRecipeLines ? formRecipeLines : undefined,
     };
 
     try {
+      let saved: any;
+      let productId: string;
       if (editingProduct) {
-        await apiClient(`/owner/menu/products/${editingProduct.id}`, { method: 'PATCH', body: product });
+        saved = await apiClient(`/owner/menu/products/${editingProduct.id}`, { method: 'PATCH', body: product });
+        productId = editingProduct.id;
       } else {
-        await apiClient('/owner/menu/products', { method: 'POST', body: product });
+        saved = await apiClient('/owner/menu/products', { method: 'POST', body: product });
+        productId = saved.id;
+      }
+      if (pendingImageFile) {
+        const formData = new FormData();
+        formData.append('file', pendingImageFile);
+        try {
+          await apiClient(`/owner/menu/products/${productId}/image`, { method: 'POST', body: formData, timeout: 30000 });
+        } catch { /* image upload is non-critical */ }
+        setPendingImageFile(null);
       }
       closeForm();
       await fetchCategories();
-      // Also expand the category and refetch products
       const prods = await apiClient<any>(`/owner/menu/products?category_id=${expandedCat}`);
       setCategories(prev => prev.map(c => c.id === expandedCat ? { ...c, products: Array.isArray(prods) ? prods : [] } : c));
     } catch {
@@ -174,6 +200,15 @@ export function MenuManagerPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { alert('Only image files (JPG, PNG, WebP)'); return; }
+    if (file.size > 5 * 1024 * 1024) { alert('Max 5 MB'); return; }
+    setFormImage(URL.createObjectURL(file));
+    setPendingImageFile(file);
   };
 
   const handleDeleteProduct = async (catId: string, productId: string) => {
@@ -458,9 +493,10 @@ export function MenuManagerPage() {
                           </td>
                           <td className="p-3 text-center">
                             <button onClick={(e) => { e.stopPropagation(); handleToggleAvailable(cat.id, product); }}
-                              className={`w-5 h-5 rounded border-2 flex items-center justify-center mx-auto transition-colors ${product.available ? 'bg-[var(--brand-primary)] border-[var(--brand-primary)]' : 'border-[var(--brand-border)]'}`}
-                              title={product.available ? t('menu.available', 'Available') : t('menu.stop_listed', 'Stop-listed')}>
-                              {product.available && <i className="ti ti-check text-[10px] text-white" />}
+                              className={`relative w-10 h-5 rounded-full transition-colors duration-200 mx-auto ${product.available ? 'bg-[var(--brand-primary)]' : 'bg-[var(--brand-border)]'}`}
+                              title={product.available ? t('menu.available', 'Available') : t('menu.stop_listed', 'Stop-listed')}
+                              role="switch" aria-checked={product.available}>
+                              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200 shadow-sm ${product.available ? 'left-[22px]' : 'left-0.5'}`} />
                             </button>
                           </td>
                           <td className="p-3 text-right">
@@ -558,7 +594,7 @@ export function MenuManagerPage() {
                   style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)' }}>
                   {formImage ? <img src={formImage} alt="" className="w-full h-full object-cover rounded-lg" />
                     : <div className="text-center"><i className="ti ti-camera text-lg" style={{ color: 'var(--brand-text-muted)' }} /><span className="text-[9px] block">JPG/PNG</span></div>}
-                  <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageUpload} className="hidden" />
+                  <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageSelect} className="hidden" />
                 </label>
                 <div className="text-xs space-y-1" style={{ color: 'var(--brand-text-muted)' }}>
                   <p>4:3 ratio, max 5 MB</p>
@@ -630,9 +666,13 @@ export function MenuManagerPage() {
               </div>
             </div>
 
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input type="checkbox" checked={formAvailable} onChange={e => setFormAvailable(e.target.checked)} className="w-4 h-4 rounded accent-[var(--brand-primary)]" />
-              <span className="text-sm">{t('admin.available_for_order', 'Available for order')}</span>
+            <label className="flex items-center gap-3 cursor-pointer select-none" onClick={() => setFormAvailable(!formAvailable)}>
+              <div className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${formAvailable ? 'bg-[var(--brand-primary)]' : 'bg-[var(--brand-border)]'}`}>
+                <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200 shadow-sm ${formAvailable ? 'translate-x-5' : 'translate-x-0'}`} />
+              </div>
+              <span className="text-sm font-medium" style={{ color: formAvailable ? 'var(--brand-text)' : 'var(--brand-text-muted)' }}>
+                {t('admin.available_for_order', 'Available for order')}
+              </span>
             </label>
 
             <div className="flex gap-3 pt-2">

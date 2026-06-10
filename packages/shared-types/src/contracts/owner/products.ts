@@ -7,6 +7,20 @@ export const CreateProductBody = z.object({
   price: z.number().int().min(0),
   available: z.boolean().default(true).optional(),
   image_key: z.string().nullable().optional(),
+  taste: z.record(z.number()).nullable().optional(),
+  recipeLines: z.array(z.object({
+    supplyId: z.string(),
+    supplyName: z.string(),
+    qty: z.number(),
+    unit: z.string(),
+    kind: z.string(),
+    kcal: z.number().nullable(),
+    proteinG: z.number().nullable(),
+    fatG: z.number().nullable(),
+    carbsG: z.number().nullable(),
+    allergens: z.array(z.string()),
+  })).nullable().optional(),
+  stockCount: z.number().int().nullable().optional(),
   attributes: z.record(z.unknown()).nullable().optional(),
   sort_order: z.number().int().default(0).optional(),
 }).strict();
@@ -19,6 +33,20 @@ export const UpdateProductBody = z.object({
   price: z.number().int().min(0).optional(),
   available: z.boolean().optional(),
   image_key: z.string().nullable().optional(),
+  taste: z.record(z.number()).nullable().optional(),
+  recipeLines: z.array(z.object({
+    supplyId: z.string(),
+    supplyName: z.string(),
+    qty: z.number(),
+    unit: z.string(),
+    kind: z.string(),
+    kcal: z.number().nullable(),
+    proteinG: z.number().nullable(),
+    fatG: z.number().nullable(),
+    carbsG: z.number().nullable(),
+    allergens: z.array(z.string()),
+  })).nullable().optional(),
+  stockCount: z.number().int().nullable().optional(),
   attributes: z.record(z.unknown()).nullable().optional(),
   sort_order: z.number().int().optional(),
 }).strict();
@@ -32,9 +60,25 @@ export const ProductResponse = z.object({
   price: z.number().int(),
   available: z.boolean(),
   imageKey: z.string().nullable(),
+  imageUrl: z.string().nullable().optional(),
   sortOrder: z.number().int(),
+  taste: z.record(z.number()).nullable().optional(),
+  recipeLines: z.array(z.object({
+    supplyId: z.string(),
+    supplyName: z.string(),
+    qty: z.number(),
+    unit: z.string(),
+    kind: z.string(),
+    kcal: z.number().nullable(),
+    proteinG: z.number().nullable(),
+    fatG: z.number().nullable(),
+    carbsG: z.number().nullable(),
+    allergens: z.array(z.string()),
+  })).nullable().optional(),
+  stockCount: z.number().int().nullable().optional(),
+  attributes: z.record(z.unknown()).nullable().optional(),
   createdAt: z.string(),
-}).strict();
+});
 export type ProductResponse = z.infer<typeof ProductResponse>;
 
 export const ProductTranslationBody = z.object({
