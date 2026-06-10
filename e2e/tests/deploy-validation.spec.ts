@@ -280,15 +280,32 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
     expect(theme.primaryColor).toBeTruthy();
   });
 
-  // ── 13. Cleanup: delete test product ────────────────────────────────
-  test('13.1 — delete test product', async ({ request }) => {
+  // ── 13. Browser smoke test: client page renders without crash ──────
+  test('13.1 — public menu page loads without JS errors and shows products', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', err => errors.push(err.message));
+    await page.goto(`${BASE}/s/${locationSlug}`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(1500);
+    const errorStr = errors.join('; ');
+    expect(errorStr, `JS errors on page load: ${errorStr}`).toBe('');
+    const body = await page.textContent('body');
+    expect(body).toContain('ALL');
+    // Check at least one product name renders
+    expect(body).toContain('Sushi');
+    // Check allergen data is visible (products with bom[].allergens render badges)
+    const hasAllergens = body.includes('soy') || body.includes('eggs') || body.includes('gluten') || body.includes('dairy');
+    expect(hasAllergens).toBe(true);
+  });
+
+  // ── 14. Cleanup: delete test product ────────────────────────────────
+  test('14.1 — delete test product', async ({ request }) => {
     const res = await request.delete(`${BASE}/api/owner/menu/products/${createdProductId}`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
     expect([200, 204]).toContain(res.status());
   });
 
-  test('13.2 — delete test category', async ({ request }) => {
+  test('14.2 — delete test category', async ({ request }) => {
     const res = await request.delete(`${BASE}/api/owner/menu/categories/${createdCategoryId}`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
