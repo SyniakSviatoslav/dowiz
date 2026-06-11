@@ -20,7 +20,7 @@ export class PgBossQueueProvider implements QueueProvider {
   constructor() {
     const env = loadEnv();
     this.boss = new PgBoss({
-      connectionString: env.DATABASE_URL_SESSION,
+      connectionString: env.DATABASE_URL_OPERATIONAL,
       max: 4,
       application_name: 'pgboss',
       schema: 'public',
