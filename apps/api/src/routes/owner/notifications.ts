@@ -98,12 +98,13 @@ export default (async function ownerNotificationRoutes(fastify, opts) {
       }),
       body: z.object({
         status: z.enum(['active', 'disabled', 'disconnected']).optional(),
-        prefs: z.record(z.boolean()).optional()
+        prefs: z.record(z.boolean()).optional(),
+        locale: z.enum(['sq', 'en', 'uk']).optional()
       }).strict()
     }
   }, async (request, reply) => {
     const { locationId, targetId } = request.params as { locationId: string; targetId: string };
-    const { status, prefs } = request.body as { status?: 'active' | 'disabled' | 'disconnected'; prefs?: Record<string, boolean> };
+    const { status, prefs, locale } = request.body as { status?: 'active' | 'disabled' | 'disconnected'; prefs?: Record<string, boolean>; locale?: string };
     
     const client = await db.connect();
     try {
@@ -131,6 +132,11 @@ export default (async function ownerNotificationRoutes(fastify, opts) {
       if (prefs) {
         setQuery.push(`prefs = $${pIdx++}`);
         params.push(currentPrefs);
+      }
+      
+      if (locale) {
+        setQuery.push(`locale = $${pIdx++}`);
+        params.push(locale);
       }
       
       if (setQuery.length > 0) {
