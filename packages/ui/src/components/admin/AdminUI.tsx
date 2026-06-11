@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { formatALL } from '@deliveryos/shared-types';
-import { Button, useI18n } from '../../index.js';
+import { Button, useI18n, MessageThread } from '../../index.js';
 
 // --- AdminShell ---
 interface AdminShellProps {
@@ -126,8 +126,12 @@ interface OrderCardProps {
   order: AdminOrder;
   onUpdateStatus: (id: string, newStatus: string) => Promise<void>;
   isLoading?: boolean;
+  showMessages?: boolean;
+  onToggleMessages?: (orderId: string) => void;
+  messages?: any[];
+  onSendMessage?: (orderId: string, presetKey: string, params?: Record<string, unknown>) => Promise<void>;
 }
-export function OrderCard({ order, onUpdateStatus, isLoading }: OrderCardProps) {
+export function OrderCard({ order, onUpdateStatus, isLoading, showMessages, onToggleMessages, messages, onSendMessage }: OrderCardProps) {
   const { t } = useI18n();
   const [loadingAction, setLoadingAction] = useState('');
 
@@ -255,8 +259,36 @@ export function OrderCard({ order, onUpdateStatus, isLoading }: OrderCardProps) 
         )}
       </div>
 
+      {/* Messages toggle + inline thread */}
+      <div className="border-t border-[var(--brand-border)] pt-3">
+        <button
+          onClick={() => onToggleMessages?.(order.id)}
+          className="flex items-center gap-2 text-sm font-medium text-[var(--brand-primary)] hover:text-[var(--brand-primary-dark)] transition-colors"
+        >
+          <i className="ti ti-message" />
+          {showMessages ? t('admin.hide_messages', 'Hide Messages') : t('admin.show_messages', 'Show Messages')}
+          {messages && messages.length > 0 && !showMessages && (
+            <span className="ml-auto text-xs bg-[var(--brand-primary)] text-[var(--color-on-primary)] px-2 py-0.5 rounded-full">
+              {messages.length}
+            </span>
+          )}
+        </button>
+        {showMessages && (
+          <div className="mt-2">
+            <MessageThread
+              orderId={order.id}
+              messages={messages ?? []}
+              role="owner"
+              currentStatus={order.status}
+              onSend={(key, params) => onSendMessage?.(order.id, key, params ?? {})}
+              onMarkRead={() => {}}
+            />
+          </div>
+        )}
+      </div>
+
       {/* Actions */}
-      <div className="mt-auto pt-4 border-t border-[var(--brand-border)] flex gap-2 overflow-x-auto no-scrollbar">
+      <div className="pt-3 border-t border-[var(--brand-border)] flex gap-2 overflow-x-auto no-scrollbar">
         {order.status === 'PENDING' && (
           <>
             <Button size="sm" onClick={() => handleAction('PREPARING')} isLoading={loadingAction === 'PREPARING'}>{t('admin.accept_prepare', 'Accept & Prepare')}</Button>

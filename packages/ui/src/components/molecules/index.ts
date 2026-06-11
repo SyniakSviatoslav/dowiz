@@ -8,3 +8,4 @@ export { CourierLiveMap } from './CourierLiveMap.js';
 export type { CourierOnMap } from './CourierLiveMap.js';
 export { MapWithRadius } from './MapWithRadius.js';
 export { TourProvider, useTour, HintCard } from './TourHint.js';
+export { MessageThread } from './MessageThread.js';

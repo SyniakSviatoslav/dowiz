@@ -75,10 +75,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
        await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
 
        // Use the service to open the shift
-       const result = await openShift(client, courierId, locationId, { messageBus });
-
-       await client.query('COMMIT');
-       return reply.send({ success: true, status: result.status, shiftId: result.shiftId, startedAt: result.startedAt });
+       const { shiftId, status, startedAt } = await openShift(client, courierId, locationId, { messageBus });
 
        if (lat !== undefined && lng !== undefined) {
         const rLat = roundCoordinate(lat);
@@ -101,7 +98,9 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
         payload: { courierId, status: 'available' }
       });
 
-      return reply.send({ success: true, status: 'available', shiftId, startedAt: new Date().toISOString() });
+      await messageBus.publish('shift.started', { shiftId, locationId, courierId, startedAt });
+
+      return reply.send({ success: true, status, shiftId, startedAt });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -160,6 +159,8 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
         type: 'courier.shift_updated',
         payload: { courierId, status: 'offline' }
       });
+
+      await messageBus.publish('shift.closed', { shiftId, locationId, courierId, endedAt: new Date().toISOString() });
 
       return reply.send({ success: true, status: 'offline' });
     } catch (err) {
@@ -243,6 +244,8 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
           type: 'courier.shift_updated',
           payload: { courierId, status: 'offline' }
         });
+
+        await messageBus.publish('shift.closed', { shiftId, locationId, courierId, endedAt: new Date().toISOString() });
 
         return reply.send({ success: true, status: 'offline', shiftId });
 

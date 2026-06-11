@@ -22,6 +22,8 @@ export function DashboardPage() {
 
   const { play: playPing } = useSound('/sounds/ping.mp3');
   const [tenantId, setTenantId] = useState('');
+  const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
+  const [messagesByOrder, setMessagesByOrder] = useState<Record<string, any[]>>({});
 
   const fetchOrders = async () => {
     try {
@@ -81,6 +83,30 @@ export function DashboardPage() {
     },
     onReconnect: () => { fetchOrders(); },
   });
+
+  const fetchMessages = async (orderId: string) => {
+    if (messagesByOrder[orderId]) return;
+    try {
+      const data = await apiClient<any>(`/orders/${orderId}/messages`);
+      setMessagesByOrder(prev => ({ ...prev, [orderId]: Array.isArray(data) ? data : [] }));
+    } catch { /* ignore */ }
+  };
+
+  const handleSendMessage = async (orderId: string, presetKey: string, params?: Record<string, unknown>) => {
+    try {
+      const msg = await apiClient(`/orders/${orderId}/messages`, { method: 'POST', body: { presetKey, params } });
+      setMessagesByOrder(prev => ({ ...prev, [orderId]: [...(prev[orderId] || []), msg] }));
+    } catch { /* ignore */ }
+  };
+
+  const handleToggleMessages = (orderId: string) => {
+    setExpandedMessages(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else { next.add(orderId); fetchMessages(orderId); }
+      return next;
+    });
+  };
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus as AdminOrder['status'] } : o));
@@ -270,7 +296,15 @@ export function DashboardPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 stagger-children">
           {filteredOrders.map(order => (
-            <OrderCard key={order.id} order={order} onUpdateStatus={handleUpdateStatus} />
+            <OrderCard
+              key={order.id}
+              order={order}
+              onUpdateStatus={handleUpdateStatus}
+              showMessages={expandedMessages.has(order.id)}
+              onToggleMessages={handleToggleMessages}
+              messages={messagesByOrder[order.id]}
+              onSendMessage={handleSendMessage}
+            />
           ))}
         </div>
       )}

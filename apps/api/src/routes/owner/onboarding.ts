@@ -77,7 +77,7 @@ export default (async function onboardingRoutes(fastify, opts) {
       await client.query(
         `INSERT INTO locations (id, org_id, slug, name, phone, currency_code, default_locale, supported_locales, status, widget_enabled, delivery_fee_flat)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', true, 0)`,
-        [locId, orgId, body.slug, body.name, body.phone, body.currency_code, body.default_locale, JSON.stringify(body.supported_locales)],
+        [locId, orgId, body.slug, body.name, body.phone, body.currency_code, body.default_locale, body.supported_locales],
       );
 
       // 4. Create membership

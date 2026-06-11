@@ -27,10 +27,13 @@
 | 8 | E2E matrix: 73/126 RED (58% failing) | `systemic` | 🔴 OPEN | Pre-2026-06-07 | `e2e/MATRIX.md` — needs systematic remediation |
 | 9 | Per-phone order throttle missing (FX-4) | `systemic` | 🔴 OPEN | 2026-06-07 | AGENTS.md §9 item 2 |
 | 10 | DB role guardrail — operational pool connects as superuser | `systemic` | 🔴 OPEN | 2026-06-07 | AGENTS.md §9 item 3 |
-| 11 | No composite `verify:all` script | `systemic` | 🔴 OPEN | 2026-06-09 | Multiple verify scripts exist but no single entry point |
-| 12 | No CI auto-run for Playwright E2E tests | `systemic` | 🔴 OPEN | 2026-06-09 | `playwright.config.ts` has empty `webServer: []` |
+| 11 | No composite `verify:all` script | `systemic` | ✅ CLOSED | 2026-06-09 | `scripts/verify-all.ts` + `pnpm verify:all` — 2026-06-11 |
+| 12 | No CI auto-run for Playwright E2E tests | `systemic` | ✅ CLOSED | 2026-06-09 | `.github/workflows/ci.yml` — post-deploy E2E smoke + regression — 2026-06-11 |
 | 13 | graphify knowledge graph stale (built pre-move) | `systemic` | 🔴 OPEN | 2026-06-07 | AGENTS.md §5 — graph built at `Documents\delivery\` not `dowiz` |
 | 14 | No harness validation script | `systemic` | ⚪ PENDING | 2026-06-09 | No script validates skill router mappings or reference integrity |
+| 15 | Permissive test assertions (`expect([200,400,500]).toContain(x)`) | `systemic` | ✅ CLOSED | 2026-06-11 | ESLint rule `local/no-permissive-status-assertion` |
+| 16 | Migration ordering drift (numeric prefix ≠ alpha order) | `systemic` | ✅ CLOSED | 2026-06-11 | `scripts/verify-migrations.ts` — exits 1 on ordering error |
+| 17 | No CI verify gates before deploy | `systemic` | ✅ CLOSED | 2026-06-11 | CI validate job now runs `verify:migrations` + `verify:secrets` |
 
 ## Episodes
 
@@ -41,3 +44,4 @@ _To be populated by Phase A1 (episode store). See `docs/harness/episodes/`._
 | Date | Change |
 |------|--------|
 | 2026-06-09 | Created ledger with 14 entries from audit sweep and recent session |
+| 2026-06-11 | Closed #11 (verify:all), #12 (CI E2E), #15 (permissive assertion rule), #16 (migration ordering), #17 (CI verify gates). Added #15-17 from retro analysis. |
