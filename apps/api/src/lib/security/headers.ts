@@ -28,7 +28,7 @@ export function setSecurityHeaders(reply: any, opts: SecurityHeadersOpts = {}): 
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'SAMEORIGIN');
     reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-    reply.header('Permissions-Policy', 'camera=(), geolocation=(), microphone=(), payment=()');
+    reply.header('Permissions-Policy', 'camera=(), geolocation=(self), microphone=(), payment=(self)');
   }
 
   if (process.env.NODE_ENV === 'production') {

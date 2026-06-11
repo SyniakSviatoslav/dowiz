@@ -84,6 +84,7 @@ import ownerPushRoutes from './routes/owner/push.js';
 import ownerOrderMetaRoutes from './routes/owner/order-meta.js';
 import ownerSignalRoutes from './routes/owner/signals.js';
 import ownerGdprRoutes from './routes/owner/gdpr.js';
+import telegramWebhookRoutes from './routes/telegram-webhook.js';
 import { AnonymizerService } from './lib/anonymizer/index.js';
 import { AnonymizerRetentionWorker } from './workers/anonymizer-retention.js';
 import { GdprErasureWorker } from './workers/anonymizer-gdpr.js';
@@ -235,12 +236,6 @@ async function main() {
   await queue.start();
 
   console.log('[API] Initializing Providers...');
-  const parsers = {
-    'csv': new CsvMenuParser(),
-    'ai-ocr': new AiOcrParser()
-  };
-  const storage = new LocalFsStorageProvider();
-  const translation = new LibreTranslateProvider();
 
   // Memory Service (mem0 — persistent agent memory via Ollama)
   const memoryService = getMemoryService();
@@ -248,6 +243,13 @@ async function main() {
     console.warn('[API] MemoryService init failed, continuing without memory:', (err as Error).message);
   });
   fastify.decorate('memory', memoryService);
+
+  const parsers = {
+      'csv': new CsvMenuParser(),
+      'ai-ocr': new AiOcrParser(memoryService)
+    };
+  const storage = new LocalFsStorageProvider();
+  const translation = new LibreTranslateProvider();
 
   // Notification Providers
   const telegramAdapter = new TelegramAdapter(env.***REDACTED*** || '');
@@ -263,9 +265,10 @@ async function main() {
   const retryPolicy = new RetryPolicy();
   const notifyWorker = new NotificationWorker(pool, queue.boss, notifyDispatcher, retryPolicy, memoryService);
   
-  // Register pg-boss workers
-  await queue.boss.work('notify.dispatch', async (job: any) => notifyWorker.handleDispatch(job));
-  await queue.boss.work('notify.customer_status', async (job: any) => notifyWorker.handleCustomerStatus(job));
+   // Register pg-boss workers
+   await queue.boss.work('notify.dispatch', async (job: any) => notifyWorker.handleDispatch(job));
+   await queue.boss.work('notify.customer_status', async (job: any) => notifyWorker.handleCustomerStatus(job));
+   await queue.boss.work('notify.telegram.send', async (job: any) => notifyWorker.handleTelegramSend(job));
   
   // Register escalation worker
   await queue.boss.createQueue('order.pending_aging');
@@ -339,83 +342,45 @@ async function main() {
     telegramPoller.start();
   }
 
-  // Backup failure → Telegram alert to location owners
-  messageBus.subscribe('backup.failed', async (payload: any) => {
-    try {
-      const client = await pool.connect();
-      try {
-        const targetsRes = await client.query(
-          `SELECT id FROM owner_notification_targets WHERE status = 'active' AND channel = 'telegram'`
-        );
-        for (const target of targetsRes.rows) {
-          await queue.boss.send('notify.dispatch', {
-            targetId: target.id,
-            eventType: 'backup.failed',
-            locationId: payload.locationId || 'system',
-            attempt: 0,
-            testMessage: `⚠️ Backup failed: ${payload.type} — ${payload.reason}`
-          });
-        }
-      } finally {
-        client.release();
-      }
-    } catch (err) {
-      console.error('[Notify] Failed to dispatch backup.failed', err);
-    }
-  });
+   // Backup failure → Telegram alert to location owners
+   messageBus.subscribe('backup.failed', async (payload: any) => {
+     try {
+       // Send a single high-level job for Telegram fan-out
+       await queue.boss.send('notify.telegram.send', {
+         event: 'backup.failed',
+         location_id: payload.locationId || 'system'
+       });
+     } catch (err) {
+       console.error('[Notify] Failed to send backup.failed telegram job', err);
+     }
+   });
 
-  // Settlement disputed → notify courier via Telegram
-  messageBus.subscribe('settlement.disputed', async (payload: any) => {
-    try {
-      const client = await pool.connect();
-      try {
-        const targetsRes = await client.query(
-          `SELECT id FROM owner_notification_targets WHERE location_id = $1 AND status = 'active' AND channel = 'telegram'`,
-          [payload.locationId]
-        );
-        for (const target of targetsRes.rows) {
-          await queue.boss.send('notify.dispatch', {
-            targetId: target.id,
-            eventType: 'settlement.disputed',
-            locationId: payload.locationId,
-            attempt: 0,
-            testMessage: `⚠️ Settlement disputed: payout ${payload.payoutId}`
-          });
-        }
-      } finally {
-        client.release();
-      }
-    } catch (err) {
-      console.error('[Notify] Failed to dispatch settlement.disputed', err);
-    }
-  });
+   // Settlement disputed → notify courier via Telegram
+   messageBus.subscribe('settlement.disputed', async (payload: any) => {
+     try {
+       // Send a single high-level job for Telegram fan-out
+       await queue.boss.send('notify.telegram.send', {
+         event: 'settlement.disputed',
+         location_id: payload.locationId
+       });
+     } catch (err) {
+       console.error('[Notify] Failed to send settlement.disputed telegram job', err);
+     }
+   });
 
-  // Courier stale heartbeat → notify owner
-  messageBus.subscribe('courier.stale_heartbeat', async (payload: any) => {
-    try {
-      const client = await pool.connect();
-      try {
-        const targetsRes = await client.query(
-          `SELECT id FROM owner_notification_targets WHERE location_id = $1 AND status = 'active' AND channel = 'telegram'`,
-          [payload.locationId]
-        );
-        for (const target of targetsRes.rows) {
-          await queue.boss.send('notify.dispatch', {
-            targetId: target.id,
-            eventType: 'order.pending_aging',
-            locationId: payload.locationId,
-            orderId: payload.orderId,
-            attempt: 0,
-            testMessage: `⚠️ Courier offline: order ${payload.orderId}`
-          });
-        }
-      } finally {
-        client.release();
-      }
-    } catch (err) {
-      console.error('[Notify] Failed to dispatch courier.stale_heartbeat', err);
-    }
-  });
+   // Courier stale heartbeat → notify owner
+   messageBus.subscribe('courier.stale_heartbeat', async (payload: any) => {
+     try {
+       // Send a single high-level job for Telegram fan-out
+       await queue.boss.send('notify.telegram.send', {
+         event: 'order.pending_aging',
+         entity_id: payload.orderId,
+         location_id: payload.locationId
+       });
+     } catch (err) {
+       console.error('[Notify] Failed to send courier.stale_heartbeat telegram job', err);
+     }
+   });
 
   // P31 — Worker Liveness Checker (singleton cron, 60s)
   const livenessChecker = new LivenessChecker(pool, queue.boss, messageBus);
@@ -434,28 +399,19 @@ async function main() {
   await queue.boss.createQueue('free_tier.watch');
   await queue.boss.schedule('free_tier.watch', '0 * * * *');
 
-  // Lifecycle Integration
-  messageBus.subscribe('order.created', async (payload: any) => {
-    try {
-      const client = await pool.connect();
-      try {
-        const targetsRes = await client.query(`SELECT id FROM owner_notification_targets WHERE location_id = $1 AND status = 'active'`, [payload.locationId]);
-        for (const target of targetsRes.rows) {
-          await queue.boss.send('notify.dispatch', {
-            targetId: target.id,
-            eventType: 'order.created',
-            orderId: payload.orderId,
-            locationId: payload.locationId,
-            attempt: 0
-          });
-        }
-      } finally {
-        client.release();
-      }
-    } catch (err) {
-      console.error('[Notify] Failed to dispatch order.created', err);
-    }
-  });
+   // Lifecycle Integration
+   messageBus.subscribe('order.created', async (payload: any) => {
+     try {
+       // Send a single high-level job for Telegram fan-out
+       await queue.boss.send('notify.telegram.send', {
+         event: 'order.created',
+         entity_id: payload.orderId,
+         location_id: payload.locationId
+       });
+     } catch (err) {
+       console.error('[Notify] Failed to send order.created telegram job', err);
+     }
+   });
 
   // Customer status push (opt-in, best-effort, after-commit)
   const CUSTOMER_PUSH_EVENTS = new Set(['order.confirmed', 'order.in_delivery', 'order.delivered']);
@@ -592,8 +548,17 @@ async function main() {
   fastify.register(courierSettlementRoutes, { prefix: '/api/courier', db: pool, messageBus });
   fastify.register(courierAssignmentsRoutes, { prefix: '/api/courier', db: pool, messageBus });
   fastify.register(courierShiftsRoutes, { prefix: '/api/courier', db: pool, messageBus });
-  fastify.register(publicFallbackConfigRoutes, { db: pool });
-  fastify.post('/api/dev/mock-auth', async (request, reply) => {
+fastify.register(publicFallbackConfigRoutes, { db: pool });
+
+// Telegram Webhook (must be registered before route definitions)
+fastify.register(telegramWebhookRoutes, {
+  db: pool,
+  queue: queue.boss,
+  telegramBotSecret: env.***REDACTED*** || '',
+  messageBus
+});
+
+fastify.post('/api/dev/mock-auth', async (request, reply) => {
     const email = 'dev@deliveryos.com';
     const googleSub = 'mock-google-12345';
     const name = 'Dev Owner';

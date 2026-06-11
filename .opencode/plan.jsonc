@@ -1,1 +1,25 @@
-﻿{"approach":"Add Groq adapter, fix auth/image/MenuManager bugs, deploy, verify","files":["apps/api/src/lib/ai-ocr-parser.ts","apps/web/src/pages/admin/MenuManagerPage.tsx","apps/web/src/pages/client/MenuPage.tsx","packages/shared-types/src/contracts/owner/products.ts","apps/api/src/routes/owner/menu-import.ts"],"keyTypes":["AiOcrParser","Product","ProductResponse"],"boundaryCondition":"LLM_PROVIDER=groq must route to Groq API format, LLM_PROVIDER=mock must still work"}
+﻿{
+  "approach": "1) Fix owner_id→user_id in notifications.ts INSERT 2) Add TELEGRAM_BOT_USERNAME to env schema 3) Remove @ts-nocheck from 7 files + fix all type issues 4) Add TELEGRAM vars to .env.example 5) typecheck+lint 6) run Telegram flow test 7) deploy 8) validate live",
+  "files": [
+    "apps/api/src/routes/owner/notifications.ts",
+    "apps/api/src/routes/telegram-webhook.ts",
+    "apps/api/src/notifications/adapters/telegram.ts",
+    "apps/api/src/notifications/render.ts",
+    "apps/api/src/notifications/workers/index.ts",
+    "apps/api/src/notifications/workers/telegram.poll.ts",
+    "apps/api/src/notifications/provider.ts",
+    "packages/config/src/index.ts",
+    ".env.example"
+  ],
+  "keyTypes": [
+    "NotificationProvider",
+    "NotificationTarget",
+    "NotificationEvent",
+    "NotificationData",
+    "NotifyResult",
+    "NotificationEventType",
+    "TelegramSendJob",
+    "NotifyDispatchJob"
+  ],
+  "boundaryCondition": "***REDACTED*** not set → adapter degrades gracefully (returns not-delivered, system continues)"
+}

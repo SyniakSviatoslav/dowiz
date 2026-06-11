@@ -70,38 +70,17 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
     const locationId = request.user.activeLocationId;
 
     const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
+     try {
+       await client.query('BEGIN');
+       await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
 
-      const shiftRes = await client.query(`
-        SELECT id, status FROM courier_shifts
-        WHERE courier_id = $1 AND location_id = $2
-        FOR UPDATE
-      `, [courierId, locationId]);
+       // Use the service to open the shift
+       const result = await openShift(client, courierId, locationId, { messageBus });
 
-      if (shiftRes.rowCount > 0 && (shiftRes.rows[0].status === 'available' || shiftRes.rows[0].status === 'on_delivery')) {
-        await client.query('COMMIT');
-        return reply.send({ success: true, status: shiftRes.rows[0].status, shiftId: shiftRes.rows[0].id, startedAt: new Date().toISOString() });
-      }
+       await client.query('COMMIT');
+       return reply.send({ success: true, status: result.status, shiftId: result.shiftId, startedAt: result.startedAt });
 
-      let shiftId;
-      if (shiftRes.rowCount > 0) {
-        await client.query(`
-          UPDATE courier_shifts SET status = 'available', ended_at = NULL, started_at = coalesce(started_at, now()), last_heartbeat_at = now()
-          WHERE id = $1
-        `, [shiftRes.rows[0].id]);
-        shiftId = shiftRes.rows[0].id;
-      } else {
-        const insertRes = await client.query(`
-          INSERT INTO courier_shifts (courier_id, location_id, status, started_at, last_heartbeat_at)
-          VALUES ($1, $2, 'available', now(), now())
-          RETURNING id
-        `, [courierId, locationId]);
-        shiftId = insertRes.rows[0].id;
-      }
-
-      if (lat !== undefined && lng !== undefined) {
+       if (lat !== undefined && lng !== undefined) {
         const rLat = roundCoordinate(lat);
         const rLng = roundCoordinate(lng);
         await client.query(`

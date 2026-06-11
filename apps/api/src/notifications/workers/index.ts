@@ -1,6 +1,5 @@
-// @ts-nocheck
 import type { Job } from 'pg-boss';
-import type { NotificationDispatcher, NotificationEventType, NotificationTarget } from '../provider.js';
+import type { NotificationDispatcher, NotificationEvent as NotifEvent, NotificationEventType, NotificationTarget } from '../provider.js';
 import { RetryPolicy } from '../retry.js';
 import { WebPushAdapter } from '../adapters/webpush.js';
 import type { MemoryService } from '../../lib/memory.js';
@@ -19,6 +18,12 @@ export interface CustomerStatusJob {
   orderId: string;
   locationId: string;
   event: 'CONFIRMED' | 'IN_DELIVERY' | 'DELIVERED';
+}
+
+export interface TelegramSendJob {
+  event: NotificationEventType;
+  entity_id?: string;
+  location_id: string;
 }
 
 const CUSTOMER_STATUS_EVENTS = ['CONFIRMED', 'IN_DELIVERY', 'DELIVERED'] as const;
@@ -164,7 +169,7 @@ export class NotificationWorker {
         `SELECT id, channel, address, status, prefs 
          FROM owner_notification_targets 
          WHERE id = $1 AND location_id = $2`,
-        [targetId, locationId]
+        [targetId, locationId],
       );
       
       if (targetRes.rows.length === 0) return; // Target not found or location mismatch
@@ -179,14 +184,14 @@ export class NotificationWorker {
           return; // Owner disabled this specific event
         }
       }
-
+      
       // 3. Quiet hours logic (simplified for P16, assume UTC 22:00-08:00)
       const hour = new Date().getUTCHours();
       const isQuietHours = hour >= 22 || hour < 8;
       if (isQuietHours && eventType !== 'order.pending_aging' && eventType !== 'test') {
         return; // Suppress non-critical during quiet hours
       }
-
+      
       // 4. Re-fetch order strictly under location_id (Tenant Isolation + 0 PII payload check)
       let orderData: any = {};
       if (orderId) {
@@ -194,13 +199,13 @@ export class NotificationWorker {
           `SELECT id, short_id, total, currency, created_at, status
            FROM orders 
            WHERE id = $1 AND location_id = $2`,
-          [orderId, locationId]
+          [orderId, locationId],
         );
         if (orderRes.rows.length === 0) return; // Order not found
         const row = orderRes.rows[0];
         orderData = {
           orderId: row.id,
-          shortOrderId: row.short_id,
+          shortOrderId: row.shortId,
           total: row.total,
           currency: row.currency,
           createdAtLocal: row.created_at.toISOString(),
@@ -239,17 +244,17 @@ export class NotificationWorker {
         } else {
           // Add to attempts in location_alerts if this is pending_aging
           if (eventType === 'order.pending_aging' && orderId) {
-             await client.query(`
-               UPDATE location_alerts 
-               SET attempts = attempts || $1::jsonb, last_error = $2 
-               WHERE order_id = $3 AND kind = 'pending_aging' AND resolved_at IS NULL
-             `, [JSON.stringify([{ attempt, time: new Date(), error: result.reason }]), result.reason, orderId]);
+            await client.query(`
+              UPDATE location_alerts 
+              SET attempts = attempts || $1::jsonb, last_error = $2 
+              WHERE order_id = $3 AND kind = 'pending_aging' AND resolved_at IS NULL
+            `, [JSON.stringify([{ attempt, time: new Date(), error: result.reason }]), result.reason, orderId]);
           }
 
           const nextDelay = this.retryPolicy.getDelay(attempt);
           if (nextDelay === -1) {
-             // Max attempts reached
-             await client.query(`UPDATE owner_notification_targets SET status = 'disabled', disabled_at = now(), last_error = 'MAX_RETRIES_EXCEEDED' WHERE id = $1`, [targetId]);
+            // Max attempts reached
+            await client.query(`UPDATE owner_notification_targets SET status = 'disabled', disabled_at = now(), last_error = 'MAX_RETRIES_EXCEEDED' WHERE id = $1`, [targetId]);
           } else {
             // Respect retry-after if provided
             const delay = result.retryAfter ? Math.max(result.retryAfter, nextDelay) : nextDelay;
@@ -258,7 +263,6 @@ export class NotificationWorker {
           }
         }
       }
-
     } finally {
       client.release();
     }
@@ -301,5 +305,111 @@ export class NotificationWorker {
     } finally {
       client.release();
     }
+  }
+
+  async handleTelegramSend(job: Job<TelegramSendJob>) {
+    const { event, entity_id, location_id } = job.data;
+    const client = await this.db.connect();
+    try {
+      // 1. Find all active telegram targets for the location that have this event enabled
+      const targetsRes = await client.query(
+        `SELECT id, address, user_id, prefs 
+         FROM owner_notification_targets 
+         WHERE location_id = $1 AND channel = 'telegram' AND status = 'active'`,
+        [location_id]
+      );
+
+      for (const target of targetsRes.rows) {
+        // Check prefs: if prefs[event] is false, skip
+        const prefs = target.prefs || {};
+        if (prefs[event] === false) {
+          continue;
+        }
+
+        // 2. Build the notification data
+        let data: any = { location_id };
+        if (entity_id) {
+          // We have an entity_id, fetch the data based on event type
+          data = await this.buildTelegramData(event, entity_id, location_id, client);
+        }
+
+        const targetObj: NotificationTarget = {
+          id: target.id,
+          channel: target.channel as any,
+          address: target.address,
+          locationId: location_id
+        };
+
+        const eventObj: NotifEvent = { type: event };
+
+        // 3. Dispatch
+        const result = await this.dispatcher.dispatch(targetObj, eventObj, { location_id, ...data });
+
+        // 4. Handle success/failure (we could log errors, but we don't retry here because the job itself is retryable via pg-boss)
+        if (!result.delivered) {
+          console.error(`[TelegramSend] Failed to send notification to target ${target.id}: ${result.reason}`);
+        }
+      }
+    } finally {
+      client.release();
+    }
+  }
+
+  // Helper function to build the NotificationData for a given event and entity_id
+  private async buildTelegramData(event: NotificationEventType, entity_id: string, location_id: string, client: any): Promise<any> {
+    // We will implement this based on the event type
+    // For now, we return a minimal data object; we will expand as needed
+    const data: any = { location_id };
+
+    switch (event) {
+      case 'order.created':
+      case 'order.substitution_needs_human':
+      case 'order.dwell_escalation':
+      case 'order.timeout_cancelled':
+      case 'cash.reconcile_discrepancy':
+      case 'delivery.flag_raised':
+      case 'rating.low_received':
+      case 'order.ready_for_pickup':
+      case 'courier.assigned': {
+        const orderRes = await client.query(
+          `SELECT id, short_id, total, currency, created_at, status
+           FROM orders 
+           WHERE id = $1 AND location_id = $2`,
+          [entity_id, location_id]
+        );
+        if (orderRes.rows.length === 0) {
+          throw new Error(`Order not found: ${entity_id}`);
+        }
+        const row = orderRes.rows[0];
+        data.orderId = row.id;
+        data.shortOrderId = row.short_id;
+        data.total = row.total;
+        data.currency = row.currency;
+        data.createdAtLocal = row.created_at.toISOString();
+        data.ageMinutes = Math.floor((Date.now() - new Date(row.created_at).getTime()) / 60000);
+        break;
+      }
+
+      case 'shift.close_reminder':
+        // This event is about a shift
+        // We don't have a shift table in the provided snippet, but we can assume we have one
+        // For now, we will not fetch any additional data
+        break;
+
+      case 'ops.worker_liveness':
+      case 'ops.backup_failed':
+      case 'ops.degradation_changed':
+        // These are system events, no entity data needed
+        break;
+
+      case 'test':
+        data.message = 'Test message';
+        break;
+
+      default:
+        throw new Error(`Unsupported event type for Telegram notification: ${event}`);
+    }
+
+    return data;
   }
 }

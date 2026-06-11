@@ -1,4 +1,4 @@
-// @ts-nocheck
+import type { Pool } from 'pg';
 import { TelegramAdapter } from '../adapters/telegram.js';
 
 export class TelegramPoller {
@@ -50,12 +50,12 @@ export class TelegramPoller {
       try {
         await client.query('BEGIN');
         
-        // Find token
-        const res = await client.query(
-          `SELECT location_id, owner_id FROM telegram_connect_tokens 
-           WHERE token = $1 AND expires_at > now() AND used_at IS NULL`,
-          [token]
-        );
+         // Find token
+         const res = await client.query(
+           `SELECT location_id, user_id FROM telegram_connect_tokens 
+            WHERE token = $1 AND expires_at > now() AND used_at IS NULL`,
+           [token]
+         );
 
         if (res.rows.length === 0) {
           await client.query('ROLLBACK');
@@ -63,15 +63,15 @@ export class TelegramPoller {
           return;
         }
 
-        const { location_id, owner_id } = res.rows[0];
+         const { location_id, user_id } = res.rows[0];
 
-        // Upsert target
-        await client.query(
-          `INSERT INTO owner_notification_targets (location_id, channel, address, status)
-           VALUES ($1, 'telegram', $2, 'active')
-           ON CONFLICT (location_id, channel, address) DO UPDATE SET status = 'active', disabled_at = NULL`,
-          [location_id, chatId]
-        );
+         // Upsert target
+         await client.query(
+           `INSERT INTO owner_notification_targets (location_id, channel, address, status, user_id)
+            VALUES ($1, 'telegram', $2, 'active', $3)
+            ON CONFLICT (location_id, channel, address) DO UPDATE SET status = 'active', disabled_at = NULL, user_id = EXCLUDED.user_id`,
+           [location_id, chatId, user_id]
+         );
 
         // Mark token used
         await client.query(`UPDATE telegram_connect_tokens SET used_at = now(), chat_id_pending = $2 WHERE token = $1`, [token, chatId]);
