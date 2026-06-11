@@ -1,4 +1,3 @@
-// @ts-nocheck
 export interface NotificationTarget {
   id: string; // the target id from owner_notification_targets
   channel: 'telegram' | 'push';
@@ -6,7 +5,22 @@ export interface NotificationTarget {
   locationId: string;
 }
 
-export type NotificationEventType = 'order.created' | 'order.pending_aging' | 'backup.failed' | 'settlement.disputed' | 'test';
+export type NotificationEventType = 
+  | 'order.created'
+  | 'order.substitution_needs_human'
+  | 'order.dwell_escalation'
+  | 'order.timeout_cancelled'
+  | 'cash.reconcile_discrepancy'
+  | 'delivery.flag_raised'
+  | 'rating.low_received'
+  | 'ops.worker_liveness'
+  | 'ops.backup_failed'
+  | 'ops.degradation_changed'
+  | 'courier.assigned'
+  | 'order.pending_aging'
+  | 'order.ready_for_pickup'
+  | 'shift.close_reminder'
+  | 'test';
 
 export interface NotificationEvent {
   type: NotificationEventType;
@@ -20,6 +34,7 @@ export interface NotificationData {
   currency?: string;
   createdAtLocal?: string;
   ageMinutes?: number;
+  quantity?: number;
   message?: string; // for 'test'
 }
 

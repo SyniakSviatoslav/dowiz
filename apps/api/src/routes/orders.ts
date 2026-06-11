@@ -4,6 +4,7 @@ import { CreateOrderInput, StatusUpdateInput } from '@deliveryos/shared-types';
 import { assertTransition, type OrderStatus } from '@deliveryos/domain';
 import { issueCustomerToken, withTenant } from '@deliveryos/platform';
 import type { QueueProvider, MessageBus } from '@deliveryos/platform';
+import { updateOrderStatus } from '../lib/orderStatusService';
 import type { Pool } from 'pg';
 import crypto from 'crypto';
 import { applyTax, assertNonNegative, computeLineTotal } from '../lib/money.js';
@@ -746,74 +747,26 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       return reply.status(403).send({ error: 'Forbidden' });
     }
 
-    try {
-      await withTenant(db, user.userId, async (client) => {
-        // 1. Read current status
-        const cur = await client.query(
-          `SELECT id, status, location_id FROM orders WHERE id = $1`,
-          [id]
-        );
+     try {
+       await withTenant(db, user.userId, async (client) => {
+         // 1. Read current status
+         const cur = await client.query(
+           `SELECT id, status, location_id FROM orders WHERE id = $1`,
+           [id]
+         );
 
-        if (!cur.rowCount || cur.rowCount === 0) {
-          throw { statusCode: 404, error: 'Order not found' };
-        }
+         if (!cur.rowCount || cur.rowCount === 0) {
+           throw { statusCode: 404, error: 'Order not found' };
+         }
 
-        const currentStatus: string = cur.rows[0].status;
+         // 2. Use the service to update the order status
+         await updateOrderStatus(client, id, cur.rows[0].location_id, newStatus, {
+           messageBus
+         });
+       });
 
-        // 2. State machine validation (before SQL)
-        try {
-          assertTransition(currentStatus as OrderStatus, newStatus as OrderStatus);
-        } catch (e: unknown) {
-          const err = e as Error;
-          if (err.name === 'IllegalTransitionError' || err.name === 'ScaffoldDisabledError') {
-            throw { statusCode: 400, error: err.message, code: err.name };
-          }
-          if (err.name === 'SameStatusError') {
-            throw { statusCode: 400, error: err.message, code: err.name };
-          }
-          throw e;
-        }
-
-        // 3. Status-guarded UPDATE (anti-race)
-        let res;
-        if (newStatus === 'CONFIRMED') {
-          res = await client.query(
-            `UPDATE orders SET status = $1, confirmed_at = now(), timeout_at = NULL
-             WHERE id = $2 AND status = $3 RETURNING id`,
-            [newStatus, id, currentStatus]
-          );
-        } else {
-          res = await client.query(
-            `UPDATE orders SET status = $1, timeout_at = NULL
-             WHERE id = $2 AND status = $3 RETURNING id`,
-            [newStatus, id, currentStatus]
-          );
-        }
-
-        if (!res.rowCount || res.rowCount === 0) {
-          throw { statusCode: 409, error: 'Order status already changed', code: 'CONFLICT' };
-        }
-
-        // 4. Broadcast via MessageBus
-        await messageBus.publish(`order:${id}`, {
-          type: 'order.status',
-          orderId: id,
-          status: newStatus,
-          locationId: cur.rows[0].location_id,
-          timestamp: new Date().toISOString(),
-        });
-
-        // Forward to dashboard room for live owner dashboard
-        if (cur.rows[0].location_id) {
-          await messageBus.publish(`location:${cur.rows[0].location_id}:dashboard`, {
-            type: `order.${newStatus.toLowerCase()}`,
-            data: { orderId: id, status: newStatus, statusUpdatedAt: new Date().toISOString() },
-          });
-        }
-
-        return reply.status(200).send({ id, status: newStatus });
-      });
-    } catch (err: unknown) {
+       return reply.status(200).send({ id: id, status: newStatus });
+     } catch (err: unknown) {
       const error = err as Record<string, unknown>;
       if (error.statusCode) {
         request.log.warn({ orderId: id, targetStatus: newStatus, error: error.error, code: error.code }, 'Status update rejected');

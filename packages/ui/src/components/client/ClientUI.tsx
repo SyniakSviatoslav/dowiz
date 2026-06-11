@@ -265,9 +265,12 @@ export function CartFAB({ itemsCount, total, onClick, isBouncing = false }: { it
         }} 
         onClick={onClick}
       >
-        <i className="ti ti-shopping-cart text-lg leading-none" />
-        <span className="mx-1 opacity-40">|</span>
-        <span>{itemsCount}</span>
+        <span className="relative inline-flex">
+          <i className="ti ti-shopping-cart text-lg leading-none" />
+          <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] rounded-full bg-[var(--color-danger)] text-white text-[10px] font-bold flex items-center justify-center leading-none px-1 shadow-md">
+            {itemsCount > 99 ? '99+' : itemsCount}
+          </span>
+        </span>
         <span className="mx-1 opacity-40">|</span>
         <span>{total}</span> ALL
       </button>

@@ -164,6 +164,11 @@ async function callLlm(provider: LlmProvider, prompt: string, model: string, tim
 export class AiOcrParser implements MenuParserProvider {
   readonly id = 'ai-ocr';
   private piiRedactor = new PiiRedactor();
+  private memoryService: any;
+
+  constructor(memoryService: any = null) {
+    this.memoryService = memoryService;
+  }
 
   async parse(input: ParserInputType): Promise<ParseResult> {
     const issues: ParseIssue[] = [];
@@ -244,6 +249,59 @@ export class AiOcrParser implements MenuParserProvider {
         ? (process.env.OPENAI_MODEL || 'gpt-4o-mini')
         : llmModel;
 
+    // Retrieve relevant memories to enhance the OCR prompt
+    let memoryExamples = '';
+    if (this.memoryService) {
+      try {
+        await this.memoryService.initialize();
+        const memories = await this.memoryService.search('menu ingredients description bom', {
+          topK: 2,
+          // We could add filters here if we tag memories appropriately
+          // For now, we'll search broadly and filter results if needed
+        });
+        
+        if (memories?.results && memories.results.length > 0) {
+          // Format memories as concise examples
+          const examples = memories.results
+            .slice(0, 2) // Limit to 2 memories to save tokens
+            .map((mem: any) => {
+              try {
+                // Try to parse the memory as JSON to extract structured data
+                const data = typeof mem.memory === 'string' ? JSON.parse(mem.memory) : mem.memory;
+                 if (data.products && Array.isArray(data.products)) {
+                  // Extract a concise example of a product with bom and description
+                  const product = data.products[0];
+                  if (product) {
+                   const bomExample = product.attributesJson?.bom?.[0] 
+                        ? ('{ name: "' + product.attributesJson.bom[0].name + '", quantity: "' + (product.attributesJson.bom[0].quantity || '') + '" }')
+                        : '{ name: "Ingredient", quantity: "Amount" }';
+                   const descExample = product.description 
+                        ? ('"' + product.description.substring(0, 30) + '..."')
+                        : '"Product description from ingredients"';
+                    return `- Product: ${product.name || 'Unnamed'}, Description: ${descExample}, BOM: [${bomExample}]`;
+                  }
+                }
+              } catch (e) {
+                // If memory is not JSON or doesn't have expected structure, use as text snippet
+                const snippet = typeof mem.memory === 'string' 
+                  ? mem.memory.substring(0, 100) 
+                  : String(mem.memory).substring(0, 100);
+                return `- Text snippet: ${snippet}...`;
+              }
+              return '- Memory item';
+            })
+            .filter(Boolean);
+            
+          if (examples.length > 0) {
+            memoryExamples = `\n\nEXAMPLES FROM PREVIOUS CORRECTIONS:\n${examples.join('\n')}\n`;
+          }
+        }
+      } catch (err) {
+        // If memory service fails, continue without memories
+        console.warn('[AI-OCR] Failed to retrieve memories for enhancement:', err.message);
+      }
+    }
+
     let llmResponse = '';
     try {
       const currency = input.config.expectedCurrency || 'ALL';
@@ -272,7 +330,7 @@ export class AiOcrParser implements MenuParserProvider {
   "modifierGroups": [],
   "modifiers": [],
   "links": []
-}
+}${memoryExamples}
 
 CRITICAL RULES:
 1. PRICE: Every product MUST have a price. Extract the visible price in minor unit (e.g. "800 Lek" → 800, "1200 ALL" → 1200). If a price appears in the text but is unclear, provide your best estimate. NEVER omit price — it is required.

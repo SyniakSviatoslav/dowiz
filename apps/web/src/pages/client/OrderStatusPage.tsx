@@ -109,9 +109,9 @@ export function OrderStatusPage() {
         if (p.etaSeconds != null) {
           setEtaMinutes(Math.ceil(p.etaSeconds / 60));
         }
-        if (p.courierName) {
-          setOrder((prev: any) => ({ ...prev, courier_name: p.courierName }));
-        }
+         if (p.courierName) {
+           setOrder((prev: any) => ({ ...prev, courierName: p.courierName }));
+         }
         if (p.phoneMasked) {
           setOrder((prev: any) => ({ ...prev, courier_phone: p.phoneMasked }));
         }

@@ -14,6 +14,8 @@ const EnvSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_BOT_SECRET: z.string().optional(),
+  TELEGRAM_BOT_USERNAME: z.string().optional(),
   // Backup Configuration
   BACKUP_ENCRYPTION_KEY: z.string().optional(), // 32 bytes base64 (required if BACKUP_ENABLED=true)
   R2_ACCESS_KEY_ID: z.string().optional(),

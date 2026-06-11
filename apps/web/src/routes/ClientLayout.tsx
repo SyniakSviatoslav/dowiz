@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ThemeProvider, CartFAB, CartDrawer, LanguageSwitcher, useI18n } from '@deliveryos/ui';
+import { ThemeProvider, CartFAB, CartDrawer, LanguageSwitcher, ToastProvider, useI18n } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../lib/index.js';
 import { CartProvider, useSharedCart } from '../lib/CartProvider.js';
@@ -69,29 +69,31 @@ function ClientLayoutInner() {
 
   return (
     <ThemeProvider theme={theme || undefined}>
-      <div className="min-h-screen bg-[var(--brand-bg)] text-[var(--brand-text)] font-sans pb-24">
-        <header className="sticky top-0 z-50 h-[56px] bg-[var(--brand-bg)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] flex items-center px-4 gap-3">
-          {logoUrl ? (
-            <img src={logoUrl} alt="" className="h-8 w-8 rounded object-contain shrink-0" />
-          ) : null}
-          <h1 className="text-[16px] font-bold flex-1 truncate" style={{ fontFamily: 'var(--brand-font-heading)' }}>{locationName || t('client.menu', 'Menu')}</h1>
-          <LanguageSwitcher variant="full" />
-        </header>
-        <Outlet />
-        <CartFAB itemsCount={itemsCount} total={total} onClick={() => setCartOpen(true)} isBouncing={isBouncing} />
-        <CartDrawer
-          isOpen={isCartOpen}
-          onClose={() => setCartOpen(false)}
-          items={items}
-          onUpdateQuantity={updateQuantity}
-          onCheckout={() => { setCartOpen(false); navigate(`/s/${slug}/checkout`); }}
-          title={t('cart.title')}
-          emptyText={t('cart.empty')}
-          totalLabel={t('cart.total')}
-          checkoutLabel={t('cart.checkout')}
-          clearLabel={t('cart.clear')}
-        />
-      </div>
+      <ToastProvider>
+        <div className="min-h-screen bg-[var(--brand-bg)] text-[var(--brand-text)] font-sans pb-24">
+          <header className="sticky top-0 z-50 h-[56px] bg-[var(--brand-bg)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] flex items-center px-4 gap-3">
+            {logoUrl ? (
+              <img src={logoUrl} alt="" className="h-8 w-8 rounded object-contain shrink-0" />
+            ) : null}
+            <h1 className="text-[16px] font-bold flex-1 truncate" style={{ fontFamily: 'var(--brand-font-heading)' }}>{locationName || t('client.menu', 'Menu')}</h1>
+            <LanguageSwitcher variant="full" />
+          </header>
+          <Outlet />
+          <CartFAB itemsCount={itemsCount} total={total} onClick={() => setCartOpen(true)} isBouncing={isBouncing} />
+          <CartDrawer
+            isOpen={isCartOpen}
+            onClose={() => setCartOpen(false)}
+            items={items}
+            onUpdateQuantity={updateQuantity}
+            onCheckout={() => { setCartOpen(false); navigate(`/s/${slug}/checkout`); }}
+            title={t('cart.title')}
+            emptyText={t('cart.empty')}
+            totalLabel={t('cart.total')}
+            checkoutLabel={t('cart.checkout')}
+            clearLabel={t('cart.clear')}
+          />
+        </div>
+      </ToastProvider>
     </ThemeProvider>
   );
 }

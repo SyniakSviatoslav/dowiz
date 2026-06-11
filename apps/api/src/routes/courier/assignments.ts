@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { z } from 'zod';
 import { loadEnv } from '@deliveryos/config';
+import { acceptCourierAssignment } from '../../lib/courierAssignmentService';
 import { MessageBus } from '@deliveryos/platform';
 
 const env = loadEnv();
@@ -51,44 +52,17 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
     
     const acceptWindowMs = parseInt(env.COURIER_ACCEPT_WINDOW_MS || '30000', 10);
 
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
+     const client = await db.connect();
+     try {
+       await client.query('BEGIN');
+       await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
 
-      const res = await client.query(`
-        SELECT order_id, assigned_at FROM courier_assignments 
-        WHERE id = $1 AND courier_id = $2 AND status = 'assigned' FOR UPDATE
-      `, [id, courierId]);
+       // Use the service to accept the assignment
+       await acceptCourierAssignment(client, id, locationId, { messageBus });
 
-      if (res.rowCount === 0) {
-        await client.query('ROLLBACK');
-        return reply.status(404).send({ error: 'ASSIGNMENT_NOT_FOUND_OR_NOT_ASSIGNED' });
-      }
-
-      const assignment = res.rows[0];
-      const elapsedMs = Date.now() - new Date(assignment.assigned_at).getTime();
-
-      if (elapsedMs > acceptWindowMs) {
-        await client.query('ROLLBACK');
-        // Let background queue or cron handle re-queueing of stale 'assigned'
-        return reply.status(410).send({ error: 'ACCEPT_WINDOW_EXPIRED' });
-      }
-
-      await client.query(`
-        UPDATE courier_assignments SET status = 'accepted', accepted_at = now() WHERE id = $1
-      `, [id]);
-
-      await client.query('COMMIT');
-
-      await messageBus.publish('order.courier_accepted', { 
-        orderId: assignment.order_id, 
-        locationId,
-        courierId
-      });
-
-      return reply.send({ success: true });
-    } catch (err) {
+       await client.query('COMMIT');
+       return reply.send({ success: true });
+     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
     } finally {

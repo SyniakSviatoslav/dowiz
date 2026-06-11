@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { NotificationProvider, NotificationTarget, NotificationEvent, NotificationData, NotifyResult } from '../provider.js';
 import { renderTelegramMessage } from '../render.js';
 

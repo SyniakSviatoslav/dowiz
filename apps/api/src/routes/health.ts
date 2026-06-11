@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyInstance } from 'fastify';
 import type { MessageBus } from '@deliveryos/platform';
 import type { Pool } from 'pg';
@@ -104,11 +103,17 @@ export default async function healthRoutes(
     if (telegramEnabled) {
       telegramResult = await withTimeout(
         (async () => {
-          const { TelegramAdapter } = await import('../notifications/adapters/telegram.js');
-          const adapter = new TelegramAdapter(process.env.TELEGRAM_BOT_TOKEN!);
-          await adapter.sendMessage({ targetId: 'health-check', text: '🩺 Health check ping' });
+          const resp = await fetch(
+            `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/getMe`,
+            { signal: AbortSignal.timeout(5000) },
+          );
+          if (!resp.ok) throw new Error(`Telegram API getMe returned ${resp.status}`);
+          const body = await resp.json();
+          if (!body.ok) throw new Error(body.description ?? 'getMe not ok');
+          return body;
         })(),
         'telegram',
+        true,
       );
     }
 
@@ -184,7 +189,7 @@ export default async function healthRoutes(
     // ── 9. Backup restore-test status (Degraded) ────────────────────
     let backupRestoreResult: any = { status: 'ok' };
     const restoreCheck = await withTimeout<{
-      rows: Array<{ last_verified_at: string | null; result: string | null }>;
+      rows: Array<{ last_verified_at: string | null; result: boolean | null }>;
     }>(
       opts.db.query(
         `SELECT MAX(created_at) AS last_verified_at,
@@ -223,13 +228,15 @@ export default async function healthRoutes(
       true
     );
     if (fallbackCheck.status === 'ok' && fallbackCheck.data) {
-      const { total, with_phone } = fallbackCheck.data.rows[0];
-      const pct = total > 0 ? Math.round((with_phone / total) * 100) : 0;
-      fallbackResult = {
-        status: pct < 50 ? 'degraded' : 'ok',
-        detail: `${with_phone}/${total} locations have fallback phone configured (${pct}%)`,
-        data: { totalLocations: total, withFallbackPhone: with_phone, coveragePct: pct },
-      } as any;
+      const row = fallbackCheck.data.rows[0];
+      if (row) {
+        const pct = row.total > 0 ? Math.round((row.with_phone / row.total) * 100) : 0;
+        fallbackResult = {
+          status: pct < 50 ? 'degraded' : 'ok',
+          detail: `${row.with_phone}/${row.total} locations have fallback phone configured (${pct}%)`,
+          data: { totalLocations: row.total, withFallbackPhone: row.with_phone, coveragePct: pct },
+        } as any;
+      }
     }
 
     // ── 11. Free-tier metrics (Degraded) ────────────────────────────
