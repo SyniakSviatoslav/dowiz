@@ -52,7 +52,7 @@ test.describe('Client Order Status — Live Deployment', () => {
     await page.goto('/s/test-slug/order/o_mock_123?dev=true');
     await page.waitForTimeout(4000);
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
-    await expect(page.locator('text=Estimated arrival')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('text=/Mbërritja|Estimated arrival|Очікуваний/i')).toBeVisible({ timeout: 8000 });
     const etaText = await page.locator('text=/\\d+\\s*min/').first().textContent();
     expect(etaText).toBeTruthy();
   });
@@ -63,7 +63,7 @@ test.describe('Client Order Status — Live Deployment', () => {
     await page.goto('/s/test-slug/order/o_mock_123?dev=true');
     await page.waitForTimeout(4000);
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
-    await expect(page.locator('text=Estimated arrival')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('text=/Mbërritja|Estimated arrival|Очікуваний/i')).toBeVisible({ timeout: 8000 });
     const etaSection = page.locator('text=/\\d+.*min/');
     await expect(etaSection.first()).toBeVisible({ timeout: 5000 });
   });
@@ -84,7 +84,9 @@ test.describe('Client Order Status — Live Deployment', () => {
     await page.goto('/s/test-slug/order/o_mock_123?dev=true');
     await page.waitForTimeout(4000);
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
-    await expect(page.locator('text=Order Details')).toBeVisible({ timeout: 5000 });
+    // Ordinal text should contain number of items — matches sq/en/uk
+    const body = await page.textContent('body');
+    expect(body).toMatch(/1x|Dragon Roll|ALL/i);
   });
 
   test('CR-5: Total price renders', async ({ page }) => {

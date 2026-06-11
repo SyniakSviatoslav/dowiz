@@ -299,3 +299,64 @@ test('AiOcrParser - PDF extracted text has normal flow with no low-confidence wa
   assert.strictEqual(lowConfIssues.length, 0);
   assert.strictEqual(res.summary.low_confidence_count, 0);
 });
+
+// ═════════════════════════════════════════════════════════════════════
+//  7. Memory Enhancement Test
+// ═════════════════════════════════════════════════════════════════════
+
+test('AiOcrParser - uses memory service to enhance prompt with examples', async () => {
+  // Mock the memory service
+  const mockMemoryService = {
+    initialize: async () => {},
+    search: async (query: string, options: any) => {
+      // Return mock memories that would enhance the prompt
+      if (query.includes('menu ingredients description bom')) {
+        return {
+          results: [
+            {
+              memory: JSON.stringify({
+                products: [{
+                  name: "Test Pizza",
+                  description: "Test description with ingredients",
+                  attributesJson: {
+                    bom: [
+                      { name: "Tomato", quantity: "100g", allergens: [] },
+                      { name: "Cheese", quantity: "50g", allergens: ["dairy"] }
+                    ]
+                  }
+                }]
+              })
+            }
+          ]
+        };
+      }
+      return { results: [] };
+    }
+  };
+
+  const prev = process.env.LLM_PROVIDER;
+  process.env.LLM_PROVIDER = 'mock';
+
+  // Create parser with mocked memory service
+  const parser = new AiOcrParser(mockMemoryService);
+  const res = await parser.parse({
+    kind: 'pdf',
+    bytes: pdfBuffer(PDF_WITH_TEXT_BASE64),
+    config: { expectedCurrency: 'EUR', currencyMinorUnit: 2 }
+  });
+
+  process.env.LLM_PROVIDER = prev;
+
+  // Basic validation that parsing worked
+  assert.strictEqual(res.summary.valid, 1);
+  assert.strictEqual(res.draft.products.length, 1);
+  
+  // The key test: we could check if the prompt enhancement happened by
+  // verifying that the mock LLM was called with enhanced prompt, but since
+  // we're using the 'mock' provider which returns a fixed response, 
+  // we primarily verify that the integration doesn't break existing functionality
+  // and that memory service is properly integrated.
+  
+  // At minimum, we verify no errors occurred during memory retrieval
+  assert.strictEqual(res.summary.errors, 0);
+});

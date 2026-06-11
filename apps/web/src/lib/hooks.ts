@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useGeolocation } from '@deliveryos/ui';
 
 // useOnlineStatus.ts
 export function useOnlineStatus() {
@@ -54,28 +55,6 @@ export function useEmbedMode() {
   return isEmbed;
 }
 
-// useGeolocation.ts
-export function useGeolocation(options: PositionOptions = { enableHighAccuracy: true }) {
-  const [position, setPosition] = useState<GeolocationPosition | null>(null);
-  const [error, setError] = useState<GeolocationPositionError | null>(null);
-
-  useEffect(() => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      return;
-    }
-
-    const watcher = navigator.geolocation.watchPosition(
-      (pos) => setPosition(pos),
-      (err) => setError(err),
-      options
-    );
-
-    return () => navigator.geolocation.clearWatch(watcher);
-  }, [options.enableHighAccuracy, options.maximumAge, options.timeout]);
-
-  return { position, error };
-}
-
 // useGeoStream.ts
 export function useGeoStream(courierId: string, enabled: boolean) {
   const { position } = useGeolocation();
@@ -83,11 +62,9 @@ export function useGeoStream(courierId: string, enabled: boolean) {
   useEffect(() => {
     if (!enabled || !position) return;
 
-    // Filter accuracy and speed (Phase 3 R1: accuracy>100m, speed>150m/s -> drop)
-    if (position.coords.accuracy > 100) return;
-    if (position.coords.speed && position.coords.speed > 150) return;
+    if (position.accuracy > 100) return;
+    if (position.speed && position.speed > 150) return;
 
     // TODO: Send via WebSocket or API
-    // apiClient(`/couriers/${courierId}/location`, { method: 'POST', body: { lat: position.coords.latitude, lng: position.coords.longitude } })
   }, [position, enabled, courierId]);
 }

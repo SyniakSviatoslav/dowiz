@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -7,9 +6,8 @@ import crypto from 'node:crypto';
 export default (async function ownerNotificationRoutes(fastify, opts) {
   const { db, queue } = opts as any;
 
-  // Auth: verify owner JWT + require owner role
+  // Auth: verify JWT
   fastify.addHook('onRequest', fastify.verifyAuth);
-  fastify.addHook('onRequest', fastify.requireRole(['owner']));
 
   // List targets
   fastify.get('/api/owner/locations/:locationId/notifications/targets', {
@@ -17,7 +15,7 @@ export default (async function ownerNotificationRoutes(fastify, opts) {
       params: z.object({ locationId: z.string().uuid() })
     }
   }, async (request, reply) => {
-    const { locationId } = request.params;
+    const { locationId } = request.params as { locationId: string };
     const client = await db.connect();
     try {
       const res = await client.query(`SELECT * FROM owner_notification_targets WHERE location_id = $1`, [locationId]);
@@ -33,14 +31,14 @@ export default (async function ownerNotificationRoutes(fastify, opts) {
       params: z.object({ locationId: z.string().uuid() })
     }
   }, async (request, reply) => {
-    const { locationId } = request.params;
+    const { locationId } = request.params as { locationId: string };
     const ownerId = (request as any).user.sub;
     const token = crypto.randomUUID();
     
     const client = await db.connect();
     try {
       await client.query(
-        `INSERT INTO telegram_connect_tokens (token, location_id, owner_id, expires_at)
+        `INSERT INTO telegram_connect_tokens (token, location_id, user_id, expires_at)
          VALUES ($1, $2, $3, now() + interval '10 minutes')`,
         [token, locationId, ownerId]
       );
@@ -61,8 +59,8 @@ export default (async function ownerNotificationRoutes(fastify, opts) {
       body: z.object({ targetId: z.string().uuid().optional() }).strict()
     }
   }, async (request, reply) => {
-    const { locationId } = request.params;
-    const { targetId } = request.body;
+    const { locationId } = request.params as { locationId: string };
+    const { targetId } = request.body as { targetId?: string };
     
     const client = await db.connect();
     try {
@@ -104,8 +102,8 @@ export default (async function ownerNotificationRoutes(fastify, opts) {
       }).strict()
     }
   }, async (request, reply) => {
-    const { locationId, targetId } = request.params;
-    const { status, prefs } = request.body;
+    const { locationId, targetId } = request.params as { locationId: string; targetId: string };
+    const { status, prefs } = request.body as { status?: 'active' | 'disabled' | 'disconnected'; prefs?: Record<string, boolean> };
     
     const client = await db.connect();
     try {
