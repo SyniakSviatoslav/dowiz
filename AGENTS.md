@@ -174,13 +174,15 @@ Use `graphify-out/GRAPH_REPORT.md` only for broad architecture overview.
 ```powershell
 pnpm dev:all                                # api(3000) + worker + ui(3001)
 pnpm verify:env; pnpm verify:db; pnpm verify:rls; pnpm verify:secrets
+pnpm verify:all                             # composite: env→db→rls→secrets→migrations→lint→typecheck
+pnpm verify:migrations                      # check migration ordering (numeric prefix ≈ alpha)
 pnpm migrate:up                             # apply migrations
 pnpm migrate:create "<name>"                # new migration in packages/db/migrations
 pnpm test:phase4 ; pnpm test:phase5         # stage tests
 pnpm verify:launch                          # full pre-launch gate
 pnpm lint ; pnpm typecheck ; pnpm format
 pnpm backup:verify ; pnpm backup:drill ; pnpm backup:list
-npx playwright test                         # e2e (chromium × 3 breakpoints)
+npx playwright test                         # e2e — auto-starts API if VITE_BASE_URL not set (chromium × 3 breakpoints)
 ```
 
 ## 11. Reference documents (deep dive when needed)

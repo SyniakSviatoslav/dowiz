@@ -313,7 +313,7 @@ export class NotificationWorker {
     try {
       // 1. Find all active telegram targets for the location that have this event enabled
       const targetsRes = await client.query(
-        `SELECT id, address, user_id, prefs 
+        `SELECT id, address, user_id, prefs, locale
          FROM owner_notification_targets 
          WHERE location_id = $1 AND channel = 'telegram' AND status = 'active'`,
         [location_id]
@@ -327,23 +327,24 @@ export class NotificationWorker {
         }
 
         // 2. Build the notification data
-        let data: any = { location_id };
+        let data: any = { location_id, locale: target.locale || 'sq' };
         if (entity_id) {
           // We have an entity_id, fetch the data based on event type
-          data = await this.buildTelegramData(event, entity_id, location_id, client);
+          data = await this.buildTelegramData(event, entity_id, location_id, client, data.locale);
         }
 
         const targetObj: NotificationTarget = {
           id: target.id,
           channel: target.channel as any,
           address: target.address,
-          locationId: location_id
+          locationId: location_id,
+          locale: data.locale,
         };
 
         const eventObj: NotifEvent = { type: event };
 
         // 3. Dispatch
-        const result = await this.dispatcher.dispatch(targetObj, eventObj, { location_id, ...data });
+        const result = await this.dispatcher.dispatch(targetObj, eventObj, data);
 
         // 4. Handle success/failure (we could log errors, but we don't retry here because the job itself is retryable via pg-boss)
         if (!result.delivered) {
@@ -355,51 +356,131 @@ export class NotificationWorker {
     }
   }
 
+  private async fetchOrderDetails(entity_id: string, location_id: string, client: any): Promise<any> {
+    const orderRes = await client.query(
+      `SELECT o.id, o.short_id, o.total, o.subtotal, o.delivery_fee, o.discount_total,
+              o.tax_total, o.currency_code, o.created_at, o.status,
+              o.type, o.delivery_address, o.delivery_instructions,
+              o.cash_pay_with,
+              c.name AS customer_name, c.phone AS customer_phone
+       FROM orders o
+       LEFT JOIN customers c ON c.id = o.customer_id
+       WHERE o.id = $1 AND o.location_id = $2`,
+      [entity_id, location_id]
+    );
+    if (orderRes.rows.length === 0) throw new Error(`Order not found: ${entity_id}`);
+    const row = orderRes.rows[0];
+
+    // Fetch order items
+    const itemsRes = await client.query(
+      `SELECT oi.name_snapshot, oi.price_snapshot, oi.quantity
+       FROM order_items oi
+       WHERE oi.order_id = $1
+       ORDER BY oi.created_at`,
+      [entity_id]
+    );
+    const items = itemsRes.rows.map((r: any) => ({
+      name: r.name_snapshot,
+      price: r.price_snapshot,
+      quantity: r.quantity,
+    }));
+
+    return {
+      orderId: row.id,
+      shortOrderId: row.short_id,
+      total: row.total,
+      subtotal: row.subtotal,
+      deliveryFee: row.delivery_fee,
+      discountTotal: row.discount_total,
+      taxTotal: row.tax_total,
+      currency: row.currency_code,
+      createdAtLocal: row.created_at.toISOString(),
+      ageMinutes: Math.floor((Date.now() - new Date(row.created_at).getTime()) / 60000),
+      orderType: row.type,
+      deliveryAddress: row.delivery_address,
+      deliveryInstructions: row.delivery_instructions,
+      cashPayWith: row.cash_pay_with,
+      customerName: row.customer_name,
+      customerPhone: row.customer_phone,
+      items,
+      quantity: items.reduce((sum: number, r: any) => sum + r.quantity, 0),
+    };
+  }
+
   // Helper function to build the NotificationData for a given event and entity_id
-  private async buildTelegramData(event: NotificationEventType, entity_id: string, location_id: string, client: any): Promise<any> {
-    // We will implement this based on the event type
-    // For now, we return a minimal data object; we will expand as needed
-    const data: any = { location_id };
+  private async buildTelegramData(event: NotificationEventType, entity_id: string, location_id: string, client: any, locale?: string): Promise<any> {
+    const data: any = { location_id, locale };
 
     switch (event) {
       case 'order.created':
+      case 'order.delivered':
       case 'order.substitution_needs_human':
       case 'order.dwell_escalation':
       case 'order.timeout_cancelled':
-      case 'cash.reconcile_discrepancy':
-      case 'delivery.flag_raised':
-      case 'rating.low_received':
+      case 'order.pending_aging':
       case 'order.ready_for_pickup':
+      case 'delivery.flag_raised':
+      case 'rating.low_received': {
+        Object.assign(data, await this.fetchOrderDetails(entity_id, location_id, client));
+        break;
+      }
+
       case 'courier.assigned': {
-        const orderRes = await client.query(
-          `SELECT id, short_id, total, currency, created_at, status
-           FROM orders 
-           WHERE id = $1 AND location_id = $2`,
+        Object.assign(data, await this.fetchOrderDetails(entity_id, location_id, client));
+        // Fetch courier name
+        const caRes = await client.query(
+          `SELECT c.name AS courier_name
+           FROM courier_assignments ca
+           JOIN couriers c ON c.id = ca.courier_id
+           WHERE ca.order_id = $1 AND ca.location_id = $2
+           ORDER BY ca.created_at DESC LIMIT 1`,
           [entity_id, location_id]
         );
-        if (orderRes.rows.length === 0) {
-          throw new Error(`Order not found: ${entity_id}`);
+        if (caRes.rows.length > 0) {
+          data.courierName = caRes.rows[0].courier_name;
         }
-        const row = orderRes.rows[0];
-        data.orderId = row.id;
-        data.shortOrderId = row.short_id;
-        data.total = row.total;
-        data.currency = row.currency;
-        data.createdAtLocal = row.created_at.toISOString();
-        data.ageMinutes = Math.floor((Date.now() - new Date(row.created_at).getTime()) / 60000);
+        break;
+      }
+
+      case 'cash.reconcile_discrepancy': {
+        Object.assign(data, await this.fetchOrderDetails(entity_id, location_id, client));
+        // Use total as discrepancy amount for this event
+        data.discrepancy = data.total;
+        break;
+      }
+
+      case 'shift.started':
+      case 'shift.closed': {
+        // entity_id is the shift_id
+        const shiftRes = await client.query(
+          `SELECT cs.id, cs.started_at, cs.ended_at,
+                  c.name AS courier_name
+           FROM courier_shifts cs
+           JOIN couriers c ON c.id = cs.courier_id
+           WHERE cs.id = $1 AND cs.location_id = $2`,
+          [entity_id, location_id]
+        );
+        if (shiftRes.rows.length === 0) throw new Error(`Shift not found: ${entity_id}`);
+        const row = shiftRes.rows[0];
+        data.courierName = row.courier_name;
+        data.shiftStartTime = row.started_at ? new Date(row.started_at).toLocaleString() : '';
+        if (row.ended_at) {
+          const durationMs = new Date(row.ended_at).getTime() - new Date(row.started_at).getTime();
+          const hours = Math.floor(durationMs / 3600000);
+          const mins = Math.floor((durationMs % 3600000) / 60000);
+          data.shiftDuration = `${hours}h ${mins}m`;
+        }
         break;
       }
 
       case 'shift.close_reminder':
-        // This event is about a shift
-        // We don't have a shift table in the provided snippet, but we can assume we have one
-        // For now, we will not fetch any additional data
+        // No entity data needed; just reminder text
         break;
 
       case 'ops.worker_liveness':
       case 'ops.backup_failed':
       case 'ops.degradation_changed':
-        // These are system events, no entity data needed
+        // System events, no entity data needed
         break;
 
       case 'test':

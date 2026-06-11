@@ -10,7 +10,7 @@ export default defineConfig({
   expect: { timeout: 10000 },
 
   use: {
-    baseURL: process.env.VITE_BASE_URL || 'https://dowiz.fly.dev',
+    baseURL: process.env.VITE_BASE_URL || 'http://localhost:3000',
     trace: 'on-first-retry',
     video: 'on',
     screenshot: 'on',
@@ -48,7 +48,14 @@ export default defineConfig({
     },
   ],
 
-  webServer: [],
+  webServer: process.env.CI || process.env.VITE_BASE_URL ? [] : [
+    {
+      command: 'pnpm dev:api:1',
+      port: 3000,
+      timeout: 120000,
+      reuseExistingServer: true,
+    },
+  ],
 
   reporter: [
     ['list'],

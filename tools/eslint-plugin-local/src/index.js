@@ -200,6 +200,43 @@ export default {
         };
       },
     },
+    'no-permissive-status-assertion': {
+      meta: {
+        type: "problem",
+        docs: { description: 'disallow expect([200,400,...]).toContain(x) — use expect(x).toBe(N) for exact status' },
+        fixable: "code",
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+        const isTestFile = /\.(spec|test)\.(ts|js|tsx|jsx)$/.test(filename);
+        if (!isTestFile) return {};
+
+        function isNumericArray(node) {
+          return node.type === 'ArrayExpression'
+            && node.elements.length > 0
+            && node.elements.every(e => e && e.type === 'Literal' && typeof e.value === 'number');
+        }
+
+        return {
+          CallExpression(node) {
+            if (node.callee.type !== 'MemberExpression') return;
+            const method = node.callee.property;
+            if (method.type !== 'Identifier' || method.name !== 'toContain') return;
+            if (node.callee.object.type !== 'CallExpression') return;
+            const expectCall = node.callee.object;
+            if (expectCall.callee.type !== 'Identifier' || expectCall.callee.name !== 'expect') return;
+            const arg = expectCall.arguments[0];
+            if (!arg || !isNumericArray(arg)) return;
+            const statuses = arg.elements.map((e) => e.value).join(', ');
+            context.report({
+              node,
+              message: `Permissive status assertion expect([${statuses}]).toContain(x) — use expect(x).toBe(N) for exact expected status. Each status is a separate test case.`,
+            });
+          },
+        };
+      },
+    },
     'no-mock-in-prod': {
       meta: {
         type: "problem",

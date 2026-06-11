@@ -1,153 +1,103 @@
 import type { NotificationData, NotificationEvent } from './provider.js';
+import { getMessage, type MessageVars, type Locale } from './locales.js';
 
-function escapeHtml(unsafe: string) {
-  return unsafe
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+function fmtPrice(v: number | undefined, currency: string | undefined): string {
+  if (v == null) return '—';
+  return `${(v / 100).toFixed(2)} ${currency || 'ALL'}`;
 }
 
-export function renderTelegramMessage(event: NotificationEvent, data: NotificationData): { text: string, reply_markup?: any } {
-  if (event.type === 'test') {
-    return {
-      text: `🧪 <b>Test from Dowiz</b>\n\n${escapeHtml(data.message || 'If you see this, notifications are working.')}`
-    };
-  }
+function toVars(data: NotificationData): MessageVars {
+  const orderTypeLabel =
+    data.orderType === 'pickup' ? 'Pickup'
+    : data.orderType === 'delivery' ? 'Delivery'
+    : undefined;
+  return {
+    shortOrderId: data.shortOrderId,
+    totalFmt: fmtPrice(data.total, data.currency),
+    subtotalFmt: fmtPrice(data.subtotal, data.currency),
+    deliveryFeeFmt: fmtPrice(data.deliveryFee, data.currency),
+    discountFmt: fmtPrice(data.discountTotal, data.currency),
+    taxFmt: fmtPrice(data.taxTotal, data.currency),
+    cashPayWithFmt: fmtPrice(data.cashPayWith, data.currency),
+    currency: data.currency,
+    customerName: data.customerName,
+    customerPhone: data.customerPhone,
+    deliveryAddress: data.deliveryAddress,
+    deliveryInstructions: data.deliveryInstructions,
+    orderTypeLabel,
+    items: data.items?.map(i => ({ name: i.name, price: i.price, quantity: i.quantity })),
+    courierName: data.courierName,
+    shiftStartTime: data.shiftStartTime,
+    shiftDuration: data.shiftDuration,
+    ageMinutes: data.ageMinutes != null ? String(data.ageMinutes) : undefined,
+    discrepancyFmt: fmtPrice(data.discrepancy, data.currency),
+    rating: data.rating != null ? String(data.rating) : undefined,
+    message: data.message,
+  };
+}
 
-   if (event.type === 'order.created') {
-     const totalAll = data.total ? Math.round(data.total / 100) : 0;
-     const quantity = data.quantity ?? 0;
-     return {
-       text: `🆕 #${escapeHtml(data.shortOrderId || '???')} · ${totalAll} ${escapeHtml(data.currency || 'ALL')} · ${quantity} поз. · ${escapeHtml(data.createdAtLocal || '')} · ⏳ timeout 7h`,
-       reply_markup: {
-         inline_keyboard: [
-           [{ text: '✅ Підтвердити', callback_data: `order.confirm:${data.orderId}` }],
-           [{ text: '❌ Відхилити', callback_data: `order.reject_choose:${data.orderId}` }]
-         ]
-       }
-     };
-   }
+export function renderTelegramMessage(event: NotificationEvent, data: NotificationData, locale: Locale = 'sq'): { text: string, reply_markup?: any } {
+  const vars = toVars(data);
+  const text = getMessage(locale, event.type, vars);
 
-  if (event.type === 'order.substitution_needs_human') {
-    return {
-      text: `⚠️ #${escapeHtml(data.shortOrderId || '???')} — Produkti u zëvogëlua, klienti kërkoi kontaktnë. Nevojitet vendim.` +
-        (data.orderId ? `\n🔗 https://app.dowiz.org/admin/locations/${data.locationId}/orders/${data.orderId}` : ''),
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '🔗 Hap në PWA', url: `https://app.dowiz.org/admin/locations/${data.locationId}/orders/${data.orderId}` }]
-        ]
-      }
-    };
-  }
+  // Generate buttons for events that support them
+  const baseUrl = 'https://app.dowiz.org';
+  const locationUrl = data.locationId ? `${baseUrl}/admin/locations/${data.locationId}/orders/${data.orderId}` : undefined;
 
-  if (event.type === 'order.dwell_escalation') {
-    return {
-      text: `⏰ #${escapeHtml(data.shortOrderId || '???')} në statusi ${escapeHtml(data.createdAtLocal || 'PENDING')} ${data.ageMinutes || 0} min — jo i konfirmuar` +
-        (data.orderId ? `\n🔗 https://app.dowiz.org/admin/locations/${data.locationId}/orders/${data.orderId}` : ''),
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '🔗 Hap në PWA', url: `https://app.dowiz.org/admin/locations/${data.locationId}/orders/${data.orderId}` }]
-        ]
-      }
-    };
-  }
-
-  if (event.type === 'order.timeout_cancelled') {
-    return {
-      text: `🚫 #${escapeHtml(data.shortOrderId || '???')} anuluar automatikus (në konfirmim të shumti)` +
-        (data.orderId ? `\n🔗 https://app.dowiz.org/admin/locations/${data.locationId}/orders/${data.orderId}` : '')
-    };
-  }
-
-  if (event.type === 'cash.reconcile_discrepancy') {
-    const discrepancy = data.total ?? 0; // total field reused for discrepancy amount
-    const absDiscrepancy = Math.abs(discrepancy);
-    const prefix = discrepancy > 0 ? '+' : '';
-    return {
-      text: `💱 Ndalimi i kasës: ${prefix}${absDiscrepancy} ALL. Behja e nevojshme.` +
-        (data.orderId ? `\n🔗 https://app.dowiz.org/admin/locations/${data.locationId}/orders/${data.orderId}` : '')
-    };
-  }
-
-  if (event.type === 'delivery.flag_raised') {
-    return {
-      text: `🚚 #${escapeHtml(data.shortOrderId || '???')} — Flag të lartëruar (GPS i largët)` +
-        (data.orderId ? `\n🔗 https://app.dowiz.org/admin/locations/${data.locationId}/orders/${data.orderId}` : ''),
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '🔗 Hap në PWA', url: `https://app.dowiz.org/admin/locations/${data.locationId}/orders/${data.orderId}` }]
-        ]
-      }
-    };
-  }
-
-  if (event.type === 'rating.low_received') {
-    return {
-      text: `⭐ #${escapeHtml(data.shortOrderId || '???')} — Vlerësim i Ulët: ${data.total ?? 0}/5` +
-        (data.orderId ? `\n🔗 https://app.dowiz.org/admin/locations/${data.locationId}/orders/${data.orderId}` : ''),
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '🔗 Hap në PWA', url: `https://app.dowiz.org/admin/locations/${data.locationId}/orders/${data.orderId}` }]
-        ]
-      }
-    };
-  }
-
-  if (event.type === 'ops.worker_liveness') {
-    return {
-      text: `🛑 Punëtori i procesit nuk përgjigjon >1 min. Kontrolloni sistemin.`
-    };
-  }
-
-  if (event.type === 'ops.backup_failed') {
-    return {
-      text: `🛑 Kopia e sigurtë nuk u verificua. Kontrolloni sistemin.`
-    };
-  }
-
-  if (event.type === 'ops.degradation_changed') {
-    // Assuming we have a way to know if it's degradation or recovery
-    // For now, we'll show a generic message; the worker could set a flag in data
-    const isDegraded = data.ageMinutes ?? 0 > 0; // Using ageMinutes as a flag
-    if (isDegraded) {
+  switch (event.type) {
+    case 'order.created':
+    case 'order.substitution_needs_human':
       return {
-        text: `⚠️ Sistemi në režim degraduar: <details ngjinuar>.`
+        text,
+        reply_markup: {
+          inline_keyboard: [[
+            { text: locale === 'sq' ? '✅ Konfirmo' : locale === 'uk' ? '✅ Підтвердити' : '✅ Confirm', callback_data: `order.confirm:${data.orderId}` },
+            { text: locale === 'sq' ? '❌ Refuzo' : locale === 'uk' ? '❌ Відхилити' : '❌ Reject', callback_data: `order.reject_choose:${data.orderId}` },
+          ]]
+        }
       };
-    } else {
+
+    case 'order.delivered':
+    case 'order.dwell_escalation':
+    case 'order.ready_for_pickup':
+    case 'delivery.flag_raised':
+    case 'rating.low_received':
+    case 'order.timeout_cancelled':
       return {
-        text: `✅ Sistemi i riparuar nga režimi degraduar.`
+        text,
+        reply_markup: locationUrl ? {
+          inline_keyboard: [[{ text: '🔗 Open in app', url: locationUrl }]]
+        } : undefined,
       };
-    }
-  }
 
-  if (event.type === 'courier.assigned') {
-    return {
-      text: `📦 Drejtim i ri #${escapeHtml(data.shortOrderId || '???')} → ${data.locationId ? 'Lokacioni' : '???'} (shiko detajet në app)` +
-        (data.orderId ? `\n🔗 https://app.dowiz.org/admin/locations/${data.locationId}/orders/${data.orderId}` : ''),
-      // Optional: add a "Accepted" button for couriers
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '👊 Marrë', callback_data: `courier.accept:${data.orderId}` }]
-        ]
-      }
-    };
-  }
+    case 'order.pending_aging':
+      return {
+        text,
+        reply_markup: data.orderId ? {
+          inline_keyboard: [[
+            { text: '✅ Confirm', callback_data: `order.confirm:${data.orderId}` },
+            { text: '❌ Reject', callback_data: `order.reject_choose:${data.orderId}` },
+          ]]
+        } : undefined,
+      };
 
-  if (event.type === 'order.ready_for_pickup') {
-    return {
-      text: `🍽️ #${escapeHtml(data.shortOrderId || '???')} gati për mblidhje` +
-        (data.orderId ? `\n🔗 https://app.dowiz.org/app/locations/${data.locationId}/orders/${data.orderId}` : '')
-    };
-  }
+    case 'courier.assigned':
+      return {
+        text,
+        reply_markup: data.orderId && locationUrl ? {
+          inline_keyboard: [[{ text: '👀 Track', url: locationUrl }]]
+        } : undefined,
+      };
 
-  if (event.type === 'shift.close_reminder') {
-    return {
-      text: `🌙 Nu lutem, mbyllni shiftin dhe balanconi kasën` +
-        (data.locationId ? `\n🔗 https://app.dowiz.org/admin/locations/${data.locationId}/shifts` : '')
-    };
-  }
+    case 'shift.close_reminder':
+      return {
+        text,
+        reply_markup: data.locationId ? {
+          inline_keyboard: [[{ text: '🔗 Close shift', url: `${baseUrl}/admin/locations/${data.locationId}/shifts` }]]
+        } : undefined,
+      };
 
-  return { text: 'Unknown event' };
+    default:
+      return { text };
+  }
 }

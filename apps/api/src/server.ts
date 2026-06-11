@@ -32,6 +32,7 @@ import courierMeRoutes from './routes/courier/me.js';
 import ownerCourierRoutes from './routes/owner/couriers.js';
 import ownerCourierInvitesRoutes from './routes/owner/courier-invites.js';
 import onboardingRoutes from './routes/owner/onboarding.js';
+import orderMessageRoutes from './routes/order-messages.js';
 import customerOrderRoutes from './routes/customer/orders.js';
 import ownerSettlementRoutes from './routes/owner/settlements.js';
 import ownerDashboardRoutes from './routes/owner/dashboard.js';
@@ -399,17 +400,47 @@ async function main() {
   await queue.boss.createQueue('free_tier.watch');
   await queue.boss.schedule('free_tier.watch', '0 * * * *');
 
-   // Lifecycle Integration
+   // Lifecycle Integration — Telegram Notification Fan-out
+   const tgSend = (event: string, entity_id: string | undefined, location_id: string) =>
+     queue.boss.send('notify.telegram.send', { event, entity_id: entity_id || '', location_id });
+
    messageBus.subscribe('order.created', async (payload: any) => {
      try {
-       // Send a single high-level job for Telegram fan-out
-       await queue.boss.send('notify.telegram.send', {
-         event: 'order.created',
-         entity_id: payload.orderId,
-         location_id: payload.locationId
-       });
+       await tgSend('order.created', payload.orderId, payload.locationId);
      } catch (err) {
        console.error('[Notify] Failed to send order.created telegram job', err);
+     }
+   });
+
+   messageBus.subscribe('order.delivered', async (payload: any) => {
+     try {
+       await tgSend('order.delivered', payload.orderId, payload.locationId);
+     } catch (err) {
+       console.error('[Notify] Failed to send order.delivered telegram job', err);
+     }
+   });
+
+   messageBus.subscribe('order.assignment_created', async (payload: any) => {
+     try {
+       await tgSend('courier.assigned', payload.orderId, payload.locationId);
+     } catch (err) {
+       console.error('[Notify] Failed to send courier.assigned telegram job', err);
+     }
+   });
+
+   messageBus.subscribe('shift.started', async (payload: any) => {
+     try {
+       await tgSend('shift.started', payload.shiftId, payload.locationId);
+     } catch (err) {
+       console.error('[Notify] Failed to send shift.started telegram job', err);
+     }
+   });
+
+   messageBus.subscribe('shift.closed', async (payload: any) => {
+     try {
+       await tgSend('shift.closed', payload.shiftId, payload.locationId);
+     } catch (err) {
+       console.error('[Notify] Failed to send shift.closed telegram job', err);
      }
    });
 
@@ -548,6 +579,7 @@ async function main() {
   fastify.register(courierSettlementRoutes, { prefix: '/api/courier', db: pool, messageBus });
   fastify.register(courierAssignmentsRoutes, { prefix: '/api/courier', db: pool, messageBus });
   fastify.register(courierShiftsRoutes, { prefix: '/api/courier', db: pool, messageBus });
+  fastify.register(orderMessageRoutes, { db: pool, messageBus });
 fastify.register(publicFallbackConfigRoutes, { db: pool });
 
 // Telegram Webhook (must be registered before route definitions)

@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, useI18n, useGeolocation } from '@deliveryos/ui';
+import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation } from '@deliveryos/ui';
 import type { CourierTask, CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 
@@ -16,6 +16,38 @@ export function DeliveryPage() {
   const [courierPos, setCourierPos] = useState<LngLatLike>(TIRANA_CENTER);
   const [clientLocation, setClientLocation] = useState<LngLatLike | null>(null);
   const { t } = useI18n();
+  const [messages, setMessages] = useState<any[]>([]);
+
+  const fetchMessages = useCallback(async () => {
+    try {
+      const data = await apiClient<any>(`/orders/${id}/messages`);
+      if (data?.messages) setMessages(data.messages);
+    } catch {
+      // messages are optional
+    }
+  }, [id]);
+
+  const handleSendMessage = useCallback(async (presetKey: string, params?: Record<string, unknown>) => {
+    try {
+      const data = await apiClient<any>(`/orders/${id}/messages`, {
+        method: 'POST',
+        body: { preset_key: presetKey, params: params || {} },
+      });
+      if (data?.message) {
+        setMessages(prev => [...prev, data.message]);
+      }
+    } catch {
+      // message send failed silently
+    }
+  }, [id]);
+
+  const handleMarkRead = useCallback(async () => {
+    try {
+      await apiClient(`/orders/${id}/messages/read`, { method: 'POST' });
+    } catch {
+      // mark read is best-effort
+    }
+  }, [id]);
 
   const { position, error: geoError } = useGeolocation({
     enableHighAccuracy: true,
@@ -52,7 +84,8 @@ export function DeliveryPage() {
 
   useEffect(() => {
     fetchTask();
-  }, [id]);
+    fetchMessages();
+  }, [id, fetchMessages]);
 
   const { status: wsStatus, sendMessage } = useWebSocket({
     room: `order:${id}`,
@@ -65,6 +98,12 @@ export function DeliveryPage() {
       }
       if (msg.type === 'client_location_stop') {
         setClientLocation(null);
+      }
+      if (msg.data?.type === 'order.message' && msg.data?.data) {
+        setMessages(prev => {
+          const exists = prev.some(m => m.id === msg.data.data.id);
+          return exists ? prev : [...prev, msg.data.data];
+        });
       }
     }
   });
@@ -196,6 +235,15 @@ export function DeliveryPage() {
             &#9990; Call
           </a>
         </div>
+
+        <MessageThread
+          orderId={id!}
+          role="courier"
+          currentStatus={task.status}
+          messages={messages}
+          onSend={handleSendMessage}
+          onMarkRead={handleMarkRead}
+        />
 
         <SwipeToComplete onComplete={handleComplete} label="Slide to Deliver" />
       </div>
