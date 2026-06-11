@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, useI18n, useToast } from '@deliveryos/ui';
+import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast } from '@deliveryos/ui';
 import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { calcETA } from '@deliveryos/shared-types';
@@ -41,6 +41,38 @@ export function OrderStatusPage() {
   const [courierPos, setCourierPos] = useState<LngLatLike>([19.817, 41.331]);
   const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
   const [sharingLocation, setSharingLocation] = useState(false);
+  const [messages, setMessages] = useState<any[]>([]);
+
+  const fetchMessages = useCallback(async () => {
+    try {
+      const data = await apiClient<any>(`/orders/${id}/messages`);
+      if (data?.messages) setMessages(data.messages);
+    } catch {
+      // messages are optional
+    }
+  }, [id]);
+
+  const handleSendMessage = useCallback(async (presetKey: string, params?: Record<string, unknown>) => {
+    try {
+      const data = await apiClient<any>(`/orders/${id}/messages`, {
+        method: 'POST',
+        body: { preset_key: presetKey, params: params || {} },
+      });
+      if (data?.message) {
+        setMessages(prev => [...prev, data.message]);
+      }
+    } catch {
+      // message send failed silently
+    }
+  }, [id]);
+
+  const handleMarkRead = useCallback(async () => {
+    try {
+      await apiClient(`/orders/${id}/messages/read`, { method: 'POST' });
+    } catch {
+      // mark read is best-effort
+    }
+  }, [id]);
 
   const fetchOrder = async () => {
     try {
@@ -76,8 +108,8 @@ export function OrderStatusPage() {
   };
 
   useEffect(() => {
-    if (id) fetchOrder();
-  }, [id]);
+    if (id) { fetchOrder(); fetchMessages(); }
+  }, [id, fetchMessages]);
 
   // Watchdog: resync if no WS message for 30s
   useEffect(() => {
@@ -123,6 +155,13 @@ export function OrderStatusPage() {
 
       if (inner.type === 'order.status' && inner.status) {
         setOrder((prev: any) => ({ ...prev, status: inner.status }));
+      }
+
+      if (inner.type === 'order.message' && inner.data) {
+        setMessages(prev => {
+          const exists = prev.some(m => m.id === inner.data.id);
+          return exists ? prev : [...prev, inner.data];
+        });
       }
     },
     onReconnect: () => {
@@ -283,6 +322,16 @@ export function OrderStatusPage() {
                 <span>{t('client.share_location', 'Share my location with courier')}</span>
               </button>
             )}
+            {/* CR-8: CourierContactBtn — call courier */}
+            {order?.courier_phone && (
+              <a
+                href={`tel:${order.courier_phone}`}
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-[var(--brand-radius)] bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] text-[var(--brand-text)] font-semibold text-sm"
+              >
+                <span>📞</span>
+                <span>{t('client.call_courier', 'Call courier')}</span>
+              </a>
+            )}
           </div>
         )}
 
@@ -325,6 +374,16 @@ export function OrderStatusPage() {
             </div>
           </div>
         )}
+
+        {/* CR-8: Message Thread */}
+        <MessageThread
+          orderId={id!}
+          role="customer"
+          currentStatus={order.status}
+          messages={messages}
+          onSend={handleSendMessage}
+          onMarkRead={handleMarkRead}
+        />
 
       </div>
     </div>

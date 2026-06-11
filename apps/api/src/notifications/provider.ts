@@ -3,10 +3,12 @@ export interface NotificationTarget {
   channel: 'telegram' | 'push';
   address: string;
   locationId: string;
+  locale?: string;
 }
 
 export type NotificationEventType = 
   | 'order.created'
+  | 'order.delivered'
   | 'order.substitution_needs_human'
   | 'order.dwell_escalation'
   | 'order.timeout_cancelled'
@@ -19,6 +21,8 @@ export type NotificationEventType =
   | 'courier.assigned'
   | 'order.pending_aging'
   | 'order.ready_for_pickup'
+  | 'shift.started'
+  | 'shift.closed'
   | 'shift.close_reminder'
   | 'test';
 
@@ -31,11 +35,29 @@ export interface NotificationData {
   locationId: string;
   shortOrderId?: string;
   total?: number;
+  subtotal?: number;
+  deliveryFee?: number;
+  discountTotal?: number;
+  taxTotal?: number;
   currency?: string;
   createdAtLocal?: string;
   ageMinutes?: number;
   quantity?: number;
+  orderType?: string;
+  deliveryAddress?: string;
+  deliveryInstructions?: string;
+  cashPayWith?: number;
+  preferences?: Record<string, any>;
+  customerName?: string;
+  customerPhone?: string;
+  items?: Array<{ name: string; price: number; quantity: number }>;
+  courierName?: string;
+  shiftStartTime?: string;
+  shiftDuration?: string;
+  discrepancy?: number;
+  rating?: number;
   message?: string; // for 'test'
+  locale?: string;
 }
 
 export interface NotifyResult {

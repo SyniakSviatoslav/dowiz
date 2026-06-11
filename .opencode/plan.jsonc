@@ -1,25 +1,15 @@
 ﻿{
-  "approach": "1) Fix owner_id→user_id in notifications.ts INSERT 2) Add TELEGRAM_BOT_USERNAME to env schema 3) Remove @ts-nocheck from 7 files + fix all type issues 4) Add TELEGRAM vars to .env.example 5) typecheck+lint 6) run Telegram flow test 7) deploy 8) validate live",
+  "approach": "CR-8 order-scoped message channel. MSG-1: migration (order_messages table + RLS + CHECK). MSG-2: preset registry + Zod schemas + send endpoint + MessageBus broadcast. MSG-3: thread UI on OrderStatusPage/ActiveDeliveryPage/admin. MSG-4: tel: call buttons + param selectors. MSG-5: free-text flag doc only (OFF).",
   "files": [
-    "apps/api/src/routes/owner/notifications.ts",
-    "apps/api/src/routes/telegram-webhook.ts",
-    "apps/api/src/notifications/adapters/telegram.ts",
-    "apps/api/src/notifications/render.ts",
-    "apps/api/src/notifications/workers/index.ts",
-    "apps/api/src/notifications/workers/telegram.poll.ts",
-    "apps/api/src/notifications/provider.ts",
-    "packages/config/src/index.ts",
-    ".env.example"
+    "packages/db/migrations/1790000000002_order_messages.ts",
+    "packages/shared-types/src/contracts/order-messages.ts",
+    "packages/shared-types/src/contracts/index.ts",
+    "apps/api/src/routes/order-messages.ts",
+    "apps/api/src/server.ts",
+    "packages/ui/src/lib/i18n.ts",
+    "apps/web/src/pages/client/OrderStatusPage.tsx",
+    "apps/web/src/pages/courier/ActiveDeliveryPage.tsx"
   ],
-  "keyTypes": [
-    "NotificationProvider",
-    "NotificationTarget",
-    "NotificationEvent",
-    "NotificationData",
-    "NotifyResult",
-    "NotificationEventType",
-    "TelegramSendJob",
-    "NotifyDispatchJob"
-  ],
-  "boundaryCondition": "***REDACTED*** not set → adapter degrades gracefully (returns not-delivered, system continues)"
+  "keyTypes": ["message_sender", "MessagePresetKey", "OrderMessagePreset", "OrderMessageRecord", "SendMessageRequest"],
+  "boundaryCondition": "free text rejected (CHECK body IS NULL), DELIVERED/terminal auto-close, owner has zero contact buttons, cross-tenant 404"
 }

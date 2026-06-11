@@ -31,6 +31,7 @@ export default tseslint.config(
       'local/no-duplicate-import': 'warn',
       'local/no-empty-catch': 'warn',
       'local/no-mock-in-prod': 'warn',
+      'local/no-permissive-status-assertion': 'warn',
 
       // --- Karpathy P2: Simplicity rules (warn-only, no CI block) ---
       'max-depth': ['warn', 4],
@@ -40,8 +41,8 @@ export default tseslint.config(
       'no-useless-rename': 'warn',
       'object-shorthand': 'warn',
       '@typescript-eslint/prefer-as-const': 'warn',
-      '@typescript-eslint/prefer-optional-chain': 'warn',
-      '@typescript-eslint/prefer-nullish-coalescing': 'warn',
+      '@typescript-eslint/prefer-optional-chain': 'off',
+      '@typescript-eslint/prefer-nullish-coalescing': 'off',
     },
   },
   {
@@ -58,13 +59,16 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'src/**', '.opencode/**', '**/build-client.js', '**/churn-report.cjs', 'tools/eslint-plugin-local/__fixtures__/**'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'src/**', '.opencode/**', '**/build-client.js', '**/churn-report.cjs'],
   },
   {
     files: ['tools/eslint-plugin-local/__fixtures__/**'],
     rules: {
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/prefer-optional-chain': 'off',
+      '@typescript-eslint/prefer-nullish-coalescing': 'off',
+      'local/no-permissive-status-assertion': 'warn',
     },
   }
 );

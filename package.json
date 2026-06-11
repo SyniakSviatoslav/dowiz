@@ -16,6 +16,8 @@
     "verify:db": "pnpm --filter @deliveryos/db run verify:db",
     "seed": "tsx --env-file=.env packages/db/scripts/seed.ts",
     "verify:rls": "tsx --env-file=.env packages/db/scripts/verify-rls.ts",
+    "verify:migrations": "tsx scripts/verify-migrations.ts",
+    "verify:all": "tsx scripts/verify-all.ts",
     "backup:restore": "tsx --env-file=.env scripts/backup-restore.ts",
     "migrate:create": "node-pg-migrate create -j ts -m packages/db/migrations",
     "migrate:up": "node-pg-migrate up -d ***REDACTED*** -j ts -m packages/db/migrations --envPath .env --tsx --tsconfig tsconfig.migrations.json",

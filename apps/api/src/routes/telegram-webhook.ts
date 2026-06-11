@@ -358,7 +358,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
 
         // Verify the token is valid and unused
         const tokenRes = await client.query(
-          `SELECT tct.location_id, tct.owner_id 
+          `SELECT tct.location_id, tct.user_id
            FROM telegram_connect_tokens tct
            WHERE tct.token = $1::uuid 
              AND tct.expires_at > now() 

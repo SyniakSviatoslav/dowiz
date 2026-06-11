@@ -16,7 +16,8 @@ export class TelegramAdapter implements NotificationProvider {
       return { delivered: false, reason: 'TELEGRAM_TOKEN_NOT_CONFIGURED' };
     }
 
-    const { text, reply_markup } = renderTelegramMessage(event, data);
+    const locale = (target as any).locale || data.locale || 'sq';
+    const { text, reply_markup } = renderTelegramMessage(event, data, locale);
 
     try {
       const response = await fetch(`${this.apiBase}${this.token}/sendMessage`, {

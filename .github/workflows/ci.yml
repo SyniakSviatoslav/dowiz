@@ -34,6 +34,12 @@ jobs:
       - name: Lint Gates
         run: pnpm lint:gates
 
+      - name: Verify migrations ordering
+        run: pnpm verify:migrations
+
+      - name: Verify no secrets in repo
+        run: pnpm verify:secrets
+
   deploy:
     needs: validate
     if: github.ref == 'refs/heads/main'
@@ -61,3 +67,30 @@ jobs:
       - run: flyctl deploy --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Post-deploy E2E smoke (deploy-validation)
+        run: npx playwright test e2e/tests/deploy-validation.spec.ts --project=desktop --reporter=list
+        env:
+          VITE_BASE_URL: "https://dowiz.fly.dev"
+        timeout-minutes: 5
+
+      - name: Post-deploy E2E regression (core lifecycles)
+        run: npx playwright test e2e/tests/flow-core-lifecycles.spec.ts --project=desktop --reporter=list
+        env:
+          VITE_BASE_URL: "https://dowiz.fly.dev"
+        timeout-minutes: 5
+
+      - name: Post-deploy E2E Telegram webhook
+        run: npx playwright test e2e/tests/telegram-webhook.spec.ts --project=desktop --reporter=list
+        env:
+          VITE_BASE_URL: "https://dowiz.fly.dev"
+        timeout-minutes: 3
+
+      - name: Post-deploy E2E Telegram full-flow
+        run: npx playwright test e2e/tests/telegram-full-flow.spec.ts --project=desktop --reporter=list
+        env:
+          VITE_BASE_URL: "https://dowiz.fly.dev"
+        timeout-minutes: 10
