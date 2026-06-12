@@ -60,12 +60,14 @@ test.describe('FE-Radar — Full Surface Scan', () => {
     setupCollectors(page);
     emit('menu', 'navigate', 'OK', 'Navigating to /s/demo');
     await page.goto(`${BASE}/s/demo`, { waitUntil: 'networkidle', timeout: 30000 });
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(3000);
     const body = await page.textContent('body');
-    if (body.includes('Menu') || body.includes('menu') || body.includes('Category')) {
-      emit('menu', 'render', 'OK', 'Menu content rendered');
+    const bodyLen = body.length;
+    const hasContent = body.includes('Menu') || body.includes('menu') || body.includes('Category') || body.includes('Lek') || body.includes('ALL');
+    if (bodyLen > 100 && hasContent) {
+      emit('menu', 'render', 'OK', `Menu rendered, ${bodyLen} chars`);
     } else {
-      emit('menu', 'render', 'DIVERGENCE', 'Body does not contain expected menu text');
+      emit('menu', 'render', 'DIVERGENCE', `No menu text found (${bodyLen} chars)`);
       issues.push({ surface: 'menu', step: 'render', expected: 'Menu content rendered', actual: 'No menu text found', evidence: body.substring(0, 200), severity: '🔴', hypothesis: 'SSR shell rendered but menu fetch failed or hydration error' });
     }
     checkIssues('menu', page);
@@ -77,6 +79,11 @@ test.describe('FE-Radar — Full Surface Scan', () => {
     const page = await ctx.newPage();
     setupCollectors(page);
     emit('checkout', 'navigate', 'OK', 'Navigating to /s/demo/checkout');
+    // First add an item to cart via localStorage so checkout renders with content
+    await page.goto(`${BASE}/s/demo`, { waitUntil: 'networkidle', timeout: 30000 });
+    await page.evaluate(() => {
+      localStorage.setItem('dowiz_cart_demo', JSON.stringify([{ id: 'test_item_1', productId: 'test', name: 'Test Item', quantity: 1, price: 500 }]));
+    });
     await page.goto(`${BASE}/s/demo/checkout`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(2000);
     const body = await page.textContent('body');

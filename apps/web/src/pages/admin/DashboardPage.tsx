@@ -180,7 +180,7 @@ export function DashboardPage() {
 
   return (
     <PullToRefresh onRefresh={fetchOrders}>
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6" role="region" aria-live="polite" aria-label={t('admin.live_orders', 'Live orders')}>
       {/* Welcome Hint */}
       {showHint && (
         <HintCard

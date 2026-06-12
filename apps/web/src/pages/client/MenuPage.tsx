@@ -360,16 +360,17 @@ export function MenuPage() {
             categories.map(cat => {
               const count = cat.products.filter(p => p.available).length;
               return (
-                <button 
-                  key={cat.id}
-                  onClick={() => handleScrollTo(cat.id)}
-                  role="tab"
-                  aria-selected={activeTab === cat.id}
-                  className="h-full flex items-center gap-1.5 px-3.5 whitespace-nowrap font-medium transition-all border-b-2"
-                  style={{ 
-                    color: activeTab === cat.id ? 'var(--brand-primary)' : 'var(--brand-text-muted)',
-                    borderColor: activeTab === cat.id ? 'var(--brand-primary)' : 'transparent',
-                  }}
+                  <button 
+                    key={cat.id}
+                    onClick={() => handleScrollTo(cat.id)}
+                    role="tab"
+                    aria-selected={activeTab === cat.id}
+                    className="h-full flex items-center gap-1.5 px-3.5 whitespace-nowrap font-medium transition-all border-b-2"
+                    style={{ 
+                      minHeight: 'var(--tap-min)',
+                      color: activeTab === cat.id ? 'var(--brand-primary)' : 'var(--brand-text-muted)',
+                      borderColor: activeTab === cat.id ? 'var(--brand-primary)' : 'transparent',
+                    }}
                 >
                   {cat.name}
                   <span className="text-[10px] opacity-50">({count})</span>
