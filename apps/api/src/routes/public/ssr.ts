@@ -43,7 +43,7 @@ export default (async function ssrRoutes(fastify, opts) {
           reply.header('X-Menu-Version', String(menuVersion));
         }
 
-        const csp = `default-src 'self'; img-src 'self' data: https://cdn.dowiz.org https://tiles.openfreemap.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; connect-src 'self' https://cdn.dowiz.org https://cdn.jsdelivr.net https://tiles.openfreemap.org; frame-ancestors ${frameAncestors}`;
+        const csp = `default-src 'self'; img-src 'self' data: https://cdn.dowiz.org https://tiles.openfreemap.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; worker-src 'self' blob:; connect-src 'self' https://cdn.dowiz.org https://cdn.jsdelivr.net https://tiles.openfreemap.org; frame-ancestors ${frameAncestors}`;
 
         reply.header('Content-Security-Policy', csp);
         reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=86400');
