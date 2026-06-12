@@ -42,6 +42,22 @@ function fmtItems(v: MessageVars): string {
 }
 
 const sq: LocaleMessages = {
+  'order.confirmed': (v) => [
+    `✅ <b>POROSIA E KONFIRMUAR #${v.shortOrderId || '???'}</b>`,
+    v.customerName ? `👤 ${v.customerName}` : '',
+    v.deliveryAddress ? `📍 ${v.deliveryAddress}` : '',
+    '',
+    v.items?.length ? `<b>📋 Produktet:</b>${fmtItems(v)}` : '',
+    v.totalFmt ? `<b>💰 Totali: ${v.totalFmt}</b>` : '',
+  ].filter(Boolean).join('\n'),
+  'order.rejected': (v) => [
+    `❌ <b>POROSIA E REFUZUA #${v.shortOrderId || '???'}</b>`,
+    v.customerName ? `👤 ${v.customerName}` : '',
+    v.deliveryAddress ? `📍 ${v.deliveryAddress}` : '',
+    '',
+    v.items?.length ? `<b>📋 Produktet:</b>${fmtItems(v)}` : '',
+    v.totalFmt ? `<b>💰 Totali: ${v.totalFmt}</b>` : '',
+  ].filter(Boolean).join('\n'),
   'order.created': (v) => [
     `🆕 <b>POROSIA E RE #${v.shortOrderId || '???'}</b>`,
     v.customerName ? `👤 ${v.customerName}` : '',
@@ -100,6 +116,22 @@ const sq: LocaleMessages = {
 };
 
 const en: LocaleMessages = {
+  'order.confirmed': (v) => [
+    `✅ <b>ORDER CONFIRMED #${v.shortOrderId || '???'}</b>`,
+    v.customerName ? `👤 ${v.customerName}` : '',
+    v.deliveryAddress ? `📍 ${v.deliveryAddress}` : '',
+    '',
+    v.items?.length ? `<b>📋 Items:</b>${fmtItems(v)}` : '',
+    v.totalFmt ? `<b>💰 Total: ${v.totalFmt}</b>` : '',
+  ].filter(Boolean).join('\n'),
+  'order.rejected': (v) => [
+    `❌ <b>ORDER REJECTED #${v.shortOrderId || '???'}</b>`,
+    v.customerName ? `👤 ${v.customerName}` : '',
+    v.deliveryAddress ? `📍 ${v.deliveryAddress}` : '',
+    '',
+    v.items?.length ? `<b>📋 Items:</b>${fmtItems(v)}` : '',
+    v.totalFmt ? `<b>💰 Total: ${v.totalFmt}</b>` : '',
+  ].filter(Boolean).join('\n'),
   'order.created': (v) => [
     `🆕 <b>NEW ORDER #${v.shortOrderId || '???'}</b>`,
     v.customerName ? `👤 ${v.customerName}` : '',
@@ -158,6 +190,22 @@ const en: LocaleMessages = {
 };
 
 const uk: LocaleMessages = {
+  'order.confirmed': (v) => [
+    `✅ <b>ЗАМОВЛЕННЯ ПІДТВЕРДЖЕНО #${v.shortOrderId || '???'}</b>`,
+    v.customerName ? `👤 ${v.customerName}` : '',
+    v.deliveryAddress ? `📍 ${v.deliveryAddress}` : '',
+    '',
+    v.items?.length ? `<b>📋 Товари:</b>${fmtItems(v)}` : '',
+    v.totalFmt ? `<b>💰 Всього: ${v.totalFmt}</b>` : '',
+  ].filter(Boolean).join('\n'),
+  'order.rejected': (v) => [
+    `❌ <b>ЗАМОВЛЕННЯ ВІДХИЛЕНО #${v.shortOrderId || '???'}</b>`,
+    v.customerName ? `👤 ${v.customerName}` : '',
+    v.deliveryAddress ? `📍 ${v.deliveryAddress}` : '',
+    '',
+    v.items?.length ? `<b>📋 Товари:</b>${fmtItems(v)}` : '',
+    v.totalFmt ? `<b>💰 Всього: ${v.totalFmt}</b>` : '',
+  ].filter(Boolean).join('\n'),
   'order.created': (v) => [
     `🆕 <b>НОВЕ ЗАМОВЛЕННЯ #${v.shortOrderId || '???'}</b>`,
     v.customerName ? `👤 ${v.customerName}` : '',

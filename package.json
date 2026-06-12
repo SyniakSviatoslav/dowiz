@@ -39,6 +39,7 @@
     "test:phase5-step4": "tsx --env-file=.env apps/api/tests/test-stage34.ts",
     "test:phase5-step5": "tsx --env-file=.env apps/api/tests/test-stage35.ts",
     "test:phase5": "tsx --env-file=.env apps/api/tests/test-stage30.ts && tsx --env-file=.env apps/api/tests/test-stage31.ts && tsx --env-file=.env apps/api/tests/test-stage32.ts && tsx --env-file=.env apps/api/tests/test-stage33.ts && tsx --env-file=.env apps/api/tests/test-stage34.ts && tsx --env-file=.env apps/api/tests/test-stage35.ts",
+    "test:nx-notification-infra": "tsx --env-file=.env apps/api/tests/test-stage36.ts",
     "verify:secrets": "tsx scripts/verify-secrets.ts",
     "free-tier:watch": "tsx --env-file=.env scripts/free-tier-watch.ts",
     "verify:launch": "tsx --env-file=.env scripts/verify-launch.ts",

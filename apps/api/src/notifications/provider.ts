@@ -8,6 +8,8 @@ export interface NotificationTarget {
 
 export type NotificationEventType = 
   | 'order.created'
+  | 'order.confirmed'
+  | 'order.rejected'
   | 'order.delivered'
   | 'order.substitution_needs_human'
   | 'order.dwell_escalation'
