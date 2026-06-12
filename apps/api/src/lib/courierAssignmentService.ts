@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import type { MessageBus } from '@deliveryos/platform';
 import { loadEnv } from '@deliveryos/config';
+import { BUS_CHANNELS } from './registry.js';
 
 export async function acceptCourierAssignment(
   client: PoolClient,
@@ -46,7 +47,7 @@ export async function acceptCourierAssignment(
   );
 
   // 5. Broadcast via MessageBus
-  await opts.messageBus.publish('order.courier_accepted', {
+  await opts.messageBus.publish(BUS_CHANNELS.ORDER_COURIER_ACCEPTED, {
     orderId: assignment.order_id,
     locationId,
     courierId: assignment.courier_id

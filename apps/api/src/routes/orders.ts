@@ -4,6 +4,7 @@ import { CreateOrderInput, StatusUpdateInput } from '@deliveryos/shared-types';
 import { assertTransition, type OrderStatus } from '@deliveryos/domain';
 import { issueCustomerToken, withTenant } from '@deliveryos/platform';
 import type { QueueProvider, MessageBus } from '@deliveryos/platform';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel } from '../lib/registry.js';
 import { updateOrderStatus } from '../lib/orderStatusService';
 import type { Pool } from 'pg';
 import crypto from 'crypto';
@@ -586,7 +587,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       );
 
       // 14. Transactional Enqueue
-      await queue.enqueue('order.timeout', { orderId: order.id, locationId }, {
+      await queue.enqueue(QUEUE_NAMES.ORDER_TIMEOUT, { orderId: order.id, locationId }, {
         singletonKey: order.id,
         startAfter: new Date(timeoutAt),
         db: { executeSql: (sql: string, values: any[]) => client.query(sql, values) }
@@ -596,7 +597,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       // Enqueue notify job within the same transaction as order INSERT
       // This ensures durability independent of LISTEN/NOTIFY
       const dedupKey = `order.created:${order.id}:${locationId}`;
-      await queue.enqueue('notify.telegram.send', {
+      await queue.enqueue(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, {
         event: 'order.created',
         entity_id: order.id,
         location_id: locationId,
@@ -612,7 +613,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       // Post-commit MessageBus
       try {
         console.log('[ORDERS] Publishing order.created event for order:', order.id);
-        await messageBus.publish('order.created', {
+        await messageBus.publish(BUS_CHANNELS.ORDER_CREATED, {
           orderId: order.id,
           locationId,
           status: 'PENDING',
@@ -621,14 +622,14 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           timestamp: new Date().toISOString(),
         });
         console.log('[ORDERS] order.created event published successfully');
-        await messageBus.publish(`order:${order.id}`, {
+        await messageBus.publish(orderChannel(order.id), {
           type: 'order.status',
           orderId: order.id,
           status: 'PENDING',
           locationId,
           timestamp: new Date().toISOString(),
         });
-        await messageBus.publish(`location:${locationId}:dashboard`, {
+        await messageBus.publish(dashboardChannel(locationId), {
           type: 'order.created',
           data: {
             orderId: order.id,

@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import { assertTransition, type OrderStatus } from '@deliveryos/domain';
 import type { MessageBus } from '@deliveryos/platform';
+import { BUS_CHANNELS, orderChannel, dashboardChannel } from './registry.js';
 
 export async function updateOrderStatus(
   client: PoolClient,
@@ -56,7 +57,7 @@ export async function updateOrderStatus(
   }
 
   // 4. Broadcast via MessageBus
-  await opts.messageBus.publish(`order:${orderId}`, {
+  await opts.messageBus.publish(orderChannel(orderId), {
     type: 'order.status',
     orderId,
     status: newStatus,
@@ -68,17 +69,16 @@ export async function updateOrderStatus(
 
   // Forward to dashboard room for live owner dashboard
   if (dbLocationId) {
-    await opts.messageBus.publish(`location:${dbLocationId}:dashboard`, {
+    await opts.messageBus.publish(dashboardChannel(dbLocationId), {
       type: `order.${newStatus.toLowerCase()}`,
       data: { orderId, status: newStatus, statusUpdatedAt: new Date().toISOString() },
     });
   }
 
   // 5. Publish lifecycle event for notification fan-out
-  // This triggers server.ts MessageBus subscriptions → tgSend() → notify.telegram.send job
   if (newStatus === 'CONFIRMED' && dbLocationId) {
-    await opts.messageBus.publish('order.confirmed', { orderId, locationId: dbLocationId });
+    await opts.messageBus.publish(BUS_CHANNELS.ORDER_CONFIRMED, { orderId, locationId: dbLocationId });
   } else if (newStatus === 'REJECTED' && dbLocationId) {
-    await opts.messageBus.publish('order.rejected', { orderId, locationId: dbLocationId });
+    await opts.messageBus.publish(BUS_CHANNELS.ORDER_REJECTED, { orderId, locationId: dbLocationId });
   }
 }

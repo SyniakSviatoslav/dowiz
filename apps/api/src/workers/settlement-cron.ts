@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Pool } from 'pg';
 import type Boss from 'pg-boss';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 import { loadEnv } from '@deliveryos/config';
 import { getSettlementPeriodBoundaries } from '../lib/settlement-period.js';
 
@@ -14,15 +15,15 @@ export class SettlementCronWorker {
 
   async start() {
     // 1. settlement.generate (daily at 2 AM UTC)
-    await this.boss.work('settlement.generate', async (job) => {
+    await this.boss.work(QUEUE_NAMES.SETTLEMENT_GENERATE, async (job) => {
       const data = job.data as any;
       await this.handleGenerate(data?.referenceDate ? new Date(data.referenceDate) : new Date());
     });
     
     // Register cron
     const cronExpr = env.SETTLEMENT_CRON || '0 2 * * *';
-    await this.boss.createQueue('settlement.generate');
-    await this.boss.schedule('settlement.generate', cronExpr, null, { singletonKey: 'settlement.generate' });
+    await this.boss.createQueue(QUEUE_NAMES.SETTLEMENT_GENERATE);
+    await this.boss.schedule(QUEUE_NAMES.SETTLEMENT_GENERATE, cronExpr, null, { singletonKey: QUEUE_NAMES.SETTLEMENT_GENERATE });
   }
 
   async handleGenerate(referenceDate: Date) {

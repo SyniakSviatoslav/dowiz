@@ -4,6 +4,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { maskName, maskPhone } from '../../lib/pii-mask.js';
 import { computeSignals } from '../../lib/signals/compute.js';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 
 const KIND_VALUES = ['no_show_recent', 'velocity_rapid', 'velocity_high_volume', 'ip_velocity_rapid', 'ip_velocity_high_volume', 'manual_flag'] as const;
 
@@ -147,7 +148,7 @@ export default (async function ownerSignalRoutes(fastify, opts) {
       );
     }
 
-    await messageBus.publish(`location:${locationId}:dashboard`, {
+    await messageBus.publish(dashboardChannel(locationId), {
       type: 'preflight.signal_acknowledged',
       data: { signalId, customerId: res.rows[0].customer_id, kind: res.rows[0].kind },
     });
@@ -178,7 +179,7 @@ export default (async function ownerSignalRoutes(fastify, opts) {
 
     if (res.rowCount === 0) return reply.status(404).send({ error: 'Signal not found or already dismissed' });
 
-    await messageBus.publish(`location:${locationId}:dashboard`, {
+    await messageBus.publish(dashboardChannel(locationId), {
       type: 'preflight.signal_dismissed',
       data: { signalId, dismissedAt: new Date().toISOString() },
     });
@@ -232,8 +233,8 @@ export default (async function ownerSignalRoutes(fastify, opts) {
 
       await client.query('COMMIT');
 
-      await messageBus.publish(`order.cancelled`, { orderId, locationId, reason: 'no_show' });
-      await messageBus.publish(`customer.no_show_incremented`, { customerId: customer_id, orderId, locationId });
+      await messageBus.publish(BUS_CHANNELS.ORDER_CANCELLED, { orderId, locationId, reason: 'no_show' });
+      await messageBus.publish(BUS_CHANNELS.CUSTOMER_NO_SHOW, { customerId: customer_id, orderId, locationId });
 
       return reply.send({ success: true, customerId: customer_id });
     } catch (err) {

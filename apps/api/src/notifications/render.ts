@@ -59,6 +59,7 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
 
     case 'order.confirmed':
     case 'order.rejected':
+    case 'cash.reconcile_discrepancy':
 
     case 'order.delivered':
     case 'order.dwell_escalation':
@@ -92,6 +93,8 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
         } : undefined,
       };
 
+    case 'shift.started':
+    case 'shift.closed':
     case 'shift.close_reminder':
       return {
         text,
@@ -100,7 +103,14 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
         } : undefined,
       };
 
-    default:
+    case 'ops.worker_liveness':
+    case 'ops.backup_failed':
+    case 'ops.degradation_changed':
+    case 'test':
       return { text };
+
+    default:
+      const _exhaustive: never = event.type;
+      return _exhaustive;
   }
 }

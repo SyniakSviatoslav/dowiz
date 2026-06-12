@@ -1,7 +1,8 @@
 import './api/devBootstrap.js';
 import { StrictMode, lazy, Suspense, Component } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { MotionConfig, AnimatePresence, motion } from 'framer-motion';
 import { ThemeProvider, TourProvider, I18nProvider } from '@deliveryos/ui';
 import './index.css';
 
@@ -66,30 +67,49 @@ function LoadingFallback() {
   );
 }
 
+function AnimatedRoutes() {
+  const location = useLocation();
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={location.pathname}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <Suspense fallback={<LoadingFallback />}>
+          <Routes location={location}>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/s/:slug/*" element={<ClientRoutes />} />
+            <Route path="/branding-preview/:slug/*" element={<ClientRoutes />} />
+            <Route path="/admin/*" element={<AdminRoutes />} />
+            <Route path="/courier/*" element={<CourierRoutes />} />
+            <Route path="/courier-invite/:inviteId" element={<CourierInvitePage />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 function App() {
   return (
     <StrictMode>
       <BrowserRouter>
+        <MotionConfig reducedMotion="user">
         <I18nProvider>
         <ThemeProvider>
           <TourProvider>
           <ErrorBoundary>
-            <Suspense fallback={<LoadingFallback />}>
-              <Routes>
-                <Route path="/" element={<Navigate to="/login" replace />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/s/:slug/*" element={<ClientRoutes />} />
-                <Route path="/branding-preview/:slug/*" element={<ClientRoutes />} />
-                <Route path="/admin/*" element={<AdminRoutes />} />
-                <Route path="/courier/*" element={<CourierRoutes />} />
-                <Route path="/courier-invite/:inviteId" element={<CourierInvitePage />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Suspense>
+            <AnimatedRoutes />
           </ErrorBoundary>
           </TourProvider>
         </ThemeProvider>
         </I18nProvider>
+        </MotionConfig>
       </BrowserRouter>
     </StrictMode>
   );

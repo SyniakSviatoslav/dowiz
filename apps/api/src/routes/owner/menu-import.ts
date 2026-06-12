@@ -5,6 +5,7 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { ParseModeEnum } from '@deliveryos/shared-types';
 import { withTenant } from '@deliveryos/platform';
+import { BUS_CHANNELS } from '../../lib/registry.js';
 
 export default (async function menuImportRoutes(fastify, opts) {
   const { db, messageBus, parsers, storage } = opts as any;
@@ -141,7 +142,7 @@ export default (async function menuImportRoutes(fastify, opts) {
       links_to_create: parseResult.draft.links
     };
 
-    await messageBus.publish('menu.import.previewed', {
+    await messageBus.publish(BUS_CHANNELS.MENU_IMPORT_PREVIEWED, {
       locationId,
       importSessionId: importSessionId!,
       counts: { valid: parseResult.summary.valid }
@@ -427,7 +428,7 @@ export default (async function menuImportRoutes(fastify, opts) {
       }
 
       // Claim-check event
-      await messageBus.publish('menu.imported', {
+      await messageBus.publish(BUS_CHANNELS.MENU_IMPORTED, {
         locationId,
         importSessionId: import_session_id,
         counts: commitRes.response?.counts

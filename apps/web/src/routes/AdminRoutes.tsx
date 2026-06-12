@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ToastProvider, LanguageSwitcher, useI18n } from '@deliveryos/ui';
+import { ToastProvider, LanguageSwitcher, useI18n, BottomTabBar, ResponsiveDialog } from '@deliveryos/ui';
+import type { TabItem } from '@deliveryos/ui';
 import { DashboardPage } from '../pages/admin/DashboardPage.js';
 import { MenuManagerPage } from '../pages/admin/MenuManagerPage.js';
 import { BrandingPage } from '../pages/admin/BrandingPage.js';
@@ -12,7 +13,7 @@ import { OnboardingPage } from '../pages/admin/OnboardingPage.js';
 import { SupplyLibraryPage } from '../pages/admin/SupplyLibraryPage.js';
 import { FlowTestPage } from '../pages/admin/FlowTestPage.js';
 
-const NAV_ITEMS = [
+const ALL_NAV_ITEMS = [
   { key: 'admin.dashboard', href: '/admin', icon: 'ti ti-layout-dashboard' },
   { key: 'admin.orders', href: '/admin/orders', icon: 'ti ti-clipboard-list' },
   { key: 'admin.menu', href: '/admin/menu', icon: 'ti ti-tools-kitchen-2' },
@@ -24,20 +25,28 @@ const NAV_ITEMS = [
   { key: 'admin.settings', href: '/admin/settings', icon: 'ti ti-settings' },
 ];
 
+const PRIMARY_TABS: TabItem[] = ALL_NAV_ITEMS.slice(0, 4).map(item => ({
+  key: item.key,
+  label: '',
+  icon: item.icon,
+  href: item.href,
+}));
+
+const MORE_ITEMS = ALL_NAV_ITEMS.slice(4);
+
 function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [logoClicks, setLogoClicks] = useState(0);
   const [showFlowTest, setShowFlowTest] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const isDev = typeof window !== 'undefined' && (sessionStorage.getItem('dos_dev') === '1' || new URLSearchParams(window.location.search).get('dev') === 'true');
   const devSuffix = isDev ? '?dev=true' : '';
 
   const navTo = (href: string) => {
     navigate(href + devSuffix);
-    setMobileOpen(false);
   };
 
   const isActive = (href: string) => location.pathname === href || (href !== '/admin' && location.pathname.startsWith(href));
@@ -52,14 +61,22 @@ function AdminLayout() {
     setTimeout(() => { if (logoClicks < 5) setLogoClicks(0); }, 3000);
   };
 
-  const sidebarWidth = collapsed ? 'w-[56px]' : 'w-56';
+  const getActiveKey = () => {
+    for (const item of ALL_NAV_ITEMS) {
+      if (isActive(item.href)) return item.key;
+    }
+    return 'admin.dashboard';
+  };
+
+  const activeKey = getActiveKey();
+  const isMoreActive = MORE_ITEMS.some(item => isActive(item.href));
 
   const SidebarNav = () => (
     <nav className="flex-1 p-2 space-y-0.5 overflow-auto">
-      {[...NAV_ITEMS, ...(showFlowTest ? [{ key: 'admin.flow_test', href: '/admin/_flow-test', icon: 'ti ti-flask' }] : [])].map(item => (
+      {[...ALL_NAV_ITEMS, ...(showFlowTest ? [{ key: 'admin.flow_test', href: '/admin/_flow-test', icon: 'ti ti-flask' }] : [])].map(item => (
         <button
           key={item.href}
-              onClick={() => { navTo(item.href); setMobileOpen(false); }}
+          onClick={() => navTo(item.href)}
           title={collapsed ? t(item.key) : undefined}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--brand-radius-sm)] text-sm transition-all duration-200 ${
             isActive(item.href)
@@ -75,9 +92,9 @@ function AdminLayout() {
   );
 
   return (
-    <div className="h-screen bg-[var(--brand-bg)] text-[var(--brand-text)] flex overflow-hidden">
+    <div className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] overflow-hidden">
       {/* Desktop sidebar */}
-      <aside className={`hidden lg:flex flex-col shrink-0 bg-[var(--brand-surface)] border-r border-[var(--brand-border)] sidebar-transition overflow-hidden ${sidebarWidth}`}>
+      <aside className={`hidden lg:flex flex-col shrink-0 bg-[var(--brand-surface)] border-r border-[var(--brand-border)] sidebar-transition overflow-hidden ${collapsed ? 'w-[56px]' : 'w-56'}`}>
         <div className={`flex items-center border-b border-[var(--brand-border)] ${collapsed ? 'justify-center p-3' : 'justify-between p-4'}`}>
           {!collapsed && (
             <button onClick={handleLogoClick} className="flex items-center gap-2 cursor-pointer select-none">
@@ -110,39 +127,63 @@ function AdminLayout() {
       </aside>
 
       {/* Mobile top bar */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-[var(--brand-surface)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] px-4 h-14 flex items-center justify-between">
+      <div className="lg:hidden flex items-center justify-between px-4 h-14 bg-[var(--brand-surface)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] shrink-0">
         <div className="flex items-center gap-2">
           <i className="ti ti-tools-kitchen-2 text-lg" style={{ color: 'var(--brand-primary)' }} />
           <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Dowiz</h2>
         </div>
-        <button onClick={() => setMobileOpen(true)} className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)]">
-          <i className="ti ti-menu-2 text-xl" />
-        </button>
+        <LanguageSwitcher variant="full" />
       </div>
 
-      {/* Mobile drawer */}
-      {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex fade-in">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
-          <aside className="relative w-64 bg-[var(--brand-surface)] border-r border-[var(--brand-border)] flex flex-col z-10 slide-in-right">
-            <div className="p-4 border-b border-[var(--brand-border)] flex justify-between items-center">
-              <div className="flex items-center gap-2">
-              <i className="ti ti-tools-kitchen-2 text-xl" style={{ color: 'var(--brand-primary)' }} />
-                <h2 className="text-lg font-bold">Dowiz</h2>
-              </div>
-              <button onClick={() => setMobileOpen(false)} className="w-7 h-7 flex items-center justify-center rounded-md text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)]">
-                <i className="ti ti-x text-lg" />
-              </button>
-            </div>
-            <SidebarNav />
-          </aside>
-        </div>
-      )}
-
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto lg:pt-0 pt-14 h-full">
+      <main className="app-shell-main lg:pt-0">
         <Outlet />
       </main>
+
+      {/* Mobile bottom tab bar */}
+      <div className="lg:hidden">
+        <BottomTabBar
+          tabs={[
+            ...PRIMARY_TABS,
+            {
+              key: 'more',
+              label: t('admin.more', 'More'),
+              icon: isMoreActive ? 'ti ti-square-rounded-letter-m' : 'ti ti-dots-grid-horizontal',
+              href: '#more',
+            },
+          ]}
+          activeKey={isMoreActive ? 'more' : activeKey}
+          onTabClick={(href) => {
+            if (href === '#more') {
+              setMoreOpen(true);
+            } else {
+              navTo(href);
+            }
+          }}
+        />
+      </div>
+
+      {/* More sheet */}
+      <ResponsiveDialog open={moreOpen} onClose={() => setMoreOpen(false)} title={t('admin.more', 'More')}>
+        <div className="grid grid-cols-2 gap-2">
+          {[...MORE_ITEMS, ...(showFlowTest ? [{ key: 'admin.flow_test', href: '/admin/_flow-test', icon: 'ti ti-flask' }] : [])].map(item => {
+            const active = isActive(item.href);
+            return (
+              <button
+                key={item.href}
+                onClick={() => { setMoreOpen(false); navTo(item.href); }}
+                className={`flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl transition-all active:scale-[0.97] ${
+                  active ? 'bg-[var(--brand-primary-light)]' : 'hover:bg-[var(--brand-surface-raised)]'
+                }`}
+                style={{ minHeight: 'var(--tap-min)' }}
+              >
+                <i className={`${item.icon} text-xl ${active ? 'text-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)]'}`} />
+                <span className={`text-xs font-medium ${active ? 'text-[var(--brand-primary)]' : 'text-[var(--brand-text)]'}`}>{t(item.key)}</span>
+              </button>
+            );
+          })}
+        </div>
+      </ResponsiveDialog>
     </div>
   );
 }

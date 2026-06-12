@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import type Boss from 'pg-boss';
 import type { MessageBus } from '@deliveryos/platform';
 import { loadEnv } from '@deliveryos/config';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 import { STATUS_KIND_MAP, KIND_TO_THRESHOLD_KEY, DEFAULT_DWELL_THRESHOLDS } from '../lib/dwell-thresholds.js';
 
 const env = loadEnv();
@@ -17,12 +18,12 @@ export class DwellMonitorWorker {
   ) {}
 
   async start() {
-    await this.boss.work('dwell.monitor', { singletonKey: 'dwell.monitor' }, async () => {
+    await this.boss.work(QUEUE_NAMES.DWELL_MONITOR, { singletonKey: QUEUE_NAMES.DWELL_MONITOR }, async () => {
       await this.run();
     });
     const cron = env.DWELL_CRON || '* * * * *';
-    await this.boss.createQueue('dwell.monitor');
-    await this.boss.schedule('dwell.monitor', cron, null, { singletonKey: 'dwell.monitor' });
+    await this.boss.createQueue(QUEUE_NAMES.DWELL_MONITOR);
+    await this.boss.schedule(QUEUE_NAMES.DWELL_MONITOR, cron, null, { singletonKey: QUEUE_NAMES.DWELL_MONITOR });
   }
 
   private async run() {
@@ -48,7 +49,7 @@ export class DwellMonitorWorker {
       }
     } catch (err) {
       console.error('[DwellMonitor] Error:', err);
-      await this.messageBus.publish('dwell.monitor.failed', { error: String(err), time: new Date().toISOString() });
+      await this.messageBus.publish(BUS_CHANNELS.DWELL_MONITOR_FAILED, { error: String(err), time: new Date().toISOString() });
     } finally {
       client.release();
     }
@@ -102,7 +103,7 @@ export class DwellMonitorWorker {
 
       const alertId = res.rows[0].id;
 
-      await this.messageBus.publish(`location:${locationId}:dashboard`, {
+      await this.messageBus.publish(dashboardChannel(locationId), {
         type: 'dwell.alert_created',
         data: { alertId, orderId, kind, dwellSeconds, severity: dwellSeconds > 0 ? 'warning' : 'info' },
       });
@@ -116,45 +117,34 @@ export class DwellMonitorWorker {
 
   private async scheduleEscalation(client: any, alertId: string, orderId: string, locationId: string, kind: string) {
     const tier2Delay = parseInt(env.DWELL_TIER2_DELAY_MS || '30000', 10);
-    const tier3Delay = parseInt(env.DWELL_TIER3_DELAY_MS || '90000', 10);
-    const tier3Enabled = env.DWELL_TIER3_ENABLED === 'true';
 
-    // Tier 1: immediate native-push (scaffold)
-    await this.boss.send('notify.dispatch', {
-      targetId: null,
-      eventType: 'dwell.alert',
-      alertId,
-      orderId,
-      locationId,
-      kind,
-      tier: 1,
-      attempt: 0,
-    }, { startAfter: 0 });
+    // Resolve active Telegram targets for this location
+    const targetsRes = await client.query(
+      `SELECT id FROM owner_notification_targets WHERE location_id = $1 AND status = 'active' AND channel = 'telegram'`,
+      [locationId]
+    );
 
-    // Tier 2: Telegram (delayed)
-    await this.boss.send('notify.dispatch', {
-      targetId: null,
-      eventType: 'dwell.alert',
-      alertId,
-      orderId,
-      locationId,
-      kind,
-      tier: 2,
-      attempt: 0,
-    }, { startAfter: Math.floor(tier2Delay / 1000) });
+    if (targetsRes.rows.length === 0) return;
 
-    // Tier 3: SMS scaffold (optional, delayed)
-    if (tier3Enabled) {
-      await this.boss.send('notify.dispatch', {
-        targetId: null,
-        eventType: 'dwell.alert',
-        alertId,
+    // Send notification to each active target via notify.dispatch
+    for (const target of targetsRes.rows) {
+      // Immediate notification
+      await this.boss.send(QUEUE_NAMES.NOTIFY_DISPATCH, {
+        targetId: target.id,
+        eventType: 'order.dwell_escalation',
         orderId,
         locationId,
-        kind,
-        tier: 3,
         attempt: 0,
-      }, { startAfter: Math.floor(tier3Delay / 1000) });
+      }, { startAfter: 0 });
+
+      // Tier 2: delayed notification (if the alert hasn't been resolved)
+      await this.boss.send(QUEUE_NAMES.NOTIFY_DISPATCH, {
+        targetId: target.id,
+        eventType: 'order.dwell_escalation',
+        orderId,
+        locationId,
+        attempt: 0,
+      }, { startAfter: Math.floor(tier2Delay / 1000) });
     }
   }
 }

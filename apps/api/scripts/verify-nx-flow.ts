@@ -165,6 +165,50 @@ async function main() {
   console.log(`  PII in job payload: ${jobRow && hasPii ? '❌ YES' : '✅ None'}`);
 
   await sessionPool.end();
+  await runAdditionalChecks();
+}
+
+// 6. Verify all queues exist in pgboss
+async function checkQueueExistence(pool: any) {
+  console.log('\n[NX-QUEUES] Verifying all 10 notification queues exist...');
+  const EXPECTED_QUEUES = [
+    'notify.dispatch',
+    'notify.customer_status',
+    'notify.telegram.send',
+    'order.pending_aging',
+    'courier.dispatch',
+    'settlement.cron',
+    'dwell.monitor',
+    'anonymizer.retention',
+    'velocity.flush',
+    'free_tier.watch',
+  ];
+  const res = await pool.query(`SELECT name FROM pgboss.queue WHERE name = ANY($1::text[])`, [EXPECTED_QUEUES]);
+  const found = new Set(res.rows.map((r: any) => r.name));
+  let allFound = true;
+  for (const q of EXPECTED_QUEUES) {
+    if (found.has(q)) {
+      console.log(`  ✅ ${q}`);
+    } else {
+      console.error(`  ❌ ${q} — NOT FOUND`);
+      allFound = false;
+    }
+  }
+  if (allFound) {
+    console.log('[NX-QUEUES] ✅ All 10 queues exist in pgboss.queue');
+  } else {
+    console.error('[NX-QUEUES] ❌ Some queues are missing');
+    process.exitCode = 1;
+  }
+}
+
+async function runAdditionalChecks(): Promise<void> {
+  const pool = createSessionPool();
+  try {
+    await checkQueueExistence(pool);
+  } finally {
+    await pool.end();
+  }
 }
 
 main().catch(err => {

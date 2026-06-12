@@ -34,6 +34,20 @@
 | 15 | Permissive test assertions (`expect([200,400,500]).toContain(x)`) | `systemic` | ✅ CLOSED | 2026-06-11 | ESLint rule `local/no-permissive-status-assertion` |
 | 16 | Migration ordering drift (numeric prefix ≠ alpha order) | `systemic` | ✅ CLOSED | 2026-06-11 | `scripts/verify-migrations.ts` — exits 1 on ordering error |
 | 17 | No CI verify gates before deploy | `systemic` | ✅ CLOSED | 2026-06-11 | CI validate job now runs `verify:migrations` + `verify:secrets` |
+| 18 | Schema-query mismatch — SQL references column that doesn't exist | `systemic` | 🔴 OPEN | 2026-06-09 | `NX-RETRO.md` §2 Pattern A — verify columns before writing JOINs |
+| 19 | Library API drift — assuming installed version matches docs/prior experience | `systemic` | 🔴 OPEN | 2026-06-09 | `NX-RETRO.md` §2 Pattern B — check installed version's API before use |
+| 20 | Incomplete event wiring — missing links in event chain | `systemic` | 🔴 OPEN | 2026-06-09 | `NX-RETRO.md` §2 Pattern C — verify publisher→handler→locale→render→type |
+| 21 | Connection lifecycle leak — connect() without matching close() | `systemic` | 🔴 OPEN | 2026-06-09 | `NX-RETRO.md` §2 Pattern D — audit connection lifecycle |
+| 22 | Resilience gap — no rate-limiter/circuit-breaker/dedup on IPC channels | `systemic` | 🔴 OPEN | 2026-06-09 | `NX-RETRO.md` §2 Pattern E — every pg-boss send needs singletonKey |
+| 23 | Backward compat blindspot — strict validation breaks existing producers | `systemic` | 🔴 OPEN | 2026-06-09 | `NX-RETRO.md` §2 Pattern F — start lenient, add strict after telemetry |
+| 24 | Topology ignorance — assuming all DB connections are equivalent | `systemic` | 🔴 OPEN | 2026-06-09 | `NX-RETRO.md` §2 Pattern G — maintain port map with pool type |
+| 25 | Permission assumption — assuming runtime role has unverified privileges | `systemic` | 🔴 OPEN | 2026-06-09 | `NX-RETRO.md` §2 Pattern H — verify privileges at startup |
+| 26 | Missing pre-flight check — depending on infrastructure that doesn't exist | `systemic` | 🔴 OPEN | 2026-06-09 | `NX-RETRO.md` §2 Pattern I — verify external deps at startup |
+| 27 | Code duplication — repeating same API call pattern 3+ times | `systemic` | 🔴 OPEN | 2026-06-09 | `NX-RETRO.md` §2 Pattern J — extract helper on third repeat |
+| 28 | Notification event dedup missing (no singletonKey on send) | `systemic` | ✅ CLOSED | 2026-06-09 | `server.ts:438-445` — dedupKey from event:entity_id:location_id |
+| 29 | Missing per-queue explicit creation (createQueue not called) | `systemic` | ✅ CLOSED | 2026-06-09 | `server.ts:260-269` — all 10 queues explicitly created |
+| 30 | PgBossQueueProvider.boss field private (blocked external access) | `systemic` | ✅ CLOSED | 2026-06-09 | `queue-provider.ts:18` — changed to public |
+| 31 | answerCallbackQuery called after processing (loading spinner) | `systemic` | ✅ CLOSED | 2026-06-09 | `telegram-webhook.ts` — moved to top of action handler |
 
 ## Episodes
 
@@ -45,3 +59,4 @@ _To be populated by Phase A1 (episode store). See `docs/harness/episodes/`._
 |------|--------|
 | 2026-06-09 | Created ledger with 14 entries from audit sweep and recent session |
 | 2026-06-11 | Closed #11 (verify:all), #12 (CI E2E), #15 (permissive assertion rule), #16 (migration ordering), #17 (CI verify gates). Added #15-17 from retro analysis. |
+| 2026-06-12 | NX audit: added #18-31 (10 OPEN failure modes from 10 error patterns + 4 closed). See `docs/harness/retro/NX-RETRO.md` and episode `docs/harness/episodes/2026-06-12--nx-audit.md`. |

@@ -1,5 +1,8 @@
 import type { Job } from 'pg-boss';
 import type { NotificationDispatcher, NotificationEvent as NotifEvent, NotificationEventType, NotificationTarget } from '../provider.js';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
+import { isEventAllowedDuringQuietHours } from '../event-registry.js';
+import { writeAudit } from '../audit.js';
 import { RetryPolicy } from '../retry.js';
 import { WebPushAdapter } from '../adapters/webpush.js';
 import type { MemoryService } from '../../lib/memory.js';
@@ -189,24 +192,32 @@ export class NotificationWorker {
         [targetId, locationId],
       );
       
-      if (targetRes.rows.length === 0) return; // Target not found or location mismatch
+      if (targetRes.rows.length === 0) {
+        await writeAudit(client, { event: eventType, targetId, locationId, channel: 'dispatch', status: 'no_target' });
+        return;
+      }
       const targetRow = targetRes.rows[0];
 
-      if (targetRow.status !== 'active') return; // Do not notify disabled/disconnected channels
+      if (targetRow.status !== 'active') {
+        await writeAudit(client, { event: eventType, targetId, locationId, channel: targetRow.channel, status: 'target_inactive' });
+        return;
+      }
       
       // 2. Check prefs
       if (eventType !== 'test') {
         const prefs = targetRow.prefs || {};
         if (prefs[eventType] === false) {
-          return; // Owner disabled this specific event
+          await writeAudit(client, { event: eventType, targetId, locationId, channel: targetRow.channel, status: 'prefs_disabled' });
+          return;
         }
       }
       
       // 3. Quiet hours logic (simplified for P16, assume UTC 22:00-08:00)
       const hour = new Date().getUTCHours();
       const isQuietHours = hour >= 22 || hour < 8;
-      if (isQuietHours && eventType !== 'order.pending_aging' && eventType !== 'test') {
-        return; // Suppress non-critical during quiet hours
+      if (isQuietHours && !isEventAllowedDuringQuietHours(eventType)) {
+        await writeAudit(client, { event: eventType, targetId, locationId, channel: targetRow.channel, status: 'quiet_hours' });
+        return;
       }
       
       // 4. Re-fetch order strictly under location_id (Tenant Isolation + 0 PII payload check)
@@ -218,7 +229,10 @@ export class NotificationWorker {
            WHERE id = $1 AND location_id = $2`,
           [orderId, locationId],
         );
-        if (orderRes.rows.length === 0) return; // Order not found
+        if (orderRes.rows.length === 0) {
+          await writeAudit(client, { event: eventType, targetId, locationId, channel: targetRow.channel, status: 'order_not_found' });
+          return;
+        }
         const row = orderRes.rows[0];
         orderData = {
           orderId: row.id,
@@ -250,24 +264,15 @@ export class NotificationWorker {
           success: true,
         });
 
-        // Resolve location_alerts if it's an escalation
-        if (eventType === 'order.pending_aging' && orderId) {
-          await client.query(`UPDATE location_alerts SET resolved_at = now() WHERE order_id = $1 AND kind = 'pending_aging' AND resolved_at IS NULL`, [orderId]);
+        // Resolve location_alerts if it's a dwell escalation
+        if (eventType === 'order.dwell_escalation' && orderId) {
+          await client.query(`UPDATE location_alerts SET resolved_at = now() WHERE order_id = $1 AND resolved_at IS NULL`, [orderId]);
         }
       } else {
         // Retry or Disable logic
         if (result.reason?.startsWith('AUTH_OR_BLOCKED')) {
           await client.query(`UPDATE owner_notification_targets SET status = 'disabled', disabled_at = now(), last_error = $2 WHERE id = $1`, [targetId, result.reason]);
         } else {
-          // Add to attempts in location_alerts if this is pending_aging
-          if (eventType === 'order.pending_aging' && orderId) {
-            await client.query(`
-              UPDATE location_alerts 
-              SET attempts = attempts || $1::jsonb, last_error = $2 
-              WHERE order_id = $3 AND kind = 'pending_aging' AND resolved_at IS NULL
-            `, [JSON.stringify([{ attempt, time: new Date(), error: result.reason }]), result.reason, orderId]);
-          }
-
           const nextDelay = this.retryPolicy.getDelay(attempt);
           if (nextDelay === -1) {
             // Max attempts reached
@@ -276,47 +281,8 @@ export class NotificationWorker {
             // Respect retry-after if provided
             const delay = result.retryAfter ? Math.max(result.retryAfter, nextDelay) : nextDelay;
             // Enqueue retry
-            await this.boss.send('notify.dispatch', { ...job.data, attempt: attempt + 1 }, { startAfter: Math.floor(delay / 1000) });
+            await this.boss.send(QUEUE_NAMES.NOTIFY_DISPATCH, { ...job.data, attempt: attempt + 1 }, { startAfter: Math.floor(delay / 1000) });
           }
-        }
-      }
-    } finally {
-      client.release();
-    }
-  }
-
-  async escalatePendingAging() {
-    const client = await this.db.connect();
-    try {
-      const thresholdMs = process.env.PENDING_AGING_THRESHOLD_MS || 5 * 60 * 1000;
-      
-      const res = await client.query(`
-        SELECT o.id, o.location_id
-        FROM orders o
-        WHERE o.status = 'PENDING'
-          AND o.created_at < now() - ($1 || ' milliseconds')::interval
-          AND NOT EXISTS (
-            SELECT 1 FROM location_alerts la
-            WHERE la.order_id = o.id 
-              AND la.kind = 'pending_aging' 
-              AND la.resolved_at IS NULL
-          )
-        LIMIT 100
-      `, [thresholdMs]);
-
-      for (const row of res.rows) {
-        // Insert alert and enqueue for targets
-        await client.query(`INSERT INTO location_alerts (location_id, order_id, kind, status) VALUES ($1, $2, 'pending_aging', 'pending')`, [row.location_id, row.id]);
-        
-        const targetsRes = await client.query(`SELECT id FROM owner_notification_targets WHERE location_id = $1 AND status = 'active'`, [row.location_id]);
-        for (const target of targetsRes.rows) {
-          await this.boss.send('notify.dispatch', {
-            targetId: target.id,
-            eventType: 'order.pending_aging',
-            orderId: row.id,
-            locationId: row.location_id,
-            attempt: 0
-          });
         }
       }
     } finally {
@@ -331,6 +297,10 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
       // NX-5: Idempotency check — skip if already delivered in this process lifetime
       if (this.dedupCache.has(dedupKey)) {
         console.log(`[TelegramSend] NX-5: Skipping duplicate job: ${dedupKey}`);
+        const cl = await this.db.connect().catch(() => null);
+        if (cl) {
+          try { await writeAudit(cl, { event, locationId: location_id, channel: 'telegram', status: 'dedup' }); } finally { cl.release(); }
+        }
         return;
       }
 
@@ -350,10 +320,10 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
   
         for (const target of targetsRes.rows) {
           try {
-            // Check prefs: if prefs[event] is false, skip
             const prefs = target.prefs || {};
             if (prefs[event] === false) {
               console.log(`[TelegramSend] Skipping target ${target.id}: prefs[${event}] = false`);
+              await writeAudit(client, { event, targetId: target.id, locationId: location_id, channel: 'telegram', status: 'prefs_disabled' });
               continue;
             }
   
@@ -363,6 +333,7 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
               const cooldownElapsed = Date.now() - chatState.lastFailure;
               if (cooldownElapsed < this.CIRCUIT_COOLDOWN_MS) {
                 console.log(`[TelegramSend] NX-5: Circuit open for chat ${target.address}, skipping (${Math.round((this.CIRCUIT_COOLDOWN_MS - cooldownElapsed) / 1000)}s remaining)`);
+                await writeAudit(client, { event, targetId: target.id, locationId: location_id, channel: 'telegram', status: 'circuit_open' });
                 continue;
               }
               // Reset circuit after cooldown
@@ -631,7 +602,8 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
         break;
 
       default:
-        throw new Error(`Unsupported event type for Telegram notification: ${event}`);
+        const _exhaustive: never = event;
+        throw new Error(`Unsupported event type for Telegram notification: ${_exhaustive}`);
     }
 
     return data;

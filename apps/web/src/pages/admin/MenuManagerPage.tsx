@@ -169,8 +169,8 @@ export function MenuManagerPage() {
   const handleImageUploadAndSave = async (e: React.ChangeEvent<HTMLInputElement>, existingProductId?: string): Promise<string | null> => {
     const file = e.target.files?.[0];
     if (!file) return null;
-    if (!file.type.startsWith('image/')) { alert('Only image files (JPG, PNG, WebP)'); return null; }
-    if (file.size > 5 * 1024 * 1024) { alert('Max 5 MB'); return null; }
+    if (!file.type.startsWith('image/')) { alert(t('admin.error_image_only', 'Only image files (JPG, PNG, WebP)')); return null; }
+    if (file.size > 5 * 1024 * 1024) { alert(t('admin.error_max_size', 'Max 5 MB')); return null; }
     const formData = new FormData();
     formData.append('file', file);
     const pid = existingProductId || '__new__';
@@ -178,7 +178,7 @@ export function MenuManagerPage() {
       const data = await apiClient<any>(`/owner/menu/products/${pid}/image`, { method: 'POST', body: formData, timeout: 30000 });
       return data.imageUrl || null;
     } catch {
-      alert('Image upload failed. Save product first, then upload image.');
+      alert(t('common.retry', 'Image upload failed. Save product first, then upload image.'));
       return null;
     }
   };
@@ -235,8 +235,8 @@ export function MenuManagerPage() {
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) { alert('Only image files (JPG, PNG, WebP)'); return; }
-    if (file.size > 5 * 1024 * 1024) { alert('Max 5 MB'); return; }
+    if (!file.type.startsWith('image/')) { alert(t('admin.error_image_only', 'Only image files (JPG, PNG, WebP)')); return; }
+    if (file.size > 5 * 1024 * 1024) { alert(t('admin.error_max_size', 'Max 5 MB')); return; }
     setFormImage(URL.createObjectURL(file));
     setPendingImageFile(file);
   };

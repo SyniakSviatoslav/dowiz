@@ -124,7 +124,7 @@ function renderCartView() {
     
     itemsHtml += `
       <div class="py-4 border-b flex gap-3 last:border-0" style="border-color:var(--brand-border)">
-        <div class="w-[56px] h-[56px] rounded-[8px] shrink-0 border flex items-center justify-center bg-cover bg-center" style="border-color:var(--brand-border); background-image: url('https://cdn.dowiz.org/${prod.image_key}')">
+        <div class="w-[56px] h-[56px] rounded-[8px] shrink-0 border flex items-center justify-center bg-cover bg-center" style="border-color:var(--brand-border); background-image: url('/images/${prod.image_key}')">
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex justify-between items-start mb-1">

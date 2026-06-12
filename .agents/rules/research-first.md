@@ -103,6 +103,21 @@ MUST include a test suite that verifies:
 
 ---
 
+### Phase 6: Event / notification / queue change (NX-specific)
+
+**Trigger:** Any change to notification events, pg-boss, MessageBus, webhooks, Telegram, or DB queries.
+
+- [ ] **Event wiring completeness** — for each event type, grep the full chain: publish → subscribe → handler → locale → render → type union. Every link must exist.
+- [ ] **Library API pinning** — read `node_modules/<pkg>/package.json` for the installed version, then read the type declarations (not docs from memory)
+- [ ] **Schema-first query verification** — before writing SQL JOINs, run `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = ?` or read the migration file
+- [ ] **Connection lifecycle audit** — every `.connect()` must have matching `.close()`/`.release()` in error and normal paths
+- [ ] **Resilience-by-default for IPC** — every `queue.send()` must include `singletonKey`/`dedupKey` to prevent duplicate jobs
+- [ ] **Backward compat first for webhooks** — start lenient (log warning on mismatch), add strict validation only after verifying all producers updated
+- [ ] **Infrastructure pre-flight** — verify external deps (queues, secrets, webhooks) exist at startup; fail fast
+- [ ] **Topology verification** — document which DB pool each connection uses; verify `inet_server_port()` returns correct port
+
+---
+
 ### Quick-reference: where things live
 
 | What you need | Where to look |
@@ -118,6 +133,15 @@ MUST include a test suite that verifies:
 | UI components | `packages/ui/src/components/` — shared library |
 | E2E helpers | `e2e/helpers/` — auth, seed, api utilities |
 | Migrations | `packages/db/migrations/` — numbered by timestamp |
+| Notification event types | `apps/api/src/notifications/provider.ts` — `NotificationEventType` union |
+| Telegram locale strings | `apps/api/src/notifications/locales.ts` — sq/en/uk messages |
+| Telegram render cases | `apps/api/src/notifications/render.ts` — message template per event |
+| Notification workers | `apps/api/src/notifications/workers/index.ts` — `buildTelegramData` |
+| pg-boss queues | `apps/api/src/server.ts` — `createQueue()` calls (search for `createQueue`) |
+| MessageBus pool config | `apps/api/src/server.ts` — search for `session pool` comments |
+| DB schema (columns/types) | `packages/db/migrations/` — read the migration that added the table |
+| Telegram webhook | `apps/api/src/routes/telegram-webhook.ts` — handler + validation |
+| Connection topology | `apps/api/scripts/phase0-probe.ts` — port/pool mapping probe |
 
 ---
 
