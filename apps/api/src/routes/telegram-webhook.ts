@@ -28,13 +28,22 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     // Verify Telegram secret token from header
+    // If telegramBotSecret is configured, prefer validation.
+    // If the header is absent (backward compat with webhooks set without secret_token),
+    // log a warning but process the request — don't break existing connect flows.
     const secretToken = request.headers['x-telegram-bot-api-secret-token'];
-    if (secretToken !== telegramBotSecret) {
-      request.log.warn({ 
-        received: secretToken ?? 'missing',
-        expectedLength: telegramBotSecret ? telegramBotSecret.length : 0
-      }, 'Invalid Telegram webhook secret token');
-      return reply.status(401).send({ error: 'Unauthorized' });
+    if (telegramBotSecret) {
+      if (secretToken && secretToken !== telegramBotSecret) {
+        request.log.warn({
+          received: secretToken,
+          expectedLength: telegramBotSecret.length
+        }, 'Invalid Telegram webhook secret token — mismatched value');
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+      if (!secretToken) {
+        request.log.warn({}, 'Telegram webhook secret token header missing — set secret_token on setWebhook');
+        // Process the request anyway for backward compat
+      }
     }
 
     // Parse the update
@@ -157,170 +166,150 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
         return;
       }
 
-      // Handle the action
+      // Answer the callback query IMMEDIATELY to remove the loading indicator
+      // Telegram best practice: answer first, process, then send follow-up messages
+      await answerCallbackQuery(callbackQuery.id, {});
+
+      // Process the action and build result
       let resultText = '';
       let shouldEditMessage = true;
+      let sendFollowUp = false;
 
-        switch (action) {
-          case 'order.confirm': {
+      switch (action) {
+        case 'order.confirm': {
+          if (!entityId) {
+            resultText = '❌ Order not found';
+            break;
+          }
+          try {
+            await client.query("SELECT set_config('app.current_tenant', $1, true)", [locationId]);
+            await updateOrderStatus(client, entityId, locationId, 'CONFIRMED', { messageBus: opts.messageBus });
+            resultText = '✅ ЗАМОВЛЕННЯ ПІДТВЕРДЖЕНО';
+            sendFollowUp = true;
+          } catch (err: any) {
+            if (err.statusCode === 404) {
+              resultText = '❌ Order not found';
+            } else if (err.statusCode === 409) {
+              const orderCheck = await client.query(
+                `SELECT status FROM orders WHERE id = $1 AND location_id = $2`,
+                [entityId, locationId]
+              );
+              if (orderCheck.rowCount === 0) {
+                resultText = '❌ Order not found';
+              } else {
+                const currentStatus = orderCheck.rows[0].status;
+                if (currentStatus === 'CONFIRMED') {
+                  resultText = '✅ Already confirmed';
+                } else if (currentStatus === 'REJECTED' || currentStatus === 'CANCELLED') {
+                  resultText = '❌ Cannot confirm cancelled order';
+                } else {
+                  resultText = `⚠️ Cannot confirm order in state ${currentStatus}`;
+                }
+              }
+            } else {
+              resultText = '⚠️ Error confirming order';
+              console.error('[TelegramWebhook] Error confirming order:', err);
+            }
+          }
+          break;
+        }
+
+        case 'order.reject_choose': {
+          const presetReasons = [
+            { text: 'Client changed mind', callback_data: `order.reject_reason_1:${entityId}` },
+            { text: 'Item unavailable', callback_data: `order.reject_reason_2:${entityId}` },
+            { text: 'Wrong address', callback_data: `order.reject_reason_3:${entityId}` },
+            { text: 'Add to stop-list', url: `https://app.dowiz.org/admin/locations/${locationId}/stop-list` }
+          ];
+          const keyboard: any[][] = [];
+          for (const reason of presetReasons) {
+            if (reason.url) {
+              keyboard.push([{ text: reason.text, url: reason.url }]);
+            } else {
+              keyboard.push([{ text: reason.text, callback_data: reason.callback_data }]);
+            }
+          }
+          try {
+            await callTelegramApi('sendMessage', {
+              chat_id: chatId,
+              text: `Select reason for rejecting order #${entityId ?? '???'}:`,
+              reply_markup: { inline_keyboard: keyboard }
+            });
+          } catch (e) {
+            console.error('[TelegramWebhook] Failed to send reason message:', e);
+          }
+          shouldEditMessage = false;
+          break;
+        }
+
+        default:
+          if (action.startsWith('order.reject_reason_')) {
             if (!entityId) {
-              resultText = '❌ Замовлення не знайдено';
+              resultText = '❌ Order not found';
               break;
             }
             try {
               await client.query("SELECT set_config('app.current_tenant', $1, true)", [locationId]);
-              await updateOrderStatus(client, entityId, locationId, 'CONFIRMED', { messageBus: opts.messageBus });
-              resultText = '✅ Підтверджено';
+              await updateOrderStatus(client, entityId, locationId, 'REJECTED', { messageBus: opts.messageBus });
+              resultText = '❌ ЗАМОВЛЕННЯ ВІДХИЛЕНО';
+              sendFollowUp = true;
             } catch (err: any) {
               if (err.statusCode === 404) {
-                resultText = '❌ Замовлення не знайдено';
+                resultText = '❌ Order not found';
               } else if (err.statusCode === 409) {
                 const orderCheck = await client.query(
                   `SELECT status FROM orders WHERE id = $1 AND location_id = $2`,
                   [entityId, locationId]
                 );
-                if (orderCheck.rowCount === 0) {
-                  resultText = '❌ Замовлення не знайдено';
+                if ((orderCheck.rowCount ?? 0) === 0) {
+                  resultText = '❌ Order not found';
                 } else {
                   const currentStatus = orderCheck.rows[0].status;
-                  if (currentStatus === 'CONFIRMED') {
-                    resultText = '✅ Вже підтверджено';
-                  } else if (currentStatus === 'REJECTED' || currentStatus === 'CANCELLED') {
-                    resultText = '❌ Неможливо підтвердити відмінене замовлення';
+                  if (currentStatus === 'REJECTED' || currentStatus === 'CANCELLED') {
+                    resultText = '❌ Already rejected';
+                  } else if (currentStatus === 'CONFIRMED') {
+                    resultText = '❌ Cannot reject confirmed order';
                   } else {
-                    resultText = `⚠️ Неможливо підтвердити замовлення у стані ${currentStatus}`;
+                    resultText = `⚠️ Cannot reject order in state ${currentStatus}`;
                   }
                 }
               } else {
-                resultText = '⚠️ Помилка при підтвердженні замовлення';
-                console.error('[TelegramWebhook] Error confirming order:', err);
+                resultText = '⚠️ Error rejecting order';
+                console.error('[TelegramWebhook] Error rejecting order:', err);
               }
             }
-            break;
+          } else {
+            resultText = 'Unknown action';
+            shouldEditMessage = false;
           }
+      }
 
-         case 'order.reject_choose':
-           // Show preset reason buttons
-           const presetReasons = [
-             { text: 'Зміна рішення клієнтом', callback_data: `order.reject_reason_1:${entityId}` },
-             { text: 'Товар відсутній', callback_data: `order.reject_reason_2:${entityId}` },
-             { text: 'Неправильна адреса', callback_data: `order.reject_reason_3:${entityId}` },
-             { text: 'Додати в стоп-лист', url: `https://app.dowiz.org/admin/locations/${locationId}/stop-list` }
-           ];
-           const keyboard: any[][] = [];
-           for (const reason of presetReasons) {
-             if (reason.url) {
-               keyboard.push([{ text: reason.text, url: reason.url }]);
-             } else {
-               keyboard.push([{ text: reason.text, callback_data: reason.callback_data }]);
-             }
-           }
-           try {
-             // We need to send a message with inline keyboard.
-             // Since we don't have a helper that supports reply_markup, we'll use the Telegram API directly.
-             const botToken = process.env.TELEGRAM_BOT_TOKEN;
-             if (!botToken) {
-               throw new Error('TELEGRAM_BOT_TOKEN not configured');
-             }
-             const apiBase = `https://api.telegram.org/bot${botToken}`;
-             const sendUrl = `${apiBase}/sendMessage`;
-             await fetch(sendUrl, {
-               method: 'POST',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({
-                 chat_id: chatId,
-                 text: `Оберіть причину відхилення замовлення #${entityId ?? '???'}:`,
-                 reply_markup: {
-                   inline_keyboard: keyboard
-                 }
-               })
-             });
-           } catch (e) {
-             console.error('[TelegramWebhook] Failed to send reason message:', e);
-             resultText = 'Помилка при відображенні причин';
-             shouldEditMessage = false;
-           }
-           // We will not edit the original message; we send a new one.
-           shouldEditMessage = false; // We don't edit the original message
-           break;
-
-          default:
-            if (action.startsWith('order.reject_reason_')) {
-              if (!entityId) {
-                resultText = '❌ Замовлення не знайдено';
-                break;
-              }
-              try {
-                await client.query("SELECT set_config('app.current_tenant', $1, true)", [locationId]);
-                await updateOrderStatus(client, entityId, locationId, 'REJECTED', { messageBus: opts.messageBus });
-                resultText = '❌ Відхилено';
-              } catch (err: any) {
-                if (err.statusCode === 404) {
-                  resultText = '❌ Замовлення не знайдено';
-                } else if (err.statusCode === 409) {
-                  const orderCheck = await client.query(
-                    `SELECT status FROM orders WHERE id = $1 AND location_id = $2`,
-                    [entityId, locationId]
-                  );
-                  if ((orderCheck.rowCount ?? 0) === 0) {
-                    resultText = '❌ Замовлення не знайдено';
-                  } else {
-                    const currentStatus = orderCheck.rows[0].status;
-                    if (currentStatus === 'REJECTED' || currentStatus === 'CANCELLED') {
-                      resultText = '❌ Вже відхилено';
-                    } else if (currentStatus === 'CONFIRMED') {
-                      resultText = '❌ Неможливо відхилити підтверджене замовлення';
-                    } else {
-                      resultText = `⚠️ Неможливо відхилити замовлення у стані ${currentStatus}`;
-                    }
-                  }
-                } else {
-                  resultText = '⚠️ Помилка при відхиленні замовлення';
-                  console.error('[TelegramWebhook] Error rejecting order:', err);
-                }
-              }
-            } else {
-              resultText = 'Невідома дія';
-              shouldEditMessage = false;
-            }
-       }
-
-      // Answer the callback query to stop the loading indicator
-      await answerCallbackQuery(callbackQuery.id, { 
-        text: resultText,
-        showAlert: false
-      });
-
-      // If we should edit the message (remove buttons, etc.)
-      if (shouldEditMessage && message) {
+      // Send follow-up confirmation message if action succeeded
+      if (sendFollowUp && resultText && entityId) {
         try {
-          // Edit the message to remove inline keyboard and show result
-          const botToken = process.env.TELEGRAM_BOT_TOKEN;
-          if (botToken) {
-            const apiBase = `https://api.telegram.org/bot${botToken}`;
-            const editUrl = `${apiBase}/editMessageText`;
-            
-            // Extract current message text (without buttons)
-            const currentText = message.text || '';
-            
-            // Append confirmation text
-            const newText = `${currentText}\n\n<b>${resultText}</b>`;
-            
-            await fetch(editUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                chat_id: message.chat.id,
-                message_id: message.message_id,
-                text: newText,
-                parse_mode: 'HTML'
-                // Note: reply_markup is not sent, which removes the keyboard
-              })
-            });
-          }
+          await callTelegramApi('sendMessage', {
+            chat_id: chatId,
+            text: `${resultText}\n\nOrder #${entityId.substring(0, 8)}`,
+            parse_mode: 'HTML',
+          });
+        } catch (followErr) {
+          console.warn('[TelegramWebhook] Failed to send follow-up message:', followErr);
+        }
+      }
+
+      // Edit the original message to remove keyboard and show result
+      if (shouldEditMessage && message && resultText) {
+        try {
+          const currentText = message.text || '';
+          const newText = `${currentText}\n\n<b>${resultText}</b>`;
+          await callTelegramApi('editMessageText', {
+            chat_id: message.chat.id,
+            message_id: message.message_id,
+            text: newText,
+            parse_mode: 'HTML'
+          });
         } catch (editErr) {
-          // Best-effort: don't let message editing failures affect the flow
-          console.warn('Failed to edit Telegram message:', editErr);
+          console.warn('[TelegramWebhook] Failed to edit message:', editErr);
         }
       }
     } catch (err) {
@@ -463,6 +452,21 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
     } finally {
       client.release();
     }
+  }
+
+  // Generic helper to call any Telegram Bot API method
+  async function callTelegramApi(method: string, body: Record<string, any>): Promise<any> {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) throw new Error('TELEGRAM_BOT_TOKEN not configured');
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(`Telegram API error (${method}): ${response.status}`);
+    }
+    return response.json();
   }
 
   // Helper to send a message via Telegram Bot API

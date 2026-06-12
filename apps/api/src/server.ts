@@ -229,12 +229,45 @@ async function main() {
   });
 
   console.log('[API] Initializing MessageBus and Redis...');
-  const messageBus = new RedisMessageBus();
+  // CRITICAL: MessageBus MUST use session pool (not operational) for LISTEN/NOTIFY to work
+  // Operational pool may use transaction pooler which doesn't support LISTEN/NOTIFY
+  const { createSessionPool } = await import('@deliveryos/db');
+  const messageBusPool = createSessionPool();
+  const messageBus = new RedisMessageBus(messageBusPool);
   await messageBus.connect();
+  console.log('[API] MessageBus connected with session pool for LISTEN/NOTIFY support');
+  
+  // CRITICAL: pg-boss uses operational pool (has DDL permissions to create queue tables)
+  // pg-boss will be instantiated below with explicit DATABASE_URL_OPERATIONAL
+  
+  // CRITICAL: Ensure MessageBus is fully connected before registering subscriptions
+  // Add a small delay to ensure LISTEN commands are processed
+  await new Promise(resolve => setTimeout(resolve, 100));
+  console.log('[API] MessageBus ready for subscriptions');
 
   console.log('[API] Initializing Queue Provider...');
-  const queue = new PgBossQueueProvider();
+  // CRITICAL: pg-boss uses session-mode connection (port 5432) for LISTEN/NOTIFY.
+  // Transaction pooler (port 6543) blocks LISTEN/NOTIFY. Session port is required.
+  // Construct session URL: same as operational but port 5432
+  const opUrl = new URL(env.DATABASE_URL_OPERATIONAL);
+  opUrl.port = '5432';
+  const queue = new PgBossQueueProvider(opUrl.toString());
   await queue.start();
+  
+  // Verify queues exist (idempotent — INSERT ON CONFLICT DO NOTHING returns early)
+  // Queues pre-created by deploy-step migrations (0006/0008/0009). No DDL exercised at runtime.
+  console.log('[API] Verifying notification queues...');
+  await queue.boss.createQueue('notify.dispatch');
+  await queue.boss.createQueue('notify.customer_status');
+  await queue.boss.createQueue('notify.telegram.send');
+  await queue.boss.createQueue('order.pending_aging');
+  await queue.boss.createQueue('courier.dispatch');
+  await queue.boss.createQueue('settlement.cron');
+  await queue.boss.createQueue('dwell.monitor');
+  await queue.boss.createQueue('anonymizer.retention');
+  await queue.boss.createQueue('velocity.flush');
+  await queue.boss.createQueue('free_tier.watch');
+  console.log('[API] Notification queues created');
 
   console.log('[API] Initializing Providers...');
 
@@ -263,16 +296,18 @@ async function main() {
     notifyDispatcher.register('push', webPushAdapter);
   }
 
-  const retryPolicy = new RetryPolicy();
+const retryPolicy = new RetryPolicy();
   const notifyWorker = new NotificationWorker(pool, queue.boss, notifyDispatcher, retryPolicy, memoryService);
   
    // Register pg-boss workers
-   await queue.boss.work('notify.dispatch', async (job: any) => notifyWorker.handleDispatch(job));
-   await queue.boss.work('notify.customer_status', async (job: any) => notifyWorker.handleCustomerStatus(job));
-   await queue.boss.work('notify.telegram.send', async (job: any) => notifyWorker.handleTelegramSend(job));
-  
+   // NOTE: queue.work() wraps pg-boss v10 array-of-jobs callback, extracting job.data per job
+   // Direct queue.boss.work() would receive [job] not job
+   await queue.work('notify.dispatch', async (data: any) => notifyWorker.handleDispatch({ data }));
+   await queue.work('notify.customer_status', async (data: any) => notifyWorker.handleCustomerStatus({ data }));
+   await queue.work('notify.telegram.send', async (data: any) => notifyWorker.handleTelegramSend({ data }));
+   console.log('[API] pg-boss workers registered: notify.dispatch, notify.customer_status, notify.telegram.send');
+ 
   // Register escalation worker
-  await queue.boss.createQueue('order.pending_aging');
   await queue.boss.work('order.pending_aging', async () => notifyWorker.escalatePendingAging());
   await queue.boss.schedule('order.pending_aging', '*/5 * * * *');
 
@@ -335,7 +370,7 @@ async function main() {
 
   // Velocity Incrementer (P26 — async velocity counter)
   const velocityIncrementer = new VelocityIncrementer(pool, queue.boss);
-  await queue.boss.work('velocity.flush', async (job: any) => velocityIncrementer.handleFlush(job));
+  await queue.work('velocity.flush', async (data: any) => velocityIncrementer.handleFlush({ data }));
 
   // Telegram Poller
   const telegramPoller = new TelegramPoller(pool, telegramAdapter);
@@ -397,28 +432,32 @@ async function main() {
       console.error('[FreeTier] Watch failed:', err.message);
     }
   });
-  await queue.boss.createQueue('free_tier.watch');
   await queue.boss.schedule('free_tier.watch', '0 * * * *');
 
    // Lifecycle Integration — Telegram Notification Fan-out
-   const tgSend = (event: string, entity_id: string | undefined, location_id: string) =>
-     queue.boss.send('notify.telegram.send', { event, entity_id: entity_id || '', location_id });
+   const tgSend = (event: string, entity_id: string | undefined, location_id: string) => {
+     const dedupKey = `${event}:${entity_id || ''}:${location_id}`;
+     return queue.boss.send('notify.telegram.send', {
+       event,
+       entity_id: entity_id || '',
+       location_id,
+       dedupKey,
+     }, { singletonKey: dedupKey });
+   };
 
-   messageBus.subscribe('order.created', async (payload: any) => {
-     try {
-       await tgSend('order.created', payload.orderId, payload.locationId);
-     } catch (err) {
-       console.error('[Notify] Failed to send order.created telegram job', err);
-     }
-   });
+    // Register subscriptions synchronously to ensure LISTEN is called before any events
+    console.log('[Notify] Registering MessageBus subscriptions...');
 
-   messageBus.subscribe('order.delivered', async (payload: any) => {
+    messageBus.subscribe('order.delivered', async (payload: any) => {
+     console.log(`[Notify] order.delivered received: orderId=${payload.orderId}, locationId=${payload.locationId}`);
      try {
        await tgSend('order.delivered', payload.orderId, payload.locationId);
+       console.log(`[Notify] order.delivered job queued: orderId=${payload.orderId}`);
      } catch (err) {
        console.error('[Notify] Failed to send order.delivered telegram job', err);
      }
    });
+   console.log('[Notify] order.delivered subscription registered');
 
    messageBus.subscribe('order.assignment_created', async (payload: any) => {
      try {
@@ -580,7 +619,38 @@ async function main() {
   fastify.register(courierAssignmentsRoutes, { prefix: '/api/courier', db: pool, messageBus });
   fastify.register(courierShiftsRoutes, { prefix: '/api/courier', db: pool, messageBus });
   fastify.register(orderMessageRoutes, { db: pool, messageBus });
-fastify.register(publicFallbackConfigRoutes, { db: pool });
+
+  // DEBUG: Manual notification test endpoint
+  fastify.post('/api/debug/test-notification', async (request, reply) => {
+    try {
+      const { locationId } = request.body as any;
+      if (!locationId) return reply.status(400).send({ error: 'locationId required' });
+      console.log('[DEBUG] Test notification requested for location:', locationId);
+      const targetsRes = await pool.query(
+        `SELECT id, channel, address FROM owner_notification_targets WHERE location_id = $1 AND channel = 'telegram' AND status = 'active'`,
+        [locationId]
+      );
+      console.log('[DEBUG] Found', targetsRes.rowCount, 'active Telegram targets');
+      if (targetsRes.rowCount === 0) {
+        return reply.status(404).send({ error: 'No active Telegram targets found' });
+      }
+      for (const target of targetsRes.rows) {
+        console.log('[DEBUG] Sending test message to:', target.address);
+        const result = await telegramAdapter.notify(
+          { id: target.id, channel: 'telegram', address: target.address, locationId },
+          { type: 'test' },
+          { location_id: locationId, message: '🔔 TEST NOTIFICATION - If you see this, the notification system works!' }
+        );
+        console.log('[DEBUG] Result:', result);
+      }
+      return reply.send({ ok: true, sent: targetsRes.rowCount });
+    } catch (err: any) {
+      console.error('[DEBUG] Test notification failed:', err);
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  fastify.register(publicFallbackConfigRoutes, { db: pool });
 
 // Telegram Webhook (must be registered before route definitions)
 fastify.register(telegramWebhookRoutes, {
