@@ -2,6 +2,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { MessageBus } from '@deliveryos/platform';
 import type { StorageProvider } from '../../ports.js';
+import { BUS_CHANNELS } from '../registry.js';
 
 export type AnonymizationScope = 'retention' | 'gdpr';
 export type ActorKind = 'system' | 'owner' | 'customer';
@@ -171,7 +172,7 @@ export class AnonymizerService {
 
       await client.query('COMMIT');
 
-      await this.messageBus.publish('customer.anonymized', {
+      await this.messageBus.publish(BUS_CHANNELS.CUSTOMER_ANONYMIZED, {
         customerId,
         locationId,
         scope: options.scope,
@@ -227,7 +228,7 @@ export class AnonymizerService {
 
       await client.query('COMMIT');
 
-      await this.messageBus.publish('order.anonymized', {
+      await this.messageBus.publish(BUS_CHANNELS.ORDER_ANONYMIZED, {
         orderId,
         locationId,
         scope: options.scope,

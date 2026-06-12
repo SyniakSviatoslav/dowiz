@@ -2,6 +2,7 @@
 import type { Pool } from 'pg';
 import type Boss from 'pg-boss';
 import type { MessageBus } from '@deliveryos/platform';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 import { STATUS_KIND_MAP } from '../lib/dwell-thresholds.js';
 
 const TRANSITION_RESOLVE_MAP: Record<string, string[]> = {
@@ -22,12 +23,12 @@ export class LifecycleHandlers {
   ) {}
 
   async start() {
-    this.messageBus.subscribe('order.confirmed', async (msg: any) => this.handleTransition(msg, 'CONFIRMED'));
-    this.messageBus.subscribe('order.cancelled', async (msg: any) => this.handleTransition(msg, 'CANCELLED'));
-    this.messageBus.subscribe('order.rejected', async (msg: any) => this.handleTransition(msg, 'REJECTED'));
+    this.messageBus.subscribe(BUS_CHANNELS.ORDER_CONFIRMED, async (msg: any) => this.handleTransition(msg, 'CONFIRMED'));
+    this.messageBus.subscribe(BUS_CHANNELS.ORDER_CANCELLED, async (msg: any) => this.handleTransition(msg, 'CANCELLED'));
+    this.messageBus.subscribe(BUS_CHANNELS.ORDER_REJECTED, async (msg: any) => this.handleTransition(msg, 'REJECTED'));
 
     // Listen for order.status events that contain the new status
-    this.messageBus.subscribe('order.status', async (msg: any) => {
+    this.messageBus.subscribe(BUS_CHANNELS.ORDER_STATUS, async (msg: any) => {
       const newStatus = msg.status;
       if (TRANSITION_RESOLVE_MAP[newStatus]) {
         await this.handleTransition({ orderId: msg.orderId }, newStatus);
@@ -60,7 +61,7 @@ export class LifecycleHandlers {
           // Cancel pending escalation jobs for this alert
           await this.boss.cancel(`notify.dispatch.${row.id}`);
 
-          await this.messageBus.publish(`dwell.alert_resolved`, {
+          await this.messageBus.publish(BUS_CHANNELS.DWELL_ALERT_RESOLVED, {
             alertId: row.id,
             orderId,
             kind,

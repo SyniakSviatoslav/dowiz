@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { roundCoordinate, isWithinGeofence } from '../../lib/geo.js';
 import { loadEnv } from '@deliveryos/config';
 import type { MessageBus } from '@deliveryos/platform';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 
 const env = loadEnv();
 
@@ -93,12 +94,12 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
 
       await client.query('COMMIT');
 
-      await messageBus.publish(`location:${locationId}:couriers`, {
+      await messageBus.publish(courierChannel(locationId), {
         type: 'courier.shift_updated',
         payload: { courierId, status: 'available' }
       });
 
-      await messageBus.publish('shift.started', { shiftId, locationId, courierId, startedAt });
+      await messageBus.publish(BUS_CHANNELS.SHIFT_STARTED, { shiftId, locationId, courierId, startedAt });
 
       return reply.send({ success: true, status, shiftId, startedAt });
     } catch (err) {
@@ -155,12 +156,12 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
 
       await client.query('COMMIT');
 
-      await messageBus.publish(`location:${locationId}:couriers`, {
+      await messageBus.publish(courierChannel(locationId), {
         type: 'courier.shift_updated',
         payload: { courierId, status: 'offline' }
       });
 
-      await messageBus.publish('shift.closed', { shiftId, locationId, courierId, endedAt: new Date().toISOString() });
+      await messageBus.publish(BUS_CHANNELS.SHIFT_CLOSED, { shiftId, locationId, courierId, endedAt: new Date().toISOString() });
 
       return reply.send({ success: true, status: 'offline' });
     } catch (err) {
@@ -240,12 +241,12 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
         await client.query('COMMIT');
 
         // Broadcast to owner WS
-        await messageBus.publish(`location:${locationId}:couriers`, {
+        await messageBus.publish(courierChannel(locationId), {
           type: 'courier.shift_updated',
           payload: { courierId, status: 'offline' }
         });
 
-        await messageBus.publish('shift.closed', { shiftId, locationId, courierId, endedAt: new Date().toISOString() });
+        await messageBus.publish(BUS_CHANNELS.SHIFT_CLOSED, { shiftId, locationId, courierId, endedAt: new Date().toISOString() });
 
         return reply.send({ success: true, status: 'offline', shiftId });
 
@@ -293,7 +294,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
         await client.query('COMMIT');
 
         // Broadcast to owner WS
-        await messageBus.publish(`location:${locationId}:couriers`, {
+        await messageBus.publish(courierChannel(locationId), {
           type: 'courier.shift_updated',
           payload: { courierId, status: 'available', position: { lat: rLat, lng: rLng } }
         });
@@ -377,7 +378,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
       await client.query('COMMIT');
 
       // Publish event (claim-check style)
-      await messageBus.publish('courier.position_updated', {
+      await messageBus.publish(BUS_CHANNELS.COURIER_POSITION_UPDATED, {
         courierId,
         locationId,
         shiftId

@@ -1,5 +1,6 @@
 import type { QueueProvider } from '@deliveryos/platform';
 import type { Pool } from 'pg';
+import { QUEUE_NAMES } from '@deliveryos/shared-types';
 
 export function registerHandlers(queue: QueueProvider, pool: Pool) {
 
@@ -7,7 +8,7 @@ export function registerHandlers(queue: QueueProvider, pool: Pool) {
     console.log(`[Worker] Processed health-job at ${new Date().toISOString()}`, payload);
   });
 
-  queue.work('order.timeout', async (payload: Record<string, unknown>) => {
+  queue.work(QUEUE_NAMES.ORDER_TIMEOUT, async (payload: Record<string, unknown>) => {
     const { orderId } = payload;
     if (!orderId || typeof orderId !== 'string') {
       console.error('[Worker] order.timeout missing orderId in payload');

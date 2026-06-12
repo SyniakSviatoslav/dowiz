@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation } from '@deliveryos/ui';
+import { motion, AnimatePresence } from 'framer-motion';
+import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot } from '@deliveryos/ui';
 import type { CourierTask, CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 
@@ -14,6 +15,7 @@ export function DeliveryPage() {
   const [task, setTask] = useState<CourierTask | null>(null);
   const [loading, setLoading] = useState(true);
   const [courierPos, setCourierPos] = useState<LngLatLike>(TIRANA_CENTER);
+  const [showCelebration, setShowCelebration] = useState(false);
   const [clientLocation, setClientLocation] = useState<LngLatLike | null>(null);
   const { t } = useI18n();
   const [messages, setMessages] = useState<any[]>([]);
@@ -124,13 +126,13 @@ export function DeliveryPage() {
   }, [position, wsStatus, sendMessage]);
 
   const handleComplete = async () => {
+    setShowCelebration(true);
     try {
       await apiClient(`/courier/orders/${id}/status`, {
         method: 'PATCH',
         body: { status: 'DELIVERED' }
       });
     } catch (e) {
-      // Dev-only: mock fallback — delivery status update may fail in dev mode
       console.debug('[DeliveryPage] delivery status update failed', e);
     }
     setTimeout(() => navigate('/courier'), 1500);
@@ -159,6 +161,28 @@ export function DeliveryPage() {
 
   return (
     <div className="flex flex-col h-screen bg-[var(--brand-surface)] text-[var(--brand-text)] relative">
+      <AnimatePresence>
+        {showCelebration && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[999] flex items-center justify-center pointer-events-none"
+            style={{ background: 'rgba(0,0,0,0.4)' }}
+          >
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+              className="flex flex-col items-center gap-3"
+            >
+              <AnimatedCheck size={80} strokeWidth={4} />
+              <span className="text-2xl font-bold text-white">{t('courier.delivered', 'Delivered!')}</span>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       <div className="flex-1 relative">
         <CourierLiveMap
@@ -182,8 +206,16 @@ export function DeliveryPage() {
         </button>
 
         <div className="absolute top-4 right-4 bg-white/90 p-1.5 rounded-full shadow-md flex gap-2 items-center px-3 z-10">
-          <WSStatusDot status={wsStatus === 'disabled' ? 'disconnected' : wsStatus} />
-          {position && <div className="w-2 h-2 rounded-full bg-[var(--color-info)] animate-pulse" title={t('courier.gps_active', 'GPS Active')} />}
+          <div className="flex items-center gap-1.5">
+            <LiveDot size={6} pulse={wsStatus !== 'disabled' && wsStatus !== 'disconnected'} color="var(--color-success)" />
+            <WSStatusDot status={wsStatus === 'disabled' ? 'disconnected' : wsStatus} />
+          </div>
+          {position && (
+            <div className="flex items-center gap-1">
+              <LiveDot size={6} pulse={true} color="var(--color-info)" />
+              <span className="text-[10px] font-medium text-gray-500">GPS</span>
+            </div>
+          )}
         </div>
       </div>
 

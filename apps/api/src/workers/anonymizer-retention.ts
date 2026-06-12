@@ -4,6 +4,7 @@ import type Boss from 'pg-boss';
 import type { MessageBus } from '@deliveryos/platform';
 import { loadEnv } from '@deliveryos/config';
 import { AnonymizerService } from '../lib/anonymizer/index.js';
+import { BUS_CHANNELS, QUEUE_NAMES } from '../lib/registry.js';
 
 const env = loadEnv();
 
@@ -18,12 +19,12 @@ export class AnonymizerRetentionWorker {
   ) {}
 
   async start() {
-    await this.boss.work('anonymizer.retention', { singletonKey: 'anonymizer.retention' }, async () => {
+    await this.boss.work(QUEUE_NAMES.ANONYMIZER_RETENTION, { singletonKey: QUEUE_NAMES.ANONYMIZER_RETENTION }, async () => {
       await this.run();
     });
     const cron = env.ANONYMIZER_RETENTION_CRON || '0 3 * * *';
-    await this.boss.createQueue('anonymizer.retention');
-    await this.boss.schedule('anonymizer.retention', cron, null, { singletonKey: 'anonymizer.retention' });
+    await this.boss.createQueue(QUEUE_NAMES.ANONYMIZER_RETENTION);
+    await this.boss.schedule(QUEUE_NAMES.ANONYMIZER_RETENTION, cron, null, { singletonKey: QUEUE_NAMES.ANONYMIZER_RETENTION });
   }
 
   private async run() {
@@ -63,7 +64,7 @@ export class AnonymizerRetentionWorker {
       }
     } catch (err) {
       console.error('[AnonymizerRetention] Error:', err);
-      await this.messageBus.publish('worker.failed', { error: String(err), time: new Date().toISOString() });
+      await this.messageBus.publish(BUS_CHANNELS.WORKER_FAILED, { error: String(err), time: new Date().toISOString() });
     } finally {
       client.release();
     }

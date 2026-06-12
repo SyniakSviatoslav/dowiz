@@ -43,7 +43,7 @@ export function BrandingPage() {
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { alert('File too large. Max 2MB.'); return; }
+    if (file.size > 2 * 1024 * 1024) { alert(t('admin.error_file_too_large', 'File too large. Max 2MB.')); return; }
     const reader = new FileReader();
     reader.onload = () => { setLogoDataUrl(reader.result as string); };
     reader.readAsDataURL(file);

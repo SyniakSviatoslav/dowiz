@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import type Boss from 'pg-boss';
 import type { MessageBus } from '@deliveryos/platform';
 import { NotificationDispatcher } from '../notifications/provider.js';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 import { loadEnv } from '@deliveryos/config';
 
 const env = loadEnv();
@@ -16,7 +17,7 @@ export class DwellEscalationWorker {
   ) {}
 
   async start() {
-    await this.boss.work('dwell.escalate', async (job: any) => {
+    await this.boss.work(QUEUE_NAMES.DWELL_ESCALATE, async (job: any) => {
       await this.handleEscalation(job.data);
     });
   }
@@ -130,7 +131,7 @@ export class DwellEscalationWorker {
     };
 
     // Use existing notify.dispatch queue for actual delivery
-    await this.boss.send('notify.dispatch', {
+    await this.boss.send(QUEUE_NAMES.NOTIFY_DISPATCH, {
       targetId: target.id,
       eventType: 'dwell.alert',
       alertId,
@@ -180,7 +181,7 @@ export class DwellEscalationWorker {
 
   private async publishEvent(locationId: string, type: string, data: any) {
     try {
-      await this.messageBus.publish(`location:${locationId}:dashboard`, { type, data });
+      await this.messageBus.publish(dashboardChannel(locationId), { type, data });
     } catch {
       // ignore publish errors — dashboard event is non-critical
       console.debug('[dwell-escalation] failed to publish event', type);

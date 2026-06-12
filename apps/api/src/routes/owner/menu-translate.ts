@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { withTenant } from '@deliveryos/platform';
+import { BUS_CHANNELS } from '../../lib/registry.js';
 
 export default (async function menuTranslateRoutes(fastify, opts) {
   const { db, messageBus, translation } = opts as any;
@@ -200,7 +201,7 @@ export default (async function menuTranslateRoutes(fastify, opts) {
         }
 
         // Publish event
-        await messageBus.publish('menu.translated', {
+        await messageBus.publish(BUS_CHANNELS.MENU_TRANSLATED, {
           locationId,
           counts,
           degraded

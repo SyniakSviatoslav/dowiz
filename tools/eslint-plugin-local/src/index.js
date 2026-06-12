@@ -4,6 +4,43 @@ const twColorPattern = /\b(bg|text|border|ring|shadow|outline|accent|fill|stroke
 
 export default {
   rules: {
+    'no-hardcoded-string': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'disallow hardcoded strings — use t(\'key\', \'fallback\')' },
+      },
+      create(context) {
+        const filename = context.getFilename();
+        const isTestFile = /\.(spec|test)\.(ts|js|tsx|jsx)$/.test(filename);
+        if (isTestFile || filename.includes('node_modules') || filename.includes('.agents/')) return {};
+        const allowedPatterns = [
+          /^(data:|blob:)/, /^[<>{}[\]]$/, /^[\d%+\-/·\.]$/, /^[A-Z]{2,4}$/,
+          /\{\{/, /^(var|calc|env)\(/, /^[a-z-]+$/, /^ti ti-/,
+          /^(http|https|ftp):\/\//, /^(#|\/self|\*|none)/, /^(min|max)-/,
+        ];
+        return {
+          Literal(node) {
+            if (typeof node.value !== 'string') return;
+            if (!node.value || node.value.length < 3) return;
+            if (node.parent && node.parent.type === 'JSXText') return;
+            if (node.parent && node.parent.type === 'JSXAttribute' && node.parent.name.name === 'className') return;
+            if (node.parent && node.parent.type === 'CallExpression' && node.parent.callee.name === 't') return;
+            if (node.parent && node.parent.type === 'ImportDeclaration') return;
+            if (node.parent && node.parent.type === 'ExportNamedDeclaration') return;
+            if (node.parent && node.parent.type === 'ExportDefaultDeclaration') return;
+            if (allowedPatterns.some(p => p.test(node.value))) return;
+            const isPrintable = /^[\x20-\x7E\s]+$/.test(node.value);
+            if (!isPrintable) return;
+            if (node.parent && node.parent.type === 'TemplateLiteral') return;
+            if (/^(px|py|mx|my|gap|w|h|text|leading|tracking|rounded|border|shadow|z|top|right|bottom|left|opacity|scale|rotate|translate|space|inset|flex|grid|col|row|order)-/.test(node.value)) return;
+            if (node.parent && node.parent.type === 'Property' && node.parent.key === node) return;
+            if (node.parent && node.parent.type === 'JSXExpressionContainer' &&
+                node.parent.parent.type === 'JSXAttribute') return;
+            context.report({ node, message: `hardcoded string "${node.value.substring(0, 40)}" — use t('key', 'fallback')` });
+          },
+        };
+      },
+    },
     'no-raw-sql': {
       meta: {
         type: 'problem',

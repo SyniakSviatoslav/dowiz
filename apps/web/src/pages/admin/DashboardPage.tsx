@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n } from '@deliveryos/ui';
-import type { AdminOrder, CourierOnMap, LngLatLike } from '@deliveryos/ui';
+import { motion } from 'framer-motion';
+import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, useHaptics, useSoundPrefs, PullToRefresh } from '@deliveryos/ui';
+import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
-
 import { exportCSV } from '../../lib/exportCSV.js';
 
 export function DashboardPage() {
@@ -16,11 +16,15 @@ export function DashboardPage() {
   const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
   const [showHint, setShowHint] = useState(() => localStorage.getItem('dos_dash_hint_dismissed') !== '1');
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const [clientSlug, setClientSlug] = useState('');
+  const [sortPickerOpen, setSortPickerOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [readiness, setReadiness] = useState<{ menu: boolean; phone: boolean; address: boolean; couriers: boolean; branding: boolean; placeOrder: boolean }>({ menu: false, phone: false, address: false, couriers: false, branding: false, placeOrder: false });
 
   const { play: playPing } = useSound('/sounds/ping.mp3');
+  const { trigger: haptic } = useHaptics();
+  const { alertSoundEnabled } = useSoundPrefs();
   const [tenantId, setTenantId] = useState('');
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
   const [messagesByOrder, setMessagesByOrder] = useState<Record<string, any[]>>({});
@@ -74,12 +78,17 @@ export function DashboardPage() {
   }, []);
 
   useWebSocket({
-    room: `admin:${tenantId}`,
-    enabled: false,
+    room: `location:${tenantId}:dashboard`,
+    enabled: true,
     onMessage: (msg) => {
-      if (msg.type === 'order_created') { setOrders(prev => [msg.payload, ...prev]); playPing(); }
-      else if (msg.type === 'order_updated') { setOrders(prev => prev.map(o => o.id === msg.payload.id ? { ...o, ...msg.payload } : o)); }
-      else if (msg.type === 'courier_position') { setCourierPositions(prev => ({ ...prev, [msg.payload.courierId]: [msg.payload.lng, msg.payload.lat] })); }
+      const inner = msg?.data?.data || msg?.data || msg;
+      if (inner.type === 'order.created') {
+        setOrders(prev => [inner.data || inner, ...prev]);
+        if (alertSoundEnabled) playPing();
+        haptic('tap');
+      }
+      else if (inner.type === 'order.status') { setOrders(prev => prev.map(o => o.id === (inner.data?.orderId || inner.orderId) ? { ...o, ...(inner.data || inner) } : o)); }
+      else if (inner.type === 'courier_position') { setCourierPositions(prev => ({ ...prev, [inner.courierId]: [inner.lng, inner.lat] })); }
     },
     onReconnect: () => { fetchOrders(); },
   });
@@ -170,6 +179,7 @@ export function DashboardPage() {
   };
 
   return (
+    <PullToRefresh onRefresh={fetchOrders}>
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
       {/* Welcome Hint */}
       {showHint && (
@@ -182,18 +192,30 @@ export function DashboardPage() {
       )}
 
       {/* Quick Stats Row */}
-      <div className="grid grid-cols-5 gap-2 stagger-children">
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 stagger-children">
         {[
-          { label: t('order.pending', 'Pending'), value: stats.pending, color: 'var(--status-pending)' },
-          { label: t('order.preparing', 'Preparing'), value: stats.inProgress, color: 'var(--status-preparing)' },
-          { label: t('order.ready', 'Ready'), value: stats.ready, color: 'var(--status-ready)' },
-          { label: t('order.in_delivery', 'Delivery'), value: stats.inDelivery, color: 'var(--status-in-delivery)' },
-          { label: t('cart.total', 'Revenue'), value: `${(stats.revenue / 1000).toFixed(0)}k`, color: 'var(--brand-primary)' },
+          { label: t('order.pending', 'Pending'), value: stats.pending, color: 'var(--status-pending)', isCurrency: false },
+          { label: t('order.preparing', 'Preparing'), value: stats.inProgress, color: 'var(--status-preparing)', isCurrency: false },
+          { label: t('order.ready', 'Ready'), value: stats.ready, color: 'var(--status-ready)', isCurrency: false },
+          { label: t('order.in_delivery', 'Delivery'), value: stats.inDelivery, color: 'var(--status-in-delivery)', isCurrency: false },
+          { label: t('cart.total', 'Revenue'), value: stats.revenue, color: 'var(--brand-primary)', isCurrency: true },
         ].map((stat, i) => (
-          <div key={stat.label} className="text-center p-3 rounded-xl card-lift" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', border: '1px solid var(--brand-border)' }}>
-            <div className="text-2xl font-bold mb-0.5" style={{ color: stat.color }}>{stat.value}</div>
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.04, duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            className="text-center p-3 rounded-xl" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
+          >
+            <div className="text-2xl font-bold mb-0.5" style={{ color: stat.color }}>
+              {stat.isCurrency ? (
+                <><AnimatedNumber value={Math.round(stats.revenue / 1000)} />k</>
+              ) : (
+                <AnimatedNumber value={stat.value} />
+              )}
+            </div>
             <div className="text-[10px] font-medium" style={{ color: 'var(--brand-text-muted)' }}>{stat.label}</div>
-          </div>
+          </motion.div>
         ))}
       </div>
 
@@ -220,12 +242,12 @@ export function DashboardPage() {
               </button>
             </div>
           )}
-          <div className="flex bg-[var(--brand-surface)] border rounded-lg overflow-hidden p-0.5" style={{ borderColor: 'var(--brand-border)' }}>
-            <button 
+          <div className="flex bg-[var(--brand-surface)] border rounded-lg overflow-hidden p-0.5" role="tablist" aria-label={t('admin.view_mode', 'View mode')} style={{ borderColor: 'var(--brand-border)' }}>
+            <button role="tab" aria-selected={viewMode === 'live'}
               onClick={() => { setViewMode('live'); setStatusFilter('all'); }}
               className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${viewMode === 'live' ? 'bg-[var(--brand-primary)] text-white' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
             >{t('admin.live', 'Live')}</button>
-            <button 
+            <button role="tab" aria-selected={viewMode === 'history'}
               onClick={() => { setViewMode('history'); setStatusFilter('all'); }}
               className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${viewMode === 'history' ? 'bg-[var(--brand-primary)] text-white' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
             >{t('courier.history', 'History')}</button>
@@ -252,30 +274,56 @@ export function DashboardPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex rounded-lg p-0.5" style={{ background: 'var(--brand-surface-raised)' }}>
+      <div className="flex items-center gap-2">
+        <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory flex-1 -mx-1 px-1" role="group" aria-label={t('admin.status_filter', 'Order status filter')}>
           {STATUSES.map(s => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
               aria-pressed={statusFilter === s}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 capitalize ${statusFilter === s ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 capitalize snap-start shrink-0 ${statusFilter === s ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+              style={{ minHeight: 'var(--tap-min)' }}
             >
               {s === 'all' ? t('common.all', 'All') : t(`order.${s.toLowerCase()}`, s.replace('_', ' ').toLowerCase())}
             </button>
           ))}
         </div>
-        <div className="flex-1" />
-        <select
-          value={sortBy}
-          onChange={e => setSortBy(e.target.value as any)}
-          className="px-3 py-1.5 text-xs rounded-lg border outline-none transition-colors"
-          style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
-        >
-          <option value="newest">{t('admin.newest_first', 'Newest first')}</option>
-          <option value="oldest">{t('admin.oldest_first', 'Oldest first')}</option>
-          <option value="highest">{t('admin.highest_total', 'Highest total')}</option>
-        </select>
+        {isMobile ? (
+          <>
+            <button
+              onClick={() => setSortPickerOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium shrink-0"
+              style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}
+            >
+              <i className="ti ti-arrows-sort text-sm" />
+              {sortBy === 'newest' ? t('admin.newest_first', 'Newest') : sortBy === 'oldest' ? t('admin.oldest_first', 'Oldest') : t('admin.highest_total', 'Highest')}
+            </button>
+            <MobilePicker
+              open={sortPickerOpen}
+              onClose={() => setSortPickerOpen(false)}
+              title={t('admin.sort_orders', 'Sort orders')}
+              options={[
+                { value: 'newest', label: t('admin.newest_first', 'Newest first'), icon: 'ti ti-sort-descending' },
+                { value: 'oldest', label: t('admin.oldest_first', 'Oldest first'), icon: 'ti ti-sort-ascending' },
+                { value: 'highest', label: t('admin.highest_total', 'Highest total'), icon: 'ti ti-coin' },
+              ]}
+              selectedValue={sortBy}
+              onSelect={(opt) => setSortBy(opt.value as any)}
+            />
+          </>
+        ) : (
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as any)}
+            aria-label={t('admin.sort_orders', 'Sort orders')}
+            className="px-3 py-1.5 text-xs rounded-lg border outline-none transition-colors shrink-0"
+            style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
+          >
+            <option value="newest">{t('admin.newest_first', 'Newest first')}</option>
+            <option value="oldest">{t('admin.oldest_first', 'Oldest first')}</option>
+            <option value="highest">{t('admin.highest_total', 'Highest total')}</option>
+          </select>
+        )}
       </div>
 
       {/* Orders grid */}
@@ -294,19 +342,28 @@ export function DashboardPage() {
           icon={<i className="ti ti-inbox text-4xl" style={{ color: 'var(--brand-text-muted)', opacity: 0.4 }} />}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 stagger-children">
+        <motion.div
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+          variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
+          initial="hidden"
+          animate="visible"
+        >
           {filteredOrders.map(order => (
-            <OrderCard
+            <motion.div
               key={order.id}
-              order={order}
-              onUpdateStatus={handleUpdateStatus}
-              showMessages={expandedMessages.has(order.id)}
-              onToggleMessages={handleToggleMessages}
-              messages={messagesByOrder[order.id]}
-              onSendMessage={handleSendMessage}
-            />
+              variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } }}
+            >
+              <OrderCard
+                order={order}
+                onUpdateStatus={handleUpdateStatus}
+                showMessages={expandedMessages.has(order.id)}
+                onToggleMessages={handleToggleMessages}
+                messages={messagesByOrder[order.id]}
+                onSendMessage={handleSendMessage}
+              />
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
 
       {/* Live Courier Map */}
@@ -314,9 +371,9 @@ export function DashboardPage() {
         <div className="flex items-center gap-2 mb-3">
           <i className="ti ti-map-2 text-lg" style={{ color: 'var(--brand-primary)' }} />
           <h3 className="text-lg font-semibold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.couriers_live', 'Couriers Live')}</h3>
-          <span className="w-2 h-2 rounded-full dot-pulse" style={{ backgroundColor: 'var(--color-success)' }} />
+          <LiveDot size={8} color="var(--color-success)" />
         </div>
-        <CourierLiveMap className="h-72 w-full rounded-xl border border-glow" couriers={couriersOnMap} center={[19.817, 41.331]} zoom={13} />
+        <CourierLiveMap className="h-48 md:h-72 w-full rounded-xl border border-glow" couriers={couriersOnMap} center={[19.817, 41.331]} zoom={13} />
       </div>
 
       {/* Readiness Checklist */}
@@ -361,5 +418,6 @@ export function DashboardPage() {
         </div>
       </div>
     </div>
+    </PullToRefresh>
   );
 }

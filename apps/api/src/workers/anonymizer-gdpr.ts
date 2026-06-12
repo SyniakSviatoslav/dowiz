@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import type Boss from 'pg-boss';
 import type { MessageBus } from '@deliveryos/platform';
 import { AnonymizerService } from '../lib/anonymizer/index.js';
+import { BUS_CHANNELS, QUEUE_NAMES, dashboardChannel } from '../lib/registry.js';
 
 export class GdprErasureWorker {
   constructor(
@@ -13,7 +14,7 @@ export class GdprErasureWorker {
   ) {}
 
   async start() {
-    await this.boss.work('anonymizer.gdpr', { singletonKey: 'anonymizer.gdpr' }, async (job: any) => {
+    await this.boss.work(QUEUE_NAMES.ANONYMIZER_GDPR, { singletonKey: QUEUE_NAMES.ANONYMIZER_GDPR }, async (job: any) => {
       await this.run(job);
     });
   }
@@ -76,7 +77,7 @@ export class GdprErasureWorker {
             ['gdpr', 'customer', customerId, row.location_id, 'system', null, JSON.stringify({ requestId: row.id, ...result })],
           );
 
-          await this.messageBus.publish(`location:${row.location_id}:dashboard`, {
+          await this.messageBus.publish(dashboardChannel(row.location_id), {
             type: 'gdpr.erasure_completed',
             data: { requestId: row.id, customerId, ...result },
           });
@@ -94,7 +95,7 @@ export class GdprErasureWorker {
                WHERE id = $2`,
               [JSON.stringify({ ...meta, retryCount, lastError: 'Processing error' }), row.id],
             );
-            await this.boss.send('anonymizer.gdpr', { requestId: row.id, retryCount }, { startAfter: backoff });
+            await this.boss.send(QUEUE_NAMES.ANONYMIZER_GDPR, { requestId: row.id, retryCount }, { startAfter: backoff });
           } else {
             await client.query(
               `UPDATE gdpr_erasure_requests
@@ -107,7 +108,7 @@ export class GdprErasureWorker {
       }
     } catch (err) {
       console.error('[GdprErasureWorker] Error:', err);
-      await this.messageBus.publish('anonymizer.gdpr.failed', { error: String(err), time: new Date().toISOString() });
+      await this.messageBus.publish(BUS_CHANNELS.ANONYMIZER_GDPR_FAILED, { error: String(err), time: new Date().toISOString() });
     } finally {
       client.release();
     }

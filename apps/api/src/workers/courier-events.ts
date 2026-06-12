@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { Pool } from 'pg';
 import type { MessageBus } from '@deliveryos/platform';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 import { decryptPII } from '../lib/pii-cipher.js';
 import { calculateNaiveETASeconds } from '../lib/geo.js';
 
@@ -11,10 +12,10 @@ export class CourierEventsWorker {
   ) {}
 
   async start() {
-    this.messageBus.subscribe('courier.position_updated', async (msg) => this.handlePositionUpdated(msg));
-    this.messageBus.subscribe('order.courier_accepted', async (msg) => this.handleAssignmentEvent(msg, 'heading_to_pickup'));
-    this.messageBus.subscribe('order.picked_up', async (msg) => this.handleAssignmentEvent(msg, 'heading_to_destination'));
-    this.messageBus.subscribe('order.delivered', async (msg) => this.handleAssignmentEvent(msg, 'delivered'));
+    this.messageBus.subscribe(BUS_CHANNELS.COURIER_POSITION_UPDATED, async (msg) => this.handlePositionUpdated(msg));
+    this.messageBus.subscribe(BUS_CHANNELS.ORDER_COURIER_ACCEPTED, async (msg) => this.handleAssignmentEvent(msg, 'heading_to_pickup'));
+    this.messageBus.subscribe(BUS_CHANNELS.ORDER_PICKED_UP, async (msg) => this.handleAssignmentEvent(msg, 'heading_to_destination'));
+    this.messageBus.subscribe(BUS_CHANNELS.ORDER_DELIVERED, async (msg) => this.handleAssignmentEvent(msg, 'delivered'));
   }
 
   private maskName(name: string): string {
@@ -98,7 +99,7 @@ export class CourierEventsWorker {
     if (!details) return; // Courier not active on any order
 
     // Dispatch to owner live map
-    await this.messageBus.publish(`location:${msg.locationId}:couriers`, {
+    await this.messageBus.publish(courierChannel(msg.locationId), {
       type: 'courier.position_updated',
       payload: { courierId: msg.courierId, position: details.position }
     });
@@ -111,7 +112,7 @@ export class CourierEventsWorker {
       );
     }
 
-    await this.messageBus.publish(`order:${details.orderId}`, {
+    await this.messageBus.publish(orderChannel(details.orderId), {
       type: 'order.courier_updated',
       payload: {
         orderId: details.orderId,
@@ -136,13 +137,13 @@ export class CourierEventsWorker {
     }
 
     // Owner live map assignment status update
-    await this.messageBus.publish(`location:${msg.locationId}:couriers`, {
+    await this.messageBus.publish(courierChannel(msg.locationId), {
       type: 'courier.assignment_status_changed',
       payload: { courierId: msg.courierId, orderId: msg.orderId, status: statusOverride }
     });
 
     // Customer payload
-    await this.messageBus.publish(`order:${msg.orderId}`, {
+    await this.messageBus.publish(orderChannel(msg.orderId), {
       type: 'order.courier_updated',
       payload: {
         orderId: msg.orderId,

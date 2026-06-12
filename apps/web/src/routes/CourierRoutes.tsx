@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LanguageSwitcher } from '@deliveryos/ui';
+import { LanguageSwitcher, BottomTabBar } from '@deliveryos/ui';
+import type { TabItem } from '@deliveryos/ui';
 import { TasksPage } from '../pages/courier/TasksPage.js';
 import { DeliveryPage } from '../pages/courier/DeliveryPage.js';
 import { LoginPage } from '../pages/courier/LoginPage.js';
@@ -8,11 +9,11 @@ import { EarningsPage } from '../pages/courier/EarningsPage.js';
 import { HistoryPage } from '../pages/courier/HistoryPage.js';
 import { ShiftPage } from '../pages/courier/ShiftPage.js';
 
-const TABS = [
-  { label: 'Tasks', href: '/courier' },
-  { label: 'Earnings', href: '/courier/earnings' },
-  { label: 'History', href: '/courier/history' },
-  { label: 'Shift', href: '/courier/shift' },
+const TABS: TabItem[] = [
+  { key: 'tasks', label: 'Tasks', icon: 'ti ti-clipboard-list', href: '/courier' },
+  { key: 'earnings', label: 'Earnings', icon: 'ti ti-coin', href: '/courier/earnings' },
+  { key: 'history', label: 'History', icon: 'ti ti-history', href: '/courier/history' },
+  { key: 'shift', label: 'Shift', icon: 'ti ti-clock', href: '/courier/shift' },
 ];
 
 function CourierLayout() {
@@ -26,36 +27,39 @@ function CourierLayout() {
   const isDeliveryView = location.pathname.includes('/delivery/');
   const isLoginView = location.pathname.includes('/login');
 
+  const getActiveKey = () => {
+    for (const tab of TABS) {
+      if (location.pathname === tab.href || (tab.href !== '/courier' && location.pathname.startsWith(tab.href))) {
+        return tab.key;
+      }
+    }
+    return 'tasks';
+  };
+
   if (isDeliveryView || isLoginView) {
-    return <Outlet />;
+    return (
+      <div className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)]">
+        <main className="app-shell-main">
+          <Outlet />
+        </main>
+      </div>
+    );
   }
 
   return (
-    <div className="h-screen bg-[var(--brand-bg)] text-[var(--brand-text)] flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-auto pb-16">
-        <Outlet />
-      </div>
-      <div className="flex items-center justify-between px-4 h-12 bg-[var(--brand-surface)] border-b border-[var(--brand-border)] shrink-0">
-        <span className="text-sm font-semibold">Courier</span>
+    <div className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)]">
+      <div className="flex items-center justify-between px-4 h-14 bg-[var(--brand-surface)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] shrink-0">
+        <span className="text-sm font-semibold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Courier</span>
         <LanguageSwitcher variant="full" />
       </div>
-      <div className="embed-hidden sticky bottom-0 left-0 right-0 h-16 bg-[var(--brand-surface)] border-t border-[var(--brand-border)] flex items-center justify-around z-50">
-        {TABS.map(tab => {
-          const active = location.pathname === tab.href || (tab.href !== '/courier' && location.pathname.startsWith(tab.href));
-          return (
-            <button
-              key={tab.href}
-              onClick={() => navTo(tab.href)}
-              aria-current={active ? 'page' : undefined}
-              className={`flex flex-col items-center justify-center w-full h-full transition-colors ${
-                active ? 'text-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'
-              }`}
-            >
-              <span className="text-[10px] font-semibold">{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      <main className="app-shell-main">
+        <Outlet />
+      </main>
+      <BottomTabBar
+        tabs={TABS}
+        activeKey={getActiveKey()}
+        onTabClick={navTo}
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import type Boss from 'pg-boss';
 import type { MessageBus } from '@deliveryos/platform';
 import { loadEnv } from '@deliveryos/config';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 import { computeSignals } from '../lib/signals/compute.js';
 
 const env = loadEnv();
@@ -15,12 +16,12 @@ export class SignalRaiserWorker {
   ) {}
 
   async start() {
-    await this.boss.work('signal.raiser', { singletonKey: 'signal.raiser' }, async () => {
+    await this.boss.work(QUEUE_NAMES.SIGNAL_RAISER, { singletonKey: QUEUE_NAMES.SIGNAL_RAISER }, async () => {
       await this.run();
     });
     const cron = env.SIGNAL_RAISE_CRON || '*/5 * * * *';
-    await this.boss.createQueue('signal.raiser');
-    await this.boss.schedule('signal.raiser', cron, null, { singletonKey: 'signal.raiser' });
+    await this.boss.createQueue(QUEUE_NAMES.SIGNAL_RAISER);
+    await this.boss.schedule(QUEUE_NAMES.SIGNAL_RAISER, cron, null, { singletonKey: QUEUE_NAMES.SIGNAL_RAISER });
   }
 
   private async run() {
@@ -122,7 +123,7 @@ export class SignalRaiserWorker {
       );
       const signalId = res.rows[0]?.id;
       if (signalId) {
-        await this.messageBus.publish(`location:${locationId}:dashboard`, {
+        await this.messageBus.publish(dashboardChannel(locationId), {
           type: 'preflight.signal_raised',
           data: { signalId, customerId, kind: sig.kind, severity: sig.severity },
         });

@@ -5,6 +5,7 @@ import {
   validatePresetAllowed
 } from '@deliveryos/shared-types';
 import type { MessageBus } from '@deliveryos/platform';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 
 export default async function orderMessageRoutes(fastify, opts) {
   const { db, messageBus } = opts;
@@ -103,7 +104,7 @@ export default async function orderMessageRoutes(fastify, opts) {
 
     // Broadcast via MessageBus
     if (messageBus) {
-      await messageBus.publish(`order:${orderId}`, {
+      await messageBus.publish(orderChannel(orderId), {
         type: 'order.message',
         data: msg
       });

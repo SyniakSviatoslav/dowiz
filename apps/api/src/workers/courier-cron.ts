@@ -2,6 +2,7 @@
 import { Pool } from 'pg';
 import type Boss from 'pg-boss';
 import type { MessageBus } from '@deliveryos/platform';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 import { loadEnv } from '@deliveryos/config';
 
 const env = loadEnv();
@@ -15,14 +16,14 @@ export class CourierCronWorker {
 
   async start() {
     // 1. gps.purge (daily at 3 AM) — singletonKey prevents double-execution on N=2
-    await this.boss.work('gps.purge', { singletonKey: 'gps.purge' }, async () => this.handleGpsPurge());
-    await this.boss.createQueue('gps.purge');
-    await this.boss.schedule('gps.purge', '0 3 * * *', null, { singletonKey: 'gps.purge' });
+    await this.boss.work(QUEUE_NAMES.GPS_PURGE, { singletonKey: QUEUE_NAMES.GPS_PURGE }, async () => this.handleGpsPurge());
+    await this.boss.createQueue(QUEUE_NAMES.GPS_PURGE);
+    await this.boss.schedule(QUEUE_NAMES.GPS_PURGE, '0 3 * * *', null, { singletonKey: QUEUE_NAMES.GPS_PURGE });
 
     // 2. courier.stale_check (every 2 minutes) — singletonKey prevents double-execution on N=2
-    await this.boss.work('courier.stale_check', { singletonKey: 'courier.stale_check' }, async () => this.handleStaleCheck());
-    await this.boss.createQueue('courier.stale_check');
-    await this.boss.schedule('courier.stale_check', '*/2 * * * *', null, { singletonKey: 'courier.stale_check' });
+    await this.boss.work(QUEUE_NAMES.COURIER_STALE_CHECK, { singletonKey: QUEUE_NAMES.COURIER_STALE_CHECK }, async () => this.handleStaleCheck());
+    await this.boss.createQueue(QUEUE_NAMES.COURIER_STALE_CHECK);
+    await this.boss.schedule(QUEUE_NAMES.COURIER_STALE_CHECK, '*/2 * * * *', null, { singletonKey: QUEUE_NAMES.COURIER_STALE_CHECK });
   }
 
   async handleGpsPurge() {
@@ -61,7 +62,7 @@ export class CourierCronWorker {
         `, [row.location_id, row.order_id]);
 
         // Publish event to trigger notification workflow
-        await this.messageBus.publish('courier.stale_heartbeat', {
+        await this.messageBus.publish(BUS_CHANNELS.COURIER_STALE_HEARTBEAT, {
           orderId: row.order_id,
           locationId: row.location_id,
           courierId: row.courier_id

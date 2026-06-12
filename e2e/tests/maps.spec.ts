@@ -19,6 +19,26 @@ test.describe('Map Components', () => {
     expect(pageContent).toMatch(/pin|map|vendndodhje/i);
   });
 
+  test('checkout map loads without CSP worker errors', async ({ page }) => {
+    const cspErrors: string[] = [];
+    page.on('console', msg => {
+      if (msg.type() === 'error' && msg.text().includes('Content Security Policy')) {
+        cspErrors.push(msg.text());
+      }
+    });
+
+    await page.goto('https://dowiz.fly.dev/s/demo/checkout', { waitUntil: 'networkidle', timeout: 30000 });
+    await page.waitForTimeout(5000);
+
+    // Verify no CSP worker-src/blob errors
+    const workerCspErrors = cspErrors.filter(e => e.includes('worker-src') || e.includes('blob'));
+    expect(workerCspErrors).toHaveLength(0);
+    
+    // Verify page loaded (should have CSP header with worker-src)
+    const bodyText = await page.textContent('body');
+    expect(bodyText).toBeTruthy();
+  });
+
   test('delivery page renders map container', async ({ page }) => {
     await page.goto('/courier/delivery/test-id?dev=true');
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });

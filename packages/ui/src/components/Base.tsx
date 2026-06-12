@@ -1,6 +1,7 @@
 import React from 'react';
 import type { InputHTMLAttributes, ButtonHTMLAttributes } from 'react';
 import { formatALL } from '../utils/index.js';
+import { t } from '../lib/i18n.js';
 
 // --- Button ---
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -106,22 +107,10 @@ export function PriceDisplay({ amount }: { amount: number }) {
 }
 
 // --- StatusBadge ---
-const STATUS_LABELS: Record<string, string> = {
-  PENDING: 'Ne pritje',
-  CONFIRMED: 'Konfirmuar',
-  PREPARING: 'Duke u pergatitur',
-  READY: 'Gati',
-  IN_DELIVERY: 'Ne dorezim',
-  DELIVERED: 'Dorezuar',
-  REJECTED: 'Refuzuar',
-  CANCELLED: 'Anuluar',
-  SCHEDULED: 'Planifikuar',
-  PICKED_UP: 'Marre',
-};
-
 export function StatusBadge({ status, pulse }: { status: string; pulse?: boolean }) {
   const key = status.toUpperCase().replace(/-/g, '_');
-  const label = STATUS_LABELS[key] || status.replace(/_/g, ' ');
+  const orderKey = `order.${key.toLowerCase()}`;
+  const label = t(orderKey, status.replace(/_/g, ' '));
   const colorVar = `--status-${key.toLowerCase()}`;
 
   return (

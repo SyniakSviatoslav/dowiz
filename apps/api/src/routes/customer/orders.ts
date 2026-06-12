@@ -4,6 +4,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { loadEnv } from '@deliveryos/config';
 import { CustomerOrderStatusResponse } from '@deliveryos/shared-types';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { distanceKm } from '../../lib/geo.js';
 
 const env = loadEnv();
@@ -189,7 +190,7 @@ export default (async function customerOrderRoutes(fastify, opts) {
       await client.query('COMMIT');
 
       // 5. Notify
-      await messageBus.publish('order.cancelled.customer_after_dispatch', {
+      await messageBus.publish(BUS_CHANNELS.ORDER_CANCEL_AFTER_DISPATCH, {
         orderId,
         locationId: order.location_id,
         reason

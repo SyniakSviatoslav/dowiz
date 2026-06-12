@@ -4,6 +4,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { maskName, maskPhone } from '../../lib/pii-mask.js';
 import { decryptPII } from '../../lib/pii-cipher.js';
 import crypto from 'node:crypto';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 
 const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED', 'CANCELLED', 'REJECTED'] as const;
 
@@ -300,15 +301,19 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
         [shiftId],
       );
 
+      // Canonical path: updateOrderStatus handles state machine + event publishing
+      const { updateOrderStatus } = await import('../../lib/orderStatusService.js');
+      await updateOrderStatus(client, orderId, locationId, 'IN_DELIVERY', { messageBus });
+      // Set courier_id separately (not part of status transition)
       await client.query(
-        `UPDATE orders SET status = 'IN_DELIVERY', courier_id = $1 WHERE id = $2`,
+        `UPDATE orders SET courier_id = $1 WHERE id = $2`,
         [courierId, orderId],
       );
 
       await client.query('COMMIT');
 
-      await messageBus.publish(`order:${orderId}`, { type: 'order.status', orderId, status: 'IN_DELIVERY', locationId, timestamp: new Date().toISOString() });
-      await messageBus.publish(`location:${locationId}:dashboard`, {
+      await messageBus.publish(orderChannel(orderId), { type: BUS_CHANNELS.ORDER_STATUS, orderId, status: 'IN_DELIVERY', locationId, timestamp: new Date().toISOString() });
+      await messageBus.publish(dashboardChannel(locationId), {
         type: 'courier.assignment_created',
         data: { orderId, courierId },
       });
@@ -365,8 +370,8 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
 
       await client.query('COMMIT');
 
-      await messageBus.publish(`order:${orderId}`, {
-        type: 'order.picked_up', orderId, locationId, timestamp: new Date().toISOString(),
+      await messageBus.publish(orderChannel(orderId), {
+        type: BUS_CHANNELS.ORDER_PICKED_UP, orderId, locationId, timestamp: new Date().toISOString(),
       });
 
       return reply.send({
@@ -444,8 +449,8 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
 
       await client.query('COMMIT');
 
-      await messageBus.publish(`order:${orderId}`, {
-        type: 'order.delivered', orderId, locationId, courierId,
+      await messageBus.publish(orderChannel(orderId), {
+        type: BUS_CHANNELS.ORDER_DELIVERED, orderId, locationId, courierId,
         cashCollected, cashAmount: finalCashAmount, timestamp: new Date().toISOString(),
       });
 
@@ -562,54 +567,23 @@ async function transitionOrder(db: any, messageBus: any, orderId: string, user: 
     );
     if (!cur.rowCount) throw { statusCode: 404, error: 'Order not found' };
 
-    const currentStatus = cur.rows[0].status;
     const locationId = cur.rows[0].location_id;
 
-    // Owner tokens don't have activeLocationId — location access verified by requireLocationAccess hook
     if (user.role !== 'owner' && (!user.activeLocationId || user.activeLocationId !== locationId)) {
       throw { statusCode: 404, error: 'Not found' };
     }
 
-    const acceptedFrom = newStatus === 'CONFIRMED' ? ['PENDING'] : ['PENDING', 'CONFIRMED', 'PREPARING', 'SCHEDULED'];
-    if (!acceptedFrom.includes(currentStatus)) {
-      throw { statusCode: 409, error: `Cannot transition from ${currentStatus} to ${newStatus}` };
-    }
+    // Canonical path: use updateOrderStatus which handles state machine, anti-race, and event publishing
+    const { updateOrderStatus } = await import('../../lib/orderStatusService.js');
+    await updateOrderStatus(client, orderId, locationId, newStatus as any, { messageBus });
 
-    let res;
-    if (newStatus === 'CONFIRMED') {
-      res = await client.query(
-        `UPDATE orders SET status = $1, confirmed_at = now(), timeout_at = NULL
-         WHERE id = $2 AND status = $3 RETURNING id`,
-        [newStatus, orderId, currentStatus],
-      );
-    } else if (newStatus === 'READY') {
-      res = await client.query(
-        `UPDATE orders SET status = $1, ready_at = now()
-         WHERE id = $2 AND status = $3 RETURNING id`,
-        [newStatus, orderId, currentStatus],
-      );
-    } else if (newStatus === 'DELIVERED') {
-      res = await client.query(
-        `UPDATE orders SET status = $1, delivered_at = now()
-         WHERE id = $2 AND status = $3 RETURNING id`,
-        [newStatus, orderId, currentStatus],
-      );
-    } else {
-      const reasonSet = reason ? `, rejection_reason = $4` : '';
-      const rParams = reason ? [newStatus, orderId, currentStatus, reason] : [newStatus, orderId, currentStatus];
-      res = await client.query(
-        `UPDATE orders SET status = $1${reasonSet} WHERE id = $2 AND status = $3 RETURNING id`,
-        rParams,
+    // Handle rejection_reason separately (updateOrderStatus doesn't set it)
+    if (reason && newStatus === 'REJECTED') {
+      await client.query(
+        `UPDATE orders SET rejection_reason = $1 WHERE id = $2`,
+        [reason, orderId],
       );
     }
-
-    if (!res.rowCount) throw { statusCode: 409, error: 'Order status already changed', code: 'CONFLICT' };
-
-    await messageBus.publish(`order:${orderId}`, { type: 'order.status', orderId, status: newStatus, locationId, timestamp: new Date().toISOString() });
-    await messageBus.publish(`location:${locationId}:dashboard`, {
-      type: `order.${newStatus.toLowerCase()}`,
-      data: { orderId, status: newStatus, statusUpdatedAt: new Date().toISOString() },
-    });
 
     return { id: orderId, status: newStatus, statusUpdatedAt: new Date().toISOString() };
   } finally {

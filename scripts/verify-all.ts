@@ -18,6 +18,10 @@ const STEPS = [
   { name: 'migration ordering', cmd: `tsx scripts/verify-migrations.ts` },
   { name: 'lint', cmd: 'pnpm lint' },
   { name: 'typecheck', cmd: 'pnpm typecheck' },
+  { name: 'i18n coverage', cmd: `tsx apps/api/scripts/verify-i18n-coverage.ts` },
+  { name: 'contrast audit', cmd: `tsx apps/api/scripts/verify-contrast.ts` },
+  { name: 'event wiring (NX)', cmd: 'pnpm verify:event-wiring' },
+  { name: 'connection lifecycle (NX)', cmd: 'pnpm verify:connection-lifecycle' },
 ];
 
 function run(cmd: string): { ok: boolean; output: string } {

@@ -5,15 +5,15 @@ import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { calcETA } from '@deliveryos/shared-types';
 
-const STATUS_LABELS: Record<string, string> = {
-  PENDING: 'Order placed',
-  CONFIRMED: 'Order confirmed',
-  PREPARING: 'Preparing your order',
-  READY: 'Order ready',
-  IN_DELIVERY: 'On the way!',
-  DELIVERED: 'Delivered',
-  REJECTED: 'Order rejected',
-  CANCELLED: 'Order cancelled',
+const STATUS_LABELS_KEYS: Record<string, string> = {
+  PENDING: 'order.placed',
+  CONFIRMED: 'order.confirmed',
+  PREPARING: 'order.preparing',
+  READY: 'order.ready',
+  IN_DELIVERY: 'order.in_delivery',
+  DELIVERED: 'order.delivered',
+  REJECTED: 'order.rejected',
+  CANCELLED: 'order.cancelled',
 };
 
 const STATUS_VARIANTS: Record<string, 'info' | 'success' | 'warning' | 'error'> = {
@@ -174,7 +174,7 @@ export function OrderStatusPage() {
     if (!order?.status) return;
     if (order.status === prevStatusRef.current) return;
     prevStatusRef.current = order.status;
-    const label = STATUS_LABELS[order.status] || order.status;
+    const label = t(STATUS_LABELS_KEYS[order.status] || '', order.status.replace(/_/g, ' '));
     const variant = STATUS_VARIANTS[order.status] || 'info';
     showToast(label, variant);
   }, [order?.status, showToast]);

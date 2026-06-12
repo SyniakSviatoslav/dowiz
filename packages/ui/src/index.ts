@@ -13,3 +13,7 @@ export * from './components/admin/AdminUI.js';
 
 export * from './components/courier/CourierUI.js';
 export * from './hooks/use-geolocation.js';
+export { useBreakpoint, useIsMobile } from './hooks/use-breakpoint.js';
+export { useHaptics } from './hooks/use-haptics.js';
+export { SoundPrefsProvider, useSoundPrefs } from './lib/sound-prefs.js';
+

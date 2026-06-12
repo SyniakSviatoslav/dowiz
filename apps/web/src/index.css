@@ -7,6 +7,7 @@
 
 html {
   scroll-behavior: smooth;
+  height: 100%;
 }
 
 body {
@@ -16,23 +17,52 @@ body {
   color: var(--brand-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  height: 100%;
+  min-height: 100dvh;
+}
+
+/* ── Mobile touch rules ── */
+button, a, [role="button"], input, select, textarea, label {
+  touch-action: manipulation;
+}
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+input, select, textarea {
+  font-size: max(16px, 1rem);
+}
+.scroll-area, .sheet-content {
+  overscroll-behavior: contain;
 }
 
 .embed-mode {
   position: relative !important;
 }
-
 .embed-mode [data-fixed] {
   position: sticky !important;
 }
-
 .embed-mode .embed-hidden {
   display: none !important;
 }
 
+/* ── Safe-area utility classes ── */
+.safe-top    { padding-top:    var(--safe-top); }
+.safe-bottom { padding-bottom: var(--safe-bottom); }
+.safe-left   { padding-left:   var(--safe-left); }
+.safe-right  { padding-right:  var(--safe-right); }
+.safe-inset  { padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left); }
+
+/* ── App shell: full-height with dynamic viewport ── */
+.app-shell  { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+.app-shell-main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
 :focus-visible {
   outline: 2px solid var(--brand-primary);
   outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+:focus:not(:focus-visible) {
+  outline: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -153,6 +183,14 @@ body {
   @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
   }
 
   .scale-in {
