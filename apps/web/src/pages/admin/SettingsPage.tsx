@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Input, EmptyState, MapWithRadius, Toggle, useI18n } from '@deliveryos/ui';
 import type { LngLatLike } from '@deliveryos/ui';
+import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
 
 interface DaySchedule {
@@ -182,6 +183,10 @@ export function SettingsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (settings.phone && !PHONE_E164_REGEX.test(settings.phone)) {
+      setError('Phone must be in international format (+355...)');
+      return;
+    }
     setSaving(true);
     setSuccess(false);
     try {
@@ -261,6 +266,8 @@ export function SettingsPage() {
                 value={settings.phone}
                 onChange={(e) => handleChange('phone', e.target.value)}
                 placeholder="+355..."
+                pattern={PHONE_E164_PATTERN}
+                title="+355 followed by 7-14 digits"
                 required
               />
             </div>

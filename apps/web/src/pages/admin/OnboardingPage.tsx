@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, FormField, MapWithRadius, MapWithPin, useI18n } from '@deliveryos/ui';
 import type { LngLatLike } from '@deliveryos/ui';
+import { PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
 
 const TOTAL_STEPS = 9;
@@ -287,7 +288,7 @@ export function OnboardingPage() {
                   <Input value={name} onChange={e => handleNameChange((e.target as HTMLInputElement).value)} placeholder="e.g. Pizza Roma" />
                 </FormField>
                 <FormField label={t('admin.phone_fallback', 'Phone (fallback for customers)')}>
-                  <Input value={phone} onChange={e => setPhone((e.target as HTMLInputElement).value)} placeholder="+355 69 XXX XXXX" />
+                  <Input value={phone} onChange={e => setPhone((e.target as HTMLInputElement).value)} placeholder="+355 69 XXX XXXX" pattern={PHONE_E164_PATTERN} title="+355 followed by 7-14 digits" />
                 </FormField>
                 <FormField label={t('admin.your_link', 'Your link')}>
                   <div className="flex items-center gap-2">
@@ -392,7 +393,7 @@ export function OnboardingPage() {
                 {courierOption === 'invite' && (
                   <div className="space-y-2">
                     <FormField label={t('admin.courier_phone', 'Courier phone')}>
-                      <Input value={courierPhone} onChange={e => setCourierPhone((e.target as HTMLInputElement).value)} placeholder="+355 69 XXX XXXX" />
+                      <Input value={courierPhone} onChange={e => setCourierPhone((e.target as HTMLInputElement).value)} placeholder="+355 69 XXX XXXX" pattern={PHONE_E164_PATTERN} title="+355 followed by 7-14 digits" />
                     </FormField>
                     <Button onClick={generateInvite}>{t('admin.generate_invite_link', 'Generate invite link')}</Button>
                     {inviteLink && (
