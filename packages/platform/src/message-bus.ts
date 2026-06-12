@@ -16,17 +16,33 @@ export class PgMessageBus implements MessageBus {
   private listenerClient: PoolClient | null = null;
   private handlers = new Map<string, Array<(msg: any) => void>>();
   private isDegraded = false;
+  private reconnectAttempts = 0;
+  private readonly MAX_RECONNECT_ATTEMPTS = 5;
 
-  constructor() {
-    this.pool = createSessionPool();
+  constructor(pool?: Pool) {
+    // Use provided pool or create session pool
+    this.pool = pool || createSessionPool();
   }
 
   async connect(): Promise<void> {
     try {
+      // Release any previous client before reconnecting
+      if (this.listenerClient) {
+        try {
+          this.listenerClient.release();
+        } catch {
+          // Ignore release errors on broken connections
+        }
+        this.listenerClient = null;
+      }
+
+      console.log('[PgMessageBus] Connecting listener client...');
       this.listenerClient = await this.pool.connect();
-      console.log('PgMessageBus connected to listen channel');
+      this.isDegraded = false; // Reset degradation on successful connect
+      console.log('[PgMessageBus] Connected successfully, setting up notification handler');
+      
       this.listenerClient.on('notification', (msg) => {
-        console.log('PgMessageBus received notification on:', msg.channel);
+        console.log('[PgMessageBus] ✓ Received notification on:', msg.channel, 'payload:', msg.payload);
         const channelHandlers = this.handlers.get(msg.channel);
         if (channelHandlers && msg.payload) {
           let parsed;
@@ -35,42 +51,97 @@ export class PgMessageBus implements MessageBus {
           } catch {
             parsed = msg.payload;
           }
+          console.log('[PgMessageBus] Calling', channelHandlers.length, 'handlers for', msg.channel);
           channelHandlers.forEach(h => h(parsed));
+        } else {
+          console.warn('[PgMessageBus] No handlers found for channel:', msg.channel, 'handlers map size:', this.handlers.size);
         }
       });
+
+      this.listenerClient.on('error', (err) => {
+        console.error('[PgMessageBus] Listener client error:', err);
+        this.isDegraded = true;
+        this.attemptReconnect();
+      });
+
+      this.listenerClient.on('end', () => {
+        console.warn('[PgMessageBus] Listener client ended, attempting reconnect...');
+        this.isDegraded = true;
+        this.attemptReconnect();
+      });
+
       // Subscribe to already registered channels if any
+      console.log('[PgMessageBus] Re-LISTENing to', this.handlers.size, 'pre-registered channels');
       for (const channel of this.handlers.keys()) {
         await this.listenerClient.query(`LISTEN "${channel}"`);
+        console.log('[PgMessageBus] LISTENing on:', channel);
       }
+      
+      console.log('[PgMessageBus] Connection setup complete, not degraded:', !this.isDegraded);
     } catch (err) {
-      console.warn('PgMessageBus degraded at startup:', err);
+      console.error('[PgMessageBus] Failed to connect listener:', err);
       this.isDegraded = true;
     }
+  }
+
+  private async attemptReconnect(): Promise<void> {
+    if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
+      console.error('[PgMessageBus] Max reconnection attempts reached, giving up');
+      return;
+    }
+    this.reconnectAttempts++;
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+    console.log(`[PgMessageBus]Attempting reconnect ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
+    setTimeout(async () => {
+      try {
+        await this.connect();
+        this.reconnectAttempts = 0;
+        console.log('[PgMessageBus] Reconnection successful');
+      } catch (err) {
+        console.error('[PgMessageBus] Reconnection failed:', err);
+      }
+    }, delay);
   }
 
   async publish(channel: string, msg: any): Promise<void> {
     if (this.isDegraded) return;
     try {
-      console.log('PgMessageBus publishing to:', channel, 'msg:', JSON.stringify(msg));
-      await this.pool.query(`NOTIFY "${channel}", '${JSON.stringify(msg)}'`);
+      console.log('[PgMessageBus] Publishing to:', channel, 'msg:', JSON.stringify(msg));
+      // Use the listener client for NOTIFY to ensure delivery
+      // If listenerClient is not available, fall back to pool
+      const client = this.listenerClient || this.pool;
+      const payload = JSON.stringify(msg).replace(/'/g, "''"); // Escape single quotes for SQL
+      await client.query(`NOTIFY "${channel}", '${payload}'`);
+      console.log('[PgMessageBus] ✓ Published to:', channel);
     } catch (err) {
-      console.error('PgMessageBus publish error:', err);
+      console.error('[PgMessageBus] Publish error:', err);
     }
   }
 
   async subscribe(channel: string, handler: (msg: any) => void): Promise<void> {
-    if (!this.handlers.has(channel)) {
+    const isNewChannel = !this.handlers.has(channel);
+    
+    if (isNewChannel) {
       this.handlers.set(channel, []);
-      if (this.listenerClient) {
-        console.log('PgMessageBus subscribing to:', channel);
+    }
+    
+    if (this.listenerClient) {
+      if (isNewChannel) {
+        console.log('[PgMessageBus] New channel, issuing LISTEN for:', channel);
         try {
-          await this.listenerClient.query(`LISTEN "${channel}"`);
+          const result = await this.listenerClient.query(`LISTEN "${channel}"`);
+          console.log('[PgMessageBus] ✓ LISTEN successful on:', channel, 'rows:', result?.rowCount);
         } catch (err) {
-          console.warn(`Pg failed to subscribe to ${channel}:`, err);
+          console.error('[PgMessageBus] Failed to LISTEN on', channel, err);
+          throw err;
         }
       }
+    } else {
+      console.warn('[PgMessageBus] listenerClient not ready, cannot LISTEN on', channel);
     }
+    
     this.handlers.get(channel)!.push(handler);
+    console.log('[PgMessageBus] Handler registered for', channel, 'total handlers:', this.handlers.get(channel)!.length);
   }
 
   unsubscribe(channel: string, handler: (msg: any) => void): void {

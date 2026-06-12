@@ -57,6 +57,9 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
         }
       };
 
+    case 'order.confirmed':
+    case 'order.rejected':
+
     case 'order.delivered':
     case 'order.dwell_escalation':
     case 'order.ready_for_pickup':

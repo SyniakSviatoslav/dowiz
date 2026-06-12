@@ -592,10 +592,26 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         db: { executeSql: (sql: string, values: any[]) => client.query(sql, values) }
       });
 
+      // NX-3: Transactional outbox for notification
+      // Enqueue notify job within the same transaction as order INSERT
+      // This ensures durability independent of LISTEN/NOTIFY
+      const dedupKey = `order.created:${order.id}:${locationId}`;
+      await queue.enqueue('notify.telegram.send', {
+        event: 'order.created',
+        entity_id: order.id,
+        location_id: locationId,
+        dedupKey,
+      }, {
+        singletonKey: dedupKey,
+        db: { executeSql: (sql: string, values: any[]) => client.query(sql, values) }
+      });
+      console.log(`[ORDERS] NX-3: notify.telegram.send enqueued transactionally for order ${order.id} (key: ${dedupKey})`);
+
       await client.query('COMMIT');
 
       // Post-commit MessageBus
       try {
+        console.log('[ORDERS] Publishing order.created event for order:', order.id);
         await messageBus.publish('order.created', {
           orderId: order.id,
           locationId,
@@ -604,6 +620,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           currency: location.currency_code,
           timestamp: new Date().toISOString(),
         });
+        console.log('[ORDERS] order.created event published successfully');
         await messageBus.publish(`order:${order.id}`, {
           type: 'order.status',
           orderId: order.id,

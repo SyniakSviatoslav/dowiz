@@ -24,6 +24,8 @@ export interface TelegramSendJob {
   event: NotificationEventType;
   entity_id?: string;
   location_id: string;
+  dedupKey?: string;
+  attempt?: number;
 }
 
 const CUSTOMER_STATUS_EVENTS = ['CONFIRMED', 'IN_DELIVERY', 'DELIVERED'] as const;
@@ -35,6 +37,20 @@ export class NotificationWorker {
   private boss: any;
   private webPushAdapter: WebPushAdapter | null = null;
   private memory: MemoryService | null;
+
+  // NX-5: Per-chat rate limiting (in-memory, reset on restart)
+  private lastSendPerChat = new Map<string, number>();
+  private readonly CHAT_RATE_LIMIT_MS = 1200; // ~1 msg/s/chat
+
+  // NX-5: Circuit breaker state per chat
+  private circuitState = new Map<string, { failures: number; lastFailure: number; tripped: boolean }>();
+  private readonly CIRCUIT_FAILURE_THRESHOLD = 5;
+  private readonly CIRCUIT_COOLDOWN_MS = 60_000; // 1 min cooldown
+  private readonly MAX_RETRIES = 10;
+
+  // NX-5: Dedup set for idempotency (in-memory LRU)
+  private dedupCache = new Set<string>();
+  private readonly DEDUP_CACHE_MAX = 1000;
 
   constructor(
     db: any,
@@ -72,7 +88,7 @@ export class NotificationWorker {
     try {
       // 1. Fetch order with tenant isolation + get restaurant name
       const orderRes = await client.query(
-        `SELECT o.id, o.short_id, o.total, o.currency, o.status, o.customer_id,
+        `SELECT o.id, o.total, o.currency_code AS currency, o.status, o.customer_id,
                 l.name AS location_name
          FROM orders o
          JOIN locations l ON l.id = o.location_id
@@ -103,8 +119,9 @@ export class NotificationWorker {
         IN_DELIVERY: 'On the way',
         DELIVERED: 'Delivered',
       };
-      const title = order.short_id
-        ? `Order #${order.short_id} ${statusLabels[event] || event}`
+      const shortId = order.id?.substring(0, 8);
+      const title = shortId
+        ? `Order #${shortId} ${statusLabels[event] || event}`
         : `${order.location_name || 'Your order'} — ${statusLabels[event] || event}`;
       const body = order.total != null
         ? `${(order.total / 100).toFixed(2)} ${order.currency || 'ALL'}`
@@ -196,7 +213,7 @@ export class NotificationWorker {
       let orderData: any = {};
       if (orderId) {
         const orderRes = await client.query(
-          `SELECT id, short_id, total, currency, created_at, status
+          `SELECT id, total, currency_code AS currency, created_at, status
            FROM orders 
            WHERE id = $1 AND location_id = $2`,
           [orderId, locationId],
@@ -205,7 +222,7 @@ export class NotificationWorker {
         const row = orderRes.rows[0];
         orderData = {
           orderId: row.id,
-          shortOrderId: row.shortId,
+          shortOrderId: row.id?.substring(0, 8),
           total: row.total,
           currency: row.currency,
           createdAtLocal: row.created_at.toISOString(),
@@ -307,58 +324,182 @@ export class NotificationWorker {
     }
   }
 
-  async handleTelegramSend(job: Job<TelegramSendJob>) {
-    const { event, entity_id, location_id } = job.data;
-    const client = await this.db.connect();
-    try {
-      // 1. Find all active telegram targets for the location that have this event enabled
-      const targetsRes = await client.query(
-        `SELECT id, address, user_id, prefs, locale
-         FROM owner_notification_targets 
-         WHERE location_id = $1 AND channel = 'telegram' AND status = 'active'`,
-        [location_id]
-      );
+async handleTelegramSend(job: Job<TelegramSendJob>) {
+      const { event, entity_id, location_id } = job.data;
+      const dedupKey = `${event}:${entity_id || ''}:${location_id}`;
 
-      for (const target of targetsRes.rows) {
-        // Check prefs: if prefs[event] is false, skip
-        const prefs = target.prefs || {};
-        if (prefs[event] === false) {
-          continue;
-        }
-
-        // 2. Build the notification data
-        let data: any = { location_id, locale: target.locale || 'sq' };
-        if (entity_id) {
-          // We have an entity_id, fetch the data based on event type
-          data = await this.buildTelegramData(event, entity_id, location_id, client, data.locale);
-        }
-
-        const targetObj: NotificationTarget = {
-          id: target.id,
-          channel: target.channel as any,
-          address: target.address,
-          locationId: location_id,
-          locale: data.locale,
-        };
-
-        const eventObj: NotifEvent = { type: event };
-
-        // 3. Dispatch
-        const result = await this.dispatcher.dispatch(targetObj, eventObj, data);
-
-        // 4. Handle success/failure (we could log errors, but we don't retry here because the job itself is retryable via pg-boss)
-        if (!result.delivered) {
-          console.error(`[TelegramSend] Failed to send notification to target ${target.id}: ${result.reason}`);
-        }
+      // NX-5: Idempotency check — skip if already delivered in this process lifetime
+      if (this.dedupCache.has(dedupKey)) {
+        console.log(`[TelegramSend] NX-5: Skipping duplicate job: ${dedupKey}`);
+        return;
       }
-    } finally {
-      client.release();
+
+      const client = await this.db.connect();
+      try {
+        console.log(`[TelegramSend] Processing job: event=${event}, entity_id=${entity_id || 'none'}, location_id=${location_id}`);
+        
+        // 1. Find all active telegram targets for the location that have this event enabled
+        const targetsRes = await client.query(
+          `SELECT id, address, user_id, prefs, locale
+           FROM owner_notification_targets 
+           WHERE location_id = $1 AND channel = 'telegram' AND status = 'active'`,
+          [location_id]
+        );
+        
+        console.log(`[TelegramSend] Found ${targetsRes.rows.length} active targets`);
+  
+        for (const target of targetsRes.rows) {
+          try {
+            // Check prefs: if prefs[event] is false, skip
+            const prefs = target.prefs || {};
+            if (prefs[event] === false) {
+              console.log(`[TelegramSend] Skipping target ${target.id}: prefs[${event}] = false`);
+              continue;
+            }
+  
+            // NX-5: Per-chat circuit breaker
+            const chatState = this.circuitState.get(target.address) || { failures: 0, lastFailure: 0, tripped: false };
+            if (chatState.tripped) {
+              const cooldownElapsed = Date.now() - chatState.lastFailure;
+              if (cooldownElapsed < this.CIRCUIT_COOLDOWN_MS) {
+                console.log(`[TelegramSend] NX-5: Circuit open for chat ${target.address}, skipping (${Math.round((this.CIRCUIT_COOLDOWN_MS - cooldownElapsed) / 1000)}s remaining)`);
+                continue;
+              }
+              // Reset circuit after cooldown
+              chatState.tripped = false;
+              chatState.failures = 0;
+              this.circuitState.set(target.address, chatState);
+              console.log(`[TelegramSend] NX-5: Circuit reset for chat ${target.address} after cooldown`);
+            }
+
+            // NX-5: Per-chat rate limiting
+            const lastSend = this.lastSendPerChat.get(target.address) || 0;
+            const elapsed = Date.now() - lastSend;
+            if (elapsed < this.CHAT_RATE_LIMIT_MS) {
+              console.log(`[TelegramSend] NX-5: Rate limited chat ${target.address}, delaying ${this.CHAT_RATE_LIMIT_MS - elapsed}ms`);
+              await new Promise(resolve => setTimeout(resolve, this.CHAT_RATE_LIMIT_MS - elapsed));
+            }
+  
+            // 2. Build the notification data
+            let data: any = { location_id, locale: target.locale || 'sq' };
+            if (entity_id) {
+              console.log(`[TelegramSend] Building data for event=${event}, entity_id=${entity_id}`);
+              data = await this.buildTelegramData(event, entity_id, location_id, client, data.locale);
+              console.log(`[TelegramSend] Built data: ${JSON.stringify({shortOrderId: data.shortOrderId, total: data.total, currency: data.currency})}`);
+            }
+  
+            const targetObj: NotificationTarget = {
+              id: target.id,
+              channel: target.channel as any,
+              address: target.address,
+              locationId: location_id,
+              locale: data.locale,
+            };
+  
+            const eventObj: NotifEvent = { type: event };
+  
+            // 3. Audit: log attempt
+            await client.query(
+              `INSERT INTO notification_outbox_audit (event, target_id, location_id, channel, status, attempts)
+               VALUES ($1, $2, $3, 'telegram', 'sending', 1)
+               ON CONFLICT DO NOTHING`,
+              [event, target.id, location_id]
+            );
+
+            // 4. Dispatch
+            console.log(`[TelegramSend] Dispatching to target ${target.id}, channel=${target.channel}, address=${target.address}`);
+            const result = await this.dispatcher.dispatch(targetObj, eventObj, data);
+
+            // NX-5: Update rate limit tracker
+            this.lastSendPerChat.set(target.address, Date.now());
+  
+            // 5. Handle success/failure
+            if (!result.delivered) {
+              console.error(`[TelegramSend] Failed to send notification to target ${target.id}: ${result.reason}`);
+
+              // NX-5: Update circuit breaker
+              chatState.failures++;
+              chatState.lastFailure = Date.now();
+              if (chatState.failures >= this.CIRCUIT_FAILURE_THRESHOLD) {
+                chatState.tripped = true;
+                console.log(`[TelegramSend] NX-5: Circuit tripped for chat ${target.address} (${chatState.failures} failures)`);
+              }
+              this.circuitState.set(target.address, chatState);
+
+              // NX-5: Audit failure
+              await client.query(
+                `INSERT INTO notification_outbox_audit (event, target_id, location_id, channel, status, attempts, error_message)
+                 VALUES ($1, $2, $3, 'telegram', 'failed', 1, $4)
+                 ON CONFLICT DO NOTHING`,
+                [event, target.id, location_id, result.reason]
+              );
+            } else {
+              console.log(`[TelegramSend] Successfully sent notification to target ${target.id}`);
+
+              // NX-5: Reset circuit on success
+              if (chatState.failures > 0) {
+                chatState.failures = 0;
+                chatState.tripped = false;
+                this.circuitState.set(target.address, chatState);
+              }
+
+              // NX-5: Mark as delivered in dedup cache
+              this.dedupCache.add(dedupKey);
+              if (this.dedupCache.size > this.DEDUP_CACHE_MAX) {
+                const first = this.dedupCache.values().next().value;
+                if (first) this.dedupCache.delete(first);
+              }
+
+              // NX-5: Audit success
+              await client.query(
+                `INSERT INTO notification_outbox_audit (event, target_id, location_id, channel, status, attempts)
+                 VALUES ($1, $2, $3, 'telegram', 'delivered', 1, $4)
+                 ON CONFLICT DO NOTHING`,
+                [event, target.id, location_id]
+              );
+            }
+          } catch (targetErr: any) {
+            console.error(`[TelegramSend] Error processing target ${target.id}: ${targetErr.message}`);
+
+            // NX-5: Circuit breaker on error
+            const errChatState = this.circuitState.get(target.address) || { failures: 0, lastFailure: 0, tripped: false };
+            errChatState.failures++;
+            errChatState.lastFailure = Date.now();
+            if (errChatState.failures >= this.CIRCUIT_FAILURE_THRESHOLD) {
+              errChatState.tripped = true;
+              console.log(`[TelegramSend] NX-5: Circuit tripped for chat ${target.address} (${errChatState.failures} failures)`);
+            }
+            this.circuitState.set(target.address, errChatState);
+          }
+        }
+      } catch (err: any) {
+        console.error(`[TelegramSend] Critical error processing job: ${err.message}`);
+
+        // NX-5: Check retry limit before rethrowing
+        const attempts = job.data?.attempt || 0;
+        if (attempts >= this.MAX_RETRIES) {
+          console.error(`[TelegramSend] NX-5: Max retries (${this.MAX_RETRIES}) reached for ${dedupKey}, moving to dead-letter`);
+          try {
+            await client.query(
+              `INSERT INTO notification_outbox_audit (event, location_id, channel, status, attempts, error_message)
+               VALUES ($1, $2, 'telegram', 'archived', $3, $4)
+               ON CONFLICT DO NOTHING`,
+              [event, location_id, attempts, err.message]
+            );
+          } catch {}
+          return; // Do not re-throw — archive and move on
+        }
+
+        // Re-throw with incremented attempt count for pg-boss retry
+        throw Object.assign(err, { data: { ...job.data, attempt: attempts + 1 } });
+      } finally {
+        client.release();
+      }
     }
-  }
 
   private async fetchOrderDetails(entity_id: string, location_id: string, client: any): Promise<any> {
     const orderRes = await client.query(
-      `SELECT o.id, o.short_id, o.total, o.subtotal, o.delivery_fee, o.discount_total,
+      `SELECT o.id, o.total, o.subtotal, o.delivery_fee, o.discount_total,
               o.tax_total, o.currency_code, o.created_at, o.status,
               o.type, o.delivery_address, o.delivery_instructions,
               o.cash_pay_with,
@@ -376,7 +517,7 @@ export class NotificationWorker {
       `SELECT oi.name_snapshot, oi.price_snapshot, oi.quantity
        FROM order_items oi
        WHERE oi.order_id = $1
-       ORDER BY oi.created_at`,
+       ORDER BY oi.id`,
       [entity_id]
     );
     const items = itemsRes.rows.map((r: any) => ({
@@ -387,7 +528,7 @@ export class NotificationWorker {
 
     return {
       orderId: row.id,
-      shortOrderId: row.short_id,
+      shortOrderId: row.id?.substring(0, 8),
       total: row.total,
       subtotal: row.subtotal,
       deliveryFee: row.delivery_fee,
@@ -413,6 +554,8 @@ export class NotificationWorker {
 
     switch (event) {
       case 'order.created':
+      case 'order.confirmed':
+      case 'order.rejected':
       case 'order.delivered':
       case 'order.substitution_needs_human':
       case 'order.dwell_escalation':

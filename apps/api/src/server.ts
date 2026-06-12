@@ -372,11 +372,11 @@ const retryPolicy = new RetryPolicy();
   const velocityIncrementer = new VelocityIncrementer(pool, queue.boss);
   await queue.work('velocity.flush', async (data: any) => velocityIncrementer.handleFlush({ data }));
 
-  // Telegram Poller
+  // Telegram Poller disabled — webhook handles all updates (messages + callbacks)
+  // Poller conflicts with webhook (getUpdates HTTP 409). Keep poller import for type,
+  // but don't start. Webhook at /webhook/telegram/:secret handles /start, /stop, /open, /close.
   const telegramPoller = new TelegramPoller(pool, telegramAdapter);
-  if (env.TELEGRAM_BOT_TOKEN) {
-    telegramPoller.start();
-  }
+  // telegramPoller.start(); — disabled: webhook active
 
    // Backup failure → Telegram alert to location owners
    messageBus.subscribe('backup.failed', async (payload: any) => {
@@ -464,6 +464,22 @@ const retryPolicy = new RetryPolicy();
        await tgSend('courier.assigned', payload.orderId, payload.locationId);
      } catch (err) {
        console.error('[Notify] Failed to send courier.assigned telegram job', err);
+     }
+   });
+
+   messageBus.subscribe('order.confirmed', async (payload: any) => {
+     try {
+       await tgSend('order.confirmed', payload.orderId, payload.locationId);
+     } catch (err) {
+       console.error('[Notify] Failed to send order.confirmed telegram job', err);
+     }
+   });
+
+   messageBus.subscribe('order.rejected', async (payload: any) => {
+     try {
+       await tgSend('order.rejected', payload.orderId, payload.locationId);
+     } catch (err) {
+       console.error('[Notify] Failed to send order.rejected telegram job', err);
      }
    });
 

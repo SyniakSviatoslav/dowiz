@@ -123,7 +123,7 @@ export default (async function ownerCourierRoutes(fastify, opts) {
     
     const client = await db.connect();
     try {
-      await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
       const res = await client.query(`
         SELECT 

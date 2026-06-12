@@ -253,6 +253,7 @@ These rules were added after discovering that 6 real production bugs passed all 
 | **Verify env var names match between code and deployment** | `GROQ_API_KE` was set on Fly (typo) instead of `GROQ_API_KEY` | Cross-reference `process.env.XXX` references with `flyctl secrets list` and `.env.example`. Add new env vars to `verify:env`. |
 | **Verify API response shapes against actual live data** | Frontend read `attributes.kcal` but API returned `attributes.bom[].kcal` | For any API integration, `curl` or `fetch` the live endpoint and inspect the actual response before writing frontend parsing code. |
 | **Verify slugs/IDs match the database before hardcoding** | `demo-location` was used but DB has `demo` | Query the actual data: `SELECT slug FROM locations` or call the live API before assuming a slug. |
+| **Verify API payload field names against Zod schemas** | Test sent `productId` but API expects `product_id` (snake_case) | Read the Zod schema in `packages/shared-types/src/*.ts` before constructing API payloads. API uses snake_case, not camelCase. |
 
 ### 13.2 Test quality rules — tests must fail when code is broken
 
@@ -264,6 +265,7 @@ These rules were added after discovering that 6 real production bugs passed all 
 | Create a slug from display name instead of using the API slug | Always use the `slug` field returned by the API. Generate from name ONLY as fallback. |
 | Form env var names from memory or convention | Copy-paste exact var names from `.env.example` or `verify:env.ts`. Verify against Fly secrets. |
 | Assume a method exists on a provider/interface | Read the actual interface file before calling any method. |
+| Use camelCase in API payloads when backend expects snake_case | Read Zod schemas in `packages/shared-types/src/`. API uses snake_case (`product_id`, `location_id`, `address_text`), not camelCase. |
 
 ### 13.3 Pre-deploy verification checklist (MANDATORY before any deploy)
 

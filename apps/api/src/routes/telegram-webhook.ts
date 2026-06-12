@@ -119,47 +119,89 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
         await answerCallbackQuery(callbackQuery.id, { text: 'Invalid action' });
         return;
       }
-      
-       // Verify the user is linked to this chat_id
-       const targetRes = await client.query(
-         `SELECT ont.id, ont.location_id, ont.channel, ont.user_id
-          FROM owner_notification_targets ont
-          WHERE ont.address = $1 AND ont.channel = 'telegram' AND ont.status = 'active'`,
-         [chatId]
-       );
 
-      if (targetRes.rows.length === 0) {
-        // No active Telegram linkage for this chat
-        await answerCallbackQuery(callbackQuery.id, { text: 'Account not linked' });
+      let locationId: string | undefined;
+      let targetUserId: string | undefined;
+
+      // For order.* actions: resolve location_id from the order first,
+      // then look up the notification target scoped by (chatId, locationId).
+      // This is more robust than the reverse because:
+      //   1. user_id may be NULL in notification_target (migration backfill)
+      //   2. same chat may be linked to multiple locations
+      if (action.startsWith('order.')) {
+        if (!entityId) {
+          await answerCallbackQuery(callbackQuery.id, { text: 'Invalid order' });
+          return;
+        }
+        const orderRes = await client.query(
+          `SELECT location_id FROM orders WHERE id = $1`,
+          [entityId]
+        );
+        if (orderRes.rows.length === 0) {
+          await answerCallbackQuery(callbackQuery.id, { text: 'Order not found' });
+          return;
+        }
+        locationId = orderRes.rows[0].location_id;
+
+        // Now verify the chat is linked to THIS location
+        const targetRes = await client.query(
+          `SELECT ont.id, ont.user_id
+           FROM owner_notification_targets ont
+           WHERE ont.address = $1 AND ont.channel = 'telegram' AND ont.status = 'active' AND ont.location_id = $2`,
+          [chatId, locationId]
+        );
+        if (targetRes.rows.length === 0) {
+          await answerCallbackQuery(callbackQuery.id, { text: 'Account not linked to this location' });
+          return;
+        }
+        targetUserId = targetRes.rows[0].user_id;
+      } else {
+        // Non-order actions: look up by chatId without location scope
+        const targetRes = await client.query(
+          `SELECT ont.id, ont.location_id, ont.user_id
+           FROM owner_notification_targets ont
+           WHERE ont.address = $1 AND ont.channel = 'telegram' AND ont.status = 'active'`,
+          [chatId]
+        );
+        if (targetRes.rows.length === 0) {
+          await answerCallbackQuery(callbackQuery.id, { text: 'Account not linked' });
+          return;
+        }
+        const target = targetRes.rows[0];
+        locationId = target.location_id;
+        targetUserId = target.user_id;
+      }
+
+      // Both branches above set locationId (or return early), but TypeScript
+      // needs a narrowing guard to treat it as string below.
+      if (!locationId) {
+        await answerCallbackQuery(callbackQuery.id, { text: 'Action not supported' });
         return;
       }
 
-       const target = targetRes.rows[0];
-       const locationId = target.location_id;
+      // Verify the user has authority: check membership only if user_id is set
+      // If user_id is NULL (legacy rows), skip membership check — the chat was
+      // linked via an authenticated token flow which already verified ownership.
+      if (targetUserId) {
+        const memberRes = await client.query(
+          `SELECT 1 FROM memberships WHERE user_id = $1 AND location_id = $2 AND status = 'active'`,
+          [targetUserId, locationId]
+        );
+        if (memberRes.rowCount === 0) {
+          await answerCallbackQuery(callbackQuery.id, { text: 'Unauthorized: not a member of this location' });
+          return;
+        }
+      }
 
-       // Verify the user is a member of the location (authority via membership)
-       const memberRes = await client.query(
-         `SELECT 1 FROM memberships WHERE user_id = $1 AND location_id = $2 AND status = 'active'`,
-         [target.user_id, locationId]
-       );
-       if (memberRes.rowCount === 0) {
-         await answerCallbackQuery(callbackQuery.id, { text: 'Unauthorized: not a member of this location' });
-         return;
-       }
-
-       // Verify the entity belongs to this location (tenant isolation)
-      // This varies by action type
-      let authorized = false;
+      // Verify the entity belongs to this location (tenant isolation)
+      // For order.* actions this is already verified above (order query returned it).
+      // For other actions, add entity verification as needed.
+      let authorized = true;
 
       if (action.startsWith('order.')) {
-        // Check if order belongs to this location
-        const orderRes = await client.query(
-          `SELECT 1 FROM orders WHERE id = $1 AND location_id = $2`,
-          [entityId, locationId]
-        );
-        authorized = orderRes.rows.length > 0;
-      } 
-      // Add other entity types as needed (shift, etc.)
+        // Already verified by the order query above — location_id matched
+        authorized = true;
+      }
 
       if (!authorized) {
         await answerCallbackQuery(callbackQuery.id, { text: 'Unauthorized' });

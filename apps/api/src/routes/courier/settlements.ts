@@ -23,7 +23,7 @@ export default (async function courierSettlementRoutes(fastify, opts) {
     // Set RLS context
     const activeLocationId = (request.user as any).activeLocationId;
     if (activeLocationId) {
-      await db.query(`SET LOCAL app.current_tenant = '${activeLocationId}'`);
+      await db.query(`SELECT set_config('app.current_tenant', $1, true)`, [activeLocationId]);
     }
 
     let sql = `
@@ -57,7 +57,7 @@ export default (async function courierSettlementRoutes(fastify, opts) {
 
     const activeLocationId = (request.user as any).activeLocationId;
     if (activeLocationId) {
-      await db.query(`SET LOCAL app.current_tenant = '${activeLocationId}'`);
+      await db.query(`SELECT set_config('app.current_tenant', $1, true)`, [activeLocationId]);
     }
 
     const payoutRes = await db.query(`
@@ -73,7 +73,7 @@ export default (async function courierSettlementRoutes(fastify, opts) {
 
     // Set RLS context for items query too
     if (activeLocationId) {
-      await db.query(`SET LOCAL app.current_tenant = '${activeLocationId}'`);
+      await db.query(`SELECT set_config('app.current_tenant', $1, true)`, [activeLocationId]);
     }
 
     // Fetch masked items
