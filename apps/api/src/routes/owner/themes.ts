@@ -136,7 +136,8 @@ export default (async function ownerThemeRoutes(fastify, opts) {
 
     const client = await db.connect();
     try {
-      const logoUrl = `https://cdn.dowiz.org/${key}`; // mocked CDN base
+      const APP_BASE = process.env.APP_BASE_URL || 'https://dowiz.fly.dev';
+      const logoUrl = `${APP_BASE}/images/${key}`;
       await client.query(`UPDATE location_themes SET logo_url = $2 WHERE location_id = $1`, [locationId, logoUrl]);
       // Re-render theme would go here in a full impl
       return reply.send({ logo_url: logoUrl });

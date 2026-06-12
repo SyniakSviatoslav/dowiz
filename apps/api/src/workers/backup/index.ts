@@ -2,6 +2,7 @@
 import { Pool } from 'pg';
 import { loadEnv } from '@deliveryos/config';
 import crypto from 'node:crypto';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { createLogicalDump } from './dump.js';
 import { createEncryptionStream } from './encrypt.js';
 import { uploadStream, uploadJson } from './upload.js';
@@ -30,19 +31,19 @@ export class BackupCronWorker {
 
     console.log('[Backup] Registering BackupCronWorker jobs...');
 
-    await this.boss.work('backup.hourly', async () => this.handleBackup('hourly'));
-    await this.boss.work('backup.daily', async () => this.handleBackup('daily'));
-    await this.boss.work('backup.weekly', async () => this.handleBackup('weekly'));
-    await this.boss.work('backup.monthly', async () => this.handleBackup('monthly'));
+    await this.boss.work(QUEUE_NAMES.BACKUP_HOURLY, async () => this.handleBackup('hourly'));
+    await this.boss.work(QUEUE_NAMES.BACKUP_DAILY, async () => this.handleBackup('daily'));
+    await this.boss.work(QUEUE_NAMES.BACKUP_WEEKLY, async () => this.handleBackup('weekly'));
+    await this.boss.work(QUEUE_NAMES.BACKUP_MONTHLY, async () => this.handleBackup('monthly'));
 
-    await this.boss.createQueue('backup.hourly');
-    await this.boss.schedule('backup.hourly', env.BACKUP_HOURLY_CRON);
-    await this.boss.createQueue('backup.daily');
-    await this.boss.schedule('backup.daily', env.BACKUP_DAILY_CRON);
-    await this.boss.createQueue('backup.weekly');
-    await this.boss.schedule('backup.weekly', env.BACKUP_WEEKLY_CRON);
-    await this.boss.createQueue('backup.monthly');
-    await this.boss.schedule('backup.monthly', env.BACKUP_MONTHLY_CRON);
+    await this.boss.createQueue(QUEUE_NAMES.BACKUP_HOURLY);
+    await this.boss.schedule(QUEUE_NAMES.BACKUP_HOURLY, env.BACKUP_HOURLY_CRON);
+    await this.boss.createQueue(QUEUE_NAMES.BACKUP_DAILY);
+    await this.boss.schedule(QUEUE_NAMES.BACKUP_DAILY, env.BACKUP_DAILY_CRON);
+    await this.boss.createQueue(QUEUE_NAMES.BACKUP_WEEKLY);
+    await this.boss.schedule(QUEUE_NAMES.BACKUP_WEEKLY, env.BACKUP_WEEKLY_CRON);
+    await this.boss.createQueue(QUEUE_NAMES.BACKUP_MONTHLY);
+    await this.boss.schedule(QUEUE_NAMES.BACKUP_MONTHLY, env.BACKUP_MONTHLY_CRON);
   }
 
   private async acquireLock(client: any, type: string): Promise<boolean> {
@@ -160,12 +161,12 @@ export class BackupCronWorker {
 
           await logBackupAudit(this.operationalPool, backupId, 'completed', 'system', null, { durationMs });
 
-          await this.messageBus.publish('backup.completed', {
-            backupId,
-            type,
-            durationMs,
-            r2Key
-          });
+      await this.messageBus.publish(BUS_CHANNELS.BACKUP_COMPLETED, {
+        backupId,
+        type,
+        durationMs,
+        r2Key
+      });
 
           console.log(`[Backup] ${type} backup ${backupId} completed in ${durationMs}ms (attempt ${attempt})`);
           lastError = null;
@@ -198,7 +199,7 @@ export class BackupCronWorker {
       });
       await logBackupAudit(this.operationalPool, backupId, 'failed', 'system', null, { error: err.message });
 
-      await this.messageBus.publish('backup.failed', {
+      await this.messageBus.publish(BUS_CHANNELS.BACKUP_FAILED, {
         backupId,
         type,
         reason: err.message

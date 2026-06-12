@@ -6,9 +6,12 @@ import { buildJsonLd } from './jsonld-builder.js';
 
 const html = htm.bind(h);
 
-export function renderMenuPage(data: any, slug: string, logoUrl?: string): string {
+export function renderMenuPage(data: any, slug: string, logoUrl?: string, baseUrl?: string, isEmbed?: boolean, isPreview?: boolean, locationStatus?: string): string {
+  const canonicalHost = baseUrl || 'https://dowiz.org';
+  const canonicalUrl = `${canonicalHost}/s/${slug}`;
+  const isClosed = locationStatus === 'closed' || locationStatus === 'disabled';
+  const shouldNoindex = isPreview || isEmbed || locationStatus === 'deleted';
   const defaultLocale = data.default_locale;
-  const isEmbed = false; // Determined client-side usually, but we could pass it down
 
   const switchScript = `
     function setLocale(newLocale) {
@@ -42,44 +45,56 @@ export function renderMenuPage(data: any, slug: string, logoUrl?: string): strin
     return attrs;
   };
 
-  const jsonLd = buildJsonLd(slug, data);
+  const jsonLd = buildJsonLd(slug, data, canonicalHost, {
+    deliveryRadiusKm: data.location?.delivery_radius_km,
+  });
 
-  const title = `${data.location.name} — Menu`;
-  let description = data.location.address || '';
+  const city = data.location.address?.split(',').pop()?.trim() || '';
+  const cuisineKeywords = data.categories?.[0]?.available_names?.[defaultLocale] || '';
+  const title = `${data.location.name} — ${cuisineKeywords ? cuisineKeywords + ' · ' : ''}доставка ${city || 'Tiranë'} | Dowiz`;
+  const shortTitle = `${data.location.name} — Menu`;
+  let description = data.location.seo_description || data.location.address || '';
   if (!description && data.categories[0]?.products[0]) {
-    description = data.categories[0].products[0].available_names[defaultLocale];
+    const first = data.categories[0].products[0].available_names[defaultLocale];
+    description = `${data.location.name}: доставка ${first} та інших страв у ${city || 'Tiranë'}. Замовляйте онлайн з доставкою додому.`;
   }
+  description = description.slice(0, 160);
 
-  // Precompute if location is closed based on status (simplified)
-  // actual status is 'open', 'closed', etc. 
-  // Let's assume open if not explicitly checking for now.
+  const dateModified = data.menu_version
+    ? new Date(parseInt(data.menu_version) * 1000).toISOString().split('T')[0]
+    : new Date().toISOString().split('T')[0];
 
   const vdom = html`
     <html lang="${defaultLocale}" data-locale="${defaultLocale}" class="scroll-smooth">
       <head>
         <meta charset="utf-8" />
-        <title>${title}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>${shortTitle}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta name="description" content="${description}" />
         <meta name="dos-location-id" content="${data.location.id || slug}" />
         <meta name="dos-menu-version" content="${data.menu_version}" />
+        <meta name="dateModified" content="${dateModified}" />
+        ${shouldNoindex ? html`<meta name="robots" content="noindex,follow" />` : ''}
         
-        <meta property="og:title" content="${title}" />
+        <meta property="og:title" content="${shortTitle}" />
         <meta property="og:description" content="${description}" />
-        <meta property="og:type" content="restaurant" />
-        <meta property="og:url" content="https://dowiz.org/s/${slug}" />
+        <meta property="og:type" content="restaurant.restaurant" />
+        <meta property="og:url" content="${canonicalUrl}" />
+        <meta property="og:site_name" content="Dowiz" />
+        <meta property="og:locale" content="${defaultLocale === 'sq' ? 'sq_AL' : 'en_US'}" />
         <meta name="twitter:card" content="summary_large_image" />
-        <link rel="canonical" href="https://dowiz.org/s/${slug}" />
+        <link rel="canonical" href="${canonicalUrl}" />
         
         ${data.supported_locales.map((loc: string) => html`
-          <link rel="alternate" hreflang="${loc}" href="https://dowiz.org/s/${slug}?locale=${loc}" />
+          <link rel="alternate" hreflang="${loc}" href="${canonicalUrl}?locale=${loc}" />
         `)}
-        <link rel="alternate" hreflang="x-default" href="https://dowiz.org/s/${slug}" />
+        <link rel="alternate" hreflang="x-default" href="${canonicalUrl}" />
         
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="true" />
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet" />
         <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet" />
+        <link rel="manifest" href="${canonicalUrl}/manifest.webmanifest" />
         
         <script src="https://cdn.tailwindcss.com"></script>
         

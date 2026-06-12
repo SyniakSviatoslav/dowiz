@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import { loadEnv } from '@deliveryos/config';
 import { createOperationalPool } from '@deliveryos/db';
 import { RedisMessageBus, PgBossQueueProvider } from '@deliveryos/platform';
+import { BUS_CHANNELS, QUEUE_NAMES, ALL_QUEUES, CUSTOMER_PUSH_EVENTS, orderChannel, dashboardChannel } from './lib/registry.js';
 import Redis from 'ioredis';
 import pg from 'pg';
 import type { ZodTypeAny } from 'zod';
@@ -70,7 +71,6 @@ import { RetryPolicy } from './notifications/retry.js';
 import { NotificationWorker } from './notifications/workers/index.js';
 import { TelegramPoller } from './notifications/workers/telegram.poll.js';
 import { DwellMonitorWorker } from './workers/dwell-monitor.js';
-import { DwellEscalationWorker } from './workers/dwell-escalation.js';
 import { LifecycleHandlers } from './workers/lifecycle-handlers.js';
 import { SignalRaiserWorker } from './workers/signal-raiser.js';
 import { VelocityIncrementer } from './lib/signals/velocity-increment.js';
@@ -254,19 +254,27 @@ async function main() {
   const queue = new PgBossQueueProvider(opUrl.toString());
   await queue.start();
   
-  // Verify queues exist (idempotent — INSERT ON CONFLICT DO NOTHING returns early)
-  // Queues pre-created by deploy-step migrations (0006/0008/0009). No DDL exercised at runtime.
+  // Attempt to verify/create queues. Some queues require DDL (CREATE TABLE) on pgboss schema
+  // which the runtime role may not have. Pre-created queues succeed silently; new ones may warn.
   console.log('[API] Verifying notification queues...');
-  await queue.boss.createQueue('notify.dispatch');
-  await queue.boss.createQueue('notify.customer_status');
-  await queue.boss.createQueue('notify.telegram.send');
-  await queue.boss.createQueue('order.pending_aging');
-  await queue.boss.createQueue('courier.dispatch');
-  await queue.boss.createQueue('settlement.cron');
-  await queue.boss.createQueue('dwell.monitor');
-  await queue.boss.createQueue('anonymizer.retention');
-  await queue.boss.createQueue('velocity.flush');
-  await queue.boss.createQueue('free_tier.watch');
+  for (const qName of ALL_QUEUES) {
+    await queue.boss.createQueue(qName).catch((err: any) => {
+      console.warn(`[API] Queue "${qName}" not pre-created: ${err.message}`);
+    });
+  }
+  // Verify queue table existence in pgboss schema
+  try {
+    const queueCheck = await messageBusPool.query(
+      `SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_schema = 'pgboss' AND table_name = 'job'`
+    );
+    if (queueCheck.rows[0]?.cnt === '0') {
+      console.warn('[API] ⚠️  pgboss.job table not found — queue operations may fail. Run migrations first.');
+    } else {
+      console.log('[API] ✅ pgboss.job table verified');
+    }
+  } catch (err) {
+    console.warn('[API] ⚠️  Could not verify pgboss schema:', (err as Error).message);
+  }
   console.log('[API] Notification queues created');
 
   console.log('[API] Initializing Providers...');
@@ -302,14 +310,10 @@ const retryPolicy = new RetryPolicy();
    // Register pg-boss workers
    // NOTE: queue.work() wraps pg-boss v10 array-of-jobs callback, extracting job.data per job
    // Direct queue.boss.work() would receive [job] not job
-   await queue.work('notify.dispatch', async (data: any) => notifyWorker.handleDispatch({ data }));
-   await queue.work('notify.customer_status', async (data: any) => notifyWorker.handleCustomerStatus({ data }));
-   await queue.work('notify.telegram.send', async (data: any) => notifyWorker.handleTelegramSend({ data }));
-   console.log('[API] pg-boss workers registered: notify.dispatch, notify.customer_status, notify.telegram.send');
- 
-  // Register escalation worker
-  await queue.boss.work('order.pending_aging', async () => notifyWorker.escalatePendingAging());
-  await queue.boss.schedule('order.pending_aging', '*/5 * * * *');
+   await queue.work(QUEUE_NAMES.NOTIFY_DISPATCH, async (data: any) => notifyWorker.handleDispatch({ data }));
+   await queue.work(QUEUE_NAMES.NOTIFY_CUSTOMER_STATUS, async (data: any) => notifyWorker.handleCustomerStatus({ data }));
+   await queue.work(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, async (data: any) => notifyWorker.handleTelegramSend({ data }));
+   console.log('[API] pg-boss workers registered');
 
   const { CourierDispatchWorker } = await import('./workers/courier-dispatch.js');
   const { CourierCronWorker } = await import('./workers/courier-cron.js');
@@ -336,9 +340,7 @@ const retryPolicy = new RetryPolicy();
   const dwellMonitorWorker = new DwellMonitorWorker(pool, queue.boss, messageBus);
   await dwellMonitorWorker.start();
 
-  // Dwell Escalation Worker
-  const dwellEscalationWorker = new DwellEscalationWorker(pool, queue.boss, messageBus, notifyDispatcher);
-  await dwellEscalationWorker.start();
+  // Nightly Reconciliation Worker — temporarily removed (esbuild bundle issue). Re-add in separate deploy.
 
   // Lifecycle Handlers (auto-resolve alerts on order transitions)
   const lifecycleHandlers = new LifecycleHandlers(pool, queue.boss, messageBus);
@@ -353,10 +355,10 @@ const retryPolicy = new RetryPolicy();
 
   // P31 — Worker Heartbeats (critical workers)
   const heartbeatConfigs = [
-    { workerId: 'dispatcher', jobName: 'courier.dispatch' },
-    { workerId: 'settlement-cron', jobName: 'settlement.cron' },
-    { workerId: 'dwell-monitor', jobName: 'dwell.monitor' },
-    { workerId: 'anonymizer-retention', jobName: 'anonymizer.retention' },
+    { workerId: 'dispatcher', jobName: QUEUE_NAMES.COURIER_DISPATCH },
+    { workerId: 'settlement-cron', jobName: QUEUE_NAMES.SETTLEMENT_CRON },
+    { workerId: 'dwell-monitor', jobName: QUEUE_NAMES.DWELL_MONITOR },
+    { workerId: 'anonymizer-retention', jobName: QUEUE_NAMES.ANONYMIZER_RETENTION },
   ];
   const heartbeats = heartbeatConfigs.map(cfg => {
     const hb = new WorkerHeartbeat(pool, cfg);
@@ -370,7 +372,7 @@ const retryPolicy = new RetryPolicy();
 
   // Velocity Incrementer (P26 — async velocity counter)
   const velocityIncrementer = new VelocityIncrementer(pool, queue.boss);
-  await queue.work('velocity.flush', async (data: any) => velocityIncrementer.handleFlush({ data }));
+  await queue.work(QUEUE_NAMES.VELOCITY_FLUSH, async (data: any) => velocityIncrementer.handleFlush({ data }));
 
   // Telegram Poller disabled — webhook handles all updates (messages + callbacks)
   // Poller conflicts with webhook (getUpdates HTTP 409). Keep poller import for type,
@@ -379,10 +381,9 @@ const retryPolicy = new RetryPolicy();
   // telegramPoller.start(); — disabled: webhook active
 
    // Backup failure → Telegram alert to location owners
-   messageBus.subscribe('backup.failed', async (payload: any) => {
+   messageBus.subscribe(BUS_CHANNELS.BACKUP_FAILED, async (payload: any) => {
      try {
-       // Send a single high-level job for Telegram fan-out
-       await queue.boss.send('notify.telegram.send', {
+       await queue.boss.send(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, {
          event: 'backup.failed',
          location_id: payload.locationId || 'system'
        });
@@ -392,10 +393,9 @@ const retryPolicy = new RetryPolicy();
    });
 
    // Settlement disputed → notify courier via Telegram
-   messageBus.subscribe('settlement.disputed', async (payload: any) => {
+   messageBus.subscribe(BUS_CHANNELS.SETTLEMENT_DISPUTED, async (payload: any) => {
      try {
-       // Send a single high-level job for Telegram fan-out
-       await queue.boss.send('notify.telegram.send', {
+       await queue.boss.send(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, {
          event: 'settlement.disputed',
          location_id: payload.locationId
        });
@@ -404,11 +404,9 @@ const retryPolicy = new RetryPolicy();
      }
    });
 
-   // Courier stale heartbeat → notify owner
-   messageBus.subscribe('courier.stale_heartbeat', async (payload: any) => {
+   messageBus.subscribe(BUS_CHANNELS.COURIER_STALE_HEARTBEAT, async (payload: any) => {
      try {
-       // Send a single high-level job for Telegram fan-out
-       await queue.boss.send('notify.telegram.send', {
+       await queue.boss.send(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, {
          event: 'order.pending_aging',
          entity_id: payload.orderId,
          location_id: payload.locationId
@@ -424,7 +422,7 @@ const retryPolicy = new RetryPolicy();
 
   // P5-5 — Free-tier watch (hourly, monitors Free tier limits)
   const { collectFreeTierMetrics } = await import('./workers/free-tier-watch.js');
-  await queue.boss.work('free_tier.watch', async () => {
+  await queue.boss.work(QUEUE_NAMES.FREE_TIER_WATCH, async () => {
     try {
       const metrics = await collectFreeTierMetrics(pool);
       console.log(`[FreeTier] Watch complete: ${metrics.status} (DB: ${metrics.dbPct}%)`);
@@ -432,12 +430,11 @@ const retryPolicy = new RetryPolicy();
       console.error('[FreeTier] Watch failed:', err.message);
     }
   });
-  await queue.boss.schedule('free_tier.watch', '0 * * * *');
+  await queue.boss.schedule(QUEUE_NAMES.FREE_TIER_WATCH, '0 * * * *');
 
-   // Lifecycle Integration — Telegram Notification Fan-out
    const tgSend = (event: string, entity_id: string | undefined, location_id: string) => {
      const dedupKey = `${event}:${entity_id || ''}:${location_id}`;
-     return queue.boss.send('notify.telegram.send', {
+     return queue.boss.send(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, {
        event,
        entity_id: entity_id || '',
        location_id,
@@ -448,7 +445,7 @@ const retryPolicy = new RetryPolicy();
     // Register subscriptions synchronously to ensure LISTEN is called before any events
     console.log('[Notify] Registering MessageBus subscriptions...');
 
-    messageBus.subscribe('order.delivered', async (payload: any) => {
+    messageBus.subscribe(BUS_CHANNELS.ORDER_DELIVERED, async (payload: any) => {
      console.log(`[Notify] order.delivered received: orderId=${payload.orderId}, locationId=${payload.locationId}`);
      try {
        await tgSend('order.delivered', payload.orderId, payload.locationId);
@@ -457,9 +454,8 @@ const retryPolicy = new RetryPolicy();
        console.error('[Notify] Failed to send order.delivered telegram job', err);
      }
    });
-   console.log('[Notify] order.delivered subscription registered');
 
-   messageBus.subscribe('order.assignment_created', async (payload: any) => {
+   messageBus.subscribe(BUS_CHANNELS.ORDER_ASSIGNMENT_CREATED, async (payload: any) => {
      try {
        await tgSend('courier.assigned', payload.orderId, payload.locationId);
      } catch (err) {
@@ -467,7 +463,7 @@ const retryPolicy = new RetryPolicy();
      }
    });
 
-   messageBus.subscribe('order.confirmed', async (payload: any) => {
+   messageBus.subscribe(BUS_CHANNELS.ORDER_CONFIRMED, async (payload: any) => {
      try {
        await tgSend('order.confirmed', payload.orderId, payload.locationId);
      } catch (err) {
@@ -475,7 +471,7 @@ const retryPolicy = new RetryPolicy();
      }
    });
 
-   messageBus.subscribe('order.rejected', async (payload: any) => {
+   messageBus.subscribe(BUS_CHANNELS.ORDER_REJECTED, async (payload: any) => {
      try {
        await tgSend('order.rejected', payload.orderId, payload.locationId);
      } catch (err) {
@@ -483,7 +479,7 @@ const retryPolicy = new RetryPolicy();
      }
    });
 
-   messageBus.subscribe('shift.started', async (payload: any) => {
+   messageBus.subscribe(BUS_CHANNELS.SHIFT_STARTED, async (payload: any) => {
      try {
        await tgSend('shift.started', payload.shiftId, payload.locationId);
      } catch (err) {
@@ -491,7 +487,7 @@ const retryPolicy = new RetryPolicy();
      }
    });
 
-   messageBus.subscribe('shift.closed', async (payload: any) => {
+   messageBus.subscribe(BUS_CHANNELS.SHIFT_CLOSED, async (payload: any) => {
      try {
        await tgSend('shift.closed', payload.shiftId, payload.locationId);
      } catch (err) {
@@ -499,13 +495,11 @@ const retryPolicy = new RetryPolicy();
      }
    });
 
-  // Customer status push (opt-in, best-effort, after-commit)
-  const CUSTOMER_PUSH_EVENTS = new Set(['order.confirmed', 'order.in_delivery', 'order.delivered']);
-  messageBus.subscribe('order.status', async (payload: any) => {
+  messageBus.subscribe(BUS_CHANNELS.ORDER_STATUS, async (payload: any) => {
     const eventKey = `order.${(payload.status || '').toLowerCase()}`;
     if (!CUSTOMER_PUSH_EVENTS.has(eventKey)) return;
     try {
-      await queue.boss.send('notify.customer_status', {
+      await queue.boss.send(QUEUE_NAMES.NOTIFY_CUSTOMER_STATUS, {
         orderId: payload.orderId,
         locationId: payload.locationId || payload.data?.locationId,
         event: payload.status,
@@ -607,7 +601,7 @@ const retryPolicy = new RetryPolicy();
   fastify.register(clientFlowRoutes, { db: pool });
   fastify.register(pwaRoutes, { db: pool });
   fastify.register(vapidRoutes);
-  fastify.register(telemetryRoutes);
+  fastify.register(telemetryRoutes, { db: pool });
   fastify.register(ownerThemeRoutes, { db: pool, storage });
   fastify.register(publicThemeRoutes, { db: pool });
   fastify.register(ownerNotificationRoutes, { db: pool, queue });
@@ -747,6 +741,8 @@ fastify.post('/api/dev/mock-auth', async (request, reply) => {
   // P33 — Fallback admin routes
   const { default: fallbackAdminRoutes } = await import('./routes/admin/fallback.js');
   fastify.register(fallbackAdminRoutes, { prefix: '/api/admin', db: pool });
+  const { default: notificationAuditRoutes } = await import('./routes/admin/notification-audit.js');
+  fastify.register(notificationAuditRoutes, { prefix: '/api/admin', db: pool });
 
   // SPA Fallback: Serve index.html for unknown GET requests matching SPA route patterns
   const SPA_ROUTES = ['/admin', '/courier', '/dashboard', '/s/', '/login'];

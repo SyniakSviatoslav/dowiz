@@ -96,3 +96,33 @@ export const STRICT_OPTS: RateLimitOpts = {
   perIpWindowMs: 60000,
   inflightPerTenant: 1,
 };
+
+export const ORDER_OPTS: RateLimitOpts = {
+  perTenant: 5,
+  perTenantWindowMs: 60000,
+  perIp: 10,
+  perIpWindowMs: 60000,
+  inflightPerTenant: 2,
+};
+
+export const PROMO_OPTS: RateLimitOpts = {
+  perTenant: 10,
+  perTenantWindowMs: 60000,
+  perIp: 5,
+  perIpWindowMs: 60000,
+  inflightPerTenant: 1,
+};
+
+export const AUTH_OPTS: RateLimitOpts = {
+  perTenant: 5,
+  perTenantWindowMs: 60000,
+  perIp: 3,
+  perIpWindowMs: 60000,
+  inflightPerTenant: 1,
+};
+
+export function recordAbuse(kind: string, tenantId: string | null, ip: string, reason: string): void {
+  const ipH = crypto.createHash('sha256').update(ip).digest('hex').slice(0, 16);
+  const event = { ts: new Date().toISOString(), kind, tenantId: tenantId || 'global', ipHash: ipH, reason };
+  console.warn('[ABUSE]', JSON.stringify(event));
+}

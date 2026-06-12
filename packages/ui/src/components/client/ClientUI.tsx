@@ -48,6 +48,7 @@ function getAllergenStyle(allergen: string) {
 }
 
 export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
+  const [imgError, setImgError] = useState(false);
   const hasAllergens = product.allergens && product.allergens.length > 0;
   const hasIngredients = product.ingredients && product.ingredients.length > 0;
   const hasTaste = product.taste && Object.keys(product.taste).length > 0;
@@ -67,8 +68,8 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
         className="w-full aspect-[4/3] flex items-center justify-center relative overflow-hidden" 
         style={{ background: 'var(--brand-surface-raised)' }}
       >
-        {product.image ? (
-          <img src={product.image} alt={product.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
+        {product.image && !imgError ? (
+          <img src={product.image} alt={product.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" onError={() => setImgError(true)} />
         ) : (
           <div className="flex flex-col items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
             <i className="ti ti-tools-kitchen-2 text-4xl opacity-25" />
@@ -113,7 +114,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
         <div className="flex items-start justify-between gap-1.5">
           <h3 className="font-semibold text-[13px] leading-tight line-clamp-2 flex-1" style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
           <button 
-            className={`shrink-0 w-[32px] h-[32px] flex items-center justify-center text-white rounded-full transition-all duration-150 ease-in-out mt-0.5 ${
+            className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-white rounded-full transition-all duration-150 ease-in-out mt-0.5 ${
               product.isAvailable 
                 ? 'hover:brightness-110 hover:scale-110 active:scale-[0.88]' 
                 : 'opacity-30 cursor-not-allowed'

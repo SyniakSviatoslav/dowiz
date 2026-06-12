@@ -55,12 +55,38 @@ export default (async function localAuthRoutes(fastify, opts) {
         return reply.status(401).send({ error: 'Account uses another sign-in method' });
       }
 
-      if (!valid) {
-        return reply.status(401).send({ error: 'Invalid email or password' });
-      }
+       if (!valid) {
+         return reply.status(401).send({ error: 'Invalid email or password' });
+       }
 
-      const role = 'owner';
-      const familyId = crypto.randomUUID();
+       // Determine user role based on ownership and memberships
+       let role = 'customer'; // default to customer
+       try {
+         // Check if user owns any organizations
+         const orgRes = await client.query(
+           `SELECT id FROM organizations WHERE owner_id = $1`,
+           [user.id]
+         );
+         if (orgRes.rowCount > 0) {
+           role = 'owner';
+         } else {
+           // Check if user has any active memberships
+           const memRes = await client.query(
+             `SELECT role FROM memberships WHERE user_id = $1 AND status = 'active' LIMIT 1`,
+             [user.id]
+           );
+           if (memRes.rowCount > 0) {
+             role = memRes.rows[0].role;
+           }
+           // If no memberships, keep default 'customer' role
+         }
+       } catch (err) {
+         request.log.error(err);
+         // Fallback to customer role on error
+         role = 'customer';
+       }
+
+       const familyId = crypto.randomUUID();
       const { signAuthToken } = await import('@deliveryos/platform');
       const accessToken = await signAuthToken({ role, userId: user.id, sub: user.id } as any, '15m');
       const refreshToken = crypto.randomBytes(32).toString('hex');

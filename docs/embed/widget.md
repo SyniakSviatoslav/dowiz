@@ -3,7 +3,7 @@
 To embed the menu as a floating button or inline overlay:
 
 ```html
-<script src="https://cdn.dowiz.org/widget.js" 
+<script src="/widget.js" 
         data-slug=":slug" 
         data-mode="overlay" 
         integrity="sha384-...hash..." 

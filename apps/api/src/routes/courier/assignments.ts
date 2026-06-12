@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { loadEnv } from '@deliveryos/config';
 import { acceptCourierAssignment } from '../../lib/courierAssignmentService';
 import type { MessageBus } from '@deliveryos/platform';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 
 const env = loadEnv();
 
@@ -120,7 +121,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       await client.query('COMMIT');
 
       // Kick off dispatch worker again
-      await messageBus.publish('order.confirmed', { orderId: order_id, locationId });
+      await messageBus.publish(BUS_CHANNELS.ORDER_CONFIRMED, { orderId: order_id, locationId });
 
       return reply.send({ success: true });
     } catch (err) {
@@ -164,7 +165,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
 
       await client.query('COMMIT');
 
-      await messageBus.publish('order.picked_up', { 
+      await messageBus.publish(BUS_CHANNELS.ORDER_PICKED_UP, { 
         orderId: order_id, 
         locationId,
         courierId 
@@ -231,7 +232,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       await client.query('COMMIT');
 
       // Integrate with Phase 1 lifecycle
-      await messageBus.publish('order.delivered', { 
+      await messageBus.publish(BUS_CHANNELS.ORDER_DELIVERED, { 
         orderId: order_id, 
         locationId,
         courierId,
@@ -299,7 +300,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
 
       await client.query('COMMIT');
 
-      await messageBus.publish('order.cancelled', { 
+      await messageBus.publish(BUS_CHANNELS.ORDER_CANCELLED, { 
         orderId: order_id, 
         locationId,
         reason: `courier_cancelled: ${reason}` 

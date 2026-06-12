@@ -249,39 +249,39 @@ export function SettingsPage() {
             <div>
               <label className="block text-sm font-medium mb-1" style={labelStyle}>
                 {t('admin.location_name', 'Location Name')}
+                <Input
+                  value={settings.locationName}
+                  onChange={(e) => handleChange('locationName', e.target.value)}
+                  placeholder={t('admin.placeholder_location_name', 'e.g. Downtown Tirana')}
+                  required
+                />
               </label>
-              <Input
-                value={settings.locationName}
-                onChange={(e) => handleChange('locationName', e.target.value)}
-                placeholder="e.g. Downtown Tirana"
-                required
-              />
             </div>
 
             <div>
               <label className="block text-sm font-medium mb-1" style={labelStyle}>
                 {t('common.phone', 'Phone')}
+                <Input
+                  value={settings.phone}
+                  onChange={(e) => handleChange('phone', e.target.value)}
+                  placeholder={t('admin.placeholder_phone', '+355...')}
+                  pattern={PHONE_E164_PATTERN}
+                  title={t('admin.phone_format_hint', '+355 followed by 7-14 digits')}
+                  required
+                />
               </label>
-              <Input
-                value={settings.phone}
-                onChange={(e) => handleChange('phone', e.target.value)}
-                placeholder="+355..."
-                pattern={PHONE_E164_PATTERN}
-                title="+355 followed by 7-14 digits"
-                required
-              />
             </div>
 
             <div>
               <label className="block text-sm font-medium mb-1" style={labelStyle}>
                 {t('common.address', 'Address')}
+                <Input
+                  value={settings.address}
+                  onChange={(e) => handleChange('address', e.target.value)}
+                  placeholder={t('admin.placeholder_address', 'Street, City')}
+                  required
+                />
               </label>
-              <Input
-                value={settings.address}
-                onChange={(e) => handleChange('address', e.target.value)}
-                placeholder="Street, City"
-                required
-              />
             </div>
           </div>
 
@@ -293,27 +293,27 @@ export function SettingsPage() {
             <div>
               <label className="block text-sm font-medium mb-1" style={labelStyle}>
                 {t('cart.delivery_fee', 'Delivery Fee')} (ALL)
+                <Input
+                  type="number"
+                  value={String(settings.deliveryFee)}
+                  onChange={(e) => handleChange('deliveryFee', e.target.value)}
+                  min="0"
+                  required
+                />
               </label>
-              <Input
-                type="number"
-                value={String(settings.deliveryFee)}
-                onChange={(e) => handleChange('deliveryFee', e.target.value)}
-                min="0"
-                required
-              />
             </div>
 
             <div>
               <label className="block text-sm font-medium mb-1" style={labelStyle}>
                 {t('admin.min_order', 'Minimum Order')} (ALL)
+                <Input
+                  type="number"
+                  value={String(settings.minOrder)}
+                  onChange={(e) => handleChange('minOrder', e.target.value)}
+                  min="0"
+                  required
+                />
               </label>
-              <Input
-                type="number"
-                value={String(settings.minOrder)}
-                onChange={(e) => handleChange('minOrder', e.target.value)}
-                min="0"
-                required
-              />
             </div>
 
             <div>
@@ -350,9 +350,9 @@ export function SettingsPage() {
                     </div>
                     {dayData.isOpen && (
                       <div className="flex items-center gap-2">
-                        <Input type="time" value={dayData.open} onChange={(e) => handleScheduleChange(day, 'open', e.target.value)} className="w-24 text-sm" />
+                        <Input type="time" value={dayData.open} onChange={(e) => handleScheduleChange(day, 'open', e.target.value)} aria-label={`${t(`admin.days.${day}`, day)} ${t('admin.open', 'open')}`} className="w-24 text-sm" />
                         <span className="text-xs text-[var(--brand-text-muted)]">{t('admin.to', 'to')}</span>
-                        <Input type="time" value={dayData.close} onChange={(e) => handleScheduleChange(day, 'close', e.target.value)} className="w-24 text-sm" />
+                        <Input type="time" value={dayData.close} onChange={(e) => handleScheduleChange(day, 'close', e.target.value)} aria-label={`${t(`admin.days.${day}`, day)} ${t('admin.close', 'close')}`} className="w-24 text-sm" />
                       </div>
                     )}
                   </div>
@@ -392,9 +392,10 @@ export function SettingsPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <button onClick={() => handleTgToggle(tgt.id, tgt.status)}
+                        aria-label={tgt.status === 'active' ? t('admin.disable', 'Disable') : t('admin.enable', 'Enable')}
                         className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${tgt.status === 'active' ? 'bg-[var(--color-success-light)]' : 'bg-[var(--brand-surface-raised)]'}`}
                         title={tgt.status === 'active' ? t('admin.disable', 'Disable') : t('admin.enable', 'Enable')}>
-                        <i className={`ti ti-${tgt.status === 'active' ? 'check' : 'power'}`} style={{ fontSize: '0.85rem', color: tgt.status === 'active' ? 'var(--color-success)' : 'var(--brand-text-muted)' }} />
+                        <i className={`ti ti-${tgt.status === 'active' ? 'check' : 'power'}`} style={{ fontSize: '0.85rem', color: tgt.status === 'active' ? 'var(--color-success)' : 'var(--brand-text-muted)' }} aria-hidden="true" />
                       </button>
                     </div>
                   </div>
@@ -446,10 +447,10 @@ export function SettingsPage() {
               {t('common.save', 'Save Changes')}
             </Button>
             {success && (
-              <span className="text-[var(--color-success)] font-medium text-sm">{t('common.saved', 'Saved successfully!')}</span>
+              <span role="status" aria-live="polite" className="text-[var(--color-success)] font-medium text-sm">{t('common.saved', 'Saved successfully!')}</span>
             )}
             {error && settings.locationName !== '' && (
-              <span className="text-[var(--color-danger)] text-sm">{error}</span>
+              <span role="alert" className="text-[var(--color-danger)] text-sm">{error}</span>
             )}
           </div>
         </form>

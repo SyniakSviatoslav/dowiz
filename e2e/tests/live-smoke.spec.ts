@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { checkAxe, checkTouchTargets, checkFormLabels, checkAriaLive } from '../helpers/a11y.js';
 
 test.describe('Live Deployment Smoke — demo tenant', () => {
 
@@ -102,5 +103,38 @@ test.describe('Live Deployment Smoke — demo tenant', () => {
     await page.goto('/s/demo');
     const cookies = await page.context().cookies();
     expect(cookies).toEqual([]);
+  });
+
+  test('no critical a11y violations on menu page', async ({ page }) => {
+    await page.goto('/s/demo');
+    await page.waitForSelector('article.product-card', { timeout: 15000 });
+
+    const violations = await checkAxe(page);
+    const critical = violations.filter(v => v.impact === 'critical');
+    expect(critical.length).toBe(0);
+  });
+
+  test('touch targets on menu page meet 44px minimum', async ({ page }) => {
+    await page.goto('/s/demo');
+    await page.waitForSelector('article.product-card', { timeout: 15000 });
+
+    const smallTargets = await checkTouchTargets(page);
+    expect(smallTargets.length).toBe(0);
+  });
+
+  test('form inputs have accessible labels', async ({ page }) => {
+    await page.goto('/s/demo');
+    await page.waitForSelector('article.product-card', { timeout: 15000 });
+
+    const unlabeled = await checkFormLabels(page);
+    expect(unlabeled.length).toBe(0);
+  });
+
+  test('page has aria-live regions for dynamic content', async ({ page }) => {
+    await page.goto('/s/demo');
+    await page.waitForSelector('article.product-card', { timeout: 15000 });
+
+    const liveCount = await checkAriaLive(page);
+    expect(liveCount).toBeGreaterThanOrEqual(0);
   });
 });

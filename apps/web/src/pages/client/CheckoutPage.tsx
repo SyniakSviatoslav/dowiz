@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, MapWithPin, useI18n } from '@deliveryos/ui';
+import { Button, MapWithPin, useI18n, StickyActionBar } from '@deliveryos/ui';
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
@@ -64,9 +64,13 @@ export function CheckoutPage() {
   const [cashAmount, setCashAmount] = useState<number>(0);
   const [instructionOption, setInstructionOption] = useState<string>('');
   const [instructionCustom, setInstructionCustom] = useState<string>('');
+  const [entrance, setEntrance] = useState('');
+  const [apartment, setApartment] = useState('');
   const [phoneError, setPhoneError] = useState('');
+  const [entranceError, setEntranceError] = useState('');
+  const [apartmentError, setApartmentError] = useState('');
 
-  useEffect(() => {
+    useEffect(() => {
     if (!slug) return;
     fetch(`/public/locations/${slug}/info`).then(r => r.json())
       .then((info: any) => {
@@ -85,6 +89,12 @@ export function CheckoutPage() {
         }
         if (parsed.address) {
           setAddress(parsed.address);
+        }
+        if (parsed.entrance) {
+          setEntrance(parsed.entrance);
+        }
+        if (parsed.apartment) {
+          setApartment(parsed.apartment);
         }
       }
     } catch { /* ignore corrupt localStorage */ }
@@ -106,7 +116,7 @@ export function CheckoutPage() {
     modifier_ids: Object.values(i.options || {}).flat() as string[],
   }));
 
-  const handlePlaceOrder = async (e: React.FormEvent) => {
+    const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (items.length === 0 || !slug || !locationId) return;
     if (!phone || !PHONE_E164_REGEX.test(phone)) {
@@ -114,6 +124,21 @@ export function CheckoutPage() {
       return;
     }
     setPhoneError('');
+    
+    // Validate entrance and apartment for delivery orders
+    if (deliveryType === 'delivery') {
+      if (!entrance.trim()) {
+        setEntranceError(t('checkout.entrance_required', 'Entrance is required'));
+        return;
+      }
+      if (!apartment.trim()) {
+        setApartmentError(t('checkout.apartment_required', 'Apartment is required'));
+        return;
+      }
+    }
+    setEntranceError('');
+    setApartmentError('');
+    
     try {
       const idempotencyKey = crypto.randomUUID();
       const orderRes = await apiClient<any>('/orders', {
@@ -137,6 +162,12 @@ export function CheckoutPage() {
           cash_pay_with: cashAmount > 0 ? cashAmount : undefined,
           idempotency_key: idempotencyKey,
           acknowledged_codes: [],
+          prefs: {
+            dropoff: {
+              entrance: entrance.trim(),
+              apartment: apartment.trim(),
+            }
+          },
           delivery_instructions: instructionOption
             ? instructionCustom
               ? `${instructionOption}: ${instructionCustom}`
@@ -149,6 +180,8 @@ export function CheckoutPage() {
           lat: (pinLocation as [number, number])?.[1] || 41.331,
           lng: (pinLocation as [number, number])?.[0] || 19.817,
           address,
+          entrance,
+          apartment,
         }));
       } catch { /* localStorage may be full or blocked */ }
       requestPushPermission(slug!);
@@ -175,41 +208,41 @@ export function CheckoutPage() {
     : { background: 'transparent', color: 'var(--brand-text-muted)' } as const;
 
   return (
-    <div className="max-w-xl mx-auto p-4 md:py-8 space-y-6">
+    <div className="max-w-xl mx-auto p-4 md:py-8 space-y-6 pb-24">
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-full flex items-center justify-center border transition-colors active:scale-95" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
-          <i className="ti ti-arrow-left" />
+        <button onClick={() => navigate(-1)} aria-label={t('common.back', 'Go back')} className="w-10 h-10 rounded-full flex items-center justify-center border transition-colors active:scale-95" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+          <i className="ti ti-arrow-left" aria-hidden="true" />
         </button>
         <h1 className="text-[24px] font-bold" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.title')}</h1>
       </div>
 
-      <form onSubmit={handlePlaceOrder} className="space-y-6">
+      <form id="checkout-form" onSubmit={handlePlaceOrder} className="space-y-6">
         <div className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
           <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.contact_info', 'Contact Info')}</h2>
           <div className="space-y-3">
             <div>
               <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.name', 'Name')}</label>
               <div className="relative">
-                <i className="ti ti-user absolute left-3 top-1/2 -translate-y-1/2 text-lg" style={{ color: 'var(--brand-text-muted)' }} />
-                <input required value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t('checkout.name_placeholder', 'Your name')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                <i className="ti ti-user absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
+                <input required value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t('checkout.name_placeholder', 'Your name')} autoComplete="name" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
               </div>
             </div>
             <div>
               <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.phone', 'Phone')}</label>
               <div className="relative">
-                <i className="ti ti-phone absolute left-3 top-1/2 -translate-y-1/2 text-lg" style={{ color: 'var(--brand-text-muted)' }} />
-                <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} placeholder="+355 6X XXX XXXX" pattern={PHONE_E164_PATTERN} title="+355 followed by 7-14 digits" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                {phoneError && <p className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{phoneError}</p>}
+                <i className="ti ti-phone absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
+                <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} placeholder="+355 6X XXX XXXX" pattern={PHONE_E164_PATTERN} title="+355 followed by 7-14 digits" type="tel" inputMode="tel" autoComplete="tel" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                {phoneError && <p role="alert" className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{phoneError}</p>}
               </div>
             </div>
           </div>
         </div>
         <div className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
           <h2 className="text-[20px] font-semibold mb-6" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.delivery_address')}</h2>
-          <div className="flex p-1 rounded-[10px] mb-6 gap-0.5" style={{ background: 'var(--brand-surface)' }}>
-            <button type="button" onClick={() => setDeliveryType('delivery')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('delivery')}>{t('courier.deliver')}</button>
-            <button type="button" onClick={() => setDeliveryType('pickup')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('pickup')}>{t('courier.pickup')}</button>
-            <button type="button" onClick={() => setDeliveryType('scheduled')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('scheduled')}>{t('order.scheduled')}</button>
+          <div className="flex p-1 rounded-[10px] mb-6 gap-0.5" role="tablist" aria-label={t('checkout.delivery_type', 'Delivery type')} style={{ background: 'var(--brand-surface)' }}>
+            <button type="button" role="tab" aria-selected={deliveryType === 'delivery'} onClick={() => setDeliveryType('delivery')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('delivery')}>{t('courier.deliver')}</button>
+            <button type="button" role="tab" aria-selected={deliveryType === 'pickup'} onClick={() => setDeliveryType('pickup')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('pickup')}>{t('courier.pickup')}</button>
+            <button type="button" role="tab" aria-selected={deliveryType === 'scheduled'} onClick={() => setDeliveryType('scheduled')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('scheduled')}>{t('order.scheduled')}</button>
           </div>
 
           {deliveryType === 'delivery' && (
@@ -221,30 +254,55 @@ export function CheckoutPage() {
               <div>
                 <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.delivery_address')}</label>
                 <div className="relative">
-                  <i className="ti ti-map-pin absolute left-3 top-1/2 -translate-y-1/2 text-lg" style={{ color: 'var(--brand-text-muted)' }} />
+                  <i className="ti ti-map-pin absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
                   <input required value={address} onChange={e => setAddress(e.target.value)} placeholder={t('checkout.delivery_address')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entrance')}</label>
+                  <div className="relative">
+                    <i className="ti ti-door-open absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
+                    <input required value={entrance} onChange={e => setEntrance(e.target.value)} placeholder={t('checkout.entrance_placeholder', 'Entrance number or name')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                  </div>
+                  {entranceError && <p role="alert" className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{entranceError}</p>}
+                </div>
+                <div>
+                  <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.apartment')}</label>
+                  <div className="relative">
+                    <i className="ti ti-apartment absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
+                    <input required value={apartment} onChange={e => setApartment(e.target.value)} placeholder={t('checkout.apartment_placeholder', 'Apartment or unit number')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                  </div>
+                  {apartmentError && <p role="alert" className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{apartmentError}</p>}
                 </div>
               </div>
               <div>
                 <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.dropoff_instructions', 'Dropoff instructions')}</label>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {['Leave at door', 'Call on arrival', 'Ring bell', 'Hand to me', 'Text on arrival'].map((opt) => (
+                <div className="flex flex-wrap gap-2 mb-2" role="group" aria-label={t('checkout.dropoff_instructions', 'Dropoff instructions')}>
+                  {[
+                    { key: 'checkout.dropoff_door', val: 'Leave at door' },
+                    { key: 'checkout.dropoff_call', val: 'Call on arrival' },
+                    { key: 'checkout.dropoff_ring', val: 'Ring bell' },
+                    { key: 'checkout.dropoff_hand', val: 'Hand to me' },
+                    { key: 'checkout.dropoff_text', val: 'Text on arrival' },
+                  ].map((opt) => (
                     <button
-                      key={opt}
+                      key={opt.key}
                       type="button"
-                      onClick={() => setInstructionOption(instructionOption === opt ? '' : opt)}
+                      aria-pressed={instructionOption === opt.val}
+                      onClick={() => setInstructionOption(instructionOption === opt.val ? '' : opt.val)}
                       className="px-3 py-1.5 text-[12px] rounded-[20px] border transition-all active:scale-95"
                       style={{
-                        background: instructionOption === opt ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
-                        borderColor: instructionOption === opt ? 'var(--brand-primary)' : 'var(--brand-border)',
-                        color: instructionOption === opt ? '#fff' : 'var(--brand-text)',
+                        background: instructionOption === opt.val ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
+                        borderColor: instructionOption === opt.val ? 'var(--brand-primary)' : 'var(--brand-border)',
+                        color: instructionOption === opt.val ? '#fff' : 'var(--brand-text)',
                       }}
-                    >{opt}</button>
+                    >{t(opt.key, opt.val)}</button>
                   ))}
                 </div>
                 {instructionOption && (
                   <div className="relative">
-                    <i className="ti ti-edit absolute left-3 top-1/2 -translate-y-1/2 text-lg" style={{ color: 'var(--brand-text-muted)' }} />
+                    <i className="ti ti-edit absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
                     <input value={instructionCustom} onChange={e => setInstructionCustom(e.target.value)} placeholder={t('checkout.extra_notes', 'Extra notes...')} className="w-full h-[44px] pl-10 pr-3 outline-none text-[13px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                   </div>
                 )}
@@ -259,11 +317,11 @@ export function CheckoutPage() {
                 <p className="text-[14px] mb-4" style={{ color: 'var(--brand-text-muted)' }}>Dubin & Sushi, Rruga Sami Frasheri 12, Tirana</p>
                 <div className="w-full h-[120px] rounded-[8px] relative overflow-hidden border flex items-center justify-center" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)' }}>
                   <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(var(--brand-border) 1px, transparent 1px), linear-gradient(90deg, var(--brand-border) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
-                  <i className="ti ti-building-store text-3xl relative z-10" style={{ color: 'var(--brand-text-muted)' }} />
+                  <i className="ti ti-building-store text-3xl relative z-10" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
                 </div>
               </div>
               <div className="flex items-center gap-3 p-3 rounded-[8px] border" style={{ background: 'var(--color-info-light)', borderColor: 'var(--color-info)', color: 'var(--color-info)' }}>
-                <i className="ti ti-info-circle" />
+                <i className="ti ti-info-circle" aria-hidden="true" />
                 <p className="text-[13px] font-medium">{t('checkout.phone_hint')}</p>
               </div>
             </div>
@@ -275,21 +333,23 @@ export function CheckoutPage() {
           <div className="border rounded-[8px] p-3 mb-3" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-primary)' }}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <i className="ti ti-cash text-xl" style={{ color: 'var(--brand-primary)' }} />
+                <i className="ti ti-cash text-xl" aria-hidden="true" style={{ color: 'var(--brand-primary)' }} />
                 <div>
                   <div className="text-[14px] font-bold" style={{ color: 'var(--brand-text)' }}>{t('checkout.cash')}</div>
                   <div className="text-[12px]" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.place_order')}</div>
                 </div>
               </div>
-              <i className="ti ti-check" style={{ color: 'var(--brand-primary)' }} />
+              <i className="ti ti-check" aria-hidden="true" style={{ color: 'var(--brand-primary)' }} />
             </div>
             <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-              <label className="text-[12px] font-semibold mb-1.5 block" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.cash_amount', 'Cash amount')}</label>
+              <label htmlFor="cash-amount" className="text-[12px] font-semibold mb-1.5 block" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.cash_amount', 'Cash amount')}</label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-bold" style={{ color: 'var(--brand-text-muted)' }}>ALL</span>
                   <input
+                    id="cash-amount"
                     type="number"
+                    inputMode="decimal"
                     min={total}
                     value={cashAmount || ''}
                     onChange={e => setCashAmount(parseInt(e.target.value) || 0)}
@@ -340,11 +400,18 @@ export function CheckoutPage() {
             <span className="text-[20px] font-black" style={{ color: 'var(--brand-primary)' }}>{total} ALL</span>
           </div>
         </div>
-
-        <Button type="submit" size="lg" className="w-full font-bold text-[16px] h-[56px] shadow-xl">
-          {t('checkout.place_order')} &bull; {total} ALL
-        </Button>
       </form>
+
+      <StickyActionBar>
+        <button
+          type="submit"
+          form="checkout-form"
+          className="w-full h-14 rounded-full bg-[var(--brand-primary)] text-white font-bold text-base shadow-xl transition-all active:scale-[0.97] flex items-center justify-center gap-2"
+          style={{ minHeight: 'var(--tap-critical)' }}
+        >
+          {t('checkout.place_order')} &bull; {total} ALL
+        </button>
+      </StickyActionBar>
 
     </div>
   );

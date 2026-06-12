@@ -1,6 +1,6 @@
 # DeliveryOS / dowiz — Agent Context
 
-> Last updated: 2026-06-09 · Source of truth: `DeliveryOS-As-Built-Summary-v1.md` (2026-06-04)
+> Last updated: 2026-06-13 · Source of truth: `DeliveryOS-As-Built-Summary-v1.md` (2026-06-04)
 > Reading this file is mandatory. Skip everything else until a router below tells you otherwise.
 
 ## 1. What this is (TL;DR — 30s read)
@@ -14,24 +14,50 @@
 ```
 apps/
   api/        Fastify 5 backend (routes/, lib/, notifications/, workers/, plugins/)
+  api/scripts/  Verify scripts: verify-orphans, verify-event-wiring, verify-no-raw-status-update, config-drift, release-gate
+  api/scripts/radar/  FE-radar + interconnected-radar + probe harness (harness/auth.ts, order.ts, observe.ts)
   web/        React 18 + Vite 6 + Tailwind frontend (18 screens, all three roles)
   worker/     pg-boss jobs (Phase 5 anonymizer, backup, cron)
 packages/
   config/     ESLint, TS, Tailwind shared config (+ verify-env.ts)
   core/       Domain primitives
-  db/         67 migrations, RLS helpers, seed.ts
+  db/         71 migrations (latest: 00010 audit-drop-reasons, 00011 reconciliation queue), RLS helpers, seed.ts
   domain/     Business logic / pure functions
   platform/   QueueProvider (pg-boss), MessageBus (pg NOTIFY/LISTEN)
-  shared-types/  Zod schemas + TS types crossing api↔web
+  shared-types/  Zod schemas + TS types crossing api↔web (+ queue-names.ts)
   ui/         Shared React component library (CSS variables only)
 docs/
-  audit/      phaseN-exit.md gates, vulnerabilities.md, inventory.md, flows/
+  audit/      phaseN-exit.md gates, vulnerabilities.md, inventory.md, flows/, bug-investigation-2026-06-12.md
+  seo/        ssr-architecture.md
+
+```
+apps/api/src/
+  plugins/
+    turnstile.ts              Turnstile CAPTCHA verification plugin
+    auth.ts                   Auth verification + role enforcement
+  lib/
+    resilience/rate-limit.ts  Token-bucket rate limiter (extended: ORDER/PROMO/AUTH_OPTS + recordAbuse)
+    ssr-renderer.ts           Preact SSR renderer (NOW ACTIVE — was dormant)
+    jsonld-builder.ts         JSON-LD builder (Restaurant+Menu+Breadcrumb+FAQPage)
+    motion.ts                 Framer Motion config + springs + variants
+  routes/public/
+    ssr.ts                    SSR route handler (/s/:slug) — calls renderMenuPage()
+    seo.ts                    robots.txt + sitemap index + sharded children
+    telemetry.ts              Analytics event ingestion (POST /api/telemetry + /api/telemetry/abuse)
+    pwa.ts                    Per-location PWA manifest
+```
+
+**New packages**: `framer-motion` (ui + web), `@cf/turnstile` verification via fetch
+
+**New tables (migration 1790000000012):** `analytics_events`, `analytics_abuse_log`, `analytics_cwv`
+  audit/      FLOW-RADAR-MAP.md, FLOW-RADAR-REPORT.md, FE-RADAR-REPORT.md, FE-RADAR-REPORT-v2.md
+  audit/      RELEASE-GATE.md, RELEASE-GATE-RUN.md, RECON-CATALOG.md, CONFIG-DRIFT-MAP.md
   phase4/     anti-fake, OTP, signals-ui, dashboard, security
   phase5/     anonymizer, GDPR, retention-policy, backup, launch-checklist
-  adr/        Architecture decision records
+  adr/        Architecture decision records (+ ADR-NOTIFICATION-CONSOLIDATION.md)
   harness/    Harness self-improvement: model-rotation.md, failure-mode-ledger.md, episodes/
-e2e/          Playwright (92 tests × 3 breakpoints = 276)
-migrations/   node-pg-migrate (delegates to packages/db/migrations)
+e2e/          Playwright (92 tests × 3 breakpoints = 276, plus fe-radar.spec.ts, fe-radar-v2.spec.ts)
+migrations/   node-pg-migrate (delegates to packages/db/migrations) 
 .agents/
   rules/      always-on rules (design-system.md, graphify.md, research-first.md, harness-self-improvement.md)
   workflows/  graphify.md, harness-self-improvement (via .agents/rules/harness-self-improvement.md)
@@ -42,6 +68,20 @@ src/screens/  Static HTML mockups (legacy design reference only)
 
 **Canonical reference doc** (read first when you need broad architecture context):
 `DeliveryOS-As-Built-Summary-v1.md` — phase status, stack, shims, security posture, must-fix list.
+
+## Key 2026-06-13 Learnings (major refactors completed)
+
+### SSR was dormant — now active
+Preact SSR renderer (`ssr-renderer.ts`) was fully implemented but NEVER CALLED. The route handler at `ssr.ts` sent the static SPA shell instead. **Fixed 2026-06-13.** Now every `/s/:slug` returns full SSR HTML with menu content, `<head>` tags, JSON-LD, hreflang, OG tags.
+
+### No animation library existed — framer-motion added from scratch
+Prior to 2026-06-13, all animations were CSS-only. Added framer-motion to both `web` and `ui` packages. Created: Pressable, AnimatedNumber, AnimatedCheck, CrossfadeOnLoad, LiveDot (battery-aware), springs + variants library, MotionConfig reducedMotion="user" wrapper.
+
+### No Cloudflare edge/WAF — app-level only
+App runs on Fly.io single instance. No Cloudflare WAF/DDoS/Bot Management available. All protection is app-level: rate-limit middleware + Turnstile plugin + existing anti-fake/signals system.
+
+### No TimescaleDB — regular PostgreSQL
+Analytics tables (`analytics_events`, `analytics_abuse_log`, `analytics_cwv`) use plain PG with proper indexes, not hypertables. Migration 1790000000012. Telemetry endpoint persists events via sendBeacon pattern. Zero PII, zero third-party trackers.
 
 ## 3. Skill router (call the right skill, save tokens)
 
@@ -93,7 +133,8 @@ Before writing or modifying code, agent MUST complete the research checklist in 
 **Minimum required:**
 1. Grep/graphify for existing implementations of what you're about to change
 2. Check conventions (auth hooks, error format, CSS vars, route prefixes)
-3. Run `pnpm lint` + `pnpm typecheck` after changes
+3. Check i18n: search `packages/ui/src/lib/i18n.ts` for existing translations before adding new keys; add every new key to ALL 3 locales
+4. Run `pnpm lint` + `pnpm typecheck` after changes
 
 Full checklist: `.agents/rules/research-first.md` (always-on rule, loaded automatically).
 
@@ -124,8 +165,20 @@ Use `graphify-out/GRAPH_REPORT.md` only for broad architecture overview.
 4. Theme switcher on every screen — cycles 6 presets via `:root` vars only.
 5. Dark mode mandatory on every screen.
 6. Implement all 4 component states (default, hover, active, disabled).
+7. 🔴 **3-language i18n mandatory.** Every user-visible string uses `t('key', 'English fallback')`. All 3 locales (`sq`, `en`, `uk`) must have the key in `packages/ui/src/lib/i18n.ts`. No hardcoded English strings, no alerts without `t()`. Check `design-system.md` rule for full details.
 
-## 7. Phase 4 anti-fake rules (P26) — server-side
+## 7. Notification hardening rules (H-series, landed 2026-06-12)
+
+1. 🔴 **All channels/queues/event types through typed registry.** Zero raw string channel or queue names. Use `BUS_CHANNELS.*`, `QUEUE_NAMES.*`, `orderChannel()`, `dashboardChannel()`, `courierChannel()`, `shiftChannel()` helpers from `apps/api/src/lib/registry.ts`.
+2. 🔴 **Every event must be fully wired.** `NotificationEventType` union at `apps/api/src/notifications/provider.ts`. Each event needs render case (`render.ts`), data builder case (`workers/index.ts:buildTelegramData`), locale strings (`locales.ts`) — enforced by `never` guards on default cases (compile error if missing).
+3. 🔴 **Every notification drop writes audit.** No silent returns in dispatch or Telegram send handlers. Audit statuses: `no_target`, `unknown_event`, `quiet_hours`, `dedup`, `target_inactive`, `prefs_disabled`, `order_not_found`, `circuit_open`, `rate_limited`, `sending`, `delivered`, `failed`. Table: `notification_outbox_audit`.
+4. 🔴 **One canonical path per task.** All order status transitions through `updateOrderStatus()` (guarded by `verify-no-raw-status-update`). No direct `UPDATE orders SET status` bypass.
+5. 🔴 **Dwell-monitor only (pending-aging removed).** One pending notification mechanism. Runs every 60s, not 5min.
+6. 🔴 **Dashboard WebSocket `enabled: true`** with correct room `location:{tenantId}:dashboard`. Reconnect handler calls `fetchOrders()` for reconcile.
+7. 🔴 **Event registry (`EVENT_REGISTRY`)** has per-event quiet-hours policy, render group, and target scope. `isEventAllowedDuringQuietHours()` replaces hardcoded allowlist.
+8. 🔴 **`delivered` audit entry** written only after successful Telegram API response (not queue processing proxy).
+
+## 7b. Phase 4 anti-fake rules (P26) — server-side
 
 1. 🔴 **No auto-ban.** Signals are advisory only. No signal blocks order placement.
 2. 🔴 **Reputation decays exponentially** (30-day half-life). Counter alone = no signal.
@@ -149,7 +202,7 @@ Use `graphify-out/GRAPH_REPORT.md` only for broad architecture overview.
 8. 🔴 **Cross-tenant → 404**, not 403. Owner-only RBAC.
 9. 🔴 **Zod `.strict()` on all GDPR endpoints. RS256 JWT only. 0 cookies.**
 
-## 9. Known broken / must-fix before pilot (updated 2026-06-10)
+## 9. Known broken / must-fix before pilot (updated 2026-06-12)
 
 | # | Item | Status | Evidence |
 |---|---|---|---|
@@ -167,7 +220,31 @@ Use `graphify-out/GRAPH_REPORT.md` only for broad architecture overview.
 | 12 | MenuPage reads `attributes.kcal` but data is in `attributes.bom[].kcal` | ✅ FIXED | `MenuPage.tsx` — `bomToNutrition()` aggregates from `bom[]`; `attrEntries` filters `bom`/`stock_count` |
 | 13 | `ai-ocr-parser.ts` default Groq model `llama3.1:8b-instruct` (Ollama fmt) | ✅ FIXED | Default now `llama-3.1-8b-instruct` (Groq format); reads `GROQ_MODEL` env var |
 
-**Remaining blockers: DB role guardrail only.** Security posture: HOLDS 13 · WEAK 1 · BROKEN 0.
+| 14 | Telegram callback query auth — NULL user_id in notification targets | ✅ FIXED | `telegram-webhook.ts:131-173` — order-first location resolution, skip membership on NULL user_id |
+| 15 | CONFIRMED/REJECTED order events not delivering Telegram notifications | ✅ FIXED | `orderStatusService.ts:77-83` — publish lifecycle events; `server.ts:469-485` — subscribe + tgSend |
+| 16 | pg-boss v10 array callback mismatch — `work()` passes `Job[]` not `Job` | ✅ FIXED | `queue-provider.ts:45-52` — wrapper iterates array; all workers use `queue.work()` |
+| 17 | pg-boss runtime role had DDL privileges (migrate:true) | ✅ FIXED | `server.ts:248` — `migrate: false`; migration 0009 revokes CREATE on public; queues pre-created |
+| 18 | MessageBus used operational (transaction) pool — LISTEN/NOTIFY broken | ✅ FIXED | `server.ts:235` — explicit session pool; `message-bus.ts:72-103` — reconnect with backoff |
+| 19 | Missing notification dedup — duplicate events created duplicate jobs | ✅ FIXED | `server.ts:438-445` — dedupKey from event:entity_id:location_id as singletonKey |
+| 20 | Queue `createQueue()` not called for 6 of 10 queues | ✅ FIXED | `server.ts:260-269` — explicit createQueue for all 10 |
+| 21 | Webhook secret-token validation too strict — broke existing connect flows | ✅ FIXED | `telegram-webhook.ts:35-47` — warn-only if header missing; full validate only if header present |
+| 22 | `answerCallbackQuery` called late — Telegram loading spinner shown | ✅ FIXED | `telegram-webhook.ts` — answer at top of handler, follow-up message sent separately |
+| 23 | The/notification owner routes lacked `locale` in PUT schema | ✅ FIXED | `notifications.ts:99-107` — added `locale: z.enum(['sq','en','uk']).optional()` |
+| 24 | `PgMessageBus.connect()` didn't release old client before reconnect | ✅ FIXED | `message-bus.ts` — release() before creating new connection, reset isDegraded |
+
+| 14 | Telegram callback query auth — NULL user_id in notification targets | ✅ FIXED | `telegram-webhook.ts:131-173` — order-first location resolution, skip membership on NULL user_id |
+| 15 | CONFIRMED/REJECTED order events not delivering Telegram notifications | ✅ FIXED | `orderStatusService.ts:77-83` — publish lifecycle events; `server.ts:469-485` — subscribe + tgSend |
+| 16 | pg-boss v10 array callback mismatch — `work()` passes `Job[]` not `Job` | ✅ FIXED | `queue-provider.ts:45-52` — wrapper iterates array; all workers use `queue.work()` |
+| 17 | pg-boss runtime role had DDL privileges (migrate:true) | ✅ FIXED | `server.ts:248` — `migrate: false`; migration 0009 revokes CREATE on public; queues pre-created |
+| 18 | MessageBus used operational (transaction) pool — LISTEN/NOTIFY broken | ✅ FIXED | `server.ts:235` — explicit session pool; `message-bus.ts:72-103` — reconnect with backoff |
+| 19 | Missing notification dedup — duplicate events created duplicate jobs | ✅ FIXED | `server.ts:438-445` — dedupKey from event:entity_id:location_id as singletonKey |
+| 20 | Queue `createQueue()` not called for 6 of 10 queues | ✅ FIXED | `server.ts:260-269` — explicit createQueue for all 10 |
+| 21 | Webhook secret-token validation too strict — broke existing connect flows | ✅ FIXED | `telegram-webhook.ts:35-47` — warn-only if header missing; full validate only if header present |
+| 22 | `answerCallbackQuery` called late — Telegram loading spinner shown | ✅ FIXED | `telegram-webhook.ts` — answer at top of handler, follow-up message sent separately |
+| 23 | The/notification owner routes lacked `locale` in PUT schema | ✅ FIXED | `notifications.ts:99-107` — added `locale: z.enum(['sq','en','uk']).optional()` |
+| 24 | `PgMessageBus.connect()` didn't release old client before reconnect | ✅ FIXED | `message-bus.ts` — release() before creating new connection, reset isDegraded |
+
+**Remaining blockers: DB role guardrail only.** Security posture: HOLDS 19 · WEAK 1 · BROKEN 0.
 
 ## 10. Common commands
 
@@ -279,3 +356,36 @@ Before `git push` or `fly deploy`, verify ALL of the following:
 6. **Slug resolution test**: the slug returned by `/owner/settings` resolves to a 200 on `/public/locations/:slug/menu`
 7. **Image upload test**: upload with auth returns 200 and the image URL is fetchable
 8. **No permissive status assertions**: no test accepts `[200, 400, 500]` as passing
+
+### 13.4 NX-specific verification rules (born from 20-issue notification audit)
+
+These rules were added after the 2026-06-12 NX audit which found 20 issues in the Telegram notification subsystem caused by library API drift, topology confusion, incomplete event wiring, and permission gaps.
+
+| Rule | Failure it prevents | How to verify |
+|---|---|---|
+| **Schema-first query verification** — before writing SQL JOINs, verify columns exist | `short_id`/`oi.created_at`/`currency` column mismatches | `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = ?` or read the migration file for the table |
+| **Library API pinning** — verify installed version's API before using it | pg-boss v10 `work(Job[])` vs v9 `work(Job)` | Read `node_modules/<pkg>/package.json` for installed version, then read type declarations or changelog for that version |
+| **Event wiring completeness** — when adding new event type, verify all chain links | Missing subscriber/handler/locale/render/type for `order.confirmed`/`order.rejected` | Grep chain: publish → subscribe → handler → locale strings → render case → type union. Every link must exist before deployment. |
+| **Connection lifecycle audit** — every connect() must have matching close() | `PgMessageBus.connect()` leaked old client on reconnect | Grep for `.connect()` calls; verify each has a corresponding `.close()`/`.release()` in error and normal paths |
+| **Resilience-by-default for IPC** — every pg-boss send must have singletonKey | Duplicate notification jobs sending multiple Telegram messages | Verify `singletonKey` or `dedupKey` is set on every `queue.send()` call |
+| **Backward compat first for webhooks** — start lenient, add strict after telemetry | Webhook secret-token validation broke existing connect flows | Log warning on first config mismatch; enforce strict validation only after verifying all producers updated (24h minimum) |
+| **Topology verification** — know the port map before connecting | MessageBus used transaction pooler (LISTEN/NOTIFY broken) | Document which pool (session/transaction) each connection uses. Verify `inet_server_port()` returns correct port for each env var. |
+| **Runtime privilege verification** — verify grants exist before depending on them | Default privileges didn't cover existing tables; missing DDL grants | Test `has_schema_privilege(user, schema, privilege)` and `has_table_privilege(user, table, privilege)` at startup |
+| **Infrastructure pre-flight** — verify external deps exist at startup | Queues not created, webhook not set, secrets missing | For each external dependency, add a startup check that fails fast |
+| **Don't repeat API calls** — on third inline fetch, extract a helper | 3+ inline fetch calls to Telegram API with inconsistent error handling | When same API host gets third inline `fetch(url, {...})`, extract shared helper with consistent error handling |
+
+### 13.5 NX test gap checklist (verify after event/notification changes)
+
+After ANY change to:
+- Notification event types or delivery
+- pg-boss queue/work/worker configuration
+- MessageBus publish/subscribe wiring
+- Telegram/Bot API interaction
+
+Run the following (in order of confidence):
+
+1. **`pnpm typecheck`** — zero errors
+2. **`pnpm test:stage36`** — all NX stage tests pass (T-1 durability, T-2 off-critical-path, T-3 topology/privileges, T-4 idempotency)
+3. **`npx tsx apps/api/scripts/verify-nx-flow.ts`** — full chain E2E: enqueue → process → audit trail
+4. **Verify all 10 queues exist** — `SELECT name FROM pgboss.queue` should return all expected queue names
+5. **Verify message delivery** — trigger an event, check `pgboss.job` for `completed` state, check `notification_outbox_audit` for the audit record

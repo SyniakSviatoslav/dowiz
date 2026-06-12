@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { ProductCard, useI18n } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 
@@ -85,9 +86,13 @@ export function MenuPage() {
     return { kcal: Math.round(kcal), protein: Math.round(protein), fat: Math.round(fat), carbs: Math.round(carbs), allergens: Array.from(allergens), ingredients };
   };
 
+  const MIN_SKELETON_DWELL = 300;
+
   const [menu, setMenu] = useState<MenuResponse | null>(null);
   const [data, setData] = useState<MenuCategory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [activeTab, setActiveTab] = useState<string>('');
   const { addItem, bounceCart } = useSharedCart();
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
@@ -144,26 +149,35 @@ export function MenuPage() {
     return Array.from(set);
   }, [data]);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch(`/public/locations/${slug}/menu`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const menuData: MenuResponse = await res.json();
-        setMenu(menuData);
-        const cats = menuData.categories || [];
-        setData(cats);
-        if (cats[0]) setActiveTab(cats[0].id);
-        setLoading(false);
-      } catch (err) {
-        console.error('[MenuPage] Failed to load menu:', err);
-        setMenu(null);
-        setData([]);
-        setLoading(false);
+  const loadMenu = useCallback(async () => {
+    const start = Date.now();
+    setLoading(true);
+    setFetchError(false);
+    try {
+      const res = await fetch(`/public/locations/${slug}/menu`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const menuData: MenuResponse = await res.json();
+      setMenu(menuData);
+      const cats = menuData.categories || [];
+      setData(cats);
+      if (cats[0]) setActiveTab(cats[0].id);
+    } catch (err) {
+      console.error('[MenuPage] Failed to load menu:', err);
+      setMenu(null);
+      setData([]);
+      setFetchError(true);
+    } finally {
+      const elapsed = Date.now() - start;
+      if (elapsed < MIN_SKELETON_DWELL) {
+        await new Promise(r => setTimeout(r, MIN_SKELETON_DWELL - elapsed));
       }
+      setLoading(false);
     }
-    load();
   }, [slug]);
+
+  useEffect(() => {
+    loadMenu();
+  }, [loadMenu, retryCount]);
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   useEffect(() => {
@@ -281,7 +295,10 @@ export function MenuPage() {
     if (product.image_key.startsWith('data:') || product.image_key.startsWith('http://') || product.image_key.startsWith('https://')) {
       return product.image_key;
     }
-    return `https://cdn.dowiz.org/${product.image_key}`;
+    const base = typeof window !== 'undefined'
+      ? window.location.origin
+      : (import.meta.env?.VITE_API_BASE_URL || '');
+    return `${base}/images/${product.image_key}`;
   };
 
   const ALLERGEN_COLORS: Record<string, { bg: string; text: string }> = {
@@ -310,7 +327,7 @@ export function MenuPage() {
     <div className="relative min-h-screen pb-28">
 
       {/* Hero Section */}
-      <section className="relative w-full h-[200px] flex items-end overflow-hidden" style={{ background: 'linear-gradient(160deg, var(--brand-surface-raised) 0%, var(--brand-accent) 60%, var(--brand-primary) 100%)' }}>
+      <section className="relative w-full h-[160px] md:h-[200px] flex items-end overflow-hidden" style={{ background: 'linear-gradient(160deg, var(--brand-surface-raised) 0%, var(--brand-accent) 60%, var(--brand-primary) 100%)' }}>
         <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.05) 100%)' }} />
         <div className="absolute inset-0 opacity-[0.04] bg-[radial-gradient(circle_at_30%_50%,#fff_0%,transparent_60%)]" />
         <div className="relative z-10 w-full px-5 pb-4">
@@ -324,7 +341,7 @@ export function MenuPage() {
             <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} />
             <span>30 min</span>
           </div>
-          <h1 className="text-[26px] font-bold leading-tight text-white" style={{ fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 16px rgba(0,0,0,0.4)' }}>
+          <h1 className="text-[22px] md:text-[26px] font-bold leading-tight text-white" style={{ fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 16px rgba(0,0,0,0.4)' }}>
             {menu?.location_name || t('client.menu', 'Menu')}
           </h1>
         </div>
@@ -332,9 +349,9 @@ export function MenuPage() {
 
       {/* Category Nav */}
       <nav className="sticky top-0 z-40 h-[44px] border-b w-full" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
-        <div className="h-full overflow-x-auto hide-scrollbar flex items-center gap-1 px-2 text-[13px]">
+        <div className="h-full overflow-x-auto hide-scrollbar flex items-center gap-1 px-2 text-[13px]" role="tablist" aria-label={t('client.categories', 'Categories')}>
           {loading ? (
-            <div className="flex gap-4 px-2 h-full items-center">
+            <div className="flex gap-4 px-2 h-full items-center" role="tablist">
               <div className="w-14 h-3.5 skeleton-block" />
               <div className="w-14 h-3.5 skeleton-block" />
               <div className="w-14 h-3.5 skeleton-block" />
@@ -372,7 +389,7 @@ export function MenuPage() {
             </span>
             {(['default', 'price-asc', 'price-desc', 'name'] as const).map(mode => (
               <button key={mode} onClick={() => setSortBy(mode)}
-                className="px-2 py-0.5 rounded-md text-[10px] font-medium transition-all whitespace-nowrap"
+                className="px-2 min-h-[44px] rounded-md text-[10px] font-medium transition-all whitespace-nowrap flex items-center"
                 style={{
                   background: sortBy === mode ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
                   color: sortBy === mode ? '#fff' : 'var(--brand-text-muted)',
@@ -390,7 +407,7 @@ export function MenuPage() {
               const s = getAllergenStyle(a);
               return (
                 <button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)}
-                  className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase whitespace-nowrap transition-all"
+                  className="px-1.5 min-h-[44px] rounded text-[9px] font-semibold uppercase whitespace-nowrap transition-all flex items-center"
                   style={{
                     background: filterAllergen === a ? s.text : s.bg,
                     color: filterAllergen === a ? '#fff' : s.text,
@@ -427,24 +444,44 @@ export function MenuPage() {
         ) : !categories.length ? (
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
             <i className="ti ti-tools-kitchen-2 text-5xl opacity-20 mb-3" style={{ color: 'var(--brand-text-muted)' }} />
-            <p className="text-sm font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('client.empty_menu', 'Menu unavailable')}</p>
+            <p className="text-sm font-medium" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('client.empty_menu', fetchError ? 'Failed to load menu' : 'Menu unavailable')}
+            </p>
+            {fetchError && (
+              <button onClick={() => { setRetryCount(c => c + 1); }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all active:scale-95" style={{ background: 'var(--brand-primary)' }}>
+                <i className="ti ti-refresh mr-1.5" />{t('client.retry', 'Retry')}
+              </button>
+            )}
           </div>
 ) : (
           displayCategories.map(category => (
-            <section 
-              key={category.id} 
-              id={category.id} 
+            <motion.section
+              key={category.id}
+              id={category.id}
               ref={el => { sectionRefs.current[category.id] = el }}
               className="mb-7 scroll-mt-[100px]"
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-60px' }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             >
               <h2 className="text-lg font-bold px-4 mb-3" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
                 {category.name}
               </h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 px-4">
+              <motion.div
+                className="grid grid-cols-2 md:grid-cols-3 gap-3 px-4"
+                variants={{ visible: { transition: { staggerChildren: 0.03 } } }}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, margin: '-40px' }}
+              >
                 {category.products.map(product => {
                   const nutrition = bomToNutrition(product);
                   return (
-                  <div key={product.id}>
+                  <motion.div
+                    key={product.id}
+                    variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } } }}
+                  >
                     <ProductCard product={{
                       id: product.id,
                       name: product.name,
@@ -472,11 +509,11 @@ export function MenuPage() {
                         handleProductClick(product);
                       }
                     }} />
-                  </div>
+                  </motion.div>
                   );
                 })}
-              </div>
-            </section>
+              </motion.div>
+            </motion.section>
           ))
         )}
        </main>
@@ -516,10 +553,10 @@ export function MenuPage() {
                 <div className="absolute bottom-3 left-3 z-10">
                   <span className="text-[10px] font-medium px-2 py-1 rounded-md flex items-center gap-1.5" style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
                     <i className="ti ti-flame" style={{ fontSize: '0.7rem' }} />
-                    {bomToNutrition(detailProduct).kcal} kcal
-                    {bomToNutrition(detailProduct).protein > 0 && <span className="opacity-70">· P{bomToNutrition(detailProduct).protein}g</span>}
-                    {bomToNutrition(detailProduct).fat > 0 && <span className="opacity-70">· F{bomToNutrition(detailProduct).fat}g</span>}
-                    {bomToNutrition(detailProduct).carbs > 0 && <span className="opacity-70">· C{bomToNutrition(detailProduct).carbs}g</span>}
+                    {bomToNutrition(detailProduct).kcal} {t('nutrition.calories', 'kcal')}
+                    {bomToNutrition(detailProduct).protein > 0 && <span className="opacity-70">· {t('nutrition.protein', 'P')}{bomToNutrition(detailProduct).protein}g</span>}
+                    {bomToNutrition(detailProduct).fat > 0 && <span className="opacity-70">· {t('nutrition.fat', 'F')}{bomToNutrition(detailProduct).fat}g</span>}
+                    {bomToNutrition(detailProduct).carbs > 0 && <span className="opacity-70">· {t('nutrition.carbs', 'C')}{bomToNutrition(detailProduct).carbs}g</span>}
                   </span>
                 </div>
               )}
@@ -588,18 +625,18 @@ export function MenuPage() {
                     <i className="ti ti-report-analytics" /> {t('client.nutrition', 'Nutrition')}
                   </h3>
                   <div className="grid grid-cols-4 gap-3 text-center">
-                    {[
-                      { label: 'Calories', value: bomToNutrition(detailProduct).kcal, unit: 'kcal', icon: 'ti ti-flame' },
-                      { label: 'Protein', value: bomToNutrition(detailProduct).protein, unit: 'g', icon: 'ti ti-droplet' },
-                      { label: 'Fat', value: bomToNutrition(detailProduct).fat, unit: 'g', icon: 'ti ti-droplet-half' },
-                      { label: 'Carbs', value: bomToNutrition(detailProduct).carbs, unit: 'g', icon: 'ti ti-droplet-filled' },
-                    ].map(n => n.value > 0 && (
-                      <div key={n.label} className="flex flex-col items-center gap-1">
-                        <i className={n.icon} style={{ fontSize: '1rem', color: 'var(--brand-text-muted)' }} />
-                        <span className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{n.value}</span>
-                        <span className="text-[9px] font-medium" style={{ color: 'var(--brand-text-muted)' }}>{n.label}</span>
-                      </div>
-                    ))}
+                      {[
+                        { key: 'nutrition.calories', value: bomToNutrition(detailProduct).kcal, icon: 'ti ti-flame' },
+                        { key: 'nutrition.protein', value: bomToNutrition(detailProduct).protein, icon: 'ti ti-droplet' },
+                        { key: 'nutrition.fat', value: bomToNutrition(detailProduct).fat, icon: 'ti ti-droplet-half' },
+                        { key: 'nutrition.carbs', value: bomToNutrition(detailProduct).carbs, icon: 'ti ti-droplet-filled' },
+                      ].map(n => n.value > 0 && (
+                        <div key={n.key} className="flex flex-col items-center gap-1">
+                          <i className={n.icon} style={{ fontSize: '1rem', color: 'var(--brand-text-muted)' }} />
+                          <span className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{n.value}</span>
+                          <span className="text-[9px] font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t(n.key)}</span>
+                        </div>
+                      ))}
                   </div>
                 </div>
               )}

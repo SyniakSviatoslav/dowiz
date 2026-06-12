@@ -4,3 +4,4 @@ export * from './contracts/index.js';
 export { CreateOrderInput, OrderItemInput, StatusUpdateInput, OrderResponse, OrderItemResponse, OrderStatusEnum, AuthToken, ParseModeEnum, CustomerOrderStatusResponse } from './legacy.js';
 
 export * from './utils.js';
+export * from './queue-names.js';

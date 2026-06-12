@@ -431,7 +431,7 @@ export function OnboardingPage() {
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
-                          if (file.size > 2 * 1024 * 1024) { alert('Logo must be under 2 MB'); return; }
+                          if (file.size > 2 * 1024 * 1024) { alert(t('admin.error_logo_size', 'Logo must be under 2 MB')); return; }
                           const reader = new FileReader();
                           reader.onload = () => setLogoUrl(reader.result as string);
                           reader.readAsDataURL(file);

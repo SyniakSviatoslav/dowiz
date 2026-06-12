@@ -1,15 +1,21 @@
 ﻿{
-  "approach": "CR-8 order-scoped message channel. MSG-1: migration (order_messages table + RLS + CHECK). MSG-2: preset registry + Zod schemas + send endpoint + MessageBus broadcast. MSG-3: thread UI on OrderStatusPage/ActiveDeliveryPage/admin. MSG-4: tel: call buttons + param selectors. MSG-5: free-text flag doc only (OFF).",
+  "approach": "Phase G-1 first (CDN hardcodings → API proxy), then G-2 (menu hydration hardening), then G-3 (gate B7/B8 browser checks)",
   "files": [
-    "packages/db/migrations/1790000000002_order_messages.ts",
-    "packages/shared-types/src/contracts/order-messages.ts",
-    "packages/shared-types/src/contracts/index.ts",
-    "apps/api/src/routes/order-messages.ts",
-    "apps/api/src/server.ts",
-    "packages/ui/src/lib/i18n.ts",
-    "apps/web/src/pages/client/OrderStatusPage.tsx",
-    "apps/web/src/pages/courier/ActiveDeliveryPage.tsx"
+    "apps/api/src/routes/owner/themes.ts",
+    "apps/api/src/lib/jsonld-builder.ts",
+    "apps/api/src/client/checkout/app.ts",
+    "apps/api/src/routes/public/pwa.ts",
+    "apps/api/src/lib/ssr-client-renderer.ts",
+    "apps/api/src/routes/public/client-flow.ts",
+    "apps/api/src/routes/public/ssr.ts",
+    "apps/api/src/routes/public/branding-preview.ts",
+    "apps/api/src/lib/security/headers.ts",
+    "apps/web/src/pages/client/MenuPage.tsx",
+    "apps/web/index.html",
+    "apps/web/public/manifest.json",
+    "packages/ui/src/components/client/ClientUI.tsx",
+    "apps/api/scripts/release-gate.ts"
   ],
-  "keyTypes": ["message_sender", "MessagePresetKey", "OrderMessagePreset", "OrderMessageRecord", "SendMessageRequest"],
-  "boundaryCondition": "free text rejected (CHECK body IS NULL), DELIVERED/terminal auto-close, owner has zero contact buttons, cross-tenant 404"
+  "keyTypes": ["StorageProvider", "Product", "MenuPage", "Blockers"],
+  "boundaryCondition": "All changes read-only re business contracts; staging-only fixes; zero real customer impact"
 }

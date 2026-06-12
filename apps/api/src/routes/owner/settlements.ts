@@ -2,6 +2,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 
 export default (async function ownerSettlementRoutes(fastify, opts) {
   const { db, messageBus } = opts as any;
@@ -135,7 +136,7 @@ export default (async function ownerSettlementRoutes(fastify, opts) {
 
       // Publish event
       const p = pRes.rows[0];
-      await messageBus.publish('settlement.approved', {
+      await messageBus.publish(BUS_CHANNELS.SETTLEMENT_APPROVED, {
         payoutId: p.id,
         courierId: p.courier_id,
         locationId: p.location_id,
@@ -234,7 +235,7 @@ export default (async function ownerSettlementRoutes(fastify, opts) {
       await client.query('COMMIT');
 
       // Notify courier (Telegram) handled elsewhere by listening to a dispute event, or just emit event
-      await messageBus.publish('settlement.disputed', {
+      await messageBus.publish(BUS_CHANNELS.SETTLEMENT_DISPUTED, {
         payoutId: id,
         courierId: pRes.rows[0].courier_id,
         locationId

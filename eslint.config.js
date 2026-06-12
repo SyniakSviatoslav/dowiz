@@ -1,10 +1,12 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import localPlugin from 'eslint-plugin-local';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 
 export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
+  jsxA11y.flatConfigs.recommended,
   {
     plugins: {
       local: localPlugin,
@@ -32,6 +34,7 @@ export default tseslint.config(
       'local/no-empty-catch': 'warn',
       'local/no-mock-in-prod': 'warn',
       'local/no-permissive-status-assertion': 'warn',
+      'local/no-hardcoded-string': 'warn',
 
       // --- Karpathy P2: Simplicity rules (warn-only, no CI block) ---
       'max-depth': ['warn', 4],
@@ -50,6 +53,7 @@ export default tseslint.config(
     rules: {
       'local/no-hardcoded-color': 'warn',
       'local/no-hardcoded-tailwind-color': 'warn',
+      'local/no-hardcoded-string': 'warn',
     },
   },
   {

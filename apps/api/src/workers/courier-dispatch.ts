@@ -2,6 +2,7 @@
 import { Pool } from 'pg';
 import type Boss from 'pg-boss';
 import type { MessageBus } from '@deliveryos/platform';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 import { loadEnv } from '@deliveryos/config';
 
 const env = loadEnv();
@@ -15,7 +16,7 @@ export class CourierDispatchWorker {
 
   async start() {
     // Register with singletonKey so only one N=2 instance processes at a time
-    await this.boss.work('courier.dispatch', { teamSize: 1, teamConcurrency: 1 }, async (job) => {
+    await this.boss.work(QUEUE_NAMES.COURIER_DISPATCH, { teamSize: 1, teamConcurrency: 1 }, async (job) => {
       const { orderId, locationId } = job.data as any;
       await this.handleDispatch(orderId, locationId);
     });
@@ -66,7 +67,7 @@ export class CourierDispatchWorker {
         // No couriers available
         if (attempts >= maxAttempts) {
           // Escalate failure
-          await this.messageBus.publish('order.dispatch_failed', { orderId, locationId, reason: 'No couriers available after max attempts' });
+          await this.messageBus.publish(BUS_CHANNELS.ORDER_DISPATCH_FAILED, { orderId, locationId, reason: 'No couriers available after max attempts' });
           await client.query(`DELETE FROM courier_dispatch_queue WHERE order_id = $1`, [orderId]);
           await client.query('COMMIT');
           return;
@@ -74,7 +75,7 @@ export class CourierDispatchWorker {
 
         // Re-enqueue after retryMs
         await client.query('COMMIT');
-        await this.boss.send('courier.dispatch', { orderId, locationId }, { startAfter: Math.floor(retryMs / 1000) });
+        await this.boss.send(QUEUE_NAMES.COURIER_DISPATCH, { orderId, locationId }, { startAfter: Math.floor(retryMs / 1000) });
         return;
       }
 
@@ -97,7 +98,7 @@ export class CourierDispatchWorker {
       await client.query('COMMIT');
 
       // Publish event
-      await this.messageBus.publish('order.assignment_created', { orderId, locationId, courierId: courier_id, shiftId: shift_id });
+      await this.messageBus.publish(BUS_CHANNELS.ORDER_ASSIGNMENT_CREATED, { orderId, locationId, courierId: courier_id, shiftId: shift_id });
       
     } catch (err) {
       await client.query('ROLLBACK');

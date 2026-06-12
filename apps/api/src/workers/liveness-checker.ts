@@ -2,6 +2,7 @@
 import type { Pool } from 'pg';
 import type Boss from 'pg-boss';
 import type { MessageBus } from '@deliveryos/platform';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 import { loadEnv } from '@deliveryos/config';
 
 const env = loadEnv();
@@ -28,14 +29,14 @@ export class LivenessChecker {
   ) {}
 
   async start() {
-    await this.boss.work('liveness.check', { singletonKey: 'liveness.check' }, async () => {
+    await this.boss.work(QUEUE_NAMES.LIVENESS_CHECK, { singletonKey: QUEUE_NAMES.LIVENESS_CHECK }, async () => {
       await this.run();
     });
     const cronMs = parseInt(env.WORKER_LIVENESS_CHECK_MS || '60000', 10);
     const cronSec = Math.max(Math.floor(cronMs / 1000), 30);
-    await this.boss.createQueue('liveness.check');
-    await this.boss.schedule('liveness.check', `*/${cronSec} * * * * *`, null, {
-      singletonKey: 'liveness.check',
+    await this.boss.createQueue(QUEUE_NAMES.LIVENESS_CHECK);
+    await this.boss.schedule(QUEUE_NAMES.LIVENESS_CHECK, `*/${cronSec} * * * * *`, null, {
+      singletonKey: QUEUE_NAMES.LIVENESS_CHECK,
     });
   }
 
@@ -65,14 +66,14 @@ export class LivenessChecker {
         const message = `⚠️ Worker liveness alert:\n${lines.join('\n')}`;
 
         if (newlyStale.length > 3) {
-          await this.messageBus.publish('worker.batch_stale', {
+          await this.messageBus.publish(BUS_CHANNELS.WORKER_BATCH_STALE, {
             count: newlyStale.length,
             workers: newlyStale.map(w => w.worker_id),
             timestamp: new Date().toISOString(),
           });
         } else {
           for (const w of newlyStale) {
-            await this.messageBus.publish('worker.stale', {
+            await this.messageBus.publish(BUS_CHANNELS.WORKER_STALE, {
               workerId: w.worker_id,
               instanceId: w.instance_id,
               staleSeconds: w.stale_seconds,
@@ -81,7 +82,7 @@ export class LivenessChecker {
           }
         }
 
-        await this.messageBus.publish('alert.worker_liveness', {
+        await this.messageBus.publish(BUS_CHANNELS.ALERT_WORKER_LIVENESS, {
           message,
           criticalCount: newlyStale.length,
           timestamp: new Date().toISOString(),
@@ -91,7 +92,7 @@ export class LivenessChecker {
       // — Auto-resolve for recovered workers —
       const recovered = [...this.previouslyStale].filter(id => !currentStaleIds.has(id));
       for (const workerId of recovered) {
-        await this.messageBus.publish('worker.recovered', {
+        await this.messageBus.publish(BUS_CHANNELS.WORKER_RECOVERED, {
           workerId,
           timestamp: new Date().toISOString(),
         });
@@ -100,7 +101,7 @@ export class LivenessChecker {
       this.previouslyStale = currentStaleIds;
     } catch (err) {
       console.error('[LivenessChecker] Error:', err);
-      await this.messageBus.publish('liveness.check.failed', {
+      await this.messageBus.publish(BUS_CHANNELS.LIVENESS_CHECK_FAILED, {
         error: String(err),
         time: new Date().toISOString(),
       });
