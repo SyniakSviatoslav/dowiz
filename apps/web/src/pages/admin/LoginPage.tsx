@@ -60,8 +60,9 @@ export function LoginPage() {
 
         <form onSubmit={handleLocalLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1 text-[var(--brand-text-muted)]">{t('admin.email', 'Email')}</label>
+            <label htmlFor="login-email" className="block text-sm font-medium mb-1 text-[var(--brand-text-muted)]">{t('admin.email', 'Email')}</label>
             <Input 
+              id="login-email"
               type="email" 
               value={email} 
               onChange={(e) => setEmail(e.target.value)} 
@@ -70,8 +71,9 @@ export function LoginPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1 text-[var(--brand-text-muted)]">{t('admin.password', 'Password')}</label>
+            <label htmlFor="login-password" className="block text-sm font-medium mb-1 text-[var(--brand-text-muted)]">{t('admin.password', 'Password')}</label>
             <Input 
+              id="login-password"
               type="password" 
               value={password} 
               onChange={(e) => setPassword(e.target.value)} 

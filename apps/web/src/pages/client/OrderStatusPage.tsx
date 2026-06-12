@@ -257,7 +257,7 @@ export function OrderStatusPage() {
   }
 
   return (
-    <div className="max-w-md mx-auto min-h-screen bg-[var(--brand-surface)] pb-10">
+    <div className="max-w-md mx-auto min-h-screen bg-[var(--brand-surface)] pb-10" role="region" aria-live="polite" aria-label={t('order.status_updates', 'Order status updates')}>
       {/* Live Courier Map */}
       <div className="h-64 relative w-full">
         <CourierLiveMap
