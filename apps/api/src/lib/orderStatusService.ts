@@ -64,11 +64,21 @@ export async function updateOrderStatus(
     timestamp: new Date().toISOString(),
   });
 
+  const dbLocationId = cur.rows[0].location_id;
+
   // Forward to dashboard room for live owner dashboard
-  if (cur.rows[0].location_id) {
-    await opts.messageBus.publish(`location:${cur.rows[0].location_id}:dashboard`, {
+  if (dbLocationId) {
+    await opts.messageBus.publish(`location:${dbLocationId}:dashboard`, {
       type: `order.${newStatus.toLowerCase()}`,
       data: { orderId, status: newStatus, statusUpdatedAt: new Date().toISOString() },
     });
+  }
+
+  // 5. Publish lifecycle event for notification fan-out
+  // This triggers server.ts MessageBus subscriptions → tgSend() → notify.telegram.send job
+  if (newStatus === 'CONFIRMED' && dbLocationId) {
+    await opts.messageBus.publish('order.confirmed', { orderId, locationId: dbLocationId });
+  } else if (newStatus === 'REJECTED' && dbLocationId) {
+    await opts.messageBus.publish('order.rejected', { orderId, locationId: dbLocationId });
   }
 }

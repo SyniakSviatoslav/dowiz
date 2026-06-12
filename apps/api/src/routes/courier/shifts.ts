@@ -2,7 +2,7 @@
 import { z } from 'zod';
 import { roundCoordinate, isWithinGeofence } from '../../lib/geo.js';
 import { loadEnv } from '@deliveryos/config';
-import { MessageBus } from '@deliveryos/platform';
+import type { MessageBus } from '@deliveryos/platform';
 
 const env = loadEnv();
 
@@ -19,7 +19,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-      await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
       const res = await client.query(`
         SELECT id, status, started_at, ended_at, last_heartbeat_at
@@ -72,7 +72,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
     const client = await db.connect();
      try {
        await client.query('BEGIN');
-       await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
+       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
        // Use the service to open the shift
        const { shiftId, status, startedAt } = await openShift(client, courierId, locationId, { messageBus });
@@ -119,7 +119,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-      await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
       const shiftRes = await client.query(`
         SELECT id, status FROM courier_shifts
@@ -192,7 +192,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-      await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
       // Check existing shift
       const shiftRes = await client.query(`
@@ -336,7 +336,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-      await client.query(`SET LOCAL app.current_tenant = '${locationId}'`);
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
       // Range check vs location pin
       const locRes = await client.query(`SELECT lat, lng FROM locations WHERE id = $1`, [locationId]);
