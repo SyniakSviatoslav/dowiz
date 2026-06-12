@@ -1,3 +1,6 @@
+export const PHONE_E164_REGEX = /^\+[1-9]\d{6,14}$/;
+export const PHONE_E164_PATTERN = '[+][1-9][0-9]{6,14}';
+
 export function formatALL(amountInCents: number): string {
   const all = Math.round(amountInCents / 100);
   return `${all} ALL`;
