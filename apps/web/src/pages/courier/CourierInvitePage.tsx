@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { Button, Input, FormField, EmptyState } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
@@ -174,6 +175,8 @@ export function CourierInvitePage() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="+355 69 123 4567"
+              pattern={PHONE_E164_PATTERN}
+              title="+355 followed by 7-14 digits"
               disabled={submitting}
             />
           </FormField>

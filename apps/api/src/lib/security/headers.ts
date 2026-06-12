@@ -12,11 +12,11 @@ export function setSecurityHeaders(reply: any, opts: SecurityHeadersOpts = {}): 
 
   const cspParts = [
     `default-src 'self'`,
-    `img-src 'self' data: https://cdn.dowiz.org`,
+    `img-src 'self' data: https://cdn.dowiz.org https://tiles.openfreemap.org`,
     `style-src 'self'${nonce ? ` 'nonce-${nonce}'` : ''} https://fonts.googleapis.com`,
     `font-src 'self' https://fonts.gstatic.com`,
     `script-src 'self'${nonce ? ` 'nonce-${nonce}'` : ''}`,
-    `connect-src 'self' https://cdn.dowiz.org`,
+    `connect-src 'self' https://cdn.dowiz.org https://tiles.openfreemap.org`,
     `frame-ancestors ${frameAncestors}`,
     `base-uri 'self'`,
     `form-action 'self'`,

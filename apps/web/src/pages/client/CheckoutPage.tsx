@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, OTPModal, MapWithPin, useI18n } from '@deliveryos/ui';
+import { Button, MapWithPin, useI18n } from '@deliveryos/ui';
 import type { LngLatLike } from '@deliveryos/ui';
+import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
 import { useSharedCart } from '../../lib/CartProvider.js';
 
@@ -47,20 +48,6 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 type DeliveryType = 'delivery' | 'pickup' | 'scheduled';
 
-async function sha256Hex(input: string): Promise<string> {
-  const enc = new TextEncoder();
-  const buf = await crypto.subtle.digest('SHA-256', enc.encode(input));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function hashOrderIntent(items: Array<{ product_id: string; quantity: number }>): Promise<string> {
-  const canonical = items
-    .map(i => `${i.product_id}:${i.quantity}`)
-    .sort()
-    .join(',');
-  return sha256Hex(canonical);
-}
-
 export function CheckoutPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -71,21 +58,17 @@ export function CheckoutPage() {
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
-  const [isOTPOpen, setOTPOpen] = useState(false);
-  const [otpError, setOtpError] = useState('');
   const [pinLocation, setPinLocation] = useState<LngLatLike | null>(null);
   const [locationId, setLocationId] = useState<string | null>(null);
   const [currency, setCurrency] = useState('ALL');
   const [cashAmount, setCashAmount] = useState<number>(0);
   const [instructionOption, setInstructionOption] = useState<string>('');
   const [instructionCustom, setInstructionCustom] = useState<string>('');
-
-  const otpTokenRef = useRef<string>('');
-  const verifiedTokenRef = useRef<string>('');
+  const [phoneError, setPhoneError] = useState('');
 
   useEffect(() => {
     if (!slug) return;
-    apiClient<any>(`/public/locations/${slug}/info`)
+    fetch(`/public/locations/${slug}/info`).then(r => r.json())
       .then((info: any) => {
         setLocationId(info.id);
         setCurrency(info.currency_code || 'ALL');
@@ -123,64 +106,18 @@ export function CheckoutPage() {
     modifier_ids: Object.values(i.options || {}).flat() as string[],
   }));
 
-  const handleStartCheckout = (e: React.FormEvent) => {
+  const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (items.length === 0 || !slug) return;
-    if (!phone) {
-      setOtpError(t('checkout.phone_required', 'Phone number required'));
+    if (items.length === 0 || !slug || !locationId) return;
+    if (!phone || !PHONE_E164_REGEX.test(phone)) {
+      setPhoneError(t('checkout.phone_invalid', 'Enter a valid phone number (+355...)'));
       return;
     }
-    setOTPOpen(true);
-  };
-
-  const handleSendOTP = async (verifyPhone: string): Promise<void> => {
-    setPhone(verifyPhone);
-    setOtpError('');
-    if (!slug) return;
-    try {
-      const res = await apiClient<any>(`/customer/locations/${slug}/otp/send`, {
-        method: 'POST',
-        body: {
-          phone: verifyPhone,
-          order_intent: {
-            items: items.map(i => ({ product_id: i.productId, quantity: i.quantity })),
-            total: total,
-            currency: currency,
-          },
-        },
-      });
-      otpTokenRef.current = res.otp_token;
-    } catch {
-      console.debug('[Checkout] OTP send failed');
-    }
-  };
-
-  const handleVerifyOTP = async (code: string) => {
-    if (!slug || !locationId) throw new Error('Location not loaded');
-    const otpToken = otpTokenRef.current;
-    if (!otpToken) throw new Error('No OTP session');
-    const intentHash = await hashOrderIntent(
-      items.map(i => ({ product_id: i.productId, quantity: i.quantity }))
-    );
-    try {
-      const verifyRes = await apiClient<any>(`/customer/locations/${slug}/otp/verify`, {
-        method: 'POST',
-        body: {
-          phone,
-          code,
-          otp_token: otpToken,
-          order_intent_hash: intentHash,
-        },
-      });
-      verifiedTokenRef.current = verifyRes.verified_token;
-    } catch (e) {
-      if (!isDevMode()) throw new Error('Invalid code');
-    }
+    setPhoneError('');
     try {
       const idempotencyKey = crypto.randomUUID();
       const orderRes = await apiClient<any>('/orders', {
         method: 'POST',
-        headers: verifiedTokenRef.current ? { 'x-otp-verified': verifiedTokenRef.current } : {},
         body: {
           locationId: locationId,
           type: 'delivery',
@@ -246,7 +183,7 @@ export function CheckoutPage() {
         <h1 className="text-[24px] font-bold" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.title')}</h1>
       </div>
 
-      <form onSubmit={handleStartCheckout} className="space-y-6">
+      <form onSubmit={handlePlaceOrder} className="space-y-6">
         <div className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
           <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.contact_info', 'Contact Info')}</h2>
           <div className="space-y-3">
@@ -261,7 +198,8 @@ export function CheckoutPage() {
               <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.phone', 'Phone')}</label>
               <div className="relative">
                 <i className="ti ti-phone absolute left-3 top-1/2 -translate-y-1/2 text-lg" style={{ color: 'var(--brand-text-muted)' }} />
-                <input required value={phone} onChange={e => setPhone(e.target.value)} placeholder="+355 6X XXX XXXX" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} placeholder="+355 6X XXX XXXX" pattern={PHONE_E164_PATTERN} title="+355 followed by 7-14 digits" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                {phoneError && <p className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{phoneError}</p>}
               </div>
             </div>
           </div>
@@ -408,7 +346,6 @@ export function CheckoutPage() {
         </Button>
       </form>
 
-      <OTPModal isOpen={isOTPOpen} onClose={() => setOTPOpen(false)} phone={phone} onSendOTP={handleSendOTP} onVerifyOTP={handleVerifyOTP} />
     </div>
   );
 }
