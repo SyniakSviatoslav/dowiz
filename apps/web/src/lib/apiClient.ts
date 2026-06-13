@@ -51,6 +51,7 @@ export const apiClient = async <T extends z.ZodType>(
   if (!isFormData) {
     headers['Content-Type'] = 'application/json';
   }
+  headers['Accept'] = 'application/json';
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
