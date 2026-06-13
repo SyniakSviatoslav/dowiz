@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Input, BottomSheet, Modal, useI18n } from '../../index.js';
-import { formatALL } from '@deliveryos/shared-types';
+import { Button, Input, BottomSheet, Modal, useI18n, PriceDisplay } from '../../index.js';
 
 export interface CartItem {
   id: string;
@@ -173,7 +172,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
 
         <div className="flex items-center justify-between mt-auto pt-1">
           <div className="flex items-baseline gap-1">
-            <span className="font-bold text-sm" style={{ color: 'var(--brand-primary)' }}>{formatALL(product.price)}</span>
+            <PriceDisplay amount={product.price} size="sm" />
             {hasNutrition && (
               <span className="text-[8px]" style={{ color: 'var(--brand-text-muted)' }}>
                 {product.kcal}kcal
@@ -231,7 +230,7 @@ export function CartDrawer({ isOpen, onClose, items, onUpdateQuantity, onCheckou
                 <div key={item.id} className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
                     <div className="text-[var(--brand-text)] font-medium truncate">{item.name}</div>
-                    <div className="text-[var(--brand-text-muted)] text-sm">{formatALL(item.price)}</div>
+                    <div className="text-[var(--brand-text-muted)] text-sm"><PriceDisplay amount={item.price} size="sm" /></div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <button onClick={() => onUpdateQuantity(item.id, item.quantity - 1)} className="w-8 h-8 rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95">-</button>
@@ -248,7 +247,7 @@ export function CartDrawer({ isOpen, onClose, items, onUpdateQuantity, onCheckou
           <div className="pt-4 border-t border-[var(--brand-border)]">
             <div className="flex justify-between font-bold text-lg mb-4 text-[var(--brand-text)]">
               <span>{totalLabel || 'Total'}</span>
-              <span>{formatALL(total)}</span>
+              <PriceDisplay amount={total} size="lg" />
             </div>
             <Button className="w-full" size="lg" onClick={onCheckout}>
               {checkoutLabel || 'Checkout'}

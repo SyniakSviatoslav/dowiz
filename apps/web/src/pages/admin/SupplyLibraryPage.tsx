@@ -128,7 +128,8 @@ const SupplyForm = ({
   };
 
   return (
-    <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-xl p-5 space-y-4 slide-in-up">
+    <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-xl flex flex-col max-h-[80vh]">
+      <div className="overflow-y-auto p-5 space-y-4 slide-in-up">
       <h3 className="text-sm font-semibold" style={{ fontFamily: 'var(--brand-font-heading)' }}>
         {initial ? `${t('common.edit')}: ${name}` : t('menu.add') + ' ' + t('admin.supplies')}
       </h3>
@@ -187,7 +188,8 @@ const SupplyForm = ({
         <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.reorder_threshold', 'Reorder threshold')} ({baseUnit})</label>
         <input value={threshold} onChange={e => setThreshold(e.target.value)} type="number" className="w-full sm:w-48 h-9 px-3 rounded-lg border text-xs outline-none focus:border-[var(--brand-primary)] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
       </div>
-      <div className="flex justify-end gap-2 pt-2">
+      </div>
+      <div className="flex justify-end gap-2 p-5 pt-3 border-t shrink-0" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
         <Button variant="ghost" size="sm" onClick={onCancel}>{t('common.cancel')}</Button>
         <Button size="sm" loading={saving} onClick={handleSave}>{t('common.save')}</Button>
       </div>
@@ -363,7 +365,7 @@ export function SupplyLibraryPage() {
           {editing && (
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center fade-in" onClick={() => setEditing(null)}>
               <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-              <div className="relative w-full max-w-lg mx-4 mb-0 sm:mb-auto max-h-[85vh] overflow-auto rounded-t-2xl sm:rounded-2xl" onClick={e => e.stopPropagation()}>
+              <div className="relative w-full max-w-lg mx-4 mb-0 sm:mb-auto rounded-t-2xl sm:rounded-2xl" onClick={e => e.stopPropagation()}>
                 <SupplyForm initial={editing} onSave={handleSave} onCancel={() => setEditing(null)} />
               </div>
             </div>

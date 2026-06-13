@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ProductCard, useI18n } from '@deliveryos/ui';
+import { ProductCard, useI18n, PriceDisplay } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 
 interface ProductModifier {
@@ -609,7 +609,7 @@ export function MenuPage() {
                     )}
                   </div>
                   <div className="text-xl font-black whitespace-nowrap shrink-0" style={{ color: 'var(--brand-primary)' }}>
-                    {(detailProduct.price + calcModifierDelta()).toLocaleString()} {getCurrency(menu)}
+                    <PriceDisplay amount={detailProduct.price + calcModifierDelta()} />
                   </div>
                 </div>
                 {detailProduct.description && (
@@ -795,7 +795,7 @@ export function MenuPage() {
                     <>
                       <span>{t('client.add_to_cart', 'Add to Cart')}</span>
                       <span className="opacity-50 font-normal">·</span>
-                      <span className="font-bold">{(detailProduct.price + calcModifierDelta()) * quantity} {getCurrency(menu)}</span>
+                      <PriceDisplay amount={(detailProduct.price + calcModifierDelta()) * quantity} />
                     </>
                   ) : (
                     t('client.unavailable', 'Unavailable')
