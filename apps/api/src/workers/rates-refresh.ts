@@ -19,8 +19,12 @@ export class RatesRefreshWorker {
       await this.run();
     });
 
-    await this.boss.send(QUEUE_NAMES.RATES_REFRESH, null, { startAfter: 5 });
-    await this.boss.schedule(QUEUE_NAMES.RATES_REFRESH, cron, null);
+    await this.boss.send(QUEUE_NAMES.RATES_REFRESH, null, { startAfter: 5 }).catch((err: any) => {
+      console.warn(`[RatesRefresh] send failed (queue may not be pre-created): ${err.message}`);
+    });
+    await this.boss.schedule(QUEUE_NAMES.RATES_REFRESH, cron, null).catch((err: any) => {
+      console.warn(`[RatesRefresh] schedule failed (queue may not be pre-created): ${err.message}`);
+    });
   }
 
   private async run() {
