@@ -554,3 +554,26 @@ The WebSocket server (`websocket.ts:95-99`) only allowed `location:` and `order:
 The global `onRequest` hook (`server.ts:550-560`) checked Bearer token for ALL routes starting with `/api/courier/`. The invite redeem endpoint (`POST /api/courier/auth/invites/{id}/redeem`) is a PUBLIC endpoint (no token required). The auth guard returned 401.
 
 **Rule:** Public endpoints under auth-guarded path prefixes MUST have explicit exceptions in `NO_AUTH_PATHS`. Currently: `['/api/courier/auth/invites/']`. Any new public endpoint added under `/api/owner/`, `/api/courier/`, or `/api/customer/` must be added to this list.
+
+### 15.12 BE↔FE contract alignment rule (born from A1, A2, A3 — data mismatch trilogy)
+
+Three data mismatches were found in this session that all followed the same pattern: the backend API returns a field with one name/shape, but the frontend expects a different one. None were caught by TypeScript because the API responses were used with `any` types.
+
+| Mismatch | Backend sends | Frontend expects | Impact |
+|---|---|---|---|
+| `cash_amount` vs `cashPayWith` | `cash_amount` (DB column) | `cashPayWith` (CourierTask interface) | Conditional UI section never renders |
+| `id` vs `order_id` | `id` = assignment UUID, `order_id` = order UUID | `task.id` used for data-testid | Test can't find task card |
+| `cash_collected` missing | Zod validates `cash_collected: z.boolean()` required | `handleComplete` sends no body | 422 validation error |
+
+**Rule:** Before using ANY API response in the frontend, verify the contract by:
+1. **Read the Zod schema** in `packages/shared-types/src/` for the endpoint — check required fields, optional fields, and field naming (snake_case vs camelCase)
+2. **Compare with the frontend interface** — check that every backend field the frontend reads has a matching property in the interface, and the names match
+3. **Check for missing required fields** — if the backend Zod schema requires a field (no `.optional()`), the frontend MUST provide it
+4. **Verify the data-testid uses the right identifier** — order UUID (`order_id`) not assignment UUID (`id`). Test selectors should use the same UUID type the test has access to
+5. **For conditional rendering:** if a field gates visibility (like `cashPayWith && <div>`), verify the API actually returns that field name, not a different casing
+
+This applies especially when:
+- Adding new API endpoints consumed by frontend
+- Using `apiClient<any>()` without a Zod schema (bypasses type checking)
+- Adding data-testid selectors for E2E tests
+- Conditional rendering based on API response fields
