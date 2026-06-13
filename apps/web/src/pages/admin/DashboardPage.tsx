@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, useHaptics, useSoundPrefs } from '@deliveryos/ui';
+import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay } from '@deliveryos/ui';
 import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
 import { exportCSV } from '../../lib/exportCSV.js';
@@ -28,6 +28,7 @@ export function DashboardPage() {
   const [tenantId, setTenantId] = useState('');
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
   const [messagesByOrder, setMessagesByOrder] = useState<Record<string, any[]>>({});
+  const [detailOrder, setDetailOrder] = useState<any | null>(null);
 
   const fetchOrders = async () => {
     try {
@@ -377,6 +378,7 @@ export function DashboardPage() {
                 onToggleMessages={handleToggleMessages}
                 messages={messagesByOrder[order.id]}
                 onSendMessage={handleSendMessage}
+                onViewDetail={(id) => setDetailOrder(orders.find(o => o.id === id) || null)}
               />
             </div>
           ))}
@@ -459,6 +461,35 @@ export function DashboardPage() {
           ))}
         </div>
       </div>
+
+      {/* Order detail modal */}
+      <ResponsiveDialog open={!!detailOrder} onClose={() => setDetailOrder(null)} title={detailOrder ? t('order.number') + detailOrder.shortId : ''}>
+        {detailOrder && (
+          <div className="space-y-4 text-sm">
+            <div className="grid grid-cols-2 gap-3">
+              <div><span className="text-[var(--brand-text-muted)]">{t('order.status')}:</span> <strong>{detailOrder.status}</strong></div>
+              <div><span className="text-[var(--brand-text-muted)]">{t('checkout.total')}:</span> <PriceDisplay amount={detailOrder.total} size="lg" /></div>
+              <div className="col-span-2"><span className="text-[var(--brand-text-muted)]">{t('admin.customer')}:</span> {detailOrder.customerName}</div>
+              <div className="col-span-2"><span className="text-[var(--brand-text-muted)]">{t('checkout.delivery')}:</span> {detailOrder.deliveryAddress || '—'}</div>
+              <div className="col-span-2"><span className="text-[var(--brand-text-muted)]">{t('checkout.payment')}:</span> {detailOrder.paymentMethod || '—'}</div>
+              {detailOrder.courierName && <div className="col-span-2"><span className="text-[var(--brand-text-muted)]">{t('courier.title')}:</span> {detailOrder.courierName}</div>}
+            </div>
+            {detailOrder.items && detailOrder.items.length > 0 && (
+              <div>
+                <h4 className="font-semibold mb-2 text-[var(--brand-text)]">{t('order.items')}:</h4>
+                <div className="space-y-1">
+                  {detailOrder.items.map((item: any, i: number) => (
+                    <div key={i} className="flex justify-between py-1 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+                      <span>{item.name} x{item.qty}</span>
+                      <PriceDisplay amount={item.price * item.qty} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </ResponsiveDialog>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, MapWithPin, useI18n, StickyActionBar } from '@deliveryos/ui';
+import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay } from '@deliveryos/ui';
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
@@ -380,12 +380,12 @@ export function CheckoutPage() {
           <div className="space-y-3 mb-4">
             <div className="flex justify-between text-[14px]">
               <span style={{ color: 'var(--brand-text-muted)' }}>{t('cart.subtotal')}</span>
-              <span className="font-medium" style={{ color: 'var(--brand-text)' }}>{subtotal} ALL</span>
+                  <PriceDisplay amount={subtotal} />
             </div>
             {deliveryType === 'delivery' && (
               <div className="flex justify-between text-[14px]">
                 <span style={{ color: 'var(--brand-text-muted)' }}>{t('cart.delivery_fee')}</span>
-                <span className="font-medium" style={{ color: 'var(--brand-text)' }}>{deliveryFee} ALL</span>
+                  <PriceDisplay amount={deliveryFee} />
               </div>
             )}
             {hasNutrition && (
@@ -397,7 +397,7 @@ export function CheckoutPage() {
           </div>
           <div className="pt-4 border-t flex justify-between items-center" style={{ borderColor: 'var(--brand-border)' }}>
             <span className="text-[16px] font-bold" style={{ color: 'var(--brand-text)' }}>{t('cart.total')}</span>
-            <span className="text-[20px] font-black" style={{ color: 'var(--brand-primary)' }}>{total} ALL</span>
+                  <PriceDisplay amount={total} size="lg" />
           </div>
         </div>
       </form>
@@ -409,7 +409,7 @@ export function CheckoutPage() {
           className="w-full h-14 rounded-full bg-[var(--brand-primary)] text-white font-bold text-base shadow-xl transition-all active:scale-[0.97] flex items-center justify-center gap-2"
           style={{ minHeight: 'var(--tap-critical)' }}
         >
-          {t('checkout.place_order')} &bull; {total} ALL
+                  {t('checkout.place_order')} &bull; <PriceDisplay amount={total} size="sm" />
         </button>
       </StickyActionBar>
 

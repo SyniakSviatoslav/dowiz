@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher } from '@deliveryos/ui';
+import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher, PriceDisplay } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../lib/index.js';
 import { CartProvider, useSharedCart } from '../lib/CartProvider.js';
@@ -118,7 +118,7 @@ function ClientLayoutInner() {
           <div className="app-shell-main">
             <Outlet />
           </div>
-          {itemsCount > 0 && (
+          {itemsCount > 0 && !location.pathname.includes('/checkout') && (
             <StickyActionBar embedSticky={true}>
               <Pressable>
                 <button
@@ -165,7 +165,7 @@ function ClientLayoutInner() {
                       className="flex items-center justify-between">
                       <div className="flex-1 min-w-0">
                         <div className="text-[var(--brand-text)] font-medium truncate">{item.name}</div>
-                        <div className="text-[var(--brand-text-muted)] text-sm">{item.price} ALL</div>
+                        <div className="text-[var(--brand-text-muted)] text-sm"><PriceDisplay amount={item.price} size="sm" /></div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
                         <button
@@ -188,7 +188,7 @@ function ClientLayoutInner() {
                 <div className="pt-4 border-t border-[var(--brand-border)] space-y-3">
                   <div className="flex justify-between font-bold text-lg text-[var(--brand-text)]">
                     <span>{t('cart.total', 'Total')}</span>
-                    <span>{total} ALL</span>
+                    <PriceDisplay amount={total} />
                   </div>
                   <button
                     onClick={() => { setCartOpen(false); navigate(`/s/${slug}/checkout`); }}
