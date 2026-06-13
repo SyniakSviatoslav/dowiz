@@ -62,6 +62,7 @@ export function CheckoutPage() {
   const [locationId, setLocationId] = useState<string | null>(null);
   const [currency, setCurrency] = useState('ALL');
   const [cashAmount, setCashAmount] = useState<number>(0);
+  const [orderError, setOrderError] = useState('');
   const [instructionOption, setInstructionOption] = useState<string>('');
   const [instructionCustom, setInstructionCustom] = useState<string>('');
   const [entrance, setEntrance] = useState('');
@@ -118,6 +119,7 @@ export function CheckoutPage() {
 
     const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    setOrderError('');
     if (items.length === 0 || !slug || !locationId) return;
     if (!phone || !PHONE_E164_REGEX.test(phone)) {
       setPhoneError(t('checkout.phone_invalid', 'Enter a valid phone number (+355...)'));
@@ -187,8 +189,16 @@ export function CheckoutPage() {
       requestPushPermission(slug!);
       clearCart();
       navigate(`/s/${slug}/order/${orderRes.id}`);
-    } catch {
+    } catch (err: any) {
       if (isDevMode()) { clearCart(); navigate(`/s/${slug}/order/o_mock_123`); return; }
+      if (err?.status === 422 && err?.body?.code === 'MIN_ORDER_NOT_MET') {
+        setOrderError(t('checkout.min_order_error', 'Minimum order is {{min}} {{currency}}. Your total is {{subtotal}}.', {
+          min: err.body.details?.min_order_value,
+          currency: 'ALL',
+          subtotal: err.body.details?.subtotal,
+        }));
+        return;
+      }
       throw new Error('Failed to place order');
     }
   };
