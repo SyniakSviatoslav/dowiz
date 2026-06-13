@@ -34,9 +34,23 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
     rooms.get(room)!.add(member);
   }
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
     let isAuthenticated = false;
     let user: AuthToken | null = null;
+    let authPromise: Promise<void> | null = null;
+
+    // Support frontend's ?token= URL param auth
+    const url = new URL(req.url || '', 'http://localhost');
+    const urlToken = url.searchParams.get('token');
+    if (urlToken) {
+      authPromise = verifyAuthToken(urlToken).then(tokenUser => {
+        user = tokenUser;
+        isAuthenticated = true;
+        userBySocket.set(ws, user);
+        ws.send(JSON.stringify({ type: 'auth_success', role: user.role }));
+      }).catch(() => {
+      });
+    }
 
     const authTimeout = setTimeout(() => {
       if (!isAuthenticated) {
@@ -47,6 +61,12 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
     ws.on('message', async (data) => {
       try {
         const msg = JSON.parse(data.toString());
+
+        // If URL token auth is pending, wait for it
+        if (authPromise) {
+          await authPromise;
+          authPromise = null;
+        }
 
         if (!isAuthenticated) {
           if (msg.type === 'auth' && msg.token) {

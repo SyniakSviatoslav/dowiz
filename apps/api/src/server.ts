@@ -199,7 +199,7 @@ async function main() {
       const parts = host.split('.');
       if (parts.length >= 3) {
         const slug = parts[0];
-        if (!['www', 'api', 'app'].includes(slug) && !request.url.startsWith('/api/') && !request.url.startsWith('/public/') && !request.url.startsWith('/s/') && !/\.\w{2,5}(\?|$)/.test(request.url)) {
+        if (!['www', 'api', 'app'].includes(slug) && !request.url.startsWith('/api/') && !request.url.startsWith('/public/') && !request.url.startsWith('/s/') && !request.url.startsWith('/admin') && !request.url.startsWith('/courier') && !request.url.startsWith('/dashboard') && !/\.\w{2,5}(\?|$)/.test(request.url)) {
           // It's a tenant subdomain, rewrite URL internally to /s/:slug
           // Preserve query strings
           const urlObj = new URL(request.url, `http://${request.hostname}`);

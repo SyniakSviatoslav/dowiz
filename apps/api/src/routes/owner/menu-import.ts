@@ -344,10 +344,10 @@ export default (async function menuImportRoutes(fastify, opts) {
           
           if (prodRes.rowCount > 0 && grpRes.rowCount > 0) {
             await client.query(
-              `INSERT INTO product_modifier_groups (product_id, group_id, sort_order)
-               VALUES ($1, $2, $3)
+              `INSERT INTO product_modifier_groups (product_id, group_id, sort_order, location_id)
+               VALUES ($1, $2, $3, $4)
                ON CONFLICT (product_id, group_id) DO UPDATE SET sort_order = EXCLUDED.sort_order`,
-              [prodRes.rows[0].id, grpRes.rows[0].id, link.sortOrder]
+              [prodRes.rows[0].id, grpRes.rows[0].id, link.sortOrder, locationId]
             );
             counts.links++;
           }
