@@ -1,6 +1,6 @@
 # DeliveryOS / dowiz — Agent Context
 
-> Last updated: 2026-06-13 (menu import preview fix) · Source of truth: `DeliveryOS-As-Built-Summary-v1.md` (2026-06-04)
+> Last updated: 2026-06-13 (retro rules + behavioral tests) · Source of truth: `DeliveryOS-As-Built-Summary-v1.md` (2026-06-04)
 > Reading this file is mandatory. Skip everything else until a router below tells you otherwise.
 
 ## 1. What this is (TL;DR — 30s read)
@@ -379,3 +379,52 @@ Run the following (in order of confidence):
 3. **`npx tsx apps/api/scripts/verify-nx-flow.ts`** — full chain E2E: enqueue → process → audit trail
 4. **Verify all 10 queues exist** — `SELECT name FROM pgboss.queue` should return all expected queue names
 5. **Verify message delivery** — trigger an event, check `pgboss.job` for `completed` state, check `notification_outbox_audit` for the audit record
+
+## 14. Behavioural-proof rules (born from 4 failed fix rounds on 2026-06-13)
+
+### 14.1 Before fixing any bug, complete the root-cause checklist
+
+1. **What is the exact observable symptom?** — not "settings don't save" but "PUT /api/owner/settings returns 200 but GET returns old hours"
+2. **Trace the code path** from user action → handler → query → response. Read every file in the chain.
+3. **What is the minimal change to fix the root cause?** — not "add a 4-hour window to the courier query" but "check if the shift's ended_at is in the future"
+4. **Prove the fix without deploying:** — write a curl command, a unit test, or a type assertion that would fail if the bug still exists
+5. **If you can't prove it locally, don't deploy it** — get a real auth token, hit the real endpoint, verify the data changed
+
+### 14.2 Auth-first rule for admin tests
+
+Every Playwright test that touches an auth-protected route MUST:
+
+1. Get a real token via `POST /api/dev/mock-auth`
+2. Set it in `localStorage` (for SPA) or pass as `Authorization: Bearer` header (for API)
+3. Verify the **data changed**, not just the response code
+4. A 200/401 response does NOT prove a fix works — only that the route exists and auth guards are active
+
+```typescript
+// CORRECT — verifies data changed:
+const before = await request.get(url, { headers: { Authorization: `Bearer ${token}` }});
+await request.put(url, { headers: { Authorization: `Bearer ${token}` }, data: { ... } });
+const after = await request.get(url, { headers: { Authorization: `Bearer ${token}` }});
+expect(after.body.hours).toEqual(testHours);
+
+// WRONG — verifies only that the endpoint exists:
+const response = await request.put(url, { data: {} });
+expect(response.status()).toBe(401);
+```
+
+### 14.3 Integration audit rule
+
+After adding a new export, component, or public function:
+
+1. `grep -r "ExportName" apps/ packages/` — verify it's imported elsewhere
+2. If zero matches, it's dead code. Either wire it into a layout or remove it.
+3. For React context providers: verify the provider wraps the component tree in `main.tsx` or the relevant layout file.
+
+### 14.4 Hot-path sanity test rule
+
+Before every deploy, the following tests MUST pass against the deployed app:
+
+1. SSR menu renders ≥1 product card (proves: no menu crash, DB accessible)
+2. Auth → couriers GET returns no duplicates AND offline status for inactive couriers (proves: query logic correct)
+3. Auth → settings PUT → GET preserves data round-trip (proves: SQL param order correct)
+4. Public menu API returns 200 with valid JSON (proves: endpoint not broken)
+5. Subdomain routing serves SPA at `/admin` (proves: custom domains work)
