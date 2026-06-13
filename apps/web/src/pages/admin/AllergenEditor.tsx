@@ -86,7 +86,7 @@ export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStat
                     color: active ? 'var(--color-on-warning)' : 'var(--brand-text-muted)',
                   }}
                 >
-                  {a}
+                  {t(`allergen.${a}`, a)}
                 </button>
               );
             })}
@@ -103,7 +103,7 @@ export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStat
               <span>
                 {t('admin.undeclared_allergens', 'Recipe contains undeclared allergens:')}{' '}
                 {bomAllergens.filter(a => !declaredAllergens.includes(a)).map(a => (
-                  <span key={a} className="font-semibold mx-0.5">{a}</span>
+                  <span key={a} className="font-semibold mx-0.5">{t(`allergen.${a}`, a)}</span>
                 ))}
                 . {t('admin.undeclared_advisory', 'Please review — this is advisory only and does not block publishing.')}
               </span>

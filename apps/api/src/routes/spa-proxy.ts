@@ -151,9 +151,9 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   const APP_BASE = process.env.APP_BASE_URL || 'https://dowiz.fly.dev';
 
    // Serve product images from local storage (CDN placeholder until Cloudflare R2 is set up)
-   fastify.get('/images/:locId/:filename', async (request, reply) => {
-     const { locId, filename } = request.params as { locId: string; filename: string };
-     const key = `${locId}/${filename}`;
+   fastify.get('/images/*', async (request, reply) => {
+     const raw = (request.params as any)['*'] as string;
+     const key = raw.startsWith('/') ? raw.slice(1) : raw;
     try {
       const buf = await storage.get(key);
       if (!buf) return reply.status(404).send({ error: 'Image not found' });

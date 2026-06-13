@@ -94,7 +94,7 @@ async function run() {
 
     // ── API Exposure check: zero grants for anon/authenticated/service_role on non-tenant tables ──
     console.log('\n🔍 Checking Data API perimeter...');
-    const NON_TENANT_TABLES = ['users', 'ops_worker_heartbeat', 'auth_refresh_tokens'];
+    const NON_TENANT_TABLES = ['users', 'ops_worker_heartbeat', 'auth_refresh_tokens', 'exchange_rates'];
 
     for (const table of NON_TENANT_TABLES) {
       const grantRes = await pool.query(

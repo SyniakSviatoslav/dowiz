@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Button, Input, EmptyState, MapWithRadius, Toggle, useI18n } from '@deliveryos/ui';
-import type { LngLatLike } from '@deliveryos/ui';
+import React, { useState, useEffect, useRef } from 'react';
+import { Button, Input, EmptyState, MapWithRadius, Toggle, useI18n, LanguageSwitcher } from '@deliveryos/ui';
+import type { LngLatLike, Locale } from '@deliveryos/ui';
 import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
+import QRCode from 'qrcode';
 
 interface DaySchedule {
   isOpen: boolean;
@@ -46,7 +47,7 @@ const MOCK_SETTINGS: LocationSettings = {
 };
 
 export function SettingsPage() {
-  const { t } = useI18n();
+  const { t, locale, setLocale } = useI18n();
   const [settings, setSettings] = useState<LocationSettings>({
     locationName: '',
     phone: '',
@@ -70,6 +71,16 @@ export function SettingsPage() {
   const [tgLoading, setTgLoading] = useState(false);
   const [tgTesting, setTgTesting] = useState(false);
   const [tgMessage, setTgMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [tgQrDataUrl, setTgQrDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!tgDeepLink) { setTgQrDataUrl(null); return; }
+    QRCode.toDataURL(tgDeepLink, {
+      width: 200,
+      margin: 1,
+      color: { dark: '#000000', light: '#ffffff' },
+    }).then(setTgQrDataUrl).catch(() => {});
+  }, [tgDeepLink]);
 
   const fetchSettings = async () => {
     try {
@@ -192,7 +203,7 @@ export function SettingsPage() {
     try {
       await apiClient('/owner/settings', {
         method: 'PUT',
-        body: settings,
+        body: { ...settings, locale },
       });
       setSuccess(true);
     } catch (err: any) {
@@ -338,27 +349,40 @@ export function SettingsPage() {
             <h3 className="font-semibold text-sm text-[var(--brand-text-muted)]">
               {t('admin.working_hours', 'Working Hours')}
             </h3>
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] gap-2">
               {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => {
                 const dayData = (settings.hoursJson[day as keyof WeeklySchedule] || DEFAULT_SCHEDULE[day]) as DaySchedule;
                 return (
-                  <div key={day} className="flex items-center gap-3 p-2 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)]">
-                    <div className="w-24 font-medium text-sm capitalize">{t(`admin.days.${day}`, day)}</div>
-                    <div className="flex-1 flex items-center gap-2">
-                      <Toggle checked={dayData.isOpen} onChange={(v) => handleScheduleChange(day, 'isOpen', v)} />
-                      <span className="text-xs w-10 text-[var(--brand-text-muted)]">{dayData.isOpen ? t('admin.open', 'Open') : t('admin.closed', 'Closed')}</span>
+                  <div key={day} className="contents">
+                    <div className="flex items-center h-10 px-2 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] font-medium text-sm capitalize">
+                      {t(`admin.days.${day}`, day)}
                     </div>
-                    {dayData.isOpen && (
-                      <div className="flex items-center gap-2">
-                        <Input type="time" value={dayData.open} onChange={(e) => handleScheduleChange(day, 'open', e.target.value)} aria-label={`${t(`admin.days.${day}`, day)} ${t('admin.open', 'open')}`} className="w-24 text-sm" />
-                        <span className="text-xs text-[var(--brand-text-muted)]">{t('admin.to', 'to')}</span>
-                        <Input type="time" value={dayData.close} onChange={(e) => handleScheduleChange(day, 'close', e.target.value)} aria-label={`${t(`admin.days.${day}`, day)} ${t('admin.close', 'close')}`} className="w-24 text-sm" />
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2 p-2 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)]">
+                      <Toggle checked={dayData.isOpen} onChange={(v) => handleScheduleChange(day, 'isOpen', v)} />
+                      <span className="text-xs w-10 text-[var(--brand-text-muted)] shrink-0">{dayData.isOpen ? t('admin.open', 'Open') : t('admin.closed', 'Closed')}</span>
+                      {dayData.isOpen && (
+                        <div className="flex items-center gap-2 ml-auto">
+                          <Input type="time" value={dayData.open} onChange={(e) => handleScheduleChange(day, 'open', e.target.value)} aria-label={`${t(`admin.days.${day}`, day)} ${t('admin.open', 'open')}`} className="w-24 sm:w-28 text-sm" />
+                          <span className="text-xs text-[var(--brand-text-muted)] shrink-0">{t('admin.to', 'to')}</span>
+                          <Input type="time" value={dayData.close} onChange={(e) => handleScheduleChange(day, 'close', e.target.value)} aria-label={`${t(`admin.days.${day}`, day)} ${t('admin.close', 'close')}`} className="w-24 sm:w-28 text-sm" />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
             </div>
+          </div>
+
+          {/* ── Language Preference ── */}
+          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">
+            <h3 className="font-semibold text-sm" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('admin.language', 'Language')}
+            </h3>
+            <p className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('admin.language_desc', 'Language for admin panel and Telegram notifications.')}
+            </p>
+            <LanguageSwitcher variant="full" />
           </div>
 
           {/* ── Telegram Notifications ── */}
@@ -403,18 +427,32 @@ export function SettingsPage() {
               </div>
             )}
 
-            {/* Deep link flow */}
+            {/* Deep link flow + QR */}
             {tgDeepLink && (
               <div className="p-3 rounded-lg border" style={{ background: 'var(--brand-primary-light)', borderColor: 'var(--brand-primary)' }}>
-                <div className="text-xs font-semibold mb-1.5" style={{ color: 'var(--brand-primary)' }}>
-                  {t('admin.tg_step1', '1. Open this link in Telegram:')}
+                <div className="flex items-start gap-4">
+                  {tgQrDataUrl && (
+                    <div className="shrink-0">
+                      <img src={tgQrDataUrl} alt="QR Code" className="w-24 h-24 rounded-lg" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold mb-1.5" style={{ color: 'var(--brand-primary)' }}>
+                      {t('admin.tg_step1', '1. Scan QR or open this link in Telegram:')}
+                    </div>
+                    <a href={tgDeepLink} target="_blank" rel="noopener noreferrer"
+                      className="text-sm font-mono underline break-all block" style={{ color: 'var(--brand-primary)' }}>
+                      {tgDeepLink}
+                    </a>
+                    <div className="text-[10px] mt-2" style={{ color: 'var(--brand-text-muted)' }}>
+                      {t('admin.tg_step2', '2. Click Start in the bot. Your Telegram will be connected automatically.')}
+                    </div>
+                  </div>
                 </div>
-                <a href={tgDeepLink} target="_blank" rel="noopener noreferrer"
-                  className="text-sm font-mono underline break-all" style={{ color: 'var(--brand-primary)' }}>
-                  {tgDeepLink}
-                </a>
-                <div className="text-[10px] mt-2" style={{ color: 'var(--brand-text-muted)' }}>
-                  {t('admin.tg_step2', '2. Click Start in the bot. Your Telegram will be connected automatically.')}
+                <div className="flex gap-2 mt-2">
+                  <Button onClick={() => { setTgDeepLink(null); handleTgConnect(); }} variant="ghost" size="sm">
+                    <i className="ti ti-refresh" /> {t('common.refresh', 'Refresh')}
+                  </Button>
                 </div>
               </div>
             )}

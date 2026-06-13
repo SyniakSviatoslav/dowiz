@@ -102,24 +102,30 @@ export function MenuPage() {
   const [imageLoadError, setImageLoadError] = useState(false);
   const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc' | 'name'>('default');
   const [filterAllergen, setFilterAllergen] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const categories = data;
 
   const displayCategories = useMemo(() => {
-    if (sortBy === 'default' && !filterAllergen) return categories;
     const all: (Product & { _catId: string; _catName: string })[] = [];
     for (const cat of categories) {
       for (const p of cat.products) {
         all.push({ ...p, _catId: cat.id, _catName: cat.name });
       }
     }
-    const filtered = filterAllergen
-      ? all.filter(p => bomToNutrition(p).allergens.includes(filterAllergen))
-      : all;
-    const sorted = sortBy === 'default' ? filtered
-      : sortBy === 'price-asc' ? [...filtered].sort((a, b) => a.price - b.price)
-      : sortBy === 'price-desc' ? [...filtered].sort((a, b) => b.price - a.price)
-      : [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+    let result = all;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(p => p.name.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q));
+    }
+    if (filterAllergen) {
+      result = result.filter(p => bomToNutrition(p).allergens.includes(filterAllergen));
+    }
+    if (sortBy === 'default' && !searchQuery && !filterAllergen) return categories;
+    const sorted = sortBy === 'default' ? result
+      : sortBy === 'price-asc' ? [...result].sort((a, b) => a.price - b.price)
+      : sortBy === 'price-desc' ? [...result].sort((a, b) => b.price - a.price)
+      : [...result].sort((a, b) => a.name.localeCompare(b.name));
     const groups: MenuCategory[] = [];
     for (const p of sorted) {
       const g = groups.find(g => g.id === p._catId);
@@ -127,7 +133,7 @@ export function MenuPage() {
       else groups.push({ id: p._catId, name: p._catName, sort_order: 0, products: [p] });
     }
     return groups;
-  }, [categories, sortBy, filterAllergen]);
+  }, [categories, sortBy, filterAllergen, searchQuery]);
 
   const allAllergens = useMemo(() => {
     const set = new Set<string>();
@@ -298,7 +304,8 @@ export function MenuPage() {
     const base = typeof window !== 'undefined'
       ? window.location.origin
       : (import.meta.env?.VITE_API_BASE_URL || '');
-    return `${base}/images/${product.image_key}`;
+    const cleanKey = product.image_key.startsWith('/') ? product.image_key.slice(1) : product.image_key;
+    return `${base}/images/${cleanKey}`;
   };
 
   const ALLERGEN_COLORS: Record<string, { bg: string; text: string }> = {
@@ -381,44 +388,61 @@ export function MenuPage() {
         </div>
       </nav>
 
-      {/* Sort & Filter Bar */}
-      {!loading && (allAllergens.length > 0 || sortBy !== 'default') && (
-        <div className="sticky top-[44px] z-30 border-b px-4 py-2 flex items-center gap-2 overflow-x-auto hide-scrollbar" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-text-muted)' }}>
-              <i className="ti ti-arrows-sort" style={{ fontSize: '0.7rem' }} />
-            </span>
-            {(['default', 'price-asc', 'price-desc', 'name'] as const).map(mode => (
-              <button key={mode} onClick={() => setSortBy(mode)}
-                className="px-2 min-h-[44px] rounded-md text-[10px] font-medium transition-all whitespace-nowrap flex items-center"
-                style={{
-                  background: sortBy === mode ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
-                  color: sortBy === mode ? '#fff' : 'var(--brand-text-muted)',
-                }}
-              >
-                {mode === 'default' ? '·' : mode === 'price-asc' ? '↑ Price' : mode === 'price-desc' ? '↓ Price' : 'A-Z'}
+      {/* Search, Sort & Filter Bar */}
+      {!loading && categories.length > 0 && (
+        <div className="sticky top-[44px] z-30 border-b px-4 py-2 space-y-2" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+          <div className="relative">
+            <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: 'var(--brand-text-muted)' }} />
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder={t('common.search', 'Search...')}
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg border text-sm outline-none"
+              style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
+                <i className="ti ti-x text-xs" style={{ color: 'var(--brand-text-muted)' }} />
               </button>
-            ))}
+            )}
           </div>
-          {allAllergens.length > 0 && (
-            <div className="h-4 w-px shrink-0" style={{ background: 'var(--brand-border)' }} />
-          )}
-          <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
-            {allAllergens.map(a => {
-              const s = getAllergenStyle(a);
-              return (
-                <button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)}
-                  className="px-1.5 min-h-[44px] rounded text-[9px] font-semibold uppercase whitespace-nowrap transition-all flex items-center"
+          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-text-muted)' }}>
+                <i className="ti ti-arrows-sort" style={{ fontSize: '0.7rem' }} />
+              </span>
+              {(['default', 'price-asc', 'price-desc', 'name'] as const).map(mode => (
+                <button key={mode} onClick={() => setSortBy(mode)}
+                  className="px-2 min-h-[44px] rounded-md text-[10px] font-medium transition-all whitespace-nowrap flex items-center"
                   style={{
-                    background: filterAllergen === a ? s.text : s.bg,
-                    color: filterAllergen === a ? '#fff' : s.text,
-                    opacity: filterAllergen && filterAllergen !== a ? 0.3 : 1,
+                    background: sortBy === mode ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
+                    color: sortBy === mode ? '#fff' : 'var(--brand-text-muted)',
                   }}
                 >
-                  {a}
+                  {mode === 'default' ? '·' : mode === 'price-asc' ? '\u2191 Price' : mode === 'price-desc' ? '\u2193 Price' : 'A-Z'}
                 </button>
-              );
-            })}
+              ))}
+            </div>
+            {allAllergens.length > 0 && (
+              <div className="h-4 w-px shrink-0" style={{ background: 'var(--brand-border)' }} />
+            )}
+            <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
+              {allAllergens.map(a => {
+                const s = getAllergenStyle(a);
+                return (
+                  <button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)}
+                    className="px-1.5 min-h-[44px] rounded text-[9px] font-semibold uppercase whitespace-nowrap transition-all flex items-center"
+                    style={{
+                      background: filterAllergen === a ? s.text : s.bg,
+                      color: filterAllergen === a ? '#fff' : s.text,
+                      opacity: filterAllergen && filterAllergen !== a ? 0.3 : 1,
+                    }}
+                  >
+                    {t(`allergen.${a.toLowerCase()}`, a)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -652,7 +676,7 @@ export function MenuPage() {
                       const s = getAllergenStyle(a);
                       return (
                         <span key={a} className="px-2 py-0.5 rounded font-semibold text-[10px] uppercase" style={{ background: s.bg, color: s.text }}>
-                          {a}
+                          {t(`allergen.${a.toLowerCase()}`, a)}
                         </span>
                       );
                     })}

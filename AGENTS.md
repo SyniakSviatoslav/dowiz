@@ -1,6 +1,6 @@
 # DeliveryOS / dowiz — Agent Context
 
-> Last updated: 2026-06-13 · Source of truth: `DeliveryOS-As-Built-Summary-v1.md` (2026-06-04)
+> Last updated: 2026-06-13 (menu import preview fix) · Source of truth: `DeliveryOS-As-Built-Summary-v1.md` (2026-06-04)
 > Reading this file is mandatory. Skip everything else until a router below tells you otherwise.
 
 ## 1. What this is (TL;DR — 30s read)
@@ -231,20 +231,10 @@ Use `graphify-out/GRAPH_REPORT.md` only for broad architecture overview.
 | 22 | `answerCallbackQuery` called late — Telegram loading spinner shown | ✅ FIXED | `telegram-webhook.ts` — answer at top of handler, follow-up message sent separately |
 | 23 | The/notification owner routes lacked `locale` in PUT schema | ✅ FIXED | `notifications.ts:99-107` — added `locale: z.enum(['sq','en','uk']).optional()` |
 | 24 | `PgMessageBus.connect()` didn't release old client before reconnect | ✅ FIXED | `message-bus.ts` — release() before creating new connection, reset isDegraded |
-
-| 14 | Telegram callback query auth — NULL user_id in notification targets | ✅ FIXED | `telegram-webhook.ts:131-173` — order-first location resolution, skip membership on NULL user_id |
-| 15 | CONFIRMED/REJECTED order events not delivering Telegram notifications | ✅ FIXED | `orderStatusService.ts:77-83` — publish lifecycle events; `server.ts:469-485` — subscribe + tgSend |
-| 16 | pg-boss v10 array callback mismatch — `work()` passes `Job[]` not `Job` | ✅ FIXED | `queue-provider.ts:45-52` — wrapper iterates array; all workers use `queue.work()` |
-| 17 | pg-boss runtime role had DDL privileges (migrate:true) | ✅ FIXED | `server.ts:248` — `migrate: false`; migration 0009 revokes CREATE on public; queues pre-created |
-| 18 | MessageBus used operational (transaction) pool — LISTEN/NOTIFY broken | ✅ FIXED | `server.ts:235` — explicit session pool; `message-bus.ts:72-103` — reconnect with backoff |
-| 19 | Missing notification dedup — duplicate events created duplicate jobs | ✅ FIXED | `server.ts:438-445` — dedupKey from event:entity_id:location_id as singletonKey |
-| 20 | Queue `createQueue()` not called for 6 of 10 queues | ✅ FIXED | `server.ts:260-269` — explicit createQueue for all 10 |
-| 21 | Webhook secret-token validation too strict — broke existing connect flows | ✅ FIXED | `telegram-webhook.ts:35-47` — warn-only if header missing; full validate only if header present |
-| 22 | `answerCallbackQuery` called late — Telegram loading spinner shown | ✅ FIXED | `telegram-webhook.ts` — answer at top of handler, follow-up message sent separately |
-| 23 | The/notification owner routes lacked `locale` in PUT schema | ✅ FIXED | `notifications.ts:99-107` — added `locale: z.enum(['sq','en','uk']).optional()` |
+| 25 | Menu import preview strips prices/images — maps products/categories to `.name` only | ✅ FIXED | `menu-import.ts:136-143` — pass through full `CanonicalCategory[]`/`CanonicalProduct[]` objects instead of `map(p => p.name)` |
 | 24 | `PgMessageBus.connect()` didn't release old client before reconnect | ✅ FIXED | `message-bus.ts` — release() before creating new connection, reset isDegraded |
 
-**Remaining blockers: DB role guardrail only.** Security posture: HOLDS 19 · WEAK 1 · BROKEN 0.
+**Remaining blockers: DB role guardrail only.** Security posture: HOLDS 25 · WEAK 1 · BROKEN 0.
 
 ## 10. Common commands
 

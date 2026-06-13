@@ -79,6 +79,7 @@ export function MenuManagerPage() {
 
   const [saving, setSaving] = useState(false);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [productsLoading, setProductsLoading] = useState(false);
 
   // Import state
   const [showImport, setShowImport] = useState(false);
@@ -101,8 +102,11 @@ export function MenuManagerPage() {
 
   // Filter/sort state
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'name' | 'price-asc' | 'price-desc'>('name');
   const [filterAvailable, setFilterAvailable] = useState<'all' | 'available' | 'unavailable'>('all');
+  const [sortOpen, setSortOpen] = useState(false);
+  const [availOpen, setAvailOpen] = useState(false);
 
 
   const fetchCategories = async () => {
@@ -342,17 +346,24 @@ export function MenuManagerPage() {
     setImportResult(null);
   };
 
+  const loadCategoryProducts = async (catId: string) => {
+    setProductsLoading(true);
+    try {
+      const prods = await apiClient<any>(`/owner/menu/products?category_id=${catId}`);
+      setCategories(prev => prev.map(c => c.id === catId ? { ...c, products: Array.isArray(prods) ? prods : [] } : c));
+    } catch {
+      setCategories(prev => prev.map(c => c.id === catId ? { ...c, products: [] } : c));
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
   const toggleExpand = async (catId: string) => {
     if (expandedCat === catId) { setExpandedCat(null); return; }
     setExpandedCat(catId);
     const cat = categories.find(c => c.id === catId);
     if (cat && cat.products === undefined) {
-      try {
-        const prods = await apiClient<any>(`/owner/menu/products?category_id=${catId}`);
-        setCategories(prev => prev.map(c => c.id === catId ? { ...c, products: Array.isArray(prods) ? prods : [] } : c));
-      } catch {
-        setCategories(prev => prev.map(c => c.id === catId ? { ...c, products: [] } : c));
-      }
+      await loadCategoryProducts(catId);
     }
   };
 
@@ -409,177 +420,209 @@ export function MenuManagerPage() {
       )}
 
       {/* Toolbar: search, filter, sort, add category */}
-      <div className="flex flex-col sm:flex-row gap-2">
-        <div className="relative flex-1">
+      <div className="flex flex-wrap gap-2">
+        <div className="relative flex-1 min-w-[200px]">
           <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--brand-text-muted)' }} />
           <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder={t('admin.search_products', 'Search products...')}
             className="w-full pl-9 pr-4 py-2 rounded-lg border text-sm outline-none"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
         </div>
-        <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
-          className="px-3 py-2 rounded-lg border text-sm outline-none"
-          style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
-          <option value="name">{t('admin.name_az', 'Name A-Z')}</option>
-          <option value="price-asc">{t('admin.price_asc', 'Price тЖС')}</option>
-          <option value="price-desc">{t('admin.price_desc', 'Price тЖУ')}</option>
-        </select>
-        <select value={filterAvailable} onChange={e => setFilterAvailable(e.target.value as any)}
-          className="px-3 py-2 rounded-lg border text-sm outline-none"
-          style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
-          <option value="all">{t('admin.all_items', 'All items')}</option>
-          <option value="available">{t('menu.available', 'Available')}</option>
-          <option value="unavailable">{t('menu.stop_listed', 'Stop-listed')}</option>
-        </select>
+
+        {/* Sort icon button */}
+        <div className="relative">
+          <button onClick={() => setSortOpen(!sortOpen)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none"
+            style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+            <i className="ti ti-arrows-sort text-base" />
+          </button>
+          {sortOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[140px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+                {[
+                  { value: 'name', label: t('admin.name_az', 'Name A-Z'), icon: 'ti ti-sort-az' },
+                  { value: 'price-asc', label: t('admin.price_asc', 'Price ArrowUp'), icon: 'ti ti-sort-ascending' },
+                  { value: 'price-desc', label: t('admin.price_desc', 'Price ArrowDown'), icon: 'ti ti-sort-descending' },
+                ].map(opt => (
+                  <button key={opt.value} onClick={() => { setSortBy(opt.value as any); setSortOpen(false); }}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${sortBy === opt.value ? 'font-semibold' : ''}`}
+                    style={{ color: sortBy === opt.value ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
+                    <i className={opt.icon} style={{ fontSize: '0.8rem' }} />
+                    <span className="flex-1">{opt.label}</span>
+                    {sortBy === opt.value && <i className="ti ti-check" style={{ color: 'var(--brand-primary)', fontSize: '0.7rem' }} />}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Availability icon button */}
+        <div className="relative">
+          <button onClick={() => setAvailOpen(!availOpen)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none"
+            style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: filterAvailable !== 'all' ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
+            <i className="ti ti-filter text-base" />
+          </button>
+          {availOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setAvailOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[150px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+                {[
+                  { value: 'all', label: t('admin.all_items', 'All items'), icon: 'ti ti-list' },
+                  { value: 'available', label: t('menu.available', 'Available'), icon: 'ti ti-circle-check' },
+                  { value: 'unavailable', label: t('menu.stop_listed', 'Stop-listed'), icon: 'ti ti-circle-x' },
+                ].map(opt => (
+                  <button key={opt.value} onClick={() => { setFilterAvailable(opt.value as any); setAvailOpen(false); }}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${filterAvailable === opt.value ? 'font-semibold' : ''}`}
+                    style={{ color: filterAvailable === opt.value ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
+                    <i className={opt.icon} style={{ fontSize: '0.8rem' }} />
+                    <span className="flex-1">{opt.label}</span>
+                    {filterAvailable === opt.value && <i className="ti ti-check" style={{ color: 'var(--brand-primary)', fontSize: '0.7rem' }} />}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex gap-2 items-center">
+          <input value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
+            placeholder={t('admin.new_category', 'New category...')}
+            className="w-32 sm:w-40 h-10 px-3 rounded-lg border text-sm outline-none"
+            style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+          <button onClick={handleAddCategory}
+            className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium shrink-0"
+            style={{ background: 'var(--brand-primary)', color: 'var(--color-on-primary)' }}>
+            <i className="ti ti-plus text-sm" />
+          </button>
+        </div>
       </div>
 
-      {/* Add Category */}
-      <div className="flex gap-2">
-        <Input placeholder={t('admin.new_category', 'New category...')} value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleAddCategory()} />
-        <Button onClick={handleAddCategory}>{t('admin.add_category', 'Add Category')}</Button>
-      </div>
+      {/* Category tabs */}
+      {!loading && categories.length > 0 && (
+        <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory sticky top-0 z-10" style={{ background: 'var(--brand-bg)' }}>
+          <button onClick={() => setSelectedCategory(null)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${selectedCategory === null ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}>
+            {t('common.all', 'All')}
+          </button>
+          {categories.map(cat => (
+            <button key={cat.id} onClick={async () => { setSelectedCategory(cat.id); await toggleExpand(cat.id); }}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${selectedCategory === cat.id ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}>
+              {cat.name} <span className="text-[10px] opacity-70">({cat.product_count ?? cat.products?.length ?? 0})</span>
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Categories & Products */}
+      {/* Products grid */}
       {loading ? (
         <div className="space-y-3">{ [1,2,3].map(i => <div key={i} className="h-12 shimmer rounded-lg" />) }</div>
       ) : categories.length === 0 ? (
         <EmptyState title={t('admin.no_categories', 'No categories')} description={t('admin.add_category_desc', 'Add a category above to start.')} />
       ) : (
-        <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--brand-border)' }}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ background: 'var(--brand-surface)' }}>
-                <th className="text-left p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.product', 'Product')}</th>
-                <th className="text-left p-3 font-medium hidden sm:table-cell" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.category', 'Category')}</th>
-                <th className="text-right p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.price_all', 'Price (ALL)')}</th>
-                <th className="text-center p-3 font-medium hidden md:table-cell" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.stock', 'Stock')}</th>
-                <th className="text-center p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('menu.available', 'Available')}</th>
-                <th className="p-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {categories.map(cat => {
-                const products = getAllProducts(cat.id);
-                if (products.length === 0 && searchQuery) return null;
-                return (
-                  <React.Fragment key={cat.id}>
-                    {/* Category header row */}
-                    <tr style={{ background: 'var(--brand-surface-raised)' }}>
-                      <td colSpan={6} className="px-3 py-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <i className={`ti text-sm cursor-pointer transition-transform ${expandedCat === cat.id ? 'ti-chevron-down' : 'ti-chevron-right'}`}
-                              style={{ color: 'var(--brand-text-muted)' }}
-                              onClick={() => toggleExpand(cat.id)} />
-                            <span className="font-semibold text-sm" style={{ color: 'var(--brand-text)' }}>{cat.name}</span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: 'var(--brand-surface)', color: 'var(--brand-text-muted)' }}>
-                              {cat.product_count ?? cat.products?.length ?? 0}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Button size="sm" variant="ghost" onClick={() => handleDeleteCategory(cat.id)} title={t('common.delete', 'Delete')} disabled={((cat.product_count ?? cat.products?.length ?? 0) > 0)}
-                              style={((cat.product_count ?? cat.products?.length ?? 0) > 0) ? { opacity: 0.3, cursor: 'not-allowed' } : {}}>
-                              <i className="ti ti-trash" />
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => openAddForm(cat.id)}>
-                              <i className="ti ti-plus" /> {t('common.add', 'Add')}
-                            </Button>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                    {/* Product rows */}
-                    {(expandedCat === cat.id || searchQuery) && (
-                      cat.products === undefined ? (
-                        <tr><td colSpan={6} className="p-4 text-center text-sm" style={{ color: 'var(--brand-text-muted)' }}>{t('common.loading', 'Loading...')}</td></tr>
-                      ) : products.length === 0 ? (
-                        <tr><td colSpan={6} className="p-4 text-center text-sm" style={{ color: 'var(--brand-text-muted)' }}>
-                          {searchQuery ? t('admin.no_matching_products', 'No matching products.') : t('admin.no_items_yet', 'No items yet. Click Add to create one.')}
-                        </td></tr>
-                      ) : products.map((product, idx) => (
-                        <tr key={product.id}
-                          className="border-t transition-colors hover:bg-[var(--brand-surface-raised)] cursor-pointer"
-                          style={{ borderColor: 'var(--brand-border)', animationDelay: `${idx * 30}ms` }}
-                          onClick={() => setPreviewProduct(product)}>
-                          <td className="p-3">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 flex items-center justify-center"
-                                style={{ background: 'var(--brand-primary-light)' }}>
-                                {product.imageUrl
-                                  ? <img src={product.imageUrl} alt="" className="w-full h-full object-cover" />
-                                  : <i className="ti ti-photo" style={{ color: 'var(--brand-primary)' }} />
-                                }
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium truncate" style={{ color: 'var(--brand-text)' }}>{product.name}</span>
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
-                                    PRD
-                                  </span>
-                                </div>
-                                {product.description && <div className="text-[11px] truncate" style={{ color: 'var(--brand-text-muted)' }}>{product.description}</div>}
-                                {getProductAllergens(product).length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {getProductAllergens(product).map(a => {
-                                      const s = ALLERGEN_COLORS[a.toLowerCase()] || { bg: 'rgba(107,114,128,0.12)', text: '#374151' };
-                                      return (
-                                        <span key={a} className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-tight"
-                                          style={{ background: s.bg, color: s.text }}>
-                                          {a}
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-3 hidden sm:table-cell" style={{ color: 'var(--brand-text-muted)' }}>
-                            {cat.name}
-                          </td>
-                          <td className="p-3 text-right font-semibold" style={{ color: 'var(--brand-primary)' }}>
-                            {product.price} ALL
-                          </td>
-                          <td className="p-3 text-center hidden md:table-cell">
-                            {product.stockCount != null ? (
-                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${product.stockCount > 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'}`}
-                                style={{ background: product.stockCount > 0 ? 'var(--color-success-light)' : 'var(--color-danger-light)' }}>
-                                {product.stockCount}
+        <div className="space-y-2">
+          {/* Active category header with add button */}
+          <div className="flex items-center justify-between">
+            <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>
+              {(() => {
+                const catsToShow = selectedCategory ? categories.filter(c => c.id === selectedCategory) : categories;
+                let count = 0;
+                catsToShow.forEach(c => { count += getAllProducts(c.id).length; });
+                return `${count} ${t('admin.products', 'products')}`;
+              })()}
+            </p>
+            {selectedCategory && (
+              <button onClick={() => openAddForm(selectedCategory)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg"
+                style={{ background: 'var(--brand-primary)', color: 'var(--color-on-primary)' }}>
+                <i className="ti ti-plus text-xs" /> {t('common.add', 'Add')}
+              </button>
+            )}
+          </div>
+          {productsLoading && selectedCategory ? (
+            <div className="col-span-full flex justify-center py-8">
+              <i className="ti ti-loader animate-spin text-xl" style={{ color: 'var(--brand-primary)' }} />
+            </div>
+          ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {(selectedCategory ? categories.filter(c => c.id === selectedCategory) : categories).map(cat => {
+              if (cat.products === undefined && selectedCategory === cat.id) return null;
+              const products = getAllProducts(cat.id);
+              if (products.length === 0 && searchQuery) return null;
+              return products.map((product) => (
+                <div key={product.id}
+                  className="p-3 rounded-xl border transition-all hover:bg-[var(--brand-surface-raised)] cursor-pointer fade-in"
+                  style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}
+                  onClick={() => setPreviewProduct(product)}>
+                  <div className="flex items-start gap-3">
+                    <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 flex items-center justify-center"
+                      style={{ background: 'var(--brand-primary-light)' }}>
+                      {product.imageUrl
+                        ? <img src={product.imageUrl} alt="" className="w-full h-full object-cover" loading="lazy"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<i class=\\"ti ti-photo\\"></i>'; }} />
+                        : <i className="ti ti-photo" style={{ color: 'var(--brand-primary)' }} />
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-medium text-sm truncate" style={{ color: 'var(--brand-text)' }}>{product.name}</span>
+                        <span className="text-sm font-bold shrink-0" style={{ color: 'var(--brand-primary)' }}>{product.price} ALL</span>
+                      </div>
+                      {product.description && <div className="text-[11px] truncate mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{product.description}</div>}
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <button onClick={(e) => { e.stopPropagation(); handleToggleAvailable(cat.id, product); }}
+                          className={`relative w-8 h-4 rounded-full transition-colors duration-200 ${product.available ? 'bg-[var(--brand-primary)]' : 'bg-[var(--brand-border)]'}`}
+                          title={product.available ? t('menu.available', 'Available') : t('menu.stop_listed', 'Stop-listed')}
+                          role="switch" aria-checked={product.available}>
+                          <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform duration-200 shadow-sm ${product.available ? 'left-[18px]' : 'left-0.5'}`} />
+                        </button>
+                        <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
+                          {product.available ? t('menu.available', 'Available') : t('menu.stop_listed', 'Stop-listed')}
+                        </span>
+                        {product.stockCount != null && (
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${product.stockCount > 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'}`}
+                            style={{ background: product.stockCount > 0 ? 'var(--color-success-light)' : 'var(--color-danger-light)' }}>
+                            {product.stockCount}
+                          </span>
+                        )}
+                      </div>
+                      {getProductAllergens(product).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {getProductAllergens(product).map(a => {
+                            const s = ALLERGEN_COLORS[a.toLowerCase()] || { bg: 'rgba(107,114,128,0.12)', text: '#374151' };
+                            return (
+                              <span key={a} className="text-[8px] font-semibold px-1 py-0.5 rounded-full leading-tight"
+                                style={{ background: s.bg, color: s.text }}>
+                                {t(`allergen.${a.toLowerCase()}`, a)}
                               </span>
-                            ) : (
-                              <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>—</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-center">
-                            <button onClick={(e) => { e.stopPropagation(); handleToggleAvailable(cat.id, product); }}
-                              className={`relative w-10 h-5 rounded-full transition-colors duration-200 mx-auto ${product.available ? 'bg-[var(--brand-primary)]' : 'bg-[var(--brand-border)]'}`}
-                              title={product.available ? t('menu.available', 'Available') : t('menu.stop_listed', 'Stop-listed')}
-                              role="switch" aria-checked={product.available}>
-                              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200 shadow-sm ${product.available ? 'left-[22px]' : 'left-0.5'}`} />
-                            </button>
-                          </td>
-                          <td className="p-3 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <button onClick={(e) => { e.stopPropagation(); openEditForm(product); }}
-                                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--brand-surface)] transition-colors"
-                                title={t('common.edit', 'Edit')}>
-                                <i className="ti ti-edit" style={{ fontSize: '0.85rem', color: 'var(--brand-text-muted)' }} />
-                              </button>
-                              <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(cat.id, product.id); }}
-                                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-danger-light)] transition-colors"
-                                title={t('common.delete', 'Delete')}>
-                                <i className="ti ti-trash" style={{ fontSize: '0.85rem', color: 'var(--brand-text-muted)' }} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-1 mt-2 pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+                    <button onClick={(e) => { e.stopPropagation(); openEditForm(product); }}
+                      className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface)] transition-colors"
+                      title={t('common.edit', 'Edit')}>
+                      <i className="ti ti-edit" style={{ fontSize: '0.75rem', color: 'var(--brand-text-muted)' }} />
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(cat.id, product.id); }}
+                      className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--color-danger-light)] transition-colors"
+                      title={t('common.delete', 'Delete')}>
+                      <i className="ti ti-trash" style={{ fontSize: '0.75rem', color: 'var(--brand-text-muted)' }} />
+                    </button>
+                  </div>
+                </div>
+              ));
+            })}
+          </div>
+          )}
+          {selectedCategory === null && categories.every(cat => getAllProducts(cat.id).length === 0) && searchQuery && (
+            <EmptyState title={t('admin.no_matching_products', 'No matching products.')} description="" />
+          )}
         </div>
       )}
 
@@ -590,7 +633,8 @@ export function MenuManagerPage() {
           <div className="relative w-[320px] bg-[var(--brand-surface)] rounded-2xl overflow-hidden shadow-2xl z-10 scale-in" onClick={e => e.stopPropagation()}>
             <div className="aspect-[4/3] relative" style={{ background: 'var(--brand-surface-raised)' }}>
               {previewProduct.imageUrl
-                ? <img src={previewProduct.imageUrl} alt="" className="w-full h-full object-cover" />
+                ? <img src={previewProduct.imageUrl} alt="" className="w-full h-full object-cover" loading="lazy"
+                    onError={(e) => { const t = e.target as HTMLImageElement; t.style.display = 'none'; const p = t.parentElement; if (p) { const i = document.createElement('i'); i.className = 'ti ti-photo text-4xl'; i.style.cssText = 'color: var(--brand-border)'; p.appendChild(i); } }} />
                 : <div className="w-full h-full flex items-center justify-center"><i className="ti ti-photo text-4xl" style={{ color: 'var(--brand-border)' }} /></div>
               }
               <button onClick={() => setPreviewProduct(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center">
@@ -629,7 +673,7 @@ export function MenuManagerPage() {
                     return (
                       <span key={a} className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                         style={{ background: s.bg, color: s.text }}>
-                        {a}
+                        {t(`allergen.${a.toLowerCase()}`, a)}
                       </span>
                     );
                   })}
@@ -651,7 +695,7 @@ export function MenuManagerPage() {
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center fade-in" onClick={closeForm}>
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <div className="relative w-full max-w-md bg-[var(--brand-surface)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 z-10 slide-in-up max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+          <div className="relative w-full max-w-md bg-[var(--brand-surface)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 z-10 slide-in-up max-h-[85vh] overflow-auto pb-20 sm:pb-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{editingProduct ? t('admin.edit_item', 'Edit Item') : t('admin.add_item', 'Add Item')}</h3>
               <button onClick={closeForm} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface-raised)]">

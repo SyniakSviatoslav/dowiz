@@ -240,7 +240,7 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
               <span className="text-[9px]" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.bom_label', 'BOM:')}</span>
               {nutrition.bomAllergens.map(a => (
                 <span key={a} className="px-1.5 py-0.5 rounded-full text-[9px] font-medium"
-                  style={{ background: 'rgba(217,119,6,0.1)', color: 'var(--color-warning)' }}>{a}</span>
+                  style={{ background: 'rgba(217,119,6,0.1)', color: 'var(--color-warning)' }}>{t(`allergen.${a}`, a)}</span>
               ))}
             </div>
           )}

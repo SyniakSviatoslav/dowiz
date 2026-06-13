@@ -175,9 +175,9 @@ const SupplyForm = ({
             {ALL_ALLERGENS.map(a => {
               const active = allergens.includes(a);
               return (
-                <button key={a} type="button" onClick={() => setAllergens(prev => active ? prev.filter(x => x !== a) : [...prev, a])}
-                  className={`px-2 py-1 rounded-full text-[10px] font-medium transition-all ${active ? 'text-white' : 'text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)]'}`}
-                  style={{ background: active ? 'var(--color-warning)' : 'var(--brand-border)' }}>{a}</button>
+                  <button key={a} type="button" onClick={() => setAllergens(prev => active ? prev.filter(x => x !== a) : [...prev, a])}
+                    className={`px-2 py-1 rounded-full text-[10px] font-medium transition-all ${active ? 'text-white' : 'text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)]'}`}
+                    style={{ background: active ? 'var(--color-warning)' : 'var(--brand-border)' }}>{t(`allergen.${a}`, a)}</button>
               );
             })}
           </div>
@@ -200,6 +200,8 @@ export function SupplyLibraryPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [kindFilter, setKindFilter] = useState<'all' | SupplyKind>('all');
+  const [sortBy, setSortBy] = useState<'name' | 'category'>('name');
+  const [sortOpen, setSortOpen] = useState(false);
   const [editing, setEditing] = useState<SupplyItem | null>(null);
   const [adding, setAdding] = useState(false);
   const { t } = useI18n();
@@ -222,8 +224,12 @@ export function SupplyLibraryPage() {
       result = result.filter(s => s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q));
     }
     if (kindFilter !== 'all') result = result.filter(s => s.kind === kindFilter);
+    result.sort((a, b) => {
+      if (sortBy === 'name') return a.name.localeCompare(b.name);
+      return a.category.localeCompare(b.category);
+    });
     return result;
-  }, [supplies, search, kindFilter]);
+  }, [supplies, search, kindFilter, sortBy]);
 
   const handleSave = (item: SupplyItem) => {
     if (editing) {
@@ -278,17 +284,43 @@ export function SupplyLibraryPage() {
 
       {adding && <SupplyForm onSave={handleSave} onCancel={() => setAdding(false)} />}
 
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2">
         <div className="relative flex-1 sm:flex-none sm:w-64">
           <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--brand-text-muted)' }} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search')}
             className="pl-9 pr-4 py-2 w-full rounded-lg border text-sm outline-none focus:border-[var(--brand-primary)] transition-colors"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
         </div>
-        <div className="flex rounded-lg p-0.5" style={{ background: 'var(--brand-surface-raised)' }}>
+        <div className="relative">
+          <button onClick={() => setSortOpen(!sortOpen)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none"
+            style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+            <i className="ti ti-arrows-sort text-base" />
+          </button>
+          {sortOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[140px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+                {[
+                  { value: 'name', label: t('admin.name_az', 'Name A-Z'), icon: 'ti ti-sort-az' },
+                  { value: 'category', label: t('admin.category', 'Category'), icon: 'ti ti-folder' },
+                ].map(opt => (
+                  <button key={opt.value} onClick={() => { setSortBy(opt.value as any); setSortOpen(false); }}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${sortBy === opt.value ? 'font-semibold' : ''}`}
+                    style={{ color: sortBy === opt.value ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
+                    <i className={opt.icon} style={{ fontSize: '0.8rem' }} />
+                    <span className="flex-1">{opt.label}</span>
+                    {sortBy === opt.value && <i className="ti ti-check" style={{ color: 'var(--brand-primary)', fontSize: '0.7rem' }} />}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory flex-1" style={{ background: 'var(--brand-bg)' }}>
           {KINDS.map(k => (
             <button key={k.key} onClick={() => setKindFilter(k.key)}
-              className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium rounded-md transition-all ${kindFilter === k.key ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}>
+              className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${kindFilter === k.key ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}>
               <i className={kindIcons[k.key]} style={{ fontSize: '0.8rem' }} />{k.label}
             </button>
           ))}
@@ -301,7 +333,14 @@ export function SupplyLibraryPage() {
         <EmptyState title={t('common.no_data')} description={search ? t('admin.no_supplies_match', 'No supplies match.') : t('admin.add_first_supply', 'Add your first supply to start.')} icon={<i className="ti ti-packages text-4xl" style={{ opacity: 0.3 }} />} />
       ) : (
         <div className="space-y-1">
-          {editing && <SupplyForm initial={editing} onSave={handleSave} onCancel={() => setEditing(null)} />}
+          {editing && (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center fade-in" onClick={() => setEditing(null)}>
+              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+              <div className="relative w-full max-w-lg mx-4 mb-0 sm:mb-auto max-h-[85vh] overflow-auto rounded-t-2xl sm:rounded-2xl" onClick={e => e.stopPropagation()}>
+                <SupplyForm initial={editing} onSave={handleSave} onCancel={() => setEditing(null)} />
+              </div>
+            </div>
+          )}
           {filtered.map((supply, i) => {
             const ico = kindIcons[supply.kind] || 'ti ti-circle';
             const icoColor = supply.kind === 'food_ingredient' ? 'var(--color-success)' : supply.kind === 'condiment' ? 'var(--color-warning)' : supply.kind === 'packaging' ? 'var(--color-info)' : 'var(--brand-text-muted)';
@@ -327,7 +366,7 @@ export function SupplyLibraryPage() {
                   </div>
                   {supply.allergens.length > 0 && (
                     <div className="flex gap-1 mt-1 flex-wrap">{supply.allergens.map(a => (
-                      <span key={a} className="px-1.5 py-0.5 rounded-full text-[9px] font-medium" style={{ background: 'rgba(217,119,6,0.1)', color: 'var(--color-warning)' }}>{a}</span>
+                      <span key={a} className="px-1.5 py-0.5 rounded-full text-[9px] font-medium" style={{ background: 'rgba(217,119,6,0.1)', color: 'var(--color-warning)' }}>{t(`allergen.${a}`, a)}</span>
                     ))}</div>
                   )}
                 </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { memo, useState } from 'react';
 import { formatALL } from '@deliveryos/shared-types';
 import { Button, useI18n, MessageThread } from '../../index.js';
 
@@ -131,7 +131,7 @@ interface OrderCardProps {
   messages?: any[];
   onSendMessage?: (orderId: string, presetKey: string, params?: Record<string, unknown>) => Promise<void>;
 }
-export function OrderCard({ order, onUpdateStatus, isLoading, showMessages, onToggleMessages, messages, onSendMessage }: OrderCardProps) {
+export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoading, showMessages, onToggleMessages, messages, onSendMessage }: OrderCardProps) {
   const { t } = useI18n();
   const [loadingAction, setLoadingAction] = useState('');
 
@@ -188,7 +188,7 @@ export function OrderCard({ order, onUpdateStatus, isLoading, showMessages, onTo
             {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>
-        <div className={`px-2.5 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 ${getStatusColor(order.status)}`}>
+        <div className={`px-2.5 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 transition-colors duration-200 ${getStatusColor(order.status)}`}>
           <i className={getStatusIcon(order.status)} style={{ fontSize: '0.75rem' }} />
           {order.status}
         </div>
@@ -304,4 +304,4 @@ export function OrderCard({ order, onUpdateStatus, isLoading, showMessages, onTo
       </div>
     </div>
   );
-}
+});

@@ -3,6 +3,34 @@ import { assertTransition, type OrderStatus } from '@deliveryos/domain';
 import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, orderChannel, dashboardChannel } from './registry.js';
 
+async function fetchOrderDelta(client: PoolClient, orderId: string) {
+  const res = await client.query(`
+    SELECT o.id, o.status, o.total, o.created_at, loc.currency_code,
+      (SELECT count(*) FROM order_items oi WHERE oi.order_id = o.id)::int as item_count,
+      (SELECT string_agg(oi.quantity::text || '\u00d7' || oi.name_snapshot, ', ')
+       FROM order_items oi WHERE oi.order_id = o.id) as items_summary,
+      courier.display_name as courier_name
+    FROM orders o
+    LEFT JOIN locations loc ON loc.id = o.location_id
+    LEFT JOIN courier_assignments ca ON ca.order_id = o.id AND ca.status IN ('accepted','picked_up','delivered')
+    LEFT JOIN users courier ON courier.id = ca.courier_id
+    WHERE o.id = $1
+  `, [orderId]);
+  const row = res.rows[0];
+  if (!row) return null;
+  return {
+    orderId: row.id,
+    status: row.status,
+    total: row.total,
+    currency: row.currency_code || 'ALL',
+    createdAt: row.created_at,
+    shortId: '#' + row.id.substring(0, 4).toUpperCase(),
+    itemCount: row.item_count || 0,
+    itemsSummary: row.items_summary || '',
+    courierName: row.courier_name || null,
+  };
+}
+
 export async function updateOrderStatus(
   client: PoolClient,
   orderId: string,
@@ -68,11 +96,15 @@ export async function updateOrderStatus(
   const dbLocationId = cur.rows[0].location_id;
 
   // Forward to dashboard room for live owner dashboard
+  // Uses 'order.status' type — FE merges by id, no full GET needed
   if (dbLocationId) {
-    await opts.messageBus.publish(dashboardChannel(dbLocationId), {
-      type: `order.${newStatus.toLowerCase()}`,
-      data: { orderId, status: newStatus, statusUpdatedAt: new Date().toISOString() },
-    });
+    const delta = await fetchOrderDelta(client, orderId);
+    if (delta) {
+      await opts.messageBus.publish(dashboardChannel(dbLocationId), {
+        type: 'order.status',
+        data: { ...delta, statusUpdatedAt: new Date().toISOString() },
+      });
+    }
   }
 
   // 5. Publish lifecycle event for notification fan-out

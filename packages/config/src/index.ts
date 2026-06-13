@@ -68,6 +68,8 @@ const EnvSchema = z.object({
   RESTORE_VERIFY_CRON: z.string().default('0 4 * * *'),
   RESTORE_VERIFY_FULL_HASH: z.enum(['true', 'false']).default('false'),
   RESTORE_POOL_SIZE: z.coerce.number().int().positive().default(2),
+  // Currency Rates Refresh
+  RATES_CRON: z.string().default('0 * * * *'),
   // AI OCR — Groq
   GROQ_API_KEY: z.string().optional(),
   GROQ_MODEL: z.string().optional(),

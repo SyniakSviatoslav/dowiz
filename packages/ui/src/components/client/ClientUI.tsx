@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Input, BottomSheet, Modal } from '../../index.js';
+import { Button, Input, BottomSheet, Modal, useI18n } from '../../index.js';
 import { formatALL } from '@deliveryos/shared-types';
 
 export interface CartItem {
@@ -48,6 +48,7 @@ function getAllergenStyle(allergen: string) {
 }
 
 export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
+  const { t } = useI18n();
   const [imgError, setImgError] = useState(false);
   const hasAllergens = product.allergens && product.allergens.length > 0;
   const hasIngredients = product.ingredients && product.ingredients.length > 0;
@@ -76,11 +77,20 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
           </div>
         )}
         {hasAllergens && (
-          <div className="absolute top-1.5 left-1.5 z-10 flex gap-0.5">
-            <span className="text-[8px] font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-0.5" style={{ background: 'rgba(220,38,38,0.15)', color: 'var(--color-danger)' }}>
-              <i className="ti ti-alert-triangle" style={{ fontSize: '0.55rem' }} />
-              {allergens.length === 1 ? allergens[0] : `${allergens.length}`}
-            </span>
+          <div className="absolute top-1.5 left-1.5 z-10 flex flex-wrap gap-0.5 max-w-[70%]">
+            {allergens.slice(0, 3).map(a => {
+              const s = getAllergenStyle(a);
+              return (
+                <span key={a} className="text-[7px] font-semibold px-1 py-0.5 rounded-sm leading-tight" style={{ background: s.bg, color: s.text }}>
+                  {t(`allergen.${a.toLowerCase()}`, a)}
+                </span>
+              );
+            })}
+            {allergens.length > 3 && (
+              <span className="text-[7px] font-semibold px-1 py-0.5 rounded-sm" style={{ background: 'rgba(220,38,38,0.15)', color: 'var(--color-danger)' }}>
+                +{allergens.length - 3}
+              </span>
+            )}
           </div>
         )}
         {!hasAllergens && product.isAvailable && (
@@ -154,7 +164,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
               const s = getAllergenStyle(a);
               return (
                 <span key={a} className="px-1 py-0 rounded text-[8px] font-semibold uppercase leading-tight" style={{ background: s.bg, color: s.text }}>
-                  {a}
+                  {t(`allergen.${a.toLowerCase()}`, a)}
                 </span>
               );
             })}
