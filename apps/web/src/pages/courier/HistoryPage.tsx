@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { EmptyState, SkeletonBase, StatusBadge, useI18n } from '@deliveryos/ui';
+import { EmptyState, SkeletonBase, StatusBadge, useI18n, PriceDisplay } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
 interface DeliveryHistory {
@@ -90,7 +90,7 @@ export function HistoryPage() {
                   <div className="text-xs text-[var(--brand-text-muted)]">{delivery.customerAddress}</div>
                 </div>
                 <div className="text-right ml-3">
-                  <div className="text-sm font-bold text-[var(--brand-text)]">{delivery.amount.toLocaleString()} ALL</div>
+                  <div className="text-sm font-bold text-[var(--brand-text)]"><PriceDisplay amount={delivery.amount} /></div>
                   <div className="text-xs text-[var(--brand-text-muted)]">{formatDate(delivery.date)}</div>
                 </div>
               </div>

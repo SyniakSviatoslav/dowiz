@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Input, FormField, MapWithRadius, MapWithPin, useI18n } from '@deliveryos/ui';
+import { Button, Input, FormField, MapWithRadius, MapWithPin, useI18n, PriceDisplay } from '@deliveryos/ui';
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
@@ -328,7 +328,7 @@ export function OnboardingPage() {
                   <div className="space-y-2">
                     <div className="flex gap-2">
                       <Input value={newItemName} onChange={e => setNewItemName((e.target as HTMLInputElement).value)} placeholder={t('admin.item_name', 'Item name')} />
-                      <Input value={newItemPrice} onChange={e => setNewItemPrice((e.target as HTMLInputElement).value)} placeholder={t('admin.price_all', 'Price (ALL)')} type="number" />
+                      <Input value={newItemPrice} onChange={e => setNewItemPrice((e.target as HTMLInputElement).value)} placeholder={t('admin.price_all', 'Price')} type="number" />
                       <Button onClick={addManualItem}>+ {t('common.add', 'Add')}</Button>
                     </div>
                   </div>
@@ -340,7 +340,7 @@ export function OnboardingPage() {
                     {menuItems.map((item, i) => (
                       <div key={i} className="flex justify-between text-sm py-1 px-2 rounded" style={{ background: 'var(--brand-surface-raised)' }}>
                         <span>{item.name}</span>
-                        <span style={{ color: 'var(--brand-primary)' }}>{item.price} ALL</span>
+                        <span style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={item.price} /></span>
                       </div>
                     ))}
                   </div>
@@ -493,7 +493,7 @@ export function OnboardingPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium truncate">{item.name}</div>
-                            <div className="text-xs opacity-50">{item.price} ALL</div>
+                            <div className="text-xs opacity-50"><PriceDisplay amount={item.price} /></div>
                           </div>
                           <button className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm" style={{ background: primaryColor }}>
                             <i className="ti ti-plus" />
@@ -521,7 +521,7 @@ export function OnboardingPage() {
                     <div className="flex justify-end p-4">
                       <div className="h-10 px-4 rounded-full flex items-center gap-2 text-white text-xs font-medium" style={{ background: primaryColor }}>
                         <i className="ti ti-shopping-cart" />
-                        <span>0 ALL</span>
+                        <span><PriceDisplay amount={0} /></span>
                       </div>
                     </div>
                   )}

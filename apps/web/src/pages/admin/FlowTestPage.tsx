@@ -241,7 +241,7 @@ export function FlowTestPage() {
           <select value={productId} onChange={e => setProductId(e.target.value)}
             className="w-full text-sm rounded-lg px-3 py-2 border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
             {products.length === 0 && <option value="">Loading...</option>}
-            {products.map(p => <option key={p.id} value={p.id}>{p.name} — {p.price} ALL</option>)}
+            {products.map(p => <option key={p.id} value={p.id}>{p.name} — {p.price}</option>)}
           </select>
         </div>
         <div>

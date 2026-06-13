@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast } from '@deliveryos/ui';
+import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay } from '@deliveryos/ui';
 import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { calcETA } from '@deliveryos/shared-types';
@@ -335,13 +335,13 @@ export function OrderStatusPage() {
             {order.items?.map((item: any, i: number) => (
               <div key={i} className="flex justify-between">
                 <span>{item.quantity}x {item.name}</span>
-                <span>{item.price} ALL</span>
+                <span><PriceDisplay amount={item.price} /></span>
               </div>
             ))}
           </div>
           <div className="border-t border-[var(--brand-border)] mt-4 pt-4 flex justify-between font-bold">
             <span>{t('client.total', 'Total')}</span>
-            <span>{order.total} ALL</span>
+            <span><PriceDisplay amount={order.total} /></span>
           </div>
         </div>
 

@@ -1,6 +1,5 @@
 import React, { memo, useState } from 'react';
-import { formatALL } from '@deliveryos/shared-types';
-import { Button, useI18n, MessageThread } from '../../index.js';
+import { Button, useI18n, MessageThread, PriceDisplay } from '../../index.js';
 
 // --- AdminShell ---
 interface AdminShellProps {
@@ -248,13 +247,13 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
         {order.customerName && order.customerName !== 'Unknown' && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.client', 'Client:')}</span> {order.customerName}</div>}
         {order.customerPhone && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('common.phone', 'Phone:')}</span> {maskPhone(order.customerPhone)}</div>}
         {order.deliveryAddress && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.to', 'To:')}</span> {order.deliveryAddress}</div>}
-        <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.items', 'Items:')}</span> {order.items?.length || 0} {t('admin.items_lower', 'items')} ({formatALL(order.total)})</div>
+        <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.items', 'Items:')}</span> {order.items?.length || 0} {t('admin.items_lower', 'items')} (<PriceDisplay amount={order.total} />)</div>
         {order.items && order.items.length > 0 && (
           <div className="ml-16 text-xs space-y-0.5" style={{ color: 'var(--brand-text-muted)' }}>
             {order.items.map((item: any, i: number) => (
               <div key={i} className="flex justify-between">
                 <span>{item.name} ×{item.qty || item.quantity}</span>
-                <span>{item.price ? formatALL(item.price * (item.qty || item.quantity)) : ''}</span>
+                <span>{item.price ? <PriceDisplay amount={item.price * (item.qty || item.quantity)} /> : null}</span>
               </div>
             ))}
           </div>

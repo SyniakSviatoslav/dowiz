@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { EmptyState, SkeletonBase, StatusBadge, useI18n } from '@deliveryos/ui';
+import { EmptyState, SkeletonBase, StatusBadge, useI18n, PriceDisplay } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
 interface EarningSummary {
@@ -83,7 +83,7 @@ export function EarningsPage() {
               >
                 <div className="text-2xl mb-1">{card.icon}</div>
                 <div className="text-xs text-[var(--brand-text-muted)] uppercase tracking-wider font-semibold mb-1">{card.label}</div>
-                <div className="text-lg font-bold text-[var(--brand-text)]">{card.amount.toLocaleString()} ALL</div>
+                <div className="text-lg font-bold text-[var(--brand-text)]"><PriceDisplay amount={card.amount} /></div>
               </div>
             ))}
           </div>
@@ -106,7 +106,7 @@ export function EarningsPage() {
                       <div className="text-xs text-[var(--brand-text-muted)]">{payout.date}</div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="text-sm font-bold text-[var(--brand-text)]">{payout.amount.toLocaleString()} ALL</div>
+                      <div className="text-sm font-bold text-[var(--brand-text)]"><PriceDisplay amount={payout.amount} /></div>
                       <StatusBadge status={payout.status} />
                     </div>
                   </div>

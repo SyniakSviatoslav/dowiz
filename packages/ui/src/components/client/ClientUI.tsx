@@ -266,7 +266,7 @@ export function CartFAB({ itemsCount, total, onClick, isBouncing = false }: { it
     <div className="fixed bottom-[80px] right-[20px] z-[100] embed-hidden">
       <button 
         id="cartFabBtn" 
-        aria-label={`Cart: ${itemsCount} items, ${total} ALL`}
+        aria-label={`Cart: ${itemsCount} items`}
         className={`h-[48px] px-5 text-white text-[14px] font-medium flex items-center justify-center gap-1 ${isBouncing ? 'cart-bounce' : ''}`}
         style={{ 
           background: 'var(--brand-primary)', 
@@ -282,7 +282,7 @@ export function CartFAB({ itemsCount, total, onClick, isBouncing = false }: { it
           </span>
         </span>
         <span className="mx-1 opacity-40">|</span>
-        <span>{total}</span> ALL
+        <PriceDisplay amount={total} />
       </button>
     </div>
   );

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Button, EmptyState, SkeletonBase, useI18n } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, useI18n, PriceDisplay } from '@deliveryos/ui';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/index.js';
 
@@ -171,7 +171,7 @@ export function CRMPage() {
                       </span>
                     </td>
                     <td className="p-3 text-right hidden md:table-cell" style={{ color: 'var(--brand-text-muted)' }}>
-                      {(c.ltv / 100).toFixed(0)} ALL
+                      <PriceDisplay amount={c.ltv} />
                     </td>
                     <td className="p-3 text-right hidden lg:table-cell" style={{ color: 'var(--brand-text-muted)' }}>
                       {c.lastOrder}
@@ -199,7 +199,7 @@ export function CRMPage() {
                                     <span className="font-medium">{p.name}</span>
                                     <div className="text-right">
                                       <div className="text-[var(--brand-text-muted)] text-xs">x{p.total_qty}</div>
-                                      <div className="text-xs font-bold text-[var(--brand-primary)]">{(p.total_spent / 100).toFixed(0)} ALL</div>
+                                      <div className="text-xs font-bold text-[var(--brand-primary)]"><PriceDisplay amount={p.total_spent} /></div>
                                     </div>
                                   </div>
                                 ))}

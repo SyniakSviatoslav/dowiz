@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Button, Input, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile } from '@deliveryos/ui';
+import { Button, Input, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { RecipeEditor } from './RecipeEditor.js';
 
@@ -609,7 +609,7 @@ export function MenuManagerPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1">
                         <span className="font-medium text-sm truncate" style={{ color: 'var(--brand-text)' }}>{product.name}</span>
-                        <span className="text-sm font-bold shrink-0" style={{ color: 'var(--brand-primary)' }}>{product.price} ALL</span>
+                        <span className="text-sm font-bold shrink-0" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={product.price} /></span>
                       </div>
                       {product.description && <div className="text-[11px] truncate mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{product.description}</div>}
                       <div className="flex items-center gap-2 mt-1.5">
@@ -693,7 +693,7 @@ export function MenuManagerPage() {
                   <h3 className="text-lg font-bold">{previewProduct.name}</h3>
                   {previewProduct.description && <p className="text-sm mt-1" style={{ color: 'var(--brand-text-muted)' }}>{previewProduct.description}</p>}
                 </div>
-                <span className="text-xl font-black shrink-0" style={{ color: 'var(--brand-primary)' }}>{previewProduct.price} ALL</span>
+                <span className="text-xl font-black shrink-0" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={previewProduct.price} /></span>
               </div>
 
 
@@ -974,7 +974,7 @@ export function MenuManagerPage() {
                               </span>
                             )}
                           </div>
-                          <span className="font-semibold text-xs" style={{ color: 'var(--brand-primary)' }}>{p.price} ALL</span>
+                          <span className="font-semibold text-xs" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={p.price} /></span>
                         </div>
                       ))}
                     </div>
