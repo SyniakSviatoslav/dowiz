@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Button, Input, EmptyState, useI18n } from '@deliveryos/ui';
+import { Button, Input, EmptyState, useI18n, useConfirm } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { RecipeEditor } from './RecipeEditor.js';
 
@@ -60,6 +60,7 @@ interface Category {
 
 export function MenuManagerPage() {
   const { t } = useI18n();
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -246,6 +247,8 @@ export function MenuManagerPage() {
   };
 
   const handleDeleteProduct = async (catId: string, productId: string) => {
+    const ok = await confirm({ title: t('admin.confirm_delete_product_title', 'Delete product'), message: t('admin.confirm_delete_product', 'Are you sure you want to delete this product?'), confirmLabel: t('common.delete', 'Delete'), variant: 'danger' });
+    if (!ok) return;
     try { 
       await apiClient(`/owner/menu/products/${productId}`, { method: 'DELETE' }); 
       setCategories(prev => prev.map(c =>
@@ -280,7 +283,8 @@ export function MenuManagerPage() {
   };
 
   const handleDeleteCategory = async (categoryId: string) => {
-    if (!confirm(t('admin.confirm_delete_category', 'Delete this category? Products in it will need to be moved or deleted first.'))) return;
+    const ok = await confirm({ title: t('admin.confirm_delete_category_title', 'Delete category'), message: t('admin.confirm_delete_category', 'Delete this category? Products in it will need to be moved or deleted first.'), confirmLabel: t('common.delete', 'Delete'), variant: 'danger' });
+    if (!ok) return;
     try {
       await apiClient(`/owner/menu/categories/${categoryId}`, { method: 'DELETE' });
       setCategories(prev => prev.filter(c => c.id !== categoryId));
@@ -986,6 +990,7 @@ export function MenuManagerPage() {
           </div>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

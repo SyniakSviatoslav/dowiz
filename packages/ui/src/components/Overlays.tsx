@@ -17,7 +17,7 @@ function Portal({ children }: { children: React.ReactNode }) {
 
 function Backdrop({ onClick, children }: { onClick: () => void, children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 transition-opacity">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 transition-opacity">
       <div className="absolute inset-0" onClick={onClick} />
       {children}
     </div>
@@ -71,7 +71,7 @@ export function Drawer({ isOpen, onClose, title, children }: OverlayProps) {
   if (!isOpen) return null;
   return (
     <Portal>
-      <div className="fixed inset-0 z-50 flex justify-end bg-black/50 transition-opacity">
+      <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm transition-opacity">
         <div className="absolute inset-0" onClick={onClose} />
         <div role="dialog" aria-modal="true" className="relative z-10 h-full w-full max-w-md bg-[var(--brand-bg)] shadow-2xl overflow-y-auto transform transition-transform">
           <div className="sticky top-0 flex items-center justify-between border-b border-[var(--brand-border)] bg-[var(--brand-bg)] px-6 py-4">
@@ -106,7 +106,7 @@ export function BottomSheet({ isOpen, onClose, title, children }: OverlayProps) 
   if (!isOpen) return null;
   return (
     <Portal>
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 transition-opacity">
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm transition-opacity">
         <div className="absolute inset-0" onClick={onClose} />
         <div role="dialog" aria-modal="true" className="relative z-10 w-full max-w-lg rounded-t-[var(--brand-radius)] bg-[var(--brand-bg)] shadow-2xl">
           <div className="flex w-full justify-center pt-3 pb-1" onClick={onClose}>

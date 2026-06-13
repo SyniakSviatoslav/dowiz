@@ -512,7 +512,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const locId = await getLocationId(request);
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
     const res = await db.query(
-      `SELECT id, name, slug, phone, delivery_fee_flat, min_order_value, free_delivery_threshold, delivery_radius_km, currency_code, tax_rate, lat, lng
+      `SELECT id, name, slug, phone, delivery_fee_flat, min_order_value, free_delivery_threshold, delivery_radius_km, currency_code, tax_rate, lat, lng, address, hours_json
        FROM locations WHERE id = $1`,
       [locId]
     );
@@ -524,6 +524,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       radiusKm: r.delivery_radius_km || 0, freeDeliveryThreshold: r.free_delivery_threshold || 0,
       currencyCode: r.currency_code || 'ALL', taxRate: r.tax_rate || 0,
       lat: r.lat, lng: r.lng,
+      address: r.address || '',
+      hoursJson: r.hours_json || {},
     });
   });
 
@@ -539,13 +541,15 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
          min_order_value = COALESCE($4, min_order_value),
          delivery_radius_km = COALESCE($5, delivery_radius_km),
          free_delivery_threshold = COALESCE($6, free_delivery_threshold),
-         tax_rate = COALESCE($7, tax_rate), lat = COALESCE($8, lat), lng = COALESCE($9, lng)
-       WHERE id = $10
-       RETURNING id, slug, name, phone, delivery_fee_flat, min_order_value, free_delivery_threshold, delivery_radius_km, tax_rate, lat, lng`,
+         tax_rate = COALESCE($7, tax_rate), lat = COALESCE($8, lat), lng = COALESCE($9, lng),
+         address = COALESCE($10, address), hours_json = COALESCE($11, hours_json)
+       WHERE id = $12
+       RETURNING id, slug, name, phone, delivery_fee_flat, min_order_value, free_delivery_threshold, delivery_radius_km, tax_rate, lat, lng, address, hours_json`,
       [parsed.locationName || null, parsed.phone || null,
        parsed.deliveryFee ?? null, parsed.minOrder ?? null, parsed.radiusKm ?? null,
        parsed.freeDeliveryThreshold ?? null, parsed.taxRate ?? null,
-       parsed.lat ?? null, parsed.lng ?? null, locId]
+       parsed.lat ?? null, parsed.lng ?? null, locId,
+       parsed.address || null, parsed.hoursJson ? JSON.stringify(parsed.hoursJson) : null]
     );
     const r = res.rows[0];
     return reply.send({
@@ -553,6 +557,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       deliveryFee: r.delivery_fee_flat || 0, minOrder: r.min_order_value || 0,
       radiusKm: r.delivery_radius_km || 0, freeDeliveryThreshold: r.free_delivery_threshold || 0,
       taxRate: r.tax_rate || 0, lat: r.lat, lng: r.lng,
+      address: r.address || '',
+      hoursJson: r.hours_json || {},
     });
   });
 
