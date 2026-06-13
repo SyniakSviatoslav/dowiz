@@ -752,7 +752,7 @@ fastify.post('/api/dev/mock-auth', async (request, reply) => {
   fastify.register(notificationAuditRoutes, { prefix: '/api/admin', db: pool });
 
   // SPA Fallback: Serve index.html for unknown GET requests matching SPA route patterns
-  const SPA_ROUTES = ['/admin', '/courier', '/dashboard', '/s/', '/login'];
+  const SPA_ROUTES = ['/admin', '/courier', '/dashboard', '/s/', '/login', '/branding-preview'];
   fastify.setNotFoundHandler((request, reply) => {
     if (
       request.method === 'GET' &&
