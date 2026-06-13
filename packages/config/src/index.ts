@@ -80,6 +80,11 @@ const EnvSchema = z.object({
   LLM_PROVIDER: z.string().optional(),
   // Missing from earlier schema — added 2026-06-13 audit
   COURIER_PII_ENCRYPTION_KEY: z.string().optional(),
+  COURIER_ACCEPT_WINDOW_MS: z.string().optional(),
+  CANCEL_AFTER_DISPATCH_WINDOW_MS: z.string().optional(),
+  COURIER_DISPATCH_MAX_ATTEMPTS: z.string().optional(),
+  COURIER_DISPATCH_RETRY_MS: z.string().optional(),
+  COURIER_GPS_MAX_DIST_KM: z.string().optional(),
   FLY_MACHINE_ID: z.string().optional(),
   GROQ_ENDPOINT: z.string().optional(),
   HOSTNAME: z.string().optional(),
