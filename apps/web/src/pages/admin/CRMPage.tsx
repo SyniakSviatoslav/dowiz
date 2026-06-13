@@ -145,7 +145,7 @@ export function CRMPage() {
             <thead>
               <tr style={{ background: 'var(--brand-surface)' }}>
                 <th className="text-left p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.customer', 'Customer')}</th>
-                <th className="text-left p-3 font-medium hidden sm:table-cell" style={{ color: 'var(--brand-text-muted)' }}>{t('common.phone', 'Phone')}</th>
+                <th className="text-left p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('common.phone', 'Phone')}</th>
                 <th className="text-right p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.orders', 'Orders')}</th>
                 <th className="text-right p-3 font-medium hidden md:table-cell" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.ltv', 'LTV')}</th>
                 <th className="text-right p-3 font-medium hidden lg:table-cell" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.last_order', 'Last order')}</th>

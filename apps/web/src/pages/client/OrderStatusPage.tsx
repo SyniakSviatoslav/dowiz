@@ -85,19 +85,13 @@ export function OrderStatusPage() {
         setEtaMinutes(data.etaMinutes);
       }
     } catch (err: any) {
-      // eslint-disable-next-line
-      if (err?.status === 404) {
+      if (err?.status === 404 || err?.status === 401) {
         setOrder({
           id,
-          status: 'PREPARING',
+          status: 'PENDING',
           createdAt: new Date().toISOString(),
-          items: [{ name: 'Classic Burger', quantity: 1, price: 650 }],
-          total: 650,
-          elapsedSeconds: 120,
-          kcal_total: 550,
-          protein_mg_total: 32,
-          fat_mg_total: 24,
-          carb_mg_total: 48,
+          items: [],
+          total: 0,
         });
       } else {
         setError('Failed to fetch order status');

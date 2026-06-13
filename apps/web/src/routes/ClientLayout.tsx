@@ -41,6 +41,29 @@ function ClientLayoutInner() {
 
   useEffect(() => {
     if (!slug) return;
+    const params = new URLSearchParams(location.search);
+    const draftPrimary = params.get('draft_primary');
+    const draftBg = params.get('draft_bg');
+    const draftText = params.get('draft_text');
+
+    // If draft params are present, use them directly (branding preview)
+    if (draftPrimary || draftBg || draftText) {
+      setLocationName(slug);
+      setTheme({
+        primary: draftPrimary || 'var(--brand-primary)',
+        primaryHover: 'var(--brand-primary-hover)',
+        primaryLight: 'var(--brand-primary-light)',
+        accent: 'var(--brand-accent)',
+        bg: draftBg || 'var(--brand-bg)',
+        surface: 'var(--brand-surface)',
+        surfaceRaised: 'var(--brand-surface-raised)',
+        text: draftText || 'var(--brand-text)',
+        textMuted: 'var(--brand-text-muted)',
+        border: 'var(--brand-border)',
+      });
+      return;
+    }
+
     apiClient<any>(`/public/theme/${slug}`)
       .then((res: any) => {
         setLocationName(res.locationName || '');
@@ -59,7 +82,7 @@ function ClientLayoutInner() {
         });
       })
       .catch(() => setTheme(null));
-  }, [slug]);
+  }, [slug, location.search]);
 
   const itemsCount = items.reduce((sum, i) => sum + i.quantity, 0);
   const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);

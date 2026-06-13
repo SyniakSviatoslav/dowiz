@@ -1,13 +1,6 @@
-const ALL_CURRENCY_SYMBOL = 'L';
-const ALL_LOCALE = 'sq-AL';
-
 export function formatALL(amount: number): string {
-  return new Intl.NumberFormat(ALL_LOCALE, {
-    style: 'currency',
-    currency: 'ALL',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount).replace(/\s*ALL/, ` ${ALL_CURRENCY_SYMBOL}`).trim();
+  const all = Math.round(amount / 100);
+  return `${all} ALL`;
 }
 
 export function parseALL(value: string): number {

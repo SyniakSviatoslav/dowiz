@@ -1,21 +1,8 @@
 ﻿{
-  "approach": "Phase G-1 first (CDN hardcodings → API proxy), then G-2 (menu hydration hardening), then G-3 (gate B7/B8 browser checks)",
+  "approach": "Fix menu import preview: API response stripped prices/images by mapping products to only .name. One-line fix: pass through full CanonicalProduct/CanonicalCategory objects.",
   "files": [
-    "apps/api/src/routes/owner/themes.ts",
-    "apps/api/src/lib/jsonld-builder.ts",
-    "apps/api/src/client/checkout/app.ts",
-    "apps/api/src/routes/public/pwa.ts",
-    "apps/api/src/lib/ssr-client-renderer.ts",
-    "apps/api/src/routes/public/client-flow.ts",
-    "apps/api/src/routes/public/ssr.ts",
-    "apps/api/src/routes/public/branding-preview.ts",
-    "apps/api/src/lib/security/headers.ts",
-    "apps/web/src/pages/client/MenuPage.tsx",
-    "apps/web/index.html",
-    "apps/web/public/manifest.json",
-    "packages/ui/src/components/client/ClientUI.tsx",
-    "apps/api/scripts/release-gate.ts"
+    "apps/api/src/routes/owner/menu-import.ts"
   ],
-  "keyTypes": ["StorageProvider", "Product", "MenuPage", "Blockers"],
-  "boundaryCondition": "All changes read-only re business contracts; staging-only fixes; zero real customer impact"
+  "keyTypes": ["CanonicalCategory", "CanonicalProduct", "CanonicalMenuDraft"],
+  "boundaryCondition": "frontend already expects correct shape (draft_preview.products[i].name/.price/.categoryKey). API must match. LLM already extracts prices."
 }

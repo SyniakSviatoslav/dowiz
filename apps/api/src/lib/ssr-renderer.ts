@@ -13,6 +13,11 @@ export function renderMenuPage(data: any, slug: string, logoUrl?: string, baseUr
   const shouldNoindex = isPreview || isEmbed || locationStatus === 'deleted';
   const defaultLocale = data.default_locale;
 
+  const categories = (data.categories || []).filter((cat: any) =>
+    cat.products && cat.products.length > 0
+  );
+  data.categories = categories;
+
   const switchScript = `
     function setLocale(newLocale) {
       document.documentElement.lang = newLocale;

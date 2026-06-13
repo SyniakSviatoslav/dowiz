@@ -313,10 +313,6 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
       await client.query('COMMIT');
 
       await messageBus.publish(orderChannel(orderId), { type: BUS_CHANNELS.ORDER_STATUS, orderId, status: 'IN_DELIVERY', locationId, timestamp: new Date().toISOString() });
-      await messageBus.publish(dashboardChannel(locationId), {
-        type: 'courier.assignment_created',
-        data: { orderId, courierId },
-      });
 
       return reply.status(200).send({ id: assignId, orderId, courierId, status: 'assigned' });
     } catch (err) {
@@ -372,6 +368,10 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
 
       await messageBus.publish(orderChannel(orderId), {
         type: BUS_CHANNELS.ORDER_PICKED_UP, orderId, locationId, timestamp: new Date().toISOString(),
+      });
+      await messageBus.publish(dashboardChannel(locationId), {
+        type: 'order.status',
+        data: { orderId, status: 'PICKED_UP', statusUpdatedAt: new Date().toISOString() },
       });
 
       return reply.send({
@@ -452,6 +452,10 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
       await messageBus.publish(orderChannel(orderId), {
         type: BUS_CHANNELS.ORDER_DELIVERED, orderId, locationId, courierId,
         cashCollected, cashAmount: finalCashAmount, timestamp: new Date().toISOString(),
+      });
+      await messageBus.publish(dashboardChannel(locationId), {
+        type: 'order.status',
+        data: { orderId, status: 'DELIVERED', statusUpdatedAt: new Date().toISOString() },
       });
 
       return reply.send({

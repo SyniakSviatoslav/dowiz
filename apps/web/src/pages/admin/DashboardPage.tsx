@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, useHaptics, useSoundPrefs, PullToRefresh } from '@deliveryos/ui';
 import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
 import { exportCSV } from '../../lib/exportCSV.js';
+import { mergeDelta } from './dashboard-utils.js';
 
 export function DashboardPage() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
@@ -20,7 +20,7 @@ export function DashboardPage() {
   const [clientSlug, setClientSlug] = useState('');
   const [sortPickerOpen, setSortPickerOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [readiness, setReadiness] = useState<{ menu: boolean; phone: boolean; address: boolean; couriers: boolean; branding: boolean; placeOrder: boolean }>({ menu: false, phone: false, address: false, couriers: false, branding: false, placeOrder: false });
+  const [readiness, setReadiness] = useState<{ menu: boolean; phone: boolean; address: boolean; couriers: boolean; branding: boolean; placeOrder: boolean; telegram: boolean }>({ menu: false, phone: false, address: false, couriers: false, branding: false, placeOrder: false, telegram: false });
 
   const { play: playPing } = useSound('/sounds/ping.mp3');
   const { trigger: haptic } = useHaptics();
@@ -58,11 +58,17 @@ export function DashboardPage() {
         setClientSlug(generated);
       }
       // Compute readiness from actual data
-      const r = { menu: false, phone: false, address: false, couriers: false, branding: false, placeOrder: false };
+      const r = { menu: false, phone: false, address: false, couriers: false, branding: false, placeOrder: false, telegram: false };
       r.phone = !!(res.phone && res.phone.length > 5);
       r.address = !!(res.address && res.address.length > 5);
       r.branding = !!(res.locationName && res.locationName.length > 2);
       setReadiness(r);
+      // Check notification status (lightweight)
+      if (res.id) {
+        apiClient<any>(`/owner/locations/${res.id}/notifications/status`).then(status => {
+          setReadiness(prev => ({ ...prev, telegram: status?.telegramConnected || false }));
+        }).catch(() => {});
+      }
     }).catch(() => {});
     // Check menu + couriers in parallel
     Promise.all([
@@ -77,20 +83,27 @@ export function DashboardPage() {
     }).catch(() => {});
   }, []);
 
+  const isFirstConnect = useRef(true);
   useWebSocket({
     room: `location:${tenantId}:dashboard`,
     enabled: true,
     onMessage: (msg) => {
-      const inner = msg?.data?.data || msg?.data || msg;
-      if (inner.type === 'order.created') {
-        setOrders(prev => [inner.data || inner, ...prev]);
+      const envelope = msg?.data || msg;
+      const payload = envelope.data || envelope;
+      if (envelope.type === 'order.created') {
+        setOrders(prev => mergeDelta(prev, payload, true));
         if (alertSoundEnabled) playPing();
         haptic('tap');
       }
-      else if (inner.type === 'order.status') { setOrders(prev => prev.map(o => o.id === (inner.data?.orderId || inner.orderId) ? { ...o, ...(inner.data || inner) } : o)); }
-      else if (inner.type === 'courier_position') { setCourierPositions(prev => ({ ...prev, [inner.courierId]: [inner.lng, inner.lat] })); }
+      else if (envelope.type === 'order.status') {
+        setOrders(prev => mergeDelta(prev, payload, false));
+      }
+      else if (envelope.type === 'courier_position') { setCourierPositions(prev => ({ ...prev, [payload.courierId]: [payload.lng, payload.lat] })); }
     },
-    onReconnect: () => { fetchOrders(); },
+    onReconnect: () => {
+      if (isFirstConnect.current) { isFirstConnect.current = false; return; }
+      fetchOrders();
+    },
   });
 
   const fetchMessages = async (orderId: string) => {
@@ -118,7 +131,12 @@ export function DashboardPage() {
   };
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
-    setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus as AdminOrder['status'] } : o));
+    setOrders(prev => {
+      const existing = prev.find(o => o.id === id);
+      if (!existing) return prev;
+      if (existing.status === newStatus) return prev;
+      return prev.map(o => o.id === id ? { ...o, status: newStatus as AdminOrder['status'] } as AdminOrder : o);
+    });
     try {
       await apiClient(`/orders/${id}/status`, { method: 'PATCH', body: { status: newStatus } });
     } catch {
@@ -165,7 +183,7 @@ export function DashboardPage() {
     { label: t('admin.couriers', 'Couriers'), done: readiness.couriers, icon: 'ti ti-motorbike' },
     { label: t('admin.branding', 'Branding'), done: readiness.branding, icon: 'ti ti-palette' },
     { label: t('checkout.place_order', 'Place order'), done: orders.length > 0, icon: 'ti ti-shopping-cart' },
-    { label: t('checkout.payment_method', 'Payment method'), done: true, icon: 'ti ti-cash' },
+    { label: t('admin.telegram_notifications', 'Telegram'), done: readiness.telegram, icon: 'ti ti-brand-telegram' },
   ];
   const doneCount = readinessItems.filter(r => r.done).length;
   const totalChecks = readinessItems.length;
@@ -180,7 +198,7 @@ export function DashboardPage() {
 
   return (
     <PullToRefresh onRefresh={fetchOrders}>
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6" role="region" aria-live="polite" aria-label={t('admin.live_orders', 'Live orders')}>
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4" role="region" aria-live="polite" aria-label={t('admin.live_orders', 'Live orders')}>
       {/* Welcome Hint */}
       {showHint && (
         <HintCard
@@ -200,12 +218,9 @@ export function DashboardPage() {
           { label: t('order.in_delivery', 'Delivery'), value: stats.inDelivery, color: 'var(--status-in-delivery)', isCurrency: false },
           { label: t('cart.total', 'Revenue'), value: stats.revenue, color: 'var(--brand-primary)', isCurrency: true },
         ].map((stat, i) => (
-          <motion.div
+          <div
             key={stat.label}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.04, duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="text-center p-3 rounded-xl" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
+            className="text-center p-3 rounded-xl fade-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)', animationDelay: `${i * 40}ms` }}
           >
             <div className="text-2xl font-bold mb-0.5" style={{ color: stat.color }}>
               {stat.isCurrency ? (
@@ -215,116 +230,127 @@ export function DashboardPage() {
               )}
             </div>
             <div className="text-[10px] font-medium" style={{ color: 'var(--brand-text-muted)' }}>{stat.label}</div>
-          </motion.div>
+          </div>
         ))}
       </div>
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div>
-            <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{viewMode === 'live' ? t('admin.live_orders', 'Live Orders') : t('courier.history', 'Order History')}</h2>
-            <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{filteredOrders.length}</p>
-          </div>
-          {clientSlug && (
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
-              <i className="ti ti-link text-[var(--brand-primary)]" />
-              <span className="font-mono truncate max-w-[180px]">{clientSlug}.dowiz.org</span>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(`https://${clientSlug}.dowiz.org`);
-                  setCopiedLink(true);
-                  setTimeout(() => setCopiedLink(false), 2000);
-                }}
-                className="text-[var(--brand-primary)] hover:underline font-medium shrink-0"
-              >
-                {copiedLink ? t('common.copied', 'Copied!') : t('common.copy', 'Copy')}
+        {/* Sticky header: title + view toggles + search */}
+        <div className="sticky top-0 z-10 pb-2 space-y-3" style={{ background: 'var(--brand-bg)' }}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-4 shrink-0">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{viewMode === 'live' ? t('admin.live_orders', 'Live Orders') : t('courier.history', 'Order History')}</h2>
+                <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{filteredOrders.length}</p>
+              </div>
+              <div className="flex bg-[var(--brand-surface)] border rounded-lg overflow-hidden p-0.5 shrink-0" role="tablist" aria-label={t('admin.view_mode', 'View mode')} style={{ borderColor: 'var(--brand-border)' }}>
+                <button role="tab" aria-selected={viewMode === 'live'}
+                  onClick={() => { setViewMode('live'); setStatusFilter('all'); }}
+                  className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors text-center ${viewMode === 'live' ? 'bg-[var(--brand-primary)] text-white' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+                >{t('admin.live', 'Live')}</button>
+                <button role="tab" aria-selected={viewMode === 'history'}
+                  onClick={() => { setViewMode('history'); setStatusFilter('all'); }}
+                  className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors text-center ${viewMode === 'history' ? 'bg-[var(--brand-primary)] text-white' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+                >{t('courier.history', 'History')}</button>
+              </div>
+              {clientSlug && (
+                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
+                  <i className="ti ti-link text-[var(--brand-primary)]" />
+                  <span className="font-mono truncate max-w-[140px]">{clientSlug}.dowiz.org</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`https://${clientSlug}.dowiz.org`);
+                      setCopiedLink(true);
+                      setTimeout(() => setCopiedLink(false), 2000);
+                    }}
+                    className="text-[var(--brand-primary)] hover:underline font-medium shrink-0"
+                  >
+                    {copiedLink ? t('common.copied', 'Copied!') : t('common.copy', 'Copy')}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 sm:flex-none">
+                <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--brand-text-muted)' }} />
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder={t('common.search', 'Search...')}
+                  aria-label="Search orders by name or ID"
+                  className="pl-9 pr-4 py-2 rounded-lg border text-sm outline-none transition-all duration-200 focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary-light)] w-full sm:w-48"
+                  style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
+                />
+              </div>
+              <button onClick={() => exportCSV(filteredOrders, 'orders.csv')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97] shrink-0" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
+                <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
               </button>
             </div>
-          )}
-          <div className="flex bg-[var(--brand-surface)] border rounded-lg overflow-hidden p-0.5" role="tablist" aria-label={t('admin.view_mode', 'View mode')} style={{ borderColor: 'var(--brand-border)' }}>
-            <button role="tab" aria-selected={viewMode === 'live'}
-              onClick={() => { setViewMode('live'); setStatusFilter('all'); }}
-              className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${viewMode === 'live' ? 'bg-[var(--brand-primary)] text-white' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
-            >{t('admin.live', 'Live')}</button>
-            <button role="tab" aria-selected={viewMode === 'history'}
-              onClick={() => { setViewMode('history'); setStatusFilter('all'); }}
-              className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${viewMode === 'history' ? 'bg-[var(--brand-primary)] text-white' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
-            >{t('courier.history', 'History')}</button>
+          </div>
+
+          {/* Filters row: statuses + sort — side by side */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory flex-1" role="group" aria-label={t('admin.status_filter', 'Order status filter')}>
+              {STATUSES.map(s => (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  aria-pressed={statusFilter === s}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 capitalize snap-start shrink-0 whitespace-nowrap ${statusFilter === s ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+                  style={{ minHeight: 'var(--tap-min)' }}
+                >
+                  {s === 'all' ? t('common.all', 'All') : t(`order.${s.toLowerCase()}`, s.replace('_', ' ').toLowerCase())}
+                </button>
+              ))}
+            </div>
+            <div className="relative">
+              <button
+                onClick={() => setSortPickerOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium shrink-0"
+                style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}
+              >
+                <i className="ti ti-arrows-sort text-sm" />
+                {isMobile && (sortBy === 'newest' ? t('admin.newest_first', 'Newest') : sortBy === 'oldest' ? t('admin.oldest_first', 'Oldest') : t('admin.highest_total', 'Highest'))}
+              </button>
+              {isMobile ? (
+                <MobilePicker
+                  open={sortPickerOpen}
+                  onClose={() => setSortPickerOpen(false)}
+                  title={t('admin.sort_orders', 'Sort orders')}
+                  options={[
+                    { value: 'newest', label: t('admin.newest_first', 'Newest first'), icon: 'ti ti-sort-descending' },
+                    { value: 'oldest', label: t('admin.oldest_first', 'Oldest first'), icon: 'ti ti-sort-ascending' },
+                    { value: 'highest', label: t('admin.highest_total', 'Highest total'), icon: 'ti ti-coin' },
+                  ]}
+                  selectedValue={sortBy}
+                  onSelect={(opt) => setSortBy(opt.value as any)}
+                />
+              ) : (
+                sortPickerOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setSortPickerOpen(false)} />
+                    <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[150px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+                      {[
+                        { value: 'newest', label: t('admin.newest_first', 'Newest first'), icon: 'ti ti-sort-descending' },
+                        { value: 'oldest', label: t('admin.oldest_first', 'Oldest first'), icon: 'ti ti-sort-ascending' },
+                        { value: 'highest', label: t('admin.highest_total', 'Highest total'), icon: 'ti ti-coin' },
+                      ].map(opt => (
+                        <button key={opt.value} onClick={() => { setSortBy(opt.value as any); setSortPickerOpen(false); }}
+                          className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${sortBy === opt.value ? 'font-semibold' : ''}`}
+                          style={{ color: sortBy === opt.value ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
+                          <i className={opt.icon} style={{ fontSize: '0.8rem' }} />
+                          <span className="flex-1">{opt.label}</span>
+                          {sortBy === opt.value && <i className="ti ti-check" style={{ color: 'var(--brand-primary)', fontSize: '0.7rem' }} />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )
+              )}
+            </div>
           </div>
         </div>
-
-        {/* Search */}
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--brand-text-muted)' }} />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={t('common.search', 'Search...')}
-              aria-label="Search orders by name or ID"
-              className="pl-9 pr-4 py-2 rounded-lg border text-sm outline-none transition-all duration-200 focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary-light)] w-full sm:w-56"
-              style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
-            />
-          </div>
-          <button onClick={() => exportCSV(filteredOrders, 'orders.csv')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97]" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
-            <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
-          </button>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex items-center gap-2">
-        <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory flex-1 -mx-1 px-1" role="group" aria-label={t('admin.status_filter', 'Order status filter')}>
-          {STATUSES.map(s => (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s)}
-              aria-pressed={statusFilter === s}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 capitalize snap-start shrink-0 ${statusFilter === s ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
-              style={{ minHeight: 'var(--tap-min)' }}
-            >
-              {s === 'all' ? t('common.all', 'All') : t(`order.${s.toLowerCase()}`, s.replace('_', ' ').toLowerCase())}
-            </button>
-          ))}
-        </div>
-        {isMobile ? (
-          <>
-            <button
-              onClick={() => setSortPickerOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium shrink-0"
-              style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}
-            >
-              <i className="ti ti-arrows-sort text-sm" />
-              {sortBy === 'newest' ? t('admin.newest_first', 'Newest') : sortBy === 'oldest' ? t('admin.oldest_first', 'Oldest') : t('admin.highest_total', 'Highest')}
-            </button>
-            <MobilePicker
-              open={sortPickerOpen}
-              onClose={() => setSortPickerOpen(false)}
-              title={t('admin.sort_orders', 'Sort orders')}
-              options={[
-                { value: 'newest', label: t('admin.newest_first', 'Newest first'), icon: 'ti ti-sort-descending' },
-                { value: 'oldest', label: t('admin.oldest_first', 'Oldest first'), icon: 'ti ti-sort-ascending' },
-                { value: 'highest', label: t('admin.highest_total', 'Highest total'), icon: 'ti ti-coin' },
-              ]}
-              selectedValue={sortBy}
-              onSelect={(opt) => setSortBy(opt.value as any)}
-            />
-          </>
-        ) : (
-          <select
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value as any)}
-            aria-label={t('admin.sort_orders', 'Sort orders')}
-            className="px-3 py-1.5 text-xs rounded-lg border outline-none transition-colors shrink-0"
-            style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
-          >
-            <option value="newest">{t('admin.newest_first', 'Newest first')}</option>
-            <option value="oldest">{t('admin.oldest_first', 'Oldest first')}</option>
-            <option value="highest">{t('admin.highest_total', 'Highest total')}</option>
-          </select>
-        )}
-      </div>
 
       {/* Orders grid */}
       {error ? (
@@ -342,17 +368,9 @@ export function DashboardPage() {
           icon={<i className="ti ti-inbox text-4xl" style={{ color: 'var(--brand-text-muted)', opacity: 0.4 }} />}
         />
       ) : (
-        <motion.div
-          className="grid grid-cols-1 md:grid-cols-2 gap-4"
-          variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
-          initial="hidden"
-          animate="visible"
-        >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredOrders.map(order => (
-            <motion.div
-              key={order.id}
-              variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } }}
-            >
+            <div key={order.id} className="order-card-container">
               <OrderCard
                 order={order}
                 onUpdateStatus={handleUpdateStatus}
@@ -361,9 +379,9 @@ export function DashboardPage() {
                 messages={messagesByOrder[order.id]}
                 onSendMessage={handleSendMessage}
               />
-            </motion.div>
+            </div>
           ))}
-        </motion.div>
+        </div>
       )}
 
       {/* Live Courier Map */}
@@ -375,6 +393,31 @@ export function DashboardPage() {
         </div>
         <CourierLiveMap className="h-48 md:h-72 w-full rounded-xl border border-glow" couriers={couriersOnMap} center={[19.817, 41.331]} zoom={13} />
       </div>
+
+      {/* Notification Banner */}
+      {!readiness.telegram && filteredOrders.some(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED') && (
+        <div className="p-4 rounded-xl border" style={{ background: 'var(--color-warning-light, rgba(217,119,6,0.1))', borderColor: 'var(--color-warning, #D97706)' }}>
+          <div className="flex items-start gap-3">
+            <i className="ti ti-bell-ringing text-lg shrink-0" style={{ color: 'var(--color-warning, #D97706)' }} />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>
+                {t('admin.notification_banner_title', 'Notifications not set up')}
+              </div>
+              <div className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>
+                {t('admin.notification_banner_desc', 'You won\'t receive alerts about new orders. Connect Telegram to stay informed.')}
+              </div>
+            </div>
+            <a
+              href="/admin/settings"
+              className="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-full text-white transition-all hover:opacity-90"
+              style={{ background: 'var(--brand-primary)' }}
+            >
+              <i className="ti ti-brand-telegram mr-1" />
+              {t('admin.tg_connect', 'Connect')}
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* Readiness Checklist */}
       <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>

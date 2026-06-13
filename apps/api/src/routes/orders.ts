@@ -629,6 +629,8 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           locationId,
           timestamp: new Date().toISOString(),
         });
+        const shortId = '#' + order.id.substring(0, 4).toUpperCase();
+        const itemsSummary = orderItemRows.map((i: any) => `${i.quantity}\u00d7${i.nameSnapshot}`).join(', ');
         await messageBus.publish(dashboardChannel(locationId), {
           type: 'order.created',
           data: {
@@ -637,9 +639,12 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
             total,
             currency: location.currency_code,
             createdAt: order.created_at,
+            shortId,
+            itemCount: items.length,
+            itemsSummary,
+            courierName: null,
             customerNameMasked: cust?.name ? cust.name.replace(/(?<=.).(?=.*@)/g, '*') : '***',
             customerPhoneMasked: cust?.phone ? cust.phone.slice(0, -4).replace(/\d/g, '*') + cust.phone.slice(-4) : '***',
-            itemCount: items.length,
           },
         });
       } catch (err) {

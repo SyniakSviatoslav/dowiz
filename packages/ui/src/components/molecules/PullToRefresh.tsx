@@ -15,7 +15,11 @@ export function PullToRefresh({ onRefresh, children, className = '', pullThresho
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleTouchStart = useCallback((e: TouchEvent) => {
-    if (containerRef.current && containerRef.current.scrollTop > 0) return;
+    const el = containerRef.current;
+    if (el) {
+      const scrollTop = el.scrollTop || (el.parentElement?.scrollTop ?? 0);
+      if (scrollTop > 0) return;
+    }
     const touch = e.touches?.[0];
     if (!touch) return;
     startYRef.current = touch.clientY;
@@ -51,7 +55,7 @@ export function PullToRefresh({ onRefresh, children, className = '', pullThresho
   return (
     <div
       ref={containerRef}
-      className={`relative overflow-hidden ${className}`}
+      className={`relative overflow-visible ${className}`}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}

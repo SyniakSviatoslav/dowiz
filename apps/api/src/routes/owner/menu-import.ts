@@ -133,13 +133,12 @@ export default (async function menuImportRoutes(fastify, opts) {
       importSessionId = res.rows[0].id;
     });
 
-    // We don't fetch diff for now to keep it simple, but we report what is to be created
     const draftPreview = {
-      categories_to_create: parseResult.draft.categories.map((c: any) => c.name),
-      products_to_create: parseResult.draft.products.map((p: any) => p.name),
-      modifier_groups_to_create: parseResult.draft.modifierGroups.map((g: any) => g.name),
-      modifiers_to_create: parseResult.draft.modifiers.map((m: any) => m.name),
-      links_to_create: parseResult.draft.links
+      categories: parseResult.draft.categories,
+      products: parseResult.draft.products,
+      modifier_groups: parseResult.draft.modifierGroups,
+      modifiers: parseResult.draft.modifiers,
+      links: parseResult.draft.links
     };
 
     await messageBus.publish(BUS_CHANNELS.MENU_IMPORT_PREVIEWED, {

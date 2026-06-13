@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, Input, useI18n } from '@deliveryos/ui';
+import { Button, Input, useI18n, LanguageSwitcher } from '@deliveryos/ui';
 import { apiClient } from '../../lib/apiClient.js';
 import { useNavigate } from 'react-router-dom';
 
@@ -87,7 +87,11 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <div className="mt-6 flex items-center justify-center gap-4">
+        <div className="mt-6 flex justify-center">
+          <LanguageSwitcher variant="full" />
+        </div>
+
+        <div className="mt-4 flex items-center justify-center gap-4">
           <div className="h-px bg-[var(--brand-border)] flex-1" />
           <span className="text-xs text-[var(--brand-text-muted)] uppercase tracking-wider">{t('common.or', 'OR')}</span>
           <div className="h-px bg-[var(--brand-border)] flex-1" />
