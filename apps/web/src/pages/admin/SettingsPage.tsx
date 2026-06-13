@@ -232,7 +232,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="p-4 space-y-6 max-w-lg mx-auto">
+    <div className="p-4 space-y-6 max-w-2xl mx-auto">
       <div className="border-b border-[var(--brand-border)] pb-4">
         <h2
           className="text-2xl font-bold"

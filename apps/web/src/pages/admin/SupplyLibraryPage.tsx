@@ -177,7 +177,7 @@ const SupplyForm = ({
               return (
                   <button key={a} type="button" onClick={() => setAllergens(prev => active ? prev.filter(x => x !== a) : [...prev, a])}
                     className={`px-2 py-1 rounded-full text-[10px] font-medium transition-all ${active ? 'text-white' : 'text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)]'}`}
-                    style={{ background: active ? 'var(--color-warning)' : 'var(--brand-border)' }}>{t(`allergen.${a}`, a)}</button>
+                    style={{ background: active ? 'var(--color-warning)' : 'var(--brand-border)' }}>{t(`allergen.${a.toLowerCase()}`, a)}</button>
               );
             })}
           </div>

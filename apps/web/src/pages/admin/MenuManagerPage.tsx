@@ -135,6 +135,30 @@ export function MenuManagerPage() {
 
   useEffect(() => { fetchCategories(); }, []);
 
+  // Load all products when "All" category is selected
+  useEffect(() => {
+    if (selectedCategory === null && categories.length > 0) {
+      loadAllProducts();
+    }
+  }, [selectedCategory, categories.length]);
+
+  const loadAllProducts = async () => {
+    setProductsLoading(true);
+    try {
+      const prods = await apiClient<any>('/owner/menu/products');
+      if (Array.isArray(prods)) {
+        setCategories(prev => prev.map(cat => ({
+          ...cat,
+          products: prods.filter(p => p.categoryId === cat.id),
+        })));
+      }
+    } catch {
+      // silently fail — individual categories will load on click
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
   const openAddForm = (categoryId: string) => {
     setEditingProduct(null);
     setShowForm(true);
@@ -169,23 +193,6 @@ export function MenuManagerPage() {
     setFormName(''); setFormPrice(''); setFormDesc('');
     setFormImage(null); setFormStock(''); setPendingImageFile(null);
     setSaving(false);
-  };
-
-  const handleImageUploadAndSave = async (e: React.ChangeEvent<HTMLInputElement>, existingProductId?: string): Promise<string | null> => {
-    const file = e.target.files?.[0];
-    if (!file) return null;
-    if (!file.type.startsWith('image/')) { alert(t('admin.error_image_only', 'Only image files (JPG, PNG, WebP)')); return null; }
-    if (file.size > 5 * 1024 * 1024) { alert(t('admin.error_max_size', 'Max 5 MB')); return null; }
-    const formData = new FormData();
-    formData.append('file', file);
-    const pid = existingProductId || '__new__';
-    try {
-      const data = await apiClient<any>(`/owner/menu/products/${pid}/image`, { method: 'POST', body: formData, timeout: 30000 });
-      return data.imageUrl || null;
-    } catch {
-      alert(t('common.retry', 'Image upload failed. Save product first, then upload image.'));
-      return null;
-    }
   };
 
   const handleSaveProduct = async () => {
@@ -223,8 +230,10 @@ export function MenuManagerPage() {
         formData.append('file', pendingImageFile);
         try {
           await apiClient(`/owner/menu/products/${productId}/image`, { method: 'POST', body: formData, timeout: 30000 });
-        } catch { /* image upload is non-critical */ }
-        setPendingImageFile(null);
+          setPendingImageFile(null);
+        } catch {
+          alert(t('admin.image_upload_failed', 'Image upload failed. You can try again.'));
+        }
       }
       closeForm();
       await fetchCategories();
@@ -720,7 +729,7 @@ export function MenuManagerPage() {
                 <div className="text-xs space-y-1" style={{ color: 'var(--brand-text-muted)' }}>
                   <p>4:3 ratio, max 5 MB</p>
                   <p>JPG, PNG, WebP</p>
-                  {formImage && <button onClick={() => setFormImage(null)} className="text-[var(--color-danger)] underline">{t('common.remove', 'Remove')}</button>}
+                  {formImage && <button onClick={async () => { const ok = await confirm({ title: t('admin.confirm_remove_image_title', 'Remove image'), message: t('admin.confirm_remove_image', 'Are you sure you want to remove the image?'), variant: 'danger' }); if (ok) { setFormImage(null); setPendingImageFile(null); } }} className="text-[var(--color-danger)] underline">{t('common.remove', 'Remove')}</button>}
                 </div>
               </div>
             </div>
@@ -808,7 +817,7 @@ export function MenuManagerPage() {
 
       {/* ── PDF Import Modal ── */}
       {showImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
           <div className="w-full max-w-lg rounded-2xl border shadow-xl overflow-hidden" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>

@@ -283,7 +283,7 @@ export default (async function menuImportRoutes(fastify, opts) {
         }
 
         // 3. Modifier Groups
-        for (const grp of draft.modifierGroups) {
+        for (const grp of (draft.modifierGroups || [])) {
           if (mode === 'add_only') {
             await client.query(
               `INSERT INTO modifier_groups (location_id, external_key, name, min_select, max_select, required)
@@ -307,7 +307,7 @@ export default (async function menuImportRoutes(fastify, opts) {
         }
 
         // 4. Modifiers
-        for (const mod of draft.modifiers) {
+        for (const mod of (draft.modifiers || [])) {
           const grpRes = await client.query(`SELECT id FROM modifier_groups WHERE location_id = $1 AND external_key = $2`, [locationId, mod.groupKey]);
           if (grpRes.rowCount === 0) {
             await client.query('ROLLBACK');
@@ -338,7 +338,7 @@ export default (async function menuImportRoutes(fastify, opts) {
         }
 
         // 5. Links
-        for (const link of draft.links) {
+        for (const link of (draft.links || [])) {
           const prodRes = await client.query(`SELECT id FROM products WHERE location_id = $1 AND external_key = $2`, [locationId, link.productKey]);
           const grpRes = await client.query(`SELECT id FROM modifier_groups WHERE location_id = $1 AND external_key = $2`, [locationId, link.groupKey]);
           
@@ -439,8 +439,17 @@ export default (async function menuImportRoutes(fastify, opts) {
       if (err.code === '23505') {
         return reply.status(409).send({ error: 'Duplicate external_key found', code: 'DUPLICATE_KEY', details: err.detail });
       }
+      if (err.code === '23503') {
+        return reply.status(409).send({ error: 'Referenced entity not found', code: 'FK_VIOLATION', details: err.detail });
+      }
+      if (err.code === '23502') {
+        return reply.status(400).send({ error: 'Missing required field', code: 'NOT_NULL', details: err.detail });
+      }
+      if (err.code === '42703') {
+        return reply.status(500).send({ error: 'Database migration missing — column not found', code: 'MISSING_COLUMN', details: err.message });
+      }
       request.log.error(err);
-      return reply.status(500).send({ error: 'Internal Server Error' });
+      return reply.status(500).send({ error: 'Import failed', code: err.code || 'UNKNOWN', message: err.message });
     }
   });
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;

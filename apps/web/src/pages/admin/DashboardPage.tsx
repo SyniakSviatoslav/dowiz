@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, useHaptics, useSoundPrefs, PullToRefresh } from '@deliveryos/ui';
+import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, useHaptics, useSoundPrefs } from '@deliveryos/ui';
 import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
 import { exportCSV } from '../../lib/exportCSV.js';
@@ -197,7 +197,6 @@ export function DashboardPage() {
   };
 
   return (
-    <PullToRefresh onRefresh={fetchOrders}>
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4" role="region" aria-live="polite" aria-label={t('admin.live_orders', 'Live orders')}>
       {/* Welcome Hint */}
       {showHint && (
@@ -461,6 +460,5 @@ export function DashboardPage() {
         </div>
       </div>
     </div>
-    </PullToRefresh>
   );
 }
