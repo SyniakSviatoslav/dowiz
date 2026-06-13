@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot } from '@deliveryos/ui';
+import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot, PriceDisplay } from '@deliveryos/ui';
 import type { CourierTask, CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 
@@ -247,16 +247,16 @@ export function DeliveryPage() {
             </div>
             <div className="flex justify-between text-sm">
               <span>{t('checkout.total', 'Total')}</span>
-              <span className="font-semibold">{(task.total / 100).toLocaleString()} ALL</span>
+              <span className="font-semibold"><PriceDisplay amount={task.total} /></span>
             </div>
             <div className="flex justify-between text-sm">
               <span>{t('checkout.cash_amount', 'Customer pays')}</span>
-              <span className="font-semibold">{(task.cashPayWith / 100).toLocaleString()} ALL</span>
+              <span className="font-semibold"><PriceDisplay amount={task.cashPayWith} /></span>
             </div>
             <div className="flex justify-between text-sm border-t border-[var(--brand-border)] pt-2">
               <span className="text-[var(--color-success)] font-bold">{t('checkout.change', 'Change')}</span>
               <span className="text-[var(--color-success)] font-bold">
-                {((task.cashPayWith - task.total) / 100).toLocaleString()} ALL
+                <PriceDisplay amount={task.cashPayWith - task.total} />
               </span>
             </div>
           </div>

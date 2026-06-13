@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Button, Input, EmptyState, CourierLiveMap, useI18n } from '@deliveryos/ui';
+import { Button, Input, EmptyState, CourierLiveMap, useI18n, PriceDisplay } from '@deliveryos/ui';
 import type { CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
@@ -324,15 +324,15 @@ export function CouriersPage() {
                     <div className="space-y-4">
                       <div className="grid grid-cols-3 gap-3">
                         <div className="p-3 rounded-lg bg-[var(--brand-surface)] border border-[var(--brand-border)] text-center">
-                          <div className="text-lg font-bold" style={{ color: 'var(--brand-primary)' }}>{courierDetails.earnings.today.toLocaleString()} ALL</div>
+                          <div className="text-lg font-bold" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={courierDetails.earnings.today} /></div>
                           <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.earnings_today', 'Today')} ({courierDetails.earnings.today_deliveries} {t('admin.deliveries', 'deliveries')})</div>
                         </div>
                         <div className="p-3 rounded-lg bg-[var(--brand-surface)] border border-[var(--brand-border)] text-center">
-                          <div className="text-lg font-bold">{courierDetails.earnings.week.toLocaleString()} ALL</div>
+                          <div className="text-lg font-bold"><PriceDisplay amount={courierDetails.earnings.week} /></div>
                           <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.earnings_week', 'This Week')}</div>
                         </div>
                         <div className="p-3 rounded-lg bg-[var(--brand-surface)] border border-[var(--brand-border)] text-center">
-                          <div className="text-lg font-bold">{courierDetails.earnings.month.toLocaleString()} ALL</div>
+                          <div className="text-lg font-bold"><PriceDisplay amount={courierDetails.earnings.month} /></div>
                           <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.earnings_month', 'This Month')} ({courierDetails.earnings.month_deliveries} {t('admin.deliveries', 'deliveries')})</div>
                         </div>
                       </div>
@@ -346,7 +346,7 @@ export function CouriersPage() {
                                 <div className="flex items-center justify-between gap-2 mb-1">
                                   <button onClick={(e) => { e.stopPropagation(); setSelectedOrderDetail(h); }}
                                     className="text-xs font-mono text-[var(--brand-primary)] hover:underline font-medium">#{h.order_id.slice(0, 8)}</button>
-                                  <span className="font-medium">{h.total?.toLocaleString()} {h.currency_code}</span>
+                                  <span className="font-medium"><PriceDisplay amount={h.total || 0} /></span>
                                 </div>
                                 <div className="flex items-center gap-2 text-xs text-[var(--brand-text-muted)]">
                                   <i className="ti ti-user" /> {h.customer_name}
@@ -427,11 +427,11 @@ export function CouriersPage() {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-lg border text-center" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
-                  <div className="text-lg font-bold" style={{ color: 'var(--brand-primary)' }}>{selectedOrderDetail.total?.toLocaleString()} {selectedOrderDetail.currency_code}</div>
+                  <div className="text-lg font-bold" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={selectedOrderDetail.total || 0} /></div>
                   <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.total', 'Total')}</div>
                 </div>
                 <div className="p-3 rounded-lg border text-center" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
-                  <div className="text-lg font-bold" style={{ color: 'var(--color-success)' }}>{selectedOrderDetail.cash_amount?.toLocaleString()} {selectedOrderDetail.currency_code}</div>
+                  <div className="text-lg font-bold" style={{ color: 'var(--color-success)' }}><PriceDisplay amount={selectedOrderDetail.cash_amount || 0} /></div>
                   <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.delivery_fee', 'Delivery Fee')}</div>
                 </div>
               </div>

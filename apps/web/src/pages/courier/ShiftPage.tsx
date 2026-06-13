@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Button, EmptyState, SkeletonBase, useI18n } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, useI18n, PriceDisplay } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
 interface ShiftState {
@@ -105,9 +105,9 @@ export function ShiftPage() {
     }
   };
 
-  const statItems = stats ? [
+  const statItems: { label: string; value: string | React.ReactNode; icon: string }[] = stats ? [
     { label: 'Deliveries', value: String(stats.deliveries), icon: '\u{1F4E6}' },
-    { label: 'Earnings', value: `${stats.earnings.toLocaleString()} ALL`, icon: '\u{1F4B0}' },
+    { label: 'Earnings', value: <PriceDisplay amount={stats.earnings} />, icon: '\u{1F4B0}' },
     { label: 'Distance', value: `${stats.distance} km`, icon: '\u{1F6F5}' },
     { label: 'Online', value: stats.onlineTime, icon: '\u23F1' },
   ] : [];
