@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LanguageSwitcher, BottomTabBar } from '@deliveryos/ui';
+import { LanguageSwitcher, BottomTabBar, CurrencySwitcher } from '@deliveryos/ui';
 import type { TabItem } from '@deliveryos/ui';
 import { TasksPage } from '../pages/courier/TasksPage.js';
 import { DeliveryPage } from '../pages/courier/DeliveryPage.js';
@@ -50,7 +50,10 @@ function CourierLayout() {
     <div className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)]">
       <div className="flex items-center justify-between px-4 h-14 bg-[var(--brand-surface)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] shrink-0">
         <span className="text-sm font-semibold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Courier</span>
-        <LanguageSwitcher variant="full" />
+        <div className="flex items-center gap-1">
+          <CurrencySwitcher />
+          <LanguageSwitcher variant="full" />
+        </div>
       </div>
       <main className="app-shell-main">
         <Outlet />

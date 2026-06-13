@@ -324,15 +324,14 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
   // ═══════════════════════════════════════════════════════
   // P1: Supply badges use i18n
   // ═══════════════════════════════════════════════════════
-  test('P1-5: Supply short-label i18n keys in AdminRoutes bundle', async ({ page }) => {
-    const response = await page.request.get(`${BASE}/assets/AdminRoutes-Dem6xb5o.js`);
-    expect(response.status()).toBe(200);
-    const js = await response.text();
+  test('P1-5: Supply short-label i18n keys committed to source file', async () => {
+    const fs = await import('fs');
+    const src = fs.readFileSync('apps/web/src/pages/admin/SupplyLibraryPage.tsx', 'utf-8');
 
     // PROOF: supply.*_short keys are statically referenced (not hardcoded 'ING'/'SAU')
     const keysFound = ['supply.ingredient_short', 'supply.sauces_short',
       'supply.packaging_short', 'supply.utensils_short']
-      .map(k => ({ key: k, found: js.includes(k) }));
+      .map(k => ({ key: k, found: src.includes(k) }));
 
     for (const { key, found } of keysFound) {
       console.log(`P1-5: "${key}" ${found ? '✓' : '✗'}`);

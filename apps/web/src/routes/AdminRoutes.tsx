@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ToastProvider, LanguageSwitcher, useI18n, BottomTabBar, ResponsiveDialog } from '@deliveryos/ui';
+import { ToastProvider, LanguageSwitcher, useI18n, BottomTabBar, ResponsiveDialog, CurrencySwitcher } from '@deliveryos/ui';
 import type { TabItem } from '@deliveryos/ui';
 import { DashboardPage } from '../pages/admin/DashboardPage.js';
 import { MenuManagerPage } from '../pages/admin/MenuManagerPage.js';
@@ -112,7 +112,7 @@ function AdminLayout() {
         </div>
         <SidebarNav />
         <div className={`p-2 border-t border-[var(--brand-border)] space-y-1 ${collapsed ? 'text-center' : ''}`}>
-          {!collapsed && <div className="px-1"><LanguageSwitcher variant="full" /></div>}
+          {!collapsed && <div className="px-1 space-y-1"><CurrencySwitcher /><LanguageSwitcher variant="full" /></div>}
           <button
             onClick={() => {
               localStorage.removeItem('dos_access_token');
@@ -132,7 +132,10 @@ function AdminLayout() {
           <i className="ti ti-tools-kitchen-2 text-lg" style={{ color: 'var(--brand-primary)' }} />
           <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Dowiz</h2>
         </div>
-        <LanguageSwitcher variant="full" />
+        <div className="flex items-center gap-1">
+          <CurrencySwitcher />
+          <LanguageSwitcher variant="full" />
+        </div>
       </div>
 
       {/* Main content */}

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable } from '@deliveryos/ui';
+import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../lib/index.js';
 import { CartProvider, useSharedCart } from '../lib/CartProvider.js';
@@ -49,6 +49,11 @@ function ClientLayoutInner() {
       }
     };
     window.addEventListener('message', handleMessage);
+
+    // Notify parent that iframe React app is mounted (branding preview)
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'branding_preview_ready' }, '*');
+    }
 
     const params = new URLSearchParams(location.search);
     const draftPrimary = params.get('draft_primary');
@@ -107,6 +112,7 @@ function ClientLayoutInner() {
               <img src={logoUrl} alt="" className="h-8 w-8 rounded object-contain shrink-0" />
             ) : null}
             <h1 className="text-base font-bold flex-1 truncate" style={{ fontFamily: 'var(--brand-font-heading)' }}>{locationName || t('client.menu', 'Menu')}</h1>
+            <CurrencySwitcher />
             <LanguageSwitcher variant="full" />
           </header>
           <div className="app-shell-main">
