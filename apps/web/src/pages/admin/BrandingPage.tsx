@@ -66,6 +66,16 @@ export function BrandingPage() {
 
   const logoPreview = logoDataUrl || logoUrl;
 
+  // Send logo to iframe via postMessage whenever it changes (iframe doesn't reload)
+  useEffect(() => {
+    if (logoPreview && previewRef.current?.contentWindow) {
+      previewRef.current.contentWindow.postMessage(
+        { type: 'branding_preview_logo', logoUrl: logoPreview },
+        '*'
+      );
+    }
+  }, [logoPreview]);
+
   const iframeUrl = useMemo(() => {
     if (!slug) return '';
     const params = new URLSearchParams();
