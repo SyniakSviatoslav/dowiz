@@ -329,7 +329,7 @@ export function DashboardPage() {
                 sortPickerOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setSortPickerOpen(false)} />
-                    <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[150px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+                    <div className="absolute right-0 bottom-full mb-2 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[150px] max-h-[60vh] overflow-y-auto scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
                       {[
                         { value: 'newest', label: t('admin.newest_first', 'Newest first'), icon: 'ti ti-sort-descending' },
                         { value: 'oldest', label: t('admin.oldest_first', 'Oldest first'), icon: 'ti ti-sort-ascending' },
