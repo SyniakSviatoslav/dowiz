@@ -162,7 +162,7 @@ export function CRMPage() {
                         {c.name}
                       </div>
                     </td>
-                    <td className="p-3 hidden sm:table-cell" style={{ color: 'var(--brand-text-muted)' }}>
+                    <td className="p-3 text-sm" style={{ color: 'var(--brand-text-muted)' }}>
                       {revealed[c.id] || c.phone}
                     </td>
                     <td className="p-3 text-right font-medium">

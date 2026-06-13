@@ -453,7 +453,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
        LEFT JOIN LATERAL (
          SELECT status FROM courier_shifts
          WHERE courier_id = u.id AND status IN ('available', 'on_delivery')
-           AND started_at > NOW() - INTERVAL '4 hours'
+           AND (ended_at IS NULL OR ended_at > NOW())
          ORDER BY started_at DESC NULLS LAST LIMIT 1
        ) cs ON true
        WHERE m.location_id = $1 AND m.role = 'courier'`,

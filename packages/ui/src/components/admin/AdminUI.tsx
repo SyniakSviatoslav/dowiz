@@ -130,13 +130,14 @@ interface OrderCardProps {
   onToggleMessages?: (orderId: string) => void;
   messages?: any[];
   onSendMessage?: (orderId: string, presetKey: string, params?: Record<string, unknown>) => Promise<void>;
+  onViewDetail?: (orderId: string) => void;
 }
 function maskPhone(phone?: string): string {
   if (!phone || phone.length < 4) return phone || '';
   return phone.slice(0, phone.length - 4).replace(/\d/g, '*') + phone.slice(-4);
 }
 
-export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoading, showMessages, onToggleMessages, messages, onSendMessage }: OrderCardProps) {
+export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoading, showMessages, onToggleMessages, messages, onSendMessage, onViewDetail }: OrderCardProps) {
   const { t } = useI18n();
   const [loadingAction, setLoadingAction] = useState('');
 
@@ -183,7 +184,7 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
   const deliveryDelta = getDeltaMin(order.readyAt, order.deliveredAt);
 
   return (
-    <div className={`bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4 flex flex-col gap-4 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+    <div className={`bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4 flex flex-col gap-4 ${isLoading ? 'opacity-50 pointer-events-none' : 'cursor-pointer hover:bg-[var(--brand-surface-raised)]'}`} onClick={() => onViewDetail?.(order.id)}>
       
       {/* Header */}
       <div className="flex justify-between items-start">

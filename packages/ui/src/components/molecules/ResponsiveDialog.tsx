@@ -37,7 +37,7 @@ export function ResponsiveDialog({ open, onClose, title, children, className = '
       <div className="fixed inset-0 z-modal-backdrop flex items-end justify-center">
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
         <div
-          className={`relative z-modal w-full max-h-[85vh] bg-[var(--brand-surface)] rounded-t-2xl shadow-elevation-4 flex flex-col animate-slide-up ${className}`}
+          className={`relative z-modal w-full max-h-[85vh] bg-[var(--brand-bg)] rounded-t-2xl shadow-elevation-4 flex flex-col animate-slide-up ${className}`}
           role="dialog"
           aria-modal="true"
           aria-label={title}
@@ -67,7 +67,7 @@ export function ResponsiveDialog({ open, onClose, title, children, className = '
   return createPortal(
     <div className="fixed inset-0 z-modal-backdrop flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative z-modal bg-[var(--brand-surface)] rounded-xl shadow-elevation-4 max-w-md w-full max-h-[85vh] overflow-y-auto ${className}`}>
+      <div className={`relative z-modal bg-[var(--brand-bg)] rounded-xl shadow-elevation-4 max-w-md w-full max-h-[85vh] overflow-y-auto ${className}`}>
         {title && (
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <h2 className="text-lg font-heading font-semibold text-[var(--brand-text)]">{title}</h2>
