@@ -66,7 +66,7 @@ export default (async function ownerNotificationRoutes(fastify, opts) {
       );
       
       const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'dowiz_bot';
-      const deepLink = `https://t.me/${botUsername}?start=${token}`;
+      const deepLink = `https://t.me/${botUsername}?startapp=${token}`;
       
       return reply.send({ deepLink, token });
     } finally {

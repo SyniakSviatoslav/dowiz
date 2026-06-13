@@ -131,6 +131,11 @@ interface OrderCardProps {
   messages?: any[];
   onSendMessage?: (orderId: string, presetKey: string, params?: Record<string, unknown>) => Promise<void>;
 }
+function maskPhone(phone?: string): string {
+  if (!phone || phone.length < 4) return phone || '';
+  return phone.slice(0, phone.length - 4).replace(/\d/g, '*') + phone.slice(-4);
+}
+
 export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoading, showMessages, onToggleMessages, messages, onSendMessage }: OrderCardProps) {
   const { t } = useI18n();
   const [loadingAction, setLoadingAction] = useState('');
@@ -240,7 +245,7 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
       {/* Details */}
       <div className="text-sm space-y-1 text-[var(--brand-text)]">
         {order.customerName && order.customerName !== 'Unknown' && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.client', 'Client:')}</span> {order.customerName}</div>}
-        {order.customerPhone && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('common.phone', 'Phone:')}</span> {order.customerPhone}</div>}
+        {order.customerPhone && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('common.phone', 'Phone:')}</span> {maskPhone(order.customerPhone)}</div>}
         {order.deliveryAddress && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.to', 'To:')}</span> {order.deliveryAddress}</div>}
         <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.items', 'Items:')}</span> {order.items?.length || 0} {t('admin.items_lower', 'items')} ({formatALL(order.total)})</div>
         {order.items && order.items.length > 0 && (

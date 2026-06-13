@@ -289,9 +289,9 @@ export function DashboardPage() {
             </div>
           </div>
 
-          {/* Filters row: statuses + sort — side by side */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory flex-1" role="group" aria-label={t('admin.status_filter', 'Order status filter')}>
+          {/* Filters row: statuses + sort — stacked on mobile, side-by-side on desktop */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+            <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory flex-1 w-full sm:w-auto" role="group" aria-label={t('admin.status_filter', 'Order status filter')}>
               {STATUSES.map(s => (
                 <button
                   key={s}
@@ -304,14 +304,14 @@ export function DashboardPage() {
                 </button>
               ))}
             </div>
-            <div className="relative">
+            <div className="relative self-end sm:self-auto">
               <button
                 onClick={() => setSortPickerOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium shrink-0"
                 style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}
               >
                 <i className="ti ti-arrows-sort text-sm" />
-                {isMobile && (sortBy === 'newest' ? t('admin.newest_first', 'Newest') : sortBy === 'oldest' ? t('admin.oldest_first', 'Oldest') : t('admin.highest_total', 'Highest'))}
+                {sortBy === 'newest' ? t('admin.newest_first', 'Newest') : sortBy === 'oldest' ? t('admin.oldest_first', 'Oldest') : t('admin.highest_total', 'Highest')}
               </button>
               {isMobile ? (
                 <MobilePicker

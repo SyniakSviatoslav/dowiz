@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Button, EmptyState, SkeletonBase, HintCard, useI18n } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, HintCard, useI18n, useConfirm } from '@deliveryos/ui';
 
 type SupplyKind = 'food_ingredient' | 'condiment' | 'packaging' | 'utensil';
 
@@ -205,6 +205,7 @@ export function SupplyLibraryPage() {
   const [editing, setEditing] = useState<SupplyItem | null>(null);
   const [adding, setAdding] = useState(false);
   const { t } = useI18n();
+  const { confirm: supplyConfirm, dialog: supplyConfirmDialog } = useConfirm();
 
   useEffect(() => {
     const s = loadSupplies();
@@ -246,7 +247,9 @@ export function SupplyLibraryPage() {
     persistAndSet(updated);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    const ok = await supplyConfirm({ title: t('admin.confirm_delete_supply_title', 'Delete supply'), message: t('admin.confirm_delete_supply', 'Are you sure you want to delete this supply item?'), confirmLabel: t('common.delete', 'Delete'), variant: 'danger' });
+    if (!ok) return;
     persistAndSet(supplies.filter(s => s.id !== id));
   };
 
@@ -267,6 +270,7 @@ export function SupplyLibraryPage() {
   ];
 
   return (
+    <>
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
@@ -384,5 +388,7 @@ export function SupplyLibraryPage() {
         </div>
       )}
     </div>
+      {supplyConfirmDialog}
+    </>
   );
 }
