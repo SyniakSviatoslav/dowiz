@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck — TODO: fix type errors, then remove this
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -259,13 +259,13 @@ export default (async function menuImportRoutes(fastify, opts) {
 
           if (mode === 'add_only') {
             await client.query(
-              `INSERT INTO products (location_id, category_id, external_key, name, description, price, available, attributes_json, image_key)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+               `INSERT INTO products (location_id, category_id, external_key, name, description, price, is_available, attributes, image_key)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
               [locationId, catId, prod.externalKey, prod.name, prod.description || null, prod.price, prod.available, prod.attributesJson || null, prod.imageKey || null]
             );
           } else {
             await client.query(
-              `INSERT INTO products (location_id, category_id, external_key, name, description, price, available, attributes_json, image_key)
+              `INSERT INTO products (location_id, category_id, external_key, name, description, price, is_available, attributes, image_key)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                ON CONFLICT (location_id, external_key) WHERE external_key IS NOT NULL 
                DO UPDATE SET 
@@ -273,8 +273,8 @@ export default (async function menuImportRoutes(fastify, opts) {
                   name = EXCLUDED.name,
                   description = EXCLUDED.description,
                   price = EXCLUDED.price,
-                  available = EXCLUDED.available,
-                  attributes_json = EXCLUDED.attributes_json,
+                  is_available = EXCLUDED.is_available,
+                  attributes = EXCLUDED.attributes,
                   image_key = EXCLUDED.image_key`,
               [locationId, catId, prod.externalKey, prod.name, prod.description || null, prod.price, prod.available, prod.attributesJson || null, prod.imageKey || null]
             );
