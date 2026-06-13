@@ -8,16 +8,19 @@ interface CurrencyContextValue {
   currency: CurrencyCode;
   currencies: CurrencyInfo[];
   setCurrency: (code: CurrencyCode) => void;
+  eurRate: number | null;
 }
 
 const CurrencyContext = createContext<CurrencyContextValue>({
   currency: 'ALL',
   currencies: [],
   setCurrency: () => {},
+  eurRate: null,
 });
 
 export function CurrencyProvider({ children }: { children: ReactNode }) {
   const [currency, setCurrencyState] = useState<CurrencyCode>(() => getCurrency());
+  const [eurRate, setEurRate] = useState<number | null>(null);
   const currencies = getCurrencies();
 
   useEffect(() => {
@@ -27,13 +30,23 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     return unsub;
   }, []);
 
+  // Fetch EUR rate on mount
+  useEffect(() => {
+    fetch('/v1/rates')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && typeof data.rate === 'number') setEurRate(data.rate);
+      })
+      .catch(() => { /* rate unavailable — display ALL only */ });
+  }, []);
+
   const changeCurrency = useCallback((newCurrency: CurrencyCode) => {
     setModuleCurrency(newCurrency);
     setCurrencyState(newCurrency);
   }, []);
 
   return (
-    <CurrencyContext.Provider value={{ currency, currencies, setCurrency: changeCurrency }}>
+    <CurrencyContext.Provider value={{ currency, currencies, setCurrency: changeCurrency, eurRate }}>
       {children}
     </CurrencyContext.Provider>
   );

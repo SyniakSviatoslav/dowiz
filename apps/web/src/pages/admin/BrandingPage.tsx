@@ -66,6 +66,23 @@ export function BrandingPage() {
 
   const logoPreview = logoDataUrl || logoUrl;
 
+  // Listen for iframe ready ping, respond with current logo
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'branding_preview_ready' && previewRef.current?.contentWindow) {
+        const url = logoDataUrl || logoUrl;
+        if (url) {
+          previewRef.current.contentWindow.postMessage(
+            { type: 'branding_preview_logo', logoUrl: url },
+            '*'
+          );
+        }
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [logoDataUrl, logoUrl]);
+
   // Send logo to iframe via postMessage whenever it changes (iframe doesn't reload)
   useEffect(() => {
     if (logoPreview && previewRef.current?.contentWindow) {
