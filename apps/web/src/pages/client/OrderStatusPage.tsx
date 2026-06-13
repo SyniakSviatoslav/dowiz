@@ -85,6 +85,10 @@ export function OrderStatusPage() {
         setEtaMinutes(data.etaMinutes);
       }
     } catch (err: any) {
+      if (err?.status === 403) {
+        setError(t('order.auth_expired', 'Session expired. Please reload the menu and try again.'));
+        return;
+      }
       if (err?.status === 404 || err?.status === 401) {
         setOrder({
           id,
