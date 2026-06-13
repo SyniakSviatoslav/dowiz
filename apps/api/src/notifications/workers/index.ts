@@ -127,7 +127,7 @@ export class NotificationWorker {
         ? `Order #${shortId} ${statusLabels[event] || event}`
         : `${order.location_name || 'Your order'} — ${statusLabels[event] || event}`;
       const body = order.total != null
-        ? `${(order.total / 100).toFixed(2)} ${order.currency || 'ALL'}`
+        ? `${order.total.toFixed(0)} ${order.currency || 'ALL'}`
         : '';
 
       const payload = JSON.stringify({

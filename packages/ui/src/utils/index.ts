@@ -1,7 +1,4 @@
-export function formatALL(amount: number): string {
-  const all = Math.round(amount / 100);
-  return `${all} ALL`;
-}
+export { formatALL } from '@deliveryos/shared-types';
 
 export function parseALL(value: string): number {
   const cleaned = value.replace(/[^0-9,.-]/g, '').replace(',', '.');

@@ -55,7 +55,7 @@ export class WebPushAdapter implements NotificationProvider {
       : 'DeliveryOS';
 
     if (data.total != null && data.currency) {
-      parts.push(`${(data.total / 100).toFixed(2)} ${data.currency}`);
+      parts.push(`${data.total.toFixed(0)} ${data.currency}`);
     }
     if (data.message) parts.push(data.message);
 

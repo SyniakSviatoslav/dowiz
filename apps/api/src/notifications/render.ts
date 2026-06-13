@@ -3,7 +3,7 @@ import { getMessage, type MessageVars, type Locale } from './locales.js';
 
 function fmtPrice(v: number | undefined, currency: string | undefined): string {
   if (v == null) return '—';
-  return `${(v / 100).toFixed(2)} ${currency || 'ALL'}`;
+  return `${v.toFixed(0)} ${currency || 'ALL'}`;
 }
 
 function toVars(data: NotificationData): MessageVars {

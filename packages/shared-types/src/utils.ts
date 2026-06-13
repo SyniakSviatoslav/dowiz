@@ -18,30 +18,27 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
 const HALF_UP = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 8 });
 
 export function formatMoney(
-  amountInCents: number,
+  amount: number,
   displayCurrency: CurrencyCode = 'ALL',
   rate?: number,
 ): string {
   if (displayCurrency === 'ALL') {
-    const all = Math.round(amountInCents / 100);
-    return `${all} ALL`;
+    return `${Math.round(amount)} ALL`;
   }
 
   if (!rate || rate <= 0) {
-    const all = Math.round(amountInCents / 100);
-    return `${all} ALL`;
+    return `${Math.round(amount)} ALL`;
   }
 
-  // Convert ALL cents to EUR (display-only)
-  const allAmount = amountInCents / 100;
-  const eurAmount = allAmount * rate;
+  // Convert ALL to EUR (display-only)
+  const eurAmount = amount * rate;
   const decimals = CURRENCIES.EUR.decimals;
   const rounded = Math.round(eurAmount * Math.pow(10, decimals)) / Math.pow(10, decimals);
   return `${rounded.toFixed(decimals)} €`;
 }
 
-export function formatALL(amountInCents: number): string {
-  return formatMoney(amountInCents, 'ALL');
+export function formatALL(amount: number): string {
+  return formatMoney(amount, 'ALL');
 }
 
 export function normalizePhone(phone: string): string {
