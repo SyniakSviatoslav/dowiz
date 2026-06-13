@@ -101,10 +101,7 @@ export function BrandLogo({ name, logoUrl }: { name: string; logoUrl?: string | 
 }
 
 // --- PriceDisplay ---
-export function PriceDisplay({ amount }: { amount: number }) {
-  // G5: Prices are pre-calculated by server. formatALL formats integer as ALL minor units → display.
-  return <span className="font-semibold">{formatALL(amount)}</span>;
-}
+export { PriceDisplay } from './atoms/PriceDisplay.js';
 
 // --- StatusBadge ---
 export function StatusBadge({ status, pulse }: { status: string; pulse?: boolean }) {
