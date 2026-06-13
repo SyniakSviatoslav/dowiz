@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '../../lib/I18nProvider.js';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -16,12 +17,15 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = 'Konfirmo',
-  cancelLabel = 'Anulo',
+  confirmLabel,
+  cancelLabel,
   onConfirm,
   onClose,
   variant = 'default',
 }: ConfirmDialogProps) {
+  const { t } = useI18n();
+  const resolvedConfirm = confirmLabel ?? t('common.confirm');
+  const resolvedCancel = cancelLabel ?? t('common.cancel');
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -88,7 +92,7 @@ export function ConfirmDialog({
             onClick={onClose}
             className="px-5 py-2 text-sm font-semibold text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] rounded-full hover:bg-[var(--brand-surface-raised)] transition-colors"
           >
-            {cancelLabel}
+            {resolvedCancel}
           </button>
           <button
             onClick={handleConfirm}
@@ -100,7 +104,7 @@ export function ConfirmDialog({
             }`}
             style={variant === 'danger' ? { background: 'var(--color-danger)' } : undefined}
           >
-            {loading ? '...' : confirmLabel}
+            {loading ? '...' : resolvedConfirm}
           </button>
         </div>
       </div>

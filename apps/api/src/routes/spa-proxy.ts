@@ -450,9 +450,12 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
               COALESCE(cs.status, 'offline') as courier_status,
               (SELECT COUNT(*) FROM courier_assignments ca2 WHERE ca2.courier_id = u.id AND ca2.status = 'delivered') as deliveries_completed
        FROM users u JOIN memberships m ON m.user_id = u.id
-       LEFT JOIN courier_shifts cs ON cs.courier_id = u.id AND cs.status != 'offline'
-       WHERE m.location_id = $1 AND m.role = 'courier'
-       GROUP BY u.id, cs.status`,
+       LEFT JOIN LATERAL (
+         SELECT status FROM courier_shifts
+         WHERE courier_id = u.id AND status IN ('available', 'on_delivery')
+         ORDER BY started_at DESC NULLS LAST LIMIT 1
+       ) cs ON true
+       WHERE m.location_id = $1 AND m.role = 'courier'`,
       [locId]
     );
     return reply.send(res.rows.map((r: any) => ({
@@ -548,8 +551,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       [parsed.locationName || null, parsed.phone || null,
        parsed.deliveryFee ?? null, parsed.minOrder ?? null, parsed.radiusKm ?? null,
        parsed.freeDeliveryThreshold ?? null, parsed.taxRate ?? null,
-       parsed.lat ?? null, parsed.lng ?? null, locId,
-       parsed.address || null, parsed.hoursJson ? JSON.stringify(parsed.hoursJson) : null]
+       parsed.lat ?? null, parsed.lng ?? null,
+       parsed.address || null, parsed.hoursJson ? JSON.stringify(parsed.hoursJson) : null, locId]
     );
     const r = res.rows[0];
     return reply.send({
