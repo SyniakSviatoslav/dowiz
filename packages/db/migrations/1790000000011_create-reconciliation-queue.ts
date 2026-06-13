@@ -6,7 +6,7 @@ import { MigrationBuilder } from 'node-pg-migrate';
  */
 
 export async function up(pgm: MigrationBuilder): Promise<void> {
-  pgm.sql(`SELECT pgboss.create_queue('reconciliation.nightly');`);
+  pgm.sql(`SELECT pgboss.create_queue('reconciliation.nightly', '{}');`);
 }
 
 export async function down(pgm: MigrationBuilder): Promise<void> {
