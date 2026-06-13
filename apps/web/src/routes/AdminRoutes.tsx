@@ -92,7 +92,7 @@ function AdminLayout() {
   );
 
   return (
-    <div className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] overflow-hidden">
+    <div className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] overflow-hidden lg:flex-row">
       {/* Desktop sidebar */}
       <aside className={`hidden lg:flex flex-col shrink-0 bg-[var(--brand-surface)] border-r border-[var(--brand-border)] sidebar-transition overflow-hidden ${collapsed ? 'w-[56px]' : 'w-56'}`}>
         <div className={`flex items-center border-b border-[var(--brand-border)] ${collapsed ? 'justify-center p-3' : 'justify-between p-4'}`}>

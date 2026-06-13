@@ -25,6 +25,28 @@ export default (async function ownerNotificationRoutes(fastify, opts) {
     }
   });
 
+  // Notification status (lightweight readiness check)
+  fastify.get('/api/owner/locations/:locationId/notifications/status', {
+    schema: {
+      params: z.object({ locationId: z.string().uuid() })
+    }
+  }, async (request, reply) => {
+    const { locationId } = request.params as { locationId: string };
+    const client = await db.connect();
+    try {
+      const res = await client.query(
+        `SELECT channel, status FROM owner_notification_targets WHERE location_id = $1`,
+        [locationId]
+      );
+      const channels = res.rows;
+      const anyActive = channels.some((r: any) => r.status === 'active');
+      const telegramConnected = channels.some((r: any) => r.channel === 'telegram' && r.status === 'active');
+      return reply.send({ channels, anyActive, telegramConnected });
+    } finally {
+      client.release();
+    }
+  });
+
   // Telegram connect-init
   fastify.post('/api/owner/locations/:locationId/notifications/telegram/connect-init', {
     schema: {

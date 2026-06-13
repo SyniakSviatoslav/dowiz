@@ -77,6 +77,7 @@ import { VelocityIncrementer } from './lib/signals/velocity-increment.js';
 import ownerFallbackRoutes from './routes/owner/fallback.js';
 import ownerRevealContactRoutes from './routes/owner/reveal-contact.js';
 import publicFallbackConfigRoutes from './routes/public/fallback-config.js';
+import ratesRoutes from './routes/public/rates.js';
 import mockAuthRoutes from './routes/dev/mock-auth.js';
 import spaProxyRoutes from './routes/spa-proxy.js';
 import customerOtpRoutes from './routes/customer/otp.js';
@@ -374,6 +375,11 @@ const retryPolicy = new RetryPolicy();
   const velocityIncrementer = new VelocityIncrementer(pool, queue.boss);
   await queue.work(QUEUE_NAMES.VELOCITY_FLUSH, async (data: any) => velocityIncrementer.handleFlush({ data }));
 
+  // Currency Rates Refresh Worker (hourly, fetches ALL→EUR from fawazahmed0)
+  const { RatesRefreshWorker } = await import('./workers/rates-refresh.js');
+  const ratesRefreshWorker = new RatesRefreshWorker(pool, queue.boss);
+  await ratesRefreshWorker.start();
+
   // Telegram Poller disabled — webhook handles all updates (messages + callbacks)
   // Poller conflicts with webhook (getUpdates HTTP 409). Keep poller import for type,
   // but don't start. Webhook at /webhook/telegram/:secret handles /start, /stop, /open, /close.
@@ -660,6 +666,7 @@ const retryPolicy = new RetryPolicy();
     }
   });
 
+  fastify.register(ratesRoutes, { db: pool });
   fastify.register(publicFallbackConfigRoutes, { db: pool });
 
 // Telegram Webhook (must be registered before route definitions)

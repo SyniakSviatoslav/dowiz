@@ -50,6 +50,7 @@ export function CouriersPage() {
   const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
   const [courierDetails, setCourierDetails] = useState<CourierDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [selectedOrderDetail, setSelectedOrderDetail] = useState<HistoryItem | null>(null);
 
   useEffect(() => {
     apiClient<any>('/owner/settings').then(res => {
@@ -343,7 +344,8 @@ export function CouriersPage() {
                             {courierDetails.history.map(h => (
                               <div key={h.id} className="px-3 py-2 rounded-lg bg-[var(--brand-surface)] border border-[var(--brand-border)] text-sm">
                                 <div className="flex items-center justify-between gap-2 mb-1">
-                                  <span className="text-xs font-mono text-[var(--brand-text-muted)]">#{h.order_id.slice(0, 8)}</span>
+                                  <button onClick={(e) => { e.stopPropagation(); setSelectedOrderDetail(h); }}
+                                    className="text-xs font-mono text-[var(--brand-primary)] hover:underline font-medium">#{h.order_id.slice(0, 8)}</button>
                                   <span className="font-medium">{h.total?.toLocaleString()} {h.currency_code}</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-xs text-[var(--brand-text-muted)]">
@@ -407,6 +409,67 @@ export function CouriersPage() {
           zoom={13}
         />
       </div>
+
+      {/* Order Detail Modal */}
+      {selectedOrderDetail && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center fade-in" onClick={() => setSelectedOrderDetail(null)}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative w-full max-w-md bg-[var(--brand-surface)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 z-10 slide-in-up" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>
+                {t('admin.order_details', 'Order Details')} #{selectedOrderDetail.order_id.slice(0, 8)}
+              </h3>
+              <button onClick={() => setSelectedOrderDetail(null)} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface-raised)]">
+                <i className="ti ti-x" style={{ color: 'var(--brand-text-muted)' }} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg border text-center" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+                  <div className="text-lg font-bold" style={{ color: 'var(--brand-primary)' }}>{selectedOrderDetail.total?.toLocaleString()} {selectedOrderDetail.currency_code}</div>
+                  <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.total', 'Total')}</div>
+                </div>
+                <div className="p-3 rounded-lg border text-center" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+                  <div className="text-lg font-bold" style={{ color: 'var(--color-success)' }}>{selectedOrderDetail.cash_amount?.toLocaleString()} {selectedOrderDetail.currency_code}</div>
+                  <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.delivery_fee', 'Delivery Fee')}</div>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+                <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.status_timeline', 'Status Timeline')}</h4>
+                <div className="space-y-2">
+                  {[
+                    { label: t('admin.assigned', 'Assigned'), time: selectedOrderDetail.assigned_at, icon: 'ti ti-user-plus' },
+                    { label: t('admin.accepted', 'Accepted'), time: selectedOrderDetail.accepted_at, icon: 'ti ti-circle-check' },
+                    { label: t('admin.picked_up', 'Picked up'), time: selectedOrderDetail.picked_up_at, icon: 'ti ti-package' },
+                    { label: t('admin.delivered', 'Delivered'), time: selectedOrderDetail.delivered_at, icon: 'ti ti-map-pin-check' },
+                  ].filter(s => s.time).map((s, i, arr) => (
+                    <div key={s.label} className="flex items-center gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: 'var(--brand-primary-light)' }}>
+                          <i className={s.icon} style={{ fontSize: '0.7rem', color: 'var(--brand-primary)' }} />
+                        </div>
+                        {i < arr.length - 1 && <div className="w-px h-4" style={{ background: 'var(--brand-border)' }} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>{s.label}</div>
+                        <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{new Date(s.time!).toLocaleString()}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="text-xs space-y-1" style={{ color: 'var(--brand-text-muted)' }}>
+                <div className="flex items-center gap-1"><i className="ti ti-user" /> {selectedOrderDetail.customer_name}</div>
+                {selectedOrderDetail.customer_phone && <div className="flex items-center gap-1"><i className="ti ti-phone" /> {selectedOrderDetail.customer_phone}</div>}
+                {selectedOrderDetail.delivery_address && <div className="flex items-center gap-1"><i className="ti ti-map-pin" /> {selectedOrderDetail.delivery_address}</div>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

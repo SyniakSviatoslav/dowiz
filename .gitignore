@@ -16,3 +16,6 @@ e2e/artifacts/
 e2e/e2e/
 *.last-run.json
 menu-sq.pdf
+
+# Knowledge graph output (generated)
+graphify-out/
