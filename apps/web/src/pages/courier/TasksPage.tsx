@@ -12,7 +12,18 @@ export function TasksPage() {
   const { play: playPing } = useSound('/sounds/ping.mp3');
   const { t } = useI18n();
 
-  const courierId = 'c1'; // Mock courier ID for Stage 4
+  // Extract courier ID from JWT stored in localStorage
+  const getCourierId = (): string => {
+    try {
+      const token = localStorage.getItem('dos_access_token');
+      if (!token) return 'c1';
+      const payloadBase64 = token.split('.')[1] || '';
+      if (!payloadBase64) return 'c1';
+      const payload = JSON.parse(atob(payloadBase64)) as Record<string, unknown>;
+      return String(payload.sub || payload.userId || 'c1');
+    } catch { return 'c1'; }
+  };
+  const courierId = getCourierId();
 
   const fetchTasks = async () => {
     try {
@@ -44,16 +55,13 @@ export function TasksPage() {
 
   const handleAccept = async (id: string) => {
     try {
-      await apiClient(`/courier/orders/${id}/status`, {
-        method: 'PATCH',
-        body: { status: 'IN_DELIVERY' }
+      await apiClient(`/courier/assignments/${id}/accept`, {
+        method: 'POST'
       });
-      // Navigate to active delivery map
-      navigate(`/courier/delivery/${id}`);
-    } catch (err) {
-      // Dev-only: mock fallback
-      navigate(`/courier/delivery/${id}`);
+    } catch {
+      // API failure is non-critical for navigation
     }
+    navigate(`/courier/delivery/${id}`);
   };
 
   const handleReject = (id: string) => {

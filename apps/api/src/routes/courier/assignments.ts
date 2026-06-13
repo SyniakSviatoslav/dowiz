@@ -4,6 +4,7 @@ import { loadEnv } from '@deliveryos/config';
 import { acceptCourierAssignment } from '../../lib/courierAssignmentService';
 import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
+import { updateOrderStatus } from '../../lib/orderStatusService';
 
 const env = loadEnv();
 
@@ -228,6 +229,9 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       await client.query(`
         UPDATE courier_shifts SET status = 'available' WHERE id = $1
       `, [shift_id]);
+
+      // Canonical path: update orders status + publish WS events (customer + owner)
+      await updateOrderStatus(client, order_id, locationId, 'DELIVERED', { messageBus });
 
       await client.query('COMMIT');
 

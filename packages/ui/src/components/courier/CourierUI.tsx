@@ -53,6 +53,7 @@ export function CourierShell({ children, currentPath, onNavigate, tasksCount = 0
 // --- TaskCard ---
 export interface CourierTask {
   id: string;
+  order_id?: string;
   status: string;
   restaurant: { name: string; address: string; lat?: number; lng?: number; };
   customer: { address: string; phone?: string; instructions?: string; lat?: number; lng?: number; };
@@ -69,33 +70,39 @@ interface TaskCardProps {
 }
 export function TaskCard({ task, onAccept, onReject, isLoading }: TaskCardProps) {
   return (
-    <div className={`bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4 space-y-4 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+    <div data-testid={`task-card-${task.order_id || task.id}`} data-status={task.status} className={`bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4 space-y-4 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
       
       {/* Header */}
       <div className="flex justify-between items-start">
-        <h3 className="font-bold text-lg text-[var(--brand-text)]">New Delivery</h3>
-        <span className="bg-[var(--status-pending-bg)] text-[var(--status-pending)] font-bold px-2 py-1 rounded text-sm">{task.eta}</span>
+        <h3 className="font-bold text-lg text-[var(--brand-text)]">
+          {task.restaurant?.name || 'New Delivery'}
+        </h3>
+        {task.eta && <span className="bg-[var(--status-pending-bg)] text-[var(--status-pending)] font-bold px-2 py-1 rounded text-sm">{task.eta}</span>}
       </div>
 
       {/* Locations */}
+      {(task.restaurant || task.customer) && (
       <div className="relative pl-6 space-y-4 before:content-[''] before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-[var(--brand-border)]">
         
-        {/* Pickup */}
+        {task.restaurant && (
         <div className="relative">
           <div className="absolute -left-[26px] top-1 w-3 h-3 rounded-full bg-[var(--brand-primary)] border-2 border-[var(--brand-surface)]" />
           <div className="text-xs text-[var(--brand-text-muted)] uppercase font-bold tracking-wider">Pickup</div>
           <div className="font-medium text-[var(--brand-text)]">{task.restaurant.name}</div>
           <div className="text-sm text-[var(--brand-text-muted)]">{task.restaurant.address}</div>
         </div>
+        )}
 
-        {/* Dropoff */}
+        {task.customer && (
         <div className="relative">
           <div className="absolute -left-[26px] top-1 w-3 h-3 rounded-full bg-[var(--color-success)] border-2 border-[var(--brand-surface)]" />
           <div className="text-xs text-[var(--brand-text-muted)] uppercase font-bold tracking-wider">Drop-off</div>
           <div className="font-medium text-[var(--brand-text)]">{task.customer.address}</div>
         </div>
+        )}
 
       </div>
+      )}
 
       <div className="border-t border-[var(--brand-border)] pt-4 flex gap-3">
         {onReject && (
@@ -108,6 +115,7 @@ export function TaskCard({ task, onAccept, onReject, isLoading }: TaskCardProps)
         )}
         <button 
           onClick={() => onAccept(task.id)}
+          data-testid="task-accept"
           className="flex-1 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white py-3 rounded-[var(--brand-radius-btn)] font-semibold transition-colors shadow-lg"
         >
           Accept Task
@@ -223,6 +231,7 @@ export function SwipeToComplete({ onComplete, label = 'Slide to Deliver', isComp
       tabIndex={0}
       role="button"
       aria-label={label}
+      data-testid="task-deliver"
       onKeyDown={handleKeyDown}
       className="relative h-14 bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-full overflow-hidden flex items-center justify-center select-none focus:outline-2 focus:outline-[var(--brand-primary)]"
     >

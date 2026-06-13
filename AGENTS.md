@@ -1,6 +1,6 @@
 # DeliveryOS / dowiz — Agent Context
 
-> Last updated: 2026-06-13 (retro rules + behavioral tests) · Source of truth: `DeliveryOS-As-Built-Summary-v1.md` (2026-06-04)
+> Last updated: 2026-06-13 (formatMoney fix + PriceDisplay everywhere + MIN_ORDER_NOT_MET + OrderStatusPage 403) · Source of truth: `DeliveryOS-As-Built-Summary-v1.md` (2026-06-04)
 > Reading this file is mandatory. Skip everything else until a router below tells you otherwise.
 
 ## 1. What this is (TL;DR — 30s read)
@@ -419,7 +419,59 @@ After adding a new export, component, or public function:
 2. If zero matches, it's dead code. Either wire it into a layout or remove it.
 3. For React context providers: verify the provider wraps the component tree in `main.tsx` or the relevant layout file.
 
-### 14.4 Hot-path sanity test rule
+### 14.5 @ts-nocheck ban rule (born from 121-file audit, 2026-06-13)
+
+`// @ts-nocheck` is banned in production route, lib, and worker files. It suppresses ALL type errors, hiding:
+- Unused imports (e.g., `issueCustomerToken` was imported but never called for weeks)
+- Wrong function signatures / renamed interfaces
+- Missing exports on renamed methods
+
+**Existing files with `@ts-nocheck` (121 files in `apps/api/src/`):** Remove `@ts-nocheck` and fix all type errors before any new feature work in that file. The `apps/web/src/` and `packages/` directories have ZERO `@ts-nocheck` — this is the target state.
+
+Exception: test files, script files, and generated client SPAs (`apps/api/src/client/`) may retain `@ts-nocheck` temporarily.
+
+### 14.6 Shared helper rule (born from 17-sites-one-pattern audit, 2026-06-13)
+
+Every hardcoded pattern that appears 3+ times must become a shared helper:
+
+| Pattern | Shared Helper | Location |
+|---------|--------------|----------|
+| Order short ID | `shortId(id)` → `#CB1B` | `packages/shared-types/src/utils.ts` |
+| Currency formatting | `formatMoney(amount, currency, rate?)` | `packages/shared-types/src/utils.ts` |
+| Currency code fallback | `ensureCurrency(code)` → `'ALL'` | `packages/shared-types/src/utils.ts` |
+
+Before writing a 3rd instance of any truncation/formatting pattern, grep for an existing helper first.
+
+### 14.7 Auth consistency rule (born from 7-auth-gaps audit, 2026-06-13)
+
+Every non-public route file MUST have BOTH `fastify.verifyAuth` AND `fastify.requireRole(['owner'|'courier'|'customer'])`. Having `verifyAuth` alone is insufficient.
+
+Exceptions:
+- `spa-proxy.ts` uses custom `getLocationId()` — this is grandfathered but should migrate to standard hooks
+- `public/` routes are correctly unauthenticated
+
+### 14.8 Env var verification rule (born from 37%-gap audit, 2026-06-13)
+
+Every `process.env.XXX` reference in production code MUST have a corresponding entry in `packages/config/src/index.ts` (EnvSchema). Add new env vars to both the schema AND `.env.example` before deploying code that reads them.
+
+### 14.9 Call-site verification rule (born from imported-but-never-called pattern)
+
+After adding an export or writing a new function, IMMEDIATELY verify:
+1. `grep -r "FunctionName" apps/ packages/` — confirm it's called elsewhere
+2. If zero matches, either wire it into a caller or remove it
+3. For shared helpers in `packages/shared-types/`: check that at least one consumer exists
+
+### 14.10 Hardcoded display string rule (born from 30+-site audit)
+
+Every user-visible currency/price/locale string MUST use either:
+- `PriceDisplay` component (React frontend)
+- `formatMoney()` function (backend/notifications)
+- `shortId()` helper (order ID display)
+- `t('key', 'fallback')` for locale (all 3 languages)
+
+No hardcoded `'ALL'`, `'EUR'`, `'sq'`, or `'#CB1B'` in display contexts. The sole exception is in `packages/shared-types/src/utils.ts` where the constants are defined.
+
+### 14.11 Pre-deploy hot-path sanity test rule
 
 Before every deploy, the following tests MUST pass against the deployed app:
 
@@ -428,3 +480,77 @@ Before every deploy, the following tests MUST pass against the deployed app:
 3. Auth → settings PUT → GET preserves data round-trip (proves: SQL param order correct)
 4. Public menu API returns 200 with valid JSON (proves: endpoint not broken)
 5. Subdomain routing serves SPA at `/admin` (proves: custom domains work)
+
+## 15. Lifecycle E2E convergence rules (born from 42-deploy-cycle audit, 2026-06-14)
+
+These rules were added after the critical lifecycle E2E test required 42 deploy cycles to fix 12 root causes. Every rule here prevents a specific failure mode that was actually encountered.
+
+### 15.1 MessageBus publish must never silently drop (born from B1)
+
+`messageBus.publish()` in `packages/platform/src/message-bus.ts` had an `if (this.isDegraded) return;` guard that silently dropped ALL WS events when the listener client disconnected. This made the entire real-time system fail intermittently with zero error feedback.
+
+**Rule:** `publish()` must ALWAYS attempt delivery via the pool fallback (`this.listenerClient || this.pool`). Never check `isDegraded` guard. The pool can always do `NOTIFY` even when the dedicated listener is down.
+
+### 15.2 Order status transitions must use canoncial path (born from C1)
+
+The courier's delivered endpoint (`assignments.ts:222-241`) updated `courier_assignments` and `courier_shifts` but NEVER called `updateOrderStatus()`. The `orders` table stayed at `IN_DELIVERY` — customer/owner never saw `DELIVERED`.
+
+**Rule:** Every order status transition MUST go through `updateOrderStatus()` in `orderStatusService.ts`. This is the single canoncial path that updates the `orders` table AND publishes WS events to both `order:{orderId}` (customer) and `location:{id}:dashboard` (owner). Never update `courier_assignments` without the corresponding `orders` update.
+
+### 15.3 data-testid for task cards must use order_id (born from A2)
+
+The TaskCard's `data-testid` used `task.id` which is the ASSIGNMENT UUID from `courier_assignments`. But test lookups use the ORDER UUID from `orders`. The test can never find the card.
+
+**Rule:** TaskCard `data-testid` must use `task.order_id || task.id` — prefer `order_id` (order UUID) when available, fall back to `id` (assignment UUID). The frontend `CourierTask` interface must include `order_id?: string`.
+
+### 15.4 Catch blocks must not hide real errors (born from B2)
+
+`TasksPage.tsx:handleAccept` had a `catch` block that called `navigate()` (the success path) even when the API call failed. The test navigated to the delivery page but the assignment was never accepted. The bug was invisible.
+
+**Rule:** Catch blocks in production code must:
+- Log the error to console
+- NOT silently continue with success-path logic
+- Navigate/toggle UI state only on success
+Exception: truly optional operations (message fetch, analytics) may silently catch.
+
+### 15.5 API client must set Accept header (born from A4)
+
+The `apiClient` in `apiClient.ts` does NOT set an `Accept` header. The browser's default `fetch()` sends `Accept: */*`. But if the browser sends `Accept: text/html,*/*`, the Fastify `setNotFoundHandler` (server.ts:820-829) serves `index.html` with status 200 for any unmatched GET route. The `apiClient` then tries `JSON.parse(html)` → SyntaxError → thrown without `.status` property → callers checking `err.status === 404` never match.
+
+**Rule:** `apiClient` MUST set `Accept: application/json` in every request. This prevents the SPA fallback handler from returning HTML for API 404s.
+
+### 15.6 WS-dependent E2E tests need page refresh fallback (born from F2)
+
+The lifecycle E2E test relied on WebSocket events for customer status updates (PENDING → CONFIRMED → PREPARING → READY → IN_DELIVERY → DELIVERED). When `messageBus.isDegraded` was true, NO events arrived. The test flaked.
+
+**Rule:** E2E tests checking status propagation must add a page refresh (`page.goto(url)`) before terminal status assertions. The refresh forces a fresh `fetchOrder()` from the API, which reads the actual `orders` table. This decouples the test from WS reliability.
+
+### 15.7 Owner dashboard live/history mode check (born from C3)
+
+The owner dashboard (`DashboardPage.tsx`) filters DELIVERED/CANCELLED orders from the "live" view. When a test checks for a delivered order card, it's not in the DOM — not because the delivery failed, but because the view hides it.
+
+**Rule:** Tests asserting terminal order cards on the owner dashboard must first switch to "history" tab: `await owner.getByRole('tab', { name: /history/i }).click()`. The order card becomes visible in history view.
+
+### 15.8 Courier mock-auth must query DB for location UUID (born from F3)
+
+The mock-auth handler for courier used a hardcoded UUID `'1f609add-062a-4bb5-89bf-d695f963ede6'` for `activeLocationId`. The owner mock-auth correctly queried `SELECT id FROM locations WHERE slug = 'demo'`. If the real database UUID differed, the courier's `app.current_tenant` would be wrong and ALL RLS-protected queries returned 0 rows.
+
+**Rule:** Mock-auth handlers must query the database for real UUIDs. Never hardcode UUIDs that correspond to database rows. Use `SELECT id FROM locations WHERE slug = 'demo'` (or similar) as owner handler does.
+
+### 15.9 Courier assignment must include courier_locations insert (born from B3)
+
+The `create-assignment` dev endpoint created records in `couriers` and `courier_shifts` but NOT in `courier_locations`. Queries that JOIN `couriers` with `courier_locations` (like the owner's couriers list) returned 0 results.
+
+**Rule:** When creating a courier assignment, always insert into `courier_locations (courier_id, location_id, role)` in addition to `couriers` and `courier_shifts`. The `courier_locations` table is the canonical membership link between couriers and locations.
+
+### 15.10 WS room validation must match frontend patterns (born from D1)
+
+The WebSocket server (`websocket.ts:95-99`) only allowed `location:` and `order:` rooms for couriers. But the frontend (`TasksPage.tsx:46`) subscribes to `courier:{courierId}`. The server rejected the subscription silently.
+
+**Rule:** WS room validation in `websocket.ts` must allow ALL room patterns that the frontend actually uses. For couriers: `courier:*`, `location:*`, `order:*`. For owners: `location:*`, `order:*`. For customers: `order:{user.orderId}`. Check frontend `useWebSocket()` calls across all pages to determine actual patterns.
+
+### 15.11 Global auth guard must exempt public endpoints (born from E1)
+
+The global `onRequest` hook (`server.ts:550-560`) checked Bearer token for ALL routes starting with `/api/courier/`. The invite redeem endpoint (`POST /api/courier/auth/invites/{id}/redeem`) is a PUBLIC endpoint (no token required). The auth guard returned 401.
+
+**Rule:** Public endpoints under auth-guarded path prefixes MUST have explicit exceptions in `NO_AUTH_PATHS`. Currently: `['/api/courier/auth/invites/']`. Any new public endpoint added under `/api/owner/`, `/api/courier/`, or `/api/customer/` must be added to this list.

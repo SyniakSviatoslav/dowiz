@@ -1,4 +1,5 @@
 // @ts-nocheck
+import crypto from 'node:crypto';
 import Fastify from 'fastify';
 import { loadEnv } from '@deliveryos/config';
 import { createOperationalPool } from '@deliveryos/db';
@@ -323,7 +324,7 @@ const retryPolicy = new RetryPolicy();
   const { BackupCronWorker } = await import('./workers/backup/index.js');
   const { BackupVerifyWorker } = await import('./workers/backup/backup-verify-scheduled.js');
   
-  const courierDispatchWorker = new CourierDispatchWorker(pool, queue.boss, messageBus);
+  const courierDispatchWorker = new CourierDispatchWorker(pool, queue, messageBus);
   const courierCronWorker = new CourierCronWorker(pool, queue.boss, messageBus);
   const courierEventsWorker = new CourierEventsWorker(pool, messageBus);
   const settlementCronWorker = new SettlementCronWorker(pool, queue.boss);
@@ -461,7 +462,7 @@ const retryPolicy = new RetryPolicy();
      }
    });
 
-   messageBus.subscribe(BUS_CHANNELS.ORDER_ASSIGNMENT_CREATED, async (payload: any) => {
+    messageBus.subscribe(BUS_CHANNELS.ORDER_ASSIGNMENT_CREATED, async (payload: any) => {
      try {
        await tgSend('courier.assigned', payload.orderId, payload.locationId);
      } catch (err) {
@@ -547,9 +548,11 @@ const retryPolicy = new RetryPolicy();
 
   // Auth-guarded path prefixes return 401 (not 404) for unauthenticated requests
   const AUTH_PREFIXES = ['/api/owner/', '/api/courier/', '/api/customer/'];
+  const NO_AUTH_PATHS = ['/api/courier/auth/invites/']; // public endpoints under auth prefix
   fastify.addHook('onRequest', async (request, reply) => {
     if (request.method === 'OPTIONS') return;
     const url = request.url.split('?')[0];
+    if (NO_AUTH_PATHS.some(p => url.startsWith(p))) return;
     if (AUTH_PREFIXES.some(p => url.startsWith(p))) {
       const token = request.headers.authorization;
       if (!token || !token.startsWith('Bearer ')) {
@@ -677,7 +680,22 @@ fastify.register(telegramWebhookRoutes, {
   messageBus
 });
 
-fastify.post('/api/dev/mock-auth', async (request, reply) => {
+fastify.register(mockAuthRoutes, { db: pool });
+
+  fastify.post('/api/dev/mock-auth', async (request, reply) => {
+    const body = (request.body || {}) as Record<string, unknown>;
+    const { signAuthToken } = await import('@deliveryos/platform');
+
+    // Courier role: simple JWT with real location UUID
+    if (body.role === 'courier') {
+      const courierId = crypto.randomUUID();
+      const locRes = await pool.query(`SELECT id FROM locations WHERE slug = 'demo' LIMIT 1`);
+      const locationId = locRes.rowCount > 0 ? locRes.rows[0].id : '1f609add-062a-4bb5-89bf-d695f963ede6';
+      const accessToken = await signAuthToken({ role: 'courier', sub: courierId, activeLocationId: locationId } as any, '1d');
+      return reply.send({ access_token: accessToken, userId: courierId, activeLocationId: locationId });
+    }
+
+    // Owner role: create/upsert dev user and return owner token
     const email = 'dev@deliveryos.com';
     const googleSub = 'mock-google-12345';
     const name = 'Dev Owner';
@@ -720,10 +738,56 @@ fastify.post('/api/dev/mock-auth', async (request, reply) => {
       }
     }
 
-    const { signAuthToken } = await import('@deliveryos/platform');
     const accessToken = await signAuthToken({ role: 'owner', userId, sub: userId } as any, '1d');
     
     return reply.send({ access_token: accessToken, userId, activeLocationId });
+  });
+  fastify.post('/api/dev/create-assignment', async (request, reply) => {
+    const { orderId, courierId, locationId } = (request.body || {}) as Record<string, string>;
+    if (!orderId || !courierId || !locationId) {
+      return reply.status(400).send({ error: 'orderId, courierId, locationId required' });
+    }
+    try {
+      const emailHash = crypto.createHash('sha256').update(courierId).digest('hex');
+      await pool.query(
+        `INSERT INTO couriers (id, email_encrypted, email_hash, full_name_encrypted, password_hash)
+         VALUES ($1, $2, $3, $2, 'mock')
+         ON CONFLICT (id) DO NOTHING`,
+        [courierId, Buffer.alloc(0), emailHash]
+      );
+      await pool.query(
+        `INSERT INTO courier_locations (courier_id, location_id, role)
+         VALUES ($1, $2, 'courier')
+         ON CONFLICT (courier_id, location_id) DO NOTHING`,
+        [courierId, locationId]
+      );
+      await pool.query(
+        `INSERT INTO courier_shifts (courier_id, location_id, status, started_at, last_heartbeat_at)
+         VALUES ($1, $2, 'available', now(), now())
+         ON CONFLICT DO NOTHING`,
+        [courierId, locationId]
+      );
+      const asgn = await pool.query(
+        `INSERT INTO courier_assignments (order_id, courier_id, location_id, status, assigned_at)
+         VALUES ($1, $2, $3, 'assigned', now())
+         ON CONFLICT (order_id) DO UPDATE SET courier_id = EXCLUDED.courier_id, status = 'assigned'
+         RETURNING id`,
+        [orderId, courierId, locationId]
+      );
+      const courierChannel = `courier:${courierId}`;
+      await messageBus.publish(courierChannel, {
+        type: 'task_assigned',
+        payload: { id: orderId, order_id: orderId, orderId, status: 'assigned', courierId }
+      });
+      await messageBus.publish(`location:${locationId}:dashboard`, {
+        type: 'assignment.created',
+        orderId,
+        courierId
+      });
+      return reply.send({ assignmentId: asgn.rows[0]?.id });
+    } catch (e: any) {
+      return reply.status(500).send({ error: 'Assignment failed: ' + (e?.message || '') });
+    }
   });
   fastify.post('/api/auth/local/login', async (request, reply) => {
     const { email, password } = request.body as any || {};

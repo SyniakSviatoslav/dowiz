@@ -44,7 +44,9 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
 
   // ── 2. Order validation fixes ──────────────────────────────────────
   test('2.1 — GET /orders/invalid-uuid returns 400, not 500', async ({ request }) => {
-    const res = await request.get(`${BASE}/api/orders/not-a-valid-uuid`);
+    const res = await request.get(`${BASE}/api/orders/not-a-valid-uuid`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
     expect(res.status()).toBe(400);
     const body = await res.json();
     expect(body.error).toContain('Invalid');

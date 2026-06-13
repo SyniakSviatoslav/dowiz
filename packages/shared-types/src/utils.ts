@@ -55,3 +55,21 @@ export function calcETA(createdAt: string | Date, elapsedSeconds: number): strin
   const created = new Date(createdAt);
   return '15-25 min';
 }
+
+export function shortId(id: string): string {
+  return '#' + id.substring(0, 4).toUpperCase();
+}
+
+export function shortIdRaw(id: string): string {
+  return id.substring(0, 4).toUpperCase();
+}
+
+export function ensureCurrency(code: string | null | undefined, fallback: CurrencyCode = 'ALL'): CurrencyCode {
+  if (code === 'ALL' || code === 'EUR') return code;
+  return fallback;
+}
+
+export function fmtPrice(amount: number, currency: string = 'ALL', decimals?: number): string {
+  const d = decimals ?? (currency === 'EUR' ? 2 : 0);
+  return `${amount.toFixed(d)} ${currency}`;
+}

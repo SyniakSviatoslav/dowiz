@@ -28,9 +28,9 @@ export default (async function customerOrderRoutes(fastify, opts) {
 
     try {
       const orderRes = await db.query(`
-        SELECT o.id, o.status, o.delivery_address, o.delivery_instructions,
-               o.total, o.created_at::text as created_at,
-               o.delivery_pin_lat, o.delivery_pin_lng,
+         SELECT o.id, o.status, o.delivery_address, o.delivery_instructions,
+                o.total, o.created_at::text as created_at,
+                o.delivery_lat, o.delivery_lng,
                ca.courier_id, ca.status as assignment_status
         FROM orders o
         LEFT JOIN courier_assignments ca ON ca.order_id = o.id AND ca.status IN ('accepted', 'picked_up')
@@ -70,10 +70,10 @@ export default (async function customerOrderRoutes(fastify, opts) {
       }
 
       let etaMinutes = null;
-      if (row.assignment_status === 'picked_up' && courierLat != null && courierLng != null && row.delivery_pin_lat != null && row.delivery_pin_lng != null) {
+      if (row.assignment_status === 'picked_up' && courierLat != null && courierLng != null && row.delivery_lat != null && row.delivery_lng != null) {
         const distKm = distanceKm(
           Number(courierLat), Number(courierLng),
-          Number(row.delivery_pin_lat), Number(row.delivery_pin_lng)
+          Number(row.delivery_lat), Number(row.delivery_lng)
         );
         if (distKm > 0) {
           etaMinutes = Math.max(1, Math.round((distKm / 25) * 60));
@@ -98,8 +98,8 @@ export default (async function customerOrderRoutes(fastify, opts) {
         courierName: row.courier_id ? courierName : null,
         courierPhoneMasked: row.courier_id ? courierPhone : null,
         courierPosition: courierLat != null && courierLng != null ? { lat: Number(courierLat), lng: Number(courierLng) } : null,
-        deliveryLat: row.delivery_pin_lat != null ? Number(row.delivery_pin_lat) : null,
-        deliveryLng: row.delivery_pin_lng != null ? Number(row.delivery_pin_lng) : null,
+        deliveryLat: row.delivery_lat != null ? Number(row.delivery_lat) : null,
+        deliveryLng: row.delivery_lng != null ? Number(row.delivery_lng) : null,
       });
     } catch (err) {
       request.log.error(err);

@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { Pool } from 'pg';
-import type Boss from 'pg-boss';
-import type { MessageBus } from '@deliveryos/platform';
+import type { QueueProvider, MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 import { loadEnv } from '@deliveryos/config';
 
@@ -10,14 +9,13 @@ const env = loadEnv();
 export class CourierDispatchWorker {
   constructor(
     private pool: Pool,
-    private boss: Boss,
+    private queue: QueueProvider,
     private messageBus: MessageBus
   ) {}
 
   async start() {
-    // Register with singletonKey so only one N=2 instance processes at a time
-    await this.boss.work(QUEUE_NAMES.COURIER_DISPATCH, { teamSize: 1, teamConcurrency: 1 }, async (job) => {
-      const { orderId, locationId } = job.data as any;
+    await this.queue.work(QUEUE_NAMES.COURIER_DISPATCH, async (data: any) => {
+      const { orderId, locationId } = data;
       await this.handleDispatch(orderId, locationId);
     });
   }

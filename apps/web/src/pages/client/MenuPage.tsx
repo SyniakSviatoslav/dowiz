@@ -727,6 +727,7 @@ export function MenuPage() {
                           return (
                             <button
                               key={mod.id}
+                              data-testid="modifier-option"
                               onClick={() => toggleModifier(group.id, mod.id, group)}
                               className={`px-3.5 py-2 rounded-[10px] text-[13px] font-medium transition-all active:scale-[0.97] border ${
                                 isSelected ? 'border-2' : ''
@@ -786,6 +787,7 @@ export function MenuPage() {
                   </button>
                 </div>
                 <button
+                  data-testid="product-detail-confirm"
                   onClick={handleAddDetail}
                   disabled={!canAdd()}
                   className="flex-1 h-[48px] rounded-xl text-white font-bold text-[15px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-center gap-2"
