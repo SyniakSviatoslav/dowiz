@@ -288,7 +288,9 @@ export function OrderStatusPage() {
           <p className="text-[var(--brand-text-muted)] text-sm">{t('client.estimated_arrival', 'Estimated arrival')}</p>
         </div>
 
-        <OrderProgress status={order.status} />
+        <div data-testid="order-status-badge" data-status={order?.status}>
+          <OrderProgress status={order.status} />
+        </div>
 
         {/* CR-6: Share my location (visible during IN_DELIVERY) */}
         {isInDelivery && (
@@ -387,3 +389,4 @@ export function OrderStatusPage() {
     </div>
   );
 }
+ 

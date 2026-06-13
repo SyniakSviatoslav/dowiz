@@ -188,7 +188,7 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <div className="font-bold text-lg text-[var(--brand-text)]">#{order.id.slice(-4).toUpperCase()}</div>
+          <div className="font-bold text-lg text-[var(--brand-text)]">{order.shortId || '#' + order.id.substring(0, 4).toUpperCase()}</div>
           <div className="text-[var(--brand-text-muted)] text-sm flex items-center gap-2">
             {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </div>
@@ -293,18 +293,21 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
       </div>
 
       {/* Actions */}
-      <div className="pt-3 border-t border-[var(--brand-border)] flex gap-2 overflow-x-auto no-scrollbar">
+      <div className="pt-3 border-t border-[var(--brand-border)] flex gap-2 overflow-x-auto no-scrollbar" onClick={(e) => e.stopPropagation()}>
         {order.status === 'PENDING' && (
           <>
-            <Button size="sm" onClick={() => handleAction('PREPARING')} isLoading={loadingAction === 'PREPARING'}>{t('admin.accept_prepare', 'Accept & Prepare')}</Button>
+            <Button size="sm" data-testid="order-confirm" onClick={() => handleAction('CONFIRMED')} isLoading={loadingAction === 'CONFIRMED'}>{t('admin.accept', 'Accept')}</Button>
             <Button size="sm" variant="outline" onClick={() => handleAction('CANCELLED')} isLoading={loadingAction === 'CANCELLED'}>{t('common.reject', 'Reject')}</Button>
           </>
         )}
+        {order.status === 'CONFIRMED' && (
+          <Button size="sm" data-testid="order-prepare" onClick={() => handleAction('PREPARING')} isLoading={loadingAction === 'PREPARING'}>{t('admin.mark_preparing', 'Mark Preparing')}</Button>
+        )}
         {order.status === 'PREPARING' && (
-          <Button size="sm" onClick={() => handleAction('READY')} isLoading={loadingAction === 'READY'}>{t('admin.mark_ready', 'Mark Ready')}</Button>
+          <Button size="sm" data-testid="order-ready" onClick={() => handleAction('READY')} isLoading={loadingAction === 'READY'}>{t('admin.mark_ready', 'Mark Ready')}</Button>
         )}
         {order.status === 'READY' && (
-          <Button size="sm" onClick={() => handleAction('IN_DELIVERY')} isLoading={loadingAction === 'IN_DELIVERY'}>{t('admin.assign_courier', 'Assign Courier')}</Button>
+          <Button size="sm" data-testid="order-assign" onClick={() => handleAction('IN_DELIVERY')} isLoading={loadingAction === 'IN_DELIVERY'}>{t('admin.assign_courier', 'Assign Courier')}</Button>
         )}
       </div>
     </div>

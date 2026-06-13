@@ -5,6 +5,9 @@ import { z } from 'zod';
 export default (async function notificationAuditRoutes(fastify, opts) {
   const { db } = opts as any;
 
+  fastify.addHook('onRequest', fastify.verifyAuth);
+  fastify.addHook('onRequest', fastify.requireRole(['owner']));
+
   // GET /admin/notification-audit — lightweight audit query for release gate
   // Returns count of delivered entries matching event+location within time window
   // PII-free: only exposes event, status, channel, count — no targets or addresses

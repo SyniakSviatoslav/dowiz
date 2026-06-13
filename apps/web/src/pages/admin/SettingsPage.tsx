@@ -203,7 +203,7 @@ export function SettingsPage() {
     try {
       await apiClient('/owner/settings', {
         method: 'PUT',
-        body: { ...settings, locale },
+        body: settings,
       });
       setSuccess(true);
     } catch (err: any) {

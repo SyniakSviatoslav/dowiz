@@ -78,6 +78,20 @@ const EnvSchema = z.object({
   OPENAI_MODEL: z.string().optional(),
   LLM_ADAPTER: z.string().optional(),
   LLM_PROVIDER: z.string().optional(),
+  // Missing from earlier schema — added 2026-06-13 audit
+  COURIER_PII_ENCRYPTION_KEY: z.string().optional(),
+  FLY_MACHINE_ID: z.string().optional(),
+  GROQ_ENDPOINT: z.string().optional(),
+  HOSTNAME: z.string().optional(),
+  IP_HASH_SALT: z.string().optional(),
+  LLM_ENDPOINT: z.string().optional(),
+  MEM0_EMBED_MODEL: z.string().optional(),
+  MEM0_LLM_MODEL: z.string().optional(),
+  MEM0_OLLAMA_URL: z.string().optional(),
+  OPENAI_ENDPOINT: z.string().optional(),
+  RENDER_GIT_COMMIT: z.string().optional(),
+  TRANSLATION_ENDPOINT: z.string().optional(),
+  TRANSLATION_PROVIDER: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

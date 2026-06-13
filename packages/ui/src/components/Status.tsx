@@ -43,7 +43,7 @@ export function WSStatusDot({ status }: { status: 'connecting' | 'connected' | '
   };
 
   return (
-    <div className="flex items-center gap-2" title={`WebSocket Status: ${status}`}>
+    <div className="flex items-center gap-2" data-connected={status === 'connected' ? 'true' : 'false'} title={`WebSocket Status: ${status}`}>
       <span className="relative flex h-3 w-3">
         {(status === 'connecting' || status === 'reconnecting') && (
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--color-warning)] opacity-75"></span>

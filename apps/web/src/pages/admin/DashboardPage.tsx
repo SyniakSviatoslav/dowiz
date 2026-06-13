@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay } from '@deliveryos/ui';
+import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay } from '@deliveryos/ui';
 import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
 import { exportCSV } from '../../lib/exportCSV.js';
@@ -85,7 +85,7 @@ export function DashboardPage() {
   }, []);
 
   const isFirstConnect = useRef(true);
-  useWebSocket({
+  const { status: connectionStatus } = useWebSocket({
     room: `location:${tenantId}:dashboard`,
     enabled: true,
     onMessage: (msg) => {
@@ -240,7 +240,10 @@ export function DashboardPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-4 shrink-0">
               <div>
-                <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{viewMode === 'live' ? t('admin.live_orders', 'Live Orders') : t('courier.history', 'Order History')}</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{viewMode === 'live' ? t('admin.live_orders', 'Live Orders') : t('courier.history', 'Order History')}</h2>
+                  <div data-testid="ws-status-dot" data-connected={connectionStatus === 'connected' ? 'true' : 'false'}><WSStatusDot status={connectionStatus === 'disabled' ? 'disconnected' : connectionStatus} /></div>
+                </div>
                 <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{filteredOrders.length}</p>
               </div>
               <div className="flex bg-[var(--brand-surface)] border rounded-lg overflow-hidden p-0.5 shrink-0" role="tablist" aria-label={t('admin.view_mode', 'View mode')} style={{ borderColor: 'var(--brand-border)' }}>
@@ -370,7 +373,7 @@ export function DashboardPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredOrders.map(order => (
-            <div key={order.id} className="order-card-container">
+            <div key={order.id} className="order-card-container" data-testid={`order-card-${order.id}`} data-status={order.status}>
               <OrderCard
                 order={order}
                 onUpdateStatus={handleUpdateStatus}
@@ -463,7 +466,7 @@ export function DashboardPage() {
       </div>
 
       {/* Order detail modal */}
-      <ResponsiveDialog open={!!detailOrder} onClose={() => setDetailOrder(null)} title={detailOrder ? t('order.number') + detailOrder.shortId : ''}>
+      <ResponsiveDialog open={!!detailOrder} onClose={() => setDetailOrder(null)} title={detailOrder ? t('order.number') + ' ' + detailOrder.shortId : ''}>
         {detailOrder && (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-3">

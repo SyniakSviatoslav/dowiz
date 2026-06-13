@@ -1,9 +1,10 @@
 import type { NotificationData, NotificationEvent } from './provider.js';
 import { getMessage, type MessageVars, type Locale } from './locales.js';
+import { formatMoney } from '@deliveryos/shared-types';
 
 function fmtPrice(v: number | undefined, currency: string | undefined): string {
   if (v == null) return '—';
-  return `${v.toFixed(0)} ${currency || 'ALL'}`;
+  return formatMoney(v, (currency || 'ALL') as any);
 }
 
 function toVars(data: NotificationData): MessageVars {

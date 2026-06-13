@@ -70,10 +70,11 @@ const settingsSchema = z.object({
   radiusKm: z.number().nonnegative().optional().nullable(),
   freeDeliveryThreshold: z.number().int().nonnegative().optional().nullable(),
   taxRate: z.number().min(0).max(100).optional().nullable(),
+  currencyCode: z.enum(['ALL', 'EUR']).optional().nullable(),
   lat: z.number().min(-90).max(90).optional().nullable(),
   lng: z.number().min(-180).max(180).optional().nullable(),
   hoursJson: z.any().optional().nullable(),
-}).strict();
+}).strip();
 
 export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { db: any; storage?: any }) {
   const { db, storage } = opts;
@@ -433,7 +434,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       total: r.total, subtotal: r.subtotal, deliveryFee: r.delivery_fee,
       deliveryAddress: r.delivery_address, paymentMethod: r.payment_method,
       customerName: r.customer_name || 'Unknown', customerPhone: r.customer_phone || '',
-      shortId: '#' + r.id.toString().substring(0, 4), items: r.items || [],
+      shortId: '#' + r.id.toString().substring(0, 4).toUpperCase(), items: r.items || [],
       itemCount: r.items ? r.items.length : 0,
       itemsSummary: r.items ? r.items.map((i: any) => `${i.name} x${i.qty}`).join(', ') : '',
       confirmSeconds: r.confirm_seconds, courierName: r.courier_name || null,
