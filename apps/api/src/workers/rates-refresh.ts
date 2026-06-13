@@ -19,7 +19,6 @@ export class RatesRefreshWorker {
       await this.run();
     });
 
-    await this.boss.createQueue(QUEUE_NAMES.RATES_REFRESH);
     await this.boss.send(QUEUE_NAMES.RATES_REFRESH, null, { startAfter: 5 });
     await this.boss.schedule(QUEUE_NAMES.RATES_REFRESH, cron, null);
   }
