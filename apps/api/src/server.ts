@@ -775,11 +775,11 @@ fastify.register(mockAuthRoutes, { db: pool });
         [orderId, courierId, locationId]
       );
       const courierChannel = `courier:${courierId}`;
-      await messageBus.publish(courierChannel, {
+      await messageBus.publish(`courier:${courierId}`, {
         type: 'task_assigned',
         payload: { id: orderId, order_id: orderId, orderId, status: 'assigned', courierId }
       });
-      await messageBus.publish(`location:${locationId}:dashboard`, {
+      await messageBus.publish(dashboardChannel(locationId), {
         type: 'assignment.created',
         orderId,
         courierId
