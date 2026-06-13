@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Button, Input, EmptyState, useI18n, useConfirm } from '@deliveryos/ui';
+import { Button, Input, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { RecipeEditor } from './RecipeEditor.js';
 
@@ -61,6 +61,7 @@ interface Category {
 export function MenuManagerPage() {
   const { t } = useI18n();
   const { confirm, dialog: confirmDialog } = useConfirm();
+  const isMobile = useIsMobile();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -441,14 +442,28 @@ export function MenuManagerPage() {
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
         </div>
 
-        {/* Sort icon button */}
+        {/* Sort */}
         <div className="relative">
-          <button onClick={() => setSortOpen(!sortOpen)}
+          <button onClick={() => setSortOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
             <i className="ti ti-arrows-sort text-base" />
+            <span className="hidden sm:inline text-xs">{sortBy === 'name' ? t('admin.name_az', 'Name A-Z') : sortBy === 'price-asc' ? t('admin.price_asc', 'Price \u2191') : t('admin.price_desc', 'Price \u2193')}</span>
           </button>
-          {sortOpen && (
+          {isMobile ? (
+            <MobilePicker
+              open={sortOpen}
+              onClose={() => setSortOpen(false)}
+              title={t('admin.sort_products', 'Sort products')}
+              options={[
+                { value: 'name', label: t('admin.name_az', 'Name A-Z'), icon: 'ti ti-sort-az' },
+                { value: 'price-asc', label: t('admin.price_asc', 'Price ArrowUp'), icon: 'ti ti-sort-ascending' },
+                { value: 'price-desc', label: t('admin.price_desc', 'Price ArrowDown'), icon: 'ti ti-sort-descending' },
+              ]}
+              selectedValue={sortBy}
+              onSelect={(opt) => { setSortBy(opt.value as any); setSortOpen(false); }}
+            />
+          ) : sortOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
               <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[140px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
@@ -470,14 +485,27 @@ export function MenuManagerPage() {
           )}
         </div>
 
-        {/* Availability icon button */}
+        {/* Availability filter */}
         <div className="relative">
-          <button onClick={() => setAvailOpen(!availOpen)}
+          <button onClick={() => setAvailOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: filterAvailable !== 'all' ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
             <i className="ti ti-filter text-base" />
           </button>
-          {availOpen && (
+          {isMobile ? (
+            <MobilePicker
+              open={availOpen}
+              onClose={() => setAvailOpen(false)}
+              title={t('admin.filter_availability', 'Filter by availability')}
+              options={[
+                { value: 'all', label: t('admin.all_items', 'All items'), icon: 'ti ti-list' },
+                { value: 'available', label: t('menu.available', 'Available'), icon: 'ti ti-circle-check' },
+                { value: 'unavailable', label: t('menu.stop_listed', 'Stop-listed'), icon: 'ti ti-circle-x' },
+              ]}
+              selectedValue={filterAvailable}
+              onSelect={(opt) => { setFilterAvailable(opt.value as any); setAvailOpen(false); }}
+            />
+          ) : availOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setAvailOpen(false)} />
               <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[150px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>

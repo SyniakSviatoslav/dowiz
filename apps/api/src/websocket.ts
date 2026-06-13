@@ -46,6 +46,7 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
       authPromise = verifyAuthToken(urlToken).then(tokenUser => {
         user = tokenUser;
         isAuthenticated = true;
+        clearTimeout(authTimeout);
         userBySocket.set(ws, user);
         ws.send(JSON.stringify({ type: 'auth_success', role: user.role }));
       }).catch(() => {
