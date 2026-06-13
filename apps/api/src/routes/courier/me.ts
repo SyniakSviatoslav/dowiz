@@ -136,6 +136,9 @@ export default (async function courierMeRoutes(fastify, opts) {
     const courierId = request.user!.sub;
     const locationId = request.user!.activeLocationId;
 
+    const locRes = await db.query(`SELECT currency_code FROM locations WHERE id = $1`, [locationId]);
+    const locationCurrency = locRes.rows[0]?.currency_code || 'ALL';
+
     const today = await db.query(`
       SELECT COALESCE(SUM(cash_amount), 0) AS amount, COUNT(*)::int AS deliveries
       FROM courier_assignments
@@ -176,7 +179,7 @@ export default (async function courierMeRoutes(fastify, opts) {
         week_deliveries: week.rows[0].deliveries,
         month: parseInt(month.rows[0].amount),
         month_deliveries: month.rows[0].deliveries,
-        currency: 'ALL',
+        currency: locationCurrency,
       },
       payouts: payouts.rows.map((p: any) => ({
         id: p.id,

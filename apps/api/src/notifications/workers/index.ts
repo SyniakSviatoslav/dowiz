@@ -1,5 +1,6 @@
 import type { Job } from 'pg-boss';
 import type { NotificationDispatcher, NotificationEvent as NotifEvent, NotificationEventType, NotificationTarget } from '../provider.js';
+import { formatMoney } from '@deliveryos/shared-types';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { isEventAllowedDuringQuietHours } from '../event-registry.js';
 import { writeAudit } from '../audit.js';
@@ -122,12 +123,12 @@ export class NotificationWorker {
         IN_DELIVERY: 'On the way',
         DELIVERED: 'Delivered',
       };
-      const shortId = order.id?.substring(0, 8);
+      const shortId = order.id?.substring(0, 4).toUpperCase();
       const title = shortId
         ? `Order #${shortId} ${statusLabels[event] || event}`
         : `${order.location_name || 'Your order'} — ${statusLabels[event] || event}`;
       const body = order.total != null
-        ? `${order.total.toFixed(0)} ${order.currency || 'ALL'}`
+        ? formatMoney(order.total, (order.currency || 'ALL') as any)
         : '';
 
       const payload = JSON.stringify({
@@ -236,7 +237,7 @@ export class NotificationWorker {
         const row = orderRes.rows[0];
         orderData = {
           orderId: row.id,
-          shortOrderId: row.id?.substring(0, 8),
+          shortOrderId: row.id?.substring(0, 4).toUpperCase(),
           total: row.total,
           currency: row.currency,
           createdAtLocal: row.created_at.toISOString(),
@@ -317,7 +318,13 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
         );
         
         console.log(`[TelegramSend] Found ${targetsRes.rows.length} active targets`);
-  
+
+        if (targetsRes.rows.length === 0) {
+          console.warn(`[TelegramSend] No active Telegram targets for location ${location_id} — notification not delivered`);
+          await writeAudit(client, { event, locationId: location_id, channel: 'telegram', status: 'no_target' });
+          return;
+        }
+
         for (const target of targetsRes.rows) {
           try {
             const prefs = target.prefs || {};
@@ -499,7 +506,7 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
 
     return {
       orderId: row.id,
-      shortOrderId: row.id?.substring(0, 8),
+      shortOrderId: row.id?.substring(0, 4).toUpperCase(),
       total: row.total,
       subtotal: row.subtotal,
       deliveryFee: row.delivery_fee,

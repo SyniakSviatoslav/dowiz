@@ -122,6 +122,7 @@ function ClientLayoutInner() {
             <StickyActionBar embedSticky={true}>
               <Pressable>
                 <button
+                  data-testid="cart-open"
                   onClick={() => setCartOpen(true)}
                   className={`w-full h-12 flex items-center justify-center gap-2 text-white font-bold text-sm rounded-full shadow-lg ${isBouncing ? 'cart-bounce' : ''}`}
                   style={{ background: 'var(--brand-primary)', boxShadow: '0 4px 12px color-mix(in srgb, var(--brand-primary) 40%, transparent)' }}
@@ -191,8 +192,9 @@ function ClientLayoutInner() {
                     <PriceDisplay amount={total} />
                   </div>
                   <button
+                    data-testid="cart-checkout"
                     onClick={() => { setCartOpen(false); navigate(`/s/${slug}/checkout`); }}
-                    className="w-full h-12 rounded-full bg-[var(--brand-primary)] text-white font-bold text-sm transition-all active:scale-[0.97]"
+                    className="w-full h-12 rounded-full bg-[var(--brand-primary)] text-white font-bold text-base shadow-xl transition-all active:scale-[0.97]"
                   >
                     {t('cart.checkout', 'Checkout')}
                   </button>

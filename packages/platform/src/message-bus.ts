@@ -104,7 +104,6 @@ export class PgMessageBus implements MessageBus {
   }
 
   async publish(channel: string, msg: any): Promise<void> {
-    if (this.isDegraded) return;
     try {
       console.log('[PgMessageBus] Publishing to:', channel, 'msg:', JSON.stringify(msg));
       // Use the listener client for NOTIFY to ensure delivery

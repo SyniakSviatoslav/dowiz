@@ -58,6 +58,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
 
   return (
     <article 
+      data-testid="menu-item"
       className={`product-card rounded-xl flex flex-col cursor-pointer overflow-hidden border transition-all duration-150 ease-in-out h-full ${
         product.isAvailable ? 'hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98]' : 'opacity-55'
       }`}
@@ -123,6 +124,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
         <div className="flex items-start justify-between gap-1.5">
           <h3 className="font-semibold text-[13px] leading-tight line-clamp-2 flex-1" style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
           <button 
+            data-testid="menu-item-add"
             className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-white rounded-full transition-all duration-150 ease-in-out mt-0.5 ${
               product.isAvailable 
                 ? 'hover:brightness-110 hover:scale-110 active:scale-[0.88]' 
@@ -249,7 +251,7 @@ export function CartDrawer({ isOpen, onClose, items, onUpdateQuantity, onCheckou
               <span>{totalLabel || 'Total'}</span>
               <PriceDisplay amount={total} size="lg" />
             </div>
-            <Button className="w-full" size="lg" onClick={onCheckout}>
+            <Button data-testid="cart-checkout" className="w-full" size="lg" onClick={onCheckout}>
               {checkoutLabel || 'Checkout'}
             </Button>
           </div>

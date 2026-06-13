@@ -215,7 +215,7 @@ export function CRMPage() {
                                   <div key={o.id} className="p-3 rounded border bg-[var(--brand-surface)]" style={{ borderColor: 'var(--brand-border)' }}>
                                     <div className="flex justify-between items-start mb-2">
                                       <div>
-                                        <span className="font-bold">#{o.id.toString().slice(-4)}</span>
+                                        <span className="font-bold">#{o.id.toString().substring(0, 4).toUpperCase()}</span>
                                         <span className="text-xs text-[var(--brand-text-muted)] ml-2">{new Date(o.created_at).toLocaleString()}</span>
                                       </div>
                                       <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-[var(--brand-surface-raised)]">{o.status}</span>

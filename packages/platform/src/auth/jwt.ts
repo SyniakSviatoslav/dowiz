@@ -59,11 +59,13 @@ export async function issueCustomerToken(params: {
   orderId: string;
   locationId: string;
   phone: string;
+  customerId: string;
 }): Promise<string> {
   return signAuthToken({
     role: 'customer',
     orderId: params.orderId,
     locationId: params.locationId,
     phone: params.phone,
+    sub: params.customerId,
   } as any, '7d');
 }

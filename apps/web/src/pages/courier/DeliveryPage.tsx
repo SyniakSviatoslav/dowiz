@@ -128,9 +128,9 @@ export function DeliveryPage() {
   const handleComplete = async () => {
     setShowCelebration(true);
     try {
-      await apiClient(`/courier/orders/${id}/status`, {
-        method: 'PATCH',
-        body: { status: 'DELIVERED' }
+      await apiClient(`/courier/assignments/${id}/delivered`, {
+        method: 'POST',
+        body: { cash_collected: false }
       });
     } catch (e) {
       console.debug('[DeliveryPage] delivery status update failed', e);
@@ -241,7 +241,7 @@ export function DeliveryPage() {
         )}
 
         {task.cashPayWith && (
-          <div className="bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-[var(--brand-radius-sm)] p-4 space-y-2">
+          <div data-testid="task-cash-amount" className="bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-[var(--brand-radius-sm)] p-4 space-y-2">
             <div className="text-xs text-[var(--brand-text-muted)] uppercase font-bold tracking-wider">
               {t('checkout.payment_method', 'Payment')} — Cash
             </div>

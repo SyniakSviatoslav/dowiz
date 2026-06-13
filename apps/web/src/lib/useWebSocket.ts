@@ -22,7 +22,6 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
   const maxReconnectAttempts = 5;
   const initialBackoff = 2000;
 
-  // Store callbacks in refs to avoid effect re-runs
   const onMessageRef = useRef(onMessage);
   const onReconnectRef = useRef(onReconnect);
   onMessageRef.current = onMessage;
@@ -37,7 +36,6 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
-    // Clear any pending reconnect timer
     if (reconnectTimer.current) {
       clearTimeout(reconnectTimer.current);
       reconnectTimer.current = null;
@@ -57,7 +55,6 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
         if (!mountedRef.current) { ws.close(1000); return; }
         setStatus('connected');
 
-        // Send auth before subscribe (server expects auth message or ?token= param)
         const token = typeof window !== 'undefined' ? localStorage.getItem('dos_access_token') : null;
         if (token) {
           ws.send(JSON.stringify({ type: 'auth', token }));
@@ -69,7 +66,6 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          // On auth success: subscribe to room and trigger reconnection callback
           if (data.type === 'auth_success') {
             reconnectAttempts.current = 0;
             if (room) {
@@ -84,9 +80,7 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
         }
       };
 
-      ws.onerror = () => {
-        // onclose will fire next, handle reconnection there
-      };
+      ws.onerror = () => {};
 
       ws.onclose = (event) => {
         wsRef.current = null;
@@ -132,7 +126,6 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
       if (wsRef.current) {
         if (room && wsRef.current.readyState === WebSocket.OPEN) {
           try { wsRef.current.send(JSON.stringify({ type: 'unsubscribe', room })); } catch {
-            // unsubscribe send may fail if ws is closing — ignore
             console.debug('[useWebSocket] unsubscribe send failed');
           }
         }

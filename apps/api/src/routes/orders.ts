@@ -4,7 +4,7 @@ import { CreateOrderInput, StatusUpdateInput } from '@deliveryos/shared-types';
 import { assertTransition, type OrderStatus } from '@deliveryos/domain';
 import { issueCustomerToken, withTenant } from '@deliveryos/platform';
 import type { QueueProvider, MessageBus } from '@deliveryos/platform';
-import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel } from '../lib/registry.js';
+import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel } from '../lib/registry.js';
 import { updateOrderStatus } from '../lib/orderStatusService';
 import type { Pool } from 'pg';
 import crypto from 'crypto';
@@ -651,6 +651,20 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         request.log.warn('Failed to publish order event');
       }
 
+      let authToken: string | undefined;
+      if (cust?.phone && resolvedCustomerId) {
+        try {
+          authToken = await issueCustomerToken({
+            orderId: order.id,
+            locationId,
+            phone: cust.phone,
+            customerId: resolvedCustomerId,
+          });
+        } catch (err) {
+          request.log.error({ err }, 'Failed to issue customer token');
+        }
+      }
+
       return reply.status(201).send({
         id: order.id,
         locationId,
@@ -659,6 +673,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         total,
         deliveryInstructions: rawInstructions || null,
         createdAt: order.created_at,
+        authToken,
         preflight: {
           outcome: 'clean',
           reasons: preflight.reasons,
@@ -681,7 +696,9 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
   });
 
   // ─── GET /orders/:id ───────────────────────────────────────────────
-  fastify.get('/orders/:id', async (request, reply) => {
+  fastify.get('/orders/:id', {
+    preHandler: [fastify.verifyAuth],
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     if (!isValidUUID(id)) {
       return reply.status(400).send({ error: 'Invalid order ID format' });
@@ -782,13 +799,53 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
            throw { statusCode: 404, error: 'Order not found' };
          }
 
-         // 2. Use the service to update the order status
-         await updateOrderStatus(client, id, cur.rows[0].location_id, newStatus, {
-           messageBus
-         });
-       });
+          // 2. Use the service to update the order status
+          const locationId = cur.rows[0].location_id;
+          await updateOrderStatus(client, id, locationId, newStatus, {
+            messageBus
+          });
 
-       return reply.status(200).send({ id: id, status: newStatus });
+          // 3. If transitioning to IN_DELIVERY, find and assign available courier synchronously
+          if (newStatus === 'IN_DELIVERY') {
+            const availRes = await client.query(
+              `SELECT c.id AS courier_id, cs.id AS shift_id
+               FROM couriers c
+               JOIN courier_locations cl ON cl.courier_id = c.id
+               JOIN courier_shifts cs ON cs.courier_id = c.id
+               WHERE cl.location_id = $1 AND c.status = 'active' AND cs.status = 'available'
+                 AND c.id NOT IN (
+                   SELECT courier_id FROM courier_assignments
+                   WHERE status IN ('assigned','accepted','picked_up') AND courier_id IS NOT NULL
+                 )
+               ORDER BY cs.last_heartbeat_at DESC NULLS LAST, c.id ASC
+               LIMIT 1`,
+              [locationId]
+            );
+            if (availRes.rowCount > 0) {
+              const { courier_id, shift_id } = availRes.rows[0];
+              await client.query(
+                `INSERT INTO courier_assignments (order_id, location_id, courier_id, shift_id, status, assigned_at)
+                 VALUES ($1, $2, $3, $4, 'assigned', now())`,
+                [id, locationId, courier_id, shift_id]
+              );
+              await client.query(
+                `UPDATE courier_shifts SET status = 'on_delivery' WHERE id = $1`,
+                [shift_id]
+              );
+              await messageBus.publish(dashboardChannel(locationId), {
+                type: 'assignment.created',
+                orderId: id,
+                courierId: courier_id
+              });
+              await messageBus.publish(courierChannel(locationId), {
+                type: 'task_assigned',
+                payload: { id, orderId: id, status: 'assigned', courierId: courier_id }
+              });
+            }
+          }
+        });
+
+        return reply.status(200).send({ id: id, status: newStatus });
      } catch (err: unknown) {
       const error = err as Record<string, unknown>;
       if (error.statusCode) {
