@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Button, EmptyState, SkeletonBase, HintCard, useI18n, useConfirm } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, HintCard, useI18n, useConfirm, MobilePicker, useIsMobile } from '@deliveryos/ui';
 
 type SupplyKind = 'food_ingredient' | 'condiment' | 'packaging' | 'utensil';
 
@@ -205,6 +205,7 @@ export function SupplyLibraryPage() {
   const [editing, setEditing] = useState<SupplyItem | null>(null);
   const [adding, setAdding] = useState(false);
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const { confirm: supplyConfirm, dialog: supplyConfirmDialog } = useConfirm();
 
   useEffect(() => {
@@ -212,6 +213,16 @@ export function SupplyLibraryPage() {
     setSupplies(s);
     setLoading(false);
   }, []);
+
+  // Lock body scroll when editing modal is open
+  useEffect(() => {
+    if (editing) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [editing]);
 
   const persistAndSet = (newSupplies: SupplyItem[]) => {
     saveSupplies(newSupplies);
@@ -296,12 +307,24 @@ export function SupplyLibraryPage() {
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
         </div>
         <div className="relative">
-          <button onClick={() => setSortOpen(!sortOpen)}
+          <button onClick={() => setSortOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
             <i className="ti ti-arrows-sort text-base" />
           </button>
-          {sortOpen && (
+          {isMobile ? (
+            <MobilePicker
+              open={sortOpen}
+              onClose={() => setSortOpen(false)}
+              title={t('admin.sort_supplies', 'Sort supplies')}
+              options={[
+                { value: 'name', label: t('admin.name_az', 'Name A-Z'), icon: 'ti ti-sort-az' },
+                { value: 'category', label: t('admin.category', 'Category'), icon: 'ti ti-folder' },
+              ]}
+              selectedValue={sortBy}
+              onSelect={(opt) => { setSortBy(opt.value as any); setSortOpen(false); }}
+            />
+          ) : sortOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
               <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[140px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>

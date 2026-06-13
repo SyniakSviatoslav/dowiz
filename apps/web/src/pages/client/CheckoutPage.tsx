@@ -208,7 +208,7 @@ export function CheckoutPage() {
     : { background: 'transparent', color: 'var(--brand-text-muted)' } as const;
 
   return (
-    <div className="max-w-xl mx-auto p-4 md:py-8 space-y-6 pb-24">
+    <div className="max-w-xl mx-auto p-4 md:py-8 space-y-6 pb-32">
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => navigate(-1)} aria-label={t('common.back', 'Go back')} className="w-10 h-10 rounded-full flex items-center justify-center border transition-colors active:scale-95" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
           <i className="ti ti-arrow-left" aria-hidden="true" />
