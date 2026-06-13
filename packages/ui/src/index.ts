@@ -16,4 +16,7 @@ export * from './hooks/use-geolocation.js';
 export { useBreakpoint, useIsMobile } from './hooks/use-breakpoint.js';
 export { useHaptics } from './hooks/use-haptics.js';
 export { SoundPrefsProvider, useSoundPrefs } from './lib/sound-prefs.js';
+export { CurrencyProvider, useCurrency } from './lib/CurrencyProvider.js';
+export { CurrencySwitcher } from './components/atoms/CurrencySwitcher.js';
+export { PriceDisplay } from './components/atoms/PriceDisplay.js';
 

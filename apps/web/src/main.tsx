@@ -3,7 +3,7 @@ import { StrictMode, lazy, Suspense, Component } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { MotionConfig, AnimatePresence, motion } from 'framer-motion';
-import { ThemeProvider, TourProvider, I18nProvider } from '@deliveryos/ui';
+import { ThemeProvider, TourProvider, I18nProvider, CurrencyProvider } from '@deliveryos/ui';
 import './index.css';
 
 class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
@@ -101,6 +101,7 @@ function App() {
       <BrowserRouter>
         <MotionConfig reducedMotion="user">
         <I18nProvider>
+        <CurrencyProvider>
         <ThemeProvider>
           <TourProvider>
           <ErrorBoundary>
@@ -108,6 +109,7 @@ function App() {
           </ErrorBoundary>
           </TourProvider>
         </ThemeProvider>
+        </CurrencyProvider>
         </I18nProvider>
         </MotionConfig>
       </BrowserRouter>
