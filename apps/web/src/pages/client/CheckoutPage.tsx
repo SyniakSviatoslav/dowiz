@@ -345,7 +345,7 @@ export function CheckoutPage() {
               <label htmlFor="cash-amount" className="text-[12px] font-semibold mb-1.5 block" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.cash_amount', 'Cash amount')}</label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-bold" style={{ color: 'var(--brand-text-muted)' }}>ALL</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-bold" style={{ color: 'var(--brand-text-muted)' }}>{currency}</span>
                   <input
                     id="cash-amount"
                     type="number"
@@ -364,10 +364,10 @@ export function CheckoutPage() {
                   {cashAmount >= total ? (
                     <>
                       <span style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.change', 'Change')}</span>
-                      <span className="font-bold" style={{ color: 'var(--brand-primary)' }}>{cashAmount - total} ALL</span>
+                      <span className="font-bold" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={cashAmount - total} /></span>
                     </>
                   ) : (
-                    <span style={{ color: 'var(--color-danger)' }}>{t('checkout.cash_amount_too_low', 'Amount must be at least')} {total} ALL</span>
+                    <span style={{ color: 'var(--color-danger)' }}>{t('checkout.cash_amount_too_low', 'Amount must be at least')} <PriceDisplay amount={total} /></span>
                   )}
                 </div>
               )}

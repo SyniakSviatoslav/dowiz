@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { EmptyState, SkeletonBase, useI18n } from '@deliveryos/ui';
+import { EmptyState, SkeletonBase, useI18n, PriceDisplay } from '@deliveryos/ui';
 import Map, { Marker } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { apiClient } from '../../lib/index.js';
@@ -142,9 +142,9 @@ export function AnalyticsPage() {
   const heatmapMax = Math.max(...heatmapData.flatMap(d => d.hours), 1);
 
   const statCards = [
-    { label: t('admin.revenue', 'Revenue'), value: `${(data.revenue.today / 100).toFixed(0)}k ALL`, trend: data.revenue.trend, icon: 'ti ti-wallet', colorVar: '--color-success' },
+    { label: t('admin.revenue', 'Revenue'), value: `${Math.round(data.revenue.today)}k`, trend: data.revenue.trend, icon: 'ti ti-wallet', colorVar: '--color-success' },
     { label: t('admin.orders', 'Orders'), value: data.orders.today.toString(), trend: data.orders.trend, icon: 'ti ti-shopping-cart', colorVar: '--color-info' },
-    { label: t('admin.avg_order', 'Avg Order'), value: `${data.avgOrderValue.value} ALL`, trend: data.avgOrderValue.trend, icon: 'ti ti-receipt', colorVar: '--status-scheduled' },
+    { label: t('admin.avg_order', 'Avg Order'), value: String(data.avgOrderValue.value), trend: data.avgOrderValue.trend, icon: 'ti ti-receipt', colorVar: '--status-scheduled' },
     { label: t('admin.delivery_time', 'Delivery'), value: `${data.deliveryTime.avg} min`, trend: data.deliveryTime.trend, icon: 'ti ti-truck-delivery', colorVar: '--color-warning' },
   ];
 
@@ -201,10 +201,10 @@ export function AnalyticsPage() {
           <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{t('admin.revenue_trend', 'Revenue Trend')}</h3>
           <div className="flex items-center gap-3">
             <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
-              {t('admin.total', 'Total:')} {data.chart.reduce((s, c) => s + c.revenue, 0).toLocaleString()} ALL
+              {t('admin.total', 'Total:')} <PriceDisplay amount={data.chart.reduce((s, c) => s + c.revenue, 0)} />
             </span>
             <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'var(--color-success-light)', color: 'var(--color-success)' }}>
-              Avg: {Math.round(data.chart.reduce((s, c) => s + c.revenue, 0) / data.chart.length).toLocaleString()} ALL
+              Avg: <PriceDisplay amount={Math.round(data.chart.reduce((s, c) => s + c.revenue, 0) / data.chart.length)} />
             </span>
           </div>
         </div>
@@ -271,7 +271,7 @@ export function AnalyticsPage() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <div className="text-sm font-semibold text-right" style={{ color: 'var(--brand-primary)' }}>
-                        {p.revenue.toLocaleString()} ALL
+                        <PriceDisplay amount={p.revenue} />
                       </div>
                       <i className={`ti ${isExpanded ? 'ti-chevron-up' : 'ti-chevron-down'} text-xs text-[var(--brand-text-muted)]`} />
                     </div>
@@ -294,7 +294,7 @@ export function AnalyticsPage() {
                                 <span className="text-[10px] px-1 py-0.5 rounded" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>x{o.quantity}</span>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
-                                <span className="font-medium">{o.price.toLocaleString()} ALL</span>
+                                <span className="font-medium"><PriceDisplay amount={o.price} /></span>
                                 <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{new Date(o.created_at).toLocaleDateString()}</span>
                               </div>
                             </div>
