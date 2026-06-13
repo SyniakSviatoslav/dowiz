@@ -357,8 +357,8 @@ export function SupplyLibraryPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium truncate" style={{ color: 'var(--brand-text)' }}>{supply.name}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
-                      {supply.kind === 'food_ingredient' ? 'ING' : supply.kind === 'condiment' ? 'SAU' : supply.kind === 'packaging' ? 'PKG' : 'UTL'}
+                    <span className="text-[10px] px-1.5 py-0.5 rounded font-mono uppercase" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
+                      {supply.kind === 'food_ingredient' ? t('supply.ingredient_short') : supply.kind === 'condiment' ? t('supply.sauces_short') : supply.kind === 'packaging' ? t('supply.packaging_short') : t('supply.utensils_short')}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px] mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>

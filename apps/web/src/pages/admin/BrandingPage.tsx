@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Button, Input, ColorInput, FormField, useI18n } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
 export function BrandingPage() {
   const { t } = useI18n();
+  const previewRef = useRef<HTMLIFrameElement>(null);
   const [config, setConfig] = useState<ThemeConfig>({
     primary: 'var(--brand-primary)',
     primaryHover: 'var(--brand-primary-hover)',
@@ -126,12 +127,21 @@ export function BrandingPage() {
               <div className="w-20 h-4 bg-[var(--brand-surface)] border border-[var(--brand-border)] border-t-0 rounded-b-xl" />
             </div>
             <iframe
+              ref={previewRef}
               src={iframeUrl}
               className="w-full h-full border-0"
               style={{ marginTop: '24px' }}
               title={t('admin.live_preview', 'Live Preview (Client View)')}
               loading="lazy"
               sandbox="allow-scripts allow-same-origin"
+              onLoad={() => {
+                if (logoPreview && previewRef.current?.contentWindow) {
+                  previewRef.current.contentWindow.postMessage(
+                    { type: 'branding_preview_logo', logoUrl: logoPreview },
+                    '*'
+                  );
+                }
+              }}
             />
           </div>
         ) : (

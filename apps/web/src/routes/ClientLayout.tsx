@@ -41,6 +41,15 @@ function ClientLayoutInner() {
 
   useEffect(() => {
     if (!slug) return;
+
+    // Listen for postMessage from branding preview parent (logo URL)
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'branding_preview_logo' && e.data.logoUrl) {
+        setLogoUrl(e.data.logoUrl);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+
     const params = new URLSearchParams(location.search);
     const draftPrimary = params.get('draft_primary');
     const draftBg = params.get('draft_bg');
@@ -82,6 +91,8 @@ function ClientLayoutInner() {
         });
       })
       .catch(() => setTheme(null));
+
+    return () => window.removeEventListener('message', handleMessage);
   }, [slug, location.search]);
 
   const itemsCount = items.reduce((sum, i) => sum + i.quantity, 0);

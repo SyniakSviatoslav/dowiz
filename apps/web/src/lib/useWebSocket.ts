@@ -56,21 +56,30 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
       ws.onopen = () => {
         if (!mountedRef.current) { ws.close(1000); return; }
         setStatus('connected');
-        reconnectAttempts.current = 0;
 
-        if (room) {
+        // Send auth before subscribe (server expects auth message or ?token= param)
+        const token = typeof window !== 'undefined' ? localStorage.getItem('dos_access_token') : null;
+        if (token) {
+          ws.send(JSON.stringify({ type: 'auth', token }));
+        } else if (room) {
           ws.send(JSON.stringify({ type: 'subscribe', room }));
         }
-
-        onReconnectRef.current?.();
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          // On auth success: subscribe to room and trigger reconnection callback
+          if (data.type === 'auth_success') {
+            reconnectAttempts.current = 0;
+            if (room) {
+              ws.send(JSON.stringify({ type: 'subscribe', room }));
+            }
+            onReconnectRef.current?.();
+            return;
+          }
           onMessageRef.current?.(data);
         } catch {
-          // ignore parse errors — malformed ws message
           console.debug('[useWebSocket] received malformed message');
         }
       };
