@@ -85,11 +85,11 @@ test.describe('UI: Image Upload — Product + Brand Logo', () => {
     });
     expect(getAfter.status()).toBe(200);
     const after = await getAfter.json();
-    expect(after.primaryColor || after.primary_color || after.primaryColorHex || before).toBeTruthy();
+    expect(after.primary_color).toBe('#E53935');
   });
 
   test('Flow 5: Public theme CSS loads with CSS variables', async ({ request }) => {
-    const themeRes = await request.get(`${BASE}/api/public/theme/demo`);
+    const themeRes = await request.get(`${BASE}/public/locations/demo/theme.css`);
     expect(themeRes.status()).toBe(200);
     const css = await themeRes.text();
     expect(css).toContain('--brand-primary');
