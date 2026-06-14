@@ -313,9 +313,9 @@ export function CheckoutPage() {
                       onClick={() => setInstructionOption(instructionOption === opt.val ? '' : opt.val)}
                       className="px-3 py-1.5 text-[12px] rounded-[20px] border transition-all active:scale-95"
                       style={{
-                        background: instructionOption === opt.val ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
+                        background: instructionOption === opt.val ? 'var(--brand-primary-light)' : 'var(--brand-surface-raised)',
                         borderColor: instructionOption === opt.val ? 'var(--brand-primary)' : 'var(--brand-border)',
-                        color: instructionOption === opt.val ? '#fff' : 'var(--brand-text)',
+                        color: instructionOption === opt.val ? 'var(--brand-text)' : 'var(--brand-text)',
                       }}
                     >{t(opt.key, opt.val)}</button>
                   ))}

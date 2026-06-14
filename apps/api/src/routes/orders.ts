@@ -65,7 +65,14 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
     }
     const { locationId, items, customer: cust, delivery, idempotency_key, cash_pay_with: cashPayWith, delivery_instructions: rawInstructions } = input;
 
-    const client = await db.connect();
+    let client;
+    try {
+      client = await db.connect();
+    } catch (err: unknown) {
+      request.log.error({ err }, 'Failed to acquire DB connection');
+      return reply.status(503).send({ code: 503, error: 'Service temporarily unavailable' });
+    }
+
     try {
       await client.query('BEGIN');
 
@@ -690,7 +697,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       }
       return reply.status(500).send({ error: 'Internal server error' });
     } finally {
-      client.release();
+      if (client) client.release();
     }
   });
 

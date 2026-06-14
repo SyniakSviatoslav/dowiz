@@ -10,9 +10,18 @@ export interface SecurityHeadersOpts {
 export function setSecurityHeaders(reply: any, opts: SecurityHeadersOpts = {}): void {
   const { nonce, frameAncestors = "'self'", isSsr = false } = opts;
 
+
+  let r2ImgSrc = '';
+  const r2PublicUrl = process.env.R2_PUBLIC_URL;
+  if (r2PublicUrl) {
+    try {
+      const u = new URL(r2PublicUrl);
+      r2ImgSrc = ' ' + u.origin;
+    } catch (_) {}
+  }
   const cspParts = [
     `default-src 'self'`,
-    `img-src 'self' data: https://tiles.openfreemap.org`,
+    `img-src 'self' data: https://tiles.openfreemap.org` + r2ImgSrc,
     `style-src 'self'${nonce ? ` 'nonce-${nonce}'` : ''} https://fonts.googleapis.com`,
     `font-src 'self' https://fonts.gstatic.com`,
     `script-src 'self'${nonce ? ` 'nonce-${nonce}'` : ''} https://cdn.tailwindcss.com`,

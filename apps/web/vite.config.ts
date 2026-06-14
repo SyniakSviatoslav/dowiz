@@ -18,10 +18,6 @@ export default defineConfig({
       '/api': 'http://localhost:3000',
       '/public': 'http://localhost:3000',
       '/auth': 'http://localhost:3000',
-      '/courier': {
-        target: 'http://localhost:3000',
-        bypass: (req) => req.url || '',
-      },
       '^/s/': {
         target: 'http://localhost:3000',
         bypass: (req) => req.url || '',
@@ -31,5 +27,13 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'framer-motion'],
+          map: ['maplibre-gl'],
+        },
+      },
+    },
   },
 });

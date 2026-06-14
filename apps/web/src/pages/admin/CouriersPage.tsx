@@ -42,9 +42,9 @@ interface CourierDetails {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  online: 'var(--color-success, #22c55e)',
-  busy: 'var(--color-warning, #f59e0b)',
-  offline: 'var(--brand-text-muted, #a8a8a8)',
+  online: 'var(--color-success)',
+  busy: 'var(--color-warning)',
+  offline: 'var(--brand-text-muted)',
 };
 
 export function CouriersPage() {
@@ -303,7 +303,7 @@ export function CouriersPage() {
                     style={{
                       backgroundColor:
                         c.status === 'offline'
-                          ? 'var(--brand-text-muted, #a8a8a8)'
+                          ? 'var(--brand-text-muted)'
                           : 'var(--brand-primary)',
                     }}
                   >

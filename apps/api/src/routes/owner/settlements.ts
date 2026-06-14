@@ -43,28 +43,32 @@ export default (async function ownerSettlementRoutes(fastify: any, opts: any) {
 
     sql += ` ORDER BY p.created_at DESC`;
 
-    const { decryptPII } = await import('../../lib/pii-cipher.js');
+    try {
+      const { decryptPII } = await import('../../lib/pii-cipher.js');
 
-    const res = await db.query(sql, params);
-    const payouts = res.rows.map((r: any) => {
-      const name = decryptPII(r.full_name_encrypted) || '';
-      return {
-        id: r.id,
-        courierId: r.courier_id,
-        courierNameMasked: name ? name.charAt(0) + '***' : 'A***',
-        deliveriesCount: r.deliveries_count,
-        totalEarned: r.total_earned,
-        currency: r.currency,
-        periodStart: r.period_start,
-        periodEnd: r.period_end,
-        status: r.status,
-        createdAt: r.created_at,
-        approvedAt: r.approved_at,
-        paidAt: r.paid_at
-      };
-    });
+      const res = await db.query(sql, params);
+      const payouts = res.rows.map((r: any) => {
+        const name = (r.full_name_encrypted ? decryptPII(r.full_name_encrypted) : '') || '';
+        return {
+          id: r.id,
+          courierId: r.courier_id,
+          courierNameMasked: name ? name.charAt(0) + '***' : 'A***',
+          deliveriesCount: r.deliveries_count,
+          totalEarned: r.total_earned,
+          currency: r.currency,
+          periodStart: r.period_start,
+          periodEnd: r.period_end,
+          status: r.status,
+          createdAt: r.created_at,
+          approvedAt: r.approved_at,
+          paidAt: r.paid_at
+        };
+      });
 
-    return { payouts };
+      return { payouts };
+    } catch {
+      return { payouts: [] };
+    }
   });
 
   // GET /api/owner/locations/:locationId/settlements/:id

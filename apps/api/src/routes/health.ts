@@ -186,32 +186,35 @@ export default async function healthRoutes(
       }
     }
 
-    // ── 9. Backup restore-test status (Degraded) ────────────────────
+    // ── 9. Backup restore-test status (Degraded) ──────────────────────────────────
     let backupRestoreResult: any = { status: 'ok' };
-    const restoreCheck = await withTimeout<{
-      rows: Array<{ last_verified_at: string | null; result: boolean | null }>;
-    }>(
-      opts.db.query(
-        `SELECT MAX(created_at) AS last_verified_at,
-                bool_and(metadata->>'result' = 'success') AS result
-         FROM backup_audit_log
-         WHERE action IN ('restore_drill_started', 'restore_drill_completed')
-         LIMIT 1`,
-      ),
-      'backup_restore',
-      true
-    );
-    if (restoreCheck.status === 'ok' && restoreCheck.data) {
-      const row = restoreCheck.data.rows[0];
-      const lastVerified = row?.last_verified_at;
-      const lastResult = row?.result;
-      const isStale = !lastVerified || (Date.now() - new Date(lastVerified).getTime() > 25 * 60 * 60 * 1000);
-      backupRestoreResult = {
-        last_verified_at: lastVerified,
-        last_result: lastResult === true ? 'success' : 'failed',
-        stale: isStale,
-        status: isStale ? 'degraded' : 'ok',
-      };
+    if (backupEnabled) {
+      const restoreCheck = await withTimeout<{
+        rows: Array<{ last_verified_at: string | null; result: boolean | null }>;
+      }>(
+        opts.db.query(
+          `SELECT MAX(created_at) AS last_verified_at,
+                  bool_and(metadata->>'result' = 'success') AS result
+           FROM backup_audit_log
+           WHERE action IN ('restore_drill_started', 'restore_drill_completed')
+           LIMIT 1`,
+        ),
+        'backup_restore',
+        true
+      );
+      if (restoreCheck.status === 'ok' && restoreCheck.data) {
+        const row = restoreCheck.data.rows[0];
+        const lastVerified = row?.last_verified_at;
+        const lastResult = row?.result;
+        const neverRun = !lastVerified;
+        const isStale = !lastVerified || (Date.now() - new Date(lastVerified).getTime() > 25 * 60 * 60 * 1000);
+        backupRestoreResult = {
+          last_verified_at: lastVerified,
+          last_result: neverRun ? 'never_run' : (lastResult === true ? 'success' : 'failed'),
+          stale: isStale,
+          status: neverRun ? 'ok' : (isStale ? 'degraded' : 'ok'),
+        };
+      }
     }
 
     // ── 10. Fallback config coverage (Degraded) ─────────────────────

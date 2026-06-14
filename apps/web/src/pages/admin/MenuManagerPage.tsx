@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Button, Input, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay } from '@deliveryos/ui';
+import { Button, Input, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 import { CategoryResponse, ProductResponse } from '@deliveryos/shared-types';
@@ -21,18 +21,6 @@ const MenuImportCommitResponse = z.object({
   }).optional(),
 }).passthrough();
 import { RecipeEditor } from './RecipeEditor.js';
-
-const ALLERGEN_COLORS: Record<string, { bg: string; text: string }> = {
-  gluten: { bg: 'rgba(234,179,8,0.12)', text: '#a16207' },
-  dairy: { bg: 'rgba(59,130,246,0.12)', text: '#1d4ed8' },
-  eggs: { bg: 'rgba(234,179,8,0.12)', text: '#a16207' },
-  soy: { bg: 'rgba(34,197,94,0.12)', text: '#15803d' },
-  nuts: { bg: 'rgba(249,115,22,0.12)', text: '#c2410c' },
-  peanuts: { bg: 'rgba(249,115,22,0.12)', text: '#c2410c' },
-  shellfish: { bg: 'rgba(239,68,68,0.12)', text: '#b91c1c' },
-  fish: { bg: 'rgba(6,182,212,0.12)', text: '#0e7490' },
-  sesame: { bg: 'rgba(168,85,247,0.12)', text: '#7e22ce' },
-};
 
 function getProductAllergens(product: Product): string[] {
   const set = new Set<string>();
@@ -559,8 +547,8 @@ export function MenuManagerPage() {
             className="w-32 sm:w-40 h-10 px-3 rounded-lg border text-sm outline-none"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
           <button onClick={handleAddCategory}
-            className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium shrink-0"
-            style={{ background: 'var(--brand-primary)', color: 'var(--color-on-primary)' }}>
+            className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium shrink-0 border border-[var(--brand-primary)]"
+            style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-text)' }}>
             <i className="ti ti-plus text-sm" />
           </button>
         </div>
@@ -570,12 +558,12 @@ export function MenuManagerPage() {
       {!loading && categories.length > 0 && (
         <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory sticky top-0 z-10" style={{ background: 'var(--brand-bg)' }}>
           <button onClick={() => setSelectedCategory(null)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${selectedCategory === null ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}>
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${selectedCategory === null ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}>
             {t('common.all', 'All')}
           </button>
           {categories.map(cat => (
             <button key={cat.id} onClick={async () => { setSelectedCategory(cat.id); await toggleExpand(cat.id); }}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${selectedCategory === cat.id ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}>
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${selectedCategory === cat.id ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}>
               {cat.name} <span className="text-[10px] opacity-70">({cat.product_count ?? cat.products?.length ?? 0})</span>
             </button>
           ))}
@@ -601,8 +589,8 @@ export function MenuManagerPage() {
             </p>
             {selectedCategory && (
               <button onClick={() => openAddForm(selectedCategory)}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg"
-                style={{ background: 'var(--brand-primary)', color: 'var(--color-on-primary)' }}>
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--brand-primary)]"
+                style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-text)' }}>
                 <i className="ti ti-plus text-xs" /> {t('common.add', 'Add')}
               </button>
             )}
@@ -657,7 +645,7 @@ export function MenuManagerPage() {
                       {getProductAllergens(product).length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
                           {getProductAllergens(product).map(a => {
-                            const s = ALLERGEN_COLORS[a.toLowerCase()] || { bg: 'rgba(107,114,128,0.12)', text: '#374151' };
+                            const s = getAllergenStyle(a);
                             return (
                               <span key={a} className="text-[8px] font-semibold px-1 py-0.5 rounded-full leading-tight"
                                 style={{ background: s.bg, color: s.text }}>
@@ -735,7 +723,7 @@ export function MenuManagerPage() {
               {getProductAllergens(previewProduct).length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {getProductAllergens(previewProduct).map(a => {
-                    const s = ALLERGEN_COLORS[a.toLowerCase()] || { bg: 'rgba(107,114,128,0.12)', text: '#374151' };
+                    const s = getAllergenStyle(a);
                     return (
                       <span key={a} className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                         style={{ background: s.bg, color: s.text }}>

@@ -156,7 +156,7 @@ async function run() {
             ) ORDER BY c.sort_order
           ) as categories
         FROM categories c
-        LEFT JOIN products_json pj ON pj.category_id = c.id
+        JOIN products_json pj ON pj.category_id = c.id
         WHERE c.location_id = v_location_id
       )
       SELECT 

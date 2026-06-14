@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { getImageUrl } from '../../lib/image-url.js';
 
 export default async function publicMenuRoutes(fastify: FastifyInstance) {
   const server = fastify.withTypeProvider<ZodTypeProvider>();
@@ -23,6 +24,16 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
 
       menu.location_id = menu.locationId = locRes.rows[0]?.id || null;
       menu.location_name = locRes.rows[0]?.name || '';
+
+      if (menu.categories && Array.isArray(menu.categories)) {
+        for (const cat of menu.categories) {
+          if (cat.products && Array.isArray(cat.products)) {
+            for (const prod of cat.products) {
+              prod.imageUrl = getImageUrl(prod.image_key || prod.imageKey);
+            }
+          }
+        }
+      }
 
       reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
       reply.header('X-Menu-Version', menu.menu_version.toString());

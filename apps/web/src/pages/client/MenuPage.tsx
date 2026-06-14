@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ProductCard, useI18n, PriceDisplay } from '@deliveryos/ui';
+import { ProductCard, useI18n, PriceDisplay, getAllergenStyle } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 
 interface ProductModifier {
@@ -29,8 +29,9 @@ interface Product {
   price: number;
   available: boolean;
   image_key?: string | null;
-  attributes?: any;
+  imageUrl?: string | null;
   modifier_groups?: ModifierGroup[];
+  attributes?: any;
 }
 
 interface MenuCategory {
@@ -297,6 +298,7 @@ export function MenuPage() {
   };
 
   const getImageUrl = (product: Product): string | null => {
+    if (product.imageUrl) return product.imageUrl;
     if (!product.image_key) return null;
     if (product.image_key.startsWith('data:') || product.image_key.startsWith('http://') || product.image_key.startsWith('https://')) {
       return product.image_key;
@@ -307,24 +309,6 @@ export function MenuPage() {
     const cleanKey = product.image_key.startsWith('/') ? product.image_key.slice(1) : product.image_key;
     return `${base}/images/${cleanKey}`;
   };
-
-  const ALLERGEN_COLORS: Record<string, { bg: string; text: string }> = {
-    gluten: { bg: 'rgba(234,179,8,0.12)', text: '#a16207' },
-    dairy: { bg: 'rgba(59,130,246,0.12)', text: '#1d4ed8' },
-    eggs: { bg: 'rgba(234,179,8,0.12)', text: '#a16207' },
-    soy: { bg: 'rgba(34,197,94,0.12)', text: '#15803d' },
-    nuts: { bg: 'rgba(249,115,22,0.12)', text: '#c2410c' },
-    peanuts: { bg: 'rgba(249,115,22,0.12)', text: '#c2410c' },
-    shellfish: { bg: 'rgba(239,68,68,0.12)', text: '#b91c1c' },
-    fish: { bg: 'rgba(6,182,212,0.12)', text: '#0e7490' },
-    sesame: { bg: 'rgba(168,85,247,0.12)', text: '#7e22ce' },
-  };
-
-  function getAllergenStyle(allergen: string) {
-    const key = allergen.toLowerCase();
-    return ALLERGEN_COLORS[key] || { bg: 'rgba(107,114,128,0.12)', text: '#374151' };
-  };
-
   const attrEntries = (p: Product): [string, any][] => {
     if (!p.attributes || typeof p.attributes !== 'object') return [];
     return Object.entries(p.attributes as Record<string, any>).filter(([k]) => !['kcal', 'protein', 'fat', 'carbs', 'allergens', 'tags', 'taste', 'bom', 'stock_count'].includes(k));
@@ -335,20 +319,20 @@ export function MenuPage() {
 
       {/* Hero Section */}
       <section className="relative w-full h-[160px] md:h-[200px] flex items-end overflow-hidden" style={{ background: 'linear-gradient(160deg, var(--brand-surface-raised) 0%, var(--brand-accent) 60%, var(--brand-primary) 100%)' }}>
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.05) 100%)' }} />
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, color-mix(in srgb, var(--brand-bg) 75%, transparent) 0%, color-mix(in srgb, var(--brand-bg) 30%, transparent) 45%, color-mix(in srgb, var(--brand-bg) 5%, transparent) 100%)' }} />
         <div className="absolute inset-0 opacity-[0.04] bg-[radial-gradient(circle_at_30%_50%,#fff_0%,transparent_60%)]" />
         <div className="relative z-10 w-full px-5 pb-4">
           <div className="flex items-center gap-1.5 text-[12px] font-medium mb-1.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
             <span className="inline-flex gap-0.5" style={{ color: 'var(--color-warning)' }}>
               {[1,2,3,4,5].map(i => <i key={i} className="ti ti-star-filled" style={{ fontSize: '0.7rem' }} />)}
             </span>
-            <span style={{ color: '#fff', fontWeight: 600 }}>4.8</span>
+            <span style={{ color: 'var(--color-on-primary)', fontWeight: 600 }}>4.8</span>
             <span className="opacity-70">(124)</span>
             <span className="mx-1.5 opacity-40">·</span>
             <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} />
             <span>30 min</span>
           </div>
-          <h1 className="text-[22px] md:text-[26px] font-bold leading-tight text-white" style={{ fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 16px rgba(0,0,0,0.4)' }}>
+          <h1 className="text-[22px] md:text-[26px] font-bold leading-tight text-white" style={{ fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 16px color-mix(in srgb, var(--brand-bg) 40%, transparent)' }}>
             {menu?.location_name || t('client.menu', 'Menu')}
           </h1>
         </div>
@@ -372,10 +356,10 @@ export function MenuPage() {
                     onClick={() => handleScrollTo(cat.id)}
                     role="tab"
                     aria-selected={activeTab === cat.id}
-                    className="h-full flex items-center gap-1.5 px-3.5 whitespace-nowrap font-medium transition-all border-b-2"
+                    className="h-full flex items-center gap-1.5 px-3.5 whitespace-nowrap font-medium transition-all border-b-2 min-w-[44px]"
                     style={{ 
                       minHeight: 'var(--tap-min)',
-                      color: activeTab === cat.id ? 'var(--brand-primary)' : 'var(--brand-text-muted)',
+                      color: activeTab === cat.id ? 'var(--brand-text)' : 'var(--brand-text-muted)',
                       borderColor: activeTab === cat.id ? 'var(--brand-primary)' : 'transparent',
                     }}
                 >
@@ -397,11 +381,11 @@ export function MenuPage() {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder={t('common.search', 'Search...')}
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg border text-sm outline-none"
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg border text-sm outline-none min-h-11"
               style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
+              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px]">
                 <i className="ti ti-x text-xs" style={{ color: 'var(--brand-text-muted)' }} />
               </button>
             )}
@@ -415,8 +399,9 @@ export function MenuPage() {
                 <button key={mode} onClick={() => setSortBy(mode)}
                   className="px-2 min-h-[44px] rounded-md text-[10px] font-medium transition-all whitespace-nowrap flex items-center"
                   style={{
-                    background: sortBy === mode ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
-                    color: sortBy === mode ? '#fff' : 'var(--brand-text-muted)',
+                    background: sortBy === mode ? 'var(--brand-primary-light)' : 'var(--brand-surface-raised)',
+                    color: sortBy === mode ? 'var(--brand-text)' : 'var(--brand-text-muted)',
+                    border: sortBy === mode ? '1px solid var(--brand-primary)' : '1px solid transparent',
                   }}
                 >
                   {mode === 'default' ? '·' : mode === 'price-asc' ? '\u2191 Price' : mode === 'price-desc' ? '\u2193 Price' : 'A-Z'}
@@ -434,7 +419,7 @@ export function MenuPage() {
                     className="px-1.5 min-h-[44px] rounded text-[9px] font-semibold uppercase whitespace-nowrap transition-all flex items-center"
                     style={{
                       background: filterAllergen === a ? s.text : s.bg,
-                      color: filterAllergen === a ? '#fff' : s.text,
+                      color: filterAllergen === a ? 'var(--color-on-primary)' : s.text,
                       opacity: filterAllergen && filterAllergen !== a ? 0.3 : 1,
                     }}
                   >
@@ -473,7 +458,7 @@ export function MenuPage() {
               {t('client.empty_menu', fetchError ? 'Failed to load menu' : 'Menu unavailable')}
             </p>
             {fetchError && (
-              <button onClick={() => { setRetryCount(c => c + 1); }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all active:scale-95" style={{ background: 'var(--brand-primary)' }}>
+              <button onClick={() => { setRetryCount(c => c + 1); }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all active:scale-95 min-h-11" style={{ background: 'var(--brand-primary)' }}>
                 <i className="ti ti-refresh mr-1.5" />{t('client.retry', 'Retry')}
               </button>
             )}
@@ -545,7 +530,7 @@ export function MenuPage() {
 
       {/* Product Detail Modal */}
       {detailProduct && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center backdrop-blur-sm transition-opacity duration-300" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={closeDetail}>
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center backdrop-blur-sm transition-opacity duration-300" style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)' }} onClick={closeDetail}>
           <div 
             className="w-full md:max-w-lg max-h-[85vh] overflow-auto rounded-t-2xl md:rounded-2xl shadow-2xl animate-slide-up" 
             style={{ background: 'var(--brand-bg)' }}
@@ -568,7 +553,7 @@ export function MenuPage() {
               )}
               <button 
                 className="absolute top-4 right-4 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center backdrop-blur-md active:scale-[0.95] transition-transform"
-                style={{ background: 'rgba(0,0,0,0.5)', color: 'white' }}
+                style={{ background: 'color-mix(in srgb, var(--brand-bg) 50%, transparent)', color: 'var(--color-on-primary)' }}
                 onClick={closeDetail}
                 aria-label="Close"
               >
@@ -576,7 +561,7 @@ export function MenuPage() {
               </button>
               {detailProduct.available && bomToNutrition(detailProduct).kcal > 0 && (
                 <div className="absolute bottom-3 left-3 z-10">
-                  <span className="text-[10px] font-medium px-2 py-1 rounded-md flex items-center gap-1.5" style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
+                  <span className="text-[10px] font-medium px-2 py-1 rounded-md flex items-center gap-1.5" style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)', color: 'var(--color-on-primary)' }}>
                     <i className="ti ti-flame" style={{ fontSize: '0.7rem' }} />
                     {bomToNutrition(detailProduct).kcal} {t('nutrition.calories', 'kcal')}
                     {bomToNutrition(detailProduct).protein > 0 && <span className="opacity-70">· {t('nutrition.protein', 'P')}{bomToNutrition(detailProduct).protein}g</span>}
@@ -595,7 +580,7 @@ export function MenuPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1.5">
                       {t('client.recommended', '') && (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1" style={{ background: 'rgba(234,79,22,0.1)', color: 'var(--brand-primary)' }}>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1" style={{ background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)', color: 'var(--brand-primary)' }}>
                           <i className="ti ti-flame" style={{ fontSize: '0.6rem' }} />
                           {t('client.popular', 'Popular')}
                         </span>
@@ -729,7 +714,7 @@ export function MenuPage() {
                               key={mod.id}
                               data-testid="modifier-option"
                               onClick={() => toggleModifier(group.id, mod.id, group)}
-                              className={`px-3.5 py-2 rounded-[10px] text-[13px] font-medium transition-all active:scale-[0.97] border ${
+                              className={`px-3.5 py-2 rounded-[10px] text-[13px] font-medium transition-all active:scale-[0.97] border min-h-11 ${
                                 isSelected ? 'border-2' : ''
                               }`}
                               style={{
@@ -739,9 +724,9 @@ export function MenuPage() {
                               }}
                             >
                               {mod.name}
-                              {mod.price_delta > 0 && (
+                                  {mod.price_delta > 0 && (
                                 <span className="ml-1 text-[11px]" style={{ color: isSelected ? 'var(--brand-primary)' : 'var(--brand-text-muted)' }}>
-                                  +{mod.price_delta.toLocaleString()}
+                                  +<PriceDisplay amount={mod.price_delta} currency="ALL" />
                                 </span>
                               )}
                             </button>

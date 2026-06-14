@@ -45,8 +45,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\package.json": {
-    "mtime": 1781303357.6673307,
-    "ast_hash": "93b7a2985f04cfbfeda09a2ff22483f9",
+    "mtime": 1781400334.9145603,
+    "ast_hash": "5120cbc0003542a3480d8c67bac70160",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\playwright.config.ts": {
@@ -235,8 +235,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\fix-db.js": {
-    "mtime": 1780697492.0421197,
-    "ast_hash": "acbd62c734cb52f5fea7ddd58677e26d",
+    "mtime": 1781407850.408421,
+    "ast_hash": "95e3f466fad947e4ae8554e7e1f86e30",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\hash.js": {
@@ -275,8 +275,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\public\\sw.js": {
-    "mtime": 1781394686.6627612,
-    "ast_hash": "3f8b295e70652d1e64fdd53e1755c8f0",
+    "mtime": 1781400268.0331304,
+    "ast_hash": "15d2aec124dc14abcb77386fa1fe9439",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\index.ts": {
@@ -290,8 +290,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\server.ts": {
-    "mtime": 1781394811.7863138,
-    "ast_hash": "d47bad00aab72b07675c731f9769a019",
+    "mtime": 1781407416.131198,
+    "ast_hash": "9d84d4bb3d2d07b2a7c3585b55a45889",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\shutdown.ts": {
@@ -320,8 +320,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\client\\checkout\\app.ts": {
-    "mtime": 1781303357.5608191,
-    "ast_hash": "d79175b523ef0b40faab8ab441bab2a4",
+    "mtime": 1781408281.014611,
+    "ast_hash": "7400b2f56472abc1e8514950b1a203ba",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\client\\checkout\\pin.ts": {
@@ -375,113 +375,108 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\ai-ocr-parser.ts": {
-    "mtime": 1781303277.9018204,
-    "ast_hash": "82e8b5ce1ef7d2820030958a61b1d525",
+    "mtime": 1781404698.752666,
+    "ast_hash": "a264f76f888c94f68068443aefd3371a",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\csv-parser.ts": {
-    "mtime": 1781397330.6864104,
-    "ast_hash": "f5e04a05cf12c44943d6e0d7c1144bda",
+    "mtime": 1781404753.1552603,
+    "ast_hash": "ad89c6339d03572031ac648d91bc6712",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\dwell-thresholds.ts": {
-    "mtime": 1780672637.8798676,
-    "ast_hash": "679ae658ae3bdb4ed3421b2e3d9005a4",
+    "mtime": 1781404477.8837028,
+    "ast_hash": "8204e2c75eb681e987ec51ed5b9105e7",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\geo.ts": {
-    "mtime": 1780672637.8798676,
-    "ast_hash": "3dd7df0df72c68e5e7863837c9242699",
+    "mtime": 1781404477.8867369,
+    "ast_hash": "daaa86372faec200acb42bbc4ec72ca7",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\ip-hash.ts": {
-    "mtime": 1780672637.8798676,
-    "ast_hash": "66dc0cf0dc4d2be93cb529606429a2fb",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\jsonld-builder.ts": {
-    "mtime": 1781303357.5608191,
-    "ast_hash": "6028ecf66283be616bf02f4dcccefb18",
+    "mtime": 1781404477.8902955,
+    "ast_hash": "bbd148590d4e028bde216db8cad0e26d",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\libretranslate-provider.ts": {
-    "mtime": 1780672637.8798676,
-    "ast_hash": "c8e45e1e59aa310041de48f6e3194a5a",
+    "mtime": 1781404703.7643697,
+    "ast_hash": "298f62e604cb4089edca7ee94523c5e3",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\local-storage.ts": {
-    "mtime": 1781303273.83789,
-    "ast_hash": "71d26e0e3b2d9bb0e3840f4053a5d97a",
+    "mtime": 1781404477.8965912,
+    "ast_hash": "620ffe5014e247329b1082aae4307172",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\logger.ts": {
-    "mtime": 1780672637.8798676,
-    "ast_hash": "4d00b6992e0eb70693655a1079f3c57c",
+    "mtime": 1781404813.8651104,
+    "ast_hash": "66cf4dbcfeb8d48d80c19a72bbae7694",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\memory.ts": {
-    "mtime": 1781397332.562582,
-    "ast_hash": "e9a689e5b22fa232d9eba26406dccf67",
+    "mtime": 1781404477.9047606,
+    "ast_hash": "7eb0c6303d9810ced06e30bbda0dfdf5",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\money.ts": {
-    "mtime": 1780672637.8878784,
-    "ast_hash": "c3a42a40d913842b55e52b4d73803686",
+    "mtime": 1781403403.8480232,
+    "ast_hash": "5796c1c153c57406dc2b9cd10568dd3a",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\otp.ts": {
-    "mtime": 1781397329.9338646,
-    "ast_hash": "67ba4a02bc67f01c73009e6eb22c766f",
+    "mtime": 1781404477.9072921,
+    "ast_hash": "cb46edb605860929847fb96e955c43a5",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\pii-cipher.ts": {
-    "mtime": 1781303258.9233508,
-    "ast_hash": "e3b4633a7d90b385bf1c2d0410c3e56a",
+    "mtime": 1781404477.9111729,
+    "ast_hash": "53696d9ba7dbb659b897df86f3637a76",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\pii-leak-detector.ts": {
-    "mtime": 1781397322.6411233,
-    "ast_hash": "9eddb4ef2b6204f104aeea5e009671e1",
+    "mtime": 1781404477.9136949,
+    "ast_hash": "b5e90d9362d663d66fdd86d46a0f4d03",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\pii-mask.ts": {
-    "mtime": 1780846619.0236914,
-    "ast_hash": "482c83f5dcfe9381ccb4aa912f505c99",
+    "mtime": 1781404477.9166727,
+    "ast_hash": "d42a08a35e60f92ede9d75bc3043042e",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\pii-redactor.ts": {
-    "mtime": 1780672637.8893943,
-    "ast_hash": "3cab5522fbae22b8800e64061c2ef115",
+    "mtime": 1781404477.9357421,
+    "ast_hash": "7132a2fb9a1845714eeb46e6c51c43a1",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\restore-sandbox.ts": {
-    "mtime": 1780672637.8914351,
-    "ast_hash": "584c169641168e6fcb381c38083640e8",
+    "mtime": 1781404477.9387934,
+    "ast_hash": "074f4b435fdb4e2733ec7e3746000c9b",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\sentry.ts": {
-    "mtime": 1781397329.3799295,
-    "ast_hash": "8948c40d22ca20f6560267bac5a5e42d",
+    "mtime": 1781405074.993407,
+    "ast_hash": "cc239c328358b4fc0f60d3f843dcddcd",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\settlement-period.ts": {
-    "mtime": 1780672637.8914351,
-    "ast_hash": "b389b9e63c8e827b40aca890a34ff3b3",
+    "mtime": 1781404477.945225,
+    "ast_hash": "8d4e3462c46eee7370c14d0186831dda",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\ssr-client-renderer.ts": {
-    "mtime": 1781303357.5699584,
-    "ast_hash": "2c66a4b91815c32efa347b74ca934712",
+    "mtime": 1781404734.4770553,
+    "ast_hash": "1790b0c07574c063bd2adf59b1622b99",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\ssr-renderer.ts": {
-    "mtime": 1781336922.1221797,
-    "ast_hash": "979a0f8a1c7dc6d8f0ca2141c3936002",
+    "mtime": 1781411784.4555595,
+    "ast_hash": "7c288ca264f610d6b71057b4d42c8810",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\theme-renderer.ts": {
-    "mtime": 1780672637.8914351,
-    "ast_hash": "84b68c6beaf78a78e1d1fb08bc0ebee2",
+    "mtime": 1781405197.233784,
+    "ast_hash": "e1ed2ea823185e24cd631d8032c58bf3",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\anonymizer\\index.ts": {
@@ -500,8 +495,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\security\\headers.ts": {
-    "mtime": 1781303357.5608191,
-    "ast_hash": "902b3f34968018f7d58fd5a9334097bb",
+    "mtime": 1781408385.5953605,
+    "ast_hash": "f145bc265d7213ac70ff8c2d9252ad1b",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\signals\\compute.ts": {
@@ -545,13 +540,13 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\notifications\\adapters\\webpush.ts": {
-    "mtime": 1781397313.8926678,
-    "ast_hash": "850cc4c3d65fdf94921f417b7f5439dd",
+    "mtime": 1781403949.3369215,
+    "ast_hash": "f3debc081cf97aa67efa42e1950257ef",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\notifications\\workers\\index.ts": {
-    "mtime": 1781397315.2832317,
-    "ast_hash": "6c1eae6f7310110cff1fc7b97c053ef3",
+    "mtime": 1781401987.8488722,
+    "ast_hash": "246af3b420b77f60cb8a53bec6868e44",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\notifications\\workers\\telegram.poll.ts": {
@@ -560,8 +555,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\plugins\\auth.ts": {
-    "mtime": 1781303258.9233508,
-    "ast_hash": "55f837b23f51825e41aa64f0b234686f",
+    "mtime": 1781403410.1818442,
+    "ast_hash": "51325e142e6a3e60d8313449855515ca",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\public\\manifest.json": {
@@ -595,18 +590,18 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\health.ts": {
-    "mtime": 1781303277.9136758,
-    "ast_hash": "02a45b7429a369e870c064d11c36bf90",
+    "mtime": 1781421020.6640804,
+    "ast_hash": "6bfa88b8900e25b8938ef6a7a9d005f8",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\orders.ts": {
-    "mtime": 1781397907.2248669,
-    "ast_hash": "33695acab7bfec23b503b94c7a2c376c",
+    "mtime": 1781407435.125245,
+    "ast_hash": "6dfdc6f22f0a01168b0a7e3712963c2b",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\spa-proxy.ts": {
-    "mtime": 1781397321.0936732,
-    "ast_hash": "aeb45c02e67a28f5bdf99254f3b78fad",
+    "mtime": 1781408105.1505468,
+    "ast_hash": "933fe563845e98a2d63f99ee4a0b69dd",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\admin\\backups.ts": {
@@ -760,8 +755,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\settlements.ts": {
-    "mtime": 1781397831.2964456,
-    "ast_hash": "6bd973c7995bf25db3b6c616030a1c1b",
+    "mtime": 1781408824.9188044,
+    "ast_hash": "ef573f51ed81e71677e6e7d2933ebc9d",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\signals.ts": {
@@ -770,8 +765,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\owner\\themes.ts": {
-    "mtime": 1781303357.5895157,
-    "ast_hash": "02dc892897694ea9cf2eb6f2aa59bb36",
+    "mtime": 1781408130.321302,
+    "ast_hash": "7cc8e5f76219e03bf36f58a805a0523b",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\public\\client-flow.ts": {
@@ -785,8 +780,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\public\\menu.ts": {
-    "mtime": 1781397687.0737967,
-    "ast_hash": "321df033ea015599b72ddbbdbec0f5f6",
+    "mtime": 1781408493.5723085,
+    "ast_hash": "65e158e1a18c3c063b0a5bb2935ad42d",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\public\\pwa.ts": {
@@ -800,8 +795,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\public\\ssr.ts": {
-    "mtime": 1781397676.3966122,
-    "ast_hash": "ca764a3f366521442d5b946f4e92f7c2",
+    "mtime": 1781408830.89161,
+    "ast_hash": "29847d8ddb94425dd46cf8d2fb0f2cd8",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\public\\telemetry.ts": {
@@ -1140,8 +1135,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\vite.config.ts": {
-    "mtime": 1781303357.6307673,
-    "ast_hash": "14f80cc3e02cc8588766b0963c64abd1",
+    "mtime": 1781420326.3256435,
+    "ast_hash": "b0ca5d90107b032d6dd19e9b5df1e917",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\public\\manifest.json": {
@@ -1160,13 +1155,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\main.tsx": {
-    "mtime": 1781356049.500515,
-    "ast_hash": "6f77716366e306bc5cae9b65c2fb71dd",
-    "semantic_hash": ""
-  },
-  "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\maplibre-shim.ts": {
-    "mtime": 1780575885.9967842,
-    "ast_hash": "a3ff85ae60799d91e657fbe279410fcb",
+    "mtime": 1781407819.6520402,
+    "ast_hash": "40b9f3ebcb158715f4ed613c29b45c38",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\vite-env.d.ts": {
@@ -1225,13 +1215,13 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\BrandingPage.tsx": {
-    "mtime": 1781398839.4053557,
-    "ast_hash": "58083faea8315a46706916451c0d46a6",
+    "mtime": 1781419654.5779383,
+    "ast_hash": "2e05c5292600f9d40bf32ea38317f926",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\CouriersPage.tsx": {
-    "mtime": 1781398828.0133445,
-    "ast_hash": "e81b6bb0187df82de7944ec9e7a6b52b",
+    "mtime": 1781408001.348802,
+    "ast_hash": "d1db1d486aa82a75bf41306eeeb25f1d",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\CRMPage.tsx": {
@@ -1240,8 +1230,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\DashboardPage.tsx": {
-    "mtime": 1781398972.936722,
-    "ast_hash": "3be01cfcb525622a0f47eaa15b09659e",
+    "mtime": 1781420870.8074071,
+    "ast_hash": "fc1ee39872dc075c0f9d4203f56d3e18",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\LoginPage.tsx": {
@@ -1250,13 +1240,13 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\MenuManagerPage.tsx": {
-    "mtime": 1781399077.3030152,
-    "ast_hash": "a2f734e869021edeadd91f1b44eaee45",
+    "mtime": 1781420903.340516,
+    "ast_hash": "8fdfffb559cf34612b71582935748d54",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\OnboardingPage.tsx": {
-    "mtime": 1781398942.2133746,
-    "ast_hash": "b82aab8d84f9c6416b54943ee5587e32",
+    "mtime": 1781420909.386343,
+    "ast_hash": "8a5d9fdb64adb480927d2f01a902c14b",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\RecipeEditor.tsx": {
@@ -1265,8 +1255,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\SettingsPage.tsx": {
-    "mtime": 1781398834.585092,
-    "ast_hash": "fb1435785308a3e797b59936c287e9bc",
+    "mtime": 1781409014.8779037,
+    "ast_hash": "1da15ed3bb9b2ae029c8dc33779b052a",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\SupplyLibraryPage.tsx": {
@@ -1275,23 +1265,23 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\client\\CheckoutPage.tsx": {
-    "mtime": 1781398851.731153,
-    "ast_hash": "053ef8c79447368355227aa1c55df928",
+    "mtime": 1781420877.0720692,
+    "ast_hash": "3d56efd984064faa99eb10ff1acc0471",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\client\\MenuPage.tsx": {
-    "mtime": 1781367583.5513406,
-    "ast_hash": "68c4218c536df2febeb283e997438548",
+    "mtime": 1781420857.0546927,
+    "ast_hash": "5248441983e4ddc9fa51de5d607c715d",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\client\\OrderStatusPage.tsx": {
-    "mtime": 1781398419.8305647,
-    "ast_hash": "a682198d25337dac80717d5f44a858fa",
+    "mtime": 1781420882.7852962,
+    "ast_hash": "37c0a478d7339345039272ef0a9f07f4",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\courier\\DeliveryPage.tsx": {
-    "mtime": 1781398955.4945192,
-    "ast_hash": "3cdd8091b740c87792746dc4e6ebf8d6",
+    "mtime": 1781407583.3750634,
+    "ast_hash": "b8263af8dc8547e25d8f52d39ed88d33",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\courier\\EarningsPage.tsx": {
@@ -1305,8 +1295,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\courier\\LoginPage.tsx": {
-    "mtime": 1781398623.608113,
-    "ast_hash": "cada6a34e9a067a398ad2033e6fc5082",
+    "mtime": 1781407582.2272475,
+    "ast_hash": "ec911d7c18aff31fad63282c596d08f4",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\courier\\ShiftPage.tsx": {
@@ -1320,8 +1310,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\routes\\AdminRoutes.tsx": {
-    "mtime": 1781363473.2992604,
-    "ast_hash": "14788c38d8d80942503d53e3e7b4721d",
+    "mtime": 1781420384.0269527,
+    "ast_hash": "eaf0e1b5f564b030e130893e04e7fb7d",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\routes\\ClientLayout.tsx": {
@@ -1560,8 +1550,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\maps.spec.ts": {
-    "mtime": 1781303357.6598108,
-    "ast_hash": "9cf2fcee0f52963d907b70a4d81274d0",
+    "mtime": 1781403656.7204926,
+    "ast_hash": "9dc738a7a7bc31309fc0fa4d7e6bb600",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\onboarding-e2e.spec.ts": {
@@ -1650,8 +1640,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\config\\src\\index.ts": {
-    "mtime": 1781394710.359836,
-    "ast_hash": "7a3b412288e4b496ffdc330055c5e62d",
+    "mtime": 1781408072.5304737,
+    "ast_hash": "d8d4a0b4e8a4b1cb47cfb7ce2c8b588f",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\config\\src\\verify-env.ts": {
@@ -1815,8 +1805,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\db\\migrations\\1780338982022_read_public_menu.ts": {
-    "mtime": 1780401554.6201665,
-    "ast_hash": "6e80617730d2e226c8481c0d00660376",
+    "mtime": 1781407849.0790148,
+    "ast_hash": "1b36d7ef62f19d35d3d40a6ee3ac9f7c",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\db\\migrations\\1780338982023_order_items_product_fk_set_null.ts": {
@@ -1845,8 +1835,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\db\\migrations\\1780338982028_ssr_public_menu.ts": {
-    "mtime": 1780421694.4121544,
-    "ast_hash": "8ed63c51ffec8fb48f97044c8c072b32",
+    "mtime": 1781407849.7696085,
+    "ast_hash": "390a8ef2a7c1edb8014b5a4563cabc53",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\db\\migrations\\1780338982030_theme_versions.ts": {
@@ -2120,8 +2110,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\platform\\src\\auth\\jwt.ts": {
-    "mtime": 1781362651.4952884,
-    "ast_hash": "953581b44178cbf76a07577258d98f49",
+    "mtime": 1781407458.8025973,
+    "ast_hash": "bfa703f34b8c6eb7a740e2d52359134d",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\platform\\src\\auth\\tenant.ts": {
@@ -2150,8 +2140,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\shared-types\\src\\utils.ts": {
-    "mtime": 1781364422.3820653,
-    "ast_hash": "657ce2866b6138f63f31c311daf9d37e",
+    "mtime": 1781403880.6692245,
+    "ast_hash": "294699a6c8eb2c9a7898a03c79ae9f9f",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\shared-types\\src\\contracts\\index.ts": {
@@ -2295,8 +2285,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\index.ts": {
-    "mtime": 1781356054.595014,
-    "ast_hash": "e1bf1255354ddfb79319d4c0183824a0",
+    "mtime": 1781407829.3238623,
+    "ast_hash": "b0f5a855a2bf53e7f201cbcc348bf477",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\Base.tsx": {
@@ -2305,8 +2295,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\Fallback.tsx": {
-    "mtime": 1780502220.9782584,
-    "ast_hash": "d2524e98d2c81c1bc8c2a0b087f4b8ac",
+    "mtime": 1781407800.121195,
+    "ast_hash": "d40da02dd86a935707e30a937413a800",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\Overlays.tsx": {
@@ -2315,18 +2305,18 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\Status.tsx": {
-    "mtime": 1781366356.3003027,
-    "ast_hash": "ef44e0e057bd3bb8eabae4de7395689b",
+    "mtime": 1781407813.5200243,
+    "ast_hash": "c1e8043836c1851e418fb54d58769649",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\admin\\AdminUI.tsx": {
-    "mtime": 1781372137.5487368,
-    "ast_hash": "b3df72d685a83486b91ec4503f006b42",
+    "mtime": 1781420305.5959926,
+    "ast_hash": "b6b4a1ac20b073c52f44d5ab7de64655",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\atoms\\Button.tsx": {
-    "mtime": 1780502285.023878,
-    "ast_hash": "f7bd7cd3bafd038cf313382a23cd85a3",
+    "mtime": 1781408789.78745,
+    "ast_hash": "4684610124fc2fa9c5363fd76a41df15",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\atoms\\Icon.tsx": {
@@ -2355,13 +2345,13 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\atoms\\StatusBadge.tsx": {
-    "mtime": 1780507030.3012798,
-    "ast_hash": "b116b4d3604685738894412a61bf3c78",
+    "mtime": 1781403531.4746609,
+    "ast_hash": "912f40dc20592b14c902395e937a57f8",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\client\\ClientUI.tsx": {
-    "mtime": 1781366428.5729358,
-    "ast_hash": "1edd1aab21b7eaed4db244fef19f67bb",
+    "mtime": 1781420306.4937634,
+    "ast_hash": "dc16a782b8b8f9c20277683fe04a16c6",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\courier\\CourierUI.tsx": {
@@ -2395,8 +2385,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\layout\\ThemeProvider.tsx": {
-    "mtime": 1780502306.7835295,
-    "ast_hash": "dff2f52bfccebc8e95a6e55cbe0b2a15",
+    "mtime": 1781408817.8618386,
+    "ast_hash": "9c1264e5fa15581ec3c2bc78688f753c",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\molecules\\BottomSheet.tsx": {
@@ -2410,8 +2400,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\molecules\\CourierLiveMap.tsx": {
-    "mtime": 1781303276.8570783,
-    "ast_hash": "1bd70c8678441fab9f22f5de21005dca",
+    "mtime": 1781407886.1180289,
+    "ast_hash": "95694a0b24f4833cf7005cc34f02e8fc",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\molecules\\Drawer.tsx": {
@@ -2505,8 +2495,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\lib\\i18n.ts": {
-    "mtime": 1781365690.968081,
-    "ast_hash": "20e8f1102351a19788725ddadbd4405f",
+    "mtime": 1781407635.6552267,
+    "ast_hash": "ccc2c679d2cf96eae271c32e8f6b6af7",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\lib\\I18nProvider.tsx": {
@@ -2525,8 +2515,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\theme\\index.ts": {
-    "mtime": 1780502149.7400813,
-    "ast_hash": "8bed129ad4c62f1d0b70cc3dc0a701dd",
+    "mtime": 1781420844.638561,
+    "ast_hash": "2453d1ed2c0f3bcd2633e8db50d060b6",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\theme\\ThemeProvider.tsx": {
@@ -2730,8 +2720,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\AGENTS.md": {
-    "mtime": 1781399352.2230887,
-    "ast_hash": "a18a1fd1c9aa5c32fe95083ed4d77b84",
+    "mtime": 1781403108.9388402,
+    "ast_hash": "9a12f7d557c95edc83c074f93a43f6cf",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\CONVENTIONS.md": {
@@ -3375,8 +3365,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\admin\\FlowTestPage.tsx": {
-    "mtime": 1781399026.3483813,
-    "ast_hash": "5b8877a0273053e428e3eb5273474326",
+    "mtime": 1781407588.5488067,
+    "ast_hash": "1b260148e0043d088a1670923c5efd47",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\web\\src\\pages\\courier\\CourierInvitePage.tsx": {
@@ -3410,8 +3400,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\skills-lock.json": {
-    "mtime": 1781303268.5868888,
-    "ast_hash": "82e4d4133178274048bceb127b1f31aa",
+    "mtime": 1781399624.9041173,
+    "ast_hash": "8104e63f59e50b915c501274ab0c1701",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\test-fetch.js": {
@@ -3425,72 +3415,72 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\eval-viewer\\generate_review.py": {
-    "mtime": 1781303268.3845606,
+    "mtime": 1781399623.0886483,
     "ast_hash": "3ec67448bf48beb2ce336e8a050e4618",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\scripts\\aggregate_benchmark.py": {
-    "mtime": 1781303268.3906484,
+    "mtime": 1781399623.0921454,
     "ast_hash": "341cc9da943bb8515f22774f3fb1f151",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\scripts\\generate_report.py": {
-    "mtime": 1781303268.3906484,
+    "mtime": 1781399623.0940125,
     "ast_hash": "e103b279b5aeb66bdc6360b2882f7461",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\scripts\\improve_description.py": {
-    "mtime": 1781303268.3938365,
+    "mtime": 1781399623.0940125,
     "ast_hash": "90f7eca93679d893581c64f5ad408e63",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\scripts\\package_skill.py": {
-    "mtime": 1781303268.3943474,
+    "mtime": 1781399623.0957878,
     "ast_hash": "b3e2d0f02bd130c6865edaeb13042f71",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\scripts\\quick_validate.py": {
-    "mtime": 1781303268.3943474,
+    "mtime": 1781399623.0957878,
     "ast_hash": "1c14726b2f21750beffe0bef97c7f8d9",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\scripts\\run_eval.py": {
-    "mtime": 1781303268.3954394,
+    "mtime": 1781399623.0957878,
     "ast_hash": "561ec9772f276cb1bea459e477f03fd9",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\scripts\\run_loop.py": {
-    "mtime": 1781303268.3964574,
+    "mtime": 1781399623.0957878,
     "ast_hash": "8d7f8fc75b5b06df80837f05dcd33445",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\scripts\\utils.py": {
-    "mtime": 1781303268.3974507,
+    "mtime": 1781399623.0957878,
     "ast_hash": "77d0ec8142dfb2f06f5d150c4beaf333",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\scripts\\__init__.py": {
-    "mtime": 1781303268.3906484,
+    "mtime": 1781399623.09108,
     "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\webapp-testing\\examples\\console_logging.py": {
-    "mtime": 1781303268.4229376,
+    "mtime": 1781399528.894235,
     "ast_hash": "7166d10f96ff246e0529038e6885d0ff",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\webapp-testing\\examples\\element_discovery.py": {
-    "mtime": 1781303268.4234452,
+    "mtime": 1781399528.8956122,
     "ast_hash": "5282fba5ef350f26c2145e5cfaa76fc9",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\webapp-testing\\examples\\static_html_automation.py": {
-    "mtime": 1781303268.4234452,
+    "mtime": 1781399528.8990753,
     "ast_hash": "ed829df858c7c0adf2b6b35e33643215",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\webapp-testing\\scripts\\with_server.py": {
-    "mtime": 1781303268.425397,
+    "mtime": 1781399528.902145,
     "ast_hash": "01c7c8d2b96019e3f88f18bb945d2abe",
     "semantic_hash": ""
   },
@@ -3510,72 +3500,72 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\eval-viewer\\generate_review.py": {
-    "mtime": 1781303268.4639626,
+    "mtime": 1781399623.0886483,
     "ast_hash": "3ec67448bf48beb2ce336e8a050e4618",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\scripts\\aggregate_benchmark.py": {
-    "mtime": 1781303268.4953725,
+    "mtime": 1781399623.0921454,
     "ast_hash": "341cc9da943bb8515f22774f3fb1f151",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\scripts\\generate_report.py": {
-    "mtime": 1781303268.4964895,
+    "mtime": 1781399623.0940125,
     "ast_hash": "e103b279b5aeb66bdc6360b2882f7461",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\scripts\\improve_description.py": {
-    "mtime": 1781303268.4964895,
+    "mtime": 1781399623.0940125,
     "ast_hash": "90f7eca93679d893581c64f5ad408e63",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\scripts\\package_skill.py": {
-    "mtime": 1781303268.4978318,
+    "mtime": 1781399623.0957878,
     "ast_hash": "b3e2d0f02bd130c6865edaeb13042f71",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\scripts\\quick_validate.py": {
-    "mtime": 1781303268.4989073,
+    "mtime": 1781399623.0957878,
     "ast_hash": "1c14726b2f21750beffe0bef97c7f8d9",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\scripts\\run_eval.py": {
-    "mtime": 1781303268.4989073,
+    "mtime": 1781399623.0957878,
     "ast_hash": "561ec9772f276cb1bea459e477f03fd9",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\scripts\\run_loop.py": {
-    "mtime": 1781303268.5171363,
+    "mtime": 1781399623.0957878,
     "ast_hash": "8d7f8fc75b5b06df80837f05dcd33445",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\scripts\\utils.py": {
-    "mtime": 1781303268.5171363,
+    "mtime": 1781399623.0957878,
     "ast_hash": "77d0ec8142dfb2f06f5d150c4beaf333",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\scripts\\__init__.py": {
-    "mtime": 1781303268.493901,
+    "mtime": 1781399623.09108,
     "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\webapp-testing\\examples\\console_logging.py": {
-    "mtime": 1781303268.5355372,
+    "mtime": 1781399528.894235,
     "ast_hash": "7166d10f96ff246e0529038e6885d0ff",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\webapp-testing\\examples\\element_discovery.py": {
-    "mtime": 1781303268.536925,
+    "mtime": 1781399528.8956122,
     "ast_hash": "5282fba5ef350f26c2145e5cfaa76fc9",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\webapp-testing\\examples\\static_html_automation.py": {
-    "mtime": 1781303268.5374515,
+    "mtime": 1781399528.8990753,
     "ast_hash": "ed829df858c7c0adf2b6b35e33643215",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\webapp-testing\\scripts\\with_server.py": {
-    "mtime": 1781303268.5384624,
+    "mtime": 1781399528.902145,
     "ast_hash": "01c7c8d2b96019e3f88f18bb945d2abe",
     "semantic_hash": ""
   },
@@ -3615,8 +3605,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\scripts\\config-drift.ts": {
-    "mtime": 1781303357.552293,
-    "ast_hash": "092d921bf359fa75aeda7dab501def72",
+    "mtime": 1781408400.3075235,
+    "ast_hash": "f37171b43197c9632ef43266b5274485",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\scripts\\phase0-probe.ts": {
@@ -3750,13 +3740,13 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\notifications\\locales.ts": {
-    "mtime": 1781303357.571026,
-    "ast_hash": "ce6632cd5a17e283c76dd00b10586578",
+    "mtime": 1781401994.6811306,
+    "ast_hash": "3fe17f0eb56d757f65b3be86a7f48114",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\plugins\\turnstile.ts": {
-    "mtime": 1781303357.5744562,
-    "ast_hash": "d69ae6e9a4aa6d8c3e3b04ccf8589f6b",
+    "mtime": 1781404477.956802,
+    "ast_hash": "183b28d18b4732f930567e8631282cd7",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\routes\\order-messages.ts": {
@@ -3850,8 +3840,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\helpers\\a11y.ts": {
-    "mtime": 1781303357.6539717,
-    "ast_hash": "546e377e5485f1b3ebfae2d19998cec8",
+    "mtime": 1781419533.9948196,
+    "ast_hash": "14c8e1bcfc8be5f0f3816756514c9cd3",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\helpers\\notifHelpers.ts": {
@@ -3875,8 +3865,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\fe-radar-v2.spec.ts": {
-    "mtime": 1781303357.6553605,
-    "ast_hash": "e4c8bf9b50820bc6bb54460f7855fcc0",
+    "mtime": 1781419541.9044962,
+    "ast_hash": "4beec5cdf9523710083269e81c09ea4c",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\fe-radar.spec.ts": {
@@ -3960,8 +3950,8 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\simple-auth.spec.ts": {
-    "mtime": 1781303357.663431,
-    "ast_hash": "639a0430a63af41f7c9be9aa361478a5",
+    "mtime": 1781419534.493864,
+    "ast_hash": "fa2fbd7162023419a16c652afe0e1d81",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\tests\\simple-test.spec.ts": {
@@ -4065,13 +4055,13 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\db\\migrations\\1790000000012_analytics-events.ts": {
-    "mtime": 1781303357.6691632,
-    "ast_hash": "1cdcc3c2053d7895a6778669a840a882",
+    "mtime": 1781401967.541168,
+    "ast_hash": "1b8207da73c0960b8efb5ad3328831a2",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\db\\migrations\\1790000000013_exchange-rates.ts": {
-    "mtime": 1781340141.5304613,
-    "ast_hash": "b252fc025ffc1833d2e45b545a224c73",
+    "mtime": 1781403789.5304563,
+    "ast_hash": "1af7e96fbd0bf2457ae34accf90638a7",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\db\\scripts\\check-job-details.ts": {
@@ -4280,42 +4270,42 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\LICENSE.txt": {
-    "mtime": 1781303268.343762,
+    "mtime": 1781399623.082899,
     "ast_hash": "b895df9142976f87a996eaf2e50fcfc0",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\SKILL.md": {
-    "mtime": 1781303268.343762,
+    "mtime": 1781399623.0834277,
     "ast_hash": "26aa26467de6ecf13ce7047858007335",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\agents\\analyzer.md": {
-    "mtime": 1781303268.343762,
+    "mtime": 1781399623.0851872,
     "ast_hash": "60ccb8eaf4baa1284f3d5833ae0992bb",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\agents\\comparator.md": {
-    "mtime": 1781303268.343762,
+    "mtime": 1781399623.0851872,
     "ast_hash": "142cb6a33c43956ad89e328a6a0bcc24",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\agents\\grader.md": {
-    "mtime": 1781303268.3520617,
+    "mtime": 1781399623.0863278,
     "ast_hash": "a20d81caedc41baa552eee0dedfad071",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\assets\\eval_review.html": {
-    "mtime": 1781303268.3520617,
+    "mtime": 1781399623.0873492,
     "ast_hash": "b4ec70f8062506594d13a550e9128205",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\eval-viewer\\viewer.html": {
-    "mtime": 1781303268.3845606,
+    "mtime": 1781399623.0886483,
     "ast_hash": "1bfb666af186113482785fd24c69b342",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\skill-creator\\references\\schemas.md": {
-    "mtime": 1781303268.3906484,
+    "mtime": 1781399623.09108,
     "ast_hash": "914dfa3b885881574e14b406d8c23465",
     "semantic_hash": ""
   },
@@ -4350,12 +4340,12 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\webapp-testing\\LICENSE.txt": {
-    "mtime": 1781303268.4194324,
+    "mtime": 1781399528.8917656,
     "ast_hash": "b895df9142976f87a996eaf2e50fcfc0",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\webapp-testing\\SKILL.md": {
-    "mtime": 1781303268.4194324,
+    "mtime": 1781399528.8917656,
     "ast_hash": "3becd8cd21604694b63809e483bc31a7",
     "semantic_hash": ""
   },
@@ -4400,42 +4390,42 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\LICENSE.txt": {
-    "mtime": 1781303268.4494095,
+    "mtime": 1781399623.082899,
     "ast_hash": "b895df9142976f87a996eaf2e50fcfc0",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\SKILL.md": {
-    "mtime": 1781303268.4513767,
+    "mtime": 1781399623.0834277,
     "ast_hash": "26aa26467de6ecf13ce7047858007335",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\agents\\analyzer.md": {
-    "mtime": 1781303268.454424,
+    "mtime": 1781399623.0851872,
     "ast_hash": "60ccb8eaf4baa1284f3d5833ae0992bb",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\agents\\comparator.md": {
-    "mtime": 1781303268.454935,
+    "mtime": 1781399623.0851872,
     "ast_hash": "142cb6a33c43956ad89e328a6a0bcc24",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\agents\\grader.md": {
-    "mtime": 1781303268.4559274,
+    "mtime": 1781399623.0863278,
     "ast_hash": "a20d81caedc41baa552eee0dedfad071",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\assets\\eval_review.html": {
-    "mtime": 1781303268.4564376,
+    "mtime": 1781399623.0873492,
     "ast_hash": "b4ec70f8062506594d13a550e9128205",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\eval-viewer\\viewer.html": {
-    "mtime": 1781303268.477459,
+    "mtime": 1781399623.0886483,
     "ast_hash": "1bfb666af186113482785fd24c69b342",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\skill-creator\\references\\schemas.md": {
-    "mtime": 1781303268.484911,
+    "mtime": 1781399623.09108,
     "ast_hash": "914dfa3b885881574e14b406d8c23465",
     "semantic_hash": ""
   },
@@ -4470,12 +4460,12 @@
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\webapp-testing\\LICENSE.txt": {
-    "mtime": 1781303268.5345244,
+    "mtime": 1781399528.8917656,
     "ast_hash": "b895df9142976f87a996eaf2e50fcfc0",
     "semantic_hash": ""
   },
   "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\webapp-testing\\SKILL.md": {
-    "mtime": 1781303268.5355372,
+    "mtime": 1781399528.8917656,
     "ast_hash": "3becd8cd21604694b63809e483bc31a7",
     "semantic_hash": ""
   },
@@ -4687,6 +4677,1651 @@
   "C:\\Users\\Dell5\\Documents\\dowiz\\e2e\\lifecycle-e2e\\README.md": {
     "mtime": 1781365187.705456,
     "ast_hash": "0b57464149cb20d72388f9aac4ddd05e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.mcp.json": {
+    "mtime": 1781402931.902544,
+    "ast_hash": "781a3b4deebc05522d2abe5d93bb5327",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\analyze.mjs": {
+    "mtime": 1781389392.0,
+    "ast_hash": "d8a863fc346c07c782fda9bce9ea8776",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\audit-money-contract-2026-06-14.json": {
+    "mtime": 1781401381.34616,
+    "ast_hash": "ef73ce341b73feaef17465cb430fbdd2",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\checks.config.mjs": {
+    "mtime": 1781388830.0,
+    "ast_hash": "6ade2ddba587895b182a3c9d0be86d35",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\entities.json": {
+    "mtime": 1780654437.2222648,
+    "ast_hash": "39f01aedcb43e1288c367a1443e59245",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\eval_runs.py": {
+    "mtime": 1781389156.0,
+    "ast_hash": "aa53b0d428a32682879e9a8908b817cc",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\metrics.py": {
+    "mtime": 1781389142.0,
+    "ast_hash": "2a77e52a4c2aa8cf5bead0ebd85e08ad",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\mine-failures.mjs": {
+    "mtime": 1781389410.0,
+    "ast_hash": "e526cd82bb3a2430c5151f661382d98e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\openrouter_judge.py": {
+    "mtime": 1781389132.0,
+    "ast_hash": "81ef7c40ff1aced1cdba6913d1f14ec6",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\record-run.mjs": {
+    "mtime": 1781389370.0,
+    "ast_hash": "8ebf38a9431611cb650b21781e2b431d",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\run-checks.mjs": {
+    "mtime": 1781388848.0,
+    "ast_hash": "57f88487a4558ec3b54d2c775544e585",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\runs.example.json": {
+    "mtime": 1781389164.0,
+    "ast_hash": "d19f58c080f56724f21ad5749860a90a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\deliveryos-money-contract\\scripts\\check-money.mjs": {
+    "mtime": 1781399979.8041677,
+    "ast_hash": "85d6bd2e0f7e04d14e9f9d0b77e42480",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\deliveryos-rls-tenant-isolation\\scripts\\check-rls.mjs": {
+    "mtime": 1781401975.769454,
+    "ast_hash": "ef2b388911579a27d228ffaaec70b857",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\pdf\\scripts\\check_bounding_boxes.py": {
+    "mtime": 1781399510.3583772,
+    "ast_hash": "9ab55fc4cd2082641fdebda3866371ac",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\pdf\\scripts\\check_fillable_fields.py": {
+    "mtime": 1781399510.3604155,
+    "ast_hash": "28e26c214bee178c166cbfcc1cae017a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\pdf\\scripts\\convert_pdf_to_images.py": {
+    "mtime": 1781399510.3615184,
+    "ast_hash": "3291b3cb048d3cbb081aeea0a4f82e70",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\pdf\\scripts\\create_validation_image.py": {
+    "mtime": 1781399510.3626685,
+    "ast_hash": "7c0fae6c2839e189e7f47b9e266d305e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\pdf\\scripts\\extract_form_field_info.py": {
+    "mtime": 1781399510.3631935,
+    "ast_hash": "285308f8690e16404562d2fdea8cf5e9",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\pdf\\scripts\\extract_form_structure.py": {
+    "mtime": 1781399510.3653822,
+    "ast_hash": "5b1297993e80415376ee17a72ba5c573",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\pdf\\scripts\\fill_fillable_fields.py": {
+    "mtime": 1781399510.3685303,
+    "ast_hash": "88e38e501f0b4ed7b8476883aaf28879",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\pdf\\scripts\\fill_pdf_form_with_annotations.py": {
+    "mtime": 1781399510.369631,
+    "ast_hash": "55e4b1777a927ecf556a554e6ed1d69c",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\systematic-debugging\\condition-based-waiting-example.ts": {
+    "mtime": 1781399533.0991647,
+    "ast_hash": "8e502a8c1e9c7de15967202615d241d5",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\systematic-debugging\\find-polluter.sh": {
+    "mtime": 1781399533.103551,
+    "ast_hash": "2ae1144fa5a66aa26c13d644a12ad0bf",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\metadata.json": {
+    "mtime": 1781399491.3369515,
+    "ast_hash": "5cd9ae4fc688353236c3b92e8f06dfcc",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\pdf\\scripts\\check_bounding_boxes.py": {
+    "mtime": 1781399510.3583772,
+    "ast_hash": "9ab55fc4cd2082641fdebda3866371ac",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\pdf\\scripts\\check_fillable_fields.py": {
+    "mtime": 1781399510.3604155,
+    "ast_hash": "28e26c214bee178c166cbfcc1cae017a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\pdf\\scripts\\convert_pdf_to_images.py": {
+    "mtime": 1781399510.3615184,
+    "ast_hash": "3291b3cb048d3cbb081aeea0a4f82e70",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\pdf\\scripts\\create_validation_image.py": {
+    "mtime": 1781399510.3626685,
+    "ast_hash": "7c0fae6c2839e189e7f47b9e266d305e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\pdf\\scripts\\extract_form_field_info.py": {
+    "mtime": 1781399510.3631935,
+    "ast_hash": "285308f8690e16404562d2fdea8cf5e9",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\pdf\\scripts\\extract_form_structure.py": {
+    "mtime": 1781399510.3653822,
+    "ast_hash": "5b1297993e80415376ee17a72ba5c573",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\pdf\\scripts\\fill_fillable_fields.py": {
+    "mtime": 1781399510.3685303,
+    "ast_hash": "88e38e501f0b4ed7b8476883aaf28879",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\pdf\\scripts\\fill_pdf_form_with_annotations.py": {
+    "mtime": 1781399510.369631,
+    "ast_hash": "55e4b1777a927ecf556a554e6ed1d69c",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\systematic-debugging\\condition-based-waiting-example.ts": {
+    "mtime": 1781399533.0991647,
+    "ast_hash": "8e502a8c1e9c7de15967202615d241d5",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\systematic-debugging\\find-polluter.sh": {
+    "mtime": 1781399533.103551,
+    "ast_hash": "2ae1144fa5a66aa26c13d644a12ad0bf",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\metadata.json": {
+    "mtime": 1781399491.3369515,
+    "ast_hash": "5cd9ae4fc688353236c3b92e8f06dfcc",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\analytics\\analyze.mjs": {
+    "mtime": 1781401033.505197,
+    "ast_hash": "b5bbfbef65e62bc2b1555bac3d92e4ff",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\analytics\\mine-failures.mjs": {
+    "mtime": 1781401048.906912,
+    "ast_hash": "b534dceda231491c15a5ba061caebc72",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\analytics\\record-run.mjs": {
+    "mtime": 1781401018.9517016,
+    "ast_hash": "64533e19490186c08c3d1a785c4336d9",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\apps\\api\\src\\lib\\image-url.ts": {
+    "mtime": 1781408064.1634047,
+    "ast_hash": "2b3bc23da324e8650fc2cd28217f189c",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\docs\\audit\\2026-06-14\\audit-report.json": {
+    "mtime": 1781401514.0351157,
+    "ast_hash": "6640649a148d2a7f874226b849ad092c",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\docs\\audit\\2026-06-14\\held-out-candidates.json": {
+    "mtime": 1781401545.9176018,
+    "ast_hash": "1cfe905b0836fcd52d61285fc24c5a07",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\eval-layer\\eval_runs.py": {
+    "mtime": 1781400964.2601192,
+    "ast_hash": "15c8413fecd66f3185643c7ae7ae20b9",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\eval-layer\\metrics.py": {
+    "mtime": 1781400904.8822985,
+    "ast_hash": "caba2edc1d30e1d3ba27aedb9c7289d8",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\eval-layer\\openrouter_judge.py": {
+    "mtime": 1781400898.6573398,
+    "ast_hash": "1367bcb6c3158f0f0cbce42d59226e9e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\eval-layer\\runs.example.json": {
+    "mtime": 1781400971.519387,
+    "ast_hash": "5541dff38bf407c081f1f383f46a9106",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\metric-core\\checks.config.mjs": {
+    "mtime": 1781400454.8440502,
+    "ast_hash": "00446aa771b325ec3a9e81745b8f9989",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\metric-core\\run-checks.mjs": {
+    "mtime": 1781400419.8056629,
+    "ast_hash": "a2453afa106ee08a71921746d2aea917",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\db\\migrations\\1790000000015_operational-pool-role.ts": {
+    "mtime": 1781403834.5681033,
+    "ast_hash": "15edc3d75845f14c0517e1e35c28a00b",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\db\\migrations\\1790000000016_fix-empty-categories.ts": {
+    "mtime": 1781419976.0385935,
+    "ast_hash": "e609cdcb255a9c5f294ae6057cdb80e1",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\components\\ErrorBoundary.tsx": {
+    "mtime": 1781407787.6724133,
+    "ast_hash": "cf11cd6fd4840758294fe47bbc000d46",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\packages\\ui\\src\\constants\\allergenColors.ts": {
+    "mtime": 1781407548.4561126,
+    "ast_hash": "8171bd398b3f7224b74bcd63dc3a419a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\scripts\\check-contracts.mjs": {
+    "mtime": 1781405272.9619732,
+    "ast_hash": "98700dfac2ced30f7e5ab9c751489214",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\dev-hub.html": {
+    "mtime": 1780663977.7662866,
+    "ast_hash": "d81fec6173f4067622cc80863d747222",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\mempalace.yaml": {
+    "mtime": 1780654444.4304354,
+    "ast_hash": "d79320c0173d89e45b80620a8f919e18",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\requirements.txt": {
+    "mtime": 1781389120.0,
+    "ast_hash": "dbe1d0dd92f7daf067aef321608e8794",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\agent-browser\\SKILL.md": {
+    "mtime": 1781399573.4040866,
+    "ast_hash": "989e4edde3b3a433c6c6ce16872a773d",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\deliveryos-money-contract\\SKILL.md": {
+    "mtime": 1781399894.5024314,
+    "ast_hash": "620e644f72591e03b8b09821d4cabeb8",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\deliveryos-rls-tenant-isolation\\SKILL.md": {
+    "mtime": 1781399899.7677634,
+    "ast_hash": "fe605137753887e96aca590982a7253d",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\design-taste-frontend\\SKILL.md": {
+    "mtime": 1781399488.5339236,
+    "ast_hash": "648c8bf98f84fbe7f14bf2da035c57fe",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\dispatching-parallel-agents\\SKILL.md": {
+    "mtime": 1781399552.2538562,
+    "ast_hash": "af319c60c986d9024c49de78dff43593",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\docker-expert\\SKILL.md": {
+    "mtime": 1781399594.6047442,
+    "ast_hash": "1f63b0f554ec318859dbf99e4705d57d",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\find-skills\\SKILL.md": {
+    "mtime": 1781399621.2355268,
+    "ast_hash": "efcaee1dd97ebac4f2f4071585cff6b5",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\improve-codebase-architecture\\DEEPENING.md": {
+    "mtime": 1781399569.7310965,
+    "ast_hash": "83611866654c9324426ee35d6fb4295e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\improve-codebase-architecture\\HTML-REPORT.md": {
+    "mtime": 1781399569.7310965,
+    "ast_hash": "6be2b9d4c2c63e5c1671ab0b059ee9a1",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\improve-codebase-architecture\\INTERFACE-DESIGN.md": {
+    "mtime": 1781399569.7356486,
+    "ast_hash": "495dddf4d7f1fed0240811bc71c1d9ea",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\improve-codebase-architecture\\LANGUAGE.md": {
+    "mtime": 1781399569.7356486,
+    "ast_hash": "ba0099d6b60d658b2aff0bba0b41dd3c",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\improve-codebase-architecture\\SKILL.md": {
+    "mtime": 1781399569.7392392,
+    "ast_hash": "b75525c48539b4aa9dd4ee0cbd287d28",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\nodejs-backend-patterns\\SKILL.md": {
+    "mtime": 1781399510.2197478,
+    "ast_hash": "466a9798fd6cdf6e01860847bbd1b5f7",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\nodejs-backend-patterns\\references\\advanced-patterns.md": {
+    "mtime": 1781399510.2215517,
+    "ast_hash": "4b4375600189862dd353f2cb046a8bd9",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\nodejs-backend-patterns\\references\\details.md": {
+    "mtime": 1781399510.223328,
+    "ast_hash": "02771f29ade22d56fb536444b41c65e0",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\pdf\\forms.md": {
+    "mtime": 1781399510.3548772,
+    "ast_hash": "6e2413286cceefab10fab9cd1cb59c97",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\pdf\\LICENSE.txt": {
+    "mtime": 1781399510.352842,
+    "ast_hash": "03077c38ac09b5515927eb4d5cf12484",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\pdf\\reference.md": {
+    "mtime": 1781399510.357062,
+    "ast_hash": "e648d10ba8cb9629ed12312b6da4279e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\pdf\\SKILL.md": {
+    "mtime": 1781399510.3548772,
+    "ast_hash": "8609b5c38f8cc19061b2a459080b5b43",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\playwright-cli\\SKILL.md": {
+    "mtime": 1781399529.5573952,
+    "ast_hash": "8a15b8ac17e49528e59a941feca81302",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\playwright-cli\\references\\element-attributes.md": {
+    "mtime": 1781399529.6086605,
+    "ast_hash": "06a9cd91326c0fb1eeafa6853132ff0d",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\playwright-cli\\references\\playwright-tests.md": {
+    "mtime": 1781399529.6099021,
+    "ast_hash": "2098b51f50cfc25605dfabd6d0368fd8",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\playwright-cli\\references\\request-mocking.md": {
+    "mtime": 1781399529.6110744,
+    "ast_hash": "281652081dacf00f27a637ce372c0d17",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\playwright-cli\\references\\running-code.md": {
+    "mtime": 1781399529.6142056,
+    "ast_hash": "39be2ef507d2943ee6e969f23e8f6c20",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\playwright-cli\\references\\session-management.md": {
+    "mtime": 1781399529.6155174,
+    "ast_hash": "50d6f92a413c507cd066e33526e5298e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\playwright-cli\\references\\spec-driven-testing.md": {
+    "mtime": 1781399529.6170473,
+    "ast_hash": "723ae46d45217aeb9b6839efb3b885b2",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\playwright-cli\\references\\storage-state.md": {
+    "mtime": 1781399529.6170473,
+    "ast_hash": "16c4d7ae1f2d8eceef11fc14de4ae130",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\playwright-cli\\references\\test-generation.md": {
+    "mtime": 1781399529.6170473,
+    "ast_hash": "cf0042e9ee13faef404a0a0a39a20591",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\playwright-cli\\references\\tracing.md": {
+    "mtime": 1781399529.6200697,
+    "ast_hash": "8c66ddbc29fc172bde7d71211d4e3473",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\playwright-cli\\references\\video-recording.md": {
+    "mtime": 1781399529.6205819,
+    "ast_hash": "29e61c00414ae28d7719b6cc285a18bf",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\request-refactor-plan\\SKILL.md": {
+    "mtime": 1781399570.785889,
+    "ast_hash": "a1c09824559ee760282abcffafce50bf",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\subagent-driven-development\\code-quality-reviewer-prompt.md": {
+    "mtime": 1781399551.2167652,
+    "ast_hash": "fc5e2ea930681d4228debaa3714f6ea0",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\subagent-driven-development\\implementer-prompt.md": {
+    "mtime": 1781399551.2181485,
+    "ast_hash": "b856c2076801a91854adf094a907de9c",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\subagent-driven-development\\SKILL.md": {
+    "mtime": 1781399551.215768,
+    "ast_hash": "da1219128741a51fccc499a613072fc3",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\subagent-driven-development\\spec-reviewer-prompt.md": {
+    "mtime": 1781399551.2191713,
+    "ast_hash": "ecc20717d0b31a9013ba732f366eba8f",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\supabase\\CHANGELOG.md": {
+    "mtime": 1781399507.997624,
+    "ast_hash": "260e8f41018eb83191046f32fb863f05",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\supabase\\SKILL.md": {
+    "mtime": 1781399507.9986382,
+    "ast_hash": "462faaec084676fa37eff6f82b8dd90b",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\supabase\\assets\\feedback-issue-template.md": {
+    "mtime": 1781399508.000083,
+    "ast_hash": "e2c8b4f1a20e46315dd7609540d9b8d4",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\supabase\\references\\skill-feedback.md": {
+    "mtime": 1781399508.0005932,
+    "ast_hash": "c9fa098e2ec8bdce9d6a0f8a64d2c6c0",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\systematic-debugging\\condition-based-waiting.md": {
+    "mtime": 1781399533.1007092,
+    "ast_hash": "c64d669f2490aa489c514304c9ad46d3",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\systematic-debugging\\CREATION-LOG.md": {
+    "mtime": 1781399533.0954266,
+    "ast_hash": "b7ba553678c10cc2234dc9ae193d5347",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\systematic-debugging\\defense-in-depth.md": {
+    "mtime": 1781399533.1017246,
+    "ast_hash": "002a0c9e8bee8fc29f85d7a434916977",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\systematic-debugging\\root-cause-tracing.md": {
+    "mtime": 1781399533.1050677,
+    "ast_hash": "7e96b2fe346c89d4f2300341529178cc",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\systematic-debugging\\SKILL.md": {
+    "mtime": 1781399533.0971596,
+    "ast_hash": "3a08f3330fce34e3b2104e7d97f64af0",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\systematic-debugging\\test-academic.md": {
+    "mtime": 1781399533.1062267,
+    "ast_hash": "272ab1d95e755a7ff9479d547168eef9",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\systematic-debugging\\test-pressure-1.md": {
+    "mtime": 1781399533.1076763,
+    "ast_hash": "3d8805e8946e3889d4de0e906af66c47",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\systematic-debugging\\test-pressure-2.md": {
+    "mtime": 1781399533.1088684,
+    "ast_hash": "237f40dfd0b48af48d239ab3af499f7b",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\systematic-debugging\\test-pressure-3.md": {
+    "mtime": 1781399533.1093943,
+    "ast_hash": "42ea1bd281ca8d837f5dd45143762b95",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\tdd\\deep-modules.md": {
+    "mtime": 1781399531.283948,
+    "ast_hash": "b5ab090a761366ce3c2c02117b776445",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\tdd\\interface-design.md": {
+    "mtime": 1781399531.2849534,
+    "ast_hash": "bcd6f09692098ec7a748a7d98e99d3ea",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\tdd\\mocking.md": {
+    "mtime": 1781399531.2849534,
+    "ast_hash": "d5bba1ea1f387c4809b7dc7c4e75c862",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\tdd\\refactoring.md": {
+    "mtime": 1781399531.2874384,
+    "ast_hash": "e8a3e0973fa19f267a836fa6edc195ad",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\tdd\\SKILL.md": {
+    "mtime": 1781399531.282936,
+    "ast_hash": "06c57edca8db6db8f64c203c60a22de8",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\tdd\\tests.md": {
+    "mtime": 1781399531.2884388,
+    "ast_hash": "2927904135046181aae6793038e5f6c7",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\using-git-worktrees\\SKILL.md": {
+    "mtime": 1781399553.9031608,
+    "ast_hash": "19c5db98107c897bed0f70415e294015",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\using-superpowers\\SKILL.md": {
+    "mtime": 1781399550.3844385,
+    "ast_hash": "7e7a8bba2c866b16f5f05351faf2e2c5",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\using-superpowers\\references\\codex-tools.md": {
+    "mtime": 1781399550.3858187,
+    "ast_hash": "980b647b2c982b5b31cf08b83823a284",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\using-superpowers\\references\\copilot-tools.md": {
+    "mtime": 1781399550.387419,
+    "ast_hash": "d4424fd67d662e17b470d9560e1cd930",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\using-superpowers\\references\\gemini-tools.md": {
+    "mtime": 1781399550.3890097,
+    "ast_hash": "4f93c6d265d412b76c4ecc15c0c2e4b4",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\AGENTS.md": {
+    "mtime": 1781399491.3357637,
+    "ast_hash": "fc8f9b0218d2173112a8418bf9d8abe7",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\README.md": {
+    "mtime": 1781399491.337989,
+    "ast_hash": "abb5236c535db0bf7ce6f38c8998bc47",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\SKILL.md": {
+    "mtime": 1781399491.526914,
+    "ast_hash": "995a667ef0b53598f56ff897d9e4b334",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\advanced-effect-event-deps.md": {
+    "mtime": 1781399491.3423216,
+    "ast_hash": "3a0e314bb9576bab61f68d5de5afaf3e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\advanced-event-handler-refs.md": {
+    "mtime": 1781399491.3433988,
+    "ast_hash": "f2a0d125f3773bfda91e187fa5bed48a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\advanced-init-once.md": {
+    "mtime": 1781399491.3450058,
+    "ast_hash": "0100519098b834e69a3515657a39bdc9",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\advanced-use-latest.md": {
+    "mtime": 1781399491.346161,
+    "ast_hash": "60309961293388c9b9e9fd4e0db344e3",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\async-api-routes.md": {
+    "mtime": 1781399491.3484612,
+    "ast_hash": "344fa543b37e303660404e1ef3a4638b",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\async-cheap-condition-before-await.md": {
+    "mtime": 1781399491.3511176,
+    "ast_hash": "96352f626f328e15a6213d485e29e36f",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\async-defer-await.md": {
+    "mtime": 1781399491.3533196,
+    "ast_hash": "235a6b5760c2e4843d778167e462cb0e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\async-dependencies.md": {
+    "mtime": 1781399491.3549504,
+    "ast_hash": "9c5622d97b20b9e0cb79455b4322061a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\async-parallel.md": {
+    "mtime": 1781399491.3560834,
+    "ast_hash": "a0e06a8e9985cdff4ece0312d8ee35db",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\async-suspense-boundaries.md": {
+    "mtime": 1781399491.3577063,
+    "ast_hash": "dbb2fc80721ca1ce32426f43219d314f",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\bundle-analyzable-paths.md": {
+    "mtime": 1781399491.3593435,
+    "ast_hash": "8cfe6e284cafd2be33f09c6a1abc78fd",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\bundle-barrel-imports.md": {
+    "mtime": 1781399491.3613994,
+    "ast_hash": "fcba301df7f11c6847dca5962ac78828",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\bundle-conditional.md": {
+    "mtime": 1781399491.3633323,
+    "ast_hash": "585be2b6fc418c766e5b91cc2141d334",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\bundle-defer-third-party.md": {
+    "mtime": 1781399491.365424,
+    "ast_hash": "6d4d1d4fac411f724071428dd0bc93ba",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\bundle-dynamic-imports.md": {
+    "mtime": 1781399491.3670292,
+    "ast_hash": "72d89583306887810f67e9f7860f06af",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\bundle-preload.md": {
+    "mtime": 1781399491.3684094,
+    "ast_hash": "924ec7e7502ca042070326d38e88f8cd",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\client-event-listeners.md": {
+    "mtime": 1781399491.370223,
+    "ast_hash": "71062add972f9735348b7ae77e778eb8",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\client-localstorage-schema.md": {
+    "mtime": 1781399491.3715744,
+    "ast_hash": "982a459b07cbec2f8386e526b924c339",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\client-passive-event-listeners.md": {
+    "mtime": 1781399491.37298,
+    "ast_hash": "3853533fd5f49fa2fc98296f9c34d84f",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\client-swr-dedup.md": {
+    "mtime": 1781399491.374008,
+    "ast_hash": "e565fcba7836d339ca4707aad6fdaa4a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\js-batch-dom-css.md": {
+    "mtime": 1781399491.3752651,
+    "ast_hash": "869dbc06a931ccfb899b739316c348af",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\js-cache-function-results.md": {
+    "mtime": 1781399491.3777678,
+    "ast_hash": "5d641ce87ef753d59e3205244e2851a1",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\js-cache-property-access.md": {
+    "mtime": 1781399491.378872,
+    "ast_hash": "5b4ae3cd853b92222a8fd8c8d8202426",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\js-cache-storage.md": {
+    "mtime": 1781399491.3812642,
+    "ast_hash": "828f260566ff92df56089321fa41c116",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\js-combine-iterations.md": {
+    "mtime": 1781399491.3831618,
+    "ast_hash": "4f241532133637fee75304d40f016713",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\js-early-exit.md": {
+    "mtime": 1781399491.3841753,
+    "ast_hash": "d300cb3e57255029e446bdfa49dc4074",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\js-flatmap-filter.md": {
+    "mtime": 1781399491.3861747,
+    "ast_hash": "161d9d8b444e5ec9cb58bffb0e1b76cd",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\js-hoist-regexp.md": {
+    "mtime": 1781399491.387179,
+    "ast_hash": "ced4609a5916db47bbaccfcc3f2dcdbb",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\js-index-maps.md": {
+    "mtime": 1781399491.3891768,
+    "ast_hash": "db5bcfde02e1ce9f41d6ed1f5aafc8c5",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\js-length-check-first.md": {
+    "mtime": 1781399491.39069,
+    "ast_hash": "2ba208759dd91578f1085c28e6a92ce9",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\js-min-max-loop.md": {
+    "mtime": 1781399491.3922827,
+    "ast_hash": "82f654d27529dd80be7ae33d45dcdf8c",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\js-request-idle-callback.md": {
+    "mtime": 1781399491.3950205,
+    "ast_hash": "91d7e7fca676efb7cecb4ccff1eaec01",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\js-set-map-lookups.md": {
+    "mtime": 1781399491.3978436,
+    "ast_hash": "59a278e21ecd322bff566ba4ad7f5a30",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\js-tosorted-immutable.md": {
+    "mtime": 1781399491.4037938,
+    "ast_hash": "fd0804905877b6b7b1858e5df1b5f3c4",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rendering-activity.md": {
+    "mtime": 1781399491.4058342,
+    "ast_hash": "b66bde1377564aa196ba15fc94215cd3",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rendering-animate-svg-wrapper.md": {
+    "mtime": 1781399491.4076428,
+    "ast_hash": "7301cbe48bf0e1c44934847861384d03",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rendering-conditional-render.md": {
+    "mtime": 1781399491.4107165,
+    "ast_hash": "7aa6112d7544d55147e183b84add9c31",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rendering-content-visibility.md": {
+    "mtime": 1781399491.4247415,
+    "ast_hash": "a4ec0125d3a9d79ac2ab5f7a7b5b4d7d",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rendering-hoist-jsx.md": {
+    "mtime": 1781399491.4370086,
+    "ast_hash": "00519c11155c5c2a6f493d7980211a71",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rendering-hydration-no-flicker.md": {
+    "mtime": 1781399491.4391398,
+    "ast_hash": "a33ebc96d26525f94c460342d913e47a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rendering-hydration-suppress-warning.md": {
+    "mtime": 1781399491.440653,
+    "ast_hash": "23bc895f5697c19a59712bf19474ec12",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rendering-resource-hints.md": {
+    "mtime": 1781399491.440653,
+    "ast_hash": "a612b2d1d86d1b8205b92ff7dfd81eb8",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rendering-script-defer-async.md": {
+    "mtime": 1781399491.440653,
+    "ast_hash": "d62596aed565dd3ad7bddd38bc8f7798",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rendering-svg-precision.md": {
+    "mtime": 1781399491.440653,
+    "ast_hash": "1b880754ee449c52ccc725481f8b2e90",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rendering-usetransition-loading.md": {
+    "mtime": 1781399491.4484613,
+    "ast_hash": "3cea04ec76a76183cebc6571ac6365a2",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-defer-reads.md": {
+    "mtime": 1781399491.4504757,
+    "ast_hash": "2b754062eb7b203632859f6515ed3561",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-dependencies.md": {
+    "mtime": 1781399491.4519966,
+    "ast_hash": "ad0e42cd0616237f62f8a5abbc2138bc",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-derived-state-no-effect.md": {
+    "mtime": 1781399491.4591634,
+    "ast_hash": "c83ba3c8ea58015fd30072790a4959c4",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-derived-state.md": {
+    "mtime": 1781399491.4726033,
+    "ast_hash": "fadd31941e355786cb0cc7bba3c672fd",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-functional-setstate.md": {
+    "mtime": 1781399491.4765768,
+    "ast_hash": "188c0b949d23c11885914c573f4a770a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-lazy-state-init.md": {
+    "mtime": 1781399491.4803908,
+    "ast_hash": "6f9fc3d826cea2ca484912256149b077",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-memo-with-default-value.md": {
+    "mtime": 1781399491.482348,
+    "ast_hash": "9bfa45660e0a4d4f180e1d12d9ed44ea",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-memo.md": {
+    "mtime": 1781399491.4841871,
+    "ast_hash": "f0decabf1e4cf032c36f0977c81167b7",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-move-effect-to-event.md": {
+    "mtime": 1781399491.4860587,
+    "ast_hash": "599463fe624afd8822ba2bfa7c0138d5",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-no-inline-components.md": {
+    "mtime": 1781399491.4876878,
+    "ast_hash": "713855e0060cfe2ce549d08ea77e1af6",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-simple-expression-in-memo.md": {
+    "mtime": 1781399491.4889922,
+    "ast_hash": "42c37552160cff86a0fcbd93a27aa74e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-split-combined-hooks.md": {
+    "mtime": 1781399491.491064,
+    "ast_hash": "b7485878ff82ce8468078a31fc1b7f19",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-transitions.md": {
+    "mtime": 1781399491.4928148,
+    "ast_hash": "3f275bbfb966fcb39c554ad959fdf016",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-use-deferred-value.md": {
+    "mtime": 1781399491.4941936,
+    "ast_hash": "913dc783397142c25ec997b5dc11245b",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\rerender-use-ref-transient-values.md": {
+    "mtime": 1781399491.497324,
+    "ast_hash": "24d2e82617e2da4207afaf049e1314f3",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\server-after-nonblocking.md": {
+    "mtime": 1781399491.4989736,
+    "ast_hash": "c88a79384f87826bf1b20aa3637093a5",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\server-auth-actions.md": {
+    "mtime": 1781399491.5007017,
+    "ast_hash": "d8691820d666e5dd9094ccc6996398e3",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\server-cache-lru.md": {
+    "mtime": 1781399491.502972,
+    "ast_hash": "723195ea460bfbc4d43b4eb0c47b246b",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\server-cache-react.md": {
+    "mtime": 1781399491.5052774,
+    "ast_hash": "bc168ee66c4378854c7aa23cb9ca1369",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\server-dedup-props.md": {
+    "mtime": 1781399491.5068803,
+    "ast_hash": "86bf6f2d562ca98bca778a5b9d2f0251",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\server-hoist-static-io.md": {
+    "mtime": 1781399491.5095117,
+    "ast_hash": "05789c4ba35f68cc0ed6deba3078f7ab",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\server-no-shared-module-state.md": {
+    "mtime": 1781399491.5145864,
+    "ast_hash": "7733faf82c146008e8f1c65660bac4bb",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\server-parallel-fetching.md": {
+    "mtime": 1781399491.5211692,
+    "ast_hash": "1a36cf0b49a1a498fc1150afbf7a42c2",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\server-parallel-nested-fetching.md": {
+    "mtime": 1781399491.523054,
+    "ast_hash": "eaa7835a15d41842406acc34002f0d6c",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\server-serialization.md": {
+    "mtime": 1781399491.525308,
+    "ast_hash": "e6d34426614852685f43609dd9e3b250",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\_sections.md": {
+    "mtime": 1781399491.339625,
+    "ast_hash": "b8c110b45145ded6919562772afe067c",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\vercel-react-best-practices\\rules\\_template.md": {
+    "mtime": 1781399491.3412428,
+    "ast_hash": "a0d76a2f87f3f80e9a8f3a2a1054aaaf",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.agents\\skills\\web-design-guidelines\\SKILL.md": {
+    "mtime": 1781399486.8994267,
+    "ast_hash": "98087aedd18375666dbb093c859b2949",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\CLAUDE.md": {
+    "mtime": 1781402932.290693,
+    "ast_hash": "7239e527bcac142ebe89217b9f10bcf1",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\agent-browser\\SKILL.md": {
+    "mtime": 1781399573.4040866,
+    "ast_hash": "989e4edde3b3a433c6c6ce16872a773d",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\design-taste-frontend\\SKILL.md": {
+    "mtime": 1781399488.5339236,
+    "ast_hash": "648c8bf98f84fbe7f14bf2da035c57fe",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\dispatching-parallel-agents\\SKILL.md": {
+    "mtime": 1781399552.2538562,
+    "ast_hash": "af319c60c986d9024c49de78dff43593",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\docker-expert\\SKILL.md": {
+    "mtime": 1781399594.6047442,
+    "ast_hash": "1f63b0f554ec318859dbf99e4705d57d",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\find-skills\\SKILL.md": {
+    "mtime": 1781399621.2355268,
+    "ast_hash": "efcaee1dd97ebac4f2f4071585cff6b5",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\improve-codebase-architecture\\DEEPENING.md": {
+    "mtime": 1781399569.7310965,
+    "ast_hash": "83611866654c9324426ee35d6fb4295e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\improve-codebase-architecture\\HTML-REPORT.md": {
+    "mtime": 1781399569.7310965,
+    "ast_hash": "6be2b9d4c2c63e5c1671ab0b059ee9a1",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\improve-codebase-architecture\\INTERFACE-DESIGN.md": {
+    "mtime": 1781399569.7356486,
+    "ast_hash": "495dddf4d7f1fed0240811bc71c1d9ea",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\improve-codebase-architecture\\LANGUAGE.md": {
+    "mtime": 1781399569.7356486,
+    "ast_hash": "ba0099d6b60d658b2aff0bba0b41dd3c",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\improve-codebase-architecture\\SKILL.md": {
+    "mtime": 1781399569.7392392,
+    "ast_hash": "b75525c48539b4aa9dd4ee0cbd287d28",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\nodejs-backend-patterns\\SKILL.md": {
+    "mtime": 1781399510.2197478,
+    "ast_hash": "466a9798fd6cdf6e01860847bbd1b5f7",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\nodejs-backend-patterns\\references\\advanced-patterns.md": {
+    "mtime": 1781399510.2215517,
+    "ast_hash": "4b4375600189862dd353f2cb046a8bd9",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\nodejs-backend-patterns\\references\\details.md": {
+    "mtime": 1781399510.223328,
+    "ast_hash": "02771f29ade22d56fb536444b41c65e0",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\pdf\\forms.md": {
+    "mtime": 1781399510.3548772,
+    "ast_hash": "6e2413286cceefab10fab9cd1cb59c97",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\pdf\\LICENSE.txt": {
+    "mtime": 1781399510.352842,
+    "ast_hash": "03077c38ac09b5515927eb4d5cf12484",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\pdf\\reference.md": {
+    "mtime": 1781399510.357062,
+    "ast_hash": "e648d10ba8cb9629ed12312b6da4279e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\pdf\\SKILL.md": {
+    "mtime": 1781399510.3548772,
+    "ast_hash": "8609b5c38f8cc19061b2a459080b5b43",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\playwright-cli\\SKILL.md": {
+    "mtime": 1781399529.5573952,
+    "ast_hash": "8a15b8ac17e49528e59a941feca81302",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\playwright-cli\\references\\element-attributes.md": {
+    "mtime": 1781399529.6086605,
+    "ast_hash": "06a9cd91326c0fb1eeafa6853132ff0d",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\playwright-cli\\references\\playwright-tests.md": {
+    "mtime": 1781399529.6099021,
+    "ast_hash": "2098b51f50cfc25605dfabd6d0368fd8",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\playwright-cli\\references\\request-mocking.md": {
+    "mtime": 1781399529.6110744,
+    "ast_hash": "281652081dacf00f27a637ce372c0d17",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\playwright-cli\\references\\running-code.md": {
+    "mtime": 1781399529.6142056,
+    "ast_hash": "39be2ef507d2943ee6e969f23e8f6c20",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\playwright-cli\\references\\session-management.md": {
+    "mtime": 1781399529.6155174,
+    "ast_hash": "50d6f92a413c507cd066e33526e5298e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\playwright-cli\\references\\spec-driven-testing.md": {
+    "mtime": 1781399529.6170473,
+    "ast_hash": "723ae46d45217aeb9b6839efb3b885b2",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\playwright-cli\\references\\storage-state.md": {
+    "mtime": 1781399529.6170473,
+    "ast_hash": "16c4d7ae1f2d8eceef11fc14de4ae130",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\playwright-cli\\references\\test-generation.md": {
+    "mtime": 1781399529.6170473,
+    "ast_hash": "cf0042e9ee13faef404a0a0a39a20591",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\playwright-cli\\references\\tracing.md": {
+    "mtime": 1781399529.6200697,
+    "ast_hash": "8c66ddbc29fc172bde7d71211d4e3473",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\playwright-cli\\references\\video-recording.md": {
+    "mtime": 1781399529.6205819,
+    "ast_hash": "29e61c00414ae28d7719b6cc285a18bf",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\request-refactor-plan\\SKILL.md": {
+    "mtime": 1781399570.785889,
+    "ast_hash": "a1c09824559ee760282abcffafce50bf",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\subagent-driven-development\\code-quality-reviewer-prompt.md": {
+    "mtime": 1781399551.2167652,
+    "ast_hash": "fc5e2ea930681d4228debaa3714f6ea0",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\subagent-driven-development\\implementer-prompt.md": {
+    "mtime": 1781399551.2181485,
+    "ast_hash": "b856c2076801a91854adf094a907de9c",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\subagent-driven-development\\SKILL.md": {
+    "mtime": 1781399551.215768,
+    "ast_hash": "da1219128741a51fccc499a613072fc3",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\subagent-driven-development\\spec-reviewer-prompt.md": {
+    "mtime": 1781399551.2191713,
+    "ast_hash": "ecc20717d0b31a9013ba732f366eba8f",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\supabase\\CHANGELOG.md": {
+    "mtime": 1781399507.997624,
+    "ast_hash": "260e8f41018eb83191046f32fb863f05",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\supabase\\SKILL.md": {
+    "mtime": 1781399507.9986382,
+    "ast_hash": "462faaec084676fa37eff6f82b8dd90b",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\supabase\\assets\\feedback-issue-template.md": {
+    "mtime": 1781399508.000083,
+    "ast_hash": "e2c8b4f1a20e46315dd7609540d9b8d4",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\supabase\\references\\skill-feedback.md": {
+    "mtime": 1781399508.0005932,
+    "ast_hash": "c9fa098e2ec8bdce9d6a0f8a64d2c6c0",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\systematic-debugging\\condition-based-waiting.md": {
+    "mtime": 1781399533.1007092,
+    "ast_hash": "c64d669f2490aa489c514304c9ad46d3",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\systematic-debugging\\CREATION-LOG.md": {
+    "mtime": 1781399533.0954266,
+    "ast_hash": "b7ba553678c10cc2234dc9ae193d5347",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\systematic-debugging\\defense-in-depth.md": {
+    "mtime": 1781399533.1017246,
+    "ast_hash": "002a0c9e8bee8fc29f85d7a434916977",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\systematic-debugging\\root-cause-tracing.md": {
+    "mtime": 1781399533.1050677,
+    "ast_hash": "7e96b2fe346c89d4f2300341529178cc",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\systematic-debugging\\SKILL.md": {
+    "mtime": 1781399533.0971596,
+    "ast_hash": "3a08f3330fce34e3b2104e7d97f64af0",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\systematic-debugging\\test-academic.md": {
+    "mtime": 1781399533.1062267,
+    "ast_hash": "272ab1d95e755a7ff9479d547168eef9",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\systematic-debugging\\test-pressure-1.md": {
+    "mtime": 1781399533.1076763,
+    "ast_hash": "3d8805e8946e3889d4de0e906af66c47",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\systematic-debugging\\test-pressure-2.md": {
+    "mtime": 1781399533.1088684,
+    "ast_hash": "237f40dfd0b48af48d239ab3af499f7b",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\systematic-debugging\\test-pressure-3.md": {
+    "mtime": 1781399533.1093943,
+    "ast_hash": "42ea1bd281ca8d837f5dd45143762b95",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\tdd\\deep-modules.md": {
+    "mtime": 1781399531.283948,
+    "ast_hash": "b5ab090a761366ce3c2c02117b776445",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\tdd\\interface-design.md": {
+    "mtime": 1781399531.2849534,
+    "ast_hash": "bcd6f09692098ec7a748a7d98e99d3ea",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\tdd\\mocking.md": {
+    "mtime": 1781399531.2849534,
+    "ast_hash": "d5bba1ea1f387c4809b7dc7c4e75c862",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\tdd\\refactoring.md": {
+    "mtime": 1781399531.2874384,
+    "ast_hash": "e8a3e0973fa19f267a836fa6edc195ad",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\tdd\\SKILL.md": {
+    "mtime": 1781399531.282936,
+    "ast_hash": "06c57edca8db6db8f64c203c60a22de8",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\tdd\\tests.md": {
+    "mtime": 1781399531.2884388,
+    "ast_hash": "2927904135046181aae6793038e5f6c7",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\using-git-worktrees\\SKILL.md": {
+    "mtime": 1781399553.9031608,
+    "ast_hash": "19c5db98107c897bed0f70415e294015",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\using-superpowers\\SKILL.md": {
+    "mtime": 1781399550.3844385,
+    "ast_hash": "7e7a8bba2c866b16f5f05351faf2e2c5",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\using-superpowers\\references\\codex-tools.md": {
+    "mtime": 1781399550.3858187,
+    "ast_hash": "980b647b2c982b5b31cf08b83823a284",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\using-superpowers\\references\\copilot-tools.md": {
+    "mtime": 1781399550.387419,
+    "ast_hash": "d4424fd67d662e17b470d9560e1cd930",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\using-superpowers\\references\\gemini-tools.md": {
+    "mtime": 1781399550.3890097,
+    "ast_hash": "4f93c6d265d412b76c4ecc15c0c2e4b4",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\AGENTS.md": {
+    "mtime": 1781399491.3357637,
+    "ast_hash": "fc8f9b0218d2173112a8418bf9d8abe7",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\README.md": {
+    "mtime": 1781399491.337989,
+    "ast_hash": "abb5236c535db0bf7ce6f38c8998bc47",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\SKILL.md": {
+    "mtime": 1781399491.526914,
+    "ast_hash": "995a667ef0b53598f56ff897d9e4b334",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\advanced-effect-event-deps.md": {
+    "mtime": 1781399491.3423216,
+    "ast_hash": "3a0e314bb9576bab61f68d5de5afaf3e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\advanced-event-handler-refs.md": {
+    "mtime": 1781399491.3433988,
+    "ast_hash": "f2a0d125f3773bfda91e187fa5bed48a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\advanced-init-once.md": {
+    "mtime": 1781399491.3450058,
+    "ast_hash": "0100519098b834e69a3515657a39bdc9",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\advanced-use-latest.md": {
+    "mtime": 1781399491.346161,
+    "ast_hash": "60309961293388c9b9e9fd4e0db344e3",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\async-api-routes.md": {
+    "mtime": 1781399491.3484612,
+    "ast_hash": "344fa543b37e303660404e1ef3a4638b",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\async-cheap-condition-before-await.md": {
+    "mtime": 1781399491.3511176,
+    "ast_hash": "96352f626f328e15a6213d485e29e36f",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\async-defer-await.md": {
+    "mtime": 1781399491.3533196,
+    "ast_hash": "235a6b5760c2e4843d778167e462cb0e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\async-dependencies.md": {
+    "mtime": 1781399491.3549504,
+    "ast_hash": "9c5622d97b20b9e0cb79455b4322061a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\async-parallel.md": {
+    "mtime": 1781399491.3560834,
+    "ast_hash": "a0e06a8e9985cdff4ece0312d8ee35db",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\async-suspense-boundaries.md": {
+    "mtime": 1781399491.3577063,
+    "ast_hash": "dbb2fc80721ca1ce32426f43219d314f",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\bundle-analyzable-paths.md": {
+    "mtime": 1781399491.3593435,
+    "ast_hash": "8cfe6e284cafd2be33f09c6a1abc78fd",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\bundle-barrel-imports.md": {
+    "mtime": 1781399491.3613994,
+    "ast_hash": "fcba301df7f11c6847dca5962ac78828",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\bundle-conditional.md": {
+    "mtime": 1781399491.3633323,
+    "ast_hash": "585be2b6fc418c766e5b91cc2141d334",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\bundle-defer-third-party.md": {
+    "mtime": 1781399491.365424,
+    "ast_hash": "6d4d1d4fac411f724071428dd0bc93ba",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\bundle-dynamic-imports.md": {
+    "mtime": 1781399491.3670292,
+    "ast_hash": "72d89583306887810f67e9f7860f06af",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\bundle-preload.md": {
+    "mtime": 1781399491.3684094,
+    "ast_hash": "924ec7e7502ca042070326d38e88f8cd",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\client-event-listeners.md": {
+    "mtime": 1781399491.370223,
+    "ast_hash": "71062add972f9735348b7ae77e778eb8",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\client-localstorage-schema.md": {
+    "mtime": 1781399491.3715744,
+    "ast_hash": "982a459b07cbec2f8386e526b924c339",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\client-passive-event-listeners.md": {
+    "mtime": 1781399491.37298,
+    "ast_hash": "3853533fd5f49fa2fc98296f9c34d84f",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\client-swr-dedup.md": {
+    "mtime": 1781399491.374008,
+    "ast_hash": "e565fcba7836d339ca4707aad6fdaa4a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\js-batch-dom-css.md": {
+    "mtime": 1781399491.3752651,
+    "ast_hash": "869dbc06a931ccfb899b739316c348af",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\js-cache-function-results.md": {
+    "mtime": 1781399491.3777678,
+    "ast_hash": "5d641ce87ef753d59e3205244e2851a1",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\js-cache-property-access.md": {
+    "mtime": 1781399491.378872,
+    "ast_hash": "5b4ae3cd853b92222a8fd8c8d8202426",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\js-cache-storage.md": {
+    "mtime": 1781399491.3812642,
+    "ast_hash": "828f260566ff92df56089321fa41c116",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\js-combine-iterations.md": {
+    "mtime": 1781399491.3831618,
+    "ast_hash": "4f241532133637fee75304d40f016713",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\js-early-exit.md": {
+    "mtime": 1781399491.3841753,
+    "ast_hash": "d300cb3e57255029e446bdfa49dc4074",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\js-flatmap-filter.md": {
+    "mtime": 1781399491.3861747,
+    "ast_hash": "161d9d8b444e5ec9cb58bffb0e1b76cd",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\js-hoist-regexp.md": {
+    "mtime": 1781399491.387179,
+    "ast_hash": "ced4609a5916db47bbaccfcc3f2dcdbb",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\js-index-maps.md": {
+    "mtime": 1781399491.3891768,
+    "ast_hash": "db5bcfde02e1ce9f41d6ed1f5aafc8c5",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\js-length-check-first.md": {
+    "mtime": 1781399491.39069,
+    "ast_hash": "2ba208759dd91578f1085c28e6a92ce9",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\js-min-max-loop.md": {
+    "mtime": 1781399491.3922827,
+    "ast_hash": "82f654d27529dd80be7ae33d45dcdf8c",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\js-request-idle-callback.md": {
+    "mtime": 1781399491.3950205,
+    "ast_hash": "91d7e7fca676efb7cecb4ccff1eaec01",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\js-set-map-lookups.md": {
+    "mtime": 1781399491.3978436,
+    "ast_hash": "59a278e21ecd322bff566ba4ad7f5a30",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\js-tosorted-immutable.md": {
+    "mtime": 1781399491.4037938,
+    "ast_hash": "fd0804905877b6b7b1858e5df1b5f3c4",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rendering-activity.md": {
+    "mtime": 1781399491.4058342,
+    "ast_hash": "b66bde1377564aa196ba15fc94215cd3",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rendering-animate-svg-wrapper.md": {
+    "mtime": 1781399491.4076428,
+    "ast_hash": "7301cbe48bf0e1c44934847861384d03",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rendering-conditional-render.md": {
+    "mtime": 1781399491.4107165,
+    "ast_hash": "7aa6112d7544d55147e183b84add9c31",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rendering-content-visibility.md": {
+    "mtime": 1781399491.4247415,
+    "ast_hash": "a4ec0125d3a9d79ac2ab5f7a7b5b4d7d",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rendering-hoist-jsx.md": {
+    "mtime": 1781399491.4370086,
+    "ast_hash": "00519c11155c5c2a6f493d7980211a71",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rendering-hydration-no-flicker.md": {
+    "mtime": 1781399491.4391398,
+    "ast_hash": "a33ebc96d26525f94c460342d913e47a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rendering-hydration-suppress-warning.md": {
+    "mtime": 1781399491.440653,
+    "ast_hash": "23bc895f5697c19a59712bf19474ec12",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rendering-resource-hints.md": {
+    "mtime": 1781399491.440653,
+    "ast_hash": "a612b2d1d86d1b8205b92ff7dfd81eb8",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rendering-script-defer-async.md": {
+    "mtime": 1781399491.440653,
+    "ast_hash": "d62596aed565dd3ad7bddd38bc8f7798",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rendering-svg-precision.md": {
+    "mtime": 1781399491.440653,
+    "ast_hash": "1b880754ee449c52ccc725481f8b2e90",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rendering-usetransition-loading.md": {
+    "mtime": 1781399491.4484613,
+    "ast_hash": "3cea04ec76a76183cebc6571ac6365a2",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-defer-reads.md": {
+    "mtime": 1781399491.4504757,
+    "ast_hash": "2b754062eb7b203632859f6515ed3561",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-dependencies.md": {
+    "mtime": 1781399491.4519966,
+    "ast_hash": "ad0e42cd0616237f62f8a5abbc2138bc",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-derived-state-no-effect.md": {
+    "mtime": 1781399491.4591634,
+    "ast_hash": "c83ba3c8ea58015fd30072790a4959c4",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-derived-state.md": {
+    "mtime": 1781399491.4726033,
+    "ast_hash": "fadd31941e355786cb0cc7bba3c672fd",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-functional-setstate.md": {
+    "mtime": 1781399491.4765768,
+    "ast_hash": "188c0b949d23c11885914c573f4a770a",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-lazy-state-init.md": {
+    "mtime": 1781399491.4803908,
+    "ast_hash": "6f9fc3d826cea2ca484912256149b077",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-memo-with-default-value.md": {
+    "mtime": 1781399491.482348,
+    "ast_hash": "9bfa45660e0a4d4f180e1d12d9ed44ea",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-memo.md": {
+    "mtime": 1781399491.4841871,
+    "ast_hash": "f0decabf1e4cf032c36f0977c81167b7",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-move-effect-to-event.md": {
+    "mtime": 1781399491.4860587,
+    "ast_hash": "599463fe624afd8822ba2bfa7c0138d5",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-no-inline-components.md": {
+    "mtime": 1781399491.4876878,
+    "ast_hash": "713855e0060cfe2ce549d08ea77e1af6",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-simple-expression-in-memo.md": {
+    "mtime": 1781399491.4889922,
+    "ast_hash": "42c37552160cff86a0fcbd93a27aa74e",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-split-combined-hooks.md": {
+    "mtime": 1781399491.491064,
+    "ast_hash": "b7485878ff82ce8468078a31fc1b7f19",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-transitions.md": {
+    "mtime": 1781399491.4928148,
+    "ast_hash": "3f275bbfb966fcb39c554ad959fdf016",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-use-deferred-value.md": {
+    "mtime": 1781399491.4941936,
+    "ast_hash": "913dc783397142c25ec997b5dc11245b",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\rerender-use-ref-transient-values.md": {
+    "mtime": 1781399491.497324,
+    "ast_hash": "24d2e82617e2da4207afaf049e1314f3",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\server-after-nonblocking.md": {
+    "mtime": 1781399491.4989736,
+    "ast_hash": "c88a79384f87826bf1b20aa3637093a5",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\server-auth-actions.md": {
+    "mtime": 1781399491.5007017,
+    "ast_hash": "d8691820d666e5dd9094ccc6996398e3",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\server-cache-lru.md": {
+    "mtime": 1781399491.502972,
+    "ast_hash": "723195ea460bfbc4d43b4eb0c47b246b",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\server-cache-react.md": {
+    "mtime": 1781399491.5052774,
+    "ast_hash": "bc168ee66c4378854c7aa23cb9ca1369",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\server-dedup-props.md": {
+    "mtime": 1781399491.5068803,
+    "ast_hash": "86bf6f2d562ca98bca778a5b9d2f0251",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\server-hoist-static-io.md": {
+    "mtime": 1781399491.5095117,
+    "ast_hash": "05789c4ba35f68cc0ed6deba3078f7ab",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\server-no-shared-module-state.md": {
+    "mtime": 1781399491.5145864,
+    "ast_hash": "7733faf82c146008e8f1c65660bac4bb",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\server-parallel-fetching.md": {
+    "mtime": 1781399491.5211692,
+    "ast_hash": "1a36cf0b49a1a498fc1150afbf7a42c2",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\server-parallel-nested-fetching.md": {
+    "mtime": 1781399491.523054,
+    "ast_hash": "eaa7835a15d41842406acc34002f0d6c",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\server-serialization.md": {
+    "mtime": 1781399491.525308,
+    "ast_hash": "e6d34426614852685f43609dd9e3b250",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\_sections.md": {
+    "mtime": 1781399491.339625,
+    "ast_hash": "b8c110b45145ded6919562772afe067c",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\vercel-react-best-practices\\rules\\_template.md": {
+    "mtime": 1781399491.3412428,
+    "ast_hash": "a0d76a2f87f3f80e9a8f3a2a1054aaaf",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\.claude\\skills\\web-design-guidelines\\SKILL.md": {
+    "mtime": 1781399486.8994267,
+    "ast_hash": "98087aedd18375666dbb093c859b2949",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\docs\\audit\\FULL-SPECTRUM-AUDIT-2026-06-14.md": {
+    "mtime": 1781407355.8117447,
+    "ast_hash": "e49f361d858f849fcb58f17d2107292d",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\docs\\audit\\2026-06-14\\audit-report.md": {
+    "mtime": 1781401528.477064,
+    "ast_hash": "a62447291ad5ec4e4f37801c48d0ae23",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\eval-layer\\requirements.txt": {
+    "mtime": 1781400892.258719,
+    "ast_hash": "109f511d0ed7f3e46c6c9638d7171d10",
+    "semantic_hash": ""
+  },
+  "C:\\Users\\Dell5\\Documents\\dowiz\\menu-sq.pdf": {
+    "mtime": 1780667716.2088115,
+    "ast_hash": "8e02848a63e982cf7c6d7bb70b4f6139",
     "semantic_hash": ""
   }
 }

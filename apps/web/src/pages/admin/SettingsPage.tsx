@@ -96,7 +96,7 @@ export function SettingsPage() {
     QRCode.toDataURL(tgDeepLink, {
       width: 200,
       margin: 1,
-      color: { dark: '#000000', light: '#ffffff' },
+      color: { dark: getComputedStyle(document.documentElement).getPropertyValue('--brand-text').trim() || '#000000', light: getComputedStyle(document.documentElement).getPropertyValue('--brand-bg').trim() || '#ffffff' },
     }).then(setTgQrDataUrl).catch(() => {});
   }, [tgDeepLink]);
 
@@ -276,41 +276,44 @@ export function SettingsPage() {
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1" style={labelStyle}>
+              <label htmlFor="settings-locationName" className="block text-sm font-medium mb-1" style={labelStyle}>
                 {t('admin.location_name', 'Location Name')}
-                <Input
-                  value={settings.locationName}
-                  onChange={(e) => handleChange('locationName', e.target.value)}
-                  placeholder={t('admin.placeholder_location_name', 'e.g. Downtown Tirana')}
-                  required
-                />
               </label>
+              <Input
+                id="settings-locationName"
+                value={settings.locationName}
+                onChange={(e) => handleChange('locationName', e.target.value)}
+                placeholder={t('admin.placeholder_location_name', 'e.g. Downtown Tirana')}
+                required
+              />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1" style={labelStyle}>
+              <label htmlFor="settings-phone" className="block text-sm font-medium mb-1" style={labelStyle}>
                 {t('common.phone', 'Phone')}
-                <Input
-                  value={settings.phone}
-                  onChange={(e) => handleChange('phone', e.target.value)}
-                  placeholder={t('admin.placeholder_phone', '+355...')}
-                  pattern={PHONE_E164_PATTERN}
-                  title={t('admin.phone_format_hint', '+355 followed by 7-14 digits')}
-                  required
-                />
               </label>
+              <Input
+                id="settings-phone"
+                value={settings.phone}
+                onChange={(e) => handleChange('phone', e.target.value)}
+                placeholder={t('admin.placeholder_phone', '+355...')}
+                pattern={PHONE_E164_PATTERN}
+                title={t('admin.phone_format_hint', '+355 followed by 7-14 digits')}
+                required
+              />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1" style={labelStyle}>
+              <label htmlFor="settings-address" className="block text-sm font-medium mb-1" style={labelStyle}>
                 {t('common.address', 'Address')}
-                <Input
-                  value={settings.address}
-                  onChange={(e) => handleChange('address', e.target.value)}
-                  placeholder={t('admin.placeholder_address', 'Street, City')}
-                  required
-                />
               </label>
+              <Input
+                id="settings-address"
+                value={settings.address}
+                onChange={(e) => handleChange('address', e.target.value)}
+                placeholder={t('admin.placeholder_address', 'Street, City')}
+                required
+              />
             </div>
           </div>
 
@@ -320,29 +323,31 @@ export function SettingsPage() {
             </h3>
 
             <div>
-              <label className="block text-sm font-medium mb-1" style={labelStyle}>
+              <label htmlFor="settings-deliveryFee" className="block text-sm font-medium mb-1" style={labelStyle}>
                 {t('cart.delivery_fee', 'Delivery Fee')} (ALL)
-                <Input
-                  type="number"
-                  value={String(settings.deliveryFee)}
-                  onChange={(e) => handleChange('deliveryFee', e.target.value)}
-                  min="0"
-                  required
-                />
               </label>
+              <Input
+                id="settings-deliveryFee"
+                type="number"
+                value={String(settings.deliveryFee)}
+                onChange={(e) => handleChange('deliveryFee', e.target.value)}
+                min="0"
+                required
+              />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1" style={labelStyle}>
+              <label htmlFor="settings-minOrder" className="block text-sm font-medium mb-1" style={labelStyle}>
                 {t('admin.min_order', 'Minimum Order')} (ALL)
-                <Input
-                  type="number"
-                  value={String(settings.minOrder)}
-                  onChange={(e) => handleChange('minOrder', e.target.value)}
-                  min="0"
-                  required
-                />
               </label>
+              <Input
+                id="settings-minOrder"
+                type="number"
+                value={String(settings.minOrder)}
+                onChange={(e) => handleChange('minOrder', e.target.value)}
+                min="0"
+                required
+              />
             </div>
 
             <div>
@@ -376,7 +381,7 @@ export function SettingsPage() {
                       {t(`admin.days.${day}`, day)}
                     </div>
                     <div className="flex items-center gap-2 p-2 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)]">
-                      <Toggle checked={dayData.isOpen} onChange={(v) => handleScheduleChange(day, 'isOpen', v)} />
+                      <Toggle checked={dayData.isOpen} onChange={(v) => handleScheduleChange(day, 'isOpen', v)} aria-label={`${t(`admin.days.${day}`, day)} ${dayData.isOpen ? t('admin.open', 'Open') : t('admin.closed', 'Closed')}`} />
                       <span className="text-xs w-10 text-[var(--brand-text-muted)] shrink-0">{dayData.isOpen ? t('admin.open', 'Open') : t('admin.closed', 'Closed')}</span>
                       {dayData.isOpen && (
                         <div className="flex items-center gap-2 ml-auto">
@@ -406,7 +411,7 @@ export function SettingsPage() {
           {/* ── Telegram Notifications ── */}
           <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">
             <div className="flex items-center gap-2">
-              <i className="ti ti-brand-telegram text-lg" style={{ color: '#0088cc' }} />
+              <i className="ti ti-brand-telegram text-lg" style={{ color: 'var(--color-info)' }} />
               <h3 className="font-semibold text-sm text-[var(--brand-text-muted)]">
                 {t('admin.telegram_notifications', 'Telegram Notifications')}
               </h3>

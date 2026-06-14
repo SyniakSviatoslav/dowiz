@@ -31,25 +31,30 @@ export function checkFocusPage(page: Page): Promise<boolean> {
   });
 }
 
-export async function checkTouchTargets(page: Page): Promise<{ tooSmall: number; tooClose: number }> {
+export async function checkTouchTargets(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const buttons = document.querySelectorAll('button, a, [role="button"], input, select, textarea');
-    let tooSmall = 0;
-    let tooClose = 0;
+    const issues: string[] = [];
     const MIN_SIZE = 44;
     for (const btn of buttons) {
       const rect = btn.getBoundingClientRect();
-      if (rect.width < MIN_SIZE || rect.height < MIN_SIZE) tooSmall++;
-      // Check proximity to other targets
+      if (rect.width < MIN_SIZE || rect.height < MIN_SIZE) {
+        issues.push(`size:${btn.tagName.toLowerCase()} ${Math.round(rect.width)}x${Math.round(rect.height)}`);
+      }
+    }
+    for (const btn of buttons) {
+      const rect = btn.getBoundingClientRect();
       for (const other of buttons) {
         if (other === btn) continue;
         const oRect = other.getBoundingClientRect();
         const gapX = Math.max(0, oRect.left - rect.right, rect.left - oRect.right);
         const gapY = Math.max(0, oRect.top - rect.bottom, rect.top - oRect.bottom);
-        if (gapX < 8 && gapX > 0 && gapY < 8 && gapY > 0) tooClose++;
+        if (gapX < 8 && gapX > 0 && gapY < 8 && gapY > 0) {
+          issues.push(`proximity:${btn.tagName.toLowerCase()}<->${other.tagName.toLowerCase()}`);
+        }
       }
     }
-    return { tooSmall, tooClose };
+    return issues;
   });
 }
 
@@ -70,8 +75,8 @@ export async function checkFormLabels(page: Page): Promise<string[]> {
   });
 }
 
-export async function checkAriaLive(page: Page): Promise<boolean> {
+export async function checkAriaLive(page: Page): Promise<number> {
   return page.evaluate(() => {
-    return document.querySelectorAll('[aria-live], [role="alert"], [role="status"]').length > 0;
+    return document.querySelectorAll('[aria-live], [role="alert"], [role="status"]').length;
   });
 }

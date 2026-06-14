@@ -121,9 +121,9 @@ async function main() {
   const cspHasTile = csp.includes('tiles.openfreemap.org');
   emit('csp-tile-domain', cspHasTile ? 'OK' : 'DRIFT', cspHasTile ? 'present' : 'missing', 
     cspHasTile ? 'tiles.openfreemap.org in img-src/connect-src' : 'Missing tiles.openfreemap.org in CSP');
-  const cspNoCdn = !csp.includes('cdn.dowiz.org');
-  emit('csp-no-cdn', cspNoCdn ? 'OK' : 'DRIFT', cspNoCdn ? 'removed' : 'still-present',
-    cspNoCdn ? 'cdn.dowiz.org removed from CSP' : 'cdn.dowiz.org still in CSP');
+  const cspHasR2 = csp.includes('r2.') || process.env.R2_PUBLIC_URL ? true : false;
+  emit('csp-r2-domain', cspHasR2 ? 'OK' : 'WARN', cspHasR2 ? 'present' : 'not-configured',
+    cspHasR2 ? 'R2 image domain in CSP' : 'R2_PUBLIC_URL not set - images served via API proxy');
 
   // CORS probe: send OPTIONS with different origins
   for (const origin of ['https://dowiz.app', 'https://evil.com']) {

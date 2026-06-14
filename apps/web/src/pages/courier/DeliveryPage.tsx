@@ -276,7 +276,7 @@ export function DeliveryPage() {
 
         <div className="flex gap-4">
           <a href={`tel:${task.customer.phone}`} className="flex-1 bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] py-3 rounded-full flex items-center justify-center font-bold gap-2">
-            &#9990; Call
+            {t('courier.call_button', 'Call')}
           </a>
         </div>
 

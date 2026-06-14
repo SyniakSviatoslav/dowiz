@@ -238,9 +238,9 @@ export function OnboardingPage() {
     btnBase: { padding: '10px 20px', borderRadius: 'var(--brand-radius-btn)', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 600 },
     option: (selected: boolean) => ({
       padding: '12px', borderRadius: 'var(--brand-radius-sm)', cursor: 'pointer', fontSize: '13px', textAlign: 'center' as const,
-      background: selected ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
-      color: selected ? 'var(--color-on-primary)' : 'var(--brand-text)',
-      border: selected ? 'none' : '1px solid var(--brand-border)',
+      background: selected ? 'var(--brand-primary-light)' : 'var(--brand-surface-raised)',
+      color: selected ? 'var(--brand-text)' : 'var(--brand-text)',
+      border: selected ? '1px solid var(--brand-primary)' : '1px solid var(--brand-border)',
     }),
   };
 
@@ -277,7 +277,7 @@ export function OnboardingPage() {
                 <button
                   onClick={() => navigator.clipboard.writeText(shareUrl)}
                   className="mt-2 px-4 py-2 text-sm rounded-full"
-                  style={{ background: 'var(--brand-primary)', color: 'var(--color-on-primary)' }}
+                  style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-text)', border: '1px solid var(--brand-primary)' }}
                 >
                   {t('common.copy_link', 'Copy link')}
                 </button>
