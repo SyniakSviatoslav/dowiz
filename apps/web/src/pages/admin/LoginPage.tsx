@@ -55,72 +55,64 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--brand-bg)] p-4">
-      <div className="w-full max-w-md p-8 bg-[var(--brand-surface)] rounded-xl shadow-elevation-2">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold mb-2" style={{ fontFamily: 'var(--brand-font-heading)' }}>DeliveryOS</h1>
-          <p className="text-[var(--brand-text-muted)]">{t('admin.sign_in_owner', 'Sign in to your owner account')}</p>
-        </div>
-
-        {error && (
-          <div className="mb-4 p-3 bg-[var(--status-cancelled-light)] border border-[var(--status-cancelled-border)] text-[var(--color-danger)] rounded-md text-sm text-center">
-            {error}
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--brand-bg)' }}>
+      <div className="w-full max-w-sm">
+        {/* Brand accent bar */}
+        <div className="h-1 w-16 mx-auto mb-6 rounded-full" style={{ background: 'linear-gradient(90deg, var(--brand-primary), var(--brand-primary-hover))' }} />
+        
+        <div className="card-base p-8 space-y-6">
+          <div className="text-center space-y-1.5">
+            <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>DeliveryOS</h1>
+            <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.sign_in_owner', 'Sign in to your owner account')}</p>
           </div>
-        )}
 
-        <form onSubmit={handleLocalLogin} className="space-y-4">
-          <div>
-            <label htmlFor="login-email" className="block text-sm font-medium mb-1 text-[var(--brand-text-muted)]">{t('admin.email', 'Email')}</label>
-            <Input 
-              id="login-email"
-              type="email" 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
-              required 
-              placeholder="owner@restaurant.com"
-            />
-          </div>
-          <div>
-            <label htmlFor="login-password" className="block text-sm font-medium mb-1 text-[var(--brand-text-muted)]">{t('admin.password', 'Password')}</label>
-            <Input 
-              id="login-password"
-              type="password" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
-              required 
-              placeholder="••••••••"
-            />
-          </div>
-          
-          <Button type="submit" variant="primary" className="w-full" disabled={loading}>
-            {loading ? t('common.loading') : t('admin.sign_in', 'Sign In')}
-          </Button>
-        </form>
-
-        <div className="mt-6 flex justify-center">
-          <LanguageSwitcher variant="full" />
-        </div>
-
-        <div className="mt-4 flex items-center justify-center gap-4">
-          <div className="h-px bg-[var(--brand-border)] flex-1" />
-          <span className="text-xs text-[var(--brand-text-muted)] uppercase tracking-wider">{t('common.or', 'OR')}</span>
-          <div className="h-px bg-[var(--brand-border)] flex-1" />
-        </div>
-
-        <div className="mt-6 space-y-3">
-          <a 
-            href="/api/auth/google" 
-            className="flex items-center justify-center gap-3 w-full px-4 py-2 border border-[var(--brand-border)] rounded-[var(--brand-radius)] hover:bg-[var(--brand-surface-raised)] transition-colors"
-          >
-            <i className="ti ti-brand-google" />
-            {t('admin.sign_in_google', 'Sign in with Google')}
-          </a>
-
-          {isDev && (
-            <Button variant="secondary" className="w-full" onClick={handleDevLogin}>
-              {t('admin.dev_login', '[DEV] One-Click Login')}
-            </Button>
+          {error && (
+            <div role="alert" aria-live="polite" className="p-3 text-sm text-center rounded-lg" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--color-danger)' }}>
+              {error}
+            </div>
           )}
+
+          <form onSubmit={handleLocalLogin} className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="login-email" className="text-sm font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.email', 'Email')}</label>
+              <Input id="login-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="owner@restaurant.com" />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="login-password" className="text-sm font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.password', 'Password')}</label>
+              <Input id="login-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
+            </div>
+            
+            <Button type="submit" variant="primary" className="w-full" disabled={loading}>
+              {loading ? t('common.loading', 'Loading...') : t('admin.sign_in', 'Sign In')}
+            </Button>
+          </form>
+
+          <div className="flex justify-center">
+            <LanguageSwitcher variant="full" />
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex-1 h-px" style={{ background: 'var(--brand-border)' }} />
+            <span className="text-xs uppercase tracking-wider" style={{ color: 'var(--brand-text-muted)' }}>{t('common.or', 'OR')}</span>
+            <div className="flex-1 h-px" style={{ background: 'var(--brand-border)' }} />
+          </div>
+
+          <div className="space-y-3">
+            <a 
+              href="/api/auth/google" 
+              className="flex items-center justify-center gap-3 w-full px-4 py-2.5 rounded-lg transition-all duration-200 active:scale-[0.98]"
+              style={{ border: '1px solid var(--brand-border)', background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
+            >
+              <i className="ti ti-brand-google" />
+              <span className="text-sm font-medium">{t('admin.sign_in_google', 'Sign in with Google')}</span>
+            </a>
+
+            {isDev && (
+              <Button variant="secondary" className="w-full" onClick={handleDevLogin}>
+                {t('admin.dev_login', '[DEV] One-Click Login')}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Button, Input, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle } from '@deliveryos/ui';
+import { motion } from 'framer-motion';
+import { Button, Input, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle, useToast } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 import { CategoryResponse, ProductResponse } from '@deliveryos/shared-types';
@@ -67,6 +68,7 @@ interface Category {
 
 export function MenuManagerPage() {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const { confirm, dialog: confirmDialog } = useConfirm();
   const isMobile = useIsMobile();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -125,17 +127,8 @@ export function MenuManagerPage() {
       setCategories(Array.isArray(data) ? data : []);
       setError('');
     } catch (err: any) {
-      if (err.status === 404 || err.status === 403) {
-        setCategories([
-          { id: 'c1', name: 'Sushi Rolls' },
-          { id: 'c2', name: 'Nigiri & Sashimi' },
-          { id: 'c3', name: 'Hot Dishes' },
-          { id: 'c4', name: 'Drinks' },
-          { id: 'c5', name: 'Desserts' },
-        ]);
-      } else {
-        setError('Failed to load menu. Add ?dev=true to the URL for mock mode.');
-      }
+      setCategories([]);
+      setError('Failed to load menu');
     } finally {
       setLoading(false);
     }
@@ -241,16 +234,17 @@ export function MenuManagerPage() {
           setPendingImageFile(null);
         } catch (err) {
           console.warn('[MenuManagerPage] image upload failed:', err);
-          alert(t('admin.image_upload_failed', 'Image upload failed. You can try again.'));
+          showToast(t('admin.image_upload_failed', 'Image upload failed. You can try again.'), 'warning');
         }
       }
       closeForm();
       await fetchCategories();
       const prods = await apiClient<typeof ProductArraySchema>(`/owner/menu/products?category_id=${expandedCat}`, { schema: ProductArraySchema });
       setCategories(prev => prev.map(c => c.id === expandedCat ? { ...c, products: Array.isArray(prods) ? (prods as any) : [] } : c));
+      showToast(t('admin.product_saved', 'Product saved'), 'success');
     } catch (err) {
       console.error('[MenuManagerPage] save product failed:', err);
-      alert(t('common.error_save', 'Failed to save product.'));
+      showToast(t('common.error_save', 'Failed to save product.'), 'error');
     } finally {
       setSaving(false);
     }
@@ -259,8 +253,8 @@ export function MenuManagerPage() {
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) { alert(t('admin.error_image_only', 'Only image files (JPG, PNG, WebP)')); return; }
-    if (file.size > 5 * 1024 * 1024) { alert(t('admin.error_max_size', 'Max 5 MB')); return; }
+    if (!file.type.startsWith('image/')) { showToast(t('admin.error_image_only', 'Only image files (JPG, PNG, WebP)'), 'error'); return; }
+    if (file.size > 5 * 1024 * 1024) { showToast(t('admin.error_max_size', 'Max 5 MB'), 'error'); return; }
     setFormImage(URL.createObjectURL(file));
     setPendingImageFile(file);
   };
@@ -273,9 +267,10 @@ export function MenuManagerPage() {
       setCategories(prev => prev.map(c =>
         c.id === catId ? { ...c, products: (c.products || []).filter(p => p.id !== productId) } : c
       ));
+      showToast(t('admin.product_deleted', 'Product deleted'), 'success');
     } catch (err) {
       console.error('[MenuManagerPage] delete product failed:', err);
-      alert(t('common.error_delete', 'Failed to delete.'));
+      showToast(t('common.error_delete', 'Failed to delete.'), 'error');
     }
   };
 
@@ -297,9 +292,10 @@ export function MenuManagerPage() {
     try { 
       await apiClient('/owner/menu/categories', { method: 'POST', body: { name } }); 
       await fetchCategories();
+      showToast(t('admin.category_saved', 'Category created'), 'success');
     } catch (err) {
       console.error('[MenuManagerPage] add category failed:', err);
-      alert(t('common.error_save', 'Failed to save category.'));
+      showToast(t('common.error_save', 'Failed to save category.'), 'error');
     }
   };
 
@@ -309,8 +305,9 @@ export function MenuManagerPage() {
     try {
       await apiClient(`/owner/menu/categories/${categoryId}`, { method: 'DELETE' });
       setCategories(prev => prev.filter(c => c.id !== categoryId));
+      showToast(t('admin.category_deleted', 'Category deleted'), 'success');
     } catch (err: any) {
-      alert(err.message || t('common.error_delete', 'Failed to delete.'));
+      showToast(err.message || t('common.error_delete', 'Failed to delete.'), 'error');
     }
   };
 
@@ -353,6 +350,7 @@ export function MenuManagerPage() {
       });
       setImportResult(res);
       setImportStep('done');
+      showToast(t('admin.import_success', 'Menu imported'), 'success');
       await fetchCategories();
     } catch (err: any) {
       setImportError(err.message || 'Failed to import menu.');
@@ -442,7 +440,7 @@ export function MenuManagerPage() {
       {error && (
         <div className="p-3 rounded-lg text-sm flex items-center justify-between" style={{ background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>
           {error}
-          <button onClick={fetchCategories} className="underline ml-3 shrink-0">{t('common.retry', 'Retry')}</button>
+          <motion.button onClick={fetchCategories} whileTap={{ scale: 0.97 }} className="underline ml-3 shrink-0">{t('common.retry', 'Retry')}</motion.button>
         </div>
       )}
 
@@ -457,12 +455,12 @@ export function MenuManagerPage() {
 
         {/* Sort */}
         <div className="relative">
-          <button onClick={() => setSortOpen(true)}
+          <motion.button onClick={() => setSortOpen(true)} whileTap={{ scale: 0.97 }}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
             <i className="ti ti-arrows-sort text-base" />
             <span className="hidden sm:inline text-xs">{sortBy === 'name' ? t('admin.name_az', 'Name A-Z') : sortBy === 'price-asc' ? t('admin.price_asc', 'Price \u2191') : t('admin.price_desc', 'Price \u2193')}</span>
-          </button>
+          </motion.button>
           {isMobile ? (
             <MobilePicker
               open={sortOpen}
@@ -485,13 +483,13 @@ export function MenuManagerPage() {
                   { value: 'price-asc', label: t('admin.price_asc', 'Price ArrowUp'), icon: 'ti ti-sort-ascending' },
                   { value: 'price-desc', label: t('admin.price_desc', 'Price ArrowDown'), icon: 'ti ti-sort-descending' },
                 ].map(opt => (
-                  <button key={opt.value} onClick={() => { setSortBy(opt.value as any); setSortOpen(false); }}
+                  <motion.button key={opt.value} onClick={() => { setSortBy(opt.value as any); setSortOpen(false); }} whileTap={{ scale: 0.97 }}
                     className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${sortBy === opt.value ? 'font-semibold' : ''}`}
                     style={{ color: sortBy === opt.value ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
                     <i className={opt.icon} style={{ fontSize: '0.8rem' }} />
                     <span className="flex-1">{opt.label}</span>
                     {sortBy === opt.value && <i className="ti ti-check" style={{ color: 'var(--brand-primary)', fontSize: '0.7rem' }} />}
-                  </button>
+                  </motion.button>
                 ))}
               </div>
             </>
@@ -500,11 +498,11 @@ export function MenuManagerPage() {
 
         {/* Availability filter */}
         <div className="relative">
-          <button onClick={() => setAvailOpen(true)}
+          <motion.button onClick={() => setAvailOpen(true)} whileTap={{ scale: 0.97 }}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: filterAvailable !== 'all' ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
             <i className="ti ti-filter text-base" />
-          </button>
+          </motion.button>
           {isMobile ? (
             <MobilePicker
               open={availOpen}
@@ -527,13 +525,13 @@ export function MenuManagerPage() {
                   { value: 'available', label: t('menu.available', 'Available'), icon: 'ti ti-circle-check' },
                   { value: 'unavailable', label: t('menu.stop_listed', 'Stop-listed'), icon: 'ti ti-circle-x' },
                 ].map(opt => (
-                  <button key={opt.value} onClick={() => { setFilterAvailable(opt.value as any); setAvailOpen(false); }}
+                  <motion.button key={opt.value} onClick={() => { setFilterAvailable(opt.value as any); setAvailOpen(false); }} whileTap={{ scale: 0.97 }}
                     className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${filterAvailable === opt.value ? 'font-semibold' : ''}`}
                     style={{ color: filterAvailable === opt.value ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
                     <i className={opt.icon} style={{ fontSize: '0.8rem' }} />
                     <span className="flex-1">{opt.label}</span>
                     {filterAvailable === opt.value && <i className="ti ti-check" style={{ color: 'var(--brand-primary)', fontSize: '0.7rem' }} />}
-                  </button>
+                  </motion.button>
                 ))}
               </div>
             </>
@@ -546,26 +544,26 @@ export function MenuManagerPage() {
             placeholder={t('admin.new_category', 'New category...')}
             className="w-32 sm:w-40 h-10 px-3 rounded-lg border text-sm outline-none"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-          <button onClick={handleAddCategory}
+          <motion.button onClick={handleAddCategory} whileTap={{ scale: 0.97 }}
             className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium shrink-0 border border-[var(--brand-primary)]"
             style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-text)' }}>
             <i className="ti ti-plus text-sm" />
-          </button>
+          </motion.button>
         </div>
       </div>
 
       {/* Category tabs */}
       {!loading && categories.length > 0 && (
         <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory sticky top-0 z-10" style={{ background: 'var(--brand-bg)' }}>
-          <button onClick={() => setSelectedCategory(null)}
+          <motion.button onClick={() => setSelectedCategory(null)} whileTap={{ scale: 0.97 }}
             className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${selectedCategory === null ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}>
             {t('common.all', 'All')}
-          </button>
+          </motion.button>
           {categories.map(cat => (
-            <button key={cat.id} onClick={async () => { setSelectedCategory(cat.id); await toggleExpand(cat.id); }}
+            <motion.button key={cat.id} onClick={async () => { setSelectedCategory(cat.id); await toggleExpand(cat.id); }} whileTap={{ scale: 0.97 }}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${selectedCategory === cat.id ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}>
               {cat.name} <span className="text-[10px] opacity-70">({cat.product_count ?? cat.products?.length ?? 0})</span>
-            </button>
+            </motion.button>
           ))}
         </div>
       )}
@@ -588,11 +586,11 @@ export function MenuManagerPage() {
               })()}
             </p>
             {selectedCategory && (
-              <button onClick={() => openAddForm(selectedCategory)}
+              <motion.button onClick={() => openAddForm(selectedCategory)} whileTap={{ scale: 0.97 }}
                 className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--brand-primary)]"
                 style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-text)' }}>
                 <i className="ti ti-plus text-xs" /> {t('common.add', 'Add')}
-              </button>
+              </motion.button>
             )}
           </div>
           {productsLoading && selectedCategory ? (
@@ -600,13 +598,20 @@ export function MenuManagerPage() {
               <i className="ti ti-loader animate-spin text-xl" style={{ color: 'var(--brand-primary)' }} />
             </div>
           ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <motion.div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.03, delayChildren: 0.05 } } }}
+            initial="hidden"
+            animate="visible"
+          >
             {(selectedCategory ? categories.filter(c => c.id === selectedCategory) : categories).map(cat => {
               if (cat.products === undefined && selectedCategory === cat.id) return null;
               const products = getAllProducts(cat.id);
               if (products.length === 0 && searchQuery) return null;
               return products.map((product) => (
-                <div key={product.id}
+                <motion.div key={product.id}
+                  variants={{ hidden: { opacity: 0, y: 12, scale: 0.97 }, visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 260, damping: 24 } } }}
+                  whileTap={{ scale: 0.97 }}
                   className="p-3 rounded-xl border transition-all hover:bg-[var(--brand-surface-raised)] cursor-pointer fade-in"
                   style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}
                   onClick={() => setPreviewProduct(product)}>
@@ -626,12 +631,12 @@ export function MenuManagerPage() {
                       </div>
                       {product.description && <div className="text-[11px] truncate mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{product.description}</div>}
                       <div className="flex items-center gap-2 mt-1.5">
-                        <button onClick={(e) => { e.stopPropagation(); handleToggleAvailable(cat.id, product); }}
+                        <motion.button onClick={(e) => { e.stopPropagation(); handleToggleAvailable(cat.id, product); }} whileTap={{ scale: 0.97 }}
                           className={`relative w-8 h-4 rounded-full transition-colors duration-200 ${product.available ? 'bg-[var(--brand-primary)]' : 'bg-[var(--brand-border)]'}`}
                           title={product.available ? t('menu.available', 'Available') : t('menu.stop_listed', 'Stop-listed')}
                           role="switch" aria-checked={product.available}>
                           <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform duration-200 shadow-sm ${product.available ? 'left-[18px]' : 'left-0.5'}`} />
-                        </button>
+                        </motion.button>
                         <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
                           {product.available ? t('menu.available', 'Available') : t('menu.stop_listed', 'Stop-listed')}
                         </span>
@@ -658,21 +663,21 @@ export function MenuManagerPage() {
                     </div>
                   </div>
                   <div className="flex items-center justify-end gap-1 mt-2 pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-                    <button onClick={(e) => { e.stopPropagation(); openEditForm(product); }}
+                    <motion.button onClick={(e) => { e.stopPropagation(); openEditForm(product); }} whileTap={{ scale: 0.97 }}
                       className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface)] transition-colors"
                       title={t('common.edit', 'Edit')}>
                       <i className="ti ti-edit" style={{ fontSize: '0.75rem', color: 'var(--brand-text-muted)' }} />
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(cat.id, product.id); }}
+                    </motion.button>
+                    <motion.button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(cat.id, product.id); }} whileTap={{ scale: 0.97 }}
                       className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--color-danger-light)] transition-colors"
                       title={t('common.delete', 'Delete')}>
                       <i className="ti ti-trash" style={{ fontSize: '0.75rem', color: 'var(--brand-text-muted)' }} />
-                    </button>
+                    </motion.button>
                   </div>
-                </div>
+                </motion.div>
               ));
             })}
-          </div>
+          </motion.div>
           )}
           {selectedCategory === null && categories.every(cat => getAllProducts(cat.id).length === 0) && searchQuery && (
             <EmptyState title={t('admin.no_matching_products', 'No matching products.')} description="" />
@@ -691,9 +696,9 @@ export function MenuManagerPage() {
                     onError={(e) => { const t = e.target as HTMLImageElement; t.style.display = 'none'; const p = t.parentElement; if (p) { const i = document.createElement('i'); i.className = 'ti ti-photo text-4xl'; i.style.cssText = 'color: var(--brand-border)'; p.appendChild(i); } }} />
                 : <div className="w-full h-full flex items-center justify-center"><i className="ti ti-photo text-4xl" style={{ color: 'var(--brand-border)' }} /></div>
               }
-              <button onClick={() => setPreviewProduct(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center">
+              <motion.button onClick={() => setPreviewProduct(null)} whileTap={{ scale: 0.97 }} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center">
                 <i className="ti ti-x" />
-              </button>
+              </motion.button>
               {!previewProduct.available && (
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                   <span className="px-3 py-1 rounded-lg text-sm font-medium bg-white/90 text-black">{t('menu.stop_listed', 'Stop-listed')}</span>
@@ -752,9 +757,9 @@ export function MenuManagerPage() {
           <div className="relative w-full max-w-md bg-[var(--brand-surface)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 z-10 slide-in-up max-h-[85vh] overflow-auto pb-20 sm:pb-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{editingProduct ? t('admin.edit_item', 'Edit Item') : t('admin.add_item', 'Add Item')}</h3>
-              <button onClick={closeForm} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface-raised)]">
+              <motion.button onClick={closeForm} whileTap={{ scale: 0.97 }} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface-raised)]">
                 <i className="ti ti-x" style={{ color: 'var(--brand-text-muted)' }} />
-              </button>
+              </motion.button>
             </div>
 
             {/* Photo */}
@@ -814,9 +819,10 @@ export function MenuManagerPage() {
                       {[1, 2, 3].map(level => {
                         const active = formTaste[axis] === level;
                         return (
-                          <button
+                          <motion.button
                             key={level}
                             type="button"
+                            whileTap={{ scale: 0.97 }}
                             onClick={() => setFormTaste(prev => prev[axis] === level ? Object.fromEntries(Object.entries(prev).filter(([k]) => k !== axis)) : { ...prev, [axis]: level })}
                             className={`flex-1 h-6 rounded text-[10px] font-medium transition-all ${
                               active ? 'text-white scale-105' : 'hover:bg-[var(--brand-surface-raised)]'
@@ -828,7 +834,7 @@ export function MenuManagerPage() {
                             title={`${TASTE_LABELS[axis] || axis}: ${level === 1 ? t('admin.taste_low', 'Low') : level === 2 ? t('admin.taste_medium', 'Medium') : t('admin.taste_high', 'High')}`}
                           >
                             {level === 1 ? t('admin.taste_low', 'Low') : level === 2 ? t('admin.taste_med', 'Med') : t('admin.taste_high', 'High')}
-                          </button>
+                          </motion.button>
                         );
                       })}
                     </div>
@@ -866,9 +872,9 @@ export function MenuManagerPage() {
                 <i className="ti ti-file-import text-lg" style={{ color: 'var(--brand-primary)' }} />
                 <h3 className="font-bold">{t('admin.import_menu', 'Import Menu from PDF')}</h3>
               </div>
-              <button onClick={resetImport} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--brand-surface)] transition-colors">
+              <motion.button onClick={resetImport} whileTap={{ scale: 0.97 }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--brand-surface)] transition-colors">
                 <i className="ti ti-x" style={{ color: 'var(--brand-text-muted)' }} />
-              </button>
+              </motion.button>
             </div>
 
             <div className="p-4 space-y-4">
@@ -884,12 +890,12 @@ export function MenuManagerPage() {
                         { value: 'add_only', label: t('admin.import_add_only', 'Add Only'), desc: t('admin.import_add_only_desc', 'Never overwrite') },
                         { value: 'replace', label: t('admin.import_replace', 'Replace'), desc: t('admin.import_replace_desc', 'Delete & recreate') },
                       ].map(opt => (
-                        <button key={opt.value} onClick={() => setImportMode(opt.value as any)}
+                        <motion.button key={opt.value} onClick={() => setImportMode(opt.value as any)} whileTap={{ scale: 0.97 }}
                           className={`flex-1 p-2 rounded-lg border text-left transition-colors ${importMode === opt.value ? 'ring-2 ring-[var(--brand-primary)]' : ''}`}
                           style={{ background: importMode === opt.value ? 'var(--brand-primary-light)' : 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
                           <div className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>{opt.label}</div>
                           <div className="text-[10px] mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{opt.desc}</div>
-                        </button>
+                        </motion.button>
                       ))}
                     </div>
                   </div>
@@ -908,9 +914,9 @@ export function MenuManagerPage() {
                         <i className="ti ti-file-check text-3xl" style={{ color: 'var(--color-success)' }} />
                         <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>{importFile.name}</div>
                         <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{(importFile.size / 1024).toFixed(0)} KB</div>
-                        <button onClick={e => { e.stopPropagation(); setImportFile(null); }} className="text-xs underline" style={{ color: 'var(--brand-text-muted)' }}>
+                        <motion.button onClick={e => { e.stopPropagation(); setImportFile(null); }} whileTap={{ scale: 0.97 }} className="text-xs underline" style={{ color: 'var(--brand-text-muted)' }}>
                           {t('common.remove', 'Remove')}
-                        </button>
+                        </motion.button>
                       </div>
                     ) : (
                       <div className="space-y-2">

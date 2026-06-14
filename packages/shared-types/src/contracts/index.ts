@@ -22,6 +22,7 @@ export * from './owner/signals.js';
 export * from './owner/alerts.js';
 export * from './owner/settlements.js';
 export * from './owner/gdpr.js';
+export * from './owner/promotions.js';
 
 export * from './courier/auth.js';
 export * from './courier/tasks.js';

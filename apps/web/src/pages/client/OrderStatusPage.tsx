@@ -264,10 +264,20 @@ export function OrderStatusPage() {
     return <EmptyState title={t('order.not_found_title', 'Not Found')} description={error || t('order.not_found_desc', 'Order not found')} />;
   }
 
+  const isDisconnected = wsStatus === 'disconnected' || wsStatus === 'reconnecting' || wsStatus === 'error';
+
   return (
     <div className="max-w-md mx-auto min-h-screen bg-[var(--brand-surface)] pb-10" role="region" aria-live="polite" aria-label={t('order.status_updates', 'Order status updates')}>
+      {/* WS Disconnect Banner */}
+      {isDisconnected && (
+        <div className="sticky top-0 z-50 px-4 py-2 text-center text-xs font-semibold flex items-center justify-center gap-2" style={{ background: 'var(--color-warning)', color: '#fff' }}>
+          <i className="ti ti-wifi-off" />
+          <span>{t('order.live_paused', 'Live updates paused. Refreshing automatically.')}</span>
+        </div>
+      )}
+
       {/* Live Courier Map */}
-      <div className="h-64 relative w-full">
+      <div className="h-64 relative w-full" title={t('tooltip.courier_location', 'Courier current location')}>
         <CourierLiveMap
           className="h-full w-full"
           couriers={couriers}
@@ -275,7 +285,7 @@ export function OrderStatusPage() {
           center={courierPos}
           zoom={14}
         />
-        <div className="absolute top-4 left-4 bg-white/90 p-1.5 rounded-full shadow-md z-10">
+        <div className="absolute top-4 left-4 bg-white/90 p-1.5 rounded-full shadow-md z-10" title={t('tooltip.ws_status', 'Connection status')}>
           <WSStatusDot status={wsStatus === 'disabled' ? 'disconnected' : wsStatus} />
         </div>
       </div>
@@ -336,6 +346,7 @@ export function OrderStatusPage() {
             {order?.courier_phone && (
               <a
                 href={`tel:${order.courier_phone}`}
+                title={t('tooltip.call_courier', 'Call your courier')}
                 className="flex items-center justify-center gap-2 w-full py-3 rounded-[var(--brand-radius)] bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] text-[var(--brand-text)] font-semibold text-sm"
               >
                 <span>📞</span>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ProductCard, useI18n, PriceDisplay, getAllergenStyle } from '@deliveryos/ui';
+import { ProductCard, useI18n, useToast, PriceDisplay, getAllergenStyle } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 
 interface ProductModifier {
@@ -272,6 +272,8 @@ export function MenuPage() {
     return `${productId}_${Math.abs(hash).toString(36)}`;
   };
 
+  const { showToast } = useToast();
+
   const handleAddDetail = () => {
     if (!detailProduct || !detailProduct.available) return;
     addItem({
@@ -283,6 +285,7 @@ export function MenuPage() {
       options: modifierGroupSelection,
     });
     bounceCart();
+    showToast(t('cart.added_to_cart', 'Added to cart'), 'success');
     closeDetail();
   };
 
@@ -318,11 +321,12 @@ export function MenuPage() {
     <div className="relative min-h-screen pb-28">
 
       {/* Hero Section */}
-      <section className="relative w-full h-[160px] md:h-[200px] flex items-end overflow-hidden" style={{ background: 'linear-gradient(160deg, var(--brand-surface-raised) 0%, var(--brand-accent) 60%, var(--brand-primary) 100%)' }}>
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, color-mix(in srgb, var(--brand-bg) 75%, transparent) 0%, color-mix(in srgb, var(--brand-bg) 30%, transparent) 45%, color-mix(in srgb, var(--brand-bg) 5%, transparent) 100%)' }} />
-        <div className="absolute inset-0 opacity-[0.04] bg-[radial-gradient(circle_at_30%_50%,#fff_0%,transparent_60%)]" />
-        <div className="relative z-10 w-full px-5 pb-4">
-          <div className="flex items-center gap-1.5 text-[12px] font-medium mb-1.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
+      <section className="relative w-full h-[160px] md:h-[200px] flex items-end overflow-hidden" style={{ background: 'linear-gradient(160deg, var(--brand-surface-raised) 0%, var(--brand-accent) 50%, var(--brand-primary) 100%)' }}>
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, color-mix(in srgb, var(--brand-bg) 80%, transparent) 0%, color-mix(in srgb, var(--brand-bg) 40%, transparent) 50%, color-mix(in srgb, var(--brand-bg) 5%, transparent) 100%)' }} />
+        <div className="absolute inset-0 opacity-[0.06]" style={{ background: 'radial-gradient(ellipse at 30% 50%, color-mix(in srgb, var(--brand-primary) 20%, transparent) 0%, transparent 60%)' }} />
+        <div className="absolute inset-0 opacity-[0.03]" style={{ background: 'radial-gradient(ellipse at 70% 30%, color-mix(in srgb, var(--brand-text) 15%, transparent) 0%, transparent 50%)' }} />
+        <div className="relative z-10 w-full px-5 pb-5">
+          <div className="flex items-center gap-1.5 text-[12px] font-medium mb-1.5" style={{ color: 'color-mix(in srgb, var(--color-on-primary) 70%, transparent)' }}>
             <span className="inline-flex gap-0.5" style={{ color: 'var(--color-warning)' }}>
               {[1,2,3,4,5].map(i => <i key={i} className="ti ti-star-filled" style={{ fontSize: '0.7rem' }} />)}
             </span>
@@ -332,7 +336,7 @@ export function MenuPage() {
             <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} />
             <span>30 min</span>
           </div>
-          <h1 className="text-[22px] md:text-[26px] font-bold leading-tight text-white" style={{ fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 16px color-mix(in srgb, var(--brand-bg) 40%, transparent)' }}>
+          <h1 className="text-[22px] md:text-[26px] font-bold leading-tight" style={{ color: 'var(--color-on-primary)', fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 16px color-mix(in srgb, var(--brand-bg) 40%, transparent)' }}>
             {menu?.location_name || t('client.menu', 'Menu')}
           </h1>
         </div>
@@ -351,8 +355,9 @@ export function MenuPage() {
             categories.map(cat => {
               const count = cat.products.filter(p => p.available).length;
               return (
-                  <button 
+                  <motion.button 
                     key={cat.id}
+                    whileTap={{ scale: 0.97 }}
                     onClick={() => handleScrollTo(cat.id)}
                     role="tab"
                     aria-selected={activeTab === cat.id}
@@ -365,7 +370,7 @@ export function MenuPage() {
                 >
                   {cat.name}
                   <span className="text-[10px] opacity-50">({count})</span>
-                </button>
+                </motion.button>
               );
             })
           )}
@@ -385,9 +390,9 @@ export function MenuPage() {
               style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px]">
+              <motion.button onClick={() => setSearchQuery('')} whileTap={{ scale: 0.97 }} className="absolute right-3 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px]">
                 <i className="ti ti-x text-xs" style={{ color: 'var(--brand-text-muted)' }} />
-              </button>
+              </motion.button>
             )}
           </div>
           <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
@@ -396,7 +401,8 @@ export function MenuPage() {
                 <i className="ti ti-arrows-sort" style={{ fontSize: '0.7rem' }} />
               </span>
               {(['default', 'price-asc', 'price-desc', 'name'] as const).map(mode => (
-                <button key={mode} onClick={() => setSortBy(mode)}
+                <motion.button key={mode} onClick={() => setSortBy(mode)} whileTap={{ scale: 0.97 }}
+                  title={t('tooltip.sort', 'Sort by...')}
                   className="px-2 min-h-[44px] rounded-md text-[10px] font-medium transition-all whitespace-nowrap flex items-center"
                   style={{
                     background: sortBy === mode ? 'var(--brand-primary-light)' : 'var(--brand-surface-raised)',
@@ -405,7 +411,7 @@ export function MenuPage() {
                   }}
                 >
                   {mode === 'default' ? '·' : mode === 'price-asc' ? '\u2191 Price' : mode === 'price-desc' ? '\u2193 Price' : 'A-Z'}
-                </button>
+                </motion.button>
               ))}
             </div>
             {allAllergens.length > 0 && (
@@ -415,7 +421,8 @@ export function MenuPage() {
               {allAllergens.map(a => {
                 const s = getAllergenStyle(a);
                 return (
-                  <button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)}
+                  <motion.button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)} whileTap={{ scale: 0.97 }}
+                    title={t('tooltip.filter_allergen', 'Filter by allergen')}
                     className="px-1.5 min-h-[44px] rounded text-[9px] font-semibold uppercase whitespace-nowrap transition-all flex items-center"
                     style={{
                       background: filterAllergen === a ? s.text : s.bg,
@@ -424,7 +431,7 @@ export function MenuPage() {
                     }}
                   >
                     {t(`allergen.${a.toLowerCase()}`, a)}
-                  </button>
+                  </motion.button>
                 );
               })}
             </div>
@@ -458,9 +465,9 @@ export function MenuPage() {
               {t('client.empty_menu', fetchError ? 'Failed to load menu' : 'Menu unavailable')}
             </p>
             {fetchError && (
-              <button onClick={() => { setRetryCount(c => c + 1); }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all active:scale-95 min-h-11" style={{ background: 'var(--brand-primary)' }}>
+              <motion.button onClick={() => { setRetryCount(c => c + 1); }} whileTap={{ scale: 0.97 }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all active:scale-95 min-h-11" style={{ background: 'var(--brand-primary)' }}>
                 <i className="ti ti-refresh mr-1.5" />{t('client.retry', 'Retry')}
-              </button>
+              </motion.button>
             )}
           </div>
 ) : (
@@ -515,6 +522,7 @@ export function MenuPage() {
                       if (!product.modifier_groups?.length) {
                         addItem({ id: `cart_${product.id}`, productId: product.id, name: product.name, quantity: 1, price: product.price, options: {} });
                         bounceCart();
+                        showToast(t('cart.added_to_cart', 'Added to cart'), 'success');
                       } else {
                         handleProductClick(product);
                       }
@@ -551,14 +559,15 @@ export function MenuPage() {
                   <span className="text-sm font-medium opacity-60">{detailProduct.name}</span>
                 </div>
               )}
-              <button 
+              <motion.button 
+                whileTap={{ scale: 0.95 }}
                 className="absolute top-4 right-4 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center backdrop-blur-md active:scale-[0.95] transition-transform"
                 style={{ background: 'color-mix(in srgb, var(--brand-bg) 50%, transparent)', color: 'var(--color-on-primary)' }}
                 onClick={closeDetail}
                 aria-label="Close"
               >
                 <i className="ti ti-x text-xl" />
-              </button>
+              </motion.button>
               {detailProduct.available && bomToNutrition(detailProduct).kcal > 0 && (
                 <div className="absolute bottom-3 left-3 z-10">
                   <span className="text-[10px] font-medium px-2 py-1 rounded-md flex items-center gap-1.5" style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)', color: 'var(--color-on-primary)' }}>
@@ -710,10 +719,11 @@ export function MenuPage() {
                           const selected = modifierGroupSelection[group.id] || [];
                           const isSelected = selected.includes(mod.id);
                           return (
-                            <button
+                            <motion.button
                               key={mod.id}
                               data-testid="modifier-option"
                               onClick={() => toggleModifier(group.id, mod.id, group)}
+                              whileTap={{ scale: 0.97 }}
                               className={`px-3.5 py-2 rounded-[10px] text-[13px] font-medium transition-all active:scale-[0.97] border min-h-11 ${
                                 isSelected ? 'border-2' : ''
                               }`}
@@ -729,7 +739,7 @@ export function MenuPage() {
                                   +<PriceDisplay amount={mod.price_delta} currency="ALL" />
                                 </span>
                               )}
-                            </button>
+                            </motion.button>
                           );
                         })}
                       </div>
@@ -753,28 +763,31 @@ export function MenuPage() {
               {/* Quantity + Add to Cart */}
               <div className="flex items-center gap-3 pt-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
                 <div className="flex items-center gap-2 rounded-xl p-1" style={{ background: 'var(--brand-surface)' }}>
-                  <button 
+                  <motion.button 
                     onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                    whileTap={{ scale: 0.9 }}
                     className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium transition-colors hover:opacity-80 active:scale-90"
                     style={{ color: 'var(--brand-text)' }}
                     aria-label="Decrease quantity"
                   >
                     <i className="ti ti-minus" />
-                  </button>
+                  </motion.button>
                   <span className="text-base font-semibold w-8 text-center" style={{ color: 'var(--brand-text)' }}>{quantity}</span>
-                  <button 
+                  <motion.button 
                     onClick={() => setQuantity(q => q + 1)}
+                    whileTap={{ scale: 0.9 }}
                     className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium transition-colors hover:opacity-80 active:scale-90"
                     style={{ color: 'var(--brand-text)' }}
                     aria-label="Increase quantity"
                   >
                     <i className="ti ti-plus" />
-                  </button>
+                  </motion.button>
                 </div>
-                <button
+                <motion.button
                   data-testid="product-detail-confirm"
                   onClick={handleAddDetail}
                   disabled={!canAdd()}
+                  whileTap={{ scale: 0.95 }}
                   className="flex-1 h-[48px] rounded-xl text-white font-bold text-[15px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-center gap-2"
                   style={{ background: detailProduct.available ? 'var(--brand-primary)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
@@ -787,7 +800,7 @@ export function MenuPage() {
                   ) : (
                     t('client.unavailable', 'Unavailable')
                   )}
-                </button>
+                </motion.button>
               </div>
             </div>
           </div>

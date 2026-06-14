@@ -10,6 +10,7 @@ import { CRMPage } from '../pages/admin/CRMPage.js';
 import { SettingsPage } from '../pages/admin/SettingsPage.js';
 import { OnboardingPage } from '../pages/admin/OnboardingPage.js';
 import { SupplyLibraryPage } from '../pages/admin/SupplyLibraryPage.js';
+import { PromotionsPage } from '../pages/admin/PromotionsPage.js';
 import { FlowTestPage } from '../pages/admin/FlowTestPage.js';
 
 const AnalyticsPage = React.lazy(() => import('../pages/admin/AnalyticsPage.js').then(m => ({ default: m.AnalyticsPage })));
@@ -19,6 +20,7 @@ const ALL_NAV_ITEMS = [
   { key: 'admin.orders', href: '/admin/orders', icon: 'ti ti-clipboard-list' },
   { key: 'admin.menu', href: '/admin/menu', icon: 'ti ti-tools-kitchen-2' },
   { key: 'admin.supplies', href: '/admin/supplies', icon: 'ti ti-packages' },
+  { key: 'admin.promotions', href: '/admin/promotions', icon: 'ti ti-ticket' },
   { key: 'admin.couriers', href: '/admin/couriers', icon: 'ti ti-motorbike' },
   { key: 'admin.analytics', href: '/admin/analytics', icon: 'ti ti-chart-bar' },
   { key: 'admin.crm', href: '/admin/crm', icon: 'ti ti-users' },
@@ -201,6 +203,7 @@ export function AdminRoutes() {
           <Route path="orders" element={<DashboardPage />} />
           <Route path="menu" element={<MenuManagerPage />} />
           <Route path="supplies" element={<SupplyLibraryPage />} />
+          <Route path="promotions" element={<PromotionsPage />} />
           <Route path="branding" element={<BrandingPage />} />
           <Route path="couriers" element={<CouriersPage />} />
           <Route path="analytics" element={<Suspense fallback={null}><AnalyticsPage /></Suspense>} />

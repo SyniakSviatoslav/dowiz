@@ -5,3 +5,4 @@ export { CreateOrderInput, OrderItemInput, StatusUpdateInput, OrderResponse, Ord
 
 export * from './utils.js';
 export * from './queue-names.js';
+export * from './allergens.js';

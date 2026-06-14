@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PHONE_E164_PATTERN } from '@deliveryos/shared-types';
-import { Button, Input, FormField, EmptyState } from '@deliveryos/ui';
+import { Button, Input, FormField, EmptyState, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 import { CourierInviteRedeemResponse } from '@deliveryos/shared-types';
@@ -18,6 +18,7 @@ const CourierInviteDetailResponse = z.custom<{
 export function CourierInvitePage() {
   const { inviteId } = useParams<{ inviteId: string }>();
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   const [loadingInvite, setLoadingInvite] = useState(true);
   const [inviteError, setInviteError] = useState('');
@@ -41,7 +42,7 @@ export function CourierInvitePage() {
 
   useEffect(() => {
     if (!inviteId) {
-      setInviteError('Invalid invite link');
+      setInviteError(t('courier.invite.invalid_link', 'Invalid invite link'));
       setLoadingInvite(false);
       return;
     }
@@ -54,18 +55,18 @@ export function CourierInvitePage() {
         setInviteData(data);
         if (!data.isValid) {
           if (data.isExpired) {
-            setInviteError('Kjo ftesë ka skaduar / This invite has expired');
+            setInviteError(t('courier.invite.expired', 'This invite has expired'));
           } else if (data.isUsed) {
-            setInviteError('Kjo ftesë është përdorur tashmë / This invite has already been used');
+            setInviteError(t('courier.invite.used', 'This invite has already been used'));
           } else if (data.isRevoked) {
-            setInviteError('Kjo ftesë është anuluar / This invite has been revoked');
+            setInviteError(t('courier.invite.revoked', 'This invite has been revoked'));
           } else {
-            setInviteError('Kjo ftesë nuk është më e vlefshme / This invite is no longer valid');
+            setInviteError(t('courier.invite.invalid', 'This invite is no longer valid'));
           }
         }
       })
       .catch((err) => {
-        setInviteError('Ftesa nuk u gjet / Invite not found or invalid');
+        setInviteError(t('courier.invite.not_found', 'Invite not found or invalid'));
       })
       .finally(() => {
         setLoadingInvite(false);
@@ -96,15 +97,15 @@ export function CourierInvitePage() {
         localStorage.setItem('dos_access_token', data.jwt);
         navigate('/courier');
       } else {
-        setSubmitError('Përgjigje e gabuar nga serveri / Invalid response from server');
+        setSubmitError(t('common.invalid_response', 'Invalid response from server'));
       }
     } catch (err: any) {
       if (err.status === 410) {
-        setSubmitError('Ftesa ka skaduar ose është e pavlefshme / Invite expired or invalid');
+        setSubmitError(t('courier.invite.expired_or_invalid', 'Invite expired or invalid'));
       } else if (err.status === 401) {
-        setSubmitError('Kodi i ftesës është i gabuar / Invalid invite code');
+        setSubmitError(t('courier.invite.wrong_code', 'Invalid invite code'));
       } else {
-        const msg = err.message || 'Regjistrimi dështoi / Registration failed';
+        const msg = err.message || t('courier.invite.registration_failed', 'Registration failed');
         setSubmitError(msg);
       }
     } finally {
@@ -117,7 +118,7 @@ export function CourierInvitePage() {
       <div className="min-h-screen bg-[var(--brand-bg)] flex items-center justify-center p-6 text-[var(--brand-text)]">
         <div className="text-center space-y-4">
           <div className="animate-spin h-8 w-8 border-2 border-brand-primary border-t-transparent rounded-full mx-auto" />
-          <p className="text-sm text-[var(--brand-text-muted)]">Duke ngarkuar ftesën / Loading invite details...</p>
+          <p className="text-sm text-[var(--brand-text-muted)]">{t('courier.invite.loading', 'Loading invite details...')}</p>
         </div>
       </div>
     );
@@ -128,12 +129,12 @@ export function CourierInvitePage() {
       <div className="min-h-screen bg-[var(--brand-bg)] flex flex-col justify-center p-6 text-[var(--brand-text)]">
         <div className="max-w-md w-full mx-auto">
           <EmptyState
-            title="Ftesë e Pavlefshme / Invalid Invite"
-            description={inviteError || 'Ftesa nuk mund të përdoret / The invite cannot be used'}
+            title={t('courier.invite.invalid_title', 'Invalid Invite')}
+            description={inviteError || t('courier.invite.cannot_use', 'The invite cannot be used')}
           />
           <div className="text-center mt-6">
             <Button onClick={() => navigate('/courier/login')} variant="outline" className="w-full">
-              Kthehu te Login / Return to Login
+              {t('courier.invite.return_to_login', 'Return to Login')}
             </Button>
           </div>
         </div>
@@ -146,25 +147,25 @@ export function CourierInvitePage() {
       <div className="max-w-md w-full mx-auto space-y-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'var(--brand-font-heading)' }}>
-            Bashkohu si {inviteData.role === 'dispatcher' ? 'Dispeçer' : 'Korrier'}
+            {t('courier.invite.join_as', 'Join as')} {inviteData.role === 'dispatcher' ? t('courier.invite.dispatcher', 'Dispatcher') : t('courier.title', 'Courier')}
           </h1>
           <p className="mt-2 text-sm text-[var(--brand-text-muted)]">
-            Ftesë nga <span className="font-semibold text-[var(--brand-text)]">{inviteData.locationName}</span>
+            {t('courier.invite.invite_from', 'Invite from')} <span className="font-semibold text-[var(--brand-text)]">{inviteData.locationName}</span>
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 bg-[var(--brand-surface)] p-6 rounded-2xl border border-[var(--brand-border)] shadow-sm">
           {submitError && (
-            <div className="bg-[var(--status-cancelled-light)] border border-[var(--status-cancelled-border)] text-[var(--color-danger)] p-3 rounded-xl text-sm">
+            <div role="alert" aria-live="polite" className="bg-[var(--status-cancelled-light)] border border-[var(--status-cancelled-border)] text-[var(--color-danger)] p-3 rounded-xl text-sm">
               {submitError}
             </div>
           )}
 
-          <FormField label="Emri i Plotë / Full Name">
+          <FormField label={t('courier.invite.full_name', 'Full Name')}>
             <Input
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="p.sh. Alban Hoxha"
+              placeholder={t('courier.invite.full_name_placeholder', 'e.g. Alban Hoxha')}
               required
               disabled={submitting}
             />
@@ -175,13 +176,13 @@ export function CourierInvitePage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="shembull@email.com"
+              placeholder={t('courier.invite.email_placeholder', 'example@email.com')}
               required
               disabled={submitting}
             />
           </FormField>
 
-          <FormField label="Numri i Telefonit / Phone Number (Optional)">
+          <FormField label={t('courier.invite.phone_label', 'Phone Number (Optional)')}>
             <Input
               type="tel"
               value={phone}
@@ -193,23 +194,23 @@ export function CourierInvitePage() {
             />
           </FormField>
 
-          <FormField label="Fjalëkalimi / Password (Min. 12 characters)">
+          <FormField label={t('courier.invite.password_label', 'Password (Min. 12 characters)')}>
             <Input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Zgjidhni një fjalëkalim të fortë"
+              placeholder={t('courier.invite.password_placeholder', 'Choose a strong password')}
               required
               minLength={12}
               disabled={submitting}
             />
           </FormField>
 
-          <FormField label="Kodi i Sigurisë së Ftesës / Invite Security Code (16 chars)">
+          <FormField label={t('courier.invite.code_label', 'Invite Security Code (16 chars)')}>
             <Input
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              placeholder="Shtypni kodin e sigurisë 16-shifror"
+              placeholder={t('courier.invite.code_placeholder', 'Enter the 16-digit security code')}
               required
               maxLength={16}
               disabled={submitting}
@@ -224,7 +225,7 @@ export function CourierInvitePage() {
             isLoading={submitting}
             disabled={!fullName.trim() || !email.trim() || password.length < 12 || code.trim().length !== 16}
           >
-            Prano Ftesën / Accept & Register
+            {t('courier.invite.accept_register', 'Accept & Register')}
           </Button>
         </form>
 
@@ -234,7 +235,7 @@ export function CourierInvitePage() {
             onClick={() => navigate('/courier/login')}
             className="text-sm text-[var(--brand-primary)] hover:underline"
           >
-            Keni një llogari? Log in / Already have an account?
+            {t('courier.invite.already_have_account', 'Already have an account?')}
           </button>
         </div>
       </div>
