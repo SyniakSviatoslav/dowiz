@@ -4,6 +4,35 @@ import htm from 'htm';
 import { LRUCache } from 'lru-cache';
 import { getImageUrl } from './image-url.js';
 import { formatMoney, ensureCurrency as ensureCurr } from '@deliveryos/shared-types';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+
+let assetTags = '';
+
+function loadAssetTags(): string {
+  const candidates = [
+    'apps/web/dist/index.html',
+    join('dist', 'public', 'index.html'),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (existsSync(candidate)) {
+        const content = readFileSync(candidate, 'utf-8');
+        const scriptMatch = content.match(/<script[^>]+src="[^"]+"[^>]*><\/script>/);
+        const linkMatches = content.matchAll(/<link[^>]+rel="(?:stylesheet|modulepreload)"[^>]+>/g);
+        const tags: string[] = [];
+        if (scriptMatch) tags.push(scriptMatch[0]);
+        for (const m of linkMatches) tags.push(m[0]);
+        return tags.join('\n          ');
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return '';
+}
+
+assetTags = loadAssetTags();
 
 const html = htm.bind(h);
 
@@ -327,6 +356,7 @@ export async function renderMenuPage(
           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
           <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
+          ${assetTags}
           <script type="application/ld+json">${jsonld}</script>
           <style>
             *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
