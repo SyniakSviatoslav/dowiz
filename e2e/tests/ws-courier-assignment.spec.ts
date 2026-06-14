@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import crypto from 'node:crypto';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -39,7 +40,7 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
         customer: { phone: '+355600000001', name: 'E2E WS Test' },
         delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga e Barrikadave, Tirana' },
         payment: { method: 'cash' },
-        idempotency_key: `ws-test-${Date.now()}`,
+        idempotency_key: crypto.randomUUID(),
       },
     });
     const orderData = await orderRes.json();
