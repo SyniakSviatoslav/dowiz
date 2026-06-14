@@ -112,6 +112,29 @@ export function DashboardPage() {
     },
   });
 
+  // Separate subscription for courier channel (position updates, shift status)
+  useWebSocket({
+    room: `location:${tenantId}:couriers`,
+    enabled: !!tenantId,
+    onMessage: (msg) => {
+      const envelope = msg?.data || msg;
+      const p = envelope.payload;
+      if (!p) return;
+      if (envelope.type === 'courier.position_updated' && p.position) {
+        setCourierPositions(prev => ({ ...prev, [p.courierId]: [p.position.lng, p.position.lat] }));
+      } else if (envelope.type === 'courier.shift_updated') {
+        setCourierPositions(prev => {
+          if (p.status === 'offline') {
+            const next = { ...prev };
+            delete next[p.courierId];
+            return next;
+          }
+          return prev;
+        });
+      }
+    },
+  });
+
   const fetchMessages = async (orderId: string) => {
     if (messagesByOrder[orderId]) return;
     try {

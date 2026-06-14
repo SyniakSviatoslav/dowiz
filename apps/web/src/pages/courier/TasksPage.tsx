@@ -52,8 +52,9 @@ export function TasksPage() {
   useWebSocket({
     room: `courier:${courierId}`,
     onMessage: (msg) => {
-      if (msg.type === 'task_assigned') {
-        setTasks(prev => [msg.payload, ...prev]);
+      const envelope = msg?.data || msg;
+      if (envelope.type === 'task_assigned') {
+        setTasks(prev => [envelope.payload, ...prev]);
         playPing();
       }
     },
