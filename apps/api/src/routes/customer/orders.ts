@@ -1,4 +1,3 @@
-// @ts-nocheck — pre-existing type errors in this file
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -9,7 +8,7 @@ import { distanceKm } from '../../lib/geo.js';
 
 const env = loadEnv();
 
-export default (async function customerOrderRoutes(fastify, opts) {
+export default (async function customerOrderRoutes(fastify: any, opts: any) {
   const { db, messageBus } = opts as any;
 
   // Ensure this is only accessible to authenticated customers
@@ -22,7 +21,7 @@ export default (async function customerOrderRoutes(fastify, opts) {
         orderId: z.string().uuid()
       })
     }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { orderId } = request.params;
     const userId = (request.user as any).sub;
 
@@ -116,12 +115,12 @@ export default (async function customerOrderRoutes(fastify, opts) {
         reason: z.string().min(5).max(500)
       })
     }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { orderId } = request.params;
     const { reason } = request.body;
     const userId = (request.user as any).sub;
 
-    const cancelWindowMs = parseInt(env.CANCEL_AFTER_DISPATCH_WINDOW_MS || '300000', 10); // 5 min default
+    const cancelWindowMs = parseInt((env as any).CANCEL_AFTER_DISPATCH_WINDOW_MS || '300000', 10); // 5 min default
     
     const client = await db.connect();
     try {

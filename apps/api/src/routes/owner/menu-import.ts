@@ -1,4 +1,3 @@
-// @ts-nocheck — TODO: fix type errors, then remove this
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -7,7 +6,7 @@ import { ParseModeEnum } from '@deliveryos/shared-types';
 import { withTenant } from '@deliveryos/platform';
 import { BUS_CHANNELS } from '../../lib/registry.js';
 
-export default (async function menuImportRoutes(fastify, opts) {
+export default (async function menuImportRoutes(fastify: any, opts: any) {
   const { db, messageBus, parsers, storage } = opts as any;
 
   async function getLocationId(user: any): Promise<string | null> {
@@ -28,12 +27,11 @@ export default (async function menuImportRoutes(fastify, opts) {
         timeWindow: '1 minute'
       }
     }
-  }, async (request, reply) => {
-    const user = request.user!;
+  }, async (request: any, reply: any) => {
+    const user = request.user as any;
     const locationId = await getLocationId(user);
     if (!locationId) return reply.status(401).send({ error: 'Unauthorized' });
     
-    // Read multipart
     const data = await request.file({ limits: { fileSize: 10 * 1024 * 1024 } });
     if (!data) {
       return reply.status(400).send({ error: 'Missing file' });
@@ -166,8 +164,8 @@ export default (async function menuImportRoutes(fastify, opts) {
         force: z.boolean().optional()
       }).strict()
     }
-  }, async (request, reply) => {
-    const user = request.user!;
+  }, async (request: any, reply: any) => {
+    const user = request.user as any;
     const locationId = await getLocationId(user);
     if (!locationId) return reply.status(401).send({ error: 'Unauthorized' });
 
@@ -342,7 +340,7 @@ export default (async function menuImportRoutes(fastify, opts) {
           const prodRes = await client.query(`SELECT id FROM products WHERE location_id = $1 AND external_key = $2`, [locationId, link.productKey]);
           const grpRes = await client.query(`SELECT id FROM modifier_groups WHERE location_id = $1 AND external_key = $2`, [locationId, link.groupKey]);
           
-          if (prodRes.rowCount > 0 && grpRes.rowCount > 0) {
+          if ((prodRes.rowCount ?? 0) > 0 && (grpRes.rowCount ?? 0) > 0) {
             await client.query(
               `INSERT INTO product_modifier_groups (product_id, group_id, sort_order, location_id)
                VALUES ($1, $2, $3, $4)

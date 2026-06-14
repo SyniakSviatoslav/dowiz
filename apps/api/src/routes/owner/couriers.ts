@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -8,15 +7,15 @@ import { verifyAuth, requireLocationAccess } from '../../plugins/auth.js';
 import { decryptPII } from '../../lib/pii-cipher.js';
 import { maskStr } from '../../lib/pii-mask.js';
 
-export default (async function ownerCourierRoutes(fastify, opts) {
+export default (async function ownerCourierRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
 
   fastify.addHook('preValidation', verifyAuth);
   fastify.addHook('preValidation', requireLocationAccess);
 
   // 1. List active members
-  fastify.get('/api/owner/locations/:locationId/couriers', async (request, reply) => {
-    const { locationId } = request.params as { locationId: string };
+  fastify.get('/api/owner/locations/:locationId/couriers', async (request: any, reply: any) => {
+    const { locationId } = request.params as any;
     
     // We get couriers for this location
     const res = await db.query(
@@ -50,12 +49,12 @@ export default (async function ownerCourierRoutes(fastify, opts) {
   });
 
   // 2. Update courier (status, role)
-  fastify.patch('/api/owner/locations/:locationId/couriers/:courierId', async (request, reply) => {
-    const { locationId, courierId } = request.params as { locationId: string; courierId: string };
+  fastify.patch('/api/owner/locations/:locationId/couriers/:courierId', async (request: any, reply: any) => {
+    const { locationId, courierId } = request.params as any;
     const body = request.body as any;
     const status = body?.status;
     const role = body?.role;
-    const ownerId = request.user!.userId;
+    const ownerId = (request.user as any).userId;
     const ipHash = crypto.createHash('sha256').update(request.ip).digest('hex');
     const uaHash = crypto.createHash('sha256').update(request.headers['user-agent'] || '').digest('hex');
 
@@ -118,8 +117,8 @@ export default (async function ownerCourierRoutes(fastify, opts) {
   });
 
   // 4. Live Map Data
-  fastify.get('/api/owner/locations/:locationId/couriers/live', async (request, reply) => {
-    const { locationId } = request.params as { locationId: string };
+  fastify.get('/api/owner/locations/:locationId/couriers/live', async (request: any, reply: any) => {
+    const { locationId } = request.params as any;
     
     const client = await db.connect();
     try {
@@ -147,9 +146,9 @@ export default (async function ownerCourierRoutes(fastify, opts) {
         WHERE cs.location_id = $1 AND cs.status IN ('available', 'on_delivery')
       `, [locationId]);
 
-      const couriers = res.rows.map(row => {
-        const fullName = decryptPII(row.full_name_encrypted);
-        const phone = decryptPII(row.phone_encrypted);
+      const couriers = res.rows.map((row: any) => {
+        const fullName = decryptPII(row.full_name_encrypted) || '';
+        const phone = decryptPII(row.phone_encrypted) || '';
         
         return {
           courierId: row.courier_id,
@@ -173,8 +172,8 @@ export default (async function ownerCourierRoutes(fastify, opts) {
   });
 
   // 5. Per-courier detail (shifts, earnings, history)
-  fastify.get('/api/owner/locations/:locationId/couriers/:courierId/details', async (request, reply) => {
-    const { locationId, courierId } = request.params as { locationId: string; courierId: string };
+  fastify.get('/api/owner/locations/:locationId/couriers/:courierId/details', async (request: any, reply: any) => {
+    const { locationId, courierId } = request.params as any;
 
     const [shiftsRes, earningsRes, historyRes] = await Promise.all([
       db.query(

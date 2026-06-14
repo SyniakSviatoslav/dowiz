@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -26,10 +25,10 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
         }).strict()
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId } = request.params;
       const { name, min_select, max_select, required } = request.body;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(
@@ -49,9 +48,9 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
       preValidation: [server.verifyAuth, server.requireRole(['owner'])],
       schema: { params: LocationParams }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId } = request.params;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(`SELECT * FROM modifier_groups WHERE location_id = $1 ORDER BY created_at ASC`, [locationId]);
@@ -74,10 +73,10 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
         }).strict()
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId, id } = request.params;
       const updates = request.body;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
       
       if (Object.keys(updates).length === 0) return reply.status(400).send({ error: 'No updates provided' });
 
@@ -107,9 +106,9 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
       preValidation: [server.verifyAuth, server.requireRole(['owner'])],
       schema: { params: GroupParams }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId, id } = request.params;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(`DELETE FROM modifier_groups WHERE location_id = $1 AND id = $2 RETURNING id`, [locationId, id]);
@@ -134,10 +133,10 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
         }).strict()
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId, groupId } = request.params;
       const { name, price_delta, available, sort_order } = request.body;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(
@@ -165,10 +164,10 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
         }).strict()
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId, id } = request.params;
       const updates = request.body;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
       
       if (Object.keys(updates).length === 0) return reply.status(400).send({ error: 'No updates provided' });
 
@@ -198,9 +197,9 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
       preValidation: [server.verifyAuth, server.requireRole(['owner'])],
       schema: { params: ModifierParams }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId, id } = request.params;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(`DELETE FROM modifiers WHERE location_id = $1 AND id = $2 RETURNING id`, [locationId, id]);

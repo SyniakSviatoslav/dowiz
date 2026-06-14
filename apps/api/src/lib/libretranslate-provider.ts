@@ -1,5 +1,5 @@
-// @ts-nocheck
 import type { TranslationProvider } from '../ports.js';
+// @ts-ignore — legacy types removed from shared-types
 import type { TranslateRequest, TranslateResponse } from '@deliveryos/shared-types';
 
 export class LibreTranslateProvider implements TranslationProvider {

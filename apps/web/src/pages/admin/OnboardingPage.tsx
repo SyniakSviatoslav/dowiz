@@ -4,6 +4,20 @@ import { Button, Input, FormField, MapWithRadius, MapWithPin, useI18n, PriceDisp
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
+import { z } from 'zod';
+
+const OnboardingOrderResponse = z.object({
+  id: z.string(),
+  orderId: z.string().optional(),
+}).passthrough();
+
+const CourierInviteResponse = z.object({
+  link: z.string().optional(),
+}).passthrough();
+
+const OnboardingPublishResponse = z.object({
+  id: z.string().optional(),
+}).passthrough();
 
 const TOTAL_STEPS = 9;
 
@@ -109,9 +123,10 @@ export function OnboardingPage() {
   // ── Invite courier ──
   const generateInvite = async () => {
     try {
-      const res = await apiClient<any>('/owner/courier-invites', { method: 'POST', body: { phone: courierPhone } });
+      const res = await apiClient<typeof CourierInviteResponse>('/owner/courier-invites', { method: 'POST', body: { phone: courierPhone }, schema: CourierInviteResponse });
       setInviteLink(res?.link || `https://${slug}.dowiz.org/courier/join?code=INVITE-${Date.now().toString(36)}`);
-    } catch {
+    } catch (err) {
+      console.warn('[OnboardingPage] generate invite failed:', err);
       setInviteLink(`https://${slug}.dowiz.org/courier/join?code=INVITE-${Date.now().toString(36)}`);
     }
   };
@@ -120,8 +135,9 @@ export function OnboardingPage() {
   const handlePublish = async () => {
     setLoading(true);
     try {
-      const res = await apiClient<any>('/owner/onboarding', {
+      const res = await apiClient<typeof OnboardingPublishResponse>('/owner/onboarding', {
         method: 'POST',
+        schema: OnboardingPublishResponse,
         body: {
           name, phone, slug,
           lat: pin[1], lng: pin[0],
@@ -137,8 +153,8 @@ export function OnboardingPage() {
       if (res?.id) setLocationId(res.id);
       setShareUrl(`https://${slug}.dowiz.org`);
       setTestOrderDone(true);
-    } catch {
-      // Mock success for demo
+    } catch (err) {
+      console.warn('[OnboardingPage] publish failed:', err);
       setShareUrl(`https://${slug}.dowiz.org`);
       setTestOrderDone(true);
     } finally {
@@ -157,8 +173,9 @@ export function OnboardingPage() {
     try {
       addFlowLog('Creating test order...');
       const idKey = crypto.randomUUID();
-      const createRes = await apiClient<any>('/orders', {
+      const createRes = await apiClient<typeof OnboardingOrderResponse>('/orders', {
         method: 'POST',
+        schema: OnboardingOrderResponse,
         body: {
           locationId: loc,
           items: menuItems.slice(0, 1).map(m => ({ product_id: `test_${m.name}`, quantity: 1, modifier_ids: [] })),

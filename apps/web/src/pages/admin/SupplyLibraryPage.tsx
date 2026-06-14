@@ -50,14 +50,15 @@ export function loadSupplies(): SupplyItem[] {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     return saveSupplies(defaultSupplies());
-  } catch {
+  } catch (err) {
+    console.debug('[SupplyLibrary] load supplies failed:', err);
     return saveSupplies(defaultSupplies());
   }
 }
 
 export function saveSupplies(supplies: SupplyItem[]): SupplyItem[] {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(supplies)); } catch {
-    console.debug('[SupplyLibrary] localStorage write failed');
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(supplies)); } catch (err) {
+    console.debug('[SupplyLibrary] localStorage write failed:', err);
   }
   return supplies;
 }

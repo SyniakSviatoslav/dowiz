@@ -3,6 +3,17 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { Button, Input, FormField, EmptyState } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
+import { z } from 'zod';
+import { CourierInviteRedeemResponse } from '@deliveryos/shared-types';
+
+const CourierInviteDetailResponse = z.custom<{
+  locationName: string;
+  role: string;
+  isValid: boolean;
+  isExpired: boolean;
+  isUsed: boolean;
+  isRevoked: boolean;
+}>();
 
 export function CourierInvitePage() {
   const { inviteId } = useParams<{ inviteId: string }>();
@@ -38,7 +49,7 @@ export function CourierInvitePage() {
     setLoadingInvite(true);
     setInviteError('');
 
-    apiClient<any>(`/courier/auth/invites/${inviteId}`)
+    apiClient<typeof CourierInviteDetailResponse>(`/courier/auth/invites/${inviteId}`, { schema: CourierInviteDetailResponse })
       .then((data) => {
         setInviteData(data);
         if (!data.isValid) {
@@ -69,8 +80,9 @@ export function CourierInvitePage() {
     setSubmitting(true);
 
     try {
-      const data = await apiClient<any>(`/courier/auth/invites/${inviteId}/redeem`, {
+      const data = await apiClient<typeof CourierInviteRedeemResponse>(`/courier/auth/invites/${inviteId}/redeem`, {
         method: 'POST',
+        schema: CourierInviteRedeemResponse,
         body: {
           email,
           code: code.trim(),

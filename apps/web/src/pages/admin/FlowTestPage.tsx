@@ -1,6 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import { Button, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
+import { z } from 'zod';
+import { AssignCourierResponse, ProductResponse } from '@deliveryos/shared-types';
+
+const OwnerSettingsResponse = z.object({
+  id: z.string().optional(),
+  name: z.string().optional(),
+}).passthrough();
+
+const CourierListResponse = z.object({
+  couriers: z.array(z.any()),
+}).passthrough();
+
+const VerifyResponse = z.object({
+  order: z.any().optional(),
+  items: z.array(z.any()).optional(),
+  assignments: z.array(z.any()).optional(),
+  auditLogs: z.array(z.any()).optional(),
+}).passthrough();
+
+const PickupResponse = z.object({
+  status: z.string().optional(),
+  courierId: z.string().optional(),
+}).passthrough();
+
+const ProductArraySchema = z.array(ProductResponse);
+
+const CreateOrderResponse = z.object({
+  id: z.string().optional(),
+  orderId: z.string().optional(),
+}).passthrough();
+
+const DeliverResponse = z.object({
+  status: z.string().optional(),
+  cashAmount: z.number().optional(),
+}).passthrough();
 
 interface FlowStep {
   id: string;
@@ -40,26 +75,26 @@ export function FlowTestPage() {
     (async () => {
       let loc = locationId;
       try {
-        const locRes = await apiClient<any>('/owner/settings');
+        const locRes = await apiClient<typeof OwnerSettingsResponse>('/owner/settings', { schema: OwnerSettingsResponse });
         if (locRes?.id) {
           setLocations([{ id: locRes.id, name: locRes.name || 'Default' }]);
           if (!loc) { loc = locRes.id; setLocationId(locRes.id); }
         }
-      } catch { /* ignore */ }
+      } catch (err) { console.debug('[FlowTestPage] load settings failed:', err); }
       try {
-        const menuRes = await apiClient<any>('/owner/menu/products');
-        const allProducts = Array.isArray(menuRes) ? menuRes : (menuRes?.products || []);
+        const menuRes = await apiClient('/owner/menu/products', { schema: ProductArraySchema });
+        const allProducts = Array.isArray(menuRes) ? menuRes : (menuRes as any)?.products || [];
         setProducts(allProducts);
         if (allProducts.length > 0 && !productId) setProductId(allProducts[0].id);
-      } catch { /* ignore */ }
+      } catch (err) { console.debug('[FlowTestPage] load products failed:', err); }
       try {
         if (loc) {
-          const courRes = await apiClient<any>(`/owner/locations/${loc}/couriers`);
+          const courRes = await apiClient<typeof CourierListResponse>(`/owner/locations/${loc}/couriers`, { schema: CourierListResponse });
           const list = courRes?.couriers || [];
           setCouriers(list);
           if (list.length > 0 && !courierId) setCourierId(list[0].id);
         }
-      } catch { /* ignore */ }
+      } catch (err) { console.debug('[FlowTestPage] load couriers failed:', err); }
     })();
   }, []);
 
@@ -86,8 +121,9 @@ export function FlowTestPage() {
       updateStep('create', { status: 'active' });
       addLog('Creating test order...');
       const idempotencyKey = crypto.randomUUID();
-      const createRes = await apiClient<any>('/orders', {
+      const createRes = await apiClient<typeof CreateOrderResponse>('/orders', {
         method: 'POST',
+        schema: CreateOrderResponse,
         body: {
           locationId,
           type: 'delivery',
@@ -101,7 +137,7 @@ export function FlowTestPage() {
           idempotency_key: idempotencyKey,
         }
       });
-      const newOrderId = createRes.id || createRes.orderId;
+      const newOrderId = createRes.id || createRes.orderId || null;
       setOrderId(newOrderId);
       updateStep('create', { status: 'done', result: newOrderId });
       addLog(`Order created: ${newOrderId}`);
@@ -137,32 +173,34 @@ export function FlowTestPage() {
         throw new Error('No couriers available. Add a courier first.');
       }
       addLog(`Assigning courier: ${courierId}...`);
-      const assignRes = await apiClient<any>(`/owner/locations/${locationId}/orders/${newOrderId}/assign-courier`, {
+      const assignRes = await apiClient<typeof AssignCourierResponse>(`/owner/locations/${locationId}/orders/${newOrderId}/assign-courier`, {
         method: 'POST',
-        body: { courierId }
+        body: { courierId },
+        schema: AssignCourierResponse,
       });
       updateStep('assign', { status: 'done', result: courierId });
       addLog(`Courier assigned: status=${assignRes.status}, assignmentId=${assignRes.id}`);
       await new Promise(r => setTimeout(r, 500));
 
       // Verify after assign
-      const verify1 = await apiClient<any>(`/owner/locations/${locationId}/orders/${newOrderId}/verify`);
+      const verify1 = await apiClient<typeof VerifyResponse>(`/owner/locations/${locationId}/orders/${newOrderId}/verify`, { schema: VerifyResponse });
       addLog(`VERIFY: order.status=${verify1.order?.status}, items=${verify1.items?.length}, assignments=${verify1.assignments?.length}, audit=${verify1.auditLogs?.length}`);
       await new Promise(r => setTimeout(r, 500));
 
       // Step 6: Pickup (owner proxy)
       updateStep('pickup', { status: 'active' });
       addLog('Picking up order (owner proxy)...');
-      const pickupRes = await apiClient<any>(`/owner/locations/${locationId}/orders/${newOrderId}/pickup`, {
+      const pickupRes = await apiClient<typeof PickupResponse>(`/owner/locations/${locationId}/orders/${newOrderId}/pickup`, {
         method: 'POST',
-        body: {}
+        body: {},
+        schema: PickupResponse,
       });
       updateStep('pickup', { status: 'done', result: pickupRes.status });
       addLog(`Pickup done: assignmentStatus=${pickupRes.status}, courierId=${pickupRes.courierId}`);
       await new Promise(r => setTimeout(r, 500));
 
       // Verify after pickup
-      const verify2 = await apiClient<any>(`/owner/locations/${locationId}/orders/${newOrderId}/verify`);
+      const verify2 = await apiClient<typeof VerifyResponse>(`/owner/locations/${locationId}/orders/${newOrderId}/verify`, { schema: VerifyResponse });
       const assign = verify2.assignments?.[0];
       addLog(`VERIFY: order.status=${verify2.order?.status}, assign.status=${assign?.status}, picked_up_at=${assign?.picked_up_at ? '✓' : '✗'}`);
       await new Promise(r => setTimeout(r, 500));
@@ -170,16 +208,17 @@ export function FlowTestPage() {
       // Step 7: Deliver (owner proxy)
       updateStep('deliver', { status: 'active' });
       addLog('Delivering order (owner proxy)...');
-      const deliverRes = await apiClient<any>(`/owner/locations/${locationId}/orders/${newOrderId}/deliver`, {
+      const deliverRes = await apiClient<typeof DeliverResponse>(`/owner/locations/${locationId}/orders/${newOrderId}/deliver`, {
         method: 'POST',
-        body: { cash_collected: true }
+        body: { cash_collected: true },
+        schema: DeliverResponse,
       });
       updateStep('deliver', { status: 'done', result: deliverRes.status });
       addLog(`Delivered: status=${deliverRes.status}, cash=${deliverRes.cashAmount}, shift now available`);
       await new Promise(r => setTimeout(r, 500));
 
       // Final verify
-      const verify3 = await apiClient<any>(`/owner/locations/${locationId}/orders/${newOrderId}/verify`);
+      const verify3 = await apiClient<typeof VerifyResponse>(`/owner/locations/${locationId}/orders/${newOrderId}/verify`, { schema: VerifyResponse });
       const finalOrder = verify3.order;
       const finalAssign = verify3.assignments?.[0];
       addLog(`FINAL VERIFY: order=${finalOrder?.status}, assign=${finalAssign?.status}, delivered_at=${finalAssign?.delivered_at ? '✓' : '✗'}, courier_shift=${finalAssign?.shift_status}, total=${finalOrder?.total}, items=${verify3.items?.length}, logs=${verify3.auditLogs?.length}`);

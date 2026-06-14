@@ -1,0 +1,42 @@
+[
+  {
+    "run_id": "run-abc123",
+    "agent_type": "implementer-frontend",
+    "model": "claude-sonnet-4",
+    "category": "frontend",
+    "input": "Create a product card component for the menu page that shows the product image, name, price in ALL, and an 'Add to cart' button.",
+    "actual_output": "```tsx\nfunction ProductCard({ product, onAdd }: ProductCardProps) {\n  return (\n    <div className=\"card\">\n      <img src={product.image_url} alt={product.name} />\n      <h3>{product.name}</h3>\n      <PriceDisplay amount={product.price} currency=\"ALL\" />\n      <button onClick={() => onAdd(product)}>Add to cart</button>\n    </div>\n  );\n}\n```",
+    "expected_output": "A ProductCard component using PriceDisplay for pricing and handling the add-to-cart action.",
+    "tools_called": [
+      {"name": "read_file", "input": {"path": "apps/web/src/pages/menu/MenuPage.tsx"}, "output": "... file contents ..."},
+      {"name": "grep", "input": {"pattern": "PriceDisplay"}, "output": "packages/ui/src/index.ts: export { PriceDisplay }"},
+      {"name": "write_file", "input": {"path": "apps/web/src/components/ProductCard.tsx"}, "output": "written OK"}
+    ],
+    "expected_tools": [
+      {"name": "grep", "input": {"pattern": "PriceDisplay|price|formatMoney"}},
+      {"name": "read_file", "input": {"path": "apps/web/src/components/*"}},
+      {"name": "write_file", "input": {"path": "apps/web/src/components/ProductCard.tsx"}}
+    ],
+    "context": ["DeliveryOS menu page — prices are integer ALL minor units, use PriceDisplay component"]
+  },
+  {
+    "run_id": "run-def456",
+    "agent_type": "implementer-backend",
+    "model": "claude-sonnet-4",
+    "category": "backend",
+    "input": "Add a GET endpoint /owner/locations/:id/stats that returns total_orders, total_revenue, and avg_order_value for today.",
+    "actual_output": "Missing endpoint section — the handler starts writing a migration instead.",
+    "expected_output": "A Fastify route in apps/api/src/routes/owner/dashboard.ts that queries the orders table and returns the requested stats.",
+    "tools_called": [
+      {"name": "read_file", "input": {"path": "apps/api/src/routes/owner/dashboard.ts"}, "output": "... file contents ..."},
+      {"name": "grep", "input": {"pattern": "SELECT.*FROM orders"}, "output": "... sql patterns ..."},
+      {"name": "write_file", "input": {"path": "packages/db/migrations/1790000000014_stats.ts"}, "output": "written migration instead of route handler"}
+    ],
+    "expected_tools": [
+      {"name": "read_file", "input": {"path": "apps/api/src/routes/owner/"}},
+      {"name": "read_file", "input": {"path": "packages/shared-types/src/contracts/"}},
+      {"name": "write_file", "input": {"path": "apps/api/src/routes/owner/dashboard.ts"}}
+    ],
+    "context": ["Adding an API endpoint — should go in routes/, not migrations/"]
+  }
+]

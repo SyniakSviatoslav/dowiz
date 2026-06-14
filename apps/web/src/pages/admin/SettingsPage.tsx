@@ -3,6 +3,24 @@ import { Button, Input, EmptyState, MapWithRadius, Toggle, useI18n, LanguageSwit
 import type { LngLatLike, Locale } from '@deliveryos/ui';
 import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
+import { z } from 'zod';
+
+const OwnerSettingsResponse = z.object({
+  id: z.string().optional(),
+  name: z.string().optional(),
+  locationName: z.string().optional(),
+  slug: z.string().optional(),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+}).passthrough();
+
+const NotificationTargetsResponse = z.object({
+  targets: z.array(z.any()),
+}).passthrough();
+
+const TelegramConnectResponse = z.object({
+  deepLink: z.string().optional(),
+}).passthrough();
 import QRCode from 'qrcode';
 
 interface DaySchedule {
@@ -85,13 +103,13 @@ export function SettingsPage() {
   const fetchSettings = async () => {
     try {
       setLoading(true);
-      const data = await apiClient<any>('/owner/settings');
-      if (data && data.locationName) {
+      const data = await apiClient<typeof OwnerSettingsResponse>('/owner/settings', { schema: OwnerSettingsResponse });
+      if (data && (data.name || (data as any).locationName)) {
         setSettings({
-          ...data,
-          hoursJson: data.hoursJson || DEFAULT_SCHEDULE,
-          lat: data.lat || 41.331,
-          lng: data.lng || 19.817,
+          ...(data as any),
+          hoursJson: (data as any).hoursJson || DEFAULT_SCHEDULE,
+          lat: (data as any).lat || 41.331,
+          lng: (data as any).lng || 19.817,
         });
         if (data.id) setLocationId(data.id);
       } else {
@@ -120,9 +138,9 @@ export function SettingsPage() {
   const fetchTgTargets = async () => {
     if (!locationId) return;
     try {
-      const res = await apiClient<any>(`/owner/locations/${locationId}/notifications/targets`);
+      const res = await apiClient<typeof NotificationTargetsResponse>(`/owner/locations/${locationId}/notifications/targets`, { schema: NotificationTargetsResponse });
       setTgTargets(res?.targets || []);
-    } catch { /* ignore */ }
+    } catch (err) { console.warn('[SettingsPage] fetch tg targets failed:', err); }
   };
 
   const handleTgConnect = async () => {
@@ -130,8 +148,8 @@ export function SettingsPage() {
     setTgLoading(true);
     setTgMessage(null);
     try {
-      const res = await apiClient<any>(`/owner/locations/${locationId}/notifications/telegram/connect-init`, { method: 'POST' });
-      setTgDeepLink(res.deepLink);
+      const res = await apiClient<typeof TelegramConnectResponse>(`/owner/locations/${locationId}/notifications/telegram/connect-init`, { method: 'POST', schema: TelegramConnectResponse });
+      setTgDeepLink(res.deepLink ?? null);
     } catch (err: any) {
       setTgMessage({ type: 'error', text: err.message || 'Failed to initiate connection' });
     } finally {
@@ -162,7 +180,7 @@ export function SettingsPage() {
         body: { status: newStatus }
       });
       await fetchTgTargets();
-    } catch { /* ignore */ }
+    } catch (err) { console.warn('[SettingsPage] toggle tg target failed:', err); }
   };
 
   const handleChange = (field: keyof LocationSettings, value: any) => {

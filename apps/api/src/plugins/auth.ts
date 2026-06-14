@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fp from 'fastify-plugin';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { verifyAuthToken } from '@deliveryos/platform';

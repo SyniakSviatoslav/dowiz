@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import crypto from 'crypto';
@@ -15,7 +14,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
   fastify.get('/auth/google', {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const state = crypto.randomUUID();
     const nonce = crypto.randomUUID();
 
@@ -23,7 +22,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
 
     // Save to Redis (TTL 10m)
-    await fastify.redis.setex(`auth:state:${state}`, 600, JSON.stringify({ codeVerifier, nonce }));
+    await (fastify as any).redis.setex(`auth:state:${state}`, 600, JSON.stringify({ codeVerifier, nonce }));
 
     const redirectUri = `${env.APP_BASE_URL}/api/auth/google/callback`;
     const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
@@ -41,7 +40,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
   fastify.get('/auth/google/callback', {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const querySchema = z.object({
       code: z.string(),
       state: z.string()
@@ -52,9 +51,9 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const { code, state } = parsed.data;
 
     // Validate state from Redis
-    const stateDataRaw = await fastify.redis.get(`auth:state:${state}`);
+    const stateDataRaw = await (fastify as any).redis.get(`auth:state:${state}`);
     if (!stateDataRaw) return reply.status(400).send({ error: 'Invalid or expired state' });
-    await fastify.redis.del(`auth:state:${state}`);
+    await (fastify as any).redis.del(`auth:state:${state}`);
 
     const { codeVerifier, nonce } = JSON.parse(stateDataRaw);
 
@@ -74,7 +73,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     });
 
     if (!tokenRes.ok) {
-      request.log.error(await tokenRes.text());
+      (request as any).log.error(await tokenRes.text());
       return reply.status(400).send({ error: 'Failed to exchange token' });
     }
 
@@ -98,7 +97,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }
 
     // Upsert User
-    const res = await fastify.db.query(
+    const res = await (fastify as any).db.query(
       `INSERT INTO users (email, google_sub, display_name) 
        VALUES ($1, $2, $3)
        ON CONFLICT (google_sub) DO UPDATE SET email = EXCLUDED.email, display_name = EXCLUDED.display_name
@@ -112,7 +111,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       userId = res.rows[0].id;
     } catch (e) {
       // Fallback: match by email and set google_sub
-      const updateRes = await fastify.db.query(
+      const updateRes = await (fastify as any).db.query(
         `UPDATE users SET google_sub = $2, display_name = COALESCE(users.display_name, $3) WHERE email = $1 RETURNING id`,
         [email, googleSub, name]
       );
@@ -128,7 +127,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const refreshToken = crypto.randomBytes(32).toString('hex');
     const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
-    await fastify.db.query(
+    await (fastify as any).db.query(
       `INSERT INTO auth_refresh_tokens (user_id, family_id, token_hash, expires_at)
        VALUES ($1, $2, $3, now() + interval '7 days')`,
       [userId, familyId, refreshTokenHash]
@@ -136,7 +135,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     // One-time code exchange
     const opaqueCode = crypto.randomUUID();
-    await fastify.redis.setex(`auth:code:${opaqueCode}`, 60, JSON.stringify({
+    await (fastify as any).redis.setex(`auth:code:${opaqueCode}`, 60, JSON.stringify({
       access_token: accessToken,
       refresh_token: refreshToken
     }));
@@ -153,12 +152,12 @@ export default async function authRoutes(fastify: FastifyInstance) {
     schema: {
       body: z.object({ code: z.string().uuid() }).strict()
     }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { code } = request.body as any;
-    const dataRaw = await fastify.redis.get(`auth:code:${code}`);
+    const dataRaw = await (fastify as any).redis.get(`auth:code:${code}`);
     if (!dataRaw) return reply.status(400).send({ error: 'Invalid or expired code' });
 
-    await fastify.redis.del(`auth:code:${code}`);
+    await (fastify as any).redis.del(`auth:code:${code}`);
     return JSON.parse(dataRaw);
   });
 
@@ -167,11 +166,11 @@ export default async function authRoutes(fastify: FastifyInstance) {
     schema: {
       body: z.object({ refresh_token: z.string() }).strict()
     }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { refresh_token } = request.body as any;
     const tokenHash = crypto.createHash('sha256').update(refresh_token).digest('hex');
 
-    const res = await fastify.db.query(
+    const res = await (fastify as any).db.query(
       `SELECT * FROM auth_refresh_tokens WHERE token_hash = $1`,
       [tokenHash]
     );
@@ -185,12 +184,12 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     if (tokenRecord.used) {
       // Reuse detected! Compromised family. Revoke all.
-      await fastify.db.query(`DELETE FROM auth_refresh_tokens WHERE family_id = $1`, [tokenRecord.family_id]);
+      await (fastify as any).db.query(`DELETE FROM auth_refresh_tokens WHERE family_id = $1`, [tokenRecord.family_id]);
       return reply.status(401).send({ error: 'Token reuse detected. Family revoked.' });
     }
 
     // Mark as used
-    await fastify.db.query(`UPDATE auth_refresh_tokens SET used = true WHERE id = $1`, [tokenRecord.id]);
+    await (fastify as any).db.query(`UPDATE auth_refresh_tokens SET used = true WHERE id = $1`, [tokenRecord.id]);
 
     // We need the user's role to mint a new access token. For simplicity, we assume we can fetch it, 
     // or we store the role in the refresh token? Wait, the access token had the role.
@@ -203,14 +202,14 @@ export default async function authRoutes(fastify: FastifyInstance) {
     // Actually, a user can have both roles in different locations. The auth token needs A role.
     // Let's assume role is 'owner' if `google_sub` is present, else 'courier'. 
     // This is safe per requirements since owner = Google, courier = invite.
-    const userRes = await fastify.db.query(`SELECT google_sub FROM users WHERE id = $1`, [tokenRecord.user_id]);
+    const userRes = await (fastify as any).db.query(`SELECT google_sub FROM users WHERE id = $1`, [tokenRecord.user_id]);
     const role = userRes.rows[0].google_sub ? 'owner' : 'courier';
 
     const newAccessToken = await signAuthToken({ role, userId: tokenRecord.user_id } as any, '15m');
     const newRefreshToken = crypto.randomBytes(32).toString('hex');
     const newRefreshTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
 
-    await fastify.db.query(
+    await (fastify as any).db.query(
       `INSERT INTO auth_refresh_tokens (user_id, family_id, token_hash, expires_at)
        VALUES ($1, $2, $3, now() + interval '7 days')`,
       [tokenRecord.user_id, tokenRecord.family_id, newRefreshTokenHash]
@@ -232,12 +231,12 @@ export default async function authRoutes(fastify: FastifyInstance) {
         name: z.string().min(1)
       }).strict()
     }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { code, phone, name } = request.body as any;
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
 
     // Inside transaction to avoid race conditions
-    const client = await fastify.db.connect();
+    const client = await (fastify as any).db.connect();
     try {
       await client.query('BEGIN');
 
@@ -300,7 +299,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       return { access_token: accessToken, refresh_token: refreshToken };
     } catch (err: any) {
       await client.query('ROLLBACK');
-      request.log.error(err);
+      (request as any).log.error(err);
       return reply.status(400).send({ error: err.message || 'Activation failed' });
     } finally {
       client.release();

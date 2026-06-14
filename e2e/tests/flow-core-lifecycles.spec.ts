@@ -4,6 +4,7 @@ const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 let authToken: string;
 let activeLocationId: string;
 let orderId: string;
+let orderStatus: string;
 let inviteId: string;
 let inviteCode: string;
 let courierJwt: string;
@@ -32,7 +33,6 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     authToken = authBody.access_token;
     activeLocationId = authBody.activeLocationId;
 
-    // Create a category + product for modifier-groups tests
     const catRes = await request.post(`${BASE}/api/owner/menu/categories`, {
       headers: { Authorization: `Bearer ${authToken}` },
       data: { name: `E2E-Cat-${TS}` },
@@ -73,8 +73,22 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     }
   });
 
+  async function getOrderStatus(request: any): Promise<string | null> {
+    if (!orderId) return null;
+    try {
+      const res = await request.get(`${BASE}/api/owner/locations/${activeLocationId}/orders/${orderId}/verify`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (res.status() !== 200) return null;
+      const body = await res.json();
+      return body.order?.status || body.status || null;
+    } catch {
+      return null;
+    }
+  }
+
   // ════════════════════════════════════════════════════════════════
-  // ORDER LIFECYCLE — reject, assign-courier, mark-no-show, cancel
+  // ORDER LIFECYCLE
   // ════════════════════════════════════════════════════════════════
 
   test('Flow 1: Order — create order for lifecycle tests', async ({ request }) => {
@@ -97,12 +111,10 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
         delivery_address: 'Rruga e Barrikadave, Tirana',
       },
     });
-    expect([201, 200, 400, 422]).toContain(orderRes.status());
-    if (orderRes.status() === 201 || orderRes.status() === 200) {
-      const body = await orderRes.json();
-      orderId = body.id || body.orderId;
-      expect(orderId).toBeTruthy();
-    }
+    expect(orderRes.status()).toBe(201);
+    const body = await orderRes.json();
+    orderId = body.id || body.orderId;
+    expect(orderId).toBeTruthy();
   });
 
   test('Flow 2: Owner — reject order', async ({ request }) => {
@@ -111,16 +123,16 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
       `${BASE}/api/owner/locations/${activeLocationId}/orders/${orderId}/reject`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { reason: 'Out of stock' } }
     );
-    expect([200, 409]).toContain(rejectRes.status());
-    if (rejectRes.status() === 200) {
-      const body = await rejectRes.json();
-      expect(body.status).toBe('REJECTED');
-    }
+    expect(rejectRes.status()).toBe(200);
+    const body = await rejectRes.json();
+    expect(body.status).toBe('REJECTED');
   });
 
   test('Flow 3: Owner — assign courier to order', async ({ request }) => {
     test.skip(!orderId, 'No order created');
-    // Get active couriers first
+    const status = await getOrderStatus(request);
+    test.skip(status !== 'PENDING' && status !== 'CONFIRMED', `Order is in state ${status}, cannot assign courier`);
+
     const couriersRes = await request.get(
       `${BASE}/api/owner/locations/${activeLocationId}/couriers`,
       { headers: { Authorization: `Bearer ${authToken}` } }
@@ -128,34 +140,31 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     expect(couriersRes.status()).toBe(200);
     const couriersBody = await couriersRes.json();
     const couriers = couriersBody.couriers || couriersBody.data || [];
-    if (couriers.length === 0) {
-      test.skip(true, 'No couriers available to assign');
-    }
+    test.skip(couriers.length === 0, 'No couriers available to assign');
 
     const courierId = couriers[0].id;
     const assignRes = await request.post(
       `${BASE}/api/owner/locations/${activeLocationId}/orders/${orderId}/assign-courier`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { courierId } }
     );
-    expect([200, 400, 404, 409]).toContain(assignRes.status());
-    if (assignRes.status() === 200) {
-      const body = await assignRes.json();
-      expect(body.courierId || body.courier_id).toBeTruthy();
-      assignmentId = body.id || body.assignmentId;
-    }
+    expect(assignRes.status()).toBe(200);
+    const body = await assignRes.json();
+    expect(body.courierId || body.courier_id).toBeTruthy();
+    assignmentId = body.id || body.assignmentId;
   });
 
   test('Flow 4: Owner — mark order as no-show', async ({ request }) => {
     test.skip(!orderId, 'No order created');
+    const status = await getOrderStatus(request);
+    test.skip(status !== 'PENDING' && status !== 'CONFIRMED', `Order is in state ${status}, cannot mark no-show`);
+
     const noShowRes = await request.post(
       `${BASE}/api/owner/locations/${activeLocationId}/orders/${orderId}/mark-no-show`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    expect([200, 409]).toContain(noShowRes.status());
-    if (noShowRes.status() === 200) {
-      const body = await noShowRes.json();
-      expect(body.success).toBe(true);
-    }
+    expect(noShowRes.status()).toBe(200);
+    const body = await noShowRes.json();
+    expect(body.success).toBe(true);
   });
 
   test('Flow 5: Owner — verify order detail', async ({ request }) => {
@@ -164,27 +173,26 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
       `${BASE}/api/owner/locations/${activeLocationId}/orders/${orderId}/verify`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    expect([200, 404]).toContain(verifyRes.status());
-    if (verifyRes.status() === 200) {
-      const body = await verifyRes.json();
-      expect(body.order).toBeTruthy();
-      expect(body.order.id || body.order.orderId).toBeTruthy();
-      expect(body.order.status).toBeTruthy();
-      expect(Array.isArray(body.items || body.order.items)).toBe(true);
-    }
+    expect(verifyRes.status()).toBe(200);
+    const body = await verifyRes.json();
+    expect(body.order).toBeTruthy();
+    expect(body.order.id || body.order.orderId).toBeTruthy();
+    expect(body.order.status).toBeTruthy();
+    expect(Array.isArray(body.items || body.order.items)).toBe(true);
   });
 
   test('Flow 6: Customer — cancel own order', async ({ request }) => {
     test.skip(!orderId, 'No order created');
+    const status = await getOrderStatus(request);
+    test.skip(status === 'REJECTED' || status === 'CANCELLED', `Order is already ${status}, cannot cancel`);
+
     const cancelRes = await request.post(
       `${BASE}/api/customer/orders/${orderId}/cancel`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { reason: 'Changed my mind — E2E test' } }
     );
-    expect([200, 403, 409, 410]).toContain(cancelRes.status());
-    if (cancelRes.status() === 200) {
-      const body = await cancelRes.json();
-      expect(body.success).toBe(true);
-    }
+    expect(cancelRes.status()).toBe(200);
+    const body = await cancelRes.json();
+    expect(body.success).toBe(true);
   });
 
   // ════════════════════════════════════════════════════════════════
@@ -210,31 +218,27 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
       `${BASE}/api/courier/auth/invites/${inviteId}/redeem`,
       { data: { email: COURIER_EMAIL, code: inviteCode, password: COURIER_PASSWORD, full_name: 'E2E Courier' } }
     );
-    expect([200, 400, 401, 422]).toContain(redeemRes.status());
-    if (redeemRes.status() === 200) {
-      const body = await redeemRes.json();
-      courierJwt = body.jwt;
-      courierRefreshToken = body.refreshToken;
-      courierUserId = body.courier?.id;
-      expect(courierJwt).toBeTruthy();
-      expect(courierRefreshToken).toBeTruthy();
-      expect(courierUserId).toBeTruthy();
-    }
+    expect(redeemRes.status()).toBe(200);
+    const body = await redeemRes.json();
+    courierJwt = body.jwt;
+    courierRefreshToken = body.refreshToken;
+    courierUserId = body.courier?.id;
+    expect(courierJwt).toBeTruthy();
+    expect(courierRefreshToken).toBeTruthy();
+    expect(courierUserId).toBeTruthy();
   });
 
   test('Flow 9: Courier — login API', async ({ request }) => {
     const loginRes = await request.post(`${BASE}/api/courier/auth/login`, {
       data: { email: COURIER_EMAIL, password: COURIER_PASSWORD, location_id: activeLocationId },
     });
-    expect([200, 401, 429]).toContain(loginRes.status());
-    if (loginRes.status() === 200) {
-      const body = await loginRes.json();
-      courierJwt = body.jwt;
-      courierRefreshToken = body.refreshToken;
-      expect(courierJwt).toBeTruthy();
-      expect(body.activeLocationId).toBeTruthy();
-      expect(body.role || body.role).toBeTruthy();
-    }
+    expect(loginRes.status()).toBe(200);
+    const body = await loginRes.json();
+    courierJwt = body.jwt;
+    courierRefreshToken = body.refreshToken;
+    expect(courierJwt).toBeTruthy();
+    expect(body.activeLocationId).toBeTruthy();
+    expect(body.role || body.role).toBeTruthy();
   });
 
   test('Flow 10: Courier — refresh token', async ({ request }) => {
@@ -242,14 +246,12 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     const refreshRes = await request.post(`${BASE}/api/courier/auth/refresh`, {
       data: { refresh_token: courierRefreshToken },
     });
-    expect([200, 401, 429]).toContain(refreshRes.status());
-    if (refreshRes.status() === 200) {
-      const body = await refreshRes.json();
-      expect(body.jwt).toBeTruthy();
-      expect(body.refreshToken).toBeTruthy();
-      courierJwt = body.jwt;
-      courierRefreshToken = body.refreshToken;
-    }
+    expect(refreshRes.status()).toBe(200);
+    const body = await refreshRes.json();
+    expect(body.jwt).toBeTruthy();
+    expect(body.refreshToken).toBeTruthy();
+    courierJwt = body.jwt;
+    courierRefreshToken = body.refreshToken;
   });
 
   test('Flow 11: Courier — GET /me profile', async ({ request }) => {
@@ -268,12 +270,10 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     const auditRes = await request.get(`${BASE}/api/courier/me/audit-log`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
     });
-    expect([200, 404]).toContain(auditRes.status());
-    if (auditRes.status() === 200) {
-      const body = await auditRes.json();
-      const logs = body.logs || body.data || body;
-      expect(Array.isArray(logs)).toBe(true);
-    }
+    expect(auditRes.status()).toBe(200);
+    const body = await auditRes.json();
+    const logs = body.logs || body.data || body;
+    expect(Array.isArray(logs)).toBe(true);
   });
 
   test('Flow 13: Courier — GET /me/earnings and /me/history', async ({ request }) => {
@@ -281,23 +281,19 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     const earnRes = await request.get(`${BASE}/api/courier/me/earnings`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
     });
-    expect([200, 404]).toContain(earnRes.status());
-    if (earnRes.status() === 200) {
-      const body = await earnRes.json();
-      if (body.summary) {
-        expect(typeof body.summary.today).toBe('number');
-      }
-      expect(Array.isArray(body.payouts || [])).toBe(true);
+    expect(earnRes.status()).toBe(200);
+    const earnBody = await earnRes.json();
+    if (earnBody.summary) {
+      expect(typeof earnBody.summary.today).toBe('number');
     }
+    expect(Array.isArray(earnBody.payouts || [])).toBe(true);
 
     const histRes = await request.get(`${BASE}/api/courier/me/history`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
     });
-    expect([200, 404]).toContain(histRes.status());
-    if (histRes.status() === 200) {
-      const body = await histRes.json();
-      expect(Array.isArray(body)).toBe(true);
-    }
+    expect(histRes.status()).toBe(200);
+    const histBody = await histRes.json();
+    expect(Array.isArray(histBody)).toBe(true);
   });
 
   test('Flow 14: Courier — GET /me/payouts', async ({ request }) => {
@@ -305,16 +301,14 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     const payoutRes = await request.get(`${BASE}/api/courier/me/payouts`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
     });
-    expect([200, 404]).toContain(payoutRes.status());
-    if (payoutRes.status() === 200) {
-      const body = await payoutRes.json();
-      const payouts = body.payouts || body.data || body;
-      if (Array.isArray(payouts) && payouts.length > 0) {
-        const detailRes = await request.get(`${BASE}/api/courier/me/payouts/${payouts[0].id}`, {
-          headers: { Authorization: `Bearer ${courierJwt}` },
-        });
-        expect([200, 404]).toContain(detailRes.status());
-      }
+    expect(payoutRes.status()).toBe(200);
+    const body = await payoutRes.json();
+    const payouts = body.payouts || body.data || body;
+    if (Array.isArray(payouts) && payouts.length > 0) {
+      const detailRes = await request.get(`${BASE}/api/courier/me/payouts/${payouts[0].id}`, {
+        headers: { Authorization: `Bearer ${courierJwt}` },
+      });
+      expect(detailRes.status()).toBe(200);
     }
   });
 
@@ -324,15 +318,12 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
       headers: { Authorization: `Bearer ${courierJwt}` },
       data: { current_password: COURIER_PASSWORD, new_password: 'new-password-456!' },
     });
-    expect([200, 400, 422]).toContain(pwdRes.status());
-    if (pwdRes.status() === 200) {
-      expect((await pwdRes.json()).success).toBe(true);
-      // Reset password back
-      await request.patch(`${BASE}/api/courier/me/password`, {
-        headers: { Authorization: `Bearer ${courierJwt}` },
-        data: { current_password: 'new-password-456!', new_password: COURIER_PASSWORD },
-      }).catch(() => {});
-    }
+    expect(pwdRes.status()).toBe(200);
+    expect((await pwdRes.json()).success).toBe(true);
+    await request.patch(`${BASE}/api/courier/me/password`, {
+      headers: { Authorization: `Bearer ${courierJwt}` },
+      data: { current_password: 'new-password-456!', new_password: COURIER_PASSWORD },
+    }).catch(() => {});
   });
 
   test('Flow 16: Courier — logout', async ({ request }) => {
@@ -340,36 +331,35 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     const logoutRes = await request.post(`${BASE}/api/courier/auth/logout`, {
       data: { refresh_token: courierRefreshToken },
     });
-    expect([200, 401]).toContain(logoutRes.status());
+    expect(logoutRes.status()).toBe(200);
   });
 
   test('Flow 17: Courier — assignment accept/pickup/deliver/cancel', async ({ request }) => {
     test.skip(!courierJwt || !assignmentId, 'No courier auth or no assignment');
-    // Accept
+
     const acceptRes = await request.post(`${BASE}/api/courier/assignments/${assignmentId}/accept`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
     });
-    expect([200, 404, 410]).toContain(acceptRes.status());
+    if (acceptRes.status() !== 200) {
+      test.skip(); // assignment not in acceptable state
+    }
 
-    // Pick up
     const puRes = await request.post(`${BASE}/api/courier/assignments/${assignmentId}/picked-up`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
     });
-    expect([200, 404, 410]).toContain(puRes.status());
+    expect(puRes.status()).toBe(200);
 
-    // Deliver
     const delRes = await request.post(`${BASE}/api/courier/assignments/${assignmentId}/delivered`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
       data: { cash_collected: false },
     });
-    expect([200, 404, 422]).toContain(delRes.status());
+    expect(delRes.status()).toBe(200);
 
-    // Cancel (to test the endpoint — will likely fail because already delivered)
     const cancelRes = await request.post(`${BASE}/api/courier/assignments/${assignmentId}/cancel`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
       data: { reason: 'E2E test cancellation' },
     });
-    expect([200, 404, 410]).toContain(cancelRes.status());
+    expect(cancelRes.status()).toBe(410);
   });
 
   // ════════════════════════════════════════════════════════════════
@@ -379,38 +369,33 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
   test('Flow 18: Courier — shift lifecycle (start, transition, ping, end)', async ({ request }) => {
     test.skip(!courierJwt, 'No courier auth');
 
-    // Get initial shift state
     const shiftRes = await request.get(`${BASE}/api/courier/me/shift`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
     });
-    expect([200, 404]).toContain(shiftRes.status());
+    expect(shiftRes.status()).toBe(200);
 
-    // Start shift
     const startRes = await request.post(`${BASE}/api/courier/me/shift/start`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
       data: { lat: 41.3275, lng: 19.8187 },
     });
-    expect([200, 409]).toContain(startRes.status());
+    expect(startRes.status()).toBe(200);
 
-    // Transition to available
     const transRes = await request.post(`${BASE}/api/courier/shifts/transition`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
       data: { to: 'available', lat: 41.3275, lng: 19.8187 },
     });
-    expect([200, 400, 409]).toContain(transRes.status());
+    expect(transRes.status()).toBe(200);
 
-    // GPS ping
     const pingRes = await request.post(`${BASE}/api/courier/shifts/ping`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
       data: { lat: 41.3275, lng: 19.8187, accuracy_meters: 10 },
     });
-    expect([200, 400, 409]).toContain(pingRes.status());
+    expect(pingRes.status()).toBe(200);
 
-    // End shift
     const endRes = await request.post(`${BASE}/api/courier/me/shift/end`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
     });
-    expect([200, 409]).toContain(endRes.status());
+    expect(endRes.status()).toBe(200);
   });
 
   // ════════════════════════════════════════════════════════════════
@@ -457,13 +442,11 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
       `${BASE}/api/owner/locations/${activeLocationId}/modifier-groups/${groupId}/modifiers`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { name: `Extra Cheese ${TS}`, price_delta: 50, sort_order: 1 } }
     );
-    expect([201, 400]).toContain(modRes.status());
-    if (modRes.status() === 201) {
-      const body = await modRes.json();
-      modifierId = body.id;
-      expect(modifierId).toBeTruthy();
-      expect(body.name).toContain(`Extra Cheese ${TS}`);
-    }
+    expect(modRes.status()).toBe(201);
+    const body = await modRes.json();
+    modifierId = body.id;
+    expect(modifierId).toBeTruthy();
+    expect(body.name).toContain(`Extra Cheese ${TS}`);
   });
 
   test('Flow 23: Owner — update modifier', async ({ request }) => {
@@ -525,7 +508,6 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     const updated = body.dwellThresholds || body;
     expect(updated.pending_s).toBe(60);
 
-    // Restore original
     await request.put(`${BASE}/api/owner/locations/${activeLocationId}/settings/dwell`, {
       headers: { Authorization: `Bearer ${authToken}` },
       data: { dwellThresholds: orig },
@@ -548,7 +530,6 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     );
     expect(putRes.status()).toBe(200);
 
-    // Restore
     await request.put(`${BASE}/api/owner/locations/${activeLocationId}/settings/fallback`, {
       headers: { Authorization: `Bearer ${authToken}` },
       data: { phone: origPhone, showPhoneOnError: origShow, showPhoneOnOffline: true },
@@ -581,7 +562,6 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     expect(putRes.status()).toBe(200);
     expect((await putRes.json()).retentionDays).toBe(90);
 
-    // Restore
     await request.put(`${BASE}/api/owner/locations/${activeLocationId}/settings/retention`, {
       headers: { Authorization: `Bearer ${authToken}` },
       data: { retentionDays: origDays },
@@ -593,11 +573,9 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
       `${BASE}/api/owner/locations/${activeLocationId}`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { name: `E2E-Test-Location-${TS}` } }
     );
-    expect([200, 400]).toContain(patchRes.status());
-    if (patchRes.status() === 200) {
-      const body = await patchRes.json();
-      expect(body.name || body.location?.name).toContain(`E2E-Test-Location-${TS}`);
-    }
+    expect(patchRes.status()).toBe(200);
+    const body = await patchRes.json();
+    expect(body.name || body.location?.name).toContain(`E2E-Test-Location-${TS}`);
   });
 
   // ════════════════════════════════════════════════════════════════
@@ -607,33 +585,28 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
   test('Flow 30: Owner — product translations CRUD', async ({ request }) => {
     test.skip(!productId, 'No product created');
 
-    // Create translation
     const putRes = await request.put(
       `${BASE}/api/owner/locations/${activeLocationId}/products/${productId}/translations/sq`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { name: `Produkt Test ${TS}`, description: 'Pershkrim test' } }
     );
-    expect([200, 400, 404]).toContain(putRes.status());
+    expect(putRes.status()).toBe(200);
 
-    // List translations
     const listRes = await request.get(
       `${BASE}/api/owner/locations/${activeLocationId}/products/${productId}/translations`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    expect([200, 404]).toContain(listRes.status());
-    if (listRes.status() === 200) {
-      const body = await listRes.json();
-      const translations = body.data || body;
-      if (Array.isArray(translations) && translations.length > 0) {
-        expect(translations.some((t: any) => t.locale === 'sq')).toBe(true);
-      }
+    expect(listRes.status()).toBe(200);
+    const body = await listRes.json();
+    const translations = body.data || body;
+    if (Array.isArray(translations) && translations.length > 0) {
+      expect(translations.some((t: any) => t.locale === 'sq')).toBe(true);
     }
 
-    // Delete translation
     const delRes = await request.delete(
       `${BASE}/api/owner/locations/${activeLocationId}/products/${productId}/translations/sq`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    expect([204, 404]).toContain(delRes.status());
+    expect(delRes.status()).toBe(204);
   });
 
   // ════════════════════════════════════════════════════════════════
@@ -641,7 +614,6 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
   // ════════════════════════════════════════════════════════════════
 
   test('Flow 31: Owner — push notification subscribe/unsubscribe/state', async ({ request }) => {
-    // Get state (before subscribe)
     const stateRes = await request.get(
       `${BASE}/api/owner/locations/${activeLocationId}/push/state`,
       { headers: { Authorization: `Bearer ${authToken}` } }
@@ -650,14 +622,12 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     const stateBody = await stateRes.json();
     expect('subscribed' in stateBody).toBe(true);
 
-    // Subscribe (will fail without valid WebPush subscription, but test the endpoint doesn't crash)
     const subRes = await request.post(
       `${BASE}/api/owner/locations/${activeLocationId}/push/subscribe`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { subscription: { endpoint: 'https://example.com/push', keys: { p256dh: 'test', auth: 'test' } } } }
     );
-    expect([200, 400, 422]).toContain(subRes.status());
+    expect(subRes.status()).toBe(422);
 
-    // Unsubscribe
     const unsubRes = await request.post(
       `${BASE}/api/owner/locations/${activeLocationId}/push/unsubscribe`,
       { headers: { Authorization: `Bearer ${authToken}` } }

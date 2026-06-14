@@ -1,9 +1,8 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 
-export default (async function courierSettlementRoutes(fastify, opts) {
+export default (async function courierSettlementRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
 
   fastify.addHook('onRequest', fastify.verifyAuth);
@@ -16,7 +15,7 @@ export default (async function courierSettlementRoutes(fastify, opts) {
         status: z.enum(['pending', 'approved', 'paid', 'disputed']).optional()
       })
     }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const courierId = (request.user as any).sub;
     const { status } = request.query;
 
@@ -51,7 +50,7 @@ export default (async function courierSettlementRoutes(fastify, opts) {
   // GET /api/courier/me/payouts/:id
   fastify.get('/me/payouts/:id', {
     schema: { params: z.object({ id: z.string().uuid() }) }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const courierId = (request.user as any).sub;
     const { id } = request.params;
 

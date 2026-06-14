@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, FormField, LanguageSwitcher } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
+import { CourierLoginResponse } from '@deliveryos/shared-types';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -16,9 +17,10 @@ export function LoginPage() {
     setLoading(true);
 
     try {
-      const data = await apiClient<any>('/courier/auth/login', {
+      const data = await apiClient<typeof CourierLoginResponse>('/courier/auth/login', {
         method: 'POST',
-        body: { email, password }
+        body: { email, password },
+        schema: CourierLoginResponse,
       });
       if (data?.jwt) {
         localStorage.setItem('dos_access_token', data.jwt);

@@ -6,6 +6,7 @@ import { isEventAllowedDuringQuietHours } from '../event-registry.js';
 import { writeAudit } from '../audit.js';
 import { RetryPolicy } from '../retry.js';
 import { WebPushAdapter } from '../adapters/webpush.js';
+import { maskPhone } from '../../lib/pii-mask.js';
 import type { MemoryService } from '../../lib/memory.js';
 import webpush from 'web-push';
 
@@ -150,7 +151,8 @@ export class NotificationWorker {
           subscription = device.push_subscription
             ? (typeof device.push_subscription === 'string' ? JSON.parse(device.push_subscription) : device.push_subscription)
             : { endpoint: device.vapid_endpoint, keys: { p256dh: device.keys_p256dh, auth: device.keys_auth } };
-        } catch {
+        } catch (err: any) {
+          console.warn('[notify] invalid push subscription for device, skipping:', err?.message);
           continue;
         }
 
@@ -464,7 +466,9 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
                ON CONFLICT DO NOTHING`,
               [event, location_id, attempts, err.message]
             );
-          } catch {}
+          } catch (auditErr: any) {
+            console.error('[TelegramSend] failed to write archive audit:', auditErr?.message);
+          }
           return; // Do not re-throw — archive and move on
         }
 
@@ -519,8 +523,8 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
       deliveryAddress: row.delivery_address,
       deliveryInstructions: row.delivery_instructions,
       cashPayWith: row.cash_pay_with,
-      customerName: row.customer_name,
-      customerPhone: row.customer_phone,
+      customerName: row.customer_name ? row.customer_name.split(' ')[0] || 'Customer' : 'Customer',
+      customerPhone: row.customer_phone ? maskPhone(row.customer_phone) : '***',
       items,
       quantity: items.reduce((sum: number, r: any) => sum + r.quantity, 0),
     };

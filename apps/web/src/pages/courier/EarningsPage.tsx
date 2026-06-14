@@ -1,6 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { EmptyState, SkeletonBase, StatusBadge, useI18n, PriceDisplay } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
+import { z } from 'zod';
+
+const CourierEarningsResponse = z.object({
+  summary: z.object({
+    today: z.number(),
+    week: z.number(),
+    month: z.number(),
+    currency: z.string().optional(),
+  }).optional(),
+  payouts: z.array(z.object({
+    id: z.string(),
+    date: z.string(),
+    amount: z.number(),
+    status: z.string(),
+    reference: z.string(),
+  })).optional(),
+}).passthrough();
 
 interface EarningSummary {
   today: number;
@@ -27,7 +44,7 @@ export function EarningsPage() {
   const fetchEarnings = async () => {
     try {
       setLoading(true);
-      const data = await apiClient<any>('/courier/me/earnings');
+      const data = await apiClient<typeof CourierEarningsResponse>('/courier/me/earnings', { schema: CourierEarningsResponse });
       if (data?.summary) {
         setSummary({
           today: data.summary.today,

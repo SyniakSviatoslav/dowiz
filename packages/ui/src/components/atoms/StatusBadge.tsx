@@ -1,14 +1,16 @@
+import { t } from '../../lib/i18n.js';
+
 const STATUS_MAP: Record<string, { color: string; label: string }> = {
-  PENDING: { color: 'bg-status-pending', label: 'Në pritje' },
-  CONFIRMED: { color: 'bg-status-confirmed', label: 'Konfirmuar' },
-  PREPARING: { color: 'bg-status-preparing', label: 'Duke u përgatitur' },
-  READY: { color: 'bg-status-ready', label: 'Gati' },
-  IN_DELIVERY: { color: 'bg-status-in-delivery', label: 'Në dorëzim' },
-  DELIVERED: { color: 'bg-status-delivered', label: 'Dorëzuar' },
-  REJECTED: { color: 'bg-status-rejected', label: 'Refuzuar' },
-  CANCELLED: { color: 'bg-status-cancelled', label: 'Anuluar' },
-  SCHEDULED: { color: 'bg-status-scheduled', label: 'Planifikuar' },
-  PICKED_UP: { color: 'bg-status-picked-up', label: 'Marrë' },
+  PENDING: { color: 'bg-status-pending', label: t('order.pending', 'Pending') },
+  CONFIRMED: { color: 'bg-status-confirmed', label: t('order.confirmed', 'Confirmed') },
+  PREPARING: { color: 'bg-status-preparing', label: t('order.preparing', 'Preparing') },
+  READY: { color: 'bg-status-ready', label: t('order.ready', 'Ready') },
+  IN_DELIVERY: { color: 'bg-status-in-delivery', label: t('order.in_delivery', 'In delivery') },
+  DELIVERED: { color: 'bg-status-delivered', label: t('order.delivered', 'Delivered') },
+  REJECTED: { color: 'bg-status-rejected', label: t('order.rejected', 'Rejected') },
+  CANCELLED: { color: 'bg-status-cancelled', label: t('order.cancelled', 'Cancelled') },
+  SCHEDULED: { color: 'bg-status-scheduled', label: t('order.scheduled', 'Scheduled') },
+  PICKED_UP: { color: 'bg-status-picked-up', label: t('order.picked_up', 'Picked up') },
 };
 
 interface StatusBadgeProps {
@@ -27,5 +29,5 @@ export function StatusBadge({ status, pulse }: StatusBadgeProps) {
   );
 }
 
-STATUS_MAP['ASSIGNED'] = { color: 'bg-status-pending', label: 'Assigned' };
-STATUS_MAP['ACCEPTED'] = { color: 'bg-status-confirmed', label: 'Accepted' };
+STATUS_MAP['ASSIGNED'] = { color: 'bg-status-pending', label: t('order.pending', 'Pending') };
+STATUS_MAP['ACCEPTED'] = { color: 'bg-status-confirmed', label: t('order.confirmed', 'Confirmed') };

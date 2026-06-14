@@ -131,7 +131,8 @@ async function checkLifecyclePolicy(s3: S3Client, config: R2Config): Promise<boo
       if (!match) return false;
     }
     return true;
-  } catch {
+  } catch (err: any) {
+    console.warn('[r2-verify] lifecycle policy check failed:', err?.message);
     return false;
   }
 }

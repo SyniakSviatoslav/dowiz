@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import { runRestoreVerify } from '../../workers/backup/backup-verify.js';
 
@@ -10,7 +9,7 @@ const backupAdminRoutes: FastifyPluginAsync = async (fastify, opts) => {
   fastify.addHook('onRequest', fastify.requireRole(['owner']));
 
   // GET /api/admin/backups — list recent backups
-  fastify.get('/backups', async (request, reply) => {
+  fastify.get('/backups', async (request: any, reply: any) => {
     const { type, status, limit } = request.query as any;
     const maxLimit = Math.min(parseInt(limit) || 50, 100);
 
@@ -66,7 +65,7 @@ const backupAdminRoutes: FastifyPluginAsync = async (fastify, opts) => {
   });
 
   // POST /api/admin/backups/verify — trigger manual restore-test
-  fastify.post('/backups/verify', async (request, reply) => {
+  fastify.post('/backups/verify', async (request: any, reply: any) => {
     const body = request.body as any;
     const backupId = body?.backupId;
 
@@ -76,7 +75,7 @@ const backupAdminRoutes: FastifyPluginAsync = async (fastify, opts) => {
   });
 
   // GET /api/admin/backups/dr-report — generate DR drill report
-  fastify.get('/backups/dr-report', async (request, reply) => {
+  fastify.get('/backups/dr-report', async (request: any, reply: any) => {
     const result = await runRestoreVerify(db, { fullHash: true });
     return result;
   });

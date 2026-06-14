@@ -1,7 +1,16 @@
 import React, { useState } from 'react';
 import { Button, Input, useI18n, LanguageSwitcher } from '@deliveryos/ui';
 import { apiClient } from '../../lib/apiClient.js';
+import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
+
+const AuthLoginResponse = z.object({
+  access_token: z.string(),
+}).passthrough();
+
+const DevMockAuthResponse = z.object({
+  access_token: z.string(),
+}).passthrough();
 
 export function LoginPage() {
   const { t } = useI18n();
@@ -19,9 +28,10 @@ export function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await apiClient<any>('/auth/local/login', {
+      const res = await apiClient<typeof AuthLoginResponse>('/auth/local/login', {
         method: 'POST',
-        body: { email, password }
+        body: { email, password },
+        schema: AuthLoginResponse,
       });
       sessionStorage.setItem('dos_access_token', res.access_token);
       localStorage.setItem('dos_access_token', res.access_token);
@@ -35,7 +45,7 @@ export function LoginPage() {
 
   const handleDevLogin = async () => {
     try {
-      const res = await apiClient<any>('/dev/mock-auth', { method: 'POST' });
+      const res = await apiClient<typeof DevMockAuthResponse>('/dev/mock-auth', { method: 'POST', schema: DevMockAuthResponse });
       sessionStorage.setItem('dos_access_token', res.access_token);
       localStorage.setItem('dos_access_token', res.access_token);
       navigate('/admin');

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { maskName, maskPhone } from '../../lib/pii-mask.js';
@@ -8,7 +7,7 @@ import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChann
 
 const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED', 'CANCELLED', 'REJECTED'] as const;
 
-export default (async function ownerDashboardRoutes(fastify, opts) {
+export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
   const { db, messageBus, queue } = opts as any;
 
   fastify.addHook('onRequest', fastify.verifyAuth);
@@ -16,7 +15,7 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
   fastify.addHook('onRequest', fastify.requireLocationAccess);
 
   // ─── Snapshot ──────────────────────────────────────────────────────
-  fastify.get('/:locationId/dashboard/snapshot', {}, async (request, reply) => {
+  fastify.get('/:locationId/dashboard/snapshot', {}, async (request: any, reply: any) => {
     const p = request.params as any;
     const q = request.query as any;
     const locationId = p.locationId;
@@ -42,9 +41,8 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
           cursorClause = ` AND o.created_at < $${queryParams.length + 1}`;
           queryParams.push(decoded.createdAt);
         }
-      } catch {
-        // invalid cursor — ignore, will use no cursor filter
-        console.debug('[dashboard] invalid cursor, ignoring');
+      } catch (err: any) {
+        console.warn('[dashboard] invalid cursor, ignoring:', err?.message);
       }
     }
 
@@ -96,12 +94,12 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
     const hasMore = ordersRes.rows.length > limit;
     const orders = (hasMore ? ordersRes.rows.slice(0, limit) : ordersRes.rows).map((row: any) => {
       let preflight = null;
-      try { preflight = typeof row.preflight === 'string' ? JSON.parse(row.preflight) : row.preflight; } catch {
-        console.debug('[dashboard] failed to parse preflight for order', row.id);
+      try { preflight = typeof row.preflight === 'string' ? JSON.parse(row.preflight) : row.preflight; } catch (err: any) {
+        console.debug('[dashboard] failed to parse preflight for order', row.id, err?.message);
       }
       let metadata = null;
-      try { metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata; } catch {
-        console.debug('[dashboard] failed to parse metadata for order', row.id);
+      try { metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata; } catch (err: any) {
+        console.debug('[dashboard] failed to parse metadata for order', row.id, err?.message);
       }
       return {
         orderId: row.id,
@@ -181,7 +179,7 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
   // ─── Confirm ──────────────────────────────────────────────────────
   fastify.post('/:locationId/orders/:orderId/confirm', {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { orderId } = request.params as any;
     const user = request.user as any;
     const result = await transitionOrder(db, messageBus, orderId, user, 'CONFIRMED');
@@ -191,7 +189,7 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
   // ─── Reject ────────────────────────────────────────────────────────
   fastify.post('/:locationId/orders/:orderId/reject', {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { orderId } = request.params as any;
     const body = request.body as any;
     const reason = body?.reason as string | undefined;
@@ -203,7 +201,7 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
   // ─── Assign Courier ────────────────────────────────────────────────
   fastify.post('/:locationId/orders/:orderId/assign-courier', {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, orderId } = request.params as any;
     const body = request.body as any;
     const courierId = body?.courierId;
@@ -326,7 +324,7 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
   // ─── Pickup (owner proxy for courier) ──────────────────────────────
   fastify.post('/:locationId/orders/:orderId/pickup', {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, orderId } = request.params as any;
 
     const client = await db.connect();
@@ -392,7 +390,7 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
   // ─── Deliver (owner proxy for courier) ─────────────────────────────
   fastify.post('/:locationId/orders/:orderId/deliver', {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, orderId } = request.params as any;
     const body = request.body as any;
     const cashCollected = body?.cash_collected ?? true;
@@ -478,7 +476,7 @@ export default (async function ownerDashboardRoutes(fastify, opts) {
   // ─── Verify order state ────────────────────────────────────────────
   fastify.get('/:locationId/orders/:orderId/verify', {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, orderId } = request.params as any;
 
     const [orderRes, itemsRes, assignmentsRes, auditRes] = await Promise.all([

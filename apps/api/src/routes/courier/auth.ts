@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -8,7 +7,7 @@ import { encryptPII } from '../../lib/pii-cipher.js';
 import { signAuthToken } from '@deliveryos/platform';
 import { maskStr } from '../../lib/pii-mask.js';
 
-export default (async function courierAuthRoutes(fastify, opts) {
+export default (async function courierAuthRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
 
   // Constants for argon2
@@ -27,7 +26,7 @@ export default (async function courierAuthRoutes(fastify, opts) {
         timeWindow: '15 minutes'
       }
     }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { inviteId } = request.params as { inviteId: string };
     
     // Manual Zod parsing to avoid AJV compilation failures
@@ -156,7 +155,7 @@ export default (async function courierAuthRoutes(fastify, opts) {
   });
 
   // 1b. Get Invite Details
-  fastify.get('/invites/:inviteId', async (request, reply) => {
+  fastify.get('/invites/:inviteId', async (request: any, reply: any) => {
     const { inviteId } = request.params as { inviteId: string };
     
     const res = await db.query(
@@ -195,7 +194,7 @@ export default (async function courierAuthRoutes(fastify, opts) {
         // Ideally keyed by IP + email_hash, but we rely on default IP rate limit here + application logic if needed
       }
     }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     // Manual Zod parsing to avoid AJV compilation failures
     const bodySchema = z.object({
       email: z.string().min(1).transform(e => e.toLowerCase().trim()),
@@ -329,7 +328,7 @@ export default (async function courierAuthRoutes(fastify, opts) {
         timeWindow: '1 minute'
       }
     }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     // Manual Zod parsing to avoid AJV compilation failures
     const bodySchema = z.object({
       refresh_token: z.string().min(1)
@@ -366,7 +365,7 @@ export default (async function courierAuthRoutes(fastify, opts) {
       }
 
       const sessionId = parts[0];
-      const tokenPlain = parts[1];
+      const tokenPlain = parts[1]!;
 
       const sessionRes = await client.query(
         `SELECT * FROM courier_sessions WHERE id = $1 FOR UPDATE NOWAIT`,
@@ -378,7 +377,7 @@ export default (async function courierAuthRoutes(fastify, opts) {
         return reply.status(401).send({ error: 'Session not found', code: 'SESSION_NOT_FOUND' });
       }
 
-      const session = sessionRes.rows[0];
+      const session = sessionRes.rows[0] as any;
 
       const validToken = await argon2.verify(session.token_hash, tokenPlain);
       if (!validToken) {
@@ -447,7 +446,7 @@ export default (async function courierAuthRoutes(fastify, opts) {
   });
 
   // 4. Logout
-  fastify.post('/logout', async (request, reply) => {
+  fastify.post('/logout', async (request: any, reply: any) => {
     // Manual Zod parsing to avoid AJV compilation failures
     const bodySchema = z.object({
       refresh_token: z.string().min(1)

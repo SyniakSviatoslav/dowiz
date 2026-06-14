@@ -36,7 +36,7 @@ type LocaleMessages = Record<string, TemplateFn>;
 function fmtItems(v: MessageVars): string {
   if (!v.items || v.items.length === 0) return '';
   return '\n' + v.items.map(i => {
-    const lineTotal = ((i.price * i.quantity) / 100).toFixed(2);
+    const lineTotal = (i.price * i.quantity).toFixed(0);
     return `• ${i.name} × ${i.quantity} — ${lineTotal} ${v.currency || 'ALL'}`;
   }).join('\n');
 }

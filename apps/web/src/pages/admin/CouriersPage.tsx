@@ -2,6 +2,20 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Button, Input, EmptyState, CourierLiveMap, useI18n, PriceDisplay } from '@deliveryos/ui';
 import type { CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
+import { z } from 'zod';
+import { LocationResponse, CourierListResponse } from '@deliveryos/shared-types';
+
+const CourierDetailsResponse = z.object({
+  shifts: z.array(z.object({ id: z.string(), status: z.string(), started_at: z.string(), ended_at: z.string().nullable() })),
+  earnings: z.object({ today: z.number(), week: z.number(), month: z.number(), today_deliveries: z.number(), month_deliveries: z.number() }),
+  history: z.array(z.any()),
+}).passthrough();
+
+const CourierInviteResponse = z.object({
+  deepLink: z.string(),
+  link: z.string(),
+  code: z.string(),
+}).passthrough();
 
 import { exportCSV } from '../../lib/exportCSV.js';
 
@@ -53,9 +67,9 @@ export function CouriersPage() {
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<HistoryItem | null>(null);
 
   useEffect(() => {
-    apiClient<any>('/owner/settings').then(res => {
+    apiClient<typeof LocationResponse>('/owner/settings', { schema: LocationResponse }).then(res => {
       if (res.id) setLocationId(res.id);
-    }).catch(() => {});
+    }).catch((err) => console.debug('[CouriersPage] failed to load settings:', err));
   }, []);
 
   const fetchDetails = async (courierId: string) => {
@@ -67,9 +81,10 @@ export function CouriersPage() {
     setSelectedCourier(courierId);
     setDetailsLoading(true);
     try {
-      const data = await apiClient<any>(`/owner/locations/${locationId}/couriers/${courierId}/details`);
+      const data = await apiClient<typeof CourierDetailsResponse>(`/owner/locations/${locationId}/couriers/${courierId}/details`, { schema: CourierDetailsResponse });
       setCourierDetails(data);
-    } catch {
+    } catch (err) {
+      console.error('[CouriersPage] failed to fetch courier details:', err);
       setCourierDetails(null);
     } finally {
       setDetailsLoading(false);
@@ -82,13 +97,14 @@ export function CouriersPage() {
     setInviteResult(null);
     setCopied(false);
     try {
-      const res = await apiClient<any>(`/owner/locations/${locationId}/courier-invites`, { 
+      const res = await apiClient<typeof CourierInviteResponse>(`/owner/locations/${locationId}/courier-invites`, { 
         method: 'POST', 
-        body: { role: newCourierRole, email: newCourierEmail, ttl_hours: 48 } 
+        body: { role: newCourierRole, email: newCourierEmail, ttl_hours: 48 },
+        schema: CourierInviteResponse,
       });
       if (res?.deepLink || res?.link) {
         setInviteResult({
-          link: res.deepLink || res.link,
+          link: (res.deepLink || res.link) as string,
           code: res.code || '',
         });
         setNewCourierEmail('');
@@ -96,7 +112,8 @@ export function CouriersPage() {
       } else {
         setInviteError('Failed to create invite');
       }
-    } catch { 
+    } catch (err) { 
+      console.error('[CouriersPage] failed to create invite:', err);
       setInviteError('Failed to create invite'); 
     }
   };
@@ -113,7 +130,7 @@ export function CouriersPage() {
     if (!locationId) return;
     try {
       setLoading(true);
-      const data = await apiClient<any>(`/owner/locations/${locationId}/couriers`);
+      const data = await apiClient<typeof CourierListResponse>(`/owner/locations/${locationId}/couriers`, { schema: CourierListResponse });
       const list = data?.couriers;
       if (Array.isArray(list) && list.length > 0) {
         setCouriers(list.map((c: any) => ({
@@ -128,7 +145,8 @@ export function CouriersPage() {
         setCouriers([]);
       }
       setError('');
-    } catch {
+    } catch (err) {
+      console.error('[CouriersPage] failed to fetch couriers:', err);
       setError('Failed to load couriers');
     } finally {
       setLoading(false);

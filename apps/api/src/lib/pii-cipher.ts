@@ -1,4 +1,3 @@
-// @ts-nocheck
 import crypto from 'node:crypto';
 
 const GLOBAL_PII_KEY_VAR = 'DOWIZ_PII_ENCRYPTION_KEY_BUFFER';

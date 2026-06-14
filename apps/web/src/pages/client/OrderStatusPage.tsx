@@ -3,7 +3,16 @@ import { useParams } from 'react-router-dom';
 import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay } from '@deliveryos/ui';
 import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
-import { calcETA } from '@deliveryos/shared-types';
+import { z } from 'zod';
+import { calcETA, CustomerOrderStatusResponse } from '@deliveryos/shared-types';
+
+const MessagesResponse = z.object({
+  messages: z.array(z.any()),
+}).passthrough();
+
+const MessageSendResponse = z.object({
+  message: z.any(),
+}).passthrough();
 
 const STATUS_LABELS_KEYS: Record<string, string> = {
   PENDING: 'order.placed',
@@ -45,38 +54,39 @@ export function OrderStatusPage() {
 
   const fetchMessages = useCallback(async () => {
     try {
-      const data = await apiClient<any>(`/orders/${id}/messages`);
+      const data = await apiClient<typeof MessagesResponse>(`/orders/${id}/messages`, { schema: MessagesResponse });
       if (data?.messages) setMessages(data.messages);
-    } catch {
-      // messages are optional
+    } catch (err) {
+      console.debug('[OrderStatusPage] fetch messages failed:', err);
     }
   }, [id]);
 
   const handleSendMessage = useCallback(async (presetKey: string, params?: Record<string, unknown>) => {
     try {
-      const data = await apiClient<any>(`/orders/${id}/messages`, {
+      const data = await apiClient<typeof MessageSendResponse>(`/orders/${id}/messages`, {
         method: 'POST',
         body: { preset_key: presetKey, params: params || {} },
+        schema: MessageSendResponse,
       });
       if (data?.message) {
         setMessages(prev => [...prev, data.message]);
       }
-    } catch {
-      // message send failed silently
+    } catch (err) {
+      console.warn('[OrderStatusPage] send message failed:', err);
     }
   }, [id]);
 
   const handleMarkRead = useCallback(async () => {
     try {
       await apiClient(`/orders/${id}/messages/read`, { method: 'POST' });
-    } catch {
-      // mark read is best-effort
+    } catch (err) {
+      console.debug('[OrderStatusPage] mark read failed:', err);
     }
   }, [id]);
 
   const fetchOrder = async () => {
     try {
-      const data = await apiClient<any>(`/customer/orders/${id}/status`);
+      const data = await apiClient<typeof CustomerOrderStatusResponse>(`/customer/orders/${id}/status`, { schema: CustomerOrderStatusResponse });
       setOrder(data);
       if (data.courierPosition) {
         setCourierPos([data.courierPosition.lng, data.courierPosition.lat]);

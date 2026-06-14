@@ -1,11 +1,10 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { maskName, maskPhone } from '../../lib/pii-mask.js';
 import { dashboardChannel } from '../../lib/registry.js';
 
-export default (async function ownerAlertRoutes(fastify, opts) {
+export default (async function ownerAlertRoutes(fastify: any, opts: any) {
   const { db, messageBus, queue } = opts as any;
 
   fastify.addHook('onRequest', fastify.verifyAuth);
@@ -23,7 +22,7 @@ export default (async function ownerAlertRoutes(fastify, opts) {
         cursor: z.string().optional(),
       }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const { status, kind, limit, cursor } = request.query;
 
@@ -48,9 +47,8 @@ export default (async function ownerAlertRoutes(fastify, opts) {
           params.push(decoded.createdAt);
           clauses += ` AND la.created_at < $${params.length}`;
         }
-      } catch {
-        // invalid cursor — ignore, will use no cursor filter
-        console.debug('[alerts] invalid cursor, ignoring');
+      } catch (err: any) {
+        console.warn('[alerts] invalid cursor, ignoring:', err?.message);
       }
     }
 
@@ -101,7 +99,7 @@ export default (async function ownerAlertRoutes(fastify, opts) {
     schema: {
       params: z.object({ locationId: z.string().uuid(), alertId: z.string().uuid() }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, alertId } = request.params;
     const user = request.user as any;
 
@@ -129,9 +127,8 @@ export default (async function ownerAlertRoutes(fastify, opts) {
       for (const job of jobs) {
         await queue.boss.cancel(job.id);
       }
-    } catch {
-      // pg-boss query errors are non-critical — alert already acknowledged
-      console.debug('[alerts] pg-boss cancel failed for', alertId);
+    } catch (err: any) {
+      console.debug('[alerts] pg-boss cancel failed for', alertId, err?.message);
     }
 
     await messageBus.publish(dashboardChannel(locationId), {
@@ -148,7 +145,7 @@ export default (async function ownerAlertRoutes(fastify, opts) {
       params: z.object({ locationId: z.string().uuid() }),
       body: z.object({ kind: z.string().optional() }).optional(),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const body = request.body || {};
     const user = request.user as any;

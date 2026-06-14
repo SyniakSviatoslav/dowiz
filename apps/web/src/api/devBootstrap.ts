@@ -10,7 +10,8 @@ function extractPath(url: string): string {
   try {
     const u = new URL(url);
     return u.pathname.replace(/^\/api/, '') || '/';
-  } catch {
+  } catch (err) {
+    console.debug('[devBootstrap] extractPath URL parse failed:', err);
     return url.replace(/^https?:\/\/[^/]+/, '').replace(/^\/api/, '') || '/';
   }
 }
@@ -26,9 +27,8 @@ if (isDev) {
     if (isApi) {
       const method = (init?.method || 'GET').toUpperCase();
       let body: unknown;
-      try { if (init?.body) body = JSON.parse(init.body as string); } catch {
-        // body is not JSON — pass through as-is
-        console.debug('[devBootstrap] request body is not JSON');
+      try { if (init?.body) body = JSON.parse(init.body as string); } catch (err) {
+        console.debug('[devBootstrap] request body is not JSON:', err);
       }
       const path = extractPath(url);
       const mock = getMockResponse(method, path, body);
@@ -47,7 +47,8 @@ if (isDev) {
 
     try {
       return await _orig.call(window, input, init);
-    } catch {
+    } catch (err) {
+      console.debug('[devBootstrap] fetch failed:', err);
       return new Response('{}', {
         status: 503,
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },

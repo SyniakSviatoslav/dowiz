@@ -1,6 +1,25 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Button, Input, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
+import { z } from 'zod';
+import { CategoryResponse, ProductResponse } from '@deliveryos/shared-types';
+
+const CategoryArraySchema = z.array(CategoryResponse);
+const ProductArraySchema = z.array(ProductResponse);
+const AnySchema = z.any();
+
+const MenuImportPreviewResponse = z.object({
+  import_session_id: z.string().optional(),
+  draft_preview: z.any().optional(),
+  issues: z.array(z.any()).optional(),
+}).passthrough();
+
+const MenuImportCommitResponse = z.object({
+  counts: z.object({
+    categories: z.number().optional(),
+    products: z.number().optional(),
+  }).optional(),
+}).passthrough();
 import { RecipeEditor } from './RecipeEditor.js';
 
 const ALLERGEN_COLORS: Record<string, { bg: string; text: string }> = {
@@ -114,7 +133,7 @@ export function MenuManagerPage() {
   const fetchCategories = async () => {
     try {
       setLoading(true);
-      const data = await apiClient<any>('/owner/menu/categories');
+      const data = await apiClient<typeof CategoryArraySchema>('/owner/menu/categories', { schema: CategoryArraySchema });
       setCategories(Array.isArray(data) ? data : []);
       setError('');
     } catch (err: any) {
@@ -146,15 +165,15 @@ export function MenuManagerPage() {
   const loadAllProducts = async () => {
     setProductsLoading(true);
     try {
-      const prods = await apiClient<any>('/owner/menu/products');
+      const prods = await apiClient<typeof ProductArraySchema>('/owner/menu/products', { schema: ProductArraySchema });
       if (Array.isArray(prods)) {
         setCategories(prev => prev.map(cat => ({
           ...cat,
-          products: prods.filter(p => p.categoryId === cat.id),
+          products: prods.filter(p => p.categoryId === cat.id) as any,
         })));
       }
-    } catch {
-      // silently fail — individual categories will load on click
+    } catch (err) {
+      console.debug('[MenuManagerPage] load all products failed:', err);
     } finally {
       setProductsLoading(false);
     }
@@ -232,15 +251,17 @@ export function MenuManagerPage() {
         try {
           await apiClient(`/owner/menu/products/${productId}/image`, { method: 'POST', body: formData, timeout: 30000 });
           setPendingImageFile(null);
-        } catch {
+        } catch (err) {
+          console.warn('[MenuManagerPage] image upload failed:', err);
           alert(t('admin.image_upload_failed', 'Image upload failed. You can try again.'));
         }
       }
       closeForm();
       await fetchCategories();
-      const prods = await apiClient<any>(`/owner/menu/products?category_id=${expandedCat}`);
-      setCategories(prev => prev.map(c => c.id === expandedCat ? { ...c, products: Array.isArray(prods) ? prods : [] } : c));
-    } catch {
+      const prods = await apiClient<typeof ProductArraySchema>(`/owner/menu/products?category_id=${expandedCat}`, { schema: ProductArraySchema });
+      setCategories(prev => prev.map(c => c.id === expandedCat ? { ...c, products: Array.isArray(prods) ? (prods as any) : [] } : c));
+    } catch (err) {
+      console.error('[MenuManagerPage] save product failed:', err);
       alert(t('common.error_save', 'Failed to save product.'));
     } finally {
       setSaving(false);
@@ -264,7 +285,8 @@ export function MenuManagerPage() {
       setCategories(prev => prev.map(c =>
         c.id === catId ? { ...c, products: (c.products || []).filter(p => p.id !== productId) } : c
       ));
-    } catch {
+    } catch (err) {
+      console.error('[MenuManagerPage] delete product failed:', err);
       alert(t('common.error_delete', 'Failed to delete.'));
     }
   };
@@ -275,8 +297,8 @@ export function MenuManagerPage() {
       if (c.id !== catId) return c;
       return { ...c, products: (c.products || []).map(p => p.id === product.id ? updated : p) };
     }));
-    try { await apiClient(`/owner/menu/products/${product.id}`, { method: 'PATCH', body: { available: updated.available } }); } catch {
-      console.debug('[MenuManager] failed to toggle product availability');
+    try { await apiClient(`/owner/menu/products/${product.id}`, { method: 'PATCH', body: { available: updated.available } }); } catch (err) {
+      console.debug('[MenuManager] failed to toggle product availability:', err);
     }
   };
 
@@ -287,7 +309,8 @@ export function MenuManagerPage() {
     try { 
       await apiClient('/owner/menu/categories', { method: 'POST', body: { name } }); 
       await fetchCategories();
-    } catch {
+    } catch (err) {
+      console.error('[MenuManagerPage] add category failed:', err);
       alert(t('common.error_save', 'Failed to save category.'));
     }
   };
@@ -319,8 +342,8 @@ export function MenuManagerPage() {
       const formData = new FormData();
       formData.append('file', importFile);
       formData.append('mode', importMode);
-      const res = await apiClient<any>('/owner/menu/import/preview', { method: 'POST', body: formData, timeout: 120000 });
-      setImportSessionId(res.import_session_id);
+      const res = await apiClient<typeof MenuImportPreviewResponse>('/owner/menu/import/preview', { method: 'POST', body: formData, timeout: 120000, schema: MenuImportPreviewResponse });
+      setImportSessionId(res.import_session_id ?? null);
       setImportPreview(res);
       setImportStep('preview');
     } catch (err: any) {
@@ -335,9 +358,10 @@ export function MenuManagerPage() {
     setImportLoading(true);
     setImportError('');
     try {
-      const res = await apiClient<any>('/owner/menu/import/commit', {
+      const res = await apiClient<typeof MenuImportCommitResponse>('/owner/menu/import/commit', {
         method: 'POST',
-        body: { import_session_id: importSessionId, force: true }
+        body: { import_session_id: importSessionId, force: true },
+        schema: MenuImportCommitResponse,
       });
       setImportResult(res);
       setImportStep('done');
@@ -363,9 +387,10 @@ export function MenuManagerPage() {
   const loadCategoryProducts = async (catId: string) => {
     setProductsLoading(true);
     try {
-      const prods = await apiClient<any>(`/owner/menu/products?category_id=${catId}`);
-      setCategories(prev => prev.map(c => c.id === catId ? { ...c, products: Array.isArray(prods) ? prods : [] } : c));
-    } catch {
+      const prods = await apiClient<typeof ProductArraySchema>(`/owner/menu/products?category_id=${catId}`, { schema: ProductArraySchema });
+      setCategories(prev => prev.map(c => c.id === catId ? { ...c, products: Array.isArray(prods) ? (prods as any) : [] } : c));
+    } catch (err) {
+      console.debug('[MenuManagerPage] load category products failed:', err);
       setCategories(prev => prev.map(c => c.id === catId ? { ...c, products: [] } : c));
     } finally {
       setProductsLoading(false);

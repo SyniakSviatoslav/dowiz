@@ -1,11 +1,10 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { withTenant } from '@deliveryos/platform';
 import { BUS_CHANNELS } from '../../lib/registry.js';
 
-export default (async function menuTranslateRoutes(fastify, opts) {
+export default (async function menuTranslateRoutes(fastify: any, opts: any) {
   const { db, messageBus, translation } = opts as any;
 
   fastify.post('/locations/:id/menu/translate', {
@@ -27,10 +26,10 @@ export default (async function menuTranslateRoutes(fastify, opts) {
         timeWindow: '1 minute'
       }
     }
-  }, async (request, reply) => {
-    const { id: locationId } = request.params as { id: string };
+  }, async (request: any, reply: any) => {
+    const { id: locationId } = request.params as any;
     const { target_locales, force, entity_filter } = request.body;
-    const user = request.user!;
+    const user = request.user as any;
 
     try {
       const result = await withTenant(db, user.userId, async (client) => {

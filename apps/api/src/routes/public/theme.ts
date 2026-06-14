@@ -1,16 +1,15 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 
-export default (async function publicThemeRoutes(fastify, opts) {
-  const { db } = opts as any;
+export default (async function publicThemeRoutes(fastify: any, opts: any) {
+  const { db } = opts;
 
   const DEFAULT_CSS = `:root{--brand-primary:#ea4f16;--brand-primary-hover:#ffa12e;--brand-bg:#121212;--brand-surface:#1e1e1e;--brand-text:#ffffff;--brand-text-muted:#a8a8a8;--brand-border:#2c2c2c;--brand-radius:12px;--color-success:#059669;--color-warning:#D97706;--color-danger:#DC2626;--color-info:#2563EB}@media(prefers-color-scheme:dark){:root{--brand-bg:#0F172A;--brand-surface:#1E293B;--brand-text:#F1F5F9;--brand-text-muted:#94A3B8;--brand-border:#334155}}`;
 
-  fastify.get('/public/locations/:locationId/theme.css', async (request, reply) => {
-    const locationId = (request.params as any).locationId || '';
-    const hash = (request.query as any)?.hash || '';
+  fastify.get('/public/locations/:locationId/theme.css', async (request: any, reply: any) => {
+    const locationId = (request.params as { locationId: string }).locationId || '';
+    const hash = (request.query as { hash?: string })?.hash || '';
 
     reply.header('Content-Type', 'text/css; charset=utf-8');
 

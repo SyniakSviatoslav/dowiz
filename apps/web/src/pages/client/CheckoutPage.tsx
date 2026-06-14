@@ -4,6 +4,12 @@ import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay } from '@del
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
+import { z } from 'zod';
+
+const OrderCreateResponse = z.object({
+  id: z.string(),
+  authToken: z.string().optional(),
+}).passthrough();
 import { useSharedCart } from '../../lib/CartProvider.js';
 
 const isDevMode = () => typeof window !== 'undefined' && sessionStorage.getItem('dos_dev') === '1';
@@ -34,8 +40,8 @@ async function requestPushPermission(_slug: string) {
         opted_in: true,
       },
     });
-  } catch {
-    // Push subscription is best-effort
+  } catch (err) {
+    console.debug('[CheckoutPage] push subscription failed:', err);
   }
 }
 
@@ -78,8 +84,8 @@ export function CheckoutPage() {
         setLocationId(info.id);
         setCurrency(info.currency_code || 'ALL');
       })
-      .catch(() => {
-        console.debug('[Checkout] failed to load location info');
+      .catch((err) => {
+        console.debug('[CheckoutPage] failed to load location info:', err);
       });
     try {
       const saved = localStorage.getItem(`dos_last_delivery_${slug}`);
@@ -98,7 +104,7 @@ export function CheckoutPage() {
           setApartment(parsed.apartment);
         }
       }
-    } catch { /* ignore corrupt localStorage */ }
+    } catch (err) { console.debug('[CheckoutPage] corrupt localStorage:', err); }
   }, [slug]);
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -143,8 +149,9 @@ export function CheckoutPage() {
     
     try {
       const idempotencyKey = crypto.randomUUID();
-      const orderRes = await apiClient<any>('/orders', {
+      const orderRes = await apiClient<typeof OrderCreateResponse>('/orders', {
         method: 'POST',
+        schema: OrderCreateResponse,
         body: {
           locationId: locationId,
           type: 'delivery',
@@ -185,7 +192,7 @@ export function CheckoutPage() {
           entrance,
           apartment,
         }));
-      } catch { /* localStorage may be full or blocked */ }
+      } catch (err) { console.debug('[CheckoutPage] localStorage write failed:', err); }
       if (orderRes.authToken) {
         localStorage.setItem('dos_access_token', orderRes.authToken);
       }

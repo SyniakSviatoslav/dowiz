@@ -1,12 +1,11 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 
-export default (async function pwaRoutes(fastify, opts) {
-  const { db } = opts as any;
+export default (async function pwaRoutes(fastify: any, opts: any) {
+  const { db } = opts;
 
-  fastify.get('/s/:slug/manifest.webmanifest', async (request, reply) => {
-    const slug = (request.params as any).slug || 'app';
+  fastify.get('/s/:slug/manifest.webmanifest', async (request: any, reply: any) => {
+    const slug = (request.params as { slug: string }).slug || 'app';
 
     let locationName = slug;
     let themeColor = '#ea4f16';
@@ -29,7 +28,9 @@ export default (async function pwaRoutes(fastify, opts) {
       } finally {
         client.release();
       }
-    } catch { }
+    } catch (err: any) {
+      console.debug('[pwa] failed to fetch location for manifest:', err?.message);
+    }
 
     reply.header('Content-Type', 'application/manifest+json');
     reply.header('Cache-Control', 'public, max-age=3600');

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyInstance } from 'fastify';
 import { CreateOrderInput, StatusUpdateInput } from '@deliveryos/shared-types';
 import { assertTransition, type OrderStatus } from '@deliveryos/domain';
@@ -56,7 +55,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
   // ─── POST /orders ──────────────────────────────────────────────────
   fastify.post('/orders', {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     let input;
     try {
       input = CreateOrderInput.parse(request.body);
@@ -94,14 +93,14 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           `SELECT require_phone_otp FROM locations WHERE id = $1`, [locationId]
         );
         requireOtp = otpCol.rows[0]?.require_phone_otp || false;
-      } catch { /* column may not exist — assume OTP not required */
-        console.debug('[orders] require_phone_otp column check failed');
+      } catch (err: any) {
+        console.debug('[orders] require_phone_otp column check failed:', err?.message);
       }
       if (requireOtp) {
         const otpHeader = request.headers['x-otp-verified'] as string | undefined;
         if (otpHeader) {
           try {
-            const { hashPhone } = await import('./lib/otp.js');
+            const { hashPhone } = await import('../lib/otp.js');
             const tokenHash = crypto.createHash('sha256').update(otpHeader).digest('hex');
             const otpSessionRes = await client.query(
               `SELECT id, phone_hash, order_intent_hash, expires_at, consumed_at
@@ -110,7 +109,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
                  AND consumed_at IS NULL AND expires_at > now()`,
               [tokenHash],
             );
-            if (otpSessionRes.rowCount > 0) {
+            if ((otpSessionRes.rowCount ?? 0) > 0) {
               otpVerified = true;
               // Mark the session as consumed (single-use)
               await client.query(
@@ -118,9 +117,8 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
                 [otpSessionRes.rows[0].id],
               );
             }
-          } catch {
-            // Invalid token — P26 does NOT block, E27 may soft-confirm
-            console.debug('[orders] OTP verification failed, proceeding without');
+          } catch (err: any) {
+            console.debug('[orders] OTP verification failed, proceeding without:', err?.message);
           }
         }
       }
@@ -157,11 +155,13 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       // 4. Preflight (E27) — check menu availability + signals + OTP before idempotency
       let evaluatePreflight, computeSignals;
       try {
+        // @ts-expect-error — preflight module may not exist; try/catch handles fallback
         const pfModule = await import('../lib/preflight.js');
         evaluatePreflight = pfModule.evaluatePreflight;
         const sigModule = await import('../lib/signals/compute.js');
         computeSignals = sigModule.computeSignals;
-      } catch {
+      } catch (err: any) {
+        console.debug('[orders] preflight/signals module import failed, using stubs:', err?.message);
         evaluatePreflight = (ctx: any) => ({ outcome: 'clean', reasons: [], confirmedReasons: [] });
         computeSignals = async () => [];
       }
@@ -246,7 +246,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
              ORDER BY created_at DESC LIMIT 1`,
             [locationId, phoneForSignals]
           );
-          if (otpRes.rowCount > 0) {
+          if ((otpRes.rowCount ?? 0) > 0) {
             const otpRow = otpRes.rows[0];
             if (otpRow.attempts < 5) {
               const valid = await verifyOtpCode(input.otp_code, otpRow.code_hash);
@@ -258,9 +258,8 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
               }
             }
           }
-        } catch {
-          // OTP server check failure — proceed without OTP (E27: not a hard block)
-          console.debug('[orders] OTP server check failed, proceeding without');
+        } catch (err: any) {
+          console.debug('[orders] OTP server check failed, proceeding without:', err?.message);
         }
       }
 
@@ -544,7 +543,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           locationId, resolvedCustomerId, delivery.address_text || null, delivery.pin.lat, delivery.pin.lng,
           subtotal, deliveryFee, taxTotal, discountTotal, total,
           cashPayWith ?? null, location.currency_code, 
-          menuVersion, input.client_menu_version || null, requestHash, timeoutAt,
+          menuVersion, (input as any).client_menu_version || null, requestHash, timeoutAt,
           rawInstructions || null,
           JSON.stringify({ otp_verified: otpServerVerified, client_ip_hash: clientIpHash }),
           preflightMeta,
@@ -697,8 +696,8 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
   // ─── GET /orders/:id ───────────────────────────────────────────────
   fastify.get('/orders/:id', {
-    preHandler: [fastify.verifyAuth],
-  }, async (request, reply) => {
+    preHandler: [(fastify as any).verifyAuth],
+  }, async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
     if (!isValidUUID(id)) {
       return reply.status(400).send({ error: 'Invalid order ID format' });
@@ -778,8 +777,8 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
   // ─── PATCH /orders/:id/status ──────────────────────────────────────
   fastify.patch('/orders/:id/status', {
-    preHandler: [fastify.verifyAuth, fastify.requireRole(['owner'])],
-  }, async (request, reply) => {
+    preHandler: [(fastify as any).verifyAuth, (fastify as any).requireRole(['owner'])],
+  }, async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
     const { status: newStatus } = StatusUpdateInput.parse(request.body);
     const user = request.user!;
@@ -821,7 +820,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
                LIMIT 1`,
               [locationId]
             );
-            if (availRes.rowCount > 0) {
+            if ((availRes.rowCount ?? 0) > 0) {
               const { courier_id, shift_id } = availRes.rows[0];
               await client.query(
                 `INSERT INTO courier_assignments (order_id, location_id, courier_id, shift_id, status, assigned_at)

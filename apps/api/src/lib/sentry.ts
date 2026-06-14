@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as Sentry from '@sentry/node';
 import { PiiRedactor } from './pii-redactor.js';
 
@@ -68,8 +67,8 @@ export function initSentry(dsn: string, gitSha?: string): void {
         }
       }
       if (event.request) {
-        if (event.request.cookies) event.request.cookies = '[REDACTED]';
-        if (event.request.headers) event.request.headers = redactSentryData(event.request.headers as Record<string, unknown>);
+        if (event.request.cookies) (event.request as any).cookies = '[REDACTED]';
+        if (event.request.headers) (event.request as any).headers = redactSentryData(event.request.headers as Record<string, unknown>);
       }
       if (event.user && event.user.id) {
         event.user = { id: event.user.id };
@@ -77,10 +76,10 @@ export function initSentry(dsn: string, gitSha?: string): void {
         event.user = undefined;
       }
       if (event.contexts) {
-        event.contexts = redactSentryData(event.contexts as Record<string, unknown>);
+        (event as any).contexts = redactSentryData(event.contexts as Record<string, unknown>);
       }
       if (event.extra) {
-        event.extra = redactSentryData(event.extra as Record<string, unknown>);
+        (event as any).extra = redactSentryData(event.extra as Record<string, unknown>);
       }
       if (event.tags) {
         const allowlist = new Set(['role', 'location_id', 'order_id', 'worker', 'db', 'error_code']);
@@ -106,7 +105,8 @@ export function initSentry(dsn: string, gitSha?: string): void {
 export function getSentry(): typeof Sentry | null {
   try {
     return Sentry;
-  } catch {
+  } catch (err: any) {
+    console.warn('[sentry] getSentry failed:', err?.message);
     return null;
   }
 }

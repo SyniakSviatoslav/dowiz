@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import crypto from 'crypto';
@@ -7,21 +6,21 @@ import { withTenant } from '@deliveryos/platform';
 export default async function courierRoutes(fastify: FastifyInstance) {
 
   fastify.post('/couriers/invites', {
-    preHandler: [fastify.verifyAuth, fastify.requireRole(['owner'])],
+    preHandler: [(fastify as any).verifyAuth, (fastify as any).requireRole(['owner'])],
     schema: {
       body: z.object({ locationId: z.string().uuid() }).strict()
     }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     // Check if the owner has access to this location. We can use requireLocationAccess 
     // but that is for path parameters. Here it's in body, so we check it manually via withTenant.
     const { locationId } = request.body as any;
-    const user = request.user!;
+    const user = (request as any).user!;
     if (user.role !== 'owner') {
       return reply.status(403).send({ error: 'Forbidden' });
     }
 
     try {
-      return await withTenant(fastify.db, user.userId, async (client) => {
+      return await withTenant((fastify as any).db, user.userId, async (client) => {
         // Double check location exists and is visible to the owner (due to RLS)
         const locRes = await client.query(`SELECT 1 FROM locations WHERE id = $1`, [locationId]);
         if (locRes.rowCount === 0) {
