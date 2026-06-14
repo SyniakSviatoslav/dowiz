@@ -64,12 +64,10 @@ test.describe('UI: Client Checkout — Full Flow', () => {
     await page.goto(`${BASE}/s/${locationSlug}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    // Wait for product cards (SSR renders product cards)
-    await page.waitForSelector('h3.product-name, [class*="product-card"]', { timeout: 10000 });
-
-    // Add to cart
+    // Wait for React hydration (SSR renders cards first, then React hydrates add buttons)
+    await page.waitForSelector('button[aria-label="Add to cart"], button[aria-label="Add"]', { timeout: 15000 });
     const addBtn = page.locator('button[aria-label="Add to cart"], button[aria-label="Add"]').first();
-    await expect(addBtn).toBeVisible({ timeout: 5000 });
+    await expect(addBtn).toBeVisible({ timeout: 3000 });
     await addBtn.click();
 
     // Cart FAB appears with count
