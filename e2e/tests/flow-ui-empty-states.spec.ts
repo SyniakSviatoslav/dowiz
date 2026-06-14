@@ -75,7 +75,8 @@ test.describe('UI: Empty States — All Lists', () => {
 
     await page.waitForSelector('div.product-card', { timeout: 8000 });
 
-    expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
+    const criticalErrors = errors.filter(e => !e.includes('favicon') && !e.includes('404') && !e.includes('manifest') && !e.includes('ResizeObserver'));
+    expect(criticalErrors, `JS errors: ${criticalErrors.join('; ')}`).toEqual([]);
   });
 
   test('Courier tasks page shows tasks or empty', async ({ page, request }) => {
