@@ -52,11 +52,11 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
     expect(courierId).toBeTruthy();
   });
 
-  test('courier receives task_assigned via WS after dev creates assignment', async ({ page }) => {
+  test('courier receives task_assigned via WS after dev creates assignment', async ({ page, request }) => {
     test.skip(!ownerToken, 'Setup failed');
 
     // Create order via API
-    const orderRes = await (await test.info()).request.post(`${BASE}/api/orders`, {
+    const orderRes = await request.post(`${BASE}/api/orders`, {
       data: {
         locationId,
         type: 'delivery',
@@ -72,7 +72,7 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
     console.log('Order created:', orderId);
 
     // Confirm the order
-    const confirmRes = await (await test.info()).request.post(
+    const confirmRes = await request.post(
       `${BASE}/api/owner/locations/${locationId}/orders/${orderId}/confirm`,
       { headers: { Authorization: `Bearer ${ownerToken}` } }
     );
