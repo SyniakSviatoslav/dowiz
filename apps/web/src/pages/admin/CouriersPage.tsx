@@ -324,16 +324,16 @@ export function CouriersPage() {
                     <div className="space-y-4">
                       <div className="grid grid-cols-3 gap-3">
                         <div className="p-3 rounded-lg bg-[var(--brand-surface)] border border-[var(--brand-border)] text-center">
-                          <div className="text-lg font-bold" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={courierDetails.earnings.today} /></div>
-                          <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.earnings_today', 'Today')} ({courierDetails.earnings.today_deliveries} {t('admin.deliveries', 'deliveries')})</div>
+                          <div className="text-lg font-bold" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={courierDetails.earnings?.today ?? 0} /></div>
+                          <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.earnings_today', 'Today')} ({courierDetails.earnings?.today_deliveries ?? 0} {t('admin.deliveries', 'deliveries')})</div>
                         </div>
                         <div className="p-3 rounded-lg bg-[var(--brand-surface)] border border-[var(--brand-border)] text-center">
-                          <div className="text-lg font-bold"><PriceDisplay amount={courierDetails.earnings.week} /></div>
+                          <div className="text-lg font-bold"><PriceDisplay amount={courierDetails.earnings?.week ?? 0} /></div>
                           <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.earnings_week', 'This Week')}</div>
                         </div>
                         <div className="p-3 rounded-lg bg-[var(--brand-surface)] border border-[var(--brand-border)] text-center">
-                          <div className="text-lg font-bold"><PriceDisplay amount={courierDetails.earnings.month} /></div>
-                          <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.earnings_month', 'This Month')} ({courierDetails.earnings.month_deliveries} {t('admin.deliveries', 'deliveries')})</div>
+                          <div className="text-lg font-bold"><PriceDisplay amount={courierDetails.earnings?.month ?? 0} /></div>
+                          <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.earnings_month', 'This Month')} ({courierDetails.earnings?.month_deliveries ?? 0} {t('admin.deliveries', 'deliveries')})</div>
                         </div>
                       </div>
 
