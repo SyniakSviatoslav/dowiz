@@ -2,6 +2,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { dashboardChannel } from '../../lib/registry.js';
 
 export default (async function ownerRevealContactRoutes(fastify, opts) {
   const { db, messageBus } = opts as any;
