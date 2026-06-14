@@ -9,7 +9,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
   const LocationParams = z.object({ locationId: z.string().uuid() });
   const GroupParams = LocationParams.extend({ id: z.string().uuid() });
   const ModifierParams = LocationParams.extend({ id: z.string().uuid() });
-  const GroupModifierParams = GroupParams.extend({ groupId: z.string().uuid() });
+  const GroupModifierParams = LocationParams.extend({ groupId: z.string().uuid() });
 
   server.post(
     '/api/owner/locations/:locationId/modifier-groups',

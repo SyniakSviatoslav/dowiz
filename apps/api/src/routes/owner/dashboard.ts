@@ -311,6 +311,10 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
       await client.query('COMMIT');
 
       await messageBus.publish(orderChannel(orderId), { type: BUS_CHANNELS.ORDER_STATUS, orderId, status: 'IN_DELIVERY', locationId, timestamp: new Date().toISOString() });
+      await messageBus.publish(`courier:${courierId}`, {
+        type: 'task_assigned',
+        payload: { id: orderId, orderId, status: 'assigned', courierId }
+      });
 
       return reply.status(200).send({ id: assignId, orderId, courierId, status: 'assigned' });
     } catch (err) {
