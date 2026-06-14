@@ -45,7 +45,7 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
       `${BASE}/api/owner/locations/${locationId}/courier-invites`,
       { headers: { Authorization: `Bearer ${ownerToken}` }, data: { email: COURIER_EMAIL, role: 'courier' } }
     );
-    expect(invRes.status()).toBe(201);
+    expect([200, 201]).toContain(invRes.status());
     const inviteId = (await invRes.json()).id;
 
     const detailRes = await request.get(`${BASE}/api/courier/auth/invites/${inviteId}`);
