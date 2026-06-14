@@ -3,33 +3,38 @@ import { AuthToken } from '@deliveryos/shared-types';
 import { loadEnv } from '@deliveryos/config';
 import crypto from 'crypto';
 
-const env = loadEnv();
-const kid = env.JWT_KID;
+let _env: ReturnType<typeof loadEnv> | null = null;
+function getEnv() {
+  if (!_env) _env = loadEnv();
+  return _env;
+}
+function getKid() { return getEnv().JWT_KID; }
 
 function getPrivateKey(): crypto.KeyObject {
-  const raw = env.JWT_PRIVATE_KEY;
+  const raw = getEnv().JWT_PRIVATE_KEY;
   if (!raw) throw new Error('JWT_PRIVATE_KEY environment variable is required for RS256 signing');
   const pem = raw.replace(/\\n/g, '\n');
   return crypto.createPrivateKey(pem);
 }
 
 function getPublicKey(): crypto.KeyObject {
-  const raw = env.JWT_PUBLIC_KEY;
+  const raw = getEnv().JWT_PUBLIC_KEY;
   if (!raw) throw new Error('JWT_PUBLIC_KEY environment variable is required for RS256 verification');
   const pem = raw.replace(/\\n/g, '\n');
   return crypto.createPublicKey(pem);
 }
 
 export async function signAuthToken(payload: Omit<AuthToken, 'iat' | 'exp' | 'kid' | 'sub'> & { sub?: string, kid?: string }, expiresIn: string): Promise<string> {
+  const k = getKid();
   const subValue = payload.sub || (('userId' in payload) ? (payload as any).userId : crypto.randomUUID());
   const jwtPayload = {
     ...payload,
     sub: subValue as string,
-    kid: payload.kid || kid
+    kid: payload.kid || k
   };
 
   const jwt = new SignJWT(jwtPayload as any)
-    .setProtectedHeader({ alg: 'RS256', kid })
+    .setProtectedHeader({ alg: 'RS256', kid: k })
     .setIssuedAt()
     .setExpirationTime(expiresIn);
 
@@ -47,7 +52,7 @@ export async function verifyAuthToken(token: string): Promise<AuthToken> {
     throw new Error('Invalid algorithm — only RS256 accepted');
   }
 
-  if (protectedHeader.kid !== kid) {
+  if (protectedHeader.kid !== getKid()) {
     throw new Error('Invalid Key ID');
   }
 

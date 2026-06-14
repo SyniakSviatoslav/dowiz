@@ -1,6 +1,6 @@
 import { MapLibreBase, type LngLatLike } from './MapLibreBase.js';
 
-function getCSSVar(name: string, fallback: string): string {
+function getCSSVar(name: string, fallback = ''): string {
   if (typeof document === 'undefined') return fallback;
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 }
@@ -34,15 +34,15 @@ export function CourierLiveMap({
   zoom = 13,
 }: CourierLiveMapProps) {
   const statusColors: Record<string, string> = {
-    online: getCSSVar('--color-success', '#059669'),
-    busy: getCSSVar('--color-warning', '#D97706'),
-    offline: getCSSVar('--brand-text-muted', '#6B7280'),
+    online: getCSSVar('--color-success'),
+    busy: getCSSVar('--color-warning'),
+    offline: getCSSVar('--brand-text-muted'),
   };
 
   const markers = couriers.map(c => ({
     id: c.id,
     lngLat: c.lngLat,
-    color: statusColors[c.status] || getCSSVar('--brand-text-muted', '#6B7280'),
+    color: statusColors[c.status] || getCSSVar('--brand-text-muted'),
     label: c.initials,
   }));
 
@@ -50,7 +50,7 @@ export function CourierLiveMap({
     markers.push({
       id: 'destination',
       lngLat: destinationPin,
-      color: getCSSVar('--color-info', '#2563EB'),
+      color: getCSSVar('--color-info'),
       label: '🏠',
     });
   }
@@ -59,7 +59,7 @@ export function CourierLiveMap({
     markers.push({
       id: 'client-live',
       lngLat: clientLocation,
-      color: getCSSVar('--color-success', '#059669'),
+      color: getCSSVar('--color-success'),
       label: '📍',
     });
   }

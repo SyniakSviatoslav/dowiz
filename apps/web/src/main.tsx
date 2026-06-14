@@ -1,54 +1,10 @@
 import './api/devBootstrap.js';
-import { StrictMode, lazy, Suspense, Component } from 'react';
+import { StrictMode, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { MotionConfig, AnimatePresence, motion } from 'framer-motion';
-import { ThemeProvider, TourProvider, I18nProvider, CurrencyProvider } from '@deliveryos/ui';
+import { ThemeProvider, TourProvider, I18nProvider, CurrencyProvider, ErrorBoundary } from '@deliveryos/ui';
 import './index.css';
-
-class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { hasError: false };
-  }
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  componentDidCatch() {}
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '1rem',
-          background: 'var(--brand-bg)',
-          color: 'var(--brand-text)',
-        }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Something went wrong</h1>
-          <p style={{ color: 'var(--brand-text-muted)' }}>An unexpected error occurred.</p>
-          <button
-            onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
-            style={{
-              padding: '0.5rem 1.5rem',
-              borderRadius: 'var(--brand-radius)',
-              border: 'none',
-              background: 'var(--brand-primary)',
-              color: 'var(--color-on-primary)',
-              cursor: 'pointer',
-            }}
-          >
-            Reload
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
 
 import { Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/admin/LoginPage.js';

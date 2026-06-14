@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Input, BottomSheet, Modal, useI18n, PriceDisplay } from '../../index.js';
+import { Button, Input, BottomSheet, Modal, useI18n, PriceDisplay, getAllergenStyle } from '../../index.js';
 
 export interface CartItem {
   id: string;
@@ -29,23 +29,6 @@ interface ProductCardProps {
 
 const TASTE_ICONS: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
 const TASTE_LABELS: Record<string, string> = { spicy: 'Spicy', sweet: 'Sweet', salty: 'Salty', sour: 'Sour', richness: 'Rich' };
-const ALLERGEN_COLORS: Record<string, { bg: string; text: string }> = {
-  gluten: { bg: 'rgba(234,179,8,0.12)', text: '#a16207' },
-  dairy: { bg: 'rgba(59,130,246,0.12)', text: '#1d4ed8' },
-  eggs: { bg: 'rgba(234,179,8,0.12)', text: '#a16207' },
-  soy: { bg: 'rgba(34,197,94,0.12)', text: '#15803d' },
-  nuts: { bg: 'rgba(249,115,22,0.12)', text: '#c2410c' },
-  peanuts: { bg: 'rgba(249,115,22,0.12)', text: '#c2410c' },
-  shellfish: { bg: 'rgba(239,68,68,0.12)', text: '#b91c1c' },
-  fish: { bg: 'rgba(6,182,212,0.12)', text: '#0e7490' },
-  sesame: { bg: 'rgba(168,85,247,0.12)', text: '#7e22ce' },
-};
-
-function getAllergenStyle(allergen: string) {
-  const key = allergen.toLowerCase();
-  return ALLERGEN_COLORS[key] || { bg: 'rgba(107,114,128,0.12)', text: '#374151' };
-}
-
 export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
   const { t } = useI18n();
   const [imgError, setImgError] = useState(false);
@@ -235,9 +218,9 @@ export function CartDrawer({ isOpen, onClose, items, onUpdateQuantity, onCheckou
                     <div className="text-[var(--brand-text-muted)] text-sm"><PriceDisplay amount={item.price} size="sm" /></div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
-                    <button onClick={() => onUpdateQuantity(item.id, item.quantity - 1)} className="w-8 h-8 rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95">-</button>
+                    <button onClick={() => onUpdateQuantity(item.id, item.quantity - 1)} className="min-w-[44px] min-h-[44px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95">-</button>
                     <span className="text-[var(--brand-text)] font-medium w-4 text-center">{item.quantity}</span>
-                    <button onClick={() => onUpdateQuantity(item.id, item.quantity + 1)} className="w-8 h-8 rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95">+</button>
+                    <button onClick={() => onUpdateQuantity(item.id, item.quantity + 1)} className="min-w-[44px] min-h-[44px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95">+</button>
                   </div>
                 </div>
               ))}
@@ -358,7 +341,7 @@ export function OTPModal({ isOpen, onClose, phone, onSendOTP, onVerifyOTP }: OTP
           </>
         ) : (
           <>
-            <p className="text-sm text-[var(--brand-text-muted)]">Code sent to {currentPhone}. <button className="text-[var(--brand-primary)] underline" onClick={() => setStep('phone')}>Edit</button></p>
+            <p className="text-sm text-[var(--brand-text-muted)]">Code sent to {currentPhone}. <button className="text-[var(--brand-primary)] underline min-h-11" onClick={() => setStep('phone')}>Edit</button></p>
             <Input 
               type="text" 
               maxLength={6}
@@ -390,7 +373,7 @@ export function OrderProgress({ status }: { status: string }) {
   const currentIndex = steps.findIndex(s => s.key === status) >= 0 ? steps.findIndex(s => s.key === status) : 0;
 
   return (
-    <div className="relative py-4">
+    <div className="relative py-4" role="status" aria-live="polite">
       <div className="absolute top-1/2 left-0 right-0 h-1 bg-[var(--brand-surface-raised)] -translate-y-1/2 z-0" />
       <div 
         className="absolute top-1/2 left-0 h-1 bg-[var(--brand-primary)] -translate-y-1/2 z-0 transition-all duration-500" 

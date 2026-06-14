@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Input, FormField, LanguageSwitcher } from '@deliveryos/ui';
+import { Button, Input, FormField, LanguageSwitcher, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { CourierLoginResponse } from '@deliveryos/shared-types';
 
 export function LoginPage() {
+  const { t } = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -57,7 +58,7 @@ export function LoginPage() {
             </div>
           )}
 
-          <FormField label="Email">
+          <FormField label={t('login.email', 'Email')}>
             <Input
               type="email"
               value={email}
@@ -68,7 +69,7 @@ export function LoginPage() {
             />
           </FormField>
 
-          <FormField label="Password">
+          <FormField label={t('login.password', 'Password')}>
             <Input
               type="password"
               value={password}

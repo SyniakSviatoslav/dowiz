@@ -8,7 +8,7 @@ test.describe('Simple Auth Test', () => {
     const authRes = await fetch(`${BASE_URL}/api/dev/mock-auth`, { method: 'POST' });
     console.log(`Auth response status: ${authRes.status}`);
     
-    expect(authRes.status()).toBe(200);
+    expect(authRes.status).toBe(200);
     const authBody = await authRes.json();
     expect(authBody.access_token).toBeTruthy();
     console.log('Successfully got token');
