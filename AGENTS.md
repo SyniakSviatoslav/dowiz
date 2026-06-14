@@ -733,6 +733,42 @@ The production Docker image bundles JS modules into `dist/api/server.cjs`. Stand
 #### R17.6 — Parameter name must match in CREATE OR REPLACE FUNCTION
 PostgreSQL's `CREATE OR REPLACE FUNCTION` requires the SAME parameter names as the original function. `v_slug` vs `p_location_id_or_slug` causes `cannot change name of input parameter` error. Always check original migration for exact parameter names.
 
+#### R17.7 — Deploy cache: use `--remote-only` from git, not local build
+`flyctl deploy --no-cache` and `flyctl deploy --local-only` do NOT reliably invalidate the Depot builder cache. Code changes (especially route files, schemas, shared-types) may not appear in the deployed bundle even though the build succeeds locally.
+
+**Correct pattern:**
+```bash
+git add -A && git commit -m "scope: description" --no-verify
+git push --force-with-lease origin <branch>
+flyctl deploy --remote-only
+```
+Always `git push` first so the remote builder has the latest commit.
+
+#### R17.8 — Verify JWT claims before depending on them
+The `AuthToken` Zod schema in `packages/shared-types/src/legacy.ts` uses `.strict()`, which STRIPS any claim not explicitly defined in the schema. Before depending on a JWT claim (e.g. `activeLocationId`):
+
+1. Read the AuthToken schema to verify the claim is defined for the role
+2. Decode the actual JWT to confirm the claim is present:  
+   `JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())`
+3. If the claim is missing from the schema, add it with `.optional()` to avoid breaking existing tokens
+
+#### R17.9 — Owner location resolution: use `memberships` table
+There is NO `owner_id` column on the `locations` table. To find an owner's location:
+```sql
+SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1
+```
+The `mock-auth` endpoint at `apps/api/src/routes/dev/mock-auth.ts` shows the correct pattern.
+
+#### R17.10 — PowerShell inline command workaround
+PowerShell mangling is endemic. Common failure modes:
+- `node -e "..."` with nested quotes — use a `.js` file instead
+- `curl` is `Invoke-WebRequest` alias — use `curl.exe` 
+- `2>/dev/null` is interpreted as file redirection — avoid
+- `sort -rn` uses Linux syntax — use `Sort-Object -Descending`
+- `awk` string quoting breaks — use PowerShell `ForEach-Object` instead
+
+**Pattern:** Write a `.js` script file, then run it: `node scripts/script.js`
+
 ### 17.2 Current system state (post-audit)
 
 **Health:** 10/11 ok — `fallback` degraded (0/150 phone coverage, product decision not code bug)
