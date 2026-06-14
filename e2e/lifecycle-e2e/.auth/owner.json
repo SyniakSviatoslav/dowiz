@@ -1,0 +1,14 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "https://dowiz.fly.dev",
+      "localStorage": [
+        {
+          "name": "dos_access_token",
+          "value": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjEifQ.eyJyb2xlIjoib3duZXIiLCJ1c2VySWQiOiI5NWQ5NWYzNS0zOWY1LTRkYmUtYTE5NS03MjBiOTRiNTAxNTAiLCJzdWIiOiI5NWQ5NWYzNS0zOWY1LTRkYmUtYTE5NS03MjBiOTRiNTAxNTAiLCJraWQiOiIxIiwiaWF0IjoxNzgxMzc0NTc3LCJleHAiOjE3ODE0NjA5Nzd9.d0CdLbVEtlt5imuSr5lFSa7h-b0EcBbOk-4VDq5AX1ZYD_szOJd9RezR6th67bPOr1n-NrIMzVhYmOdbvNTIrcCVvKQ5ltv75VgMM9zSoa608uW1feZ0_j0ADCsSuCSQifyf2NsiAjuOb0r3dGf3WdzVDtecMAXBFt38WJ6Bk1mGQEMeqZNguZSCDw5PFnO9XLrdaJXVs5pHptPiMOJ735r1xu4YPJZn0vXrQM-EWiUlbAL_i8n7AOZmNmwTzPLi1cKACUKPkEplU7_Is-sGPcuWV-ffNWqvYFl-inSrooulCmtUEf-Q0sYz6h7qFVwlko-GjcIXU_TovqQeeHPLqg"
+        }
+      ]
+    }
+  ]
+}
