@@ -4,6 +4,7 @@ export { ErrorBoundary, withErrorBoundary } from './components/ErrorBoundary.js'
 export * from './components/Overlays.js';
 export * from './components/Status.js';
 export * from './components/molecules/index.js';
+export { pageTransition } from './lib/motion.js';
 
 export * from './constants/allergenColors.js';
 export * from './lib/i18n.js';

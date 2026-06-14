@@ -1,10 +1,6 @@
 import type { ReactNode } from 'react';
 import { useI18n } from '@deliveryos/ui';
-
-const EU_ALLERGENS = [
-  'gluten', 'shellfish', 'eggs', 'fish', 'peanuts', 'soy',
-  'milk', 'nuts', 'celery', 'mustard', 'sesame', 'sulphites', 'lupin', 'molluscs',
-];
+import { EU_ALLERGENS } from '@deliveryos/shared-types';
 
 interface AllergenEditorProps {
   status: 'unset' | 'none' | 'listed';

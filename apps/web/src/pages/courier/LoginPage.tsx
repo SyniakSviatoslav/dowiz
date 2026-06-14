@@ -27,69 +27,73 @@ export function LoginPage() {
         localStorage.setItem('dos_access_token', data.jwt);
         navigate('/courier');
       } else {
-        setError('Invalid response from server');
+        setError(t('common.invalid_response', 'Invalid response from server'));
       }
     } catch (err: any) {
-      setError(err.status === 401 ? 'Invalid email or password' : 'Login failed. Please try again.');
+      setError(err.status === 401 ? t('auth.invalid_credentials', 'Invalid email or password') : t('auth.login_failed', 'Login failed. Please try again.'));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[var(--brand-bg)] flex flex-col justify-center p-6">
-      <div className="absolute top-4 right-4">
-        <LanguageSwitcher variant="full" />
-      </div>
-      <div className="max-w-md w-full mx-auto space-y-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-[var(--brand-text)]" style={{ fontFamily: 'var(--brand-font-heading)' }}>
-            Courier Login
-          </h1>
-          <p className="mt-2 text-sm text-[var(--brand-text-muted)]">
-            Enter your email and password to continue
-          </p>
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--brand-bg)' }}>
+      <div className="w-full max-w-sm">
+        <div className="absolute top-4 right-4">
+          <LanguageSwitcher variant="full" />
         </div>
+        <div className="h-1 w-16 mx-auto mb-6 rounded-full" style={{ background: 'linear-gradient(90deg, var(--brand-primary), var(--brand-primary-hover))' }} />
 
-        <form onSubmit={handleLogin} className="space-y-6">
+        <div className="card-base p-8 space-y-6">
+          <div className="text-center space-y-1.5">
+            <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>
+              {t('courier.login', 'Courier Login')}
+            </h1>
+            <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('courier.login_subtitle', 'Enter your email and password to continue')}
+            </p>
+          </div>
+
           {error && (
-            <div className="bg-[var(--status-cancelled-light)] border border-[var(--status-cancelled-border)] text-[var(--color-danger)] p-3 rounded-[var(--brand-radius-sm)] text-sm">
+            <div role="alert" aria-live="polite" className="p-3 text-sm text-center rounded-lg" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--color-danger)' }}>
               {error}
             </div>
           )}
 
-          <FormField label={t('login.email', 'Email')}>
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="courier@example.com"
-              required
-              error={!!error}
-            />
-          </FormField>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <FormField label={t('login.email', 'Email')}>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="courier@example.com"
+                required
+                error={!!error}
+              />
+            </FormField>
 
-          <FormField label={t('login.password', 'Password')}>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              required
-              error={!!error}
-            />
-          </FormField>
+            <FormField label={t('login.password', 'Password')}>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                required
+                error={!!error}
+              />
+            </FormField>
 
-          <Button
-            type="submit"
-            className="w-full"
-            size="lg"
-            isLoading={loading}
-            disabled={!email.trim() || !password}
-          >
-            Log In
-          </Button>
-        </form>
+            <Button
+              type="submit"
+              className="w-full"
+              size="lg"
+              isLoading={loading}
+              disabled={!email.trim() || !password}
+            >
+              {t('auth.login', 'Log In')}
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
   );

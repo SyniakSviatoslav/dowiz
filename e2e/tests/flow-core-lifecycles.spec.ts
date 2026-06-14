@@ -27,7 +27,7 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
   // SETUP
   // ════════════════════════════════════════════════════════════════
   test.beforeAll(async ({ request }) => {
-    const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'owner', locationSlug: 'demo' } });
+    const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'owner', locationSlug: 'demo' }, timeout: 30000 });
     expect(authRes.status()).toBe(200);
     const authBody = await authRes.json();
     authToken = authBody.access_token;

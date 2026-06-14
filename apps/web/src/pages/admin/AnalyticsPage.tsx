@@ -142,7 +142,7 @@ export function AnalyticsPage() {
     </div>
   );
 
-  if (!data) return <EmptyState title={t('admin.no_data', 'No data')} description={t('admin.analytics_empty', 'Analytics will appear here.')} icon={<i className="ti ti-chart-bar text-4xl opacity-30" />} />;
+  if (!data) return <EmptyState title={t('admin.no_data', 'No data')} description={t('admin.analytics_empty_hint', 'Analytics populate after orders start coming in. You currently have no order data to display.')} icon={<i className="ti ti-chart-bar text-4xl opacity-30" />} />;
 
   const maxRevenue = Math.max(...data.chart.map(c => c.revenue), 1);
   const heatmapData = data.heatmap || [

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay } from '@deliveryos/ui';
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
@@ -76,6 +77,8 @@ export function CheckoutPage() {
   const [phoneError, setPhoneError] = useState('');
   const [entranceError, setEntranceError] = useState('');
   const [apartmentError, setApartmentError] = useState('');
+  const [placing, setPlacing] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
     useEffect(() => {
     if (!slug) return;
@@ -147,6 +150,7 @@ export function CheckoutPage() {
     setEntranceError('');
     setApartmentError('');
     
+    setPlacing(true);
     try {
       const idempotencyKey = crypto.randomUUID();
       const orderRes = await apiClient<typeof OrderCreateResponse>('/orders', {
@@ -198,8 +202,11 @@ export function CheckoutPage() {
       }
       requestPushPermission(slug!);
       clearCart();
-      navigate(`/s/${slug}/order/${orderRes.id}`);
+      setPlacing(false);
+      setShowConfirmation(true);
+      setTimeout(() => navigate(`/s/${slug}/order/${orderRes.id}`), 1500);
     } catch (err: any) {
+      setPlacing(false);
       if (isDevMode()) { clearCart(); navigate(`/s/${slug}/order/o_mock_123`); return; }
       if (err?.status === 422 && err?.body?.code === 'MIN_ORDER_NOT_MET') {
         setOrderError(t('checkout.min_order_error', 'Minimum order is {{min}} {{currency}}. Your total is {{subtotal}}.', {
@@ -230,14 +237,19 @@ export function CheckoutPage() {
   return (
     <div className="max-w-xl mx-auto p-4 md:py-8 space-y-6 pb-32">
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate(-1)} aria-label={t('common.back', 'Go back')} className="w-10 h-10 rounded-full flex items-center justify-center border transition-colors active:scale-95" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+        <motion.button onClick={() => navigate(-1)} whileTap={{ scale: 0.95 }} aria-label={t('common.back', 'Go back')} className="w-10 h-10 rounded-full flex items-center justify-center border transition-colors active:scale-95" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
           <i className="ti ti-arrow-left" aria-hidden="true" />
-        </button>
+        </motion.button>
         <h1 className="text-[24px] font-bold" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.title')}</h1>
       </div>
 
       <form id="checkout-form" onSubmit={handlePlaceOrder} className="space-y-6">
-        <div className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+          className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
           <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.contact_info', 'Contact Info')}</h2>
           <div className="space-y-3">
             <div>
@@ -256,13 +268,18 @@ export function CheckoutPage() {
               </div>
             </div>
           </div>
-        </div>
-        <div className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
+          className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
           <h2 className="text-[20px] font-semibold mb-6" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.delivery_address')}</h2>
           <div className="flex p-1 rounded-[10px] mb-6 gap-0.5" role="tablist" aria-label={t('checkout.delivery_type', 'Delivery type')} style={{ background: 'var(--brand-surface)' }}>
-            <button type="button" role="tab" aria-selected={deliveryType === 'delivery'} onClick={() => setDeliveryType('delivery')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('delivery')}>{t('courier.deliver')}</button>
-            <button type="button" role="tab" aria-selected={deliveryType === 'pickup'} onClick={() => setDeliveryType('pickup')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('pickup')}>{t('courier.pickup')}</button>
-            <button type="button" role="tab" aria-selected={deliveryType === 'scheduled'} onClick={() => setDeliveryType('scheduled')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('scheduled')}>{t('order.scheduled')}</button>
+            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'delivery'} onClick={() => setDeliveryType('delivery')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('delivery')}>{t('courier.deliver')}</motion.button>
+            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'pickup'} onClick={() => setDeliveryType('pickup')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('pickup')}>{t('courier.pickup')}</motion.button>
+            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'scheduled'} onClick={() => setDeliveryType('scheduled')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('scheduled')}>{t('order.scheduled')}</motion.button>
           </div>
 
           {deliveryType === 'delivery' && (
@@ -306,9 +323,10 @@ export function CheckoutPage() {
                     { key: 'checkout.dropoff_hand', val: 'Hand to me' },
                     { key: 'checkout.dropoff_text', val: 'Text on arrival' },
                   ].map((opt) => (
-                    <button
+                    <motion.button
                       key={opt.key}
                       type="button"
+                      whileTap={{ scale: 0.95 }}
                       aria-pressed={instructionOption === opt.val}
                       onClick={() => setInstructionOption(instructionOption === opt.val ? '' : opt.val)}
                       className="px-3 py-1.5 text-[12px] rounded-[20px] border transition-all active:scale-95"
@@ -317,7 +335,7 @@ export function CheckoutPage() {
                         borderColor: instructionOption === opt.val ? 'var(--brand-primary)' : 'var(--brand-border)',
                         color: instructionOption === opt.val ? 'var(--brand-text)' : 'var(--brand-text)',
                       }}
-                    >{t(opt.key, opt.val)}</button>
+                    >{t(opt.key, opt.val)}</motion.button>
                   ))}
                 </div>
                 {instructionOption && (
@@ -346,9 +364,23 @@ export function CheckoutPage() {
               </div>
             </div>
           )}
-        </div>
 
-        <div className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+          {deliveryType === 'scheduled' && (
+            <div className="flex items-center gap-3 p-4 rounded-[12px] border" style={{ background: 'var(--color-warning-light, rgba(217,119,6,0.1))', borderColor: 'var(--color-warning, #D97706)' }}>
+              <i className="ti ti-clock text-lg shrink-0" style={{ color: 'var(--color-warning, #D97706)' }} />
+              <p className="text-[13px] font-medium" style={{ color: 'var(--brand-text)' }}>
+                {t('checkout.scheduled_coming_soon', 'Scheduled delivery coming soon. Please select Delivery or Pickup.')}
+              </p>
+            </div>
+          )}
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
+          className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
           <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.payment_method')}</h2>
           <div className="border rounded-[8px] p-3 mb-3" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-primary)' }}>
             <div className="flex items-center justify-between">
@@ -393,9 +425,14 @@ export function CheckoutPage() {
               )}
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
+          className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
           <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('order.title')}</h2>
           <div className="space-y-3 mb-4">
             <div className="flex justify-between text-[14px]">
@@ -419,7 +456,7 @@ export function CheckoutPage() {
             <span className="text-[16px] font-bold" style={{ color: 'var(--brand-text)' }}>{t('cart.total')}</span>
                   <span data-testid="checkout-total"><PriceDisplay amount={total} size="lg" /></span>
           </div>
-        </div>
+        </motion.div>
       </form>
 
       {orderError && (
@@ -433,16 +470,50 @@ export function CheckoutPage() {
       )}
 
       <StickyActionBar>
-        <button
+        <motion.button
           type="submit"
           form="checkout-form"
           data-testid="order-confirm-button"
-          className="w-full h-14 rounded-full bg-[var(--brand-primary)] text-white font-bold text-base shadow-xl transition-all active:scale-[0.97] flex items-center justify-center gap-2"
+          disabled={placing}
+          whileTap={{ scale: placing ? 1 : 0.97 }}
+          className="w-full h-14 rounded-full bg-[var(--brand-primary)] text-white font-bold text-base shadow-xl transition-all active:scale-[0.97] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ minHeight: 'var(--tap-critical)' }}
         >
-                  {t('checkout.place_order')} &bull; <PriceDisplay amount={total} size="sm" />
-        </button>
+          {placing ? (
+            <span className="inline-flex items-center gap-2">
+              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              {t('checkout.placing_order', 'Placing order...')}
+            </span>
+          ) : (
+            <>{t('checkout.place_order')} &bull; <PriceDisplay amount={total} size="sm" /></>
+          )}
+        </motion.button>
       </StickyActionBar>
+
+      {showConfirmation && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[999] flex items-center justify-center pointer-events-none"
+          style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)' }}
+        >
+          <motion.div
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+            className="flex flex-col items-center gap-3"
+          >
+            <svg className="w-16 h-16 text-[var(--color-success)]" viewBox="0 0 24 24" fill="none">
+              <motion.circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.4 }} />
+              <motion.path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: 0.2, duration: 0.3 }} />
+            </svg>
+            <span className="text-2xl font-bold" style={{ color: 'var(--brand-text)' }}>{t('checkout.order_placed', 'Order placed!')} ✓</span>
+          </motion.div>
+        </motion.div>
+      )}
 
     </div>
   );

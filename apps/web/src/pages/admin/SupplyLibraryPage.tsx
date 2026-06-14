@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Button, EmptyState, SkeletonBase, HintCard, useI18n, useConfirm, MobilePicker, useIsMobile } from '@deliveryos/ui';
+import { EU_ALLERGENS } from '@deliveryos/shared-types';
 
 type SupplyKind = 'food_ingredient' | 'condiment' | 'packaging' | 'utensil';
 
@@ -96,7 +97,7 @@ const SupplyForm = ({
   const [saving, setSaving] = useState(false);
   const isFood = kind === 'food_ingredient' || kind === 'condiment';
 
-  const ALL_ALLERGENS = ['gluten', 'shellfish', 'eggs', 'fish', 'peanuts', 'soy', 'milk', 'nuts', 'celery', 'mustard', 'sesame', 'sulphites', 'lupin', 'molluscs'];
+  const ALL_ALLERGENS = EU_ALLERGENS;
 
   const handleSave = () => {
     if (!name.trim() || !category.trim()) return;

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Button, Input, ColorInput, FormField, useI18n } from '@deliveryos/ui';
+import { Button, Input, ColorInput, FormField, useI18n, useToast } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { ThemeResponse, LocationResponse } from '@deliveryos/shared-types';
 
 export function BrandingPage() {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const previewRef = useRef<HTMLIFrameElement>(null);
   const [config, setConfig] = useState<ThemeConfig>({
     primary: 'var(--brand-primary)',
@@ -22,7 +23,6 @@ export function BrandingPage() {
   const [logoUrl, setLogoUrl] = useState('');
   const [logoDataUrl, setLogoDataUrl] = useState('');
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
   const [slug, setSlug] = useState('');
 
   useEffect(() => {
@@ -54,16 +54,16 @@ export function BrandingPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setSuccess(false);
     try {
       await apiClient('/owner/brand', {
         method: 'PUT',
         body: { primaryColor: config.primary, bgColor: config.bg, logoUrl: logoDataUrl || logoUrl }
       });
-      setSuccess(true);
+      showToast(t('common.saved', 'Branding saved'), 'success');
     } catch (e) {
       console.error('[BrandingPage] Failed to save branding:', e);
-    } finally { setLoading(false); setTimeout(() => setSuccess(false), 3000); }
+      showToast(t('common.error', 'Failed to save branding'), 'error');
+    } finally { setLoading(false); }
   };
 
   const logoPreview = logoDataUrl || logoUrl;
@@ -142,7 +142,6 @@ export function BrandingPage() {
           </div>
           <div className="flex items-center gap-4">
             <Button type="submit" isLoading={loading} size="lg">{t('common.save', 'Save Changes')}</Button>
-            {success && <span className="text-[var(--color-success)] font-medium">{t('common.saved', 'Saved!')}</span>}
           </div>
         </form>
       </div>

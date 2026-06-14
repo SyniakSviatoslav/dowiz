@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay } from '@deliveryos/ui';
+import { motion } from 'framer-motion';
+import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay } from '@deliveryos/ui';
 import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
@@ -47,15 +48,8 @@ export function DashboardPage() {
       const data = await apiClient<typeof OrdersListResponse>('/owner/orders', { schema: OrdersListResponse });
       setOrders(Array.isArray(data) ? data : []);
     } catch (err: any) {
-      if (err.status === 404) {
-        setOrders([
-          { id: 'o_1', status: 'PENDING', createdAt: new Date().toISOString(), items: [{ name: 'Burger', quantity: 2 }], total: 130000, customerName: 'Sara', shortId: '#2301', itemCount: 2, itemsSummary: 'Burger x2', customerPhone: '+355...', etaMinutes: null, elapsedSeconds: 60, courierName: null },
-          { id: 'o_2', status: 'PREPARING', createdAt: new Date(Date.now() - 600000).toISOString(), items: [{ name: 'Pizza', quantity: 1 }], total: 85000, customerName: 'Alina', shortId: '#2300', itemCount: 1, itemsSummary: 'Pizza x1', customerPhone: '+355...', etaMinutes: null, elapsedSeconds: 600, courierName: 'Ardit' },
-          { id: 'o_3', status: 'IN_DELIVERY', createdAt: new Date(Date.now() - 1200000).toISOString(), items: [{ name: 'Sushi', quantity: 3 }], total: 210000, customerName: 'Bled', shortId: '#2299', itemCount: 3, itemsSummary: 'Sushi x3', customerPhone: '+355...', etaMinutes: 14, elapsedSeconds: 1200, courierName: 'Ardit' },
-        ]);
-      } else {
-        setError('Failed to load active orders');
-      }
+      setOrders([]);
+      setError('Failed to load orders');
     } finally {
       setLoading(false);
     }
@@ -133,6 +127,9 @@ export function DashboardPage() {
     } catch (err) { console.warn('[DashboardPage] send message failed:', err); }
   };
 
+  const { showToast } = useToast();
+  const { confirm, dialog } = useConfirm();
+
   const handleToggleMessages = (orderId: string) => {
     setExpandedMessages(prev => {
       const next = new Set(prev);
@@ -143,6 +140,17 @@ export function DashboardPage() {
   };
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
+    if (newStatus === 'REJECTED' || newStatus === 'CANCELLED') {
+      const confirmed = await confirm({
+        title: newStatus === 'REJECTED' ? t('admin.reject_order', 'Reject Order') : t('admin.cancel_order', 'Cancel Order'),
+        message: newStatus === 'REJECTED'
+          ? t('admin.reject_confirm_msg', 'Are you sure you want to reject this order? This cannot be undone.')
+          : t('admin.cancel_confirm_msg', 'Are you sure you want to cancel this order? This cannot be undone.'),
+        confirmLabel: newStatus === 'REJECTED' ? t('admin.reject', 'Reject') : t('admin.cancel', 'Cancel'),
+        variant: 'danger',
+      });
+      if (!confirmed) return;
+    }
     setOrders(prev => {
       const existing = prev.find(o => o.id === id);
       if (!existing) return prev;
@@ -151,6 +159,18 @@ export function DashboardPage() {
     });
     try {
       await apiClient(`/orders/${id}/status`, { method: 'PATCH', body: { status: newStatus } });
+      const statusLabels: Record<string, string> = {
+        CONFIRMED: t('admin.order_confirmed_toast', 'Order confirmed!'),
+        PREPARING: t('admin.order_preparing_toast', 'Order marked as preparing!'),
+        READY: t('admin.order_ready_toast', 'Order is ready!'),
+        IN_DELIVERY: t('admin.order_assigned_toast', 'Order assigned to courier!'),
+        DELIVERED: t('admin.order_delivered_toast', 'Order delivered!'),
+        REJECTED: t('admin.order_rejected_toast', 'Order rejected.'),
+        CANCELLED: t('admin.order_cancelled_toast', 'Order cancelled.'),
+      };
+      if (statusLabels[newStatus]) {
+        showToast(statusLabels[newStatus], newStatus === 'REJECTED' || newStatus === 'CANCELLED' ? 'error' : 'success');
+      }
     } catch (err) {
       console.error('[DashboardPage] update status failed:', err);
       fetchOrders();
@@ -222,17 +242,18 @@ export function DashboardPage() {
       )}
 
       {/* Quick Stats Row */}
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 stagger-children">
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 stagger-children">
         {[
-          { label: t('order.pending', 'Pending'), value: stats.pending, color: 'var(--status-pending)', isCurrency: false },
-          { label: t('order.preparing', 'Preparing'), value: stats.inProgress, color: 'var(--status-preparing)', isCurrency: false },
-          { label: t('order.ready', 'Ready'), value: stats.ready, color: 'var(--status-ready)', isCurrency: false },
-          { label: t('order.in_delivery', 'Delivery'), value: stats.inDelivery, color: 'var(--status-in-delivery)', isCurrency: false },
-          { label: t('cart.total', 'Revenue'), value: stats.revenue, color: 'var(--brand-primary)', isCurrency: true },
+          { label: t('order.pending', 'Pending'), value: stats.pending, color: 'var(--status-pending)', isCurrency: false, tooltip: t('tooltip.pending_orders', 'Orders awaiting confirmation') },
+          { label: t('order.preparing', 'Preparing'), value: stats.inProgress, color: 'var(--status-preparing)', isCurrency: false, tooltip: t('tooltip.active_orders', 'Orders being prepared') },
+          { label: t('order.ready', 'Ready'), value: stats.ready, color: 'var(--status-ready)', isCurrency: false, tooltip: t('tooltip.ready_orders', 'Orders ready for pickup or delivery') },
+          { label: t('order.in_delivery', 'Delivery'), value: stats.inDelivery, color: 'var(--status-in-delivery)', isCurrency: false, tooltip: '' },
+          { label: t('cart.total', 'Revenue'), value: stats.revenue, color: 'var(--brand-primary)', isCurrency: true, tooltip: t('tooltip.revenue_today', "Today's total revenue") },
         ].map((stat, i) => (
           <div
             key={stat.label}
-            className="text-center p-3 rounded-xl fade-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)', animationDelay: `${i * 40}ms` }}
+            title={stat.tooltip || undefined}
+            className="text-center p-3 rounded-xl fade-in card-base" style={{ animationDelay: `${i * 40}ms` }}
           >
             <div className="text-2xl font-bold mb-0.5" style={{ color: stat.color }}>
               {stat.isCurrency ? (
@@ -259,14 +280,14 @@ export function DashboardPage() {
                 <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{filteredOrders.length}</p>
               </div>
               <div className="flex bg-[var(--brand-surface)] border rounded-lg overflow-hidden p-0.5 shrink-0" role="tablist" aria-label={t('admin.view_mode', 'View mode')} style={{ borderColor: 'var(--brand-border)' }}>
-                <button role="tab" aria-selected={viewMode === 'live'}
+                <motion.button role="tab" whileTap={{ scale: 0.97 }} aria-selected={viewMode === 'live'}
                   onClick={() => { setViewMode('live'); setStatusFilter('all'); }}
                   className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors text-center ${viewMode === 'live' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}
-                >{t('admin.live', 'Live')}</button>
-                <button role="tab" aria-selected={viewMode === 'history'}
+                >{t('admin.live', 'Live')}</motion.button>
+                <motion.button role="tab" whileTap={{ scale: 0.97 }} aria-selected={viewMode === 'history'}
                   onClick={() => { setViewMode('history'); setStatusFilter('all'); }}
                   className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors text-center ${viewMode === 'history' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}
-                >{t('courier.history', 'History')}</button>
+                >{t('courier.history', 'History')}</motion.button>
               </div>
               {clientSlug && (
                 <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
@@ -298,9 +319,9 @@ export function DashboardPage() {
                   style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
                 />
               </div>
-              <button onClick={() => exportCSV(filteredOrders, 'orders.csv')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97] shrink-0" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
+              <motion.button onClick={() => exportCSV(filteredOrders, 'orders.csv')} whileTap={{ scale: 0.97 }} title={t('tooltip.export_csv', 'Export as CSV')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97] shrink-0" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
                 <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
-              </button>
+              </motion.button>
             </div>
           </div>
 
@@ -308,26 +329,29 @@ export function DashboardPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
             <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory flex-1 w-full sm:w-auto" role="group" aria-label={t('admin.status_filter', 'Order status filter')}>
               {STATUSES.map(s => (
-                <button
+                  <motion.button
                   key={s}
                   onClick={() => setStatusFilter(s)}
+                  whileTap={{ scale: 0.97 }}
                   aria-pressed={statusFilter === s}
+                  title={t('tooltip.filter_status', 'Filter by status')}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 capitalize snap-start shrink-0 whitespace-nowrap ${statusFilter === s ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}
                   style={{ minHeight: 'var(--tap-min)' }}
                 >
                   {s === 'all' ? t('common.all', 'All') : t(`order.${s.toLowerCase()}`, s.replace('_', ' ').toLowerCase())}
-                </button>
+                </motion.button>
               ))}
             </div>
             <div className="relative self-end sm:self-auto">
-              <button
+              <motion.button
                 onClick={() => setSortPickerOpen(true)}
+                whileTap={{ scale: 0.97 }}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium shrink-0"
                 style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}
               >
                 <i className="ti ti-arrows-sort text-sm" />
                 {sortBy === 'newest' ? t('admin.newest_first', 'Newest') : sortBy === 'oldest' ? t('admin.oldest_first', 'Oldest') : t('admin.highest_total', 'Highest')}
-              </button>
+              </motion.button>
               {isMobile ? (
                 <MobilePicker
                   open={sortPickerOpen}
@@ -351,13 +375,13 @@ export function DashboardPage() {
                         { value: 'oldest', label: t('admin.oldest_first', 'Oldest first'), icon: 'ti ti-sort-ascending' },
                         { value: 'highest', label: t('admin.highest_total', 'Highest total'), icon: 'ti ti-coin' },
                       ].map(opt => (
-                        <button key={opt.value} onClick={() => { setSortBy(opt.value as any); setSortPickerOpen(false); }}
+                        <motion.button key={opt.value} onClick={() => { setSortBy(opt.value as any); setSortPickerOpen(false); }} whileTap={{ scale: 0.97 }}
                           className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${sortBy === opt.value ? 'font-semibold' : ''}`}
                           style={{ color: sortBy === opt.value ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
                           <i className={opt.icon} style={{ fontSize: '0.8rem' }} />
                           <span className="flex-1">{opt.label}</span>
                           {sortBy === opt.value && <i className="ti ti-check" style={{ color: 'var(--brand-primary)', fontSize: '0.7rem' }} />}
-                        </button>
+                        </motion.button>
                       ))}
                     </div>
                   </>
@@ -378,14 +402,24 @@ export function DashboardPage() {
         </div>
       ) : filteredOrders.length === 0 ? (
         <EmptyState
-          title={t('common.no_data', 'No data')}
-          description={t('common.no_data', 'No data')}
+          title={t('admin.no_orders_yet', 'No orders yet')}
+          description={t('admin.no_orders_hint', 'Share your menu link with customers to start receiving orders.')}
           icon={<i className="ti ti-inbox text-4xl" style={{ color: 'var(--brand-text-muted)', opacity: 0.4 }} />}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" aria-live="polite" aria-atomic="true">
+        <motion.div
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+          variants={{ visible: { transition: { staggerChildren: 0.025 } } }}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: '-40px' }}
+          aria-live="polite" aria-atomic="true"
+        >
           {filteredOrders.map(order => (
-            <div key={order.id} className="order-card-container" data-testid={`order-card-${order.id}`} data-status={order.status}>
+            <motion.div
+              key={order.id}
+              variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } } }}
+              className="order-card-container" data-testid={`order-card-${order.id}`} data-status={order.status}>
               <OrderCard
                 order={order}
                 onUpdateStatus={handleUpdateStatus}
@@ -395,9 +429,9 @@ export function DashboardPage() {
                 onSendMessage={handleSendMessage}
                 onViewDetail={(id) => setDetailOrder(orders.find(o => o.id === id) || null)}
               />
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
 
       {/* Live Courier Map */}
@@ -436,7 +470,7 @@ export function DashboardPage() {
       )}
 
       {/* Readiness Checklist */}
-      <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+      <div className="card-base p-5">
         <div className="flex items-center gap-2 mb-4">
           <i className="ti ti-clipboard-check text-lg" style={{ color: 'var(--brand-primary)' }} />
           <h3 className="text-sm font-semibold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.store_readiness', 'Store Readiness')}</h3>
@@ -453,12 +487,12 @@ export function DashboardPage() {
             }}
           />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
           {readinessItems.map(item => (
             <div
               key={item.label}
-              className="flex items-center gap-2.5 p-2.5 rounded-lg transition-all duration-200 hover:bg-[var(--brand-surface-raised)]"
-              style={{ background: 'var(--brand-surface-raised)' }}
+              className="flex items-center gap-2.5 p-2.5 rounded-lg transition-all duration-200"
+              style={{ background: item.done ? 'color-mix(in srgb, var(--color-success) 5%, transparent)' : 'var(--brand-surface-raised)' }}
             >
               <i
                 className={`${item.icon} text-sm`}
@@ -505,6 +539,7 @@ export function DashboardPage() {
           </div>
         )}
       </ResponsiveDialog>
+      {dialog}
     </div>
   );
 }
