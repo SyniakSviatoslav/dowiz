@@ -843,7 +843,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
                 orderId: id,
                 courierId: courier_id
               });
-              await messageBus.publish(courierChannel(locationId), {
+              await messageBus.publish(`courier:${courier_id}`, {
                 type: 'task_assigned',
                 payload: { id, orderId: id, status: 'assigned', courierId: courier_id }
               });
