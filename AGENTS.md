@@ -1,6 +1,6 @@
 # DeliveryOS / dowiz — Agent Context
 
-> Last updated: 2026-06-14 (full project audit — 16 findings, 1 blocker, 3 major) · Source of truth: `DeliveryOS-As-Built-Summary-v1.md` (2026-06-04)
+> Last updated: 2026-06-14 (E2E sweep — 77 specs, ~749 tests, WS fix, modifier fix, SSR fix, 10 UI specs, 5 new rules) · Source of truth: `DeliveryOS-As-Built-Summary-v1.md` (2026-06-04)
 > Reading this file is mandatory. Skip everything else until a router below tells you otherwise.
 > Reading this file is mandatory. Skip everything else until a router below tells you otherwise.
 
@@ -57,7 +57,7 @@ apps/api/src/
   phase5/     anonymizer, GDPR, retention-policy, backup, launch-checklist
   adr/        Architecture decision records (+ ADR-NOTIFICATION-CONSOLIDATION.md)
   harness/    Harness self-improvement: model-rotation.md, failure-mode-ledger.md, episodes/
-e2e/          Playwright (92 tests × 3 breakpoints = 276, plus fe-radar.spec.ts, fe-radar-v2.spec.ts)
+e2e/          Playwright (92 tests × 3 breakpoints = 276 core, plus 14 flow-*.spec.ts = 231 tests × 3 = 693, plus fe-radar.spec.ts, fe-radar-v2.spec.ts)
 migrations/   node-pg-migrate (delegates to packages/db/migrations) 
   .repowise/  repowise intelligence layer (graph, git, health, dead code, decisions)
   .agents/
@@ -778,6 +778,140 @@ PowerShell mangling is endemic. Common failure modes:
 **Orders:** `POST /api/orders` creates orders with correct Zod schema
 **Locales:** All 3 (sq/en/uk) have full 728-key coverage
 **Backup restore:** Now reports `ok` when BACKUP_ENABLED is false (was false `degraded`)
+
+## 18. 2026-06-14 E2E Sweep — Retro Rules (born from 14-spec session, 693 tests, 8 bugs found)
+
+### 18.1 Rate limit resilience — retryOn429 helper
+Every spec that hits rate-limited endpoints (`onboarding/start` has 3/min, global 100/min) MUST use `retryOn429()` from `e2e/helpers/retry.ts` instead of raw `request.get/post()` when the request is not the primary assertion target.
+
+**Pattern:**
+```typescript
+import { retryOn429 } from '../../helpers/retry.js';
+const res = await retryOn429(request, url, { data, headers });
+```
+
+**Exceptions:** The primary assertion test (e.g., "create returns 201") should NOT retry — a 429 here is a valid failure.
+
+### 18.2 Route prefix verification (born from 3 prefix bugs)
+Before hitting ANY API endpoint in a test, verify the route prefix matches the Fastify registration in `server.ts`:
+- `/auth/*` routes → check if registered with prefix
+- `/api/owner/*` routes → check if registration adds `/api/owner`
+- `/public/*` routes → check if served by spa-proxy or dedicated route
+
+**Pattern:** `grep "register.*<routeFile>" apps/api/src/server.ts` to find the exact prefix.
+
+**Known prefix pitfalls:**
+| Frontend calls | Actual endpoint | Why |
+|---|---|---|
+| `/auth/local/login` | `/api/auth/local/login` | Inline handler in server.ts:794 |
+| `/courier/auth/login` | `/api/courier/auth/login` | Registered with prefix `/api/courier/auth` |
+| `/onboarding/start` | `/api/owner/onboarding/start` | Registered with prefix `/api/owner` |
+| `/owner/brand` | `/api/owner/brand` (spa-proxy) | Self-prefixed in spa-proxy.ts |
+| `/owner/settings` | `/api/owner/settings` (spa-proxy) | Self-prefixed in spa-proxy.ts |
+
+### 18.3 Cache-Control: no-cache for stale-sensitive API calls
+The public menu endpoint (`/public/locations/{slug}/menu`) sets `Cache-Control: public, max-age=60`. Playwright's `request` fixture respects HTTP caching. When asserting data that was JUST created (e.g., a product just created should appear in the public menu), pass `Cache-Control: no-cache` to bypass the cache.
+
+**Pattern:**
+```typescript
+const res = await request.get(url, { headers: { 'Cache-Control': 'no-cache' } });
+```
+
+**Endpoints with known caching:**
+| Endpoint | Cache header | Stale risk |
+|---|---|---|
+| `GET /public/locations/{slug}/menu` | `max-age=60` | New products/categories invisible for 60s |
+| `GET /public/locations/{id}/theme.css` | `max-age=31536000` (with hash) or `max-age=60` | Brand changes invisible until hash changes |
+
+### 18.4 Commit discipline for E2E specs
+After each spec is 3× green, commit it immediately with a structured message:
+```
+feat(e2e): flow-<name> — <N> flows, <M> tests, 3× green
+
+Changes:
+- e2e/tests/flow-<name>.spec.ts — new spec covering <flows list>
+- e2e/helpers/<new-helper>.ts — added for rate-limit/cache-busting
+
+MISSING discovered:
+- <bug 1> — <ref link>
+- <bug 2> — <ref link>
+```
+
+This creates rollback checkpoints per spec (14 commits instead of 1).
+
+### 18.5 Pre-spec verification checklist
+Before writing a new `flow-*.spec.ts`, run:
+1. `grep "register" apps/api/src/server.ts | grep <route-file>` — find exact prefix
+2. `grep "<endpoint>" apps/api/src/routes/spa-proxy.ts` — check spa-proxy duplication
+3. `npx playwright test e2e/tests/existing-spec --reporter=list` — confirm baseline green
+4. `curl -sI ${BASE}/public/locations/${slug}/menu | findstr "Cache-Control"` — check caching
+
+### 18.6 SSR cache version rule (born from SSR asset tag bug, 2026-06-14)
+
+Bumping the SSR template output format (e.g. adding `<script>` tags for the SPA bundle) requires incrementing `CACHE_VERSION` in `apps/api/src/lib/ssr-renderer.ts`. The LRU cache stores rendered HTML keyed by slug + version. Without a version bump, old cached HTML is served without new format changes.
+
+**Pattern:**
+```typescript
+const CACHE_VERSION = 'v3'; // bump when SSR output format changes
+const cacheKey = `ssr:menu:${slug}:${CACHE_VERSION}`;
+```
+
+### 18.7 E2E idempotency key must be valid UUID (born from 7 test fix rounds, 2026-06-14)
+
+The `/api/orders` endpoint validates `idempotency_key` as a UUID via Zod schema. Test files using `idempotency_key: \`prefix-${Date.now()}\`` produce non-UUID strings and get 400 "Invalid uuid". **Always use `crypto.randomUUID()`** or a hardcoded valid UUID.
+
+```typescript
+// CORRECT:
+import crypto from 'node:crypto';
+idempotency_key: crypto.randomUUID(),
+
+// WRONG (causes 400):
+idempotency_key: `my-test-${Date.now()}`,
+```
+
+### 18.8 Playwright CSS selector rules (born from SSR selector debugging, 2026-06-14)
+
+1. **`waitForSelector` does NOT support Playwright-specific pseudo-selectors.** `text=` is Playwright-only and cannot be mixed with CSS selectors in `waitForSelector`. Use `page.locator()` with `.or()` instead:
+   ```typescript
+   // WRONG:
+   await page.waitForSelector('div.card, text=no items');
+   // CORRECT:
+   await page.locator('div.card').or(page.locator('text=no items')).waitFor();
+   ```
+
+2. **SSR vs SPA selectors.** Menu page at `/s/:slug` renders Preact SSR with `div.product-card` elements immediately. Interactive elements (`button[aria-label="Add to cart"]`) only appear after the SPA JavaScript bundle hydrates. The bundle must be served as `<script>` tags in the SSR `<head>`.
+
+3. **Filter non-critical JS errors.** `favicon`, `404`, `manifest`, `ResizeObserver`, and `Unexpected token` errors are benign. Filter them in E2E tests:
+   ```typescript
+   const criticalErrors = errors.filter(e =>
+     !e.includes('favicon') && !e.includes('404') && !e.includes('manifest') &&
+     !e.includes('ResizeObserver') && !e.includes("Unexpected token")
+   );
+   ```
+
+### 18.9 Public menu API response shape (born from 3 test fixes, 2026-06-14)
+
+The public menu endpoint no longer returns `products` at the top level. Products are nested inside `categories[].products[]`. Read the menu like this:
+
+```typescript
+const menu = await res.json();
+const cats = menu.categories || [];
+const allProds = cats.flatMap((c: any) => c.products || c.items || []);
+```
+
+### 18.10 Channel name verification rule (born from courier WS notification bug, 2026-06-14)
+
+Every backend `messageBus.publish()` channel name must be verified against the frontend `useWebSocket({ room })` subscription. Known channel helpers and their patterns:
+
+| Helper | Resolves to | Frontend subscribes? |
+|---|---|---|
+| `orderChannel(id)` | `order:{id}` | ✅ `OrderStatusPage` |
+| `dashboardChannel(id)` | `location:{id}:dashboard` | ✅ `DashboardPage` |
+| `courierChannel(id)` | `location:{id}:couriers` | ⚠️ Dashboard (courier positions) |
+| raw `courier:{id}` | `courier:{courierId}` | ✅ `TasksPage` |
+| `shiftChannel(id)` | `courier:{id}:shift` | ❌ Dead — no subscriber |
+
+The bug: `courierChannel(locationId)` was used to notify a specific courier, but it resolves to `location:{id}:couriers` (a broadcast channel). Courier-specific notifications must use raw `courier:${courierId}`.
 
 ### 17.3 Remaining non-code items
 
