@@ -10,25 +10,30 @@ import { join } from 'node:path';
 let assetTags = '';
 
 function loadAssetTags(): string {
+  const base = process.cwd();
   const candidates = [
+    join(base, 'dist', 'public', 'index.html'),
+    join(base, 'apps', 'web', 'dist', 'index.html'),
+    'dist/public/index.html',
     'apps/web/dist/index.html',
-    join('dist', 'public', 'index.html'),
   ];
   for (const candidate of candidates) {
     try {
       if (existsSync(candidate)) {
         const content = readFileSync(candidate, 'utf-8');
         const scriptMatch = content.match(/<script[^>]+src="[^"]+"[^>]*><\/script>/);
-        const linkMatches = content.matchAll(/<link[^>]+rel="(?:stylesheet|modulepreload)"[^>]+>/g);
+        const linkMatches = [...content.matchAll(/<link[^>]+rel="(?:stylesheet|modulepreload)"[^>]+>/g)];
         const tags: string[] = [];
         if (scriptMatch) tags.push(scriptMatch[0]);
-        for (const m of linkMatches) tags.push(m[0]);
+        linkMatches.forEach(m => tags.push(m[0]));
+        console.log('[SSR] Loaded asset tags from:', candidate);
         return tags.join('\n          ');
       }
     } catch {
-      // ignore
+      console.warn('[SSR] Failed to load asset tags from:', candidate);
     }
   }
+  console.warn('[SSR] No asset tags found, SPA will not hydrate');
   return '';
 }
 
