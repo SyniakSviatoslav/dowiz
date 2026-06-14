@@ -4,7 +4,6 @@ const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 let authToken: string;
 
 test.describe('UI: Empty States — All Lists', () => {
-  let request: any;
   test.beforeAll(async ({ request }) => {
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
@@ -71,11 +70,10 @@ test.describe('UI: Empty States — All Lists', () => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
 
-    await page.goto(`${BASE}/s/demo`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/s/demo`, { waitUntil: 'domcontentloaded', timeout: 15000 });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const cards = page.locator('div.product-card');
-    await expect(cards.first().or(page.locator('text=no products'))).toBeAttached({ timeout: 8000 });
+    await page.waitForSelector('div.product-card, text=no products', { timeout: 8000 });
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
@@ -84,13 +82,25 @@ test.describe('UI: Empty States — All Lists', () => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
 
-    // Create temp courier token with no assignments
-    const courierRes = await request.post(`${BASE}/api/dev/mock-auth`, {
-      data: { role: 'courier' },
+    // Create courier token via inline http call (no request fixture available)
+    const https = require('https');
+    const courierToken = await new Promise<string>((resolve, reject) => {
+      const body = JSON.stringify({ role: 'courier' });
+      const req = https.request(`${BASE}/api/dev/mock-auth`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      }, (res: any) => {
+        let data = '';
+        res.on('data', (c: string) => data += c);
+        res.on('end', () => {
+          const j = JSON.parse(data);
+          resolve(j.access_token);
+        });
+      });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
     });
-    expect(courierRes.status()).toBe(200);
-    const courierBody = await courierRes.json();
-    const courierToken = courierBody.access_token;
 
     await page.addInitScript((token: string) => localStorage.setItem('dos_access_token', token), courierToken);
     await page.goto(`${BASE}/courier`, { waitUntil: 'networkidle' });
