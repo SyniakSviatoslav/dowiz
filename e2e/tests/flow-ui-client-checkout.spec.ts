@@ -65,7 +65,7 @@ test.describe('UI: Client Checkout — Full Flow', () => {
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
     // Wait for product cards
-    const cards = page.locator('article.product-card');
+    const cards = page.locator('article[data-testid="menu-item"]');
     await expect(cards.first()).toBeVisible({ timeout: 10000 });
 
     // Add to cart
