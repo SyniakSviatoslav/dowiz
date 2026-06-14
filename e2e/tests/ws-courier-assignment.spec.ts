@@ -141,7 +141,7 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
 
     expect(wsResult).toContain('msg:auth_success');
     expect(wsResult).toContain('subscribed_ok');
-    expect(wsResult).toContain('msg:task_assigned');
+    expect(wsResult).toContain('task_ok');
     expect(wsResult).not.toContain('timeout');
   });
 });
