@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { maskName, maskPhone } from '../../lib/pii-mask.js';
+import { dashboardChannel } from '../../lib/registry.js';
 
 export default (async function ownerAlertRoutes(fastify, opts) {
   const { db, messageBus, queue } = opts as any;
@@ -133,7 +134,7 @@ export default (async function ownerAlertRoutes(fastify, opts) {
       console.debug('[alerts] pg-boss cancel failed for', alertId);
     }
 
-    await messageBus.publish(`location:${locationId}:dashboard`, {
+    await messageBus.publish(dashboardChannel(locationId), {
       type: 'dwell.alert_acknowledged',
       data: { alertId, orderId: order_id, kind, acknowledgedAt: new Date().toISOString() },
     });
@@ -173,7 +174,7 @@ export default (async function ownerAlertRoutes(fastify, opts) {
     `, params);
 
     for (const row of res.rows) {
-      await messageBus.publish(`location:${locationId}:dashboard`, {
+      await messageBus.publish(dashboardChannel(locationId), {
         type: 'dwell.alert_acknowledged',
         data: { alertId: row.id, orderId: row.order_id, kind: row.kind, acknowledgedAt: new Date().toISOString() },
       });
