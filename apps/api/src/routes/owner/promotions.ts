@@ -16,11 +16,11 @@ export default async function ownerPromotionRoutes(fastify: FastifyInstance) {
     if (jwtId) return jwtId;
     const userId = (request.user as any).userId;
     const res = await db.query(
-      `SELECT id FROM locations WHERE owner_id = $1 LIMIT 1`,
+      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
       [userId]
     );
     if (res.rowCount === 0) throw new Error('No location found for this user');
-    return res.rows[0].id;
+    return res.rows[0].location_id;
   };
 
   // ─── List Promotions ──────────────────────────────────────────────
