@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { Button, EmptyState, SkeletonBase, useI18n, PriceDisplay } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
@@ -115,11 +116,11 @@ export function ShiftPage() {
     }
   };
 
-  const statItems: { label: string; value: string | React.ReactNode; icon: string }[] = stats ? [
-    { label: 'Deliveries', value: String(stats.deliveries), icon: '\u{1F4E6}' },
-    { label: 'Earnings', value: <PriceDisplay amount={stats.earnings} />, icon: '\u{1F4B0}' },
-    { label: 'Distance', value: `${stats.distance} km`, icon: '\u{1F6F5}' },
-    { label: 'Online', value: stats.onlineTime, icon: '\u23F1' },
+  const statItems: { label: string; value: string | React.ReactNode; icon: React.ReactNode }[] = stats ? [
+    { label: 'Deliveries', value: String(stats.deliveries), icon: <i className="ti ti-package" aria-hidden="true"></i> },
+    { label: 'Earnings', value: <PriceDisplay amount={stats.earnings} />, icon: <i className="ti ti-moneybag" aria-hidden="true"></i> },
+    { label: 'Distance', value: `${stats.distance} km`, icon: <i className="ti ti-motorbike" aria-hidden="true"></i> },
+    { label: 'Online', value: stats.onlineTime, icon: <i className="ti ti-clock" aria-hidden="true"></i> },
   ] : [];
 
   return (
@@ -147,7 +148,12 @@ export function ShiftPage() {
         <EmptyState title={t('common.error', 'Error')} description={error} />
       ) : (
         <>
-          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-6 text-center">
+          <motion.div
+            className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-6 text-center"
+            initial={{ opacity: 0, y: 12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+          >
             {shift.isActive ? (
               <div className="space-y-4">
                 <div className="text-sm font-semibold text-[var(--brand-text-muted)] uppercase tracking-wider">
@@ -171,7 +177,7 @@ export function ShiftPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="text-5xl mb-2">{'\u{1F552}'}</div>
+                <div className="text-5xl mb-2"><i className="ti ti-clock" aria-hidden="true"></i></div>
                 <div className="text-sm text-[var(--brand-text-muted)]">
                   {t('courier.offline_hint', 'You are currently offline. Start your shift to begin receiving delivery tasks.')}
                 </div>
@@ -186,15 +192,21 @@ export function ShiftPage() {
                 </Button>
               </div>
             )}
-          </div>
+          </motion.div>
 
           {stats && (
             <div className="space-y-3">
               <h2 className="text-lg font-bold text-[var(--brand-text)]">{t('courier.today_stats', 'Today\'s Stats')}</h2>
-              <div className="grid grid-cols-2 gap-3">
+              <motion.div
+                className="grid grid-cols-2 gap-3"
+                variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.06, delayChildren: 0.1 } } }}
+                initial="hidden"
+                animate="visible"
+              >
                 {statItems.map((item) => (
-                  <div
+                  <motion.div
                     key={item.label}
+                    variants={{ hidden: { opacity: 0, y: 12, scale: 0.97 }, visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 260, damping: 24 } } }}
                     className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4"
                   >
                     <div className="text-2xl mb-1">{item.icon}</div>
@@ -202,9 +214,9 @@ export function ShiftPage() {
                       {item.label}
                     </div>
                     <div className="text-lg font-bold text-[var(--brand-text)]">{item.value}</div>
-                  </div>
+                  </motion.div>
                 ))}
-              </div>
+              </motion.div>
             </div>
           )}
         </>

@@ -30,6 +30,9 @@ export function DeliveryPage() {
   const [clientLocation, setClientLocation] = useState<LngLatLike | null>(null);
   const { t } = useI18n();
   const [messages, setMessages] = useState<any[]>([]);
+  const [pickedUp, setPickedUp] = useState(false);
+  const [pickupLoading, setPickupLoading] = useState(false);
+  const [cashCollected, setCashCollected] = useState<number | null>(null);
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -137,12 +140,28 @@ export function DeliveryPage() {
     }
   }, [position, wsStatus, sendMessage]);
 
+  const handlePickup = async () => {
+    setPickupLoading(true);
+    try {
+      await apiClient(`/orders/${id}/pickup`, { method: 'PATCH' });
+      setPickedUp(true);
+    } catch (err) {
+      console.warn('[DeliveryPage] pickup failed:', err);
+    } finally {
+      setPickupLoading(false);
+    }
+  };
+
   const handleComplete = async () => {
     setShowCelebration(true);
     try {
+      const body: Record<string, unknown> = {};
+      if (task?.cashPayWith && cashCollected != null) {
+        body.cash_collected = cashCollected;
+      }
       await apiClient(`/courier/assignments/${id}/delivered`, {
         method: 'POST',
-        body: { cash_collected: false }
+        body,
       });
     } catch (e) {
       console.debug('[DeliveryPage] delivery status update failed', e);
@@ -180,7 +199,7 @@ export function DeliveryPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[999] flex items-center justify-center pointer-events-none"
-            style={{ background: 'rgba(0,0,0,0.4)' }}
+            style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)' }}
           >
             <motion.div
               initial={{ scale: 0.5, opacity: 0 }}
@@ -213,9 +232,13 @@ export function DeliveryPage() {
           </div>
         )}
 
-        <button onClick={() => navigate('/courier')} className="absolute top-4 left-4 w-10 h-10 bg-white text-black rounded-full shadow-lg flex items-center justify-center text-xl font-bold z-10">
+        <motion.button
+          onClick={() => navigate('/courier')}
+          whileTap={{ scale: 0.97 }}
+          className="absolute top-4 left-4 w-10 h-10 bg-[var(--brand-surface)] text-[var(--brand-text)] rounded-full shadow-lg flex items-center justify-center text-xl font-bold z-10"
+        >
           &times;
-        </button>
+        </motion.button>
 
         <div className="absolute top-4 right-4 bg-white/90 p-1.5 rounded-full shadow-md flex gap-2 items-center px-3 z-10">
           <div className="flex items-center gap-1.5">
@@ -225,13 +248,13 @@ export function DeliveryPage() {
           {position && (
             <div className="flex items-center gap-1">
               <LiveDot size={6} pulse={true} color="var(--color-info)" />
-              <span className="text-[10px] font-medium text-gray-500">GPS</span>
+              <span className="text-[10px] font-medium text-[var(--brand-text-muted)]">GPS</span>
             </div>
           )}
         </div>
       </div>
 
-      <div className="bg-[var(--brand-surface)] rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] -mt-6 relative z-10 p-6 flex flex-col gap-6">
+      <div className="bg-[var(--brand-surface)] rounded-t-3xl shadow-elevation-3 -mt-6 relative z-10 p-6 flex flex-col gap-6">
         
         <div className="w-12 h-1.5 bg-[var(--brand-border)] rounded-full mx-auto -mt-2" />
 
@@ -289,7 +312,44 @@ export function DeliveryPage() {
           onMarkRead={handleMarkRead}
         />
 
-        <SwipeToComplete onComplete={handleComplete} label="Slide to Deliver" />
+        {!pickedUp ? (
+          <motion.button
+            onClick={handlePickup}
+            disabled={pickupLoading}
+            whileTap={{ scale: 0.97 }}
+            className="w-full h-14 bg-[var(--brand-primary)] text-white font-bold text-base rounded-full shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {pickupLoading ? (
+              <span className="inline-flex items-center gap-2">
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                {t('common.loading', 'Loading...')}
+              </span>
+            ) : t('courier.mark_picked_up', 'Mark as Picked Up')}
+          </motion.button>
+        ) : (
+          <>
+            {task?.cashPayWith && (
+              <div className="space-y-2">
+                <label className="text-sm font-bold block" style={{ color: 'var(--brand-text)' }}>
+                  {t('checkout.cash_amount', 'How much did the customer pay?')}
+                </label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={cashCollected ?? task.cashPayWith}
+                  onChange={e => setCashCollected(e.target.value ? parseFloat(e.target.value) : null)}
+                  min={0}
+                  className="w-full h-12 px-4 outline-none text-base font-bold border rounded-xl transition-colors"
+                  style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
+                />
+              </div>
+            )}
+            <SwipeToComplete onComplete={handleComplete} label={t('courier.slide_to_deliver', 'Slide to Deliver')} />
+          </>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useI18n } from '../lib/I18nProvider.js';
 
 // --- SkeletonBase ---
 export function SkeletonBase({ className = '' }: { className?: string }) {
@@ -21,11 +22,12 @@ export function EmptyState({ title, description, icon, action }: { title: string
 
 // --- OfflineBanner ---
 export function OfflineBanner({ fallbackPhone }: { fallbackPhone?: string }) {
+  const { t } = useI18n();
   return (
     <div className="fixed top-0 left-0 right-0 z-50 bg-[var(--color-warning)] text-[var(--brand-text)] px-4 py-2 text-sm font-medium text-center shadow-md">
-      You are currently offline. Please check your internet connection.
+      {t('common.offline', 'You are currently offline. Please check your internet connection.')}
       {fallbackPhone && (
-        <span className="block mt-1">Need help? Call us: <a href={`tel:${fallbackPhone}`} className="underline font-bold">{fallbackPhone}</a></span>
+        <span className="block mt-1">{t('common.call_us', 'Need help? Call us:')} <a href={`tel:${fallbackPhone}`} className="underline font-bold">{fallbackPhone}</a></span>
       )}
     </div>
   );

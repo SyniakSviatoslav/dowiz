@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Button, Input, EmptyState, CourierLiveMap, useI18n, PriceDisplay } from '@deliveryos/ui';
+import { motion } from 'framer-motion';
+import { Button, Input, EmptyState, CourierLiveMap, useI18n, PriceDisplay, useToast } from '@deliveryos/ui';
 import type { CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
@@ -49,6 +50,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function CouriersPage() {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const [couriers, setCouriers] = useState<Courier[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -59,7 +61,6 @@ export function CouriersPage() {
   const [newCourierRole, setNewCourierRole] = useState('courier');
   const [inviteResult, setInviteResult] = useState<{ link: string; code: string } | null>(null);
   const [inviteError, setInviteError] = useState('');
-  const [copied, setCopied] = useState(false);
   const [locationId, setLocationId] = useState('');
   const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
   const [courierDetails, setCourierDetails] = useState<CourierDetails | null>(null);
@@ -95,7 +96,6 @@ export function CouriersPage() {
     if (!newCourierEmail || !locationId) return;
     setInviteError('');
     setInviteResult(null);
-    setCopied(false);
     try {
       const res = await apiClient<typeof CourierInviteResponse>(`/owner/locations/${locationId}/courier-invites`, { 
         method: 'POST', 
@@ -107,6 +107,7 @@ export function CouriersPage() {
           link: (res.deepLink || res.link) as string,
           code: res.code || '',
         });
+        showToast(t('admin.invite_created', 'Invite created!'), 'success');
         setNewCourierEmail('');
         fetchCouriers();
       } else {
@@ -122,8 +123,7 @@ export function CouriersPage() {
     if (!inviteResult) return;
     const text = `Ftesë për Korrier / Courier Invite:\nLink: ${inviteResult.link}\nCode: ${inviteResult.code}`;
     navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 3000);
+    showToast(t('admin.invite_copied', 'Invite link copied!'), 'success');
   };
 
   const fetchCouriers = useCallback(async () => {
@@ -191,9 +191,9 @@ export function CouriersPage() {
           <div className="bg-[var(--brand-surface-raised)] px-3 py-1 rounded-full text-sm font-medium">
             {onlineCount} {t('admin.online', 'online')}
           </div>
-          <button onClick={() => exportCSV(filtered, 'couriers.csv')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors hover:bg-[var(--brand-surface-raised)]" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
+          <motion.button onClick={() => exportCSV(filtered, 'couriers.csv')} whileTap={{ scale: 0.97 }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors hover:bg-[var(--brand-surface-raised)]" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
             <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
-          </button>
+          </motion.button>
           <Button onClick={() => setShowAddForm(!showAddForm)}>+ {t('admin.add_courier', 'Add Courier')}</Button>
         </div>
       </div>
@@ -261,7 +261,7 @@ export function CouriersPage() {
                 className="w-full"
                 size="sm"
               >
-                {copied ? '✓ U Kopjua / Copied!' : '📋 Kopjo Detajet / Copy Link & Code'}
+                {'📋 Kopjo Detajet / Copy Link & Code'}
               </Button>
             </div>
           )}
@@ -288,12 +288,21 @@ export function CouriersPage() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <EmptyState title={t('admin.no_couriers', 'No couriers')} description={t('admin.no_couriers_match', 'No couriers match your search.')} />
+        <EmptyState title={t('admin.no_couriers', 'No couriers')} description={search ? t('admin.no_couriers_match', 'No couriers match your search.') : t('admin.no_couriers_hint', 'Send an invite link to add your first courier.')} />
       ) : (
-        <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] overflow-hidden">
+        <motion.div
+          className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] overflow-hidden"
+          variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.04, delayChildren: 0.05 } } }}
+          initial="hidden"
+          animate="visible"
+        >
           {filtered.map((c) => (
-            <div key={c.id}>
-              <div
+            <motion.div
+              key={c.id}
+              variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24 } } }}
+            >
+              <motion.div
+                whileTap={{ scale: 0.99 }}
                 className="p-4 border-b border-[var(--brand-border)] flex items-center justify-between gap-3 cursor-pointer hover:bg-[var(--brand-surface-raised)] transition-colors"
                 onClick={() => fetchDetails(c.id)}
               >
@@ -330,7 +339,7 @@ export function CouriersPage() {
                   </span>
                   <i className={`ti ${selectedCourier === c.id ? 'ti-chevron-up' : 'ti-chevron-down'} text-sm text-[var(--brand-text-muted)]`} />
                 </div>
-              </div>
+              </motion.div>
               {selectedCourier === c.id && (
                 <div className="p-4 border-b border-[var(--brand-border)] bg-[var(--brand-surface-raised)]/50">
                   {detailsLoading ? (
@@ -362,8 +371,8 @@ export function CouriersPage() {
                             {courierDetails.history.map(h => (
                               <div key={h.id} className="px-3 py-2 rounded-lg bg-[var(--brand-surface)] border border-[var(--brand-border)] text-sm">
                                 <div className="flex items-center justify-between gap-2 mb-1">
-                                  <button onClick={(e) => { e.stopPropagation(); setSelectedOrderDetail(h); }}
-                                    className="text-xs font-mono text-[var(--brand-primary)] hover:underline font-medium">#{h.order_id.slice(0, 8)}</button>
+                                  <motion.button onClick={(e) => { e.stopPropagation(); setSelectedOrderDetail(h); }} whileTap={{ scale: 0.97 }}
+                                    className="text-xs font-mono text-[var(--brand-primary)] hover:underline font-medium">#{h.order_id.slice(0, 8)}</motion.button>
                                   <span className="font-medium"><PriceDisplay amount={h.total || 0} /></span>
                                 </div>
                                 <div className="flex items-center gap-2 text-xs text-[var(--brand-text-muted)]">
@@ -404,13 +413,13 @@ export function CouriersPage() {
                       )}
                     </div>
                   ) : (
-                    <div className="text-sm text-[var(--brand-text-muted)]">{t('common.error', 'Failed to load details')}</div>
+                    <div className="text-sm text-[var(--brand-text-muted)]">{t('common.error', 'Failed to load details')}                    </div>
                   )}
                 </div>
               )}
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
 
       <div className="mt-6">
@@ -437,9 +446,9 @@ export function CouriersPage() {
               <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>
                 {t('admin.order_details', 'Order Details')} #{selectedOrderDetail.order_id.slice(0, 8)}
               </h3>
-              <button onClick={() => setSelectedOrderDetail(null)} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface-raised)]">
+              <motion.button onClick={() => setSelectedOrderDetail(null)} whileTap={{ scale: 0.97 }} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface-raised)]">
                 <i className="ti ti-x" style={{ color: 'var(--brand-text-muted)' }} />
-              </button>
+              </motion.button>
             </div>
 
             <div className="space-y-3">

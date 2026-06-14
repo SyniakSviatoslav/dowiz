@@ -1,3 +1,5 @@
+// @deprecated — Unused shell component. apps/web uses inline layout in AdminRoutes.tsx, not this component.
+// Kept for reference; remove after confirming no external consumers.
 import { type ReactNode, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useEmbed } from '../../hooks/use-embed.js';

@@ -44,15 +44,7 @@ export function CRMPage() {
     apiClient<typeof CustomerListResponse>('/owner/customers', { schema: CustomerListResponse })
       .then(d => { setCustomers(d.customers || (d as any) || []); setLoading(false); })
       .catch(() => {
-        setCustomers([
-          { id: 'c1', name: 'Sara Mancini', phone: '+355 69 *** ***', orders: 18, ltv: 32400, lastOrder: 'today' },
-          { id: 'c2', name: 'Alina Popa', phone: '+355 69 *** ***', orders: 11, ltv: 19800, lastOrder: 'yesterday' },
-          { id: 'c3', name: 'Bled Gjoni', phone: '+355 69 *** ***', orders: 27, ltv: 51300, lastOrder: 'today' },
-          { id: 'c4', name: 'Dorina Shehu', phone: '+355 69 *** ***', orders: 4, ltv: 6800, lastOrder: '3 weeks ago' },
-          { id: 'c5', name: 'Erion Berisha', phone: '+355 69 *** ***', orders: 14, ltv: 24200, lastOrder: '2 days ago' },
-          { id: 'c6', name: 'Fatbardha Koci', phone: '+355 69 *** ***', orders: 1, ltv: 2090, lastOrder: '2 months ago' },
-          { id: 'c7', name: 'Gjergji Marku', phone: '+355 69 *** ***', orders: 32, ltv: 61400, lastOrder: 'today' },
-        ]);
+        setCustomers([]);
         setLoading(false);
       });
   }, []);
@@ -151,7 +143,7 @@ export function CRMPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState title={t('admin.no_customers', 'No customers')} description={search ? t('admin.no_match', 'No match.') : t('admin.no_customer_data_yet', 'No customer data yet.')} />
+        <EmptyState title={t('admin.no_customers', 'No customers')} description={search ? t('admin.no_match', 'No match.') : t('admin.no_customers_hint', 'Customers appear after their first order.')} />
       ) : (
         <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--brand-border)' }}>
           <table className="w-full text-sm">

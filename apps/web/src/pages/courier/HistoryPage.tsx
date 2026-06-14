@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { EmptyState, SkeletonBase, StatusBadge, useI18n, PriceDisplay } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
@@ -33,7 +34,10 @@ export function HistoryPage() {
   const [deliveries, setDeliveries] = useState<DeliveryHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+
+  const LOCALE_MAP: Record<string, string> = { sq: 'sq-AL', en: 'en-GB', uk: 'uk-UA' };
+  const dateLocale = LOCALE_MAP[locale] || 'en-GB';
 
   const fetchHistory = async () => {
     try {
@@ -53,7 +57,7 @@ export function HistoryPage() {
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   };
 
   const renderStars = (rating?: number) => {
@@ -61,9 +65,7 @@ export function HistoryPage() {
     return (
       <div className="flex items-center gap-0.5">
         {[1, 2, 3, 4, 5].map((star) => (
-          <span key={star} className={`text-xs ${star <= rating ? 'text-[var(--color-warning)]' : 'text-[var(--brand-border)]'}`}>
-            &#9733;
-          </span>
+          <i key={star} className={`ti ti-star-filled text-xs ${star <= rating ? 'text-[var(--color-warning)]' : 'text-[var(--brand-border)]'}`} aria-hidden="true"></i>
         ))}
       </div>
     );
@@ -89,10 +91,16 @@ export function HistoryPage() {
       ) : deliveries.length === 0 ? (
         <EmptyState title={t('courier.no_deliveries', 'No deliveries yet')} description={t('courier.no_deliveries_desc', 'Your completed deliveries will appear here.')} />
       ) : (
-        <div className="space-y-3">
+        <motion.div
+          className="space-y-3"
+          variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.04, delayChildren: 0.05 } } }}
+          initial="hidden"
+          animate="visible"
+        >
           {deliveries.map((delivery) => (
-            <div
+            <motion.div
               key={delivery.id}
+              variants={{ hidden: { opacity: 0, y: 12, scale: 0.98 }, visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 260, damping: 24 } } }}
               className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4"
             >
               <div className="flex items-start justify-between mb-2">
@@ -118,9 +126,9 @@ export function HistoryPage() {
                   </div>
                 )}
               </div>
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
     </div>
   );

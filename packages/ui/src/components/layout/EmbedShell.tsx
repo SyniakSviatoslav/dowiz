@@ -1,3 +1,5 @@
+// @deprecated — Unused shell component. Embed mode handled inline in app layouts, not this wrapper.
+// Kept for reference; remove after confirming no external consumers.
 import { useEffect, type ReactNode } from 'react';
 
 interface EmbedShellProps {

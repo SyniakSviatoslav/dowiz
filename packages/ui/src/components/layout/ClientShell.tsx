@@ -1,3 +1,5 @@
+// @deprecated — Unused shell component. apps/web uses inline layout in ClientLayout.tsx, not this component.
+// Kept for reference; remove after confirming no external consumers.
 import type { ReactNode } from 'react';
 import { useEmbed } from '../../hooks/use-embed.js';
 import { LanguageSwitcher } from '../../lib/I18nProvider.js';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Button, Input, EmptyState, MapWithRadius, Toggle, useI18n, LanguageSwitcher } from '@deliveryos/ui';
+import { Button, Input, EmptyState, MapWithRadius, Toggle, useI18n, LanguageSwitcher, useToast } from '@deliveryos/ui';
 import type { LngLatLike, Locale } from '@deliveryos/ui';
 import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
@@ -66,6 +66,7 @@ const MOCK_SETTINGS: LocationSettings = {
 
 export function SettingsPage() {
   const { t, locale, setLocale } = useI18n();
+  const { showToast } = useToast();
   const [settings, setSettings] = useState<LocationSettings>({
     locationName: '',
     phone: '',
@@ -79,7 +80,6 @@ export function SettingsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
   // Telegram state
@@ -217,24 +217,21 @@ export function SettingsPage() {
       return;
     }
     setSaving(true);
-    setSuccess(false);
     try {
       await apiClient('/owner/settings', {
         method: 'PUT',
         body: settings,
       });
-      setSuccess(true);
+      showToast(t('common.saved', 'Settings saved'), 'success');
     } catch (err: any) {
       if (err.status === 404) {
-        setSuccess(true);
+        showToast(t('common.saved', 'Settings saved'), 'success');
       } else {
+        showToast(t('common.error', 'Failed to save settings'), 'error');
         setError('Failed to save settings');
       }
     } finally {
       setSaving(false);
-      if (success || !error) {
-        setTimeout(() => setSuccess(false), 3000);
-      }
     }
   };
 
@@ -482,7 +479,7 @@ export function SettingsPage() {
 
             {/* Messages */}
             {tgMessage && (
-              <div className="p-3 rounded-lg text-xs" style={{
+              <div role="alert" aria-live="polite" className="p-3 rounded-lg text-xs" style={{
                 background: tgMessage.type === 'success' ? 'var(--color-success-light)' : 'var(--color-danger-light)',
                 color: tgMessage.type === 'success' ? 'var(--color-success)' : 'var(--color-danger)'
               }}>
@@ -507,9 +504,6 @@ export function SettingsPage() {
             <Button type="submit" isLoading={saving} size="lg">
               {t('common.save', 'Save Changes')}
             </Button>
-            {success && (
-              <span role="status" aria-live="polite" className="text-[var(--color-success)] font-medium text-sm">{t('common.saved', 'Saved successfully!')}</span>
-            )}
             {error && settings.locationName !== '' && (
               <span role="alert" className="text-[var(--color-danger)] text-sm">{error}</span>
             )}

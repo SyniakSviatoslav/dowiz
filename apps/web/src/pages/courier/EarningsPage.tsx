@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { EmptyState, SkeletonBase, StatusBadge, useI18n, PriceDisplay } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
@@ -68,9 +69,9 @@ export function EarningsPage() {
   }, []);
 
   const summaryCards = summary ? [
-    { label: t('courier.today', 'Today'), amount: summary.today, icon: '\u2600' },
-    { label: t('courier.this_week', 'This Week'), amount: summary.week, icon: '\u{1F4C5}' },
-    { label: t('courier.this_month', 'This Month'), amount: summary.month, icon: '\u{1F4B0}' },
+    { label: t('courier.today', 'Today'), amount: summary.today, icon: <i className="ti ti-sun" aria-hidden="true"></i> },
+    { label: t('courier.this_week', 'This Week'), amount: summary.week, icon: <i className="ti ti-calendar" aria-hidden="true"></i> },
+    { label: t('courier.this_month', 'This Month'), amount: summary.month, icon: <i className="ti ti-moneybag" aria-hidden="true"></i> },
   ] : [];
 
   return (
@@ -92,18 +93,24 @@ export function EarningsPage() {
         <EmptyState title={t('common.error', 'Error')} description={error} />
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-3">
+          <motion.div
+            className="grid grid-cols-3 gap-3"
+            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } } }}
+            initial="hidden"
+            animate="visible"
+          >
             {summaryCards.map((card) => (
-              <div
+              <motion.div
                 key={card.label}
+                variants={{ hidden: { opacity: 0, y: 12, scale: 0.97 }, visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 260, damping: 24 } } }}
                 className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4 text-center"
               >
                 <div className="text-2xl mb-1">{card.icon}</div>
                 <div className="text-xs text-[var(--brand-text-muted)] uppercase tracking-wider font-semibold mb-1">{card.label}</div>
                 <div className="text-lg font-bold text-[var(--brand-text)]"><PriceDisplay amount={card.amount} /></div>
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
 
           <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] overflow-hidden">
             <div className="p-4 border-b border-[var(--brand-border)]">
@@ -115,9 +122,18 @@ export function EarningsPage() {
                 <EmptyState title={t('courier.no_payouts', 'No payouts yet')} description={t('courier.no_payouts_desc', 'Your payouts will appear here once processed.')} />
               </div>
             ) : (
-              <div className="divide-y divide-[var(--brand-border)]">
+              <motion.div
+                className="divide-y divide-[var(--brand-border)]"
+                variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.03, delayChildren: 0.1 } } }}
+                initial="hidden"
+                animate="visible"
+              >
                 {payouts.map((payout) => (
-                  <div key={payout.id} className="p-4 flex items-center justify-between">
+                  <motion.div
+                    key={payout.id}
+                    variants={{ hidden: { opacity: 0, x: -8 }, visible: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 260, damping: 24 } } }}
+                    className="p-4 flex items-center justify-between"
+                  >
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium text-[var(--brand-text)]">{payout.reference}</div>
                       <div className="text-xs text-[var(--brand-text-muted)]">{payout.date}</div>
@@ -126,9 +142,9 @@ export function EarningsPage() {
                       <div className="text-sm font-bold text-[var(--brand-text)]"><PriceDisplay amount={payout.amount} /></div>
                       <StatusBadge status={payout.status} />
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
-              </div>
+              </motion.div>
             )}
           </div>
         </>
