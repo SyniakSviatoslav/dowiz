@@ -1,10 +1,9 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 
-export default (async function ownerSettlementRoutes(fastify, opts) {
+export default (async function ownerSettlementRoutes(fastify: any, opts: any) {
   const { db, messageBus } = opts as any;
 
   fastify.addHook('onRequest', fastify.verifyAuth);
@@ -22,7 +21,7 @@ export default (async function ownerSettlementRoutes(fastify, opts) {
         period_end: z.string().optional()
       })
     }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const q = request.query;
     
@@ -47,7 +46,7 @@ export default (async function ownerSettlementRoutes(fastify, opts) {
     const { decryptPII } = await import('../../lib/pii-cipher.js');
 
     const res = await db.query(sql, params);
-    const payouts = res.rows.map(r => {
+    const payouts = res.rows.map((r: any) => {
       const name = decryptPII(r.full_name_encrypted) || '';
       return {
         id: r.id,
@@ -73,7 +72,7 @@ export default (async function ownerSettlementRoutes(fastify, opts) {
     schema: {
       params: z.object({ locationId: z.string().uuid(), id: z.string().uuid() })
     }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, id } = request.params;
     
     const payoutRes = await db.query(`
@@ -93,7 +92,7 @@ export default (async function ownerSettlementRoutes(fastify, opts) {
       ORDER BY ca.delivered_at DESC
     `, [id]);
 
-    const items = itemsRes.rows.map(r => ({
+    const items = itemsRes.rows.map((r: any) => ({
       shortOrderId: r.order_id.substring(0, 8),
       deliveredAt: r.delivered_at,
       amount: r.amount,
@@ -107,7 +106,7 @@ export default (async function ownerSettlementRoutes(fastify, opts) {
   fastify.post('/:locationId/settlements/:id/approve', {
     schema: { params: z.object({ locationId: z.string().uuid(), id: z.string().uuid() }) },
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, id } = request.params;
     const userId = (request.user as any).sub;
 
@@ -162,7 +161,7 @@ export default (async function ownerSettlementRoutes(fastify, opts) {
       body: z.object({ payment_reference: z.string().optional(), payment_method: z.enum(['cash', 'bank_transfer', 'other']).optional() })
     },
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, id } = request.params;
     const { payment_reference, payment_method } = request.body;
     const userId = (request.user as any).sub;
@@ -206,7 +205,7 @@ export default (async function ownerSettlementRoutes(fastify, opts) {
       body: z.object({ reason: z.string(), items: z.array(z.string().uuid()).optional() })
     },
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, id } = request.params;
     const { reason, items } = request.body;
     const userId = (request.user as any).sub;
@@ -257,7 +256,7 @@ export default (async function ownerSettlementRoutes(fastify, opts) {
       body: z.object({ reason: z.string() })
     },
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, id } = request.params;
     const { reason } = request.body;
     const userId = (request.user as any).sub;
@@ -301,7 +300,7 @@ export default (async function ownerSettlementRoutes(fastify, opts) {
       body: z.object({ referenceDate: z.string() })
     },
     config: { rateLimit: { max: 5, timeWindow: '5 minutes' } }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const { referenceDate } = request.body;
     

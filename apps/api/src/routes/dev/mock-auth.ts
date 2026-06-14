@@ -1,11 +1,10 @@
-// @ts-nocheck
 import type { FastifyInstance } from 'fastify';
 import { signAuthToken } from '@deliveryos/platform';
 import crypto from 'node:crypto';
 
 export default async function mockAuthRoutes(fastify: FastifyInstance) {
   console.log('[API] Registering mockAuthRoutes: /dev/mock-auth');
-  fastify.post('/dev/mock-auth', async (request, reply) => {
+  fastify.post('/dev/mock-auth', async (request: any, reply: any) => {
     const body = request.body as Record<string, unknown> || {};
     const role = body.role === 'courier' ? 'courier' : 'owner';
 
@@ -29,7 +28,7 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
 
     let userId: string;
     try {
-      const res = await fastify.db.query(
+      const res = await (fastify as any).db.query(
         `INSERT INTO users (email, google_sub, display_name) 
          VALUES ($1, $2, $3)
          ON CONFLICT (google_sub) DO UPDATE SET email = EXCLUDED.email, display_name = EXCLUDED.display_name
@@ -38,7 +37,7 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
       );
       userId = res.rows[0].id;
     } catch (e) {
-      const updateRes = await fastify.db.query(
+      const updateRes = await (fastify as any).db.query(
         `UPDATE users SET google_sub = $2, display_name = COALESCE(users.display_name, $3) WHERE email = $1 RETURNING id`,
         [email, googleSub, ownerName]
       );
@@ -48,7 +47,7 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
       userId = updateRes.rows[0].id;
     }
 
-    const memberRes = await fastify.db.query(
+    const memberRes = await (fastify as any).db.query(
       `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
       [userId]
     );
@@ -59,18 +58,18 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
   });
 
   // Test helper: create courier assignment for an order
-  fastify.post('/dev/create-assignment', async (request, reply) => {
+  fastify.post('/dev/create-assignment', async (request: any, reply: any) => {
     const { orderId, courierId, locationId } = request.body as Record<string, string>;
     if (!orderId || !courierId || !locationId) {
       return reply.status(400).send({ error: 'orderId, courierId, locationId required' });
     }
 
-    const ownerRes = await fastify.db.query(
+    const ownerRes = await (fastify as any).db.query(
       `SELECT id FROM users WHERE email = 'dev@deliveryos.com' LIMIT 1`
     );
     const ownerId = ownerRes.rowCount > 0 ? ownerRes.rows[0].id : '00000000-0000-0000-0000-000000000000';
 
-    const client = await fastify.db.connect();
+    const client = await (fastify as any).db.connect();
     try {
       await client.query('BEGIN');
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);

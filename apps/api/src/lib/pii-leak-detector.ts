@@ -1,4 +1,3 @@
-// @ts-nocheck
 export interface PiiLeakResult {
   source: 'json_key' | 'json_value' | 'html_attribute' | 'string_value';
   pattern: string;
@@ -48,9 +47,8 @@ export function detectPiiLeak(input: string, contextLabel: string = 'unknown'): 
   try {
     parsed = JSON.parse(input);
     isJson = true;
-  } catch {
-    // Not JSON input — continue with string-level PII scans
-    console.debug('[pii-leak-detector] input is not valid JSON');
+  } catch (err: any) {
+    console.debug('[pii-leak-detector] input is not valid JSON:', err?.message);
   }
 
   if (isJson && typeof parsed === 'object') {

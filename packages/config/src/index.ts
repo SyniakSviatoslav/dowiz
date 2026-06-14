@@ -88,7 +88,7 @@ const EnvSchema = z.object({
   FLY_MACHINE_ID: z.string().optional(),
   GROQ_ENDPOINT: z.string().optional(),
   HOSTNAME: z.string().optional(),
-  IP_HASH_SALT: z.string().optional(),
+  IP_HASH_SALT: z.string().min(1, 'Required for deterministic PII hashing — set any value in dev'),
   LLM_ENDPOINT: z.string().optional(),
   MEM0_EMBED_MODEL: z.string().optional(),
   MEM0_LLM_MODEL: z.string().optional(),

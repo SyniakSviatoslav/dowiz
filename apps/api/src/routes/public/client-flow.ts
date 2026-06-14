@@ -1,11 +1,10 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { renderClientShell } from '../../lib/ssr-client-renderer.js';
 import crypto from 'node:crypto';
 
-export default (async function clientFlowRoutes(fastify, opts) {
+export default (async function clientFlowRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
 
   const paramsSchema = z.object({ slug: z.string() });
@@ -42,7 +41,7 @@ export default (async function clientFlowRoutes(fastify, opts) {
     return { nonce, themeData };
   }
 
-  fastify.get('/s/:slug/cart', async (request, reply) => {
+  fastify.get('/s/:slug/cart', async (request: any, reply: any) => {
     const { slug } = request.params as any;
     const { nonce, themeData } = await getThemeAndCSP(slug, reply);
     const html = renderClientShell({ 
@@ -52,7 +51,7 @@ export default (async function clientFlowRoutes(fastify, opts) {
     return reply.header('Content-Type', 'text/html; charset=utf-8').send(html);
   });
 
-  fastify.get('/s/:slug/checkout', async (request, reply) => {
+  fastify.get('/s/:slug/checkout', async (request: any, reply: any) => {
     const { slug } = request.params as any;
     const { nonce, themeData } = await getThemeAndCSP(slug, reply);
     const html = renderClientShell({ 
@@ -62,7 +61,7 @@ export default (async function clientFlowRoutes(fastify, opts) {
     return reply.header('Content-Type', 'text/html; charset=utf-8').send(html);
   });
 
-  fastify.get('/s/:slug/orders/:orderId', async (request, reply) => {
+  fastify.get('/s/:slug/orders/:orderId', async (request: any, reply: any) => {
     const { slug } = request.params as any;
     const { nonce, themeData } = await getThemeAndCSP(slug, reply);
     const html = renderClientShell({ 

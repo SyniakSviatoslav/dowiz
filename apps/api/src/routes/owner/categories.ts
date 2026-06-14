@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -29,10 +28,10 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
         }).strict()
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { name, sort_order } = request.body;
       const { locationId } = request.params;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(
@@ -59,10 +58,10 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
         }).strict()
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId } = request.params;
       const { cursor, limit } = request.query;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         let query = `SELECT * FROM categories WHERE location_id = $1`;
@@ -92,9 +91,9 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
         params: CategoryParams
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId, id } = request.params;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(
@@ -120,10 +119,10 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
         }).strict()
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId, id } = request.params;
       const updates = request.body;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       if (Object.keys(updates).length === 0) {
         return reply.status(400).send({ error: 'No updates provided' });
@@ -165,9 +164,9 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
         params: CategoryParams
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId, id } = request.params;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         // Check if products exist

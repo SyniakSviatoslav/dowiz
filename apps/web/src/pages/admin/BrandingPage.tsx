@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Button, Input, ColorInput, FormField, useI18n } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
+import { ThemeResponse, LocationResponse } from '@deliveryos/shared-types';
 
 export function BrandingPage() {
   const { t } = useI18n();
@@ -25,17 +26,17 @@ export function BrandingPage() {
   const [slug, setSlug] = useState('');
 
   useEffect(() => {
-    apiClient<any>('/owner/brand').then(res => {
-      if (res.primary_color) setConfig(prev => ({ ...prev, primary: res.primary_color }));
-      if (res.bg_color) setConfig(prev => ({ ...prev, bg: res.bg_color }));
-      if (res.text_color) setConfig(prev => ({ ...prev, text: res.text_color }));
-      if (res.logo_url) setLogoUrl(res.logo_url);
+    apiClient<typeof ThemeResponse>('/owner/brand', { schema: ThemeResponse }).then(res => {
+      if (res.primaryColor) setConfig(prev => ({ ...prev, primary: res.primaryColor! }));
+      if (res.bgColor) setConfig(prev => ({ ...prev, bg: res.bgColor! }));
+      if (res.textColor) setConfig(prev => ({ ...prev, text: res.textColor! }));
+      if (res.logoUrl) setLogoUrl(res.logoUrl!);
     }).catch(() => {});
-    apiClient<any>('/owner/settings').then(res => {
+    apiClient<typeof LocationResponse>('/owner/settings', { schema: LocationResponse }).then(res => {
       if (res.slug) {
         setSlug(res.slug);
-      } else if (res.locationName) {
-        const generated = res.locationName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
+      } else if (res.name) {
+        const generated = res.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
         setSlug(generated);
       }
     }).catch(() => {});

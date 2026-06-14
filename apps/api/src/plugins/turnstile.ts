@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
 

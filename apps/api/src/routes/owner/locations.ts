@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -32,10 +31,10 @@ export default async function locationRoutes(fastify: FastifyInstance) {
         }).strict()
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId } = request.params;
       const updates = request.body;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       if (Object.keys(updates).length === 0) return reply.status(400).send({ error: 'No updates provided' });
 

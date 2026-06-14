@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck — TODO: fix legacy type imports and null safety in CSV parser
 import type { MenuParserProvider, ParserInputType } from '../ports.js';
 import type { CanonicalMenuDraft, ParseIssue, ParseResult, ParseMode, CanonicalCategory, CanonicalProduct, CanonicalModifierGroup, CanonicalModifier } from '@deliveryos/shared-types';
 
@@ -120,7 +120,8 @@ export class CsvMenuParser implements MenuParserProvider {
             if (attrJsonStr) {
               try {
                 attrJson = JSON.parse(attrJsonStr);
-              } catch {
+              } catch (err: any) {
+                console.warn('[csv-parser] invalid attributes_json at row', rowNumber, ':', err?.message);
                 addIssue(rowNumber, 'PARSE_ERROR', 'attributes_json is invalid', 'warning');
               }
             }

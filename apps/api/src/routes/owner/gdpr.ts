@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -22,7 +21,7 @@ const retentionBodySchema = z.object({
   retentionDays: z.number().int().min(30).max(2555),
 }).strict();
 
-export default (async function ownerGdprRoutes(fastify, opts) {
+export default (async function ownerGdprRoutes(fastify: any, opts: any) {
   const { db, messageBus, queue } = opts as any;
 
   fastify.addHook('onRequest', fastify.verifyAuth);
@@ -38,7 +37,7 @@ export default (async function ownerGdprRoutes(fastify, opts) {
       params: z.object({ locationId: z.string().uuid() }),
       body: createRequestSchema,
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const { customerId, phone, reason } = request.body;
     const user = request.user as any;
@@ -97,7 +96,7 @@ export default (async function ownerGdprRoutes(fastify, opts) {
       params: z.object({ locationId: z.string().uuid() }),
       querystring: listQuerySchema,
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const { status, limit, cursor } = request.query;
 
@@ -116,9 +115,8 @@ export default (async function ownerGdprRoutes(fastify, opts) {
           params.push(decoded.requestedAt);
           clauses += ` AND requested_at < $${params.length}`;
         }
-      } catch {
-        // invalid cursor — ignore, will use no cursor filter
-        console.debug('[gdpr] invalid cursor, ignoring');
+      } catch (err: any) {
+        console.warn('[gdpr] invalid cursor, ignoring:', err?.message);
       }
     }
 
@@ -156,7 +154,7 @@ export default (async function ownerGdprRoutes(fastify, opts) {
     schema: {
       params: z.object({ locationId: z.string().uuid(), requestId: z.string().uuid() }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, requestId } = request.params;
 
     const reqRes = await db.query(
@@ -209,7 +207,7 @@ export default (async function ownerGdprRoutes(fastify, opts) {
     schema: {
       params: z.object({ locationId: z.string().uuid() }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const res = await db.query(
       `SELECT retention_days FROM locations WHERE id = $1`,
@@ -225,7 +223,7 @@ export default (async function ownerGdprRoutes(fastify, opts) {
       params: z.object({ locationId: z.string().uuid() }),
       body: retentionBodySchema,
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const { retentionDays } = request.body;
     const res = await db.query(

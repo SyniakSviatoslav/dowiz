@@ -1,17 +1,16 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 
-export default (async function publicFallbackConfigRoutes(fastify, opts) {
-  const { db } = opts as any;
+export default (async function publicFallbackConfigRoutes(fastify: any, opts: any) {
+  const { db } = opts;
 
   // ─── GET Fallback Config for a location (public, no auth) ────────
   fastify.get('/api/public/locations/:slug/fallback-config', {
     schema: {
       params: z.object({ slug: z.string() }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { slug } = request.params;
 
     const res = await db.query(

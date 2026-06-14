@@ -21,7 +21,7 @@ function parseStoredCart(raw: string): CartItem[] {
       }
     }
     return [];
-  } catch { return []; }
+  } catch (err) { console.debug('[CartProvider] parse stored cart failed:', err); return []; }
 }
 
 interface CartContextType {

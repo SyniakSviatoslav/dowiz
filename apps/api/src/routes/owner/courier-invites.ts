@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -6,7 +5,7 @@ import crypto from 'node:crypto';
 import argon2 from 'argon2';
 import { verifyAuth, requireLocationAccess } from '../../plugins/auth.js';
 
-export default (async function ownerCourierInvitesRoutes(fastify, opts) {
+export default (async function ownerCourierInvitesRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
 
   // Constants for argon2
@@ -21,8 +20,8 @@ export default (async function ownerCourierInvitesRoutes(fastify, opts) {
   fastify.addHook('preValidation', requireLocationAccess);
 
   // 1. Create Invite
-  fastify.post('/api/owner/locations/:locationId/courier-invites', async (request, reply) => {
-    const { locationId } = request.params as { locationId: string };
+  fastify.post('/api/owner/locations/:locationId/courier-invites', async (request: any, reply: any) => {
+    const { locationId } = request.params as any;
     const body = request.body as any;
     if (!body?.role || !body?.email) {
       return reply.status(400).send({ error: 'role and email are required' });
@@ -30,7 +29,7 @@ export default (async function ownerCourierInvitesRoutes(fastify, opts) {
     const role = body.role;
     const email = String(body.email).toLowerCase().trim();
     const ttl_hours = Number(body.ttl_hours) || 48;
-    const ownerId = request.user!.userId;
+    const ownerId = (request.user as any).userId;
     const ipHash = crypto.createHash('sha256').update(request.ip).digest('hex');
     const uaHash = crypto.createHash('sha256').update(request.headers['user-agent'] || '').digest('hex');
 
@@ -78,8 +77,8 @@ export default (async function ownerCourierInvitesRoutes(fastify, opts) {
   });
 
   // 2. List Active Invites
-  fastify.get('/api/owner/locations/:locationId/courier-invites', async (request, reply) => {
-    const { locationId } = request.params as { locationId: string };
+  fastify.get('/api/owner/locations/:locationId/courier-invites', async (request: any, reply: any) => {
+    const { locationId } = request.params as any;
     
     const res = await db.query(
       `SELECT id, role, expires_at, created_at 
@@ -92,9 +91,9 @@ export default (async function ownerCourierInvitesRoutes(fastify, opts) {
   });
 
   // 3. Revoke Invite
-  fastify.delete('/api/owner/locations/:locationId/courier-invites/:inviteId', async (request, reply) => {
-    const { locationId, inviteId } = request.params as { locationId: string; inviteId: string };
-    const ownerId = request.user!.userId;
+  fastify.delete('/api/owner/locations/:locationId/courier-invites/:inviteId', async (request: any, reply: any) => {
+    const { locationId, inviteId } = request.params as any;
+    const ownerId = (request.user as any).userId;
     const ipHash = crypto.createHash('sha256').update(request.ip).digest('hex');
     const uaHash = crypto.createHash('sha256').update(request.headers['user-agent'] || '').digest('hex');
 

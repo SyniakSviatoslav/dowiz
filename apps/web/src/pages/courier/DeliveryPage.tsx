@@ -4,6 +4,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot, PriceDisplay } from '@deliveryos/ui';
 import type { CourierTask, CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
+import { z } from 'zod';
+
+const MessagesResponse = z.object({
+  messages: z.array(z.any()),
+}).passthrough();
+
+const MessageSendResponse = z.object({
+  message: z.any(),
+}).passthrough();
+
+const CourierTaskDetail = z.custom<CourierTask>();
 
 const TIRANA_CENTER: LngLatLike = [19.817, 41.331];
 const MOCK_RESTAURANT: LngLatLike = [19.812, 41.328];
@@ -22,32 +33,33 @@ export function DeliveryPage() {
 
   const fetchMessages = useCallback(async () => {
     try {
-      const data = await apiClient<any>(`/orders/${id}/messages`);
+      const data = await apiClient<typeof MessagesResponse>(`/orders/${id}/messages`, { schema: MessagesResponse });
       if (data?.messages) setMessages(data.messages);
-    } catch {
-      // messages are optional
+    } catch (err) {
+      console.debug('[DeliveryPage] fetch messages failed:', err);
     }
   }, [id]);
 
   const handleSendMessage = useCallback(async (presetKey: string, params?: Record<string, unknown>) => {
     try {
-      const data = await apiClient<any>(`/orders/${id}/messages`, {
+      const data = await apiClient<typeof MessageSendResponse>(`/orders/${id}/messages`, {
         method: 'POST',
         body: { preset_key: presetKey, params: params || {} },
+        schema: MessageSendResponse,
       });
       if (data?.message) {
         setMessages(prev => [...prev, data.message]);
       }
-    } catch {
-      // message send failed silently
+    } catch (err) {
+      console.warn('[DeliveryPage] send message failed:', err);
     }
   }, [id]);
 
   const handleMarkRead = useCallback(async () => {
     try {
       await apiClient(`/orders/${id}/messages/read`, { method: 'POST' });
-    } catch {
-      // mark read is best-effort
+    } catch (err) {
+      console.debug('[DeliveryPage] mark read failed:', err);
     }
   }, [id]);
 
@@ -65,7 +77,7 @@ export function DeliveryPage() {
 
   const fetchTask = async () => {
     try {
-      const data = await apiClient<any>(`/courier/orders/${id}`);
+      const data = await apiClient<typeof CourierTaskDetail>(`/courier/orders/${id}`, { schema: CourierTaskDetail });
       setTask(data);
     } catch (err: any) {
       if (err.status === 404) {

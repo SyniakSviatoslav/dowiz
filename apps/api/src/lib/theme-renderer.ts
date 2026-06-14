@@ -1,4 +1,3 @@
-// @ts-nocheck
 import crypto from 'node:crypto';
 
 export const ALLOWED_FONTS = ['Inter', 'Roboto', 'Source Sans 3', 'Lato', 'Open Sans', 'system-ui'] as const;
@@ -30,7 +29,7 @@ function getLuminance(hex: string): number {
     v /= 255;
     return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
   });
-  return a[0] * 0.2126 + a[1] * 0.7152 + a[2] * 0.0722;
+  return a[0]! * 0.2126 + a[1]! * 0.7152 + a[2]! * 0.0722;
 }
 
 function getContrastRatio(hex1: string, hex2: string): number {

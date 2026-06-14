@@ -1,11 +1,10 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { dashboardChannel } from '../../lib/registry.js';
 
-export default (async function ownerRevealContactRoutes(fastify, opts) {
-  const { db, messageBus } = opts as any;
+export default (async function ownerRevealContactRoutes(fastify: any, opts: any) {
+  const { db, messageBus } = opts;
 
   fastify.addHook('onRequest', fastify.verifyAuth);
   fastify.addHook('onRequest', fastify.requireRole(['owner']));
@@ -25,7 +24,7 @@ export default (async function ownerRevealContactRoutes(fastify, opts) {
         reason: z.string().max(500).optional(),
       }).strict(),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, orderId } = request.params;
     const { reason } = request.body;
     const user = request.user as any;

@@ -1,6 +1,6 @@
 # DeliveryOS — API, DB, WS, Worker Inventory (Phase A)
 
-> **Generated:** 2026-06-04 · **Source:** Code — not docs · **Scope:** read-only audit  
+> **Generated:** 2026-06-04 · **Updated:** 2026-06-14 (structural sweep) · **Source:** Code — not docs · **Scope:** read-only audit  
 > **Evidence key:** every entry traceable to `file:line` in the repository
 
 ---

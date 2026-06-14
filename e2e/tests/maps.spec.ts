@@ -11,7 +11,7 @@ test.describe('Map Components', () => {
     await page.getByRole('button', { name: /add|shto/i }).first().click();
     await expect(page.getByTestId('cart-fab')).toBeVisible({ timeout: 5000 });
     await page.getByTestId('cart-fab').click();
-    await expect(page.getByText('Your Cart', { exact: false })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/your cart|shporta|кошик/i)).toBeVisible({ timeout: 5000 });
     await page.getByRole('button', { name: /checkout|porosit|vazhdo/i }).click();
     await expect(page).toHaveURL(/\/checkout/, { timeout: 5000 });
 
@@ -60,7 +60,7 @@ test.describe('Map Components', () => {
     await page.goto('/admin?dev=true');
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const courierHeading = page.getByText('Couriers Live', { exact: false });
+    const courierHeading = page.getByText(/couriers live|korrierët|кур'єри/i);
     const isVisible = await courierHeading.isVisible().catch(() => false);
   });
 

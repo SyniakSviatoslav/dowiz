@@ -3,6 +3,20 @@ import { EmptyState, SkeletonBase, useI18n, PriceDisplay } from '@deliveryos/ui'
 import Map, { Marker } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { apiClient } from '../../lib/index.js';
+import { z } from 'zod';
+
+const AnalyticsOverviewResponse = z.custom<AnalyticsData>();
+
+const ProductOrdersResponse = z.array(z.object({
+  id: z.string(),
+  total: z.number(),
+  currency_code: z.string(),
+  created_at: z.string(),
+  status: z.string(),
+  customer_name: z.string(),
+  quantity: z.number(),
+  price: z.number(),
+}));
 import { exportCSV } from '../../lib/exportCSV.js';
 
 interface AnalyticsData {
@@ -80,7 +94,7 @@ export function AnalyticsPage() {
   useEffect(() => {
     setLoading(true);
     setError(false);
-    apiClient<any>(`/owner/analytics?period=${period}`)
+    apiClient<typeof AnalyticsOverviewResponse>(`/owner/analytics?period=${period}`, { schema: AnalyticsOverviewResponse })
       .then(d => { setData(d); setLoading(false); })
       .catch(() => {
         setError(true);
@@ -97,9 +111,10 @@ export function AnalyticsPage() {
     setExpandedProduct(name);
     setProductOrdersLoading(true);
     try {
-      const data = await apiClient<any>(`/owner/analytics/product-orders?name=${encodeURIComponent(name)}`);
+      const data = await apiClient<typeof ProductOrdersResponse>(`/owner/analytics/product-orders?name=${encodeURIComponent(name)}`, { schema: ProductOrdersResponse });
       setProductOrders(Array.isArray(data) ? data : []);
-    } catch {
+    } catch (err) {
+      console.error('[AnalyticsPage] fetch product orders failed:', err);
       setProductOrders([]);
     } finally {
       setProductOrdersLoading(false);

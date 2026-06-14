@@ -1,9 +1,8 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 
-export default (async function ownerOrderMetaRoutes(fastify, opts) {
+export default (async function ownerOrderMetaRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
 
   fastify.addHook('onRequest', fastify.verifyAuth);
@@ -21,7 +20,7 @@ export default (async function ownerOrderMetaRoutes(fastify, opts) {
         test_order: z.boolean().optional(),
       }).strict(),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, orderId } = request.params as any;
     const { test_order } = request.body as any;
 

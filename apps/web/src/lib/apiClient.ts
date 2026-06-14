@@ -75,9 +75,8 @@ export const apiClient = async <T extends z.ZodType>(
       let errorData;
       try {
         errorData = await response.json();
-      } catch {
-        // response body is not JSON
-        console.debug('[apiClient] failed to parse error response as JSON');
+      } catch (err) {
+        console.debug('[apiClient] failed to parse error response as JSON:', err);
       }
 
       // Status -> Action mapping (G2)

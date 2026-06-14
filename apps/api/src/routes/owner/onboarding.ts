@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -22,7 +21,7 @@ const REQUIRED_WITH_DEFAULTS: Record<number, string> = {
   7: 'Telegram skipped — you\'ll still receive alerts on the dashboard and via push',
 };
 
-export default (async function onboardingRoutes(fastify, opts) {
+export default (async function onboardingRoutes(fastify: any, opts: any) {
   const { db, messageBus, queue } = opts as any;
 
   // ─── Auth hook for all routes ─────────────────────────────────────
@@ -42,14 +41,13 @@ export default (async function onboardingRoutes(fastify, opts) {
       }).strict(),
     },
     config: { rateLimit: { max: 3, timeWindow: '1 minute' } },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const user = request.user as any;
     const body = request.body as any;
     const userId = user.userId;
 
     const client = await db.connect();
     try {
-      // 1. Check slug uniqueness
       const slugCheck = await client.query(`SELECT id FROM locations WHERE slug = $1`, [body.slug]);
       if (slugCheck.rowCount > 0) {
         return reply.status(409).send({ error: 'Slug already taken', code: 'SLUG_TAKEN' });
@@ -121,7 +119,7 @@ export default (async function onboardingRoutes(fastify, opts) {
     schema: {
       params: z.object({ locationId: z.string().uuid() }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params as any;
     const user = request.user as any;
 
@@ -153,7 +151,7 @@ export default (async function onboardingRoutes(fastify, opts) {
         step: z.number().int().min(1).max(STEP_COUNT),
       }).strict(),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params as any;
     const { step } = request.body as any;
     const user = request.user as any;
@@ -181,7 +179,7 @@ export default (async function onboardingRoutes(fastify, opts) {
       }
 
       // Remove from skipped if was skipped
-      state.skippedSteps = state.skippedSteps.filter(s => s !== step);
+      state.skippedSteps = state.skippedSteps.filter((s: number) => s !== step);
 
       // Advance to next incomplete step
       let nextStep = step + 1;
@@ -225,7 +223,7 @@ export default (async function onboardingRoutes(fastify, opts) {
         stepNum: z.coerce.number().int().min(1).max(STEP_COUNT),
       }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, stepNum } = request.params as any;
 
     if (!SKIPPABLE.has(stepNum)) {
@@ -289,7 +287,7 @@ export default (async function onboardingRoutes(fastify, opts) {
     schema: {
       params: z.object({ locationId: z.string().uuid() }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params as any;
     const res = await db.query(
       `SELECT id, slug, onboarding_completed_at FROM locations WHERE id = $1`,
@@ -315,9 +313,8 @@ function parseState(raw: any): any {
         data: state.data || {},
       };
     }
-  } catch {
-    // fall through — return default initial state
-    console.debug('[onboarding] failed to parse onboarding state, using defaults');
+  } catch (err: any) {
+    console.warn('[onboarding] failed to parse onboarding state, using defaults:', err?.message);
   }
   // Default initial state
   return { v: 1, step: 1, completedSteps: [], skippedSteps: [], data: {} };

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { z } from 'zod';
 import {
   PRESET_REGISTRY, MessagePresetKey, SendMessageRequest, MessageRecord, TERMINAL_STATUSES,
@@ -7,10 +6,10 @@ import {
 import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 
-export default async function orderMessageRoutes(fastify, opts) {
+export default async function orderMessageRoutes(fastify: any, opts: any) {
   const { db, messageBus } = opts;
 
-  async function getOrder(request, orderId) {
+  async function getOrder(request: any, orderId: string) {
     const { rows } = await db.query(
       `SELECT id, status, location_id, customer_id, delivery_instructions, payment_method, cash_pay_with
        FROM orders WHERE id = $1`,
@@ -19,7 +18,7 @@ export default async function orderMessageRoutes(fastify, opts) {
     return rows[0] || null;
   }
 
-  async function hasCourier(orderId) {
+  async function hasCourier(orderId: string) {
     const { rows } = await db.query(
       `SELECT 1 FROM courier_assignments
        WHERE order_id = $1 AND status IN ('assigned', 'accepted', 'picked_up') LIMIT 1`,
@@ -31,7 +30,7 @@ export default async function orderMessageRoutes(fastify, opts) {
   // ─── Send message ──────────────────────────────────────────────────
   fastify.post('/api/orders/:orderId/messages', {
     preValidation: [fastify.verifyAuth]
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const body = request.body || {};
     const orderId = request.params.orderId;
 
@@ -116,7 +115,7 @@ export default async function orderMessageRoutes(fastify, opts) {
   // ─── Get message history ──────────────────────────────────────────
   fastify.get('/api/orders/:orderId/messages', {
     preValidation: [fastify.verifyAuth]
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const orderId = request.params.orderId;
     const role = request.user.role;
 
@@ -148,7 +147,7 @@ export default async function orderMessageRoutes(fastify, opts) {
   // ─── Mark as read ──────────────────────────────────────────────────
   fastify.post('/api/orders/:orderId/messages/read', {
     preValidation: [fastify.verifyAuth]
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const orderId = request.params.orderId;
     const role = request.user.role;
 

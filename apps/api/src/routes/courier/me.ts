@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -7,14 +6,14 @@ import argon2 from 'argon2';
 import { decryptPII } from '../../lib/pii-cipher.js';
 import { maskStr } from '../../lib/pii-mask.js';
 
-export default (async function courierMeRoutes(fastify, opts) {
+export default (async function courierMeRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
 
   fastify.addHook('preHandler', fastify.verifyAuth);
   fastify.addHook('preHandler', fastify.requireRole(['courier']));
 
   // 1. Get Profile
-  fastify.get('/me', async (request, reply) => {
+  fastify.get('/me', async (request: any, reply: any) => {
     const courierId = request.user!.sub;
     const locationId = request.user!.activeLocationId;
 
@@ -49,7 +48,7 @@ export default (async function courierMeRoutes(fastify, opts) {
   });
 
   // 2. Audit Log
-  fastify.get('/me/audit-log', async (request, reply) => {
+  fastify.get('/me/audit-log', async (request: any, reply: any) => {
     const courierId = request.user!.sub;
 
     const res = await db.query(
@@ -65,7 +64,7 @@ export default (async function courierMeRoutes(fastify, opts) {
   });
 
   // 3. Change Password
-  fastify.patch('/me/password', async (request, reply) => {
+  fastify.patch('/me/password', async (request: any, reply: any) => {
     // Manual Zod parsing to avoid AJV compilation failures
     const bodySchema = z.object({
       current_password: z.string().min(1),
@@ -132,7 +131,7 @@ export default (async function courierMeRoutes(fastify, opts) {
   });
 
   // 4. Earnings Summary
-  fastify.get('/me/earnings', async (request, reply) => {
+  fastify.get('/me/earnings', async (request: any, reply: any) => {
     const courierId = request.user!.sub;
     const locationId = request.user!.activeLocationId;
 
@@ -192,7 +191,7 @@ export default (async function courierMeRoutes(fastify, opts) {
   });
 
   // 5. Delivery History
-  fastify.get('/me/history', async (request, reply) => {
+  fastify.get('/me/history', async (request: any, reply: any) => {
     const courierId = request.user!.sub;
 
     const res = await db.query(`

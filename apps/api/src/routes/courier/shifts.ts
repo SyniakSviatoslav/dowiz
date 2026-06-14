@@ -1,9 +1,9 @@
-// @ts-nocheck
 import { z } from 'zod';
 import { roundCoordinate, isWithinGeofence } from '../../lib/geo.js';
 import { loadEnv } from '@deliveryos/config';
 import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
+import { openShift } from '../../lib/shiftService.js';
 
 const env = loadEnv();
 
@@ -343,8 +343,8 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
       const locRes = await client.query(`SELECT lat, lng FROM locations WHERE id = $1`, [locationId]);
       if (locRes.rowCount > 0 && locRes.rows[0].lat && locRes.rows[0].lng) {
         const center = { lat: locRes.rows[0].lat, lng: locRes.rows[0].lng };
-        const maxDist = parseFloat(env.COURIER_GPS_MAX_DIST_KM || '50');
-        if (!isWithinGeofence({ lat, lng }, center, maxDist)) {
+        const maxDist = parseFloat((env as any).COURIER_GPS_MAX_DIST_KM || '50');
+        if (!isWithinGeofence(lat, lng, center.lat, center.lng, maxDist)) {
           await client.query('ROLLBACK');
           return reply.status(400).send({ error: 'GPS_OUT_OF_RANGE' });
         }

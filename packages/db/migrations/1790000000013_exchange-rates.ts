@@ -1,5 +1,11 @@
 import type { MigrationBuilder } from 'node-pg-migrate';
 
+// WHITELIST: exchange_rates is intentionally non-tenant-scoped.
+// This table stores currency conversion rates (ALL↔EUR) that are
+// global reference data, not tenant-owned. No location_id column.
+// All tenants read the same rates. Do NOT add FORCE ROW LEVEL SECURITY.
+// See also: analytics_events whitelist in migration 1790000000012.
+
 export async function up(pgm: MigrationBuilder): Promise<void> {
   pgm.sql(`
     CREATE TABLE exchange_rates (
