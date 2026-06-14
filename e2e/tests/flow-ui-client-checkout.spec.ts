@@ -61,12 +61,11 @@ test.describe('UI: Client Checkout — Full Flow', () => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
 
-    await page.goto(`${BASE}/s/${locationSlug}`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/s/${locationSlug}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    // Wait for product cards
-    const cards = page.locator('div.product-card');
-    await expect(cards.first()).toBeVisible({ timeout: 10000 });
+    // Wait for product cards (SSR renders div.product-card)
+    await page.waitForSelector('div.product-card', { timeout: 10000 });
 
     // Add to cart
     const addBtn = page.locator('button[aria-label="Add to cart"], button[aria-label="Add"]').first();
