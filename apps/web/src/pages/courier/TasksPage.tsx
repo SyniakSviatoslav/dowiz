@@ -29,7 +29,8 @@ export function TasksPage() {
     try {
       setLoading(true);
       const data = await apiClient<any>('/courier/me/assignments');
-      setTasks(data?.success && Array.isArray(data.assignments) ? data.assignments : []);
+      const raw = data?.success && Array.isArray(data.assignments) ? data.assignments : [];
+      setTasks(raw.map((a: any) => ({ ...a, cashPayWith: a.cash_amount != null ? a.cash_amount : a.cashPayWith })));
     } catch (err: any) {
       setError('Failed to fetch tasks');
     } finally {
