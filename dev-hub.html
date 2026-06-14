@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeliveryOS — Dev Hub</title>
+<style>
+  :root {
+    --bg: #0c0c0c; --surface: #1a1a1a; --border: #2a2a2a;
+    --text: #eee; --muted: #888; --orange: #f97316; --blue: #3b82f6; --green: #059669;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 24px; min-height: 100vh; }
+  h1 { font-size: 28px; margin-bottom: 4px; } h1 span { color: var(--orange); }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+  .topbar { display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap; }
+  .topbar button {
+    padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-size: 12px; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .topbar button:hover { background: var(--border); }
+  .topbar button.active { background: var(--orange); border-color: var(--orange); color: #fff; }
+  .grid { display: grid; gap: 24px; }
+  @media (min-width: 900px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+  .col { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .col h2 { font-size: 16px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .col.client h2 { color: var(--orange); } .col.admin h2 { color: var(--blue); } .col.courier h2 { color: var(--green); }
+  a { display: block; padding: 8px 12px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 13px; margin-bottom: 2px; transition: background 0.15s; }
+  a:hover { background: var(--border); }
+  a .tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: middle; background: var(--border); color: var(--muted); }
+  a .tag.map { background: rgba(249,115,22,0.15); color: var(--orange); }
+  .footer { margin-top: 32px; color: var(--muted); font-size: 12px; text-align: center; }
+  .ls-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 24px; font-size: 12px; }
+  .ls-panel strong { color: var(--green); }
+  .ls-panel code { background: var(--border); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<h1>DeliveryOS <span>Dev Hub</span></h1>
+<p class="sub"><strong id="count"></strong> screens — all with mock data (<code>?dev=true</code>)</p>
+
+<div class="ls-panel">
+  <strong>localStorage pre-set:</strong>
+  <button onclick="setLS('dos_access_token','dev_mock_token')">Set token</button>
+  <button onclick="setLS('dos_role','owner')">Set role=owner</button>
+  <button onclick="setLS('dos_role','courier')">Set role=courier</button>
+  <button onclick="setLS('dos_slug','test-slug')">Set slug</button>
+  <button onclick="clearAllLS()">Clear all</button>
+  &nbsp;|&nbsp;
+  <span id="ls-status">checking...</span>
+</div>
+
+<div class="grid">
+
+  <div class="col client">
+    <h2>Client</h2>
+    <a href="http://localhost:5173/s/test-slug?dev=true" target="_blank">Menu <span class="tag map">map</span></a>
+    <a href="http://localhost:5173/s/test-slug/checkout?dev=true" target="_blank">Checkout <span class="tag map">map</span></a>
+    <a href="http://localhost:5173/s/test-slug/order/o_mock_123?dev=true" target="_blank">Order Status <span class="tag map">map</span></a>
+    <a href="http://localhost:5173/s/test-slug?dev=true&embed=true" target="_blank">Embed Mode</a>
+  </div>
+
+  <div class="col admin">
+    <h2>Admin / Owner</h2>
+    <a href="http://localhost:5173/admin?dev=true" target="_blank">Dashboard <span class="tag map">map</span></a>
+    <a href="http://localhost:5173/admin/orders?dev=true" target="_blank">Orders</a>
+    <a href="http://localhost:5173/admin/menu?dev=true" target="_blank">Menu Manager</a>
+    <a href="http://localhost:5173/admin/supplies?dev=true" target="_blank">Supplies</a>
+    <a href="http://localhost:5173/admin/branding?dev=true" target="_blank">Branding</a>
+    <a href="http://localhost:5173/admin/couriers?dev=true" target="_blank">Couriers <span class="tag map">map</span></a>
+    <a href="http://localhost:5173/admin/analytics?dev=true" target="_blank">Analytics</a>
+    <a href="http://localhost:5173/admin/crm?dev=true" target="_blank">CRM</a>
+    <a href="http://localhost:5173/admin/settings?dev=true" target="_blank">Settings</a>
+    <a href="http://localhost:5173/admin/onboarding?dev=true" target="_blank">Onboarding <span class="tag map">map</span></a>
+  </div>
+
+  <div class="col courier">
+    <h2>Courier</h2>
+    <a href="http://localhost:5173/courier?dev=true" target="_blank">Tasks</a>
+    <a href="http://localhost:5173/courier/delivery/test-id?dev=true" target="_blank">Active Delivery <span class="tag map">map</span></a>
+    <a href="http://localhost:5173/courier/login?dev=true" target="_blank">Login</a>
+    <a href="http://localhost:5173/courier/earnings?dev=true" target="_blank">Earnings</a>
+    <a href="http://localhost:5173/courier/history?dev=true" target="_blank">History</a>
+    <a href="http://localhost:5173/courier/shift?dev=true" target="_blank">Shift</a>
+  </div>
+
+</div>
+
+<p class="footer">
+  <strong>Map pages (openfreemap tiles):</strong> menu · checkout · status · dashboard · couriers · onboarding · delivery<br>
+  <strong>Mock login:</strong> +355691234567 / password &nbsp;|&nbsp; <strong>Mock invite:</strong> INVITE-123<br>
+  <strong>No API server needed</strong> — all data from <code>mockData.ts</code> via <code>?dev=true</code>
+</p>
+
+<script>
+  const BASE = 'http://localhost:5173';
+  const links = document.querySelectorAll('a');
+
+  // Open in same window with localStorage pre-set
+  links.forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const href = a.getAttribute('href');
+      window.open(href, '_blank');
+    });
+  });
+
+  function setLS(key, val) {
+    localStorage.setItem(key, val);
+    updateStatus();
+  }
+  function clearAllLS() {
+    ['dos_access_token','dos_role','dos_slug'].forEach(k => localStorage.removeItem(k));
+    updateStatus();
+  }
+  function updateStatus() {
+    const t = localStorage.getItem('dos_access_token');
+    const r = localStorage.getItem('dos_role');
+    const s = localStorage.getItem('dos_slug');
+    document.getElementById('ls-status').innerHTML =
+      (t ? `<code>token=${t.slice(0,12)}...</code> ` : '<code>token=—</code> ') +
+      (r ? `<code>role=${r}</code> ` : '<code>role=—</code> ') +
+      (s ? `<code>slug=${s}</code>` : '<code>slug=—</code>');
+  }
+
+  document.getElementById('count').textContent = links.length;
+  updateStatus();
+</script>
+</body>
+</html>

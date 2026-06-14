@@ -1,0 +1,22 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+coverage/
+playwright-report/
+test-results/
+artifacts/
+metric-core/metric-core-result.json
+analytics/analytics-report.json
+analytics/mine-report.json
+analytics/mempalace-reflections.jsonl
+analytics/held-out-candidates.json
+run-history.jsonl
+eval-layer/deepeval-result.json
+.repowise/
+.repowise/
+
+# graphify cache
+graphify-out/
+# claude installed skills.claude/skills/

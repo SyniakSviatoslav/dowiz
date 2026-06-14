@@ -1,0 +1,120 @@
+import type { FastifyInstance } from 'fastify';
+import { signAuthToken } from '@deliveryos/platform';
+import crypto from 'node:crypto';
+import { dashboardChannel } from '../../lib/registry.js';
+
+export default async function mockAuthRoutes(fastify: FastifyInstance) {
+  console.log('[API] Registering mockAuthRoutes: /dev/mock-auth');
+  fastify.post('/dev/mock-auth', async (request: any, reply: any) => {
+    const body = request.body as Record<string, unknown> || {};
+    const role = body.role === 'courier' ? 'courier' : 'owner';
+
+    if (role === 'courier') {
+      const locationId = (body.locationId as string) || '1f609add-062a-4bb5-89bf-d695f963ede6';
+      const courierId = crypto.randomUUID();
+
+      const accessToken = await signAuthToken({
+        role: 'courier',
+        sub: courierId,
+        activeLocationId: locationId,
+      } as any, '1d');
+
+      return reply.send({ access_token: accessToken, userId: courierId, activeLocationId: locationId });
+    }
+
+    // Owner role (default)
+    const email = 'dev@deliveryos.com';
+    const googleSub = 'mock-google-12345';
+    const ownerName = 'Dev Owner';
+
+    let userId: string;
+    try {
+      const res = await (fastify as any).db.query(
+        `INSERT INTO users (email, google_sub, display_name) 
+         VALUES ($1, $2, $3)
+         ON CONFLICT (google_sub) DO UPDATE SET email = EXCLUDED.email, display_name = EXCLUDED.display_name
+         RETURNING id`,
+        [email, googleSub, ownerName]
+      );
+      userId = res.rows[0].id;
+    } catch (e) {
+      const updateRes = await (fastify as any).db.query(
+        `UPDATE users SET google_sub = $2, display_name = COALESCE(users.display_name, $3) WHERE email = $1 RETURNING id`,
+        [email, googleSub, ownerName]
+      );
+      if (updateRes.rowCount === 0) {
+        throw new Error('Failed to upsert dev user');
+      }
+      userId = updateRes.rows[0].id;
+    }
+
+    const memberRes = await (fastify as any).db.query(
+      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+      [userId]
+    );
+    const activeLocationId = memberRes.rowCount > 0 ? memberRes.rows[0].location_id : undefined;
+
+    const accessToken = await signAuthToken({ role: 'owner', userId, activeLocationId } as any, '1d');
+    return reply.send({ access_token: accessToken, userId, activeLocationId });
+  });
+
+  // Test helper: create courier assignment for an order
+  fastify.post('/dev/create-assignment', async (request: any, reply: any) => {
+    const { orderId, courierId, locationId } = request.body as Record<string, string>;
+    if (!orderId || !courierId || !locationId) {
+      return reply.status(400).send({ error: 'orderId, courierId, locationId required' });
+    }
+
+    const ownerRes = await (fastify as any).db.query(
+      `SELECT id FROM users WHERE email = 'dev@deliveryos.com' LIMIT 1`
+    );
+    const ownerId = ownerRes.rowCount > 0 ? ownerRes.rows[0].id : '00000000-0000-0000-0000-000000000000';
+
+    const client = await (fastify as any).db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
+      await client.query(`SELECT set_config('app.user_id', $1, true)`, [ownerId]);
+
+      const shiftRes = await client.query(
+        `INSERT INTO courier_shifts (courier_id, location_id, status, started_at)
+         VALUES ($1, $2, 'available', now())
+         ON CONFLICT DO NOTHING
+         RETURNING id`,
+        [courierId, locationId]
+      );
+      const shiftId = shiftRes.rows[0]?.id || null;
+
+      const asgnRes = await client.query(
+        `INSERT INTO courier_assignments (order_id, courier_id, location_id, shift_id, status)
+         VALUES ($1, $2, $3, $4, 'assigned')
+         ON CONFLICT (order_id) DO UPDATE SET courier_id = EXCLUDED.courier_id, status = 'assigned'
+         RETURNING id`,
+        [orderId, courierId, locationId, shiftId]
+      );
+
+      await client.query('COMMIT');
+
+      // Publish WS events for test verification
+      const messageBus = (fastify as any).messageBus;
+      if (messageBus) {
+        await messageBus.publish(dashboardChannel(locationId), {
+          type: 'assignment.created',
+          orderId,
+          courierId,
+        });
+        await messageBus.publish(`courier:${courierId}`, {
+          type: 'task_assigned',
+          payload: { id: orderId, orderId, status: 'assigned', courierId },
+        });
+      }
+
+      return reply.send({ assignmentId: asgnRes.rows[0].id, shiftId });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+}

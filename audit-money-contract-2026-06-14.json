@@ -1,0 +1,70 @@
+{
+  "audit": "Phase 2a — Money & Rounding Contract",
+  "generated": "2026-06-14",
+  "findings": [
+    {
+      "domain": "money-contract",
+      "severity": "major",
+      "invariant": "ALL monetary values are integer minor units — never divide by 100 or format as EUR-style decimals",
+      "evidence": "apps/api/src/notifications/locales.ts:39",
+      "detail": "`((i.price * i.quantity) / 100).toFixed(2)` divides integer ALL by 100 and formats with 2 decimals. ALL is 0-decimal: 1500 ALL = 1500, not 15.00. This produces wrong display values in Telegram notification item line-totals.",
+      "fix": "Replace with `formatMoney(i.price * i.quantity, v.currency || 'ALL')` from @deliveryos/shared-types"
+    },
+    {
+      "domain": "money-contract",
+      "severity": "major",
+      "invariant": "EUR conversion uses rate — never divide by 10^minor_unit (assumes EUR-cents storage)",
+      "evidence": "apps/api/src/lib/ssr-renderer.ts:233",
+      "detail": "`(prod.price / Math.pow(10, data.currency.minor_unit)).toFixed(...)` treats the stored ALL integer as if it were in EUR-cent units (dividing by 100 when minor_unit=2). No rate conversion applied. ALL=0 minor_unit happens to be correct, but EUR display would produce wrong values because the rate multiplier is missing.",
+      "fix": "Replace with `formatMoney(prod.price, displayCurrency, exchangeRate)` — use the CurrencyProvider's rate for EUR display"
+    },
+    {
+      "domain": "money-contract",
+      "severity": "major",
+      "invariant": "EUR conversion uses rate — never divide by 10^minor_unit (assumes EUR-cents storage)",
+      "evidence": "apps/api/src/lib/jsonld-builder.ts:96",
+      "detail": "Same pattern as ssr-renderer.ts: `(prod.price / Math.pow(10, data.currency?.minor_unit || 0)).toFixed(...)`. Schema.org requires `price` as the actual display price (not minor units), but rate conversion is missing. For EUR display, would produce `1500 / 100 = 15.00` instead of `1500 * rate`.",
+      "fix": "Use `formatMoney(prod.price, data.currency?.code, exchangeRate)` and strip the currency symbol for the JSON-LD numeric price field, or compute `(amount * rate).toFixed(2)`"
+    },
+    {
+      "domain": "money-contract",
+      "severity": "advisory",
+      "invariant": "Formatting through shared utilities only — fmtPrice is a duplicate of formatMoney",
+      "evidence": "packages/shared-types/src/utils.ts:72",
+      "detail": "`fmtPrice(amount, currency, decimals?)` at line 72 uses `amount.toFixed(d)` which is ad-hoc formatting. It is only used in `apps/api/src/notifications/render.ts` (6 call sites at lines 17-22, 34) which wraps it around `formatMoney`. This is redundant and duplicates the formatting contract.",
+      "fix": "Deprecate fmtPrice(). Replace all 6 call sites in render.ts with direct `formatMoney()` calls"
+    },
+    {
+      "domain": "money-contract",
+      "severity": "pass",
+      "invariant": "CreateOrderInput uses integer minor units for monetary fields",
+      "evidence": "packages/shared-types/src/legacy.ts:58",
+      "detail": "`cash_pay_with: z.number().int().positive().optional()` — validates integer ALL minor units. Subtotal/total not in schema (computed server-side from items).",
+      "fix": null
+    },
+    {
+      "domain": "money-contract",
+      "severity": "pass",
+      "invariant": "PriceDisplay used for all frontend price renderings",
+      "evidence": "apps/web/src/pages/ (14+ files using PriceDisplay import)",
+      "detail": "Verified PriceDisplay usage across: MenuManagerPage (4 sites), DashboardPage (4), DeliveryPage (3), OnboardingPage (3), CheckoutPage (6), CouriersPage (6), ShiftPage (2), AnalyticsPage (4), CRMPage (3), EarningsPage (3), HistoryPage (2), ClientLayout (2), OrderStatusPage (3), MenuPage (2). No ad-hoc price template strings found in frontend.",
+      "fix": null
+    },
+    {
+      "domain": "money-contract",
+      "severity": "pass",
+      "invariant": "No ad-hoc toFixed(2) on monetary values in frontend",
+      "evidence": "apps/web/src/ (grep toFixed(2) = 0 hits)",
+      "detail": "No toFixed(2) calls exist anywhere in apps/web/src/. All frontend monetary display goes through PriceDisplay.",
+      "fix": null
+    },
+    {
+      "domain": "money-contract",
+      "severity": "pass",
+      "invariant": "Backend notifications use formatMoney consistently",
+      "evidence": "apps/api/src/notifications/render.ts:7, workers/index.ts:131, adapters/webpush.ts:2",
+      "detail": "`render.ts` wraps formatMoney via local `fmtPrice()` helper; `workers/index.ts` uses `formatMoney(order.total, ...)`; `webpush.ts` imports formatMoney. Notification locale template keys use pre-formatted strings (fmt suffixed fields).",
+      "fix": null
+    }
+  ]
+}

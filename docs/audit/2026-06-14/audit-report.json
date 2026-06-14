@@ -1,0 +1,195 @@
+{
+  "audit_id": "audit-2026-06-14",
+  "generated_at": "2026-06-14T05:00:00Z",
+  "metric_core": {
+    "run_id": "audit-2026-06-14",
+    "passed": false,
+    "score": 0.71,
+    "gating_failed": ["playwright-smoke"],
+    "results": {
+      "tsc": "PASS (24.0s)",
+      "lint": "FAIL — 109 errors, 11433 warnings (pre-existing, soft gate)",
+      "check-money": "PASS — 0 violations",
+      "check-rls": "PASS — 0 violations",
+      "check-contracts": "PASS (placeholder — wire real check)",
+      "playwright-smoke": "FAIL — E2E_BASE_URL not set (MISSING env)",
+      "verify-env": "PASS (2.0s)"
+    }
+  },
+  "findings": [
+    {
+      "id": "F-001",
+      "domain": "rls-tenant-isolation",
+      "severity": "blocker",
+      "invariant": "All tables with location_id must have FORCE ROW LEVEL SECURITY + RLS policies",
+      "evidence": "migration 1790000000012: analytics_events, analytics_abuse_log, analytics_cwv — 3 tables with location_id, ZERO RLS policies, ZERO FORCE RLS",
+      "detail": "The Phase 5 analytics migration created 3 tables (analytics_events, analytics_abuse_log, analytics_cwv) with `location_id UUID NOT NULL REFERENCES locations(id)` but added NO RLS policy and NO FORCE RLS. Any role with table access can read any tenant's analytics data. The telemetry endpoint (routes/public/telemetry.ts) inserts into these tables without tenant context. This is a cross-tenant data leak vulnerability — any tenant could query another tenant's analytics events.",
+      "fix": "Add RLS policies + FORCE RLS to all 3 tables. Either a follow-up migration or amend 1790000000012 if not yet deployed. Policy: `USING (location_id = current_setting('app.current_tenant')::uuid)`",
+      "action": "HUMAN GATE — requires migration change"
+    },
+    {
+      "id": "F-002",
+      "domain": "security",
+      "severity": "major",
+      "invariant": "0 PII in customer events, notification payloads, and MessageBus",
+      "evidence": "apps/api/src/notifications/workers/index.ts:487 fetches raw `c.phone AS customer_phone` and `c.name AS customer_name`; locales.ts renders `📞 ${v.customerPhone}` and `👤 ${v.customerName}` in Telegram order notifications",
+      "detail": "Unhashed, unmasked customer phone number and full name are transmitted to Telegram (third-party server) in order.created/confirmed/rejected/rejected notifications. The courier-events.ts worker has a `maskPhone()` helper that truncates to `+*** ***1234`, but the notifications worker bypasses it entirely. This violates P26 #7 ('0 PII in customer events').",
+      "fix": "Mask phone in `fetchOrderDetails()` with `maskPhone()` before passing to notification data. Omit or mask customer name — use first-name-only or 'Customer' default.",
+      "action": "HUMAN GATE — PII compliance issue"
+    },
+    {
+      "id": "F-003",
+      "domain": "money-contract",
+      "severity": "major",
+      "invariant": "ALL amounts use integer half-up rounding — no division by 100",
+      "evidence": "apps/api/src/notifications/locales.ts:39: `const lineTotal = ((i.price * i.quantity) / 100).toFixed(2)` — divides stored price by 100",
+      "detail": "The notification locales.ts divides price by 100 before displaying, assuming minor-unit pricing (500 = 50000 qindarka). But the integer-ALL contract means 500 = 500 lekë. A 500 ALL × 2 items order shows as 10.00 instead of 1000 ALL in Telegram/SMS notifications. Owners see 100×-too-small totals.",
+      "fix": "Remove `/100`. Change to `(i.price * i.quantity).toFixed(0)` or use `formatMoney(i.price * i.quantity, 'ALL')`.",
+      "action": "HUMAN GATE — affects production notifications"
+    },
+    {
+      "id": "F-004",
+      "domain": "money-contract",
+      "severity": "major",
+      "invariant": "@ts-nocheck banned in route/lib files per §14.5",
+      "evidence": "apps/api/src/lib/money.ts:1: `// @ts-nocheck`. Zero imports of this file found across the codebase — dead code with suppressed type errors.",
+      "detail": "The money.ts library contains toMinorUnit, roundHalfUp, applyTax, computeLineTotal, assertNonNegative. Zero of these functions are imported anywhere. The @ts-nocheck suppresses whatever type errors exist. Either wire it into the actual money pipeline or delete it.",
+      "fix": "Remove @ts-nocheck, fix type errors, and either export the functions properly or delete the file if truly dead code.",
+      "action": "Cleanup — wire or remove"
+    },
+    {
+      "id": "F-005",
+      "domain": "security",
+      "severity": "minor",
+      "invariant": "@ts-nocheck banned in route/lib files per §14.5",
+      "evidence": "apps/api/src/plugins/auth.ts:1: `// @ts-nocheck` — missed in the 45-file structural sweep",
+      "detail": "The auth plugin still has @ts-nocheck on line 1. Type errors in the auth internals are suppressed. The 2026-06-14 structural sweep cleaned all 45 route files but missed this plugin file.",
+      "fix": "Remove @ts-nocheck and fix any type errors. Use `fastify: any, opts: any` pattern as established.",
+      "action": "Cleanup — missed in sweep"
+    },
+    {
+      "id": "F-006",
+      "domain": "security",
+      "severity": "minor",
+      "invariant": "EnvSchema must cover all process.env.XXX — IP_HASH_SALT should be required in production",
+      "evidence": "packages/config/src/index.ts: IP_HASH_SALT typed as `z.string().optional()`. Used in signal-raiser.ts for SHA-256 hashing of customer IPs.",
+      "detail": "Without a required salt, IP hashing is deterministic — rainbow-table-reversible. For Phase 4 anti-fake (P26 #5), velocity tracking uses `*_hash` (sha256) with salt. An optional salt defeats the privacy guarantee.",
+      "fix": "Change to `z.string().min(1)` — require salt in production.",
+      "action": "Env schema fix"
+    },
+    {
+      "id": "F-007",
+      "domain": "money-contract",
+      "severity": "minor",
+      "invariant": "EUR conversion must use integer arithmetic, not floating-point",
+      "evidence": "packages/shared-types/src/utils.ts:34-36: `const eurAmount = amount * rate; Math.round(eurAmount * 100) / 100`",
+      "detail": "Floating-point multiply for ALL→EUR conversion can produce IEEE 754 edge cases (e.g., 0.425 * 100 = 42.49999999999999 → rounds to 42 instead of 43). The integer contract says use BigInt or scaled-integer arithmetic for all money math.",
+      "fix": "Use integer arithmetic: scale rate to fixed-point integer (e.g., rate × 10^8), multiply with BigInt, round, then display-scale.",
+      "action": "Minor — edge cases at scale"
+    },
+    {
+      "id": "F-008",
+      "domain": "money-contract",
+      "severity": "minor",
+      "invariant": "All price formatting must use formatMoney/PriceDisplay — no ad-hoc formatting",
+      "evidence": "ssr-renderer.ts:233, jsonld-builder.ts:76-96, webpush.ts:60 use inline toFixed()/toFixed(0) instead of formatMoney",
+      "detail": "SSR, JSON-LD, and WebPush notification use ad-hoc `toFixed(data.currency.minor_unit)` and `toFixed(0) + ' ' + currency` instead of the centralized formatMoney. For ALL (minor_unit=0) these happen to produce correct output, but adding a new decimal currency would break them silently.",
+      "fix": "Replace inline formatting with `formatMoney(price, 'ALL')` from @deliveryos/shared-types in all 3 files.",
+      "action": "Refactor for maintainability"
+    },
+    {
+      "id": "F-009",
+      "domain": "rls-tenant-isolation",
+      "severity": "advisory",
+      "invariant": "Operational pool should not connect as superuser (bypasses RLS)",
+      "evidence": "AGENTS.md §9 item 3: operational pool connects as postgres superuser. packages/db/src/index.ts uses DATABASE_URL_OPERATIONAL env var.",
+      "detail": "The operational pool uses superuser (postgres) connection which inherently BYPASSRLS regardless of FORCE RLS. Only the session pool respects tenant isolation. Known config issue — flagged but not resolved.",
+      "fix": "Create dedicated non-superuser role (deliveryos_operational_user) with NOBYPASSRLS for the operational pool. Or restrict operational pool to non-tenant operations only.",
+      "action": "Advisory — config issue"
+    },
+    {
+      "id": "F-010",
+      "domain": "rls-tenant-isolation",
+      "severity": "advisory",
+      "invariant": "exchange_rates table needs documentation as intentional non-tenant exception",
+      "evidence": "migration 1790000000013: exchange_rates table without RLS — intentionally non-tenant (public reference data). No documentation comment explaining this.",
+      "detail": "The exchange_rates table is correctly designed as non-tenant (no location_id, no RLS), but the migration has no comment explaining WHY it's exempt from the standard RLS requirement.",
+      "fix": "Add comment to migration 1790000000013: 'Exchange rates are public cross-tenant reference data — intentionally non-tenant-scoped.'",
+      "action": "Documentation only"
+    },
+    {
+      "id": "F-011",
+      "domain": "frontend-polish",
+      "severity": "advisory",
+      "invariant": "Dark mode is mandatory on every screen (§6 #5)",
+      "evidence": "apps/web/src/: only 1 `dark:` Tailwind rule found (SettingsPage.tsx:99). packages/ui/src/: zero `dark:` rules.",
+      "detail": "Dark mode is virtually absent from the entire frontend despite being a non-negotiable design rule. Only the SettingsPage has a single dark-mode CSS rule.",
+      "fix": "Add `dark:` variants to all Tailwind classes across every component and page. Add `.dark` class toggle on `<html>` element.",
+      "action": "Advisory — large effort, scope separately"
+    },
+    {
+      "id": "F-012",
+      "domain": "frontend-polish",
+      "severity": "advisory",
+      "invariant": "All 4 component states (default, hover, active, disabled) per §6 #6",
+      "evidence": "Button.tsx: secondary, outline, ghost, danger variants lack active state. Secondary, outline, ghost, danger lack disabled styling. Input.tsx: no hover state, no disabled styling.",
+      "detail": "Only the primary Button variant has full 4-state coverage. Secondary/outline/ghost/danger lack `active:` and `disabled:` classes. Input component has no hover state and no disabled-specific visual styling.",
+      "fix": "Add `active:scale-[0.98]` to all button variants. Add `disabled:opacity-50 disabled:cursor-not-allowed` to all button and input variants. Add `hover:border-[var(--brand-primary)]` to Input.",
+      "action": "Advisory — component polish"
+    },
+    {
+      "id": "F-013",
+      "domain": "frontend-polish",
+      "severity": "advisory",
+      "invariant": "3-language i18n mandatory per §6 #3 — StatusBadge bypasses i18n",
+      "evidence": "StatusBadge.tsx:1-12 uses hardcoded Albanian labels (`'Në pritje'`, `'Konfirmuar'`, etc.) instead of t()",
+      "detail": "StatusBadge component uses hardcoded Albanian strings — they will not change when locale switches to English or Ukrainian.",
+      "fix": "Replace with `t('order.status_pending', 'Pending')`, `t('order.status_confirmed', 'Confirmed')`, etc.",
+      "action": "Advisory — i18n fix"
+    },
+    {
+      "id": "F-014",
+      "domain": "i18n-coverage",
+      "severity": "advisory",
+      "invariant": "i18n-safe test selectors — E2E tests must not use hardcoded English strings",
+      "evidence": "e2e/tests/maps.spec.ts:14 uses getByText('Your Cart'), :63 uses getByText('Couriers Live')",
+      "detail": "These test selectors use hardcoded English strings that fail when the app renders in Albanian or Ukrainian locale.",
+      "fix": "Replace with regex: `getByText(/your cart|shporta|кошик/i)`. Or set locale to 'en' explicitly in test setup.",
+      "action": "Advisory — test fix"
+    },
+    {
+      "id": "F-015",
+      "domain": "i18n-coverage",
+      "severity": "advisory",
+      "invariant": "All 3 locales must have identical key coverage",
+      "evidence": "i18n.ts: key `client.recommended` has empty string ('') in ALL 3 locales — dead or placeholder",
+      "detail": "A key with empty translations in all 3 locales is either dead code (remove) or missing translations (fill).",
+      "fix": "Either provide translations or remove the key if unused.",
+      "action": "Advisory — minor cleanup"
+    },
+    {
+      "id": "F-016",
+      "domain": "security",
+      "severity": "advisory",
+      "invariant": "Turnstile CAPTCHA should be wired for public endpoints",
+      "evidence": "apps/api/src/plugins/turnstile.ts exists but is never registered in server.ts. TURNSTILE_SECRET_KEY not in EnvSchema or .env.example.",
+      "detail": "The Turnstile CAPTCHA plugin is defined but never wired into the server. Public endpoints (order creation, auth) lack CAPTCHA challenge enforcement.",
+      "fix": "Register turnstile plugin in server.ts, add TURNSTILE_SECRET_KEY to EnvSchema and .env.example.",
+      "action": "Advisory — anti-abuse hardening"
+    }
+  ],
+  "summary": {
+    "blocker": 1,
+    "major": 3,
+    "minor": 4,
+    "advisory": 8,
+    "pass": 6,
+    "total_findings": 16,
+    "total_checks_pass": 5,
+    "total_checks_fail": 2,
+    "metric_core_score": 0.71,
+    "human_gate_required": ["F-001 (RLS on analytics tables)", "F-002 (PII in Telegram)", "F-003 (price /100 in notifications)"],
+    "missed_in_sweep": ["F-005 (auth.ts @ts-nocheck)"],
+    "infra_missing": ["playwright-smoke (needs E2E_BASE_URL)", "check-contracts (needs real contract-map check)"]
+  }
+}

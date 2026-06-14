@@ -1,0 +1,31 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "=== Running Pre-commit Checks ==="
+
+echo "1/4: Linting code..."
+pnpm lint || exit 1
+
+echo "2/4: Typechecking code..."
+pnpm -r typecheck || exit 1
+
+echo "3/4: Building packages and apps..."
+pnpm -r build || exit 1
+
+echo "4/5: Validating Fly.io config..."
+if command -v flyctl >/dev/null 2>&1 || command -v fly >/dev/null 2>&1; then
+  flyctl config validate || fly config validate || exit 1
+  echo "Fly.io config is valid!"
+else
+  echo "Fly CLI not found. Skipping config validation."
+fi
+
+echo "5/5: Checking Fly.io Build (Docker)..."
+if command -v docker >/dev/null 2>&1; then
+  docker build -t dowiz-check . || exit 1
+  echo "Fly.io (Docker) build successful!"
+else
+  echo "Docker is not installed or not running. Skipping Fly.io build check."
+fi
+
+echo "=== All checks passed! ==="

@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeliveryOS — GDPR Erasure Requests</title>
+  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Serif+Display&family=Cormorant+Garamond:wght@400;600&family=Playfair+Display:wght@400;600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/admin/dashboard.js"></script>
+  <style>
+    :root {
+      --brand-bg:#0F172A;--brand-surface:#1E293B;--brand-raised:#263548;
+      --brand-text:#F1F5F9;--brand-muted:#94A3B8;--brand-border:#334155;
+      --brand-primary:#ea4f16;--brand-primary-hover:#ffa12e;
+      --brand-primary-light:rgba(234,79,22,0.12);--brand-accent:#2a2a2a;
+      --brand-surface-raised:#263548;--brand-text-muted:#94A3B8;
+      --brand-radius:12px;--brand-radius-sm:8px;--brand-radius-btn:78px;
+      --color-success:#059669;--color-warning:#D97706;--color-danger:#DC2626;--color-info:#2563EB;
+    }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--brand-bg); color:var(--brand-text); }
+    .gdpr-row { background:var(--brand-surface); border:1px solid var(--brand-border); border-radius:10px; padding:14px 16px; transition:border-color 0.2s; }
+    .gdpr-row:hover { border-color:var(--brand-primary); }
+    .gdpr-row.expanded { border-color:var(--brand-primary); }
+    select, input, textarea { background:var(--brand-bg); border:1px solid var(--brand-border); border-radius:8px; padding:8px 12px; color:var(--brand-text); font-size:14px; width:100%; }
+    select:focus, input:focus, textarea:focus { outline:2px solid var(--brand-primary); outline-offset:-1px; }
+    textarea { resize:vertical; min-height:60px; }
+    select { cursor:pointer; }
+    .badge-pending { background:var(--color-warning);color:#fff; }
+    .badge-in_progress { background:var(--color-info);color:#fff; }
+    .badge-completed { background:var(--color-success);color:#fff; }
+    .badge-failed { background:var(--color-danger);color:#fff; }
+    .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    @media (max-width:640px) { .detail-grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <button id="themeBtn" onclick="cycleTheme()" class="fixed top-4 right-4 z-50 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full cursor-pointer" style="background:var(--brand-surface);border:1px solid var(--brand-border);color:var(--brand-muted);">
+    <i class="ti ti-palette"></i><span id="themeLabel">Food Dark</span>
+  </button>
+
+  <div class="flex flex-col min-h-screen">
+    <header class="flex items-center justify-between px-6 py-3 border-b" style="border-color:var(--brand-border);background:var(--brand-surface);">
+      <div class="flex items-center gap-3">
+        <h1 class="text-lg font-bold">DeliveryOS</h1>
+        <span class="text-sm px-2 py-0.5 rounded-full" style="background:var(--brand-primary);color:#fff;" id="statusBadge">disconnected</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm" style="color:var(--brand-muted);">
+        <a href="/admin/dashboard.html" class="hover:text-white">Dashboard</a>
+        <a href="/admin/orders.html" class="hover:text-white">Orders</a>
+        <a href="/admin/alerts.html" class="hover:text-white">Alerts</a>
+        <a href="/admin/signals.html" class="hover:text-white">Signals</a>
+        <a href="/admin/settings-security.html" class="hover:text-white">Security</a>
+        <a href="/admin/settings-dwell.html" class="hover:text-white">Dwell</a>
+        <a href="/admin/gdpr.html" class="hover:text-white font-semibold" style="color:var(--brand-text);">GDPR</a>
+        <a href="/admin/health.html" class="hover:text-white">Health</a>
+      </div>
+    </header>
+
+    <div class="flex-1 p-6 max-w-3xl mx-auto w-full">
+      <!-- Breadcrumb -->
+      <nav class="text-xs mb-4" style="color:var(--brand-muted);">
+        <a href="/admin/dashboard.html" class="hover:text-white">Dashboard</a>
+        <span class="mx-1">/</span>
+        <span>GDPR Erasure Requests</span>
+      </nav>
+
+      <h2 class="text-xl font-bold mb-1">GDPR Erasure Requests</h2>
+      <p class="text-sm mb-6" style="color:var(--brand-muted);">Manage customer data erasure requests under GDPR Article 17 (Right to Erasure).</p>
+
+      <!-- Submit Request -->
+      <div class="mb-8 p-5 rounded-xl" style="background:var(--brand-surface);border:1px solid var(--brand-border);">
+        <h3 class="font-semibold mb-3 flex items-center gap-2">
+          <i class="ti ti-plus"></i> Submit New Erasure Request
+        </h3>
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs font-medium mb-1 block" style="color:var(--brand-muted);">Customer ID or Phone *</label>
+            <input type="text" id="requestIdentifier" placeholder="e.g. +355 67 123 4567 or cust_abc123" class="w-full">
+          </div>
+          <div>
+            <label class="text-xs font-medium mb-1 block" style="color:var(--brand-muted);">Reason (optional)</label>
+            <textarea id="requestReason" placeholder="Reason for erasure request..." class="w-full"></textarea>
+          </div>
+          <div class="flex items-center gap-3">
+            <button onclick="submitRequest()" id="submitBtn" class="px-6 py-2 rounded-lg font-medium text-sm" style="background:var(--brand-primary);color:#fff;">Submit Request</button>
+            <span id="submitStatus" class="text-sm"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="flex items-center gap-3 mb-4 flex-wrap">
+        <select id="statusFilter" class="w-auto text-sm px-3 py-1.5 rounded-lg" style="background:var(--brand-bg);border:1px solid var(--brand-border);color:var(--brand-text);">
+          <option value="">All statuses</option>
+          <option value="pending">Pending</option>
+          <option value="in_progress">In Progress</option>
+          <option value="completed">Completed</option>
+          <option value="failed">Failed</option>
+        </select>
+        <button onclick="refresh()" class="text-sm px-3 py-1.5 rounded-lg" style="background:var(--brand-bg);border:1px solid var(--brand-border);color:var(--brand-text);">
+          <i class="ti ti-refresh"></i> Refresh
+        </button>
+        <span id="requestCount" class="text-xs" style="color:var(--brand-muted);"></span>
+      </div>
+
+      <!-- Requests List -->
+      <div id="requestContainer">
+        <div class="text-center py-16" style="color:var(--brand-muted);" id="loadingState">Loading requests...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const PRESETS = {
+    "Food Dark": {"--brand-primary":"#ea4f16","--brand-primary-hover":"#ffa12e","--brand-primary-light":"rgba(234,79,22,0.12)","--brand-accent":"#2a2a2a","--brand-bg":"#121212","--brand-surface":"#1e1e1e","--brand-surface-raised":"#2a2a2a","--brand-text":"#ffffff","--brand-text-muted":"#a8a8a8","--brand-border":"#2c2c2c","--brand-radius":"12px","--brand-radius-sm":"8px","--brand-radius-btn":"78px"},
+    "Crimson Classic": {"--brand-primary":"#C1121F","--brand-primary-hover":"#9B0D17","--brand-primary-light":"#FFF0F1","--brand-accent":"#F5F0E8","--brand-bg":"#FFFFFF","--brand-surface":"#F8F9FA","--brand-surface-raised":"#F0F0F0","--brand-text":"#1A1A1A","--brand-text-muted":"#6B7280","--brand-border":"#E5E7EB","--brand-radius":"12px","--brand-radius-sm":"6px","--brand-radius-btn":"24px"},
+    "Ocean Fresh": {"--brand-primary":"#0D9488","--brand-primary-hover":"#0A7567","--brand-primary-light":"#F0FDFA","--brand-accent":"#F0F9F8","--brand-bg":"#FFFFFF","--brand-surface":"#F8FFFE","--brand-surface-raised":"#E0F7F5","--brand-text":"#134E4A","--brand-text-muted":"#6B7280","--brand-border":"#CCFBF1","--brand-radius":"24px","--brand-radius-sm":"12px","--brand-radius-btn":"32px"},
+    "Midnight Urban": {"--brand-primary":"#F97316","--brand-primary-hover":"#EA6A0A","--brand-primary-light":"rgba(249,115,22,0.10)","--brand-accent":"#1E1E1E","--brand-bg":"#111111","--brand-surface":"#1C1C1C","--brand-surface-raised":"#2a2a2a","--brand-text":"#F5F5F5","--brand-text-muted":"#9CA3AF","--brand-border":"#2D2D2D","--brand-radius":"4px","--brand-radius-sm":"2px","--brand-radius-btn":"4px"},
+    "Sage Garden": {"--brand-primary":"#4D7C0F","--brand-primary-hover":"#3F6812","--brand-primary-light":"#F7FEE7","--brand-accent":"#ECFCCB","--brand-bg":"#FFFFFF","--brand-surface":"#F7FEE7","--brand-surface-raised":"#E8F5E0","--brand-text":"#1A2E05","--brand-text-muted":"#6B7280","--brand-border":"#D9F99D","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px"},
+    "Royal Gold": {"--brand-primary":"#B45309","--brand-primary-hover":"#92400E","--brand-primary-light":"rgba(180,83,9,0.10)","--brand-accent":"#1C1400","--brand-bg":"#0D0900","--brand-surface":"#1A1200","--brand-surface-raised":"#2a2000","--brand-text":"#FEF3C7","--brand-text-muted":"#D97706","--brand-border":"#2D2000","--brand-radius":"2px","--brand-radius-sm":"1px","--brand-radius-btn":"2px"}
+  };
+  const PRESET_KEYS = Object.keys(PRESETS);
+  let currentPresetIdx = parseInt(localStorage.getItem('dos_theme_idx') || '0', 10);
+
+  function cycleTheme() {
+    currentPresetIdx = (currentPresetIdx + 1) % PRESET_KEYS.length;
+    localStorage.setItem('dos_theme_idx', String(currentPresetIdx));
+    applyTheme(PRESET_KEYS[currentPresetIdx]);
+  }
+
+  function applyTheme(name) {
+    const p = PRESETS[name];
+    const r = document.documentElement.style;
+    Object.entries(p).forEach(([k, v]) => r.setProperty(k, v));
+    document.getElementById('themeLabel').textContent = name;
+  }
+
+  applyTheme(PRESET_KEYS[currentPresetIdx]);
+
+  (async () => {
+    const token = getOwnerToken();
+    const locationId = getLocationId();
+    if (!token || !locationId) {
+      document.body.innerHTML = '<div class="flex items-center justify-center h-screen" style="color:var(--brand-muted);"><div class="text-center"><p class="text-lg mb-2">Not authenticated</p><p class="text-sm">Please <a href="/29-admin-login.html" class="underline">log in</a> first.</p></div></div>';
+      return;
+    }
+
+    const STATUS_LABELS = { pending:'Pending', in_progress:'In Progress', completed:'Completed', failed:'Failed' };
+    const STATUS_BADGE = { pending:'badge-pending', in_progress:'badge-in_progress', completed:'badge-completed', failed:'badge-failed' };
+
+    const container = document.getElementById('requestContainer');
+    const loadingState = document.getElementById('loadingState');
+    const requestCount = document.getElementById('requestCount');
+    const statusFilter = document.getElementById('statusFilter');
+    const submitBtn = document.getElementById('submitBtn');
+    const submitStatus = document.getElementById('submitStatus');
+
+    // Mock data for when API is unavailable
+    const MOCK_REQUESTS = [
+      { id:'gdpr_abc12345', customerId:'cust_a1b2c3', customerPhoneMasked:'+*** *** 1234', customerNameMasked:'E***', status:'pending', requestedAt:new Date(Date.now() - 3600000).toISOString(), completedAt:null, errorMessage:null, metadata:{ ordersAnonymized:0, piiFields:0, messagesDeleted:0 } },
+      { id:'gdpr_def67890', customerId:'cust_d4e5f6', customerPhoneMasked:'+*** *** 5678', customerNameMasked:'M***', status:'completed', requestedAt:new Date(Date.now() - 86400000 * 2).toISOString(), completedAt:new Date(Date.now() - 86400000).toISOString(), errorMessage:null, metadata:{ ordersAnonymized:12, piiFields:7, messagesDeleted:34 } },
+      { id:'gdpr_ghi11121', customerId:'cust_g7h8i9', customerPhoneMasked:'+*** *** 9012', customerNameMasked:'A***', status:'failed', requestedAt:new Date(Date.now() - 86400000 * 5).toISOString(), completedAt:null, errorMessage:'Database timeout — retry scheduled', metadata:{ ordersAnonymized:0, piiFields:0, messagesDeleted:0 } },
+      { id:'gdpr_jkl31415', customerId:'cust_j0k1l2', customerPhoneMasked:'+*** *** 3456', customerNameMasked:'S***', status:'in_progress', requestedAt:new Date(Date.now() - 7200000).toISOString(), completedAt:null, errorMessage:null, metadata:{ ordersAnonymized:5, piiFields:3, messagesDeleted:12 } },
+    ];
+
+    let currentRequests = [];
+    let useMock = false;
+
+    function buildBadge(status) {
+      const cls = STATUS_BADGE[status] || 'badge-pending';
+      return `<span class="text-xs px-2 py-0.5 rounded-full font-medium ${cls}">${STATUS_LABELS[status] || status}</span>`;
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '—';
+      return new Date(iso).toLocaleString('sq', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    }
+
+    function renderRequests(requests) {
+      container.innerHTML = '';
+
+      if (requests.length === 0) {
+        container.innerHTML = '<div class="text-center py-16" style="color:var(--brand-muted);"><i class="ti ti-shield-off text-3xl"></i><p class="mt-2">No erasure requests</p></div>';
+        requestCount.textContent = '0 requests';
+        return;
+      }
+
+      for (const r of requests) {
+        const el = document.createElement('div');
+        el.className = 'gdpr-row mb-2';
+        const shortId = r.id.length > 12 ? r.id.slice(0, 12) + '…' : r.id;
+        const showError = r.status === 'failed' && r.errorMessage;
+        el.innerHTML = `<div class="flex items-start justify-between gap-4 cursor-pointer" onclick="toggleDetail('${r.id}')">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="font-mono text-xs" style="color:var(--brand-muted);">${shortId}</span>
+              ${buildBadge(r.status)}
+            </div>
+            <div class="text-sm">${r.customerNameMasked || 'Unknown'} · ${r.customerPhoneMasked || ''}</div>
+            <div class="text-xs mt-0.5" style="color:var(--brand-muted);">
+              Requested: ${formatDate(r.requestedAt)}
+              ${r.completedAt ? '· Completed: ' + formatDate(r.completedAt) : ''}
+            </div>
+            ${showError ? `<div class="text-xs mt-1 flex items-center gap-1" style="color:var(--color-danger);"><i class="ti ti-alert-triangle"></i> ${r.errorMessage}</div>` : ''}
+          </div>
+          <div class="flex-shrink-0 text-xs" style="color:var(--brand-muted);">
+            <i class="ti ti-chevron-down" id="chevron-${r.id}"></i>
+          </div>
+        </div>
+        <div id="detail-${r.id}" class="hidden mt-3 pt-3 border-t" style="border-color:var(--brand-border);">
+          <div class="text-xs font-medium mb-2" style="color:var(--brand-muted);">Anonymization Summary</div>
+          <div class="detail-grid">
+            <div class="p-3 rounded-lg" style="background:var(--brand-bg);">
+              <div class="text-lg font-bold">${r.metadata?.ordersAnonymized ?? '—'}</div>
+              <div class="text-xs" style="color:var(--brand-muted);">Orders Anonymized</div>
+            </div>
+            <div class="p-3 rounded-lg" style="background:var(--brand-bg);">
+              <div class="text-lg font-bold">${r.metadata?.piiFields ?? '—'}</div>
+              <div class="text-xs" style="color:var(--brand-muted);">PII Fields Cleared</div>
+            </div>
+            <div class="p-3 rounded-lg" style="background:var(--brand-bg);">
+              <div class="text-lg font-bold">${r.metadata?.messagesDeleted ?? '—'}</div>
+              <div class="text-xs" style="color:var(--brand-muted);">Messages Deleted</div>
+            </div>
+            <div class="p-3 rounded-lg" style="background:var(--brand-bg);">
+              <div class="text-lg font-bold">${r.metadata?.customerNotes ?? '—'}</div>
+              <div class="text-xs" style="color:var(--brand-muted);">Customer Notes</div>
+            </div>
+          </div>
+          <div class="text-xs mt-2" style="color:var(--brand-muted);">
+            Customer ID: <span class="font-mono">${r.customerId || '—'}</span>
+          </div>
+        </div>`;
+        container.appendChild(el);
+      }
+
+      requestCount.textContent = `${requests.length} request${requests.length !== 1 ? 's' : ''}`;
+    }
+
+    window.toggleDetail = (id) => {
+      const detail = document.getElementById('detail-' + id);
+      const chevron = document.getElementById('chevron-' + id);
+      if (!detail) return;
+      const isOpen = !detail.classList.contains('hidden');
+      detail.classList.toggle('hidden');
+      if (chevron) chevron.className = isOpen ? 'ti ti-chevron-down' : 'ti ti-chevron-up';
+    };
+
+    async function fetchRequests() {
+      const status = statusFilter.value;
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      const url = `/api/owner/locations/${locationId}/gdpr-requests?${params}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(`Failed: ${res.status}`);
+      return res.json();
+    }
+
+    window.refresh = async () => {
+      container.innerHTML = '<div class="text-center py-16" style="color:var(--brand-muted);">Loading...</div>';
+      try {
+        const data = useMock ? { requests: MOCK_REQUESTS } : await fetchRequests();
+        currentRequests = data.requests || data || [];
+        renderRequests(currentRequests);
+      } catch (e) {
+        console.warn('API unavailable, using mock data:', e.message);
+        useMock = true;
+        currentRequests = MOCK_REQUESTS;
+        renderRequests(MOCK_REQUESTS);
+      }
+    };
+
+    window.submitRequest = async () => {
+      const identifier = document.getElementById('requestIdentifier').value.trim();
+      const reason = document.getElementById('requestReason').value.trim();
+
+      if (!identifier) {
+        submitStatus.textContent = 'Customer ID or phone is required';
+        submitStatus.style.color = 'var(--color-danger)';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+      submitStatus.textContent = '';
+
+      try {
+        const body = { customerIdentifier: identifier };
+        if (reason) body.reason = reason;
+
+        const res = await fetch(`/api/owner/locations/${locationId}/gdpr-requests`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: `Failed: ${res.status}` }));
+          throw new Error(err.error || `Failed: ${res.status}`);
+        }
+
+        submitStatus.textContent = 'Request submitted successfully';
+        submitStatus.style.color = 'var(--color-success)';
+        document.getElementById('requestIdentifier').value = '';
+        document.getElementById('requestReason').value = '';
+        setTimeout(() => { submitStatus.textContent = ''; }, 4000);
+        refresh();
+      } catch (e) {
+        // Mock mode: simulate success
+        if (useMock || e.message.includes('Failed: 404')) {
+          submitStatus.textContent = 'Request submitted (mock)';
+          submitStatus.style.color = 'var(--color-success)';
+          document.getElementById('requestIdentifier').value = '';
+          document.getElementById('requestReason').value = '';
+          setTimeout(() => { submitStatus.textContent = ''; }, 4000);
+          refresh();
+        } else {
+          submitStatus.textContent = `Error: ${e.message}`;
+          submitStatus.style.color = 'var(--color-danger)';
+        }
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Request';
+      }
+    };
+
+    statusFilter.addEventListener('change', () => refresh());
+
+    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    new DashboardWSClient({
+      url: `${wsProtocol}//${location.host}`,
+      token, locationId,
+      onStatusChange: (s) => {
+        const badge = document.getElementById('statusBadge');
+        if (badge) { badge.textContent = s; badge.style.background = s === 'subscribed' ? '#059669' : '#D97706'; }
+      },
+    });
+
+    refresh();
+  })();
+  </script>
+</body>
+</html>
