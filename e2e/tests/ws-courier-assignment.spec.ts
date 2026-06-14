@@ -18,10 +18,15 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
     expect(locationId).toBeTruthy();
 
     // 2. Fetch menu for a product
-    const menuRes = await request.get(`${BASE}/public/locations/demo/menu`);
+    const menuRes = await request.get(`${BASE}/public/locations/demo/menu`, {
+      headers: { 'Cache-Control': 'no-cache' },
+    });
     expect(menuRes.ok()).toBe(true);
     const menu = await menuRes.json();
-    const products = menu.products || menu.items || menu.data || [];
+    const cats = menu.categories || [];
+    const allProds = cats.flatMap((c: any) => c.products || c.items || []);
+    const topLevelProds = menu.products || menu.items || menu.data || [];
+    const products = [...allProds, ...topLevelProds];
     test.skip(products.length === 0, 'No products in demo menu');
     const productId = products[0].id;
 
@@ -37,8 +42,9 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
         idempotency_key: `ws-test-${Date.now()}`,
       },
     });
-    expect(orderRes.status()).toBe(201);
     const orderData = await orderRes.json();
+    console.log('Order create:', orderRes.status(), JSON.stringify(orderData));
+    expect(orderRes.status()).toBe(201);
     const orderId = orderData.id || orderData.orderId;
     expect(orderId).toBeTruthy();
 
