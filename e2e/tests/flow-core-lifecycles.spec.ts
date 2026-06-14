@@ -103,12 +103,13 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
 
     const orderRes = await request.post(`${BASE}/api/orders`, {
       data: {
-        location_id: activeLocationId,
+        locationId: activeLocationId,
+        type: 'delivery',
         items: [{ product_id: pid, quantity: 1 }],
-        delivery_type: 'delivery',
-        customer_name: 'E2E Test',
-        customer_phone: '+355600000001',
-        delivery_address: 'Rruga e Barrikadave, Tirana',
+        customer: { phone: '+355600000001', name: 'E2E Test' },
+        delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga e Barrikadave, Tirana' },
+        payment: { method: 'cash' },
+        idempotency_key: '00000000-0000-0000-0000-000000000003',
       },
     });
     expect(orderRes.status()).toBe(201);
