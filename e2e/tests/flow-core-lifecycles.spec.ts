@@ -98,7 +98,10 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     const menuRes = await request.get(`${BASE}/public/locations/${locationSlug}/menu`);
     expect(menuRes.ok()).toBe(true);
     const menu = await menuRes.json();
-    const products = menu.products || menu.items || menu.data || [];
+    const cats = menu.categories || [];
+    const allProds = cats.flatMap((c: any) => c.products || c.items || []);
+    const flatProds = menu.products || menu.items || menu.data || [];
+    const products = [...allProds, ...flatProds];
     const pid = products[0]?.id || productId;
 
     const orderRes = await request.post(`${BASE}/api/orders`, {
