@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { maskName, maskPhone } from '../../lib/pii-mask.js';
 import { computeSignals } from '../../lib/signals/compute.js';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
+import { updateOrderStatus } from '../../lib/orderStatusService';
 
 const KIND_VALUES = ['no_show_recent', 'velocity_rapid', 'velocity_high_volume', 'ip_velocity_rapid', 'ip_velocity_high_volume', 'manual_flag'] as const;
 
@@ -225,9 +226,10 @@ export default (async function ownerSignalRoutes(fastify, opts) {
         [customer_id],
       );
 
-      // Update order status to CANCELLED with reason
+      // Update order status to CANCELLED (canonical path via updateOrderStatus)
+      await updateOrderStatus(client, orderId, locationId, 'CANCELLED', { messageBus });
       await client.query(
-        `UPDATE orders SET status = 'CANCELLED', status_notes = 'no_show' WHERE id = $1`,
+        `UPDATE orders SET status_notes = 'no_show' WHERE id = $1`,
         [orderId],
       );
 
