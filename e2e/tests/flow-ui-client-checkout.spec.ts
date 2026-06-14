@@ -64,8 +64,8 @@ test.describe('UI: Client Checkout — Full Flow', () => {
     await page.goto(`${BASE}/s/${locationSlug}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    // Wait for product cards (SSR renders div.product-card)
-    await page.waitForSelector('div.product-card', { timeout: 10000 });
+    // Wait for product cards (SSR renders product cards)
+    await page.waitForSelector('h3.product-name, [class*="product-card"]', { timeout: 10000 });
 
     // Add to cart
     const addBtn = page.locator('button[aria-label="Add to cart"], button[aria-label="Add"]').first();
