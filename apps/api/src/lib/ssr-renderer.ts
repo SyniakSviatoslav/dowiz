@@ -7,9 +7,10 @@ import { formatMoney, ensureCurrency as ensureCurr } from '@deliveryos/shared-ty
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-let assetTags = '';
+let assetTags: string | null = null;
 
 function loadAssetTags(): string {
+  if (assetTags !== null) return assetTags;
   const base = process.cwd();
   const candidates = [
     join(base, 'dist', 'public', 'index.html'),
@@ -26,8 +27,9 @@ function loadAssetTags(): string {
         const tags: string[] = [];
         if (scriptMatch) tags.push(scriptMatch[0]);
         linkMatches.forEach(m => tags.push(m[0]));
+        assetTags = tags.join('\n          ');
         console.log('[SSR] Loaded asset tags from:', candidate);
-        return tags.join('\n          ');
+        return assetTags;
       }
     } catch {
       console.warn('[SSR] Failed to load asset tags from:', candidate);
@@ -36,8 +38,6 @@ function loadAssetTags(): string {
   console.warn('[SSR] No asset tags found, SPA will not hydrate');
   return '';
 }
-
-assetTags = loadAssetTags();
 
 const html = htm.bind(h);
 
@@ -413,7 +413,7 @@ export async function renderMenuPage(
       </html>
     `;
 
-    const fullHtml = ('<!DOCTYPE html>\n' + render(vdom as any)).replace('<!--SSR_ASSETS-->', assetTags);
+    const fullHtml = ('<!DOCTYPE html>\n' + render(vdom as any)).replace('<!--SSR_ASSETS-->', loadAssetTags());
     cache.set(cacheKey, { html: fullHtml, slug });
     return fullHtml;
   } finally {
