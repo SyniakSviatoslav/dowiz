@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import crypto from 'node:crypto';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 let authToken: string;
@@ -104,7 +105,7 @@ test.describe('API: Order with Modifiers + Promotions', () => {
         customer: { phone: '+355600000010', name: 'Mod Promo Test' },
         delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga e Elbasanit, Tirana' },
         payment: { method: 'cash' },
-        idempotency_key: `mod-promo-${TS}`,
+        idempotency_key: crypto.randomUUID(),
       },
     });
     expect(orderRes.status()).toBe(201);

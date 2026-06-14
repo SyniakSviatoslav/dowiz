@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import crypto from 'node:crypto';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -93,7 +94,7 @@ test.describe('UI: Courier Core Flow — Login, Accept, Deliver', () => {
         customer: { phone: '+355600000002', name: 'UI Courier Test' },
         delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Sheshi Skënderbej, Tirana' },
         payment: { method: 'cash' },
-        idempotency_key: `ui-cour-${TS}`,
+        idempotency_key: crypto.randomUUID(),
       },
     });
     expect(orderRes.status()).toBe(201);

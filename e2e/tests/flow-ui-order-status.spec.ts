@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import crypto from 'node:crypto';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -44,7 +45,7 @@ test.describe('UI: Client Order Status — WS, Map, Share, Messages', () => {
         customer: { phone: '+355600000020', name: 'Status Page Test' },
         delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga e Kavajës, Tirana' },
         payment: { method: 'cash' },
-        idempotency_key: `os-test-${TS}`,
+        idempotency_key: crypto.randomUUID(),
       },
     });
     expect(orderRes.status()).toBe(201);
