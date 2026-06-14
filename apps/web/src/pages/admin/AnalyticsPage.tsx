@@ -1,0 +1,474 @@
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { EmptyState, SkeletonBase, useI18n, PriceDisplay } from '@deliveryos/ui';
+import Map, { Marker } from 'react-map-gl/maplibre';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { apiClient } from '../../lib/index.js';
+import { z } from 'zod';
+
+const AnalyticsOverviewResponse = z.custom<AnalyticsData>();
+
+const ProductOrdersResponse = z.array(z.object({
+  id: z.string(),
+  total: z.number(),
+  currency_code: z.string(),
+  created_at: z.string(),
+  status: z.string(),
+  customer_name: z.string(),
+  quantity: z.number(),
+  price: z.number(),
+}));
+import { exportCSV } from '../../lib/exportCSV.js';
+
+interface AnalyticsData {
+  revenue: { today: number; trend: string };
+  orders: { today: number; trend: string };
+  avgOrderValue: { value: number; trend: string };
+  deliveryTime: { avg: number; trend: string };
+  chart: Array<{ day: string; revenue: number }>;
+  topProducts: Array<{ name: string; orders: number; revenue: number; imageUrl?: string }>;
+  geoLocations?: Array<{ lat: number; lng: number }>;
+  heatmap?: Array<{ day: string; hours: number[]; products: string[][] }>;
+}
+
+interface ProductOrder {
+  id: string;
+  total: number;
+  currency_code: string;
+  created_at: string;
+  status: string;
+  customer_name: string;
+  quantity: number;
+  price: number;
+}
+
+const HOUR_LABELS = ['0-3', '4-7', '8-11', '12-15', '16-19', '20-23'];
+
+function SimpleBar({ value, maxValue, label, dayLabel, delay }: { value: number; maxValue: number; label: string; dayLabel: string; delay: number }) {
+  const [height, setHeight] = useState(0);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setHeight((value / maxValue) * 100), delay);
+    return () => clearTimeout(timer);
+  }, [value, maxValue, delay]);
+
+  return (
+    <div className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+      <span className="text-[10px] font-medium" style={{ color: 'var(--brand-text-muted)' }}>
+        {label}
+      </span>
+      <div
+        className="w-full rounded-t-md transition-all duration-500 ease-out"
+        style={{
+          height: `${height}%`,
+          minHeight: 4,
+          background: 'linear-gradient(to top, var(--brand-primary), var(--brand-primary-hover))',
+        }}
+      />
+      <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{dayLabel}</span>
+    </div>
+  );
+}
+
+export function AnalyticsPage() {
+  const { t } = useI18n();
+  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<'7d' | '30d'>('7d');
+  const [copied, setCopied] = useState(false);
+
+  const [error, setError] = useState(false);
+  const CONSUMPTION_DATA = [
+    { name: 'Salmon fillet', consumed: 12.5, unit: 'kg', ordered: 8, pct: 85 },
+    { name: 'Sushi rice', consumed: 28, unit: 'kg', ordered: 4, pct: 65 },
+    { name: 'Nori sheets', consumed: 240, unit: 'pcs', ordered: 60, pct: 50 },
+    { name: 'Avocado', consumed: 35, unit: 'pcs', ordered: 10, pct: 40 },
+    { name: 'Cream cheese', consumed: 6.2, unit: 'kg', ordered: 3, pct: 70 },
+    { name: 'Spicy mayo', consumed: 4.5, unit: 'L', ordered: 2, pct: 30 },
+    { name: 'Takeout boxes', consumed: 126, unit: 'pcs', ordered: 126, pct: 100 },
+    { name: 'Chopsticks', consumed: 252, unit: 'pcs', ordered: 126, pct: 100 },
+  ];
+  const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
+  const [productOrders, setProductOrders] = useState<ProductOrder[]>([]);
+  const [productOrdersLoading, setProductOrdersLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(false);
+    apiClient<typeof AnalyticsOverviewResponse>(`/owner/analytics?period=${period}`, { schema: AnalyticsOverviewResponse })
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => {
+        setError(true);
+        setLoading(false);
+      });
+  }, [period]);
+
+  const toggleProduct = async (name: string) => {
+    if (expandedProduct === name) {
+      setExpandedProduct(null);
+      setProductOrders([]);
+      return;
+    }
+    setExpandedProduct(name);
+    setProductOrdersLoading(true);
+    try {
+      const data = await apiClient<typeof ProductOrdersResponse>(`/owner/analytics/product-orders?name=${encodeURIComponent(name)}`, { schema: ProductOrdersResponse });
+      setProductOrders(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('[AnalyticsPage] fetch product orders failed:', err);
+      setProductOrders([]);
+    } finally {
+      setProductOrdersLoading(false);
+    }
+  };
+
+  const handleCopyReorder = useCallback(() => {
+    const list = data?.topProducts?.map(p => p.name).join('\n') || '';
+    navigator.clipboard.writeText(list).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  }, [data]);
+
+  if (loading) return (
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <SkeletonBase className="h-8 w-32" />
+        <SkeletonBase className="h-8 w-24 rounded-lg" />
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[1, 2, 3, 4].map(i => <SkeletonBase key={i} className="h-24 rounded-xl" />)}
+      </div>
+      <SkeletonBase className="h-64 rounded-xl" />
+    </div>
+  );
+
+  if (!data) return <EmptyState title={t('admin.no_data', 'No data')} description={t('admin.analytics_empty_hint', 'Analytics populate after orders start coming in. You currently have no order data to display.')} icon={<i className="ti ti-chart-bar text-4xl opacity-30" />} />;
+
+  const maxRevenue = Math.max(...data.chart.map(c => c.revenue), 1);
+  const heatmapData = data.heatmap || [
+    { day: 'Mon', hours: [0,0,0,0,0,0], products: [[],[],[],[],[],[]] },
+    { day: 'Tue', hours: [0,0,0,0,0,0], products: [[],[],[],[],[],[]] },
+    { day: 'Wed', hours: [0,0,0,0,0,0], products: [[],[],[],[],[],[]] },
+    { day: 'Thu', hours: [0,0,0,0,0,0], products: [[],[],[],[],[],[]] },
+    { day: 'Fri', hours: [0,0,0,0,0,0], products: [[],[],[],[],[],[]] },
+    { day: 'Sat', hours: [0,0,0,0,0,0], products: [[],[],[],[],[],[]] },
+    { day: 'Sun', hours: [0,0,0,0,0,0], products: [[],[],[],[],[],[]] },
+  ];
+  const heatmapMax = Math.max(...heatmapData.flatMap(d => d.hours), 1);
+
+  const statCards = [
+    { label: t('admin.revenue', 'Revenue'), value: `${Math.round(data.revenue.today)}k`, trend: data.revenue.trend, icon: 'ti ti-wallet', colorVar: '--color-success' },
+    { label: t('admin.orders', 'Orders'), value: data.orders.today.toString(), trend: data.orders.trend, icon: 'ti ti-shopping-cart', colorVar: '--color-info' },
+    { label: t('admin.avg_order', 'Avg Order'), value: String(data.avgOrderValue.value), trend: data.avgOrderValue.trend, icon: 'ti ti-receipt', colorVar: '--status-scheduled' },
+    { label: t('admin.delivery_time', 'Delivery'), value: `${data.deliveryTime.avg} min`, trend: data.deliveryTime.trend, icon: 'ti ti-truck-delivery', colorVar: '--color-warning' },
+  ];
+
+  return (
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.analytics', 'Analytics')}</h2>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.analytics_desc', 'Performance overview for your restaurant')}</p>
+        </div>
+        <div className="flex rounded-lg p-0.5" style={{ background: 'var(--brand-surface-raised)' }}>
+          {(['7d', '30d'] as const).map(p => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${period === p ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+            >
+              {p === '7d' ? t('admin.7_days', '7 days') : t('admin.30_days', '30 days')}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Stat cards */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{t('admin.overview', 'Overview')}</h3>
+        <button
+          onClick={() => exportCSV(statCards.map(c => ({ Metric: c.label, Value: c.value, Trend: c.trend })), 'analytics-stats.csv')}
+          className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md hover:bg-[var(--brand-surface-raised)] transition-colors"
+          style={{ color: 'var(--brand-text-muted)' }}
+        >
+          <i className="ti ti-download" /> {t('admin.export_csv', 'Export CSV')}
+        </button>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 stagger-children">
+        {statCards.map((card, i) => (
+          <div key={i} className="p-4 rounded-xl border card-lift breathe" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', animationDelay: `${i * 0.3}s` }}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium" style={{ color: 'var(--brand-text-muted)' }}>{card.label}</span>
+              <i className={`${card.icon} text-lg`} style={{ color: `var(${card.colorVar})` }} />
+            </div>
+            <div className="text-xl font-bold mb-1" style={{ color: 'var(--brand-text)' }}>{card.value}</div>
+            <span className="text-xs font-medium" style={{ color: card.trend.startsWith('+') ? 'var(--color-success)' : card.trend.startsWith('-') ? 'var(--color-danger)' : 'var(--brand-text-muted)' }}>
+              {card.trend} vs last period
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Revenue chart */}
+      <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{t('admin.revenue_trend', 'Revenue Trend')}</h3>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
+              {t('admin.total', 'Total:')} <PriceDisplay amount={data.chart.reduce((s, c) => s + c.revenue, 0)} />
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'var(--color-success-light)', color: 'var(--color-success)' }}>
+              Avg: <PriceDisplay amount={Math.round(data.chart.reduce((s, c) => s + c.revenue, 0) / data.chart.length)} />
+            </span>
+          </div>
+        </div>
+        <div className="flex items-end gap-2 h-48">
+          {data.chart.map((item, idx) => (
+            <SimpleBar
+              key={item.day}
+              value={item.revenue}
+              maxValue={maxRevenue}
+              label={`${(item.revenue / 1000).toFixed(0)}k`}
+              dayLabel={item.day}
+              delay={idx * 60}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Two-column layout for Top Products + Consumption */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top products */}
+        <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{t('admin.top_products', 'Top Products')}</h3>
+            <button
+              onClick={() => exportCSV(data.topProducts.map(p => ({ Product: p.name, Orders: p.orders, Revenue: p.revenue })), 'top-products.csv')}
+              className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md hover:bg-[var(--brand-surface-raised)] transition-colors"
+              style={{ color: 'var(--brand-text-muted)' }}
+            >
+              <i className="ti ti-download" /> {t('admin.export_csv', 'Export CSV')}
+            </button>
+          </div>
+          <div className="space-y-1">
+            {data.topProducts.map((p, i) => {
+              const firstRevenue = data.topProducts[0]?.revenue ?? p.revenue;
+              const barPct = firstRevenue > 0 ? Math.round((p.revenue / firstRevenue) * 100) : 100;
+              const isExpanded = expandedProduct === p.name;
+              return (
+                <div key={p.name}>
+                  <div
+                    className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors slide-in-right cursor-pointer"
+                    style={{ animationDelay: `${i * 50}ms` }}
+                    onClick={() => toggleProduct(p.name)}
+                  >
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 overflow-hidden" style={{ background: 'var(--brand-primary-light)' }}>
+                      {p.imageUrl ? (
+                        <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
+                      ) : i === 0 ? (
+                        <i className="ti ti-crown" style={{ color: 'var(--color-warning)' }} />
+                      ) : (
+                        <i className="ti ti-tools-kitchen-2" style={{ color: 'var(--brand-primary)' }} />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="text-sm font-medium truncate">{p.name}</div>
+                        {i === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>#1</span>}
+                      </div>
+                      <div className="h-1 rounded-full" style={{ background: 'var(--brand-border)' }}>
+                        <div className="h-full rounded-full progress-animate" style={{ width: `${barPct}%`, background: 'var(--brand-primary)', opacity: 0.3 + (barPct / 100) * 0.7 }} />
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{p.orders} {t('admin.orders', 'orders').toLowerCase()}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-sm font-semibold text-right" style={{ color: 'var(--brand-primary)' }}>
+                        <PriceDisplay amount={p.revenue} />
+                      </div>
+                      <i className={`ti ${isExpanded ? 'ti-chevron-up' : 'ti-chevron-down'} text-xs text-[var(--brand-text-muted)]`} />
+                    </div>
+                  </div>
+                  {isExpanded && (
+                    <div className="px-3 pb-2">
+                      {productOrdersLoading ? (
+                        <div className="animate-pulse space-y-2 py-2">
+                          {[1,2,3].map(j => <div key={j} className="h-8 bg-[var(--brand-surface)] rounded" />)}
+                        </div>
+                      ) : productOrders.length === 0 ? (
+                        <div className="text-xs py-2 text-center" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.no_orders', 'No orders found')}</div>
+                      ) : (
+                        <div className="max-h-48 overflow-auto space-y-1 pt-1">
+                          {productOrders.map(o => (
+                            <div key={o.id} className="flex items-center justify-between px-3 py-2 rounded-lg text-xs" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="font-mono text-[10px] text-[var(--brand-text-muted)]">{o.id.slice(0, 8)}</span>
+                                <span className="truncate">{o.customer_name}</span>
+                                <span className="text-[10px] px-1 py-0.5 rounded" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>x{o.quantity}</span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-medium"><PriceDisplay amount={o.price} /></span>
+                                <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{new Date(o.created_at).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Consumption report */}
+        <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>
+              {t('admin.ingredient_consumption', 'Ingredient Consumption')} <span className="text-[10px] font-normal opacity-50">({t('admin.derived', 'derived')})</span>
+            </h3>
+            <button
+              onClick={() => exportCSV(CONSUMPTION_DATA, 'consumption.csv')}
+              className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border transition-colors hover:bg-[var(--brand-surface-raised)]"
+              style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}
+            >
+              <i className="ti ti-download" /> {t('admin.export', 'Export')}
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {CONSUMPTION_DATA.map((item, i) => (
+              <div
+                key={item.name}
+                className="flex items-center justify-between p-3 rounded-lg border slide-in-up"
+                style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)', animationDelay: `${i * 60}ms` }}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium truncate">{item.name}</div>
+                  <div className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{item.consumed} {item.unit}</div>
+                  <div className="w-full h-1 rounded-full mt-1.5" style={{ background: 'var(--brand-border)' }}>
+                    <div
+                      className="h-full rounded-full progress-animate"
+                      style={{
+                        width: `${item.pct}%`,
+                        background: item.pct > 80 ? 'var(--color-warning)' : 'var(--color-success)',
+                        transitionDelay: `${i * 80}ms`,
+                      }}
+                    />
+                  </div>
+                </div>
+                {item.pct > 80 && (
+                  <span className="text-[10px] ml-2 px-1.5 py-0.5 rounded font-medium shrink-0 animate-pulse" style={{ background: 'rgba(217,119,6,0.15)', color: 'var(--color-warning)' }}>
+                    {t('admin.reorder', 'Reorder')}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] mt-3" style={{ color: 'var(--brand-text-muted)' }}>
+            {t('admin.consumption_hint', 'Based on today\'s orders x recipe quantities. Estimates only.')}
+          </p>
+          <button
+            onClick={handleCopyReorder}
+            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 text-[11px] font-medium rounded-lg border transition-all duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97]"
+            style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-primary)' }}
+          >
+            {copied ? (
+              <><i className="ti ti-check" /> {t('common.copied', 'Copied!')}</>
+            ) : (
+              <><i className="ti ti-clipboard" /> {t('admin.copy_reorder', 'Copy Reorder List')}</>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Order Heatmap */}
+      <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{t('admin.order_heatmap', 'Order Heatmap')}</h3>
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
+              <span className="w-2 h-2 rounded-sm" style={{ background: 'var(--brand-surface-raised)' }} /> {t('admin.low', 'Low')}
+            </span>
+            <span className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
+              <span className="w-2 h-2 rounded-sm" style={{ background: 'var(--brand-primary)' }} /> {t('admin.peak', 'Peak')}
+            </span>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr>
+                <th className="text-left font-medium py-1 pr-3" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.day', 'Day')}</th>
+                {HOUR_LABELS.map(label => (
+                  <th key={label} className="text-center font-medium py-1 px-1" style={{ color: 'var(--brand-text-muted)' }}>{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {heatmapData.map(row => (
+                <tr key={row.day}>
+                  <td className="text-left font-medium py-1 pr-3" style={{ color: 'var(--brand-text)' }}>{row.day}</td>
+                  {row.hours.map((count, ci) => {
+                    const products = row.products?.[ci] || [];
+                    const productList = products.length > 0 ? products.slice(0, 5).join(', ') + (products.length > 5 ? ` +${products.length - 5} more` : '') : '';
+                    return (
+                      <td key={ci} className="p-0.5 relative group">
+                        <div
+                          className="rounded-sm transition-all duration-300 hover:scale-110 cursor-default"
+                          title={productList ? `${row.day} ${HOUR_LABELS[ci]}: ${count} orders\nProducts: ${productList}` : `${row.day} ${HOUR_LABELS[ci]}: ${count} orders`}
+                          style={{
+                            minHeight: 28,
+                            minWidth: 32,
+                            background: count === heatmapMax
+                              ? 'color-mix(in srgb, var(--brand-primary) 90%, transparent)'
+                              : count > 0
+                                ? `color-mix(in srgb, var(--brand-primary) ${Math.round((0.1 + (count / heatmapMax) * 0.8) * 100)}%, transparent)`
+                                : 'var(--brand-surface-raised)',
+                            ...(count === heatmapMax ? { border: '1px solid var(--brand-primary)', boxShadow: '0 0 8px color-mix(in srgb, var(--brand-primary) 30%, transparent)' } : {}),
+                          }}
+                        >
+                          {count > 0 && (
+                            <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded text-[10px] whitespace-nowrap z-10 pointer-events-none shadow-lg"
+                              style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}>
+                              <div className="font-semibold">{count} {count === 1 ? 'order' : 'orders'}</div>
+                              {productList && <div className="text-[var(--brand-text-muted)] max-w-[200px] truncate">{productList}</div>}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Geo-Analytics */}
+      <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+        <h3 className="text-sm font-semibold mb-4" style={{ color: 'var(--brand-text)' }}>{t('admin.delivery_heatmap', 'Delivery Heatmap (Last 7 Days)')}</h3>
+        <div className="h-64 rounded-xl overflow-hidden">
+          <Map
+            initialViewState={{
+              longitude: 19.8187,
+              latitude: 41.3275,
+              zoom: 12
+            }}
+            mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+            interactive={true}
+          >
+            {data.geoLocations?.map((loc, i) => (
+              <Marker key={i} longitude={loc.lng} latitude={loc.lat}>
+                <div className="w-3 h-3 rounded-full bg-[var(--brand-primary)] opacity-60 shadow-lg" />
+              </Marker>
+            ))}
+          </Map>
+        </div>
+      </div>
+    </div>
+  );
+}

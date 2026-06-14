@@ -1,0 +1,90 @@
+wing: dowiz
+rooms:
+- name: apps
+  description: Files from apps/
+  keywords:
+  - apps
+  - apps
+- name: design
+  description: Files from assets/
+  keywords:
+  - design
+  - assets
+- name: documentation
+  description: Files from docs/
+  keywords:
+  - documentation
+  - docs
+- name: e2e
+  description: Files from e2e/
+  keywords:
+  - e2e
+  - e2e
+- name: graphify_out
+  description: Files from graphify-out/
+  keywords:
+  - graphify_out
+  - graphify-out
+- name: load
+  description: Files from load/
+  keywords:
+  - load
+  - load
+- name: migrations
+  description: Files from migrations/
+  keywords:
+  - migrations
+  - migrations
+- name: packages
+  description: Files from packages/
+  keywords:
+  - packages
+  - packages
+- name: scripts
+  description: Files from scripts/
+  keywords:
+  - scripts
+  - scripts
+- name: spikes
+  description: Files from spikes/
+  keywords:
+  - spikes
+  - spikes
+- name: src
+  description: Files from src/
+  keywords:
+  - src
+  - src
+- name: testing
+  description: Files from tests/
+  keywords:
+  - testing
+  - tests
+- name: backend
+  description: Files from api/
+  keywords:
+  - backend
+  - api
+- name: research
+  description: Files from references/
+  keywords:
+  - research
+  - references
+- name: frontend
+  description: Files from client/
+  keywords:
+  - frontend
+  - client
+- name: costs
+  description: Files from finance/
+  keywords:
+  - costs
+  - finance
+- name: configuration
+  description: Files from config/
+  keywords:
+  - configuration
+  - config
+- name: general
+  description: Files that don't fit other rooms
+  keywords: []

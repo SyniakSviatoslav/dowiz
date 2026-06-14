@@ -1,0 +1,5 @@
+[
+  {"run_id": "audit-2026-06-14", "config_version": "3", "task": "full project audit", "domain": "rls-tenant-isolation", "gating_failed": ["rls-analytics-tables"]},
+  {"run_id": "audit-2026-06-14", "config_version": "3", "task": "full project audit", "domain": "security-pii", "gating_failed": ["pii-in-telegram-notifications"]},
+  {"run_id": "audit-2026-06-14", "config_version": "3", "task": "full project audit", "domain": "money-contract", "gating_failed": ["price-100-division"]}
+]
