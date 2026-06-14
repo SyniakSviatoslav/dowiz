@@ -9,7 +9,19 @@ const PromotionParams = z.object({
 
 export default async function ownerPromotionRoutes(fastify: FastifyInstance) {
   const server = fastify.withTypeProvider<ZodTypeProvider>();
-  const getLocationId = (request: any) => (request.user as any).activeLocationId;
+
+  // Resolve owner's location from DB (not from JWT — JWT may not carry activeLocationId)
+  const getLocationId = async (request: any, db: any): Promise<string> => {
+    const jwtId = (request.user as any).activeLocationId;
+    if (jwtId) return jwtId;
+    const userId = (request.user as any).userId;
+    const res = await db.query(
+      `SELECT id FROM locations WHERE owner_id = $1 LIMIT 1`,
+      [userId]
+    );
+    if (res.rowCount === 0) throw new Error('No location found for this user');
+    return res.rows[0].id;
+  };
 
   // ─── List Promotions ──────────────────────────────────────────────
   server.get(
@@ -26,7 +38,7 @@ export default async function ownerPromotionRoutes(fastify: FastifyInstance) {
       }
     },
     async (request: any, reply: any) => {
-      const locationId = getLocationId(request);
+      const locationId = await getLocationId(request, server.db);
       const { is_active, type, limit, offset } = request.query;
       const userId = request.user.userId;
 
@@ -88,7 +100,7 @@ export default async function ownerPromotionRoutes(fastify: FastifyInstance) {
       }
     },
     async (request: any, reply: any) => {
-      const locationId = getLocationId(request);
+      const locationId = await getLocationId(request, server.db);
       const body = request.body;
       const userId = request.user.userId;
 
@@ -132,7 +144,7 @@ export default async function ownerPromotionRoutes(fastify: FastifyInstance) {
       }
     },
     async (request: any, reply: any) => {
-      const locationId = getLocationId(request);
+      const locationId = await getLocationId(request, server.db);
       const { code, order_subtotal, product_ids } = request.body;
       const userId = request.user.userId;
 
@@ -209,7 +221,7 @@ export default async function ownerPromotionRoutes(fastify: FastifyInstance) {
       }
     },
     async (request: any, reply: any) => {
-      const locationId = getLocationId(request);
+      const locationId = await getLocationId(request, server.db);
       const { id } = request.params;
       const userId = request.user.userId;
 
@@ -251,7 +263,7 @@ export default async function ownerPromotionRoutes(fastify: FastifyInstance) {
       }
     },
     async (request: any, reply: any) => {
-      const locationId = getLocationId(request);
+      const locationId = await getLocationId(request, server.db);
       const { id } = request.params;
       const body = request.body;
       const userId = request.user.userId;
@@ -314,7 +326,7 @@ export default async function ownerPromotionRoutes(fastify: FastifyInstance) {
       }
     },
     async (request: any, reply: any) => {
-      const locationId = getLocationId(request);
+      const locationId = await getLocationId(request, server.db);
       const { id } = request.params;
       const userId = request.user.userId;
 
