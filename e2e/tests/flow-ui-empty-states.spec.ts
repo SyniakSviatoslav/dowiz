@@ -73,8 +73,8 @@ test.describe('UI: Empty States — All Lists', () => {
     await page.goto(`${BASE}/s/demo`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    const cards = page.locator('article[data-testid="menu-item"]');
+    await expect(cards.first().or(page.locator('text=no products'))).toBeAttached({ timeout: 8000 });
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
