@@ -268,26 +268,26 @@ export function FlowTestPage() {
       {/* Config */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-xl border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
         <div>
-          <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>Location</label>
+          <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('flow_test.location', 'Location')}</label>
           <select value={locationId} onChange={e => setLocationId(e.target.value)}
             className="w-full text-sm rounded-lg px-3 py-2 border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
-            {locations.length === 0 && <option value="">Loading...</option>}
+            {locations.length === 0 && <option value="">{t('common.loading', 'Loading...')}</option>}
             {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
         </div>
         <div>
-          <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>Product</label>
+          <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('flow_test.product', 'Product')}</label>
           <select value={productId} onChange={e => setProductId(e.target.value)}
             className="w-full text-sm rounded-lg px-3 py-2 border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
-            {products.length === 0 && <option value="">Loading...</option>}
+            {products.length === 0 && <option value="">{t('common.loading', 'Loading...')}</option>}
             {products.map(p => <option key={p.id} value={p.id}>{p.name} — {p.price}</option>)}
           </select>
         </div>
         <div>
-          <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>Courier</label>
+          <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('flow_test.courier', 'Courier')}</label>
           <select value={courierId} onChange={e => setCourierId(e.target.value)}
             className="w-full text-sm rounded-lg px-3 py-2 border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
-            {couriers.length === 0 && <option value="">None available</option>}
+            {couriers.length === 0 && <option value="">{t('flow_test.none_available', 'None available')}</option>}
             {couriers.map(c => <option key={c.id} value={c.id}>{c.full_name || c.name} ({c.status})</option>)}
           </select>
         </div>

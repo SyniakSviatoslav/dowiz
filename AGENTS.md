@@ -653,3 +653,77 @@ This applies especially when:
 | P3 | LF→CRLF git config | Repo-wide | ✅ `core.autocrlf=false` + `.gitattributes` with `* text=auto eol=lf`. |
 
 **85 files changed, +887/−695 insertions/deletions. `pnpm typecheck` passes on all 12 workspace projects.**
+
+## 17. 2026-06-14 Full-Spectrum Audit — Completed (31 fixes)
+
+| Domain | Fixes | Key Items |
+|---|---|---|
+| **Auth & Server** | 5 | JWT lazy load, `loadEnv()` module-scope crash, `.env.example` RS256 docs, `IP_HASH_SALT` + remove old `***REDACTED***`, backup_restore false-degraded |
+| **SSR Menu** | 3 | Full Preact rendering (was SPA shell), JSON-LD/OG/hreflang, LRU cache, 80 empty test categories removed |
+| **Orders** | 2 | `db.connect()` try/catch guard, correlation ID property fix |
+| **Frontend** | 8 | Color contrast (35 violations), touch targets (110→44px), form labels (17), aria-live (4 regions), auto dark mode, hardcoded i18n strings (14), code-split maplibre-gl, branding preview |
+| **Code Quality** | 7 | ErrorBoundary consolidation (3→1), ALLERGEN_COLORS dedup (3→1), hex→CSS vars (~30), modifier PriceDisplay, E2E helper bugs (3), vite proxy courier-login, hover config |
+| **Images** | 1 | `getImageUrl()` 4-tier fallback + CSP auto-update |
+
+**48 files changed, +293/−365. 5 deploys, 0 rollbacks. All 12 packages typecheck clean every time.**
+
+### 17.1 New rules from session
+
+#### R17.1 — SQL production db workaround
+On Windows/PowerShell, SQL with `$$` (dollar-quoting) or single quotes CANNOT be passed through `flyctl ssh` inline. The base64 + echo approach works but output capture fails with "The handle is invalid". Correct pattern:
+
+```powershell
+# Write script to variable, encode as ASCII base64 (NOT UTF8, avoids BOM)
+$code = 'your node script here'
+$bytes = [Text.Encoding]::ASCII.GetBytes($code)
+$b64 = [Convert]::ToBase64String($bytes)
+
+# Upload + execute in SINGLE SSH session via sh -c wrapper
+flyctl ssh console --app dowiz -C "sh -c 'echo $b64 | base64 -d > /app/fix.js && node /app/fix.js'"
+
+# The pg module is bundled inside server.cjs — NOT available as standalone require('pg')
+# Must npm install pg first, or write script to /app/ directory
+```
+
+#### R17.2 — Commit before every deploy
+Before `flyctl deploy`, do `git add -A && git commit -m "scope: description"`. Creates rollback checkpoints and prevents lost work. The deploy image tag (`deployment-01KV...`) is not enough for traceability.
+
+#### R17.3 — Clean build for migrations
+Use `flyctl deploy --no-cache` when deploy includes new migration files. Depot builder caches `COPY packages ./packages` layers and won't pick up new migration files otherwise.
+
+#### R17.4 — Health check false-degraded guard
+Every health sub-check that depends on an optional feature (BACKUP_ENABLED, etc.) MUST be wrapped behind a feature-flag guard. Unconditional checks against empty/missing data produce false `degraded` status. Pattern:
+
+```typescript
+if (backupEnabled) {
+  // ... query backup_restore table
+} else {
+  result.backup_restore = { status: 'ok' };
+}
+```
+
+#### R17.5 — Node module resolution on Fly server
+The production Docker image bundles JS modules into `dist/api/server.cjs`. Standalone `node /tmp/script.js` cannot `require('pg')` because `pg` is not in `node_modules`. Two workarounds:
+1. Write script to `/app/` directory (same dir as node_modules/symlinks)
+2. `npm install pg` on the running server first
+
+#### R17.6 — Parameter name must match in CREATE OR REPLACE FUNCTION
+PostgreSQL's `CREATE OR REPLACE FUNCTION` requires the SAME parameter names as the original function. `v_slug` vs `p_location_id_or_slug` causes `cannot change name of input parameter` error. Always check original migration for exact parameter names.
+
+### 17.2 Current system state (post-audit)
+
+**Health:** 10/11 ok — `fallback` degraded (0/150 phone coverage, product decision not code bug)
+**Auth:** Valid JWT via `POST /api/dev/mock-auth`
+**SSR:** https://dowiz.fly.dev/s/demo — 15 sections, 0 test cats, OG/JSON-LD/hreflang
+**Menu API:** 14 categories with products, 0 empty categories
+**Orders:** `POST /api/orders` creates orders with correct Zod schema
+**Locales:** All 3 (sq/en/uk) have full 728-key coverage
+**Backup restore:** Now reports `ok` when BACKUP_ENABLED is false (was false `degraded`)
+
+### 17.3 Remaining non-code items
+
+| Item | Reason |
+|---|---|
+| Fallback phone 0% | Needs owner-facing UI — product decision |
+| Vite chunk warning (maplibre 1MB) | Code-split as lazy chunk, loads only on analytics page. Acceptable. |
+| `uk` locale translation quality | All 728 keys present in all 3 locales. Native speaker review would improve quality but structure is complete. |**

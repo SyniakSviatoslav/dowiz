@@ -261,11 +261,11 @@ export function DashboardPage() {
               <div className="flex bg-[var(--brand-surface)] border rounded-lg overflow-hidden p-0.5 shrink-0" role="tablist" aria-label={t('admin.view_mode', 'View mode')} style={{ borderColor: 'var(--brand-border)' }}>
                 <button role="tab" aria-selected={viewMode === 'live'}
                   onClick={() => { setViewMode('live'); setStatusFilter('all'); }}
-                  className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors text-center ${viewMode === 'live' ? 'bg-[var(--brand-primary)] text-white' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+                  className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors text-center ${viewMode === 'live' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}
                 >{t('admin.live', 'Live')}</button>
                 <button role="tab" aria-selected={viewMode === 'history'}
                   onClick={() => { setViewMode('history'); setStatusFilter('all'); }}
-                  className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors text-center ${viewMode === 'history' ? 'bg-[var(--brand-primary)] text-white' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+                  className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors text-center ${viewMode === 'history' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}
                 >{t('courier.history', 'History')}</button>
               </div>
               {clientSlug && (
@@ -312,7 +312,7 @@ export function DashboardPage() {
                   key={s}
                   onClick={() => setStatusFilter(s)}
                   aria-pressed={statusFilter === s}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 capitalize snap-start shrink-0 whitespace-nowrap ${statusFilter === s ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 capitalize snap-start shrink-0 whitespace-nowrap ${statusFilter === s ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}
                   style={{ minHeight: 'var(--tap-min)' }}
                 >
                   {s === 'all' ? t('common.all', 'All') : t(`order.${s.toLowerCase()}`, s.replace('_', ' ').toLowerCase())}
@@ -383,7 +383,7 @@ export function DashboardPage() {
           icon={<i className="ti ti-inbox text-4xl" style={{ color: 'var(--brand-text-muted)', opacity: 0.4 }} />}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" aria-live="polite" aria-atomic="true">
           {filteredOrders.map(order => (
             <div key={order.id} className="order-card-container" data-testid={`order-card-${order.id}`} data-status={order.status}>
               <OrderCard

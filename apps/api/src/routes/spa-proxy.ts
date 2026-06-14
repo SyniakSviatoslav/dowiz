@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { jwtVerify } from 'jose';
 import { loadEnv } from '@deliveryos/config';
 import crypto from 'crypto';
+import { getImageUrl } from '../lib/image-url.js';
 import { maskStr } from '../lib/pii-mask.js';
 import { z } from 'zod';
 
@@ -181,11 +182,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       description: r.description,
       available: r.is_available,
       categoryId: r.category_id,
-      imageUrl: r.image_key
-        ? r.image_key.startsWith('http://') || r.image_key.startsWith('https://') || r.image_key.startsWith('data:')
-          ? r.image_key
-          : `${APP_BASE}/images/${r.image_key}`
-        : null,
+      imageUrl: getImageUrl(r.image_key, APP_BASE),
       imageKey: r.image_key,
       stockCount: r.attributes?.stock_count ?? null,
       taste: r.attributes?.taste ?? null,
@@ -299,7 +296,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       return reply.status(400).send({ error: 'Invalid image file', detail: sharpErr.message });
     }
     const key = `${locId}/${pid}.webp`;
-    const imageUrl = `${APP_BASE}/images/${key}`;
+    const imageUrl = getImageUrl(key, APP_BASE);
     try {
       await storage.put(key, processed);
     } catch (putErr: any) {
@@ -677,3 +674,4 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     return reply.send({ orders: ordersRes.rows, preferences: prefsRes.rows, heatmap: heatmapRes.rows });
   });
 }
+

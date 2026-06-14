@@ -110,7 +110,7 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
         FROM categories c
         LEFT JOIN category_translations ct ON ct.category_id = c.id AND ct.locale = p_locale
         LEFT JOIN category_translations ct_def ON ct_def.category_id = c.id AND ct_def.locale = v_def_locale
-        LEFT JOIN products_json pj ON pj.category_id = c.id
+        JOIN products_json pj ON pj.category_id = c.id
         WHERE c.location_id = v_location_id
       )
       SELECT 

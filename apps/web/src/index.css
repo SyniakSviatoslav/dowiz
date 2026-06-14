@@ -148,8 +148,8 @@ input, select, textarea {
     animation: pulse-subtle 3s ease-in-out infinite;
   }
   @keyframes pulse-subtle {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(234,79,22,0.3); }
-    50% { box-shadow: 0 0 0 6px rgba(234,79,22,0); }
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand-primary) 30%, transparent); }
+    50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--brand-primary) 0%, transparent); }
   }
 
   .float {
@@ -265,8 +265,8 @@ input, select, textarea {
     animation: glowPrimary 3s ease-in-out infinite;
   }
   @keyframes glowPrimary {
-    0%, 100% { box-shadow: 0 0 12px rgba(234,79,22,0.15), 0 0 24px rgba(234,79,22,0.05); }
-    50% { box-shadow: 0 0 20px rgba(234,79,22,0.25), 0 0 40px rgba(234,79,22,0.1); }
+    0%, 100% { box-shadow: 0 0 12px color-mix(in srgb, var(--brand-primary) 15%, transparent), 0 0 24px color-mix(in srgb, var(--brand-primary) 5%, transparent); }
+    50% { box-shadow: 0 0 20px color-mix(in srgb, var(--brand-primary) 25%, transparent), 0 0 40px color-mix(in srgb, var(--brand-primary) 10%, transparent); }
   }
 
   /* ── Ripple effect for buttons ── */
@@ -321,7 +321,7 @@ input, select, textarea {
   .border-glow:focus-within,
   .border-glow:hover {
     border-color: var(--brand-primary);
-    box-shadow: 0 0 0 1px rgba(234,79,22,0.1);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand-primary) 10%, transparent);
   }
 
   /* ── Number counter animation ── */
@@ -357,10 +357,10 @@ input, select, textarea {
   }
   @keyframes attentionRing {
     0%, 100% {
-      box-shadow: 0 0 0 0 rgba(234,79,22,0.4);
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand-primary) 40%, transparent);
     }
     50% {
-      box-shadow: 0 0 0 8px rgba(234,79,22,0);
+      box-shadow: 0 0 0 8px color-mix(in srgb, var(--brand-primary) 0%, transparent);
     }
   }
 

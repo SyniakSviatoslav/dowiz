@@ -1,5 +1,4 @@
-import React, { Component } from 'react';
-import type { ErrorInfo, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 // --- SkeletonBase ---
 export function SkeletonBase({ className = '' }: { className?: string }) {
@@ -54,58 +53,4 @@ export function WSStatusDot({ status }: { status: 'connecting' | 'connected' | '
   );
 }
 
-// --- ErrorBoundary ---
-interface ErrorBoundaryProps {
-  children: ReactNode;
-  fallbackPhone?: string;
-}
-
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error?: Error;
-}
-
-export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-[50vh] flex flex-col items-center justify-center p-6 text-center">
-          <i className="ti ti-alert-triangle text-4xl mb-4" style={{ color: 'var(--color-warning)' }} />
-          <h2 className="text-xl font-bold text-[var(--color-danger)] mb-2">Something went wrong</h2>
-          <p className="text-[var(--brand-text-muted)] mb-6 max-w-md">
-            We encountered an unexpected error. Don't worry, your cart is safe.
-          </p>
-          {this.props.fallbackPhone && (
-            <div className="p-4 bg-[var(--brand-surface-raised)] rounded-[var(--brand-radius-sm)] border border-[var(--brand-border)]">
-              <p className="text-sm text-[var(--brand-text)] mb-2">To place an order immediately, please call:</p>
-              <a href={`tel:${this.props.fallbackPhone}`} className="text-lg font-bold text-[var(--brand-primary)] hover:underline">
-                {this.props.fallbackPhone}
-              </a>
-            </div>
-          )}
-          <button 
-            onClick={() => window.location.reload()} 
-            className="mt-6 px-6 py-2 bg-[var(--brand-primary)] text-white rounded-full font-medium hover:bg-[var(--brand-primary-hover)] transition-colors"
-          >
-            Reload Page
-          </button>
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
-}
+// --- (ErrorBoundary moved to canonical ErrorBoundary.tsx) ---

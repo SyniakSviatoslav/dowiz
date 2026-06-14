@@ -9,6 +9,21 @@ const ThemeContext = createContext<{
 } | null>(null);
 
 const PRESET_NAMES = Object.keys(PRESETS) as BrandPreset[];
+const STORAGE_KEY = 'dowiz-preset';
+
+function getInitialPreset(fallback: BrandPreset): BrandPreset {
+  try {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+    if (saved && (saved in PRESETS)) return saved as BrandPreset;
+  } catch {}
+  if (typeof window !== 'undefined') {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const detected = prefersDark ? 'food-dark' : 'crimson-classic';
+    try { localStorage.setItem(STORAGE_KEY, detected); } catch {}
+    return detected;
+  }
+  return fallback;
+}
 
 export function ThemeProvider({
   children,
@@ -19,7 +34,7 @@ export function ThemeProvider({
   initialPreset?: BrandPreset;
   ssrConfig?: BrandConfig;
 }) {
-  const [preset, setPresetState] = useState<BrandPreset>(initialPreset);
+  const [preset, setPresetState] = useState<BrandPreset>(() => getInitialPreset(initialPreset));
 
   const config = ssrConfig ?? getPresetConfig(preset) ?? PRESETS['food-dark'];
 
@@ -29,11 +44,29 @@ export function ThemeProvider({
     }
   }, [config, ssrConfig]);
 
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const handler = (e: MediaQueryListEvent) => {
+      const target = e.matches ? 'food-dark' : 'crimson-classic';
+      const cfg = getPresetConfig(target);
+      if (cfg) {
+        applyBrandTheme(cfg);
+        setPresetState(target);
+        try { localStorage.setItem(STORAGE_KEY, target); } catch {}
+      }
+    };
+
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   function setPreset(name: BrandPreset) {
     const cfg = getPresetConfig(name);
     if (cfg) {
       applyBrandTheme(cfg);
       setPresetState(name);
+      try { localStorage.setItem(STORAGE_KEY, name); } catch {}
     }
   }
 

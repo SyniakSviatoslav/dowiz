@@ -81,8 +81,10 @@ test.describe('FE-Radar v2 — Full Surface + a11y + Throttled', () => {
           }
 
           const touch = await checkTouchTargets(page);
-          if (touch.tooSmall > 0) record('menu', 'touch-target-size', 'a11y', '🟠', 'All touch targets ≥44px', `${touch.tooSmall} too small`, 'Hard to tap on mobile 390');
-          if (touch.tooClose > 0) record('menu', 'touch-target-proximity', 'a11y', '🟡', 'Targets not overlapping', `${touch.tooClose} too close`, 'Adjacent targets may cause mis-taps');
+          const touchSize = touch.filter(t => t.startsWith('size:')).length;
+          const touchProx = touch.filter(t => t.startsWith('proximity:')).length;
+          if (touchSize > 0) record('menu', 'touch-target-size', 'a11y', '🟠', 'All touch targets ≥44px', `${touchSize} too small`, 'Hard to tap on mobile 390');
+          if (touchProx > 0) record('menu', 'touch-target-proximity', 'a11y', '🟡', 'Targets not overlapping', `${touchProx} too close`, 'Adjacent targets may cause mis-taps');
 
           const formLabels = await checkFormLabels(page);
           if (formLabels.length > 0) record('menu', 'form-labels', 'a11y', '🟠', 'All inputs have labels', `${formLabels.length} missing`, formLabels[0]);
@@ -140,7 +142,8 @@ test.describe('FE-Radar v2 — Full Surface + a11y + Throttled', () => {
           const labels = await checkFormLabels(page);
           if (labels.length > 0) record('admin-login', 'form-labels', 'a11y', '🟠', 'All inputs labeled', `${labels.length} missing`, labels[0]);
           const touch = await checkTouchTargets(page);
-          if (touch.tooSmall > 0) record('admin-login', 'touch-targets', 'a11y', '🟠', 'All ≥44px', `${touch.tooSmall} too small`, '');
+          const touchSize = touch.filter(t => t.startsWith('size:')).length;
+          if (touchSize > 0) record('admin-login', 'touch-targets', 'a11y', '🟠', 'All ≥44px', `${touchSize} too small`, '');
         }
 
         await page.close();

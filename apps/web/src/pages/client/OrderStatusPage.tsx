@@ -261,7 +261,7 @@ export function OrderStatusPage() {
   }
 
   if (error || !order) {
-    return <EmptyState title="Not Found" description={error || 'Order not found'} />;
+    return <EmptyState title={t('order.not_found_title', 'Not Found')} description={error || t('order.not_found_desc', 'Order not found')} />;
   }
 
   return (
@@ -298,7 +298,7 @@ export function OrderStatusPage() {
           <p className="text-[var(--brand-text-muted)] text-sm">{t('client.estimated_arrival', 'Estimated arrival')}</p>
         </div>
 
-        <div data-testid="order-status-badge" data-status={order?.status}>
+        <div data-testid="order-status-badge" data-status={order?.status} aria-live="polite" aria-atomic="true">
           <OrderProgress status={order.status} />
         </div>
 
@@ -326,7 +326,7 @@ export function OrderStatusPage() {
             ) : (
               <button
                 onClick={startSharing}
-                className="flex items-center justify-center gap-2 w-full py-3 rounded-[var(--brand-radius)] bg-[var(--brand-primary)] text-[var(--color-on-primary)] font-semibold text-sm"
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-[var(--brand-radius)] bg-[var(--brand-primary-light)] text-[var(--brand-text)] font-semibold text-sm border border-[var(--brand-primary)]"
               >
                 <span>📍</span>
                 <span>{t('client.share_location', 'Share my location with courier')}</span>

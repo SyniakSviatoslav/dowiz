@@ -573,7 +573,7 @@ const retryPolicy = new RetryPolicy();
     }
 
     const statusCode = error.statusCode || 500;
-    const correlationId = (request as any).correlationId || 'unknown';
+    const correlationId = (request.headers['x-correlation-id'] as string) || 'unknown';
 
     // Log full error server-side with correlation ID
     if (statusCode >= 500) {

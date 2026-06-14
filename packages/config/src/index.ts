@@ -22,6 +22,7 @@ const EnvSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_ENDPOINT: z.string().optional(),
   R2_BUCKET: z.string().optional(),
+  R2_PUBLIC_URL: z.string().optional(),
   BACKUP_ENABLED: z.enum(['true', 'false']).default('false'),
   BACKUP_POOL_SIZE: z.coerce.number().int().positive().default(2),
   BACKUP_HOURLY_CRON: z.string().default('0 * * * *'),

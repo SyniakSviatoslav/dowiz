@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ToastProvider, LanguageSwitcher, useI18n, BottomTabBar, ResponsiveDialog, CurrencySwitcher } from '@deliveryos/ui';
 import type { TabItem } from '@deliveryos/ui';
@@ -6,12 +6,13 @@ import { DashboardPage } from '../pages/admin/DashboardPage.js';
 import { MenuManagerPage } from '../pages/admin/MenuManagerPage.js';
 import { BrandingPage } from '../pages/admin/BrandingPage.js';
 import { CouriersPage } from '../pages/admin/CouriersPage.js';
-import { AnalyticsPage } from '../pages/admin/AnalyticsPage.js';
 import { CRMPage } from '../pages/admin/CRMPage.js';
 import { SettingsPage } from '../pages/admin/SettingsPage.js';
 import { OnboardingPage } from '../pages/admin/OnboardingPage.js';
 import { SupplyLibraryPage } from '../pages/admin/SupplyLibraryPage.js';
 import { FlowTestPage } from '../pages/admin/FlowTestPage.js';
+
+const AnalyticsPage = React.lazy(() => import('../pages/admin/AnalyticsPage.js').then(m => ({ default: m.AnalyticsPage })));
 
 const ALL_NAV_ITEMS = [
   { key: 'admin.dashboard', href: '/admin', icon: 'ti ti-layout-dashboard' },
@@ -202,7 +203,7 @@ export function AdminRoutes() {
           <Route path="supplies" element={<SupplyLibraryPage />} />
           <Route path="branding" element={<BrandingPage />} />
           <Route path="couriers" element={<CouriersPage />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="analytics" element={<Suspense fallback={null}><AnalyticsPage /></Suspense>} />
           <Route path="crm" element={<CRMPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="onboarding" element={<OnboardingPage />} />

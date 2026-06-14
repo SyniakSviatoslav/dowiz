@@ -1,9 +1,11 @@
 export * from './theme/ThemeProvider.js';
 export * from './components/Base.js';
+export { ErrorBoundary, withErrorBoundary } from './components/ErrorBoundary.js';
 export * from './components/Overlays.js';
 export * from './components/Status.js';
 export * from './components/molecules/index.js';
 
+export * from './constants/allergenColors.js';
 export * from './lib/i18n.js';
 export { I18nProvider, useI18n, LanguageSwitcher } from './lib/I18nProvider.js';
 
