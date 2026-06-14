@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import crypto from 'node:crypto';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -40,7 +41,7 @@ test.describe('UI: Admin Dashboard — Status Transitions via UI, Detail Modal, 
         customer: { phone: '+355600000030', name: 'Dashboard UI Test' },
         delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga e Durrësit, Tirana' },
         payment: { method: 'cash' },
-        idempotency_key: `dsh-ui-${TS}`,
+        idempotency_key: crypto.randomUUID(),
       },
     });
     expect(orderRes.status()).toBe(201);

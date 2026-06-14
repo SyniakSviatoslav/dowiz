@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import crypto from 'node:crypto';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -49,7 +50,7 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
         customer: { phone: '+355600000003', name: 'UI Owner Test' },
         delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga Myslym Shyri, Tirana' },
         payment: { method: 'cash' },
-        idempotency_key: `ui-owner-${TS}`,
+        idempotency_key: crypto.randomUUID(),
       },
     });
     expect(orderRes.status()).toBe(201);
