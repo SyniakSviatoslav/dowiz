@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import type { MessageBus } from '@deliveryos/platform';
 import { loadEnv } from '@deliveryos/config';
+import { shiftChannel } from './registry.js';
 
 export async function openShift(
   client: PoolClient,
@@ -56,7 +57,7 @@ export async function openShift(
   }
 
   // 2. Broadcast via MessageBus
-  await opts.messageBus.publish(`courier:${courierId}:shift`, {
+  await opts.messageBus.publish(shiftChannel(courierId), {
     type: 'shift.opened',
     shiftId,
     status,
