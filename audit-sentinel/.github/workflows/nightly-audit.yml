@@ -1,0 +1,65 @@
+name: nightly-audit
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_run:
+    workflows: ['deploy']
+    types: [completed]
+  repository_dispatch:
+    types: [watchdog-anomaly]
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Install Playwright
+        run: npx playwright install chromium --with-deps
+
+      - name: Run Full Audit (Tier-2)
+        run: |
+          cd audit-sentinel
+          node dist/auditor/invoke.js
+        env:
+          ENV: ${{ vars.AUDIT_ENV || 'staging' }}
+          BASE_URL: ${{ secrets.AUDIT_BASE_URL }}
+          MENU_URL: ${{ secrets.AUDIT_MENU_URL }}
+          SITE_URL: ${{ secrets.AUDIT_SITE_URL }}
+          TEST_TENANT: ${{ secrets.AUDIT_TEST_TENANT || 'demo' }}
+          ***REDACTED***: ${{ secrets.OPS_***REDACTED*** }}
+          TELEGRAM_CHAT_ID: ${{ secrets.OPS_TELEGRAM_CHAT_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AUDIT_AGENT_ENABLED: 'true'
+
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-findings-${{ github.run_id }}
+          path: audit-sentinel/findings/
+          retention-days: 30
+
+      - name: Escalate blockers (Telegram)
+        if: failure()
+        run: |
+          cd audit-sentinel
+          node dist/escalate/telegram.js
+        env:
+          ***REDACTED***: ${{ secrets.OPS_***REDACTED*** }}
+          TELEGRAM_CHAT_ID: ${{ secrets.OPS_TELEGRAM_CHAT_ID }}

@@ -1,0 +1,31 @@
+app = "dowiz"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[processes]
+  web    = "dist/api/server.cjs"
+  worker = "dist/worker/index.cjs"
+
+[http_service]
+  processes = ["web"]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+
+[[http_service.checks]]
+  path = "/health"
+  interval = "15s"
+  timeout = "3s"
+
+[[vm]]
+  processes = ["web"]
+  memory = "512mb"
+
+[[vm]]
+  processes = ["worker"]
+  memory = "256mb"
+
+kill_signal = "SIGTERM"
+kill_timeout = "30s"

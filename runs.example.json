@@ -1,0 +1,30 @@
+[
+  {
+    "run_id": "currency-switcher-7f3a",
+    "input": "Add a 10% discount to the cart subtotal in DeliveryOS",
+    "actual_output": "Edited pricing/engine.ts: applied discount on integer ALL subtotal via the central rounding util; PriceDisplay unchanged; EUR display untouched. tsc + money-contract checks pass.",
+    "expected_output": "Discount applied to integer-ALL subtotal through the central half-up rounding util; no float; EUR display unaffected.",
+    "tools_called": [
+      { "name": "read_file", "args": { "path": "pricing/engine.ts" } },
+      { "name": "edit_file", "args": { "path": "pricing/engine.ts" } },
+      { "name": "run_command", "args": { "cmd": "node .../check-money.mjs" } }
+    ],
+    "expected_tools": [
+      { "name": "edit_file" },
+      { "name": "run_command" }
+    ]
+  },
+  {
+    "run_id": "reviews-table-2c19",
+    "input": "Add a reviews table with per-location ratings",
+    "actual_output": "Migration 0NN: created reviews table with RLS enabled + FORCE, tenant policy on location_id; rls-isolation check passes.",
+    "tools_called": [
+      { "name": "edit_file", "args": { "path": "migrations/0NN_reviews.sql" } },
+      { "name": "run_command", "args": { "cmd": "node .../check-rls.mjs" } }
+    ],
+    "expected_tools": [
+      { "name": "edit_file" },
+      { "name": "run_command" }
+    ]
+  }
+]

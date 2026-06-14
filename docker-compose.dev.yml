@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: deliveryos_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    environment:
+      - OLLAMA_NOPULL=1
+
+  libretranslate:
+    image: libretranslate/libretranslate:latest
+    container_name: deliveryos_libretranslate
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    environment:
+      - LT_NO_LEARN=true
+
+volumes:
+  ollama_data:

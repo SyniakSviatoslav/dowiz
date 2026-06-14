@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Build
+        run: pnpm -r build
+        
+      - name: Typecheck
+        run: pnpm -r typecheck
+        
+      - name: Lint
+        run: pnpm lint
+        
+      - name: Lint Gates
+        run: pnpm lint:gates
+
+      - name: Verify migrations ordering
+        run: pnpm verify:migrations
+
+      - name: Verify no secrets in repo
+        run: pnpm verify:secrets
+
+  deploy:
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Migrate Database
+        run: pnpm migrate:up
+        env:
+          ***REDACTED***: ${{ secrets.***REDACTED*** }}
+          
+      - name: Deploy to Fly
+        uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Post-deploy E2E smoke (deploy-validation)
+        run: npx playwright test e2e/tests/deploy-validation.spec.ts --project=desktop --reporter=list
+        env:
+          VITE_BASE_URL: "https://dowiz.fly.dev"
+        timeout-minutes: 5
+
+      - name: Post-deploy E2E regression (core lifecycles)
+        run: npx playwright test e2e/tests/flow-core-lifecycles.spec.ts --project=desktop --reporter=list
+        env:
+          VITE_BASE_URL: "https://dowiz.fly.dev"
+        timeout-minutes: 5
+
+      - name: Post-deploy E2E Telegram webhook
+        run: npx playwright test e2e/tests/telegram-webhook.spec.ts --project=desktop --reporter=list
+        env:
+          VITE_BASE_URL: "https://dowiz.fly.dev"
+        timeout-minutes: 3
+
+      - name: Post-deploy E2E Telegram full-flow
+        run: npx playwright test e2e/tests/telegram-full-flow.spec.ts --project=desktop --reporter=list
+        env:
+          VITE_BASE_URL: "https://dowiz.fly.dev"
+        timeout-minutes: 10
