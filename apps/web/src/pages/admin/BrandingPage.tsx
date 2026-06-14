@@ -60,8 +60,9 @@ export function BrandingPage() {
         body: { primaryColor: config.primary, bgColor: config.bg, logoUrl: logoDataUrl || logoUrl }
       });
       setSuccess(true);
-    } catch { setSuccess(true); }
-    finally { setLoading(false); setTimeout(() => setSuccess(false), 3000); }
+    } catch (e) {
+      console.error('[BrandingPage] Failed to save branding:', e);
+    } finally { setLoading(false); setTimeout(() => setSuccess(false), 3000); }
   };
 
   const logoPreview = logoDataUrl || logoUrl;
