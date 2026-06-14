@@ -75,8 +75,8 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
             return;
           }
           onMessageRef.current?.(data);
-        } catch {
-          console.debug('[useWebSocket] received malformed message');
+        } catch (err) {
+          console.warn('[useWebSocket] received malformed message:', err);
         }
       };
 
@@ -104,7 +104,8 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
           setStatus('disconnected');
         }
       };
-    } catch {
+    } catch (err) {
+      console.warn('[useWebSocket] connect failed:', err);
       setStatus('error');
     }
   }, [enabled, room]);
@@ -125,8 +126,8 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
       }
       if (wsRef.current) {
         if (room && wsRef.current.readyState === WebSocket.OPEN) {
-          try { wsRef.current.send(JSON.stringify({ type: 'unsubscribe', room })); } catch {
-            console.debug('[useWebSocket] unsubscribe send failed');
+          try { wsRef.current.send(JSON.stringify({ type: 'unsubscribe', room })); } catch (err) {
+            console.debug('[useWebSocket] unsubscribe send failed:', err);
           }
         }
         wsRef.current.close(1000, 'unmount');

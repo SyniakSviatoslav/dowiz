@@ -1,4 +1,3 @@
-// @ts-nocheck
 import argon2 from 'argon2';
 import crypto from 'node:crypto';
 
@@ -21,7 +20,8 @@ export async function hashOtpCode(code: string): Promise<string> {
 export async function verifyOtpCode(code: string, hash: string): Promise<boolean> {
   try {
     return await argon2.verify(hash, code);
-  } catch {
+  } catch (err: any) {
+    console.warn('[otp] argon2 verify failed:', err?.message);
     return false;
   }
 }

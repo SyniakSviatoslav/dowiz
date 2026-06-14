@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -9,7 +8,7 @@ import { updateOrderStatus } from '../../lib/orderStatusService';
 
 const KIND_VALUES = ['no_show_recent', 'velocity_rapid', 'velocity_high_volume', 'ip_velocity_rapid', 'ip_velocity_high_volume', 'manual_flag'] as const;
 
-export default (async function ownerSignalRoutes(fastify, opts) {
+export default (async function ownerSignalRoutes(fastify: any, opts: any) {
   const { db, messageBus } = opts as any;
 
   fastify.addHook('onRequest', fastify.verifyAuth);
@@ -27,7 +26,7 @@ export default (async function ownerSignalRoutes(fastify, opts) {
         cursor: z.string().optional(),
       }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const { status, kind, limit, cursor } = request.query;
 
@@ -54,9 +53,8 @@ export default (async function ownerSignalRoutes(fastify, opts) {
           params.push(decoded.raisedAt);
           clauses += ` AND cs.raised_at < $${params.length}`;
         }
-      } catch {
-        // invalid cursor — ignore, will use no cursor filter
-        console.debug('[signals] invalid cursor, ignoring');
+      } catch (err: any) {
+        console.warn('[signals] invalid cursor, ignoring:', err?.message);
       }
     }
 
@@ -105,7 +103,7 @@ export default (async function ownerSignalRoutes(fastify, opts) {
         customer_id: z.string().uuid().optional(),
       }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const { phone_hash, ip_hash, customer_id } = request.query;
 
@@ -124,7 +122,7 @@ export default (async function ownerSignalRoutes(fastify, opts) {
     schema: {
       params: z.object({ locationId: z.string().uuid(), signalId: z.string().uuid() }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, signalId } = request.params;
     const user = request.user as any;
 
@@ -163,7 +161,7 @@ export default (async function ownerSignalRoutes(fastify, opts) {
       params: z.object({ locationId: z.string().uuid(), signalId: z.string().uuid() }),
       body: z.object({ reason: z.string().max(500).optional() }).strict(),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, signalId } = request.params;
     const body = request.body || {};
     const user = request.user as any;
@@ -193,7 +191,7 @@ export default (async function ownerSignalRoutes(fastify, opts) {
     schema: {
       params: z.object({ locationId: z.string().uuid(), orderId: z.string().uuid() }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId, orderId } = request.params;
     const user = request.user as any;
 

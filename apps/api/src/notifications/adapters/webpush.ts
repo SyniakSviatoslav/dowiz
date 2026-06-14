@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { formatMoney } from '@deliveryos/shared-types';
+import { formatMoney, ensureCurrency } from '@deliveryos/shared-types';
 import webpush from 'web-push';
 import type { NotificationProvider, NotificationTarget, NotificationEvent, NotificationData, NotifyResult } from '../provider.js';
 
@@ -14,7 +13,8 @@ export class WebPushAdapter implements NotificationProvider {
     let subscription: PushSubscriptionJSON;
     try {
       subscription = JSON.parse(target.address) as PushSubscriptionJSON;
-    } catch {
+    } catch (err: any) {
+      console.warn('[webpush] invalid push subscription JSON:', err?.message);
       return { delivered: false, reason: 'invalid_push_subscription_json' };
     }
 
@@ -56,7 +56,7 @@ export class WebPushAdapter implements NotificationProvider {
       : 'DeliveryOS';
 
     if (data.total != null && data.currency) {
-      parts.push(`${data.total.toFixed(0)} ${data.currency}`);
+      parts.push(formatMoney(data.total, ensureCurrency(data.currency)));
     }
     if (data.message) parts.push(data.message);
 

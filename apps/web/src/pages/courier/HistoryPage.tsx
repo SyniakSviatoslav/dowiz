@@ -1,6 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { EmptyState, SkeletonBase, StatusBadge, useI18n, PriceDisplay } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
+import { z } from 'zod';
+
+const HistoryItem = z.object({
+  id: z.string(),
+  orderId: z.string(),
+  date: z.string(),
+  restaurant: z.string(),
+  customerAddress: z.string(),
+  amount: z.number(),
+  status: z.string(),
+  rating: z.number().optional(),
+  feedback: z.string().optional(),
+});
+
+const HistoryListResponse = z.array(HistoryItem);
 
 interface DeliveryHistory {
   id: string;
@@ -23,7 +38,7 @@ export function HistoryPage() {
   const fetchHistory = async () => {
     try {
       setLoading(true);
-      const data = await apiClient<any>('/courier/me/history');
+      const data = await apiClient<typeof HistoryListResponse>('/courier/me/history', { schema: HistoryListResponse });
       setDeliveries(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError('Failed to fetch delivery history');

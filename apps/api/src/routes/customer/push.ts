@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -15,14 +14,14 @@ const subscribeSchema = z.object({
   opted_in: z.boolean().default(true),
 }).strict();
 
-export default (async function customerPushRoutes(fastify, opts) {
+export default (async function customerPushRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
 
   // ─── Register/update push subscription ────────────────────────────
   fastify.post('/push/subscribe', {
     schema: { body: subscribeSchema },
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const user = request.user as any;
     if (!user || user.role !== 'customer') {
       return reply.status(401).send({ error: 'Customer authentication required' });
@@ -64,7 +63,7 @@ export default (async function customerPushRoutes(fastify, opts) {
   // ─── Unsubscribe ──────────────────────────────────────────────────
   fastify.post('/push/unsubscribe', {
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const user = request.user as any;
     if (!user || user.role !== 'customer') return reply.status(401).send({ error: 'Unauthorized' });
 

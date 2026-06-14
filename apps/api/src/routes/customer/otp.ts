@@ -1,7 +1,7 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { BUS_CHANNELS } from '../../lib/registry.js';
 
 const sendOtpSchema = z.object({
   phone: z.string().regex(/^\+[1-9]\d{6,14}$/, 'Must be E.164 format'),
@@ -22,14 +22,14 @@ const verifyOtpSchema = z.object({
   order_intent_hash: z.string().min(1),
 }).strict();
 
-export default (async function customerOtpRoutes(fastify, opts) {
+export default (async function customerOtpRoutes(fastify: any, opts: any) {
   const { db, messageBus } = opts as any;
 
   // ─── OTP Send ────────────────────────────────────────────────────
   fastify.post('/locations/:slug/otp/send', {
     schema: { body: sendOtpSchema },
     config: { rateLimit: { max: 3, timeWindow: '15 minutes', keyGenerator: (req: any) => req.body?.phone || req.ip } },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { slug } = request.params as any;
     const { phone, order_intent } = request.body;
 
@@ -95,7 +95,7 @@ export default (async function customerOtpRoutes(fastify, opts) {
     console.log(`[OTP] Sending code to ${maskPhone(phone)} for location ${slug}`);
 
     // Publish event
-    await messageBus.publish(`otp.sent`, { locationId: location.id, phoneHash });
+    await messageBus.publish(BUS_CHANNELS.OTP_SENT, { locationId: location.id, phoneHash });
 
     return reply.send({
       otp_token: otpToken,
@@ -107,7 +107,7 @@ export default (async function customerOtpRoutes(fastify, opts) {
   fastify.post('/locations/:slug/otp/verify', {
     schema: { body: verifyOtpSchema },
     config: { rateLimit: { max: 5, timeWindow: '15 minutes', keyGenerator: (req: any) => req.body?.phone || req.ip } },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { slug } = request.params as any;
     const { phone, code, otp_token, order_intent_hash } = request.body;
 
@@ -187,7 +187,7 @@ export default (async function customerOtpRoutes(fastify, opts) {
 
       await client.query('COMMIT');
 
-      await messageBus.publish(`otp.verified`, { locationId: location.id, phoneHash, success: true });
+      await messageBus.publish(BUS_CHANNELS.OTP_VERIFIED, { locationId: location.id, phoneHash, success: true });
 
       return reply.send({
         verified_token: verifiedToken,

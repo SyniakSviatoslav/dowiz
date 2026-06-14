@@ -1,5 +1,5 @@
-// @ts-nocheck
 import type { MenuParserProvider, ParserInputType } from '../ports.js';
+// @ts-ignore — legacy types removed from shared-types, used by OCR parser at runtime
 import type { CanonicalMenuDraft, ParseIssue, ParseResult } from '@deliveryos/shared-types';
 import { PiiRedactor } from './pii-redactor.js';
 import Tesseract from 'tesseract.js';
@@ -184,6 +184,7 @@ export class AiOcrParser implements MenuParserProvider {
         // Pre-load worker module onto globalThis to prevent pdfjs-dist from
         // doing its own dynamic import("./pdf.worker.mjs") which fails in
         // esbuild-bundled environments (worker file is not on disk at runtime).
+        // @ts-expect-error — pdfjs worker lacks types
         const workerMod = await import('pdfjs-dist/build/pdf.worker.mjs');
         (globalThis as any).pdfjsWorker = workerMod;
         const pdfjs = await import('pdfjs-dist');
@@ -298,7 +299,7 @@ export class AiOcrParser implements MenuParserProvider {
         }
       } catch (err) {
         // If memory service fails, continue without memories
-        console.warn('[AI-OCR] Failed to retrieve memories for enhancement:', err.message);
+        console.warn('[AI-OCR] Failed to retrieve memories for enhancement:', (err as any).message);
       }
     }
 

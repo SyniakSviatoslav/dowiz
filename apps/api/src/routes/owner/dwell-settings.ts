@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -11,8 +10,8 @@ const inputSchema = z.object({
   en_route_s: z.number().int().min(10).max(7200),
 });
 
-export default (async function ownerDwellSettingsRoutes(fastify, opts) {
-  const { db } = opts as any;
+export default (async function ownerDwellSettingsRoutes(fastify: any, opts: any) {
+  const { db } = opts;
 
   fastify.addHook('onRequest', fastify.verifyAuth);
   fastify.addHook('onRequest', fastify.requireRole(['owner']));
@@ -23,14 +22,14 @@ export default (async function ownerDwellSettingsRoutes(fastify, opts) {
     schema: {
       params: z.object({ locationId: z.string().uuid() }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const res = await db.query(
       `SELECT dwell_thresholds FROM locations WHERE id = $1`,
       [locationId],
     );
     if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
-    const thresholds = res.rows[0].dwell_thresholds || DEFAULT_DWELL_THRESHOLDS;
+    const thresholds = res.rows[0]?.dwell_thresholds || DEFAULT_DWELL_THRESHOLDS;
     return reply.send({ dwellThresholds: thresholds });
   });
 
@@ -40,7 +39,7 @@ export default (async function ownerDwellSettingsRoutes(fastify, opts) {
       params: z.object({ locationId: z.string().uuid() }),
       body: z.object({ dwellThresholds: inputSchema }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const { dwellThresholds } = request.body;
     const stored = { v: 1, ...dwellThresholds };

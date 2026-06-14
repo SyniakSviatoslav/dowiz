@@ -96,7 +96,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
         if (res.rows.length > 0) return res.rows[0].location_id;
       }
       return null;
-    } catch {
+    } catch (err: any) {
+      console.warn('[spa-proxy] JWT verification failed:', err?.message);
       return null;
     }
   }
@@ -161,7 +162,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       reply.header('Cache-Control', 'public, max-age=31536000, immutable');
       reply.header('Content-Type', 'image/webp');
       return reply.send(buf);
-    } catch {
+    } catch (err: any) {
+      console.warn('[spa-proxy] image fetch failed:', err?.message);
       return reply.status(404).send({ error: 'Image not found' });
     }
   });

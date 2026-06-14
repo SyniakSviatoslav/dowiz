@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { z } from 'zod';
 import { loadEnv } from '@deliveryos/config';
 import { acceptCourierAssignment } from '../../lib/courierAssignmentService';
@@ -52,7 +51,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
     const locationId = request.user.activeLocationId;
     const { id } = request.params;
     
-    const acceptWindowMs = parseInt(env.COURIER_ACCEPT_WINDOW_MS || '30000', 10);
+    const acceptWindowMs = parseInt((env as any).COURIER_ACCEPT_WINDOW_MS || '30000', 10);
 
      const client = await db.connect();
      try {
@@ -267,7 +266,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
     const { id } = request.params;
     const { reason } = request.body;
     
-    const cancelWindowMs = parseInt(env.CANCEL_AFTER_DISPATCH_WINDOW_MS || '300000', 10);
+    const cancelWindowMs = parseInt((env as any).CANCEL_AFTER_DISPATCH_WINDOW_MS || '300000', 10);
 
     const client = await db.connect();
     try {

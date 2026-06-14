@@ -4,6 +4,15 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher, PriceDisplay } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../lib/index.js';
+import { z } from 'zod';
+
+const PublicThemeResponse = z.object({
+  locationName: z.string().optional(),
+  logoUrl: z.string().optional(),
+  primaryColor: z.string().optional(),
+  bgColor: z.string().optional(),
+  textColor: z.string().optional(),
+}).passthrough();
 import { CartProvider, useSharedCart } from '../lib/CartProvider.js';
 
 function ClientLayoutInner() {
@@ -78,8 +87,8 @@ function ClientLayoutInner() {
       return;
     }
 
-    apiClient<any>(`/public/theme/${slug}`)
-      .then((res: any) => {
+    apiClient<typeof PublicThemeResponse>(`/public/theme/${slug}`, { schema: PublicThemeResponse })
+      .then((res) => {
         setLocationName(res.locationName || '');
         setLogoUrl(res.logoUrl || '');
         setTheme({

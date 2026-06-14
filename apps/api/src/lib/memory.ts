@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Memory, type MemoryConfig, type AddMemoryOptions, type SearchMemoryOptions, type SearchResult, type Message } from 'mem0ai/oss';
 
 const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
@@ -166,7 +165,8 @@ export class MemoryService {
         topK,
       });
       return (result?.results ?? []).map((r) => r.memory);
-    } catch {
+    } catch (err: any) {
+      console.warn('[memory] getWorkerContext search failed:', err?.message);
       return [];
     }
   }
@@ -205,7 +205,8 @@ export class MemoryService {
         topK,
       });
       return (result?.results ?? []).map((r) => r.memory);
-    } catch {
+    } catch (err: any) {
+      console.warn('[memory] getUserContext search failed:', err?.message);
       return [];
     }
   }

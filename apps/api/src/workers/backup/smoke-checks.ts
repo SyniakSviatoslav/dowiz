@@ -224,7 +224,8 @@ async function checkPIIFree(pool: Pool): Promise<SmokeCheck> {
         }
         details[table] = piiCount;
         totalPii += piiCount;
-      } catch {
+      } catch (err: any) {
+        console.debug('[smoke-checks] PII check failed for table', table, ':', err?.message);
         details[table] = -1;
       }
     }

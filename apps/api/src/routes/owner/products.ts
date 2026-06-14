@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -29,10 +28,10 @@ export default async function productRoutes(fastify: FastifyInstance) {
         }).strict()
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId } = request.params;
       const { category_id, name, description, price, available, image_key, attributes, sort_order } = request.body;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(
@@ -60,10 +59,10 @@ export default async function productRoutes(fastify: FastifyInstance) {
         }).strict()
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId } = request.params;
       const { cursor, limit, category_id, available } = request.query;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         let query = `SELECT * FROM products WHERE location_id = $1`;
@@ -99,9 +98,9 @@ export default async function productRoutes(fastify: FastifyInstance) {
       preValidation: [server.verifyAuth, server.requireRole(['owner'])],
       schema: { params: ProductParams }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId, id } = request.params;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(`SELECT * FROM products WHERE location_id = $1 AND id = $2`, [locationId, id]);
@@ -129,10 +128,10 @@ export default async function productRoutes(fastify: FastifyInstance) {
         }).strict()
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId, id } = request.params;
       const updates = request.body;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       if (Object.keys(updates).length === 0) return reply.status(400).send({ error: 'No updates provided' });
 
@@ -167,9 +166,9 @@ export default async function productRoutes(fastify: FastifyInstance) {
       preValidation: [server.verifyAuth, server.requireRole(['owner'])],
       schema: { params: ProductParams }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId, id } = request.params;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(`DELETE FROM products WHERE location_id = $1 AND id = $2 RETURNING id`, [locationId, id]);
@@ -192,10 +191,10 @@ export default async function productRoutes(fastify: FastifyInstance) {
         }).strict()
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId, id, locale } = request.params;
       const { name, description } = request.body;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         // Validate locale exists in supported_locales
@@ -227,9 +226,9 @@ export default async function productRoutes(fastify: FastifyInstance) {
       preValidation: [server.verifyAuth, server.requireRole(['owner'])],
       schema: { params: ProductParams }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { id } = request.params;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(`SELECT * FROM product_translations WHERE product_id = $1`, [id]);
@@ -244,9 +243,9 @@ export default async function productRoutes(fastify: FastifyInstance) {
       preValidation: [server.verifyAuth, server.requireRole(['owner'])],
       schema: { params: TranslationParams }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { id, locale } = request.params;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(`DELETE FROM product_translations WHERE product_id = $1 AND locale = $2 RETURNING locale`, [id, locale]);
@@ -269,10 +268,10 @@ export default async function productRoutes(fastify: FastifyInstance) {
         }).strict())
       }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { locationId, id } = request.params;
       const payload = request.body;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       await withTenant(server.db, userId, async (client) => {
         await client.query(`DELETE FROM product_modifier_groups WHERE product_id = $1`, [id]);
@@ -295,9 +294,9 @@ export default async function productRoutes(fastify: FastifyInstance) {
       preValidation: [server.verifyAuth, server.requireRole(['owner'])],
       schema: { params: ProductParams }
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const { id } = request.params;
-      const userId = request.user!.userId;
+      const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(

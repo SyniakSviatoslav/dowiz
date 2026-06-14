@@ -2,6 +2,18 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Button, EmptyState, SkeletonBase, useI18n, PriceDisplay } from '@deliveryos/ui';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/index.js';
+import { z } from 'zod';
+import { RevealContactResponse } from '@deliveryos/shared-types';
+
+const CustomerListResponse = z.object({
+  customers: z.array(z.any()),
+}).passthrough();
+
+const CustomerAnalyticsResponse = z.object({
+  orders: z.array(z.any()).optional(),
+  preferences: z.array(z.any()).optional(),
+  heatmap: z.array(z.any()).optional(),
+}).passthrough();
 
 import { exportCSV } from '../../lib/exportCSV.js';
 
@@ -29,8 +41,8 @@ export function CRMPage() {
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
 
   useEffect(() => {
-    apiClient<any>('/owner/customers')
-      .then(d => { setCustomers(d.customers || d || []); setLoading(false); })
+    apiClient<typeof CustomerListResponse>('/owner/customers', { schema: CustomerListResponse })
+      .then(d => { setCustomers(d.customers || (d as any) || []); setLoading(false); })
       .catch(() => {
         setCustomers([
           { id: 'c1', name: 'Sara Mancini', phone: '+355 69 *** ***', orders: 18, ltv: 32400, lastOrder: 'today' },
@@ -49,9 +61,10 @@ export function CRMPage() {
     e.stopPropagation();
     setRevealing(id);
     try {
-      const res = await apiClient<any>(`/owner/customers/${id}/reveal-contact`, { method: 'POST' });
+      const res = await apiClient<typeof RevealContactResponse>(`/owner/customers/${id}/reveal-contact`, { method: 'POST', schema: RevealContactResponse });
       setRevealed(prev => ({ ...prev, [id]: res.phone || '+355 69 XXX XXXX' }));
-    } catch {
+    } catch (err) {
+      console.warn('[CRMPage] reveal contact failed:', err);
       setRevealed(prev => ({ ...prev, [id]: '+355 69 876 543' }));
     } finally {
       setRevealing(null);
@@ -67,10 +80,10 @@ export function CRMPage() {
     if (!analyticsCache[id]) {
       setLoadingAnalytics(id);
       try {
-        const data = await apiClient<any>(`/owner/customers/${id}/analytics`);
+        const data = await apiClient<typeof CustomerAnalyticsResponse>(`/owner/customers/${id}/analytics`, { schema: CustomerAnalyticsResponse });
         setAnalyticsCache(prev => ({ ...prev, [id]: data }));
-      } catch {
-        // Mock data if API fails
+      } catch (err) {
+        console.warn('[CRMPage] customer analytics failed:', err);
         setAnalyticsCache(prev => ({ ...prev, [id]: {
           orders: [
             { id: 'o1', status: 'DELIVERED', total: 150000, created_at: new Date().toISOString(), delivery_address: 'Rruga e Durresit', items: [{name: 'Pizza', qty: 2}] }

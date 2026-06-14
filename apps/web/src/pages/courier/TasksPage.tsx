@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { TaskCard, EmptyState, useI18n } from '@deliveryos/ui';
 import type { CourierTask } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
+import { AssignmentListResponse } from '@deliveryos/shared-types';
 
 export function TasksPage() {
   const [tasks, setTasks] = useState<CourierTask[]>([]);
@@ -21,14 +22,14 @@ export function TasksPage() {
       if (!payloadBase64) return 'c1';
       const payload = JSON.parse(atob(payloadBase64)) as Record<string, unknown>;
       return String(payload.sub || payload.userId || 'c1');
-    } catch { return 'c1'; }
+    } catch (err) { console.warn('[TasksPage] failed to parse JWT:', err); return 'c1'; }
   };
   const courierId = getCourierId();
 
   const fetchTasks = async () => {
     try {
       setLoading(true);
-      const data = await apiClient<any>('/courier/me/assignments');
+      const data = await apiClient<typeof AssignmentListResponse>('/courier/me/assignments', { schema: AssignmentListResponse });
       const raw = data?.success && Array.isArray(data.assignments) ? data.assignments : [];
       setTasks(raw.map((a: any) => ({ ...a, cashPayWith: a.cash_amount != null ? a.cash_amount : a.cashPayWith })));
     } catch (err: any) {
@@ -59,8 +60,8 @@ export function TasksPage() {
       await apiClient(`/courier/assignments/${id}/accept`, {
         method: 'POST'
       });
-    } catch {
-      // API failure is non-critical for navigation
+    } catch (err) {
+      console.warn('[TasksPage] accept task failed:', err);
     }
     navigate(`/courier/delivery/${id}`);
   };

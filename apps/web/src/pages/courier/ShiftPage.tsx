@@ -1,6 +1,16 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Button, EmptyState, SkeletonBase, useI18n, PriceDisplay } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
+import { z } from 'zod';
+
+const ShiftResponse = z.object({
+  isActive: z.boolean().optional(),
+  startedAt: z.string().nullable().optional(),
+  elapsedSeconds: z.number().optional(),
+  shiftId: z.string().nullable().optional(),
+  status: z.string().nullable().optional(),
+  stats: z.custom<ShiftStats>().optional(),
+}).passthrough();
 
 interface ShiftState {
   isActive: boolean;
@@ -28,7 +38,7 @@ export function ShiftPage() {
   const fetchShift = async () => {
     try {
       setLoading(true);
-      const data = await apiClient<any>('/courier/me/shift');
+      const data = await apiClient<typeof ShiftResponse>('/courier/me/shift', { schema: ShiftResponse });
       setShift({
         isActive: data?.isActive ?? false,
         startedAt: data?.startedAt ?? null,
@@ -77,7 +87,7 @@ export function ShiftPage() {
   const handleStartShift = async () => {
     setActionLoading(true);
     try {
-      const data = await apiClient<any>('/courier/me/shift/start', { method: 'POST' });
+      const data = await apiClient<typeof ShiftResponse>('/courier/me/shift/start', { method: 'POST', schema: ShiftResponse });
       setShift({
         isActive: data?.isActive ?? true,
         startedAt: data?.startedAt ?? new Date().toISOString(),
@@ -95,7 +105,7 @@ export function ShiftPage() {
   const handleEndShift = async () => {
     setActionLoading(true);
     try {
-      await apiClient<any>('/courier/me/shift/end', { method: 'POST' });
+      await apiClient<typeof ShiftResponse>('/courier/me/shift/end', { method: 'POST', schema: ShiftResponse });
       setShift({ isActive: false, startedAt: null, elapsedSeconds: 0, shiftId: null, status: null });
       fetchShift();
     } catch (err: any) {

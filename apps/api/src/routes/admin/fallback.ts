@@ -1,17 +1,16 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 
-export default (async function fallbackAdminRoutes(fastify, opts) {
-  const { db } = opts as any;
+export default (async function fallbackAdminRoutes(fastify: any, opts: any) {
+  const { db } = opts;
 
   // Auth: require owner JWT for all admin fallback operations
   fastify.addHook('onRequest', fastify.verifyAuth);
   fastify.addHook('onRequest', fastify.requireRole(['owner']));
 
   // ─── GET Fallback Health Overview ────────────────────────────────
-  fastify.get('/fallback/health', async (request, reply) => {
+  fastify.get('/fallback/health', async (request: any, reply: any) => {
     const locationsRes = await db.query(
       `SELECT l.id, l.name, l.slug, l.phone AS public_phone, l.fallback_config,
               COUNT(ont.id) FILTER (WHERE ont.channel = 'telegram' AND ont.status = 'active') AS telegram_active,
@@ -44,7 +43,7 @@ export default (async function fallbackAdminRoutes(fastify, opts) {
   });
 
   // ─── Trigger R2 fallback coverage check ──────────────────────────
-  fastify.post('/fallback/r2-check', async (request, reply) => {
+  fastify.post('/fallback/r2-check', async (request: any, reply: any) => {
     const res = await db.query(
       `SELECT COUNT(*)::int AS total_locations,
               COUNT(*) FILTER (WHERE fallback_config->>'phone' IS NOT NULL AND fallback_config->>'phone' != '') AS with_fallback_phone

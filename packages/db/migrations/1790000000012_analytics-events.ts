@@ -1,5 +1,14 @@
 import type { MigrationBuilder } from 'node-pg-migrate';
 
+// WHITELIST: analytics tables are intentionally non-tenant-scoped.
+// These tables store anonymous telemetry (no PII), analytics events,
+// abuse logs, and CWV metrics. They are queried per-location but
+// aggregated across tenants for abuse detection and platform health.
+// location_id is stored for per-location breakdowns but RLS is NOT
+// enforced — the telemetry endpoint inserts without tenant context.
+// Do NOT add FORCE ROW LEVEL SECURITY to these tables without
+// changing the telemetry insert path.
+
 export async function up(pgm: MigrationBuilder): Promise<void> {
   pgm.sql(`
     CREATE TABLE analytics_events (

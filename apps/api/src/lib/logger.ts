@@ -1,4 +1,3 @@
-// @ts-nocheck
 import pino from 'pino';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { PiiRedactor } from './pii-redactor.js';
@@ -48,7 +47,7 @@ export function createPinoLogger(name?: string): pino.Logger {
     name,
     level: process.env.LOG_LEVEL || 'info',
     mixin() {
-      const correlationId = correlationStore.get();
+      const correlationId = (correlationStore as any).get();
       return correlationId ? { correlationId } : {};
     },
     serializers: {

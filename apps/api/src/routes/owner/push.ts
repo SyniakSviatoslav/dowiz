@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -13,8 +12,8 @@ const subscribePushSchema = z.object({
   }),
 }).strict();
 
-export default (async function ownerPushRoutes(fastify, opts) {
-  const { db } = opts as any;
+export default (async function ownerPushRoutes(fastify: any, opts: any) {
+  const { db } = opts;
 
   fastify.addHook('onRequest', fastify.verifyAuth);
   fastify.addHook('onRequest', fastify.requireRole(['owner']));
@@ -27,7 +26,7 @@ export default (async function ownerPushRoutes(fastify, opts) {
       body: subscribePushSchema,
     },
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params as any;
     const user = request.user as any;
     const { subscription } = request.body as any;
@@ -62,7 +61,7 @@ export default (async function ownerPushRoutes(fastify, opts) {
   // ─── Unsubscribe owner push ───────────────────────────────────────
   fastify.post('/:locationId/push/unsubscribe', {
     schema: { params: z.object({ locationId: z.string().uuid() }) },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params as any;
 
     await db.query(
@@ -77,7 +76,7 @@ export default (async function ownerPushRoutes(fastify, opts) {
   // ─── Get push subscription state ──────────────────────────────────
   fastify.get('/:locationId/push/state', {
     schema: { params: z.object({ locationId: z.string().uuid() }) },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params as any;
 
     const res = await db.query(

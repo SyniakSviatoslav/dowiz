@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -8,8 +7,8 @@ function hashIp(ip: string): string {
   return crypto.createHash('sha256').update(ip).digest('hex').slice(0, 16);
 }
 
-export default (async function telemetryRoutes(fastify, opts) {
-  const { db } = opts as any;
+export default (async function telemetryRoutes(fastify: any, opts: any) {
+  const { db } = opts;
 
   const eventSchema = z.object({
     event: z.string().min(1).max(64),
@@ -37,7 +36,7 @@ export default (async function telemetryRoutes(fastify, opts) {
 
   fastify.post('/api/telemetry', {
     config: { rateLimit: false }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     try {
       const parsed = batchEventSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -84,7 +83,7 @@ export default (async function telemetryRoutes(fastify, opts) {
 
   fastify.post('/api/telemetry/abuse', {
     config: { rateLimit: false }
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     try {
       const body = request.body as any;
       const kind = body?.kind || 'unknown';

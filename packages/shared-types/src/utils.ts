@@ -30,10 +30,13 @@ export function formatMoney(
     return `${Math.round(amount)} ALL`;
   }
 
-  // Convert ALL to EUR (display-only)
-  const eurAmount = amount * rate;
+  // Convert ALL to EUR using scaled integer arithmetic (display-only)
+  const rateScaled = Math.round(rate * 1_000_000_000);
+  const eurCents = BigInt(amount) * BigInt(rateScaled) * 100n;
+  const scale = BigInt(10) ** BigInt(9);
+  const eurCentsRounded = Number((eurCents + scale / 2n) / scale);
   const decimals = CURRENCIES.EUR.decimals;
-  const rounded = Math.round(eurAmount * Math.pow(10, decimals)) / Math.pow(10, decimals);
+  const rounded = eurCentsRounded / Math.pow(10, decimals);
   return `${rounded.toFixed(decimals)} €`;
 }
 

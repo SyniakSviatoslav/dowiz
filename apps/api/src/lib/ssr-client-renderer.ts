@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { h } from 'preact';
 import render from 'preact-render-to-string';
 import htm from 'htm';
@@ -76,5 +75,5 @@ export function renderClientShell({ title, slug, scriptUrl, nonce, cssHash, them
     </html>
   `;
 
-  return '<!DOCTYPE html>\n' + render(vdom);
+  return '<!DOCTYPE html>\n' + render(vdom as any);
 }

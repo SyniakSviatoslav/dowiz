@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -11,8 +10,8 @@ const fallbackBodySchema = z.object({
   wsRetryBaseMs: z.number().int().min(500).max(10000).optional(),
 }).strict();
 
-export default (async function ownerFallbackRoutes(fastify, opts) {
-  const { db } = opts as any;
+export default (async function ownerFallbackRoutes(fastify: any, opts: any) {
+  const { db } = opts;
 
   fastify.addHook('onRequest', fastify.verifyAuth);
   fastify.addHook('onRequest', fastify.requireRole(['owner']));
@@ -23,14 +22,14 @@ export default (async function ownerFallbackRoutes(fastify, opts) {
     schema: {
       params: z.object({ locationId: z.string().uuid() }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const res = await db.query(
       `SELECT fallback_config FROM locations WHERE id = $1`,
       [locationId],
     );
     if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
-    const config = res.rows[0].fallback_config || {};
+    const config = res.rows[0]?.fallback_config || {};
     return reply.send({
       phone: config.phone || null,
       showPhoneOnError: config.show_phone_on_error !== false,
@@ -46,7 +45,7 @@ export default (async function ownerFallbackRoutes(fastify, opts) {
       params: z.object({ locationId: z.string().uuid() }),
       body: fallbackBodySchema,
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const { phone, showPhoneOnError, showPhoneOnOffline, wsRetryMax, wsRetryBaseMs } = request.body;
 
@@ -70,7 +69,7 @@ export default (async function ownerFallbackRoutes(fastify, opts) {
     schema: {
       params: z.object({ locationId: z.string().uuid() }),
     },
-  }, async (request, reply) => {
+  }, async (request: any, reply: any) => {
     const { locationId } = request.params;
 
     const [fbRes, notifRes] = await Promise.all([

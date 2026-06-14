@@ -1,10 +1,9 @@
-// @ts-nocheck
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 
 const MAX_URLS_PER_SHARD = 50000;
 
-export default (async function seoRoutes(fastify, opts) {
+export default (async function seoRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
 
   async function getActiveLocations(client: any) {
@@ -25,7 +24,7 @@ export default (async function seoRoutes(fastify, opts) {
     return res.rows;
   }
 
-  function buildUrlTag(loc: string, lastmod: string, supportedLocales: string[]) {
+  function buildUrlTag(loc: string, lastmod: string, supportedLocales: string[] | undefined) {
     let xml = `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n`;
     for (const locale of supportedLocales || ['sq', 'en']) {
       xml += `    <xhtml:link rel="alternate" hreflang="${locale}" href="${loc}?locale=${locale}" />\n`;
@@ -35,7 +34,7 @@ export default (async function seoRoutes(fastify, opts) {
     return xml;
   }
 
-  fastify.get('/robots.txt', async (request, reply) => {
+  fastify.get('/robots.txt', async (request: any, reply: any) => {
     const host = request.hostname;
     const protocol = request.protocol || 'https';
     const sitemapUrl = `${protocol}://${host}/sitemap.xml`;
@@ -80,7 +79,7 @@ Sitemap: ${sitemapUrl}`;
   });
 
   // Sitemap index → sharded children
-  fastify.get('/sitemap.xml', async (request, reply) => {
+  fastify.get('/sitemap.xml', async (request: any, reply: any) => {
     try {
       const client = await db.connect();
       try {
@@ -111,7 +110,7 @@ Sitemap: ${sitemapUrl}`;
   });
 
   // Sharded location sitemaps
-  fastify.get('/sitemap-locations-:shard.xml', async (request, reply) => {
+  fastify.get('/sitemap-locations-:shard.xml', async (request: any, reply: any) => {
     const shard = parseInt((request.params as any).shard, 10) || 1;
 
     try {
@@ -138,7 +137,7 @@ Sitemap: ${sitemapUrl}`;
           const version = row.mv_version || row.menu_version || 1;
           const updated = row.updated_at || new Date(version * 1000).toISOString();
           const lastmod = updated ? new Date(updated).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-          xml += buildUrlTag(loc, lastmod, row.supported_locales);
+          xml += buildUrlTag(loc, lastmod as string, row.supported_locales);
         }
 
         xml += `</urlset>`;

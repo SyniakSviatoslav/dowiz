@@ -1,7 +1,18 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay } from '@deliveryos/ui';
 import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@deliveryos/ui';
+import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
+import { z } from 'zod';
+import { LocationResponse, CourierListResponse, CategoryResponse } from '@deliveryos/shared-types';
+
+const AnyResponse = z.any();
+
+const NotificationStatusResponse = z.object({
+  telegramConnected: z.boolean().optional(),
+}).passthrough();
+
+const OrdersListResponse = z.any();
 import { exportCSV } from '../../lib/exportCSV.js';
 import { mergeDelta } from './dashboard-utils.js';
 
@@ -33,7 +44,7 @@ export function DashboardPage() {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const data = await apiClient<any>('/owner/orders');
+      const data = await apiClient<typeof OrdersListResponse>('/owner/orders', { schema: OrdersListResponse });
       setOrders(Array.isArray(data) ? data : []);
     } catch (err: any) {
       if (err.status === 404) {
@@ -52,29 +63,29 @@ export function DashboardPage() {
 
   useEffect(() => {
     fetchOrders();
-    apiClient<any>('/owner/settings').then(res => {
+    apiClient<typeof LocationResponse>('/owner/settings', { schema: LocationResponse }).then(res => {
       if (res.id) setTenantId(res.id);
-      if (res.locationName) {
-        const generated = res.locationName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
+      if ((res as any).locationName || res.name) {
+        const generated = ((res as any).locationName || res.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
         setClientSlug(generated);
       }
       // Compute readiness from actual data
       const r = { menu: false, phone: false, address: false, couriers: false, branding: false, placeOrder: false, telegram: false };
       r.phone = !!(res.phone && res.phone.length > 5);
       r.address = !!(res.address && res.address.length > 5);
-      r.branding = !!(res.locationName && res.locationName.length > 2);
+      r.branding = !!((res as any).locationName || res.name) && ((res as any).locationName || res.name).length > 2;
       setReadiness(r);
       // Check notification status (lightweight)
       if (res.id) {
-        apiClient<any>(`/owner/locations/${res.id}/notifications/status`).then(status => {
+        apiClient<typeof NotificationStatusResponse>(`/owner/locations/${res.id}/notifications/status`, { schema: NotificationStatusResponse }).then(status => {
           setReadiness(prev => ({ ...prev, telegram: status?.telegramConnected || false }));
         }).catch(() => {});
       }
     }).catch(() => {});
     // Check menu + couriers in parallel
     Promise.all([
-      apiClient<any>('/owner/menu/categories').catch(() => []),
-      apiClient<any>('/owner/couriers').catch(() => []),
+      apiClient('/owner/menu/categories', { schema: z.array(CategoryResponse) }).catch(() => []),
+      apiClient<typeof CourierListResponse>('/owner/couriers', { schema: CourierListResponse }).catch(() => ({ couriers: [] })),
     ]).then(([cats, couriers]) => {
       setReadiness(prev => ({
         ...prev,
@@ -110,16 +121,16 @@ export function DashboardPage() {
   const fetchMessages = async (orderId: string) => {
     if (messagesByOrder[orderId]) return;
     try {
-      const data = await apiClient<any>(`/orders/${orderId}/messages`);
+      const data = await apiClient<typeof AnyResponse>(`/orders/${orderId}/messages`, { schema: AnyResponse });
       setMessagesByOrder(prev => ({ ...prev, [orderId]: Array.isArray(data) ? data : [] }));
-    } catch { /* ignore */ }
+    } catch (err) { console.debug('[DashboardPage] fetch messages failed:', err); }
   };
 
   const handleSendMessage = async (orderId: string, presetKey: string, params?: Record<string, unknown>) => {
     try {
       const msg = await apiClient(`/orders/${orderId}/messages`, { method: 'POST', body: { presetKey, params } });
       setMessagesByOrder(prev => ({ ...prev, [orderId]: [...(prev[orderId] || []), msg] }));
-    } catch { /* ignore */ }
+    } catch (err) { console.warn('[DashboardPage] send message failed:', err); }
   };
 
   const handleToggleMessages = (orderId: string) => {
@@ -140,7 +151,8 @@ export function DashboardPage() {
     });
     try {
       await apiClient(`/orders/${id}/status`, { method: 'PATCH', body: { status: newStatus } });
-    } catch {
+    } catch (err) {
+      console.error('[DashboardPage] update status failed:', err);
       fetchOrders();
     }
   };
