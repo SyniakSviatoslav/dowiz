@@ -356,7 +356,7 @@ export async function renderMenuPage(
           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
           <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-          ${assetTags}
+          <!--SSR_ASSETS-->
           <script type="application/ld+json">${jsonld}</script>
           <style>
             *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -408,7 +408,7 @@ export async function renderMenuPage(
       </html>
     `;
 
-    const fullHtml = '<!DOCTYPE html>\n' + render(vdom as any);
+    const fullHtml = ('<!DOCTYPE html>\n' + render(vdom as any)).replace('<!--SSR_ASSETS-->', assetTags);
     cache.set(cacheKey, { html: fullHtml, slug });
     return fullHtml;
   } finally {
