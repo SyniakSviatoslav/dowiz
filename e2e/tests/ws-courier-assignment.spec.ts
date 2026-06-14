@@ -105,16 +105,12 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
             if (data.type === 'subscribed' && !subscribed) {
               subscribed = true;
               messages.push('subscribed_ok');
-              // Create assignment via dev endpoint (handles DB + WS publish)
               try {
-                const assignRes = await fetch(
-                  `${base}/api/dev/create-assignment`,
-                  {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ orderId: oId, courierId: cId, locationId: locId }),
-                  }
-                );
+                const assignRes = await fetch(`${base}/api/dev/create-assignment`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ orderId: oId, courierId: cId, locationId: locId }),
+                });
                 messages.push(`assign_status:${assignRes.status}`);
                 const assignBody = await assignRes.json();
                 messages.push(`assign_body:${JSON.stringify(assignBody).slice(0, 120)}`);
@@ -123,7 +119,9 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
               }
             }
 
-            if (data.type === 'task_assigned') {
+            // Check both direct and relayed (wrapped) message formats
+            const innerType = data.data?.type || data.type;
+            if (innerType === 'task_assigned') {
               messages.push(`task_ok`);
               clearTimeout(timeout);
               ws.close();
