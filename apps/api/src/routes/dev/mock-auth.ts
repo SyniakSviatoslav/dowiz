@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { signAuthToken } from '@deliveryos/platform';
 import crypto from 'node:crypto';
+import { dashboardChannel } from '../../lib/registry.js';
 
 export default async function mockAuthRoutes(fastify: FastifyInstance) {
   console.log('[API] Registering mockAuthRoutes: /dev/mock-auth');
@@ -93,6 +94,21 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
       );
 
       await client.query('COMMIT');
+
+      // Publish WS events for test verification
+      const messageBus = (fastify as any).messageBus;
+      if (messageBus) {
+        await messageBus.publish(dashboardChannel(locationId), {
+          type: 'assignment.created',
+          orderId,
+          courierId,
+        });
+        await messageBus.publish(`courier:${courierId}`, {
+          type: 'task_assigned',
+          payload: { id: orderId, orderId, status: 'assigned', courierId },
+        });
+      }
+
       return reply.send({ assignmentId: asgnRes.rows[0].id, shiftId });
     } catch (err) {
       await client.query('ROLLBACK');
