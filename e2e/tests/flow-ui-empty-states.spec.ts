@@ -4,6 +4,7 @@ const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 let authToken: string;
 
 test.describe('UI: Empty States — All Lists', () => {
+  let request: any;
   test.beforeAll(async ({ request }) => {
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
@@ -73,7 +74,7 @@ test.describe('UI: Empty States — All Lists', () => {
     await page.goto(`${BASE}/s/demo`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const cards = page.locator('article[data-testid="menu-item"]');
+    const cards = page.locator('div.product-card');
     await expect(cards.first().or(page.locator('text=no products'))).toBeAttached({ timeout: 8000 });
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
@@ -84,7 +85,7 @@ test.describe('UI: Empty States — All Lists', () => {
     page.on('pageerror', err => errors.push(err.message));
 
     // Create temp courier token with no assignments
-    const courierRes = await (await test.info()).request.post(`${BASE}/api/dev/mock-auth`, {
+    const courierRes = await request.post(`${BASE}/api/dev/mock-auth`, {
       data: { role: 'courier' },
     });
     expect(courierRes.status()).toBe(200);
