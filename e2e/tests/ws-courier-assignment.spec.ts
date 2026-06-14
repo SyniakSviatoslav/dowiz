@@ -61,7 +61,7 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
         locationId,
         type: 'delivery',
         items: [{ product_id: productId, quantity: 1 }],
-        customer: { phone: '+355600000001', name: 'WS Test' },
+        customer: { phone: `+3556000${String(Date.now()).slice(-6)}`, name: 'WS Test' },
         delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Test Address, Tirana' },
         payment: { method: 'cash' },
         idempotency_key: crypto.randomUUID(),
