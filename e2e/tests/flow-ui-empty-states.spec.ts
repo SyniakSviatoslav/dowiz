@@ -73,7 +73,7 @@ test.describe('UI: Empty States — All Lists', () => {
     await page.goto(`${BASE}/s/demo`, { waitUntil: 'domcontentloaded', timeout: 15000 });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    await page.waitForSelector('div.product-card', { timeout: 8000 });
+    await page.waitForSelector('h3.product-name, [class*="product-card"]', { timeout: 8000 });
 
     const criticalErrors = errors.filter(e => !e.includes('favicon') && !e.includes('404') && !e.includes('manifest') && !e.includes('ResizeObserver'));
     expect(criticalErrors, `JS errors: ${criticalErrors.join('; ')}`).toEqual([]);
