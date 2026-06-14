@@ -140,7 +140,7 @@ export type CustomerOrderStatusResponse = z.infer<typeof CustomerOrderStatusResp
 // ─── AuthToken ───────────────────────────────────────────────────────
 const AuthBase = { sub: z.string().uuid(), iat: z.number().int(), exp: z.number().int(), kid: z.string() };
 export const AuthToken = z.discriminatedUnion('role', [
-  z.object({ role: z.literal('owner'), userId: z.string().uuid(), ...AuthBase }).strict(),
+  z.object({ role: z.literal('owner'), userId: z.string().uuid(), activeLocationId: z.string().uuid().optional(), ...AuthBase }).strict(),
   z.object({ role: z.literal('courier'), activeLocationId: z.string().uuid(), jti: z.string().uuid().optional(), ...AuthBase }).strict(),
   z.object({
     role: z.literal('customer'),

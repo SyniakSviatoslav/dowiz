@@ -6,7 +6,6 @@ const ARTIFACTS = 'e2e/artifacts';
 
 test.describe('Promotions — CRUD + Validate', () => {
   let ownerToken: string;
-  let locationId: string;
   let createdPromoId: string;
   let createdPromoCode: string;
 
@@ -17,13 +16,11 @@ test.describe('Promotions — CRUD + Validate', () => {
     expect(mockRes.status()).toBe(200);
     const body = await mockRes.json();
     ownerToken = body.access_token;
-    locationId = body.activeLocationId;
-    expect(locationId).toBeTruthy();
   });
 
-  test('GET /api/owner/locations/:id/promotions returns list', async ({ request }) => {
+  test('GET /api/owner/promotions returns list', async ({ request }) => {
     const res = await request.get(
-      `${BASE}/api/owner/locations/${locationId}/promotions`,
+      `${BASE}/api/owner/promotions`,
       { headers: { Authorization: `Bearer ${ownerToken}` } }
     );
     expect(res.status()).toBe(200);
@@ -32,9 +29,9 @@ test.describe('Promotions — CRUD + Validate', () => {
     expect(typeof body.total).toBe('number');
   });
 
-  test('GET /api/owner/locations/:id/promotions/:id returns 404 for missing', async ({ request }) => {
+  test('GET /api/owner/promotions/:id returns 404 for missing', async ({ request }) => {
     const res = await request.get(
-      `${BASE}/api/owner/locations/${locationId}/promotions/00000000-0000-0000-0000-000000000000`,
+      `${BASE}/api/owner/promotions/00000000-0000-0000-0000-000000000000`,
       { headers: { Authorization: `Bearer ${ownerToken}` } }
     );
     expect(res.status()).toBe(404);
@@ -42,7 +39,7 @@ test.describe('Promotions — CRUD + Validate', () => {
 
   test('POST creates a percentage promotion', async ({ request }) => {
     const res = await request.post(
-      `${BASE}/api/owner/locations/${locationId}/promotions`,
+      `${BASE}/api/owner/promotions`,
       {
         headers: { Authorization: `Bearer ${ownerToken}`, 'Content-Type': 'application/json' },
         data: {
@@ -68,7 +65,7 @@ test.describe('Promotions — CRUD + Validate', () => {
   test('PATCH toggles active status to false', async ({ request }) => {
     expect(createdPromoId).toBeTruthy();
     const res = await request.patch(
-      `${BASE}/api/owner/locations/${locationId}/promotions/${createdPromoId}`,
+      `${BASE}/api/owner/promotions/${createdPromoId}`,
       {
         headers: { Authorization: `Bearer ${ownerToken}`, 'Content-Type': 'application/json' },
         data: { is_active: false },
@@ -82,7 +79,7 @@ test.describe('Promotions — CRUD + Validate', () => {
   test('PATCH toggles active status back to true', async ({ request }) => {
     expect(createdPromoId).toBeTruthy();
     const res = await request.patch(
-      `${BASE}/api/owner/locations/${locationId}/promotions/${createdPromoId}`,
+      `${BASE}/api/owner/promotions/${createdPromoId}`,
       {
         headers: { Authorization: `Bearer ${ownerToken}`, 'Content-Type': 'application/json' },
         data: { is_active: true },
@@ -95,7 +92,7 @@ test.describe('Promotions — CRUD + Validate', () => {
 
   test('PATCH 404 for non-existent promotion', async ({ request }) => {
     const res = await request.patch(
-      `${BASE}/api/owner/locations/${locationId}/promotions/00000000-0000-0000-0000-000000000000`,
+      `${BASE}/api/owner/promotions/00000000-0000-0000-0000-000000000000`,
       {
         headers: { Authorization: `Bearer ${ownerToken}`, 'Content-Type': 'application/json' },
         data: { is_active: true },
@@ -107,7 +104,7 @@ test.describe('Promotions — CRUD + Validate', () => {
   test('POST validate returns valid for the created promotion', async ({ request }) => {
     expect(createdPromoCode).toBeTruthy();
     const res = await request.post(
-      `${BASE}/api/owner/locations/${locationId}/promotions/validate`,
+      `${BASE}/api/owner/promotions/validate`,
       {
         headers: { Authorization: `Bearer ${ownerToken}`, 'Content-Type': 'application/json' },
         data: { code: createdPromoCode, order_subtotal: 100000 },
@@ -121,7 +118,7 @@ test.describe('Promotions — CRUD + Validate', () => {
 
   test('POST validate returns invalid for unknown code', async ({ request }) => {
     const res = await request.post(
-      `${BASE}/api/owner/locations/${locationId}/promotions/validate`,
+      `${BASE}/api/owner/promotions/validate`,
       {
         headers: { Authorization: `Bearer ${ownerToken}`, 'Content-Type': 'application/json' },
         data: { code: 'NONEXISTENT-CODE-999', order_subtotal: 100000 },
@@ -136,7 +133,7 @@ test.describe('Promotions — CRUD + Validate', () => {
   test('POST validate returns invalid when order below minimum', async ({ request }) => {
     expect(createdPromoCode).toBeTruthy();
     const res = await request.post(
-      `${BASE}/api/owner/locations/${locationId}/promotions/validate`,
+      `${BASE}/api/owner/promotions/validate`,
       {
         headers: { Authorization: `Bearer ${ownerToken}`, 'Content-Type': 'application/json' },
         data: { code: createdPromoCode, order_subtotal: 100 },
@@ -149,7 +146,7 @@ test.describe('Promotions — CRUD + Validate', () => {
 
   test('POST validate returns 401 without auth', async ({ request }) => {
     const res = await request.post(
-      `${BASE}/api/owner/locations/${locationId}/promotions/validate`,
+      `${BASE}/api/owner/promotions/validate`,
       {
         headers: { 'Content-Type': 'application/json' },
         data: { code: 'ANYCODE', order_subtotal: 100000 },
@@ -161,7 +158,7 @@ test.describe('Promotions — CRUD + Validate', () => {
   test('DELETE removes the test promotion', async ({ request }) => {
     expect(createdPromoId).toBeTruthy();
     const res = await request.delete(
-      `${BASE}/api/owner/locations/${locationId}/promotions/${createdPromoId}`,
+      `${BASE}/api/owner/promotions/${createdPromoId}`,
       { headers: { Authorization: `Bearer ${ownerToken}` } }
     );
     expect(res.status()).toBe(200);
@@ -172,7 +169,7 @@ test.describe('Promotions — CRUD + Validate', () => {
   test('DELETE 404 for already-deleted promotion', async ({ request }) => {
     expect(createdPromoId).toBeTruthy();
     const res = await request.delete(
-      `${BASE}/api/owner/locations/${locationId}/promotions/${createdPromoId}`,
+      `${BASE}/api/owner/promotions/${createdPromoId}`,
       { headers: { Authorization: `Bearer ${ownerToken}` } }
     );
     expect(res.status()).toBe(404);
@@ -181,21 +178,21 @@ test.describe('Promotions — CRUD + Validate', () => {
   test('DELETE returns 401 without auth', async ({ request }) => {
     expect(createdPromoId).toBeTruthy();
     const res = await request.delete(
-      `${BASE}/api/owner/locations/${locationId}/promotions/${createdPromoId}`
+      `${BASE}/api/owner/promotions/${createdPromoId}`
     );
     expect(res.status()).toBe(401);
   });
 
   test('GET returns 401 without auth', async ({ request }) => {
     const res = await request.get(
-      `${BASE}/api/owner/locations/${locationId}/promotions`
+      `${BASE}/api/owner/promotions`
     );
     expect(res.status()).toBe(401);
   });
 
   test('POST returns 401 without auth', async ({ request }) => {
     const res = await request.post(
-      `${BASE}/api/owner/locations/${locationId}/promotions`,
+      `${BASE}/api/owner/promotions`,
       {
         headers: { 'Content-Type': 'application/json' },
         data: { code: 'TEST', type: 'percentage', discount_value: 10 },
@@ -206,7 +203,7 @@ test.describe('Promotions — CRUD + Validate', () => {
 
   test('POST returns 400 with invalid data', async ({ request }) => {
     const res = await request.post(
-      `${BASE}/api/owner/locations/${locationId}/promotions`,
+      `${BASE}/api/owner/promotions`,
       {
         headers: { Authorization: `Bearer ${ownerToken}`, 'Content-Type': 'application/json' },
         data: { discount_value: -5, type: 'invalid_type' },

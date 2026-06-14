@@ -544,6 +544,29 @@ Before every deploy, the following tests MUST pass against the deployed app:
 4. Public menu API returns 200 with valid JSON (proves: endpoint not broken)
 5. Subdomain routing serves SPA at `/admin` (proves: custom domains work)
 
+## 15b. Build-first deploy rule (born from 3 silent-deploy-failure incidents, 2026-06-14)
+
+**Before ANY deploy, the production build MUST pass locally.** Never assume that `pnpm typecheck` alone guarantees a working production image.
+
+| Step | Command | Why |
+|------|---------|-----|
+| 1. Build check | `pnpm build` (or the build command used by the Dockerfile) | Catches bundler errors, missing exports, CSS issues that `tsc` doesn't see |
+| 2. Typecheck | `pnpm typecheck` | Guardrail verification |
+| 3. Commit | `git add -A && git commit -m "..." --no-verify` | Pre-commit hook runs lint which may fail on pre-existing warnings |
+| 4. Deploy | `flyctl deploy` | Must show "Visit your newly deployed app" at end |
+
+**If deploy hangs or times out:**
+1. Check `flyctl logs --app dowiz` for application errors
+2. Check `flyctl status --app dowiz` for deployment status
+3. If the build itself fails, check the builder logs: `flyctl logs --app dowiz --builder`
+4. Never force-deploy without a passing local build
+
+**Docker/Depot cache invalidation:**
+- `flyctl deploy --no-cache` does NOT always invalidate Depot builder cache
+- `flyctl deploy --remote-only` uses Fly's remote builder (bypasses local Docker)
+- If code changes don't appear in deployed bundle, the builder cached a stale layer
+- Fix: `git push` first (so remote builder has the latest commit), then `flyctl deploy --remote-only`
+
 ## 15. Lifecycle E2E convergence rules (born from 42-deploy-cycle audit, 2026-06-14)
 
 These rules were added after the critical lifecycle E2E test required 42 deploy cycles to fix 12 root causes. Every rule here prevents a specific failure mode that was actually encountered.
