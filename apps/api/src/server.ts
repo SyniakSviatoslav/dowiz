@@ -93,6 +93,7 @@ import { AnonymizerService } from './lib/anonymizer/index.js';
 import { AnonymizerRetentionWorker } from './workers/anonymizer-retention.js';
 import { GdprErasureWorker } from './workers/anonymizer-gdpr.js';
 import { MemoryService, getMemoryService } from './lib/memory.js';
+import { registerNotifySubscriptions } from './bootstrap/messaging.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -388,41 +389,7 @@ const retryPolicy = new RetryPolicy();
   const telegramPoller = new TelegramPoller(pool, telegramAdapter);
   // telegramPoller.start(); — disabled: webhook active
 
-   // Backup failure → Telegram alert to location owners
-   messageBus.subscribe(BUS_CHANNELS.BACKUP_FAILED, async (payload: any) => {
-     try {
-       await queue.boss.send(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, {
-         event: 'backup.failed',
-         location_id: payload.locationId || 'system'
-       });
-     } catch (err) {
-       console.error('[Notify] Failed to send backup.failed telegram job', err);
-     }
-   });
-
-   // Settlement disputed → notify courier via Telegram
-   messageBus.subscribe(BUS_CHANNELS.SETTLEMENT_DISPUTED, async (payload: any) => {
-     try {
-       await queue.boss.send(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, {
-         event: 'settlement.disputed',
-         location_id: payload.locationId
-       });
-     } catch (err) {
-       console.error('[Notify] Failed to send settlement.disputed telegram job', err);
-     }
-   });
-
-   messageBus.subscribe(BUS_CHANNELS.COURIER_STALE_HEARTBEAT, async (payload: any) => {
-     try {
-       await queue.boss.send(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, {
-         event: 'order.pending_aging',
-         entity_id: payload.orderId,
-         location_id: payload.locationId
-       });
-     } catch (err) {
-       console.error('[Notify] Failed to send courier.stale_heartbeat telegram job', err);
-     }
-   });
+  registerNotifySubscriptions(messageBus, queue.boss);
 
   // P31 — Worker Liveness Checker (singleton cron, 60s)
   const livenessChecker = new LivenessChecker(pool, queue.boss, messageBus);
