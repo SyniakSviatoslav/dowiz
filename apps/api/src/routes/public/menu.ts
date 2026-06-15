@@ -48,7 +48,7 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
       const { slug } = request.params as any;
       const res = await server.db.query(
         `SELECT l.id, l.name, l.slug, l.currency_code, l.currency_minor_unit, l.default_locale,
-                l.lat, l.lng, l.delivery_paused, l.hours_json,
+                l.lat, l.lng, l.delivery_paused, l.hours_json, l.address,
                 lt.google_rating, lt.google_review_count, lt.google_maps_url
          FROM locations l
          LEFT JOIN location_themes lt ON lt.location_id = l.id
@@ -87,6 +87,7 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
         default_locale: r.default_locale,
         lat: r.lat != null ? Number(r.lat) : null,
         lng: r.lng != null ? Number(r.lng) : null,
+        address: r.address ?? null,
         isOpen,
         googleRating: r.google_rating != null ? Number(r.google_rating) : null,
         googleReviewCount: r.google_review_count != null ? Number(r.google_review_count) : null,
