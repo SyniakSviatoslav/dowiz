@@ -74,8 +74,8 @@ test.describe('Flow: Ingredients & Modifiers — Groups, Modifiers, price_delta,
     const body = await createRes.json();
     expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(body.name).toBe(`E2E-Group-${TS}`);
-    expect(body.min_select).toBe(1);
-    expect(body.max_select).toBe(2);
+    expect(body.minSelect).toBe(1);
+    expect(body.maxSelect).toBe(2);
     expect(body.required).toBe(true);
     groupId = body.id;
   });
@@ -92,8 +92,8 @@ test.describe('Flow: Ingredients & Modifiers — Groups, Modifiers, price_delta,
     const found = body.data.find((g: any) => g.id === groupId);
     expect(found).toBeTruthy();
     expect(found.name).toBe(`E2E-Group-${TS}`);
-    expect(found.min_select).toBe(1);
-    expect(found.max_select).toBe(2);
+    expect(found.minSelect).toBe(1);
+    expect(found.maxSelect).toBe(2);
     expect(found.required).toBe(true);
   });
 
@@ -109,8 +109,8 @@ test.describe('Flow: Ingredients & Modifiers — Groups, Modifiers, price_delta,
     expect(patchRes.status()).toBe(200);
     const patched = await patchRes.json();
     expect(patched.name).toBe(`E2E-Group-Updated-${TS}`);
-    expect(patched.min_select).toBe(0);
-    expect(patched.max_select).toBe(3);
+    expect(patched.minSelect).toBe(0);
+    expect(patched.maxSelect).toBe(3);
     expect(patched.required).toBe(false);
   });
 
@@ -127,7 +127,7 @@ test.describe('Flow: Ingredients & Modifiers — Groups, Modifiers, price_delta,
     const body = await createRes.json();
     expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(body.name).toBe(`Extra Cheese ${TS}`);
-    expect(body.price_delta).toBe(100);
+    expect(body.priceDelta).toBe(100);
     expect(body.available).toBe(true);
     modifierId = body.id;
   });
@@ -143,7 +143,7 @@ test.describe('Flow: Ingredients & Modifiers — Groups, Modifiers, price_delta,
     );
     expect(patchRes.status()).toBe(200);
     const patched = await patchRes.json();
-    expect(patched.price_delta).toBe(150);
+    expect(patched.priceDelta).toBe(150);
     expect(patched.available).toBe(false);
   });
 
@@ -198,8 +198,8 @@ test.describe('Flow: Ingredients & Modifiers — Groups, Modifiers, price_delta,
     );
     expect(createRes.status()).toBe(201);
     const body = await createRes.json();
-    expect(body.price_delta).toBe(0);
-    expect(body.sort_order).toBe(0);
+    expect(body.priceDelta).toBe(0);
+    expect(body.sortOrder).toBe(0);
   });
 
   test('Flow 4: Unauthenticated — modifier group CRUD returns 401', async ({ request }) => {
