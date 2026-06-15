@@ -19,7 +19,9 @@ export default (async function ownerCourierRoutes(fastify: any, opts: any) {
 
     const client = await db.connect();
     try {
-      // courier_locations has RLS requiring app.current_tenant to be set
+      // courier_locations has RLS; is_local=true requires an explicit BEGIN
+      // so the setting persists beyond the set_config statement itself
+      await client.query('BEGIN');
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
       const res = await client.query(
@@ -51,7 +53,11 @@ export default (async function ownerCourierRoutes(fastify: any, opts: any) {
         };
       });
 
+      await client.query('COMMIT');
       return reply.send({ couriers });
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
     } finally {
       client.release();
     }

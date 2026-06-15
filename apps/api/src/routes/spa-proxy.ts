@@ -299,6 +299,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
     const client = await db.connect();
     try {
+      await client.query('BEGIN');
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locId]);
       const res = await client.query(
         `SELECT c.id, c.full_name_encrypted, c.phone_encrypted, c.status,
@@ -322,6 +323,10 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
         status: r.courier_status === 'available' ? 'online' : r.courier_status === 'on_delivery' ? 'busy' : 'offline',
         deliveriesCompleted: parseInt(r.deliveries_completed) || 0, rating: 0,
       })));
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
     } finally {
       client.release();
     }
