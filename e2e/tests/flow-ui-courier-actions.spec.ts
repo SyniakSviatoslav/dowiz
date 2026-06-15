@@ -43,14 +43,15 @@ test.describe('UI: Courier — Accept via UI, Delivery Page, Shift Controls', ()
       `${BASE}/api/owner/locations/${activeLocationId}/courier-invites`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { email: COURIER_EMAIL, role: 'courier' } }
     );
-    expect(invRes.status()).toBe(201);
-    const invDetail = await request.get(`${BASE}/api/courier/auth/invites/${(await invRes.json()).id}`);
-    const invite = await invDetail.json();
-    const code = invite.code || invite.inviteCode;
+    expect(invRes.status()).toBe(200);
+    const invBody = await invRes.json();
+    const inviteId = invBody.inviteId;
+    const code = invBody.code;
 
-    await request.post(`${BASE}/api/courier/auth/invites/${invite.id}/redeem`, {
-      data: { name: 'UI Courier 2', email: COURIER_EMAIL, password: COURIER_PASSWORD, code },
-    });
+    const redeemBody2 = await (await request.post(`${BASE}/api/courier/auth/invites/${inviteId}/redeem`, {
+      data: { full_name: 'UI Courier 2', email: COURIER_EMAIL, password: COURIER_PASSWORD, code },
+    })).json();
+    courierId = redeemBody2.courier?.id;
 
     const loginRes = await request.post(`${BASE}/api/courier/auth/login`, {
       data: { email: COURIER_EMAIL, password: COURIER_PASSWORD },
@@ -58,7 +59,6 @@ test.describe('UI: Courier — Accept via UI, Delivery Page, Shift Controls', ()
     expect(loginRes.status()).toBe(200);
     const loginBody = await loginRes.json();
     courierToken = loginBody.jwt;
-    courierId = loginBody.courier?.id || loginBody.userId;
 
     // Start shift
     await request.post(`${BASE}/api/courier/me/shift/start`, {

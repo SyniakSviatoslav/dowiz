@@ -52,31 +52,28 @@ test.describe('UI: Courier Core Flow — Login, Accept, Deliver', () => {
       `${BASE}/api/owner/locations/${activeLocationId}/courier-invites`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { email: COURIER_EMAIL, role: 'courier' } }
     );
-    expect(inviteRes.status()).toBe(201);
+    expect(inviteRes.status()).toBe(200);
     const inviteBody = await inviteRes.json();
-    const inviteId = inviteBody.id;
+    const inviteId = inviteBody.inviteId;
+    const code = inviteBody.code;
 
-    const inviteDetailRes = await request.get(`${BASE}/api/courier/auth/invites/${inviteId}`);
-    expect(inviteDetailRes.status()).toBe(200);
-    const inviteDetail = await inviteDetailRes.json();
-    const code = inviteDetail.code || inviteDetail.inviteCode;
-
-    // Redeem invite
+    // Redeem invite — response includes courier.id
     const redeemRes = await request.post(`${BASE}/api/courier/auth/invites/${inviteId}/redeem`, {
-      data: { name: 'UI Courier', email: COURIER_EMAIL, password: COURIER_PASSWORD, code },
+      data: { full_name: 'UI Courier', email: COURIER_EMAIL, password: COURIER_PASSWORD, code },
     });
     expect(redeemRes.status()).toBe(200);
+    const redeemBody = await redeemRes.json();
+    courierId = redeemBody.courier?.id;
+    expect(courierId).toBeTruthy();
 
-    // Login as courier
+    // Login as courier — response only has jwt, refreshToken, activeLocationId, role
     const loginRes = await request.post(`${BASE}/api/courier/auth/login`, {
       data: { email: COURIER_EMAIL, password: COURIER_PASSWORD },
     });
     expect(loginRes.status()).toBe(200);
     const loginBody = await loginRes.json();
     courierToken = loginBody.jwt;
-    courierId = loginBody.courier?.id || loginBody.userId;
     expect(courierToken).toBeTruthy();
-    expect(courierId).toBeTruthy();
 
     // Start courier shift
     const shiftRes = await request.post(`${BASE}/api/courier/me/shift/start`, {
