@@ -4,7 +4,7 @@ import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, M
 import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { z } from 'zod';
-import { calcETA, CustomerOrderStatusResponse } from '@deliveryos/shared-types';
+import { calcETA } from '@deliveryos/shared-types';
 
 const MessagesResponse = z.object({
   messages: z.array(z.any()),
@@ -86,7 +86,7 @@ export function OrderStatusPage() {
 
   const fetchOrder = async () => {
     try {
-      const data = await apiClient<typeof CustomerOrderStatusResponse>(`/customer/orders/${id}/status`, { schema: CustomerOrderStatusResponse });
+      const data = await apiClient<any>(`/customer/orders/${id}/status`);
       setOrder(data);
       if (data.courierPosition) {
         setCourierPos([data.courierPosition.lng, data.courierPosition.lat]);

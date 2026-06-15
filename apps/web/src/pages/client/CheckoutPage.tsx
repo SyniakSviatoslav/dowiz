@@ -216,7 +216,7 @@ export function CheckoutPage() {
         }));
         return;
       }
-      throw new Error('Failed to place order');
+      setOrderError(t('checkout.order_failed', 'Failed to place order. Please try again.'));
     }
   };
 
