@@ -309,7 +309,7 @@ export function OnboardingPage() {
                 </FormField>
                 <FormField label={t('admin.your_link', 'Your link')}>
                   <div className="flex items-center gap-2">
-                    <Input value={slug} onChange={e => handleSlugChange((e.target as HTMLInputElement).value)} placeholder="pizza-roma" />
+                    <Input value={slug} onChange={e => handleSlugChange((e.target as HTMLInputElement).value)} placeholder="sushi-durres" />
                     <span className="text-sm whitespace-nowrap" style={s.muted}>.dowiz.org</span>
                   </div>
                   {slugError && <p className="text-xs mt-1" style={{ color: 'var(--color-danger)' }}>{slugError}</p>}

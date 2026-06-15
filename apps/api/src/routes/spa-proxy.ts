@@ -321,14 +321,17 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
          WHERE cl.location_id = $1`,
         [locId]
       );
-      return reply.send(res.rows.map((r: any) => ({
-        id: r.id,
-        name: r.full_name_encrypted ? (decryptPII(r.full_name_encrypted) || 'Unknown') : 'Unknown',
-        phone: '',
-        status: r.courier_status === 'available' ? 'online' : r.courier_status === 'on_delivery' ? 'busy' : 'offline',
-        deliveriesCompleted: parseInt(r.deliveries_completed) || 0, rating: 0,
-      })));
+      const rows = res.rows.map((r: any) => {
+        let name = 'Unknown';
+        try { name = r.full_name_encrypted ? (decryptPII(r.full_name_encrypted) || 'Unknown') : 'Unknown'; } catch {}
+        return {
+          id: r.id, name, phone: '',
+          status: r.courier_status === 'available' ? 'online' : r.courier_status === 'on_delivery' ? 'busy' : 'offline',
+          deliveriesCompleted: parseInt(r.deliveries_completed) || 0, rating: 0,
+        };
+      });
       await client.query('COMMIT');
+      return reply.send(rows);
     } catch (e) {
       await client.query('ROLLBACK').catch(() => {});
       throw e;
@@ -361,7 +364,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
     const res = await withTenant(db, ctx.userId, async (client) =>
       client.query(
-        `SELECT primary_color, secondary_color, font_family, bg_color, text_color, logo_url, frame_ancestors
+        `SELECT primary_color, bg_color, text_color, logo_url, frame_ancestors
          FROM location_themes WHERE location_id = $1`,
         [ctx.locId]
       )
@@ -371,8 +374,6 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       id: ctx.locId,
       locationId: ctx.locId,
       primaryColor: t.primary_color || null,
-      secondaryColor: t.secondary_color || null,
-      fontFamily: t.font_family || null,
       bgColor: t.bg_color || null,
       textColor: t.text_color || null,
       logoUrl: t.logo_url || null,
