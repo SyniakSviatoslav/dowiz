@@ -152,7 +152,7 @@ test.describe('Flow: Ingredients & Modifiers — Groups, Modifiers, price_delta,
     const attachRes = await request.put(
       `${BASE}/api/owner/locations/${activeLocationId}/products/${productId}/modifier-groups`,
       {
-        data: { modifierGroupIds: [groupId] },
+        data: [{ group_id: groupId, sort_order: 0 }],
         headers: { Authorization: `Bearer ${authToken}` },
       },
     );
@@ -176,15 +176,15 @@ test.describe('Flow: Ingredients & Modifiers — Groups, Modifiers, price_delta,
     );
     expect(delRes.status()).toBe(204);
 
-    // Verify list no longer has it
+    // Verify deletion via group list (no standalone modifiers list endpoint exists)
     const listRes = await request.get(
-      `${BASE}/api/owner/locations/${activeLocationId}/modifier-groups/${groupId}/modifiers`,
+      `${BASE}/api/owner/locations/${activeLocationId}/modifier-groups`,
       { headers: { Authorization: `Bearer ${authToken}` } },
     );
     expect(listRes.status()).toBe(200);
     const list = await listRes.json();
-    const found = (list.data || list).find((m: any) => m.id === modifierId);
-    expect(found).toBeFalsy();
+    const group = list.data.find((g: any) => g.id === groupId);
+    expect(group?.modifierCount).toBe(0);
   });
 
   test('Flow 8: Owner — create modifier with zero price_delta and sort_order, verify contract', async ({ request }) => {
