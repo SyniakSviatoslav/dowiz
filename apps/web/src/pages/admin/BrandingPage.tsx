@@ -22,8 +22,10 @@ export function BrandingPage() {
   });
   const [logoUrl, setLogoUrl] = useState('');
   const [logoDataUrl, setLogoDataUrl] = useState('');
+  const [logoUploading, setLogoUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [slug, setSlug] = useState('');
+  const [locationId, setLocationId] = useState('');
   const [googleRating, setGoogleRating] = useState('');
   const [googleReviewCount, setGoogleReviewCount] = useState('');
   const [googleMapsUrl, setGoogleMapsUrl] = useState('');
@@ -34,6 +36,7 @@ export function BrandingPage() {
       if (res.bgColor) setConfig(prev => ({ ...prev, bg: res.bgColor! }));
       if (res.textColor) setConfig(prev => ({ ...prev, text: res.textColor! }));
       if (res.logoUrl) setLogoUrl(res.logoUrl!);
+      if (res.locationId) setLocationId(res.locationId);
       if (res.googleRating != null) setGoogleRating(String(res.googleRating));
       if (res.googleReviewCount != null) setGoogleReviewCount(String(res.googleReviewCount));
       if (res.googleMapsUrl) setGoogleMapsUrl(res.googleMapsUrl);
@@ -48,13 +51,34 @@ export function BrandingPage() {
     }).catch(() => {});
   }, []);
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) { alert(t('admin.error_file_too_large', 'File too large. Max 2MB.')); return; }
+    // Show preview immediately via data URL
     const reader = new FileReader();
-    reader.onload = () => { setLogoDataUrl(reader.result as string); };
+    reader.onload = () => setLogoDataUrl(reader.result as string);
     reader.readAsDataURL(file);
+    // Upload via multipart to persist the logo
+    if (!locationId) return;
+    setLogoUploading(true);
+    try {
+      const form = new FormData();
+      form.append('logo', file);
+      const res = await fetch(`/api/owner/locations/${locationId}/theme/logo`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('dos_access_token') || ''}` },
+        body: form,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.logo_url) { setLogoUrl(data.logo_url); setLogoDataUrl(''); }
+      }
+    } catch {
+      // Preview still shows; logo not persisted until next save
+    } finally {
+      setLogoUploading(false);
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -66,7 +90,7 @@ export function BrandingPage() {
         body: {
           primaryColor: config.primary,
           bgColor: config.bg,
-          logoUrl: logoDataUrl || logoUrl,
+          logoUrl: logoUrl || null,
           googleRating: googleRating ? parseFloat(googleRating) : null,
           googleReviewCount: googleReviewCount ? parseInt(googleReviewCount, 10) : null,
           googleMapsUrl: googleMapsUrl || null,
@@ -138,9 +162,9 @@ export function BrandingPage() {
             <p className="text-xs text-[var(--brand-text-muted)]">{t('admin.logo_hint', 'Recommended: 512x512px PNG with transparent background. Max 2MB.')}</p>
             <div className="flex items-start gap-4">
               <div className="flex-1 space-y-3">
-                <FormField label={t('admin.upload_logo', 'Upload Logo File')}>
-                  <input type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={handleLogoUpload}
-                    className="w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[var(--brand-primary)] file:text-white hover:file:opacity-90" />
+                <FormField label={t('admin.upload_logo', logoUploading ? 'Uploading…' : 'Upload Logo File')}>
+                  <input type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={handleLogoUpload} disabled={logoUploading}
+                    className="w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[var(--brand-primary)] file:text-white hover:file:opacity-90 disabled:opacity-50" />
                 </FormField>
                 <FormField label={t('admin.or_logo_url', '— or Logo URL —')}>
                   <Input value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="https://cdn.example.com/logo.png" />

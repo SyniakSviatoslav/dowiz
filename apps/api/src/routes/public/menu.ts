@@ -48,7 +48,7 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
       const { slug } = request.params as any;
       const res = await server.db.query(
         `SELECT l.id, l.name, l.slug, l.currency_code, l.currency_minor_unit, l.default_locale,
-                l.lat, l.lng,
+                l.lat, l.lng, l.delivery_paused, l.hours_json,
                 lt.google_rating, lt.google_review_count, lt.google_maps_url
          FROM locations l
          LEFT JOIN location_themes lt ON lt.location_id = l.id
@@ -57,12 +57,37 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
       );
       if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
       const r = res.rows[0];
+
+      // Compute isOpen from hours_json + delivery_paused
+      let isOpen = !(r.delivery_paused ?? false);
+      if (isOpen && r.hours_json) {
+        try {
+          const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+          const now = new Date();
+          const dayName = days[now.getDay()] as string;
+          const dayData = (r.hours_json as Record<string, any>)[dayName];
+          if (dayData && typeof dayData === 'object') {
+            if (dayData.isOpen === false) {
+              isOpen = false;
+            } else if (dayData.open && dayData.close) {
+              const [oh, om] = dayData.open.split(':').map(Number);
+              const [ch, cm] = dayData.close.split(':').map(Number);
+              const nowMins = now.getHours() * 60 + now.getMinutes();
+              const openMins = oh * 60 + om;
+              const closeMins = ch * 60 + cm;
+              isOpen = nowMins >= openMins && nowMins < closeMins;
+            }
+          }
+        } catch { /* ignore parse errors */ }
+      }
+
       return reply.send({
         id: r.id, name: r.name, slug: r.slug,
         currency_code: r.currency_code, currency_minor_unit: r.currency_minor_unit,
         default_locale: r.default_locale,
         lat: r.lat != null ? Number(r.lat) : null,
         lng: r.lng != null ? Number(r.lng) : null,
+        isOpen,
         googleRating: r.google_rating != null ? Number(r.google_rating) : null,
         googleReviewCount: r.google_review_count != null ? Number(r.google_review_count) : null,
         googleMapsUrl: r.google_maps_url ?? null,
