@@ -34,18 +34,23 @@ const brandSchema = z.object({
   logoUrl: z.string().max(1000).optional().nullable(),
 }).strict();
 
+// pg returns NUMERIC columns as strings; coerce all numeric fields so the schema
+// accepts both the raw DB values echoed back by the frontend and proper JS numbers
+const coerceNum = (inner: z.ZodType) =>
+  z.preprocess((v) => (v != null && v !== '' ? Number(v) : v), inner);
+
 const settingsSchema = z.object({
   locationName: z.string().min(1).max(200).optional().nullable(),
   phone: z.string().max(50).optional().nullable(),
   address: z.string().max(500).optional().nullable(),
-  deliveryFee: z.number().int().nonnegative().optional().nullable(),
-  minOrder: z.number().int().nonnegative().optional().nullable(),
-  radiusKm: z.number().nonnegative().optional().nullable(),
-  freeDeliveryThreshold: z.number().int().nonnegative().optional().nullable(),
-  taxRate: z.number().min(0).max(100).optional().nullable(),
+  deliveryFee: coerceNum(z.number().int().nonnegative()).optional().nullable(),
+  minOrder: coerceNum(z.number().int().nonnegative()).optional().nullable(),
+  radiusKm: coerceNum(z.number().nonnegative()).optional().nullable(),
+  freeDeliveryThreshold: coerceNum(z.number().int().nonnegative()).optional().nullable(),
+  taxRate: coerceNum(z.number().min(0).max(100)).optional().nullable(),
   currencyCode: z.enum(['ALL', 'EUR']).optional().nullable(),
-  lat: z.number().min(-90).max(90).optional().nullable(),
-  lng: z.number().min(-180).max(180).optional().nullable(),
+  lat: coerceNum(z.number().min(-90).max(90)).optional().nullable(),
+  lng: coerceNum(z.number().min(-180).max(180)).optional().nullable(),
   hoursJson: z.any().optional().nullable(),
 }).strip();
 
@@ -409,10 +414,14 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const r = res.rows[0];
     return reply.send({
       id: r.id, slug: r.slug, locationName: r.name, phone: r.phone || '',
-      deliveryFee: r.delivery_fee_flat || 0, minOrder: r.min_order_value || 0,
-      radiusKm: r.delivery_radius_km || 0, freeDeliveryThreshold: r.free_delivery_threshold || 0,
-      currencyCode: r.currency_code || 'ALL', taxRate: r.tax_rate || 0,
-      lat: r.lat, lng: r.lng,
+      deliveryFee: Number(r.delivery_fee_flat) || 0,
+      minOrder: Number(r.min_order_value) || 0,
+      radiusKm: Number(r.delivery_radius_km) || 0,
+      freeDeliveryThreshold: Number(r.free_delivery_threshold) || 0,
+      currencyCode: r.currency_code || 'ALL',
+      taxRate: Number(r.tax_rate) || 0,
+      lat: r.lat !== null ? Number(r.lat) : null,
+      lng: r.lng !== null ? Number(r.lng) : null,
       address: r.address || '',
       hoursJson: r.hours_json || {},
     });
@@ -444,9 +453,13 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     if (!r) return reply.status(404).send({ error: 'Location not found' });
     return reply.send({
       id: r.id, slug: r.slug, locationName: r.name, phone: r.phone || '',
-      deliveryFee: r.delivery_fee_flat || 0, minOrder: r.min_order_value || 0,
-      radiusKm: r.delivery_radius_km || 0, freeDeliveryThreshold: r.free_delivery_threshold || 0,
-      taxRate: r.tax_rate || 0, lat: r.lat, lng: r.lng,
+      deliveryFee: Number(r.delivery_fee_flat) || 0,
+      minOrder: Number(r.min_order_value) || 0,
+      radiusKm: Number(r.delivery_radius_km) || 0,
+      freeDeliveryThreshold: Number(r.free_delivery_threshold) || 0,
+      taxRate: Number(r.tax_rate) || 0,
+      lat: r.lat !== null ? Number(r.lat) : null,
+      lng: r.lng !== null ? Number(r.lng) : null,
       address: r.address || '',
       hoursJson: r.hours_json || {},
     });
