@@ -17,10 +17,12 @@ export function mapProductRow(r: Record<string, any>): Record<string, any> {
     categoryId: r.category_id,
     imageUrl: getImageUrl(r.image_key, APP_BASE),
     imageKey: r.image_key,
+    sortOrder: r.sort_order ?? 0,
     stockCount: r.attributes?.stock_count ?? null,
     taste: r.attributes?.taste ?? null,
     recipeLines: bom.length ? bom : null,
     allergens: allergens.size ? Array.from(allergens).sort() : null,
     attributes: r.attributes || null,
+    createdAt: r.created_at ?? null,
   };
 }

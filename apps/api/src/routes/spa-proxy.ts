@@ -249,33 +249,41 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     if (statusFilter && statusFilter !== 'all') { statusClause = 'AND o.status = $2'; params.push(statusFilter); }
     const res = await db.query(
       `SELECT o.id, o.status, o.created_at, o.confirmed_at, o.ready_at, o.delivered_at, o.total, o.subtotal,
-              o.delivery_fee, o.delivery_address, o.payment_method,
+              o.delivery_fee, o.delivery_address, o.payment_method, o.metadata,
               c.name as customer_name, c.phone as customer_phone,
               (SELECT jsonb_agg(jsonb_build_object('name', oi.name_snapshot, 'qty', oi.quantity, 'price', oi.price_snapshot))
                FROM order_items oi WHERE oi.order_id = o.id) as items,
               EXTRACT(EPOCH FROM (COALESCE(o.confirmed_at, now()) - o.created_at))::int as confirm_seconds,
-              COALESCE(cr.display_name, u.display_name) as courier_name
+              cr.full_name_encrypted as courier_name_enc
        FROM orders o LEFT JOIN customers c ON c.id = o.customer_id
        LEFT JOIN courier_assignments ca ON ca.order_id = o.id AND ca.status IN ('accepted','picked_up','delivered')
-       LEFT JOIN users cr ON cr.id = ca.courier_id
-       LEFT JOIN memberships m2 ON m2.user_id = cr.id
-       LEFT JOIN users u ON u.id = m2.user_id
+       LEFT JOIN couriers cr ON cr.id = ca.courier_id
        WHERE o.location_id = $1 ${statusClause}
        ORDER BY o.created_at DESC LIMIT 50`,
       params
     );
-    return reply.send(res.rows.map((r: any) => ({
-      id: r.id, status: r.status, createdAt: r.created_at,
-      confirmedAt: r.confirmed_at, readyAt: r.ready_at, deliveredAt: r.delivered_at,
-      total: r.total, subtotal: r.subtotal, deliveryFee: r.delivery_fee,
-      deliveryAddress: r.delivery_address, paymentMethod: r.payment_method,
-      customerName: r.customer_name || 'Unknown', customerPhone: r.customer_phone || '',
-      shortId: '#' + r.id.toString().substring(0, 4).toUpperCase(), items: r.items || [],
-      itemCount: r.items ? r.items.length : 0,
-      itemsSummary: r.items ? r.items.map((i: any) => `${i.name} x${i.qty}`).join(', ') : '',
-      confirmSeconds: r.confirm_seconds, courierName: r.courier_name || null,
-      elapsedSeconds: Math.floor((Date.now() - new Date(r.created_at).getTime()) / 1000),
-    })));
+    const { decryptPII } = await import('../lib/pii-cipher.js').catch(() => ({ decryptPII: (_s: string) => '' }));
+    return reply.send(res.rows.map((r: any) => {
+      const meta = r.metadata || {};
+      const courierRaw = r.courier_name_enc ? decryptPII(r.courier_name_enc) : null;
+      const courierName = courierRaw ? (courierRaw.charAt(0) + '***') : null;
+      return {
+        id: r.id, status: r.status, createdAt: r.created_at,
+        confirmedAt: r.confirmed_at, readyAt: r.ready_at, deliveredAt: r.delivered_at,
+        total: r.total, subtotal: r.subtotal, deliveryFee: r.delivery_fee,
+        deliveryAddress: r.delivery_address, paymentMethod: r.payment_method,
+        customerName: r.customer_name || 'Unknown', customerPhone: r.customer_phone || '',
+        shortId: '#' + r.id.toString().substring(0, 4).toUpperCase(), items: r.items || [],
+        itemCount: r.items ? r.items.length : 0,
+        itemsSummary: r.items ? r.items.map((i: any) => `${i.name} x${i.qty}`).join(', ') : '',
+        confirmSeconds: r.confirm_seconds, courierName,
+        elapsedSeconds: Math.floor((Date.now() - new Date(r.created_at).getTime()) / 1000),
+        signals: {
+          otpVerified: meta.otp_verified === true,
+          reputationScore: typeof meta.reputation_score === 'number' ? meta.reputation_score : 75,
+        },
+      };
+    }));
   });
 
   // GET /api/owner/couriers
@@ -326,9 +334,24 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const ctx = await getOwnerContext(request);
     if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
     const res = await withTenant(db, ctx.userId, async (client) =>
-      client.query(`SELECT primary_color, bg_color, text_color, logo_url FROM location_themes WHERE location_id = $1`, [ctx.locId])
+      client.query(
+        `SELECT primary_color, secondary_color, font_family, bg_color, text_color, logo_url, frame_ancestors
+         FROM location_themes WHERE location_id = $1`,
+        [ctx.locId]
+      )
     );
-    return reply.send(res.rows[0] || {});
+    const t = res.rows[0] || {};
+    return reply.send({
+      id: ctx.locId,
+      locationId: ctx.locId,
+      primaryColor: t.primary_color || null,
+      secondaryColor: t.secondary_color || null,
+      fontFamily: t.font_family || null,
+      bgColor: t.bg_color || null,
+      textColor: t.text_color || null,
+      logoUrl: t.logo_url || null,
+      frameAncestors: t.frame_ancestors || null,
+    });
   });
 
   // PUT /api/owner/brand — update theme

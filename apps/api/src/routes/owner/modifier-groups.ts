@@ -38,7 +38,8 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
           [locationId, name, min_select, max_select, required]
         );
       });
-      return reply.status(201).send(res.rows[0]);
+      const r = res.rows[0];
+      return reply.status(201).send({ id: r.id, name: r.name, minSelect: r.min_select, maxSelect: r.max_select, required: r.required, modifierCount: 0 });
     }
   );
 
@@ -53,9 +54,17 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
       const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
-        return client.query(`SELECT * FROM modifier_groups WHERE location_id = $1 ORDER BY created_at ASC`, [locationId]);
+        return client.query(
+          `SELECT mg.*, COUNT(m.id)::int AS modifier_count
+           FROM modifier_groups mg
+           LEFT JOIN modifiers m ON m.group_id = mg.id
+           WHERE mg.location_id = $1
+           GROUP BY mg.id
+           ORDER BY mg.created_at ASC`,
+          [locationId]
+        );
       });
-      return reply.send({ data: res.rows });
+      return reply.send({ data: res.rows.map((r: any) => ({ id: r.id, name: r.name, minSelect: r.min_select, maxSelect: r.max_select, required: r.required, modifierCount: r.modifier_count ?? 0 })) });
     }
   );
 
@@ -96,7 +105,8 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
         /* eslint-enable local/no-raw-sql */
       });
       if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
-      return reply.send(res.rows[0]);
+      const r = res.rows[0];
+      return reply.send({ id: r.id, name: r.name, minSelect: r.min_select, maxSelect: r.max_select, required: r.required, modifierCount: 0 });
     }
   );
 
@@ -146,7 +156,8 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
           [locationId, groupId, name, price_delta, available, sort_order]
         );
       });
-      return reply.status(201).send(res.rows[0]);
+      const r = res.rows[0];
+      return reply.status(201).send({ id: r.id, groupId: r.group_id, name: r.name, priceDelta: r.price_delta, available: r.available, sortOrder: r.sort_order });
     }
   );
 
@@ -187,7 +198,8 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
         /* eslint-enable local/no-raw-sql */
       });
       if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
-      return reply.send(res.rows[0]);
+      const r = res.rows[0];
+      return reply.send({ id: r.id, groupId: r.group_id, name: r.name, priceDelta: r.price_delta, available: r.available, sortOrder: r.sort_order });
     }
   );
 

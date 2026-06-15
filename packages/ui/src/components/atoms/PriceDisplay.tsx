@@ -15,9 +15,10 @@ const sizes = {
   lg: 'text-xl font-bold',
 };
 
-export function PriceDisplay({ amount, className = '', size = 'md', currency: explicitCurrency, rate }: PriceDisplayProps) {
-  const { currency: contextCurrency } = useCurrency();
+export function PriceDisplay({ amount, className = '', size = 'md', currency: explicitCurrency, rate: explicitRate }: PriceDisplayProps) {
+  const { currency: contextCurrency, eurRate } = useCurrency();
   const displayCurrency = explicitCurrency || contextCurrency;
+  const rate = explicitRate ?? eurRate ?? undefined;
   const formatted = formatMoney(amount, displayCurrency, rate);
 
   return (
