@@ -2,18 +2,22 @@ import { z } from 'zod';
 
 export const SettlementItem = z.object({
   id: z.string().uuid(),
-  courierName: z.string(),
-  amount: z.number().int(),
+  courierId: z.string().uuid(),
+  courierNameMasked: z.string(),
+  deliveriesCount: z.number().int(),
+  totalEarned: z.number().int(),
+  currency: z.string(),
   status: z.enum(['pending','approved','paid','disputed']),
   periodStart: z.string(),
   periodEnd: z.string(),
   createdAt: z.string(),
+  approvedAt: z.string().nullable(),
+  paidAt: z.string().nullable(),
 }).strict();
 export type SettlementItem = z.infer<typeof SettlementItem>;
 
 export const SettlementListResponse = z.object({
-  settlements: z.array(SettlementItem),
-  nextCursor: z.string().nullable(),
+  payouts: z.array(SettlementItem),
 }).strict();
 export type SettlementListResponse = z.infer<typeof SettlementListResponse>;
 

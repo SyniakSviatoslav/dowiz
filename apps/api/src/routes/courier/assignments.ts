@@ -14,16 +14,17 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
   fastify.addHook('preValidation', fastify.requireRole(['courier']));
 
   function toTaskShape(row: any) {
+    const cashAmt = row.cash_amount ? parseInt(row.cash_amount) : null;
     return {
       id: row.id,
-      order_id: row.order_id,
+      orderId: row.order_id,
       status: row.status,
-      assigned_at: row.assigned_at,
-      accepted_at: row.accepted_at,
-      picked_up_at: row.picked_up_at,
-      delivered_at: row.delivered_at,
-      cash_collected: row.cash_collected,
-      cash_amount: row.cash_amount,
+      assignedAt: row.assigned_at ?? null,
+      acceptedAt: row.accepted_at ?? null,
+      pickedUpAt: row.picked_up_at ?? null,
+      deliveredAt: row.delivered_at ?? null,
+      cashCollected: row.cash_collected ?? false,
+      cashAmount: cashAmt,
       total: parseInt(row.total) || 0,
       eta: '~15 min',
       restaurant: {
@@ -39,7 +40,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
         lat: row.delivery_lat ? parseFloat(row.delivery_lat) : null,
         lng: row.delivery_lng ? parseFloat(row.delivery_lng) : null,
       },
-      cashPayWith: row.cash_amount ? parseInt(row.cash_amount) : null,
+      cashPayWith: cashAmt,
     };
   }
 

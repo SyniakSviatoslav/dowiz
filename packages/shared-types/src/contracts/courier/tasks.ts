@@ -21,15 +21,31 @@ export const CourierAssignment = z.object({
   acceptedAt: z.string().nullable(),
   pickedUpAt: z.string().nullable(),
   deliveredAt: z.string().nullable(),
-  cashCollected: z.boolean(),
+  cashCollected: z.boolean().nullable(),
   cashAmount: z.number().int().nullable(),
-}).strict();
+  cashPayWith: z.number().int().nullable().optional(),
+  total: z.number().int().optional(),
+  eta: z.string().optional(),
+  restaurant: z.object({
+    name: z.string(),
+    address: z.string(),
+    lat: z.number().nullable(),
+    lng: z.number().nullable(),
+  }).optional(),
+  customer: z.object({
+    address: z.string(),
+    phone: z.string().nullable(),
+    instructions: z.string().nullable(),
+    lat: z.number().nullable(),
+    lng: z.number().nullable(),
+  }).optional(),
+}).passthrough();
 export type CourierAssignment = z.infer<typeof CourierAssignment>;
 
 export const AssignmentListResponse = z.object({
   success: z.literal(true),
   assignments: z.array(CourierAssignment),
-}).strict();
+}).passthrough();
 export type AssignmentListResponse = z.infer<typeof AssignmentListResponse>;
 
 export const AcceptRejectResponse = z.object({

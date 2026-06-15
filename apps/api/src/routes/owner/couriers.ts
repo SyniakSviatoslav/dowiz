@@ -19,7 +19,7 @@ export default (async function ownerCourierRoutes(fastify: any, opts: any) {
     
     // We get couriers for this location
     const res = await db.query(
-      `SELECT c.id, c.email_encrypted, c.phone_encrypted, c.full_name_encrypted, c.status, c.last_login_at, cl.role,
+      `SELECT c.id, c.email_encrypted, c.phone_encrypted, c.full_name_encrypted, c.status, c.last_login_at, c.created_at, cl.role,
               (SELECT COUNT(*) FROM courier_assignments ca WHERE ca.courier_id = c.id AND ca.status = 'delivered') as deliveries_completed
        FROM couriers c
        JOIN courier_locations cl ON c.id = cl.courier_id
@@ -34,14 +34,16 @@ export default (async function ownerCourierRoutes(fastify: any, opts: any) {
 
       return {
         id: row.id,
+        name: fullName || '',
+        maskedPhone: phonePlain ? maskStr(phonePlain) : null,
+        maskedEmail: maskStr(emailPlain),
         status: row.status,
         role: row.role,
-        last_login_at: row.last_login_at,
-        full_name: fullName,
-        masked_email: maskStr(emailPlain),
-        masked_phone: phonePlain ? maskStr(phonePlain) : null,
-        deliveries_completed: parseInt(row.deliveries_completed) || 0,
-        rating: 0
+        onlineStatus: null,
+        ordersToday: parseInt(row.deliveries_completed) || 0,
+        rating: 0,
+        lastLoginAt: row.last_login_at ?? null,
+        createdAt: row.created_at ?? new Date().toISOString(),
       };
     });
 
