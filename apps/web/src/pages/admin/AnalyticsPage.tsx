@@ -258,8 +258,9 @@ export function AnalyticsPage() {
               const isExpanded = expandedProduct === p.name;
               return (
                 <div key={p.name}>
-                  <div
-                    className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors slide-in-right cursor-pointer"
+                  <button
+                    type="button"
+                    className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors slide-in-right cursor-pointer w-full text-left"
                     style={{ animationDelay: `${i * 50}ms` }}
                     onClick={() => toggleProduct(p.name)}
                   >
@@ -290,7 +291,7 @@ export function AnalyticsPage() {
                       </div>
                       <i className={`ti ${isExpanded ? 'ti-chevron-up' : 'ti-chevron-down'} text-xs text-[var(--brand-text-muted)]`} />
                     </div>
-                  </div>
+                  </button>
                   {isExpanded && (
                     <div className="px-3 pb-2">
                       {productOrdersLoading ? (

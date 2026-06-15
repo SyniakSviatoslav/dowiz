@@ -391,7 +391,7 @@ export function DashboardPage() {
               ) : (
                 sortPickerOpen && (
                   <>
-                    <div className="fixed inset-0 z-40" onClick={() => setSortPickerOpen(false)} />
+                    <div className="fixed inset-0 z-40" role="button" tabIndex={-1} aria-label="Close sort picker" onClick={() => setSortPickerOpen(false)} onKeyDown={e => e.key === 'Escape' && setSortPickerOpen(false)} />
                     <div className="absolute right-0 bottom-full mb-2 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[150px] max-h-[60vh] overflow-y-auto scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
                       {[
                         { value: 'newest', label: t('admin.newest_first', 'Newest first'), icon: 'ti ti-sort-descending' },
