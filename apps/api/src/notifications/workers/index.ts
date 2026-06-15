@@ -612,9 +612,10 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
         data.message = 'Test message';
         break;
 
-      default:
+      default: {
         const _exhaustive: never = event;
         throw new Error(`Unsupported event type for Telegram notification: ${_exhaustive}`);
+      }
     }
 
     return data;

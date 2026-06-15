@@ -3,8 +3,13 @@
 
 echo "=== Running Pre-commit Checks ==="
 
-echo "1/4: Linting code..."
-pnpm lint || exit 1
+echo "1/4: Linting staged files..."
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' | tr '\n' ' ')
+if [ -n "$STAGED" ]; then
+  npx eslint $STAGED || exit 1
+else
+  echo "No JS/TS staged files to lint."
+fi
 
 echo "2/4: Typechecking code..."
 pnpm -r typecheck || exit 1

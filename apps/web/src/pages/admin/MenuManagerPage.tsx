@@ -3,10 +3,8 @@ import { motion } from 'framer-motion';
 import { Button, Input, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle, useToast } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
-import { CategoryResponse, ProductResponse } from '@deliveryos/shared-types';
+import { useMenuData, type Product, type Category } from '../../hooks/useMenuData.js';
 
-const CategoryArraySchema = z.array(CategoryResponse);
-const ProductArraySchema = z.array(ProductResponse);
 const AnySchema = z.any();
 
 const MenuImportPreviewResponse = z.object({
@@ -42,38 +40,12 @@ function getProductAllergens(product: Product): string[] {
 }
 
 
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  description?: string;
-  available: boolean;
-  categoryId: string;
-  imageUrl?: string;
-
-  stockCount?: number;
-  taste?: { spicy?: number; sweet?: number; salty?: number; sour?: number; richness?: number };
-  recipeLines?: Array<{ supplyId: string; supplyName: string; qty: number; unit: string; kind: string; kcal: number | null; proteinG: number | null; fatG: number | null; carbsG: number | null; allergens: string[] }>;
-  attributes?: Record<string, unknown>;
-}
-
-interface Category {
-  id: string;
-  name: string;
-  product_count?: number;
-  products?: Product[];
-}
-
-
-
 export function MenuManagerPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
   const { confirm, dialog: confirmDialog } = useConfirm();
   const isMobile = useIsMobile();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { categories, setCategories, loading, error, productsLoading, refresh: fetchCategories, loadProducts } = useMenuData();
   const [newCategoryName, setNewCategoryName] = useState('');
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
@@ -90,7 +62,6 @@ export function MenuManagerPage() {
 
   const [saving, setSaving] = useState(false);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
-  const [productsLoading, setProductsLoading] = useState(false);
 
   // Import state
   const [showImport, setShowImport] = useState(false);
@@ -104,7 +75,7 @@ export function MenuManagerPage() {
   const [importError, setImportError] = useState('');
   const [importResult, setImportResult] = useState<any>(null);
 
-  // Taste profile (5 axes ├Ч 3 levels)
+  // Taste profile (5 axes x 3 levels)
   const TASTE_AXES = ['spicy', 'sweet', 'salty', 'sour', 'richness'] as const;
   const TASTE_LABELS: Record<string, string> = { spicy: 'Spicy', sweet: 'Sweet', salty: 'Salty', sour: 'Sour', richness: 'Richness' };
   const TASTE_ICONS: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
@@ -119,46 +90,12 @@ export function MenuManagerPage() {
   const [sortOpen, setSortOpen] = useState(false);
   const [availOpen, setAvailOpen] = useState(false);
 
-
-  const fetchCategories = async () => {
-    try {
-      setLoading(true);
-      const data = await apiClient<typeof CategoryArraySchema>('/owner/menu/categories', { schema: CategoryArraySchema });
-      setCategories(Array.isArray(data) ? data : []);
-      setError('');
-    } catch (err: any) {
-      setCategories([]);
-      setError('Failed to load menu');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchCategories(); }, []);
-
   // Load all products when "All" category is selected
   useEffect(() => {
     if (selectedCategory === null && categories.length > 0) {
-      loadAllProducts();
+      loadProducts();
     }
   }, [selectedCategory, categories.length]);
-
-  const loadAllProducts = async () => {
-    setProductsLoading(true);
-    try {
-      const prods = await apiClient<typeof ProductArraySchema>('/owner/menu/products', { schema: ProductArraySchema });
-      if (Array.isArray(prods)) {
-        setCategories(prev => prev.map(cat => ({
-          ...cat,
-          products: prods.filter(p => p.categoryId === cat.id) as any,
-        })));
-      }
-    } catch (err) {
-      console.debug('[MenuManagerPage] load all products failed:', err);
-    } finally {
-      setProductsLoading(false);
-    }
-  };
 
   const openAddForm = (categoryId: string) => {
     setEditingProduct(null);
@@ -239,8 +176,7 @@ export function MenuManagerPage() {
       }
       closeForm();
       await fetchCategories();
-      const prods = await apiClient<typeof ProductArraySchema>(`/owner/menu/products?category_id=${expandedCat}`, { schema: ProductArraySchema });
-      setCategories(prev => prev.map(c => c.id === expandedCat ? { ...c, products: Array.isArray(prods) ? (prods as any) : [] } : c));
+      await loadProducts(expandedCat);
       showToast(t('admin.product_saved', 'Product saved'), 'success');
     } catch (err) {
       console.error('[MenuManagerPage] save product failed:', err);
@@ -262,8 +198,8 @@ export function MenuManagerPage() {
   const handleDeleteProduct = async (catId: string, productId: string) => {
     const ok = await confirm({ title: t('admin.confirm_delete_product_title', 'Delete product'), message: t('admin.confirm_delete_product', 'Are you sure you want to delete this product?'), confirmLabel: t('common.delete', 'Delete'), variant: 'danger' });
     if (!ok) return;
-    try { 
-      await apiClient(`/owner/menu/products/${productId}`, { method: 'DELETE' }); 
+    try {
+      await apiClient(`/owner/menu/products/${productId}`, { method: 'DELETE' });
       setCategories(prev => prev.map(c =>
         c.id === catId ? { ...c, products: (c.products || []).filter(p => p.id !== productId) } : c
       ));
@@ -289,8 +225,8 @@ export function MenuManagerPage() {
     const name = newCategoryName.trim();
     if (!name) return;
     setNewCategoryName('');
-    try { 
-      await apiClient('/owner/menu/categories', { method: 'POST', body: { name } }); 
+    try {
+      await apiClient('/owner/menu/categories', { method: 'POST', body: { name } });
       await fetchCategories();
       showToast(t('admin.category_saved', 'Category created'), 'success');
     } catch (err) {
@@ -313,7 +249,7 @@ export function MenuManagerPage() {
 
   const MAX_IMPORT_SIZE = 10 * 1024 * 1024; // 10MB
 
-  // ── PDF Menu Import ──
+  // PDF Menu Import
   const handleImportUpload = async () => {
     if (!importFile) return;
     if (importFile.size > MAX_IMPORT_SIZE) {
@@ -370,30 +306,17 @@ export function MenuManagerPage() {
     setImportResult(null);
   };
 
-  const loadCategoryProducts = async (catId: string) => {
-    setProductsLoading(true);
-    try {
-      const prods = await apiClient<typeof ProductArraySchema>(`/owner/menu/products?category_id=${catId}`, { schema: ProductArraySchema });
-      setCategories(prev => prev.map(c => c.id === catId ? { ...c, products: Array.isArray(prods) ? (prods as any) : [] } : c));
-    } catch (err) {
-      console.debug('[MenuManagerPage] load category products failed:', err);
-      setCategories(prev => prev.map(c => c.id === catId ? { ...c, products: [] } : c));
-    } finally {
-      setProductsLoading(false);
-    }
-  };
-
   const toggleExpand = async (catId: string) => {
     if (expandedCat === catId) { setExpandedCat(null); return; }
     setExpandedCat(catId);
     const cat = categories.find(c => c.id === catId);
     if (cat && cat.products === undefined) {
-      await loadCategoryProducts(catId);
+      await loadProducts(catId);
     }
   };
 
 
-  // тФАтФА Filtered/sorted products тФАтФА
+  // Filtered/sorted products
   const getAllProducts = (catId: string): Product[] => {
     const cat = categories.find(c => c.id === catId);
     if (!cat?.products) return [];
@@ -412,7 +335,7 @@ export function MenuManagerPage() {
     return result;
   };
 
-  // тФАтФА Stock summary тФАтФА
+  // Stock summary
   const totalDishes = useMemo(() => {
     let count = 0;
     categories.forEach(c => {
@@ -429,7 +352,7 @@ export function MenuManagerPage() {
         <div>
           <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.menu_manager', 'Menu Manager')}</h2>
           <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>
-            {categories.length} {t('admin.categories', 'categories')} ┬╖ {totalDishes} {t('admin.dishes_in_stock', 'dishes in stock')}
+            {categories.length} {t('admin.categories', 'categories')} &middot; {totalDishes} {t('admin.dishes_in_stock', 'dishes in stock')}
           </p>
         </div>
         <Button onClick={() => setShowImport(true)} variant="ghost" size="sm">
@@ -459,7 +382,7 @@ export function MenuManagerPage() {
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
             <i className="ti ti-arrows-sort text-base" />
-            <span className="hidden sm:inline text-xs">{sortBy === 'name' ? t('admin.name_az', 'Name A-Z') : sortBy === 'price-asc' ? t('admin.price_asc', 'Price \u2191') : t('admin.price_desc', 'Price \u2193')}</span>
+            <span className="hidden sm:inline text-xs">{sortBy === 'name' ? t('admin.name_az', 'Name A-Z') : sortBy === 'price-asc' ? t('admin.price_asc', 'Price asc') : t('admin.price_desc', 'Price desc')}</span>
           </motion.button>
           {isMobile ? (
             <MobilePicker
@@ -476,6 +399,7 @@ export function MenuManagerPage() {
             />
           ) : sortOpen && (
             <>
+              {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
               <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
               <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[140px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
                 {[
@@ -518,6 +442,7 @@ export function MenuManagerPage() {
             />
           ) : availOpen && (
             <>
+              {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
               <div className="fixed inset-0 z-40" onClick={() => setAvailOpen(false)} />
               <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[150px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
                 {[
@@ -562,7 +487,7 @@ export function MenuManagerPage() {
           {categories.map(cat => (
             <motion.button key={cat.id} onClick={async () => { setSelectedCategory(cat.id); await toggleExpand(cat.id); }} whileTap={{ scale: 0.97 }}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${selectedCategory === cat.id ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}>
-              {cat.name} <span className="text-[10px] opacity-70">({cat.product_count ?? cat.products?.length ?? 0})</span>
+              {cat.name} <span className="text-[10px] opacity-70">({cat.productCount ?? cat.products?.length ?? 0})</span>
             </motion.button>
           ))}
         </div>
@@ -687,8 +612,10 @@ export function MenuManagerPage() {
 
       {/* Product Preview Card */}
       {previewProduct && (
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
         <div className="fixed inset-0 z-50 flex items-center justify-center fade-in" onClick={() => setPreviewProduct(null)}>
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
           <div className="relative w-[320px] bg-[var(--brand-surface)] rounded-2xl overflow-hidden shadow-2xl z-10 scale-in" onClick={e => e.stopPropagation()}>
             <div className="aspect-[4/3] relative" style={{ background: 'var(--brand-surface-raised)' }}>
               {previewProduct.imageUrl
@@ -713,8 +640,6 @@ export function MenuManagerPage() {
                 </div>
                 <span className="text-xl font-black shrink-0" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={previewProduct.price} /></span>
               </div>
-
-
 
               {previewProduct.stockCount != null && (
                 <div className="flex items-center gap-2">
@@ -752,8 +677,10 @@ export function MenuManagerPage() {
 
       {/* Add/Edit Form Modal */}
       {showForm && (
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center fade-in" onClick={closeForm}>
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
           <div className="relative w-full max-w-md bg-[var(--brand-surface)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 z-10 slide-in-up max-h-[85vh] overflow-auto pb-20 sm:pb-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{editingProduct ? t('admin.edit_item', 'Edit Item') : t('admin.add_item', 'Add Item')}</h3>
@@ -782,6 +709,7 @@ export function MenuManagerPage() {
 
             <div>
               <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.name', 'Name')} *</label>
+              {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
               <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="e.g. Margherita Pizza" autoFocus />
             </div>
 
@@ -843,6 +771,7 @@ export function MenuManagerPage() {
               </div>
             </div>
 
+            {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
             <label className="flex items-center gap-3 cursor-pointer select-none" onClick={() => setFormAvailable(!formAvailable)}>
               <div className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${formAvailable ? 'bg-[var(--brand-primary)]' : 'bg-[var(--brand-border)]'}`}>
                 <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200 shadow-sm ${formAvailable ? 'translate-x-5' : 'translate-x-0'}`} />
@@ -862,7 +791,7 @@ export function MenuManagerPage() {
         </div>
       )}
 
-      {/* ── PDF Import Modal ── */}
+      {/* PDF Import Modal */}
       {showImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/50 backdrop-blur-sm pointer-events-none" />
           <div className="w-full max-w-lg rounded-2xl border shadow-xl overflow-hidden relative" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', zIndex: 1 }}>
@@ -902,11 +831,14 @@ export function MenuManagerPage() {
 
                   {/* Drop zone */}
                   <div
+                    role="button"
+                    tabIndex={0}
                     onDragOver={e => { e.preventDefault(); setImportDragOver(true); }}
                     onDragLeave={() => setImportDragOver(false)}
                     onDrop={e => { e.preventDefault(); setImportDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) setImportFile(f); }}
                     className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${importDragOver ? 'border-[var(--brand-primary)] bg-[var(--brand-primary-light)]' : 'border-[var(--brand-border)]'}`}
-                    onClick={() => document.getElementById('import-file-input')?.click()}>
+                    onClick={() => document.getElementById('import-file-input')?.click()}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') document.getElementById('import-file-input')?.click(); }}>
                     <input id="import-file-input" type="file" accept=".pdf,image/*" className="hidden"
                       onChange={e => { const f = e.target.files?.[0]; if (f) setImportFile(f); }} />
                     {importFile ? (

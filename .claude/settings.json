@@ -28,14 +28,37 @@
   },
   "hooks": {
     "PreToolUse": [
-      { "matcher": "Edit|Write", "hooks": [{ "type": "command", "command": "bash .claude/hooks/protect-paths.sh" }] },
-      { "matcher": "Bash",        "hooks": [{ "type": "command", "command": "bash .claude/hooks/guard-bash.sh" }] }
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{
+          "type": "command",
+          "command": "bash \"/c/Users/Dell5/Documents/dowiz/.claude/hooks/protect-paths.sh\""
+        }]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "bash \"/c/Users/Dell5/Documents/dowiz/.claude/hooks/guard-bash.sh\""
+        }]
+      }
     ],
     "PostToolUse": [
-      { "matcher": "Edit|Write",  "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-gates.sh" }] }
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{
+          "type": "command",
+          "command": "bash \"/c/Users/Dell5/Documents/dowiz/.claude/hooks/post-edit-gates.sh\""
+        }]
+      }
     ],
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "bash .claude/hooks/require-classification.sh" }] }
+      {
+        "hooks": [{
+          "type": "command",
+          "command": "bash \"/c/Users/Dell5/Documents/dowiz/.claude/hooks/require-classification.sh\""
+        }]
+      }
     ]
   }
 }

@@ -1,5 +1,5 @@
 import type { MessageBus } from '@deliveryos/platform';
-import type PgBoss from 'pg-boss';
+import type { PgBoss } from 'pg-boss';
 import { BUS_CHANNELS, QUEUE_NAMES, CUSTOMER_PUSH_EVENTS } from '../lib/registry.js';
 
 export function registerNotifySubscriptions(messageBus: MessageBus, queueBoss: PgBoss): void {

@@ -61,7 +61,6 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
     case 'order.confirmed':
     case 'order.rejected':
     case 'cash.reconcile_discrepancy':
-
     case 'order.delivered':
     case 'order.dwell_escalation':
     case 'order.ready_for_pickup':
@@ -110,8 +109,9 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
     case 'test':
       return { text };
 
-    default:
+    default: {
       const _exhaustive: never = event.type;
       return _exhaustive;
+    }
   }
 }
