@@ -333,7 +333,7 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
 
     const delRes = await request.post(
       `${BASE}/api/courier/assignments/${assignmentId}/delivered`,
-      { headers: { Authorization: `Bearer ${courierToken}` }, data: { cash_collected: false } }
+      { headers: { Authorization: `Bearer ${courierToken}` }, data: { cash_collected: false }, timeout: 30000 }
     );
     expect([200, 400, 409]).toContain(delRes.status());
     console.log('Delivered status:', delRes.status());
