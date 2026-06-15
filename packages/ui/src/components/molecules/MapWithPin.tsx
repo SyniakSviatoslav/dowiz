@@ -79,6 +79,7 @@ export function MapWithPin({
         onClick={handleMapClick}
       />
       <button
+        type="button"
         onClick={handleMyLocation}
         disabled={locating}
         className="absolute top-3 right-3 w-10 h-10 rounded-full flex items-center justify-center shadow-lg border z-10 transition-all active:scale-95 disabled:opacity-50"
@@ -103,6 +104,7 @@ export function MapWithPin({
       {pin && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
           <button
+            type="button"
             onClick={handleConfirm}
             className={`px-6 py-2.5 rounded-full font-medium text-sm shadow-lg transition-all ${
               confirmed

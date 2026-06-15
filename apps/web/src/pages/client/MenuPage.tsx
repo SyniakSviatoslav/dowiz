@@ -398,8 +398,19 @@ export function MenuPage() {
         <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, color-mix(in srgb, var(--brand-bg) 80%, transparent) 0%, color-mix(in srgb, var(--brand-bg) 40%, transparent) 50%, color-mix(in srgb, var(--brand-bg) 5%, transparent) 100%)' }} />
         <div className="absolute inset-0 opacity-[0.06]" style={{ background: 'radial-gradient(ellipse at 30% 50%, color-mix(in srgb, var(--brand-primary) 20%, transparent) 0%, transparent 60%)' }} />
         <div className="absolute inset-0 opacity-[0.03]" style={{ background: 'radial-gradient(ellipse at 70% 30%, color-mix(in srgb, var(--brand-text) 15%, transparent) 0%, transparent 50%)' }} />
-        <div className="relative z-10 w-full px-5 pb-5">
-          <div className="flex items-center gap-1.5 text-[12px] font-medium mb-1.5" style={{ color: 'color-mix(in srgb, var(--color-on-primary) 70%, transparent)' }}>
+        <motion.div
+          className="relative z-10 w-full px-5 pb-5"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <motion.div
+            className="flex items-center gap-1.5 text-[12px] font-medium mb-1.5"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4, delay: 0.15 }}
+            style={{ color: 'color-mix(in srgb, var(--color-on-primary) 70%, transparent)' }}
+          >
             {locationInfo?.googleRating != null ? (
               <>
                 <span className="inline-flex gap-0.5" style={{ color: 'var(--color-warning)' }}>
@@ -416,11 +427,11 @@ export function MenuPage() {
                 <span>~{deliveryETA} min</span>
               </>
             )}
-          </div>
+          </motion.div>
           <h1 className="text-[22px] md:text-[26px] font-bold leading-tight" style={{ color: 'var(--color-on-primary)', fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 16px color-mix(in srgb, var(--brand-bg) 40%, transparent)' }}>
             {menu?.location_name || t('client.menu', 'Menu')}
           </h1>
-        </div>
+        </motion.div>
       </section>
 
       {/* Unified sticky: Category nav + Search/Sort/Filter — sits below the 56px (h-14) header */}

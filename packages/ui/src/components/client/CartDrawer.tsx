@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button, BottomSheet, useI18n, PriceDisplay } from '../../index.js';
 
 export interface CartItem {
@@ -36,20 +37,47 @@ export function CartDrawer({ isOpen, onClose, items, onUpdateQuantity, onCheckou
               <span className="text-sm">{emptyText || t('cart.empty', 'Cart is empty')}</span>
             </div>
           ) : (
-            <div className="space-y-4">
-              {items.map(item => (
-                <div key={item.id} className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[var(--brand-text)] font-medium truncate">{item.name}</div>
-                    <div className="text-[var(--brand-text-muted)] text-sm"><PriceDisplay amount={item.price} size="sm" /></div>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <button onClick={() => onUpdateQuantity(item.id, item.quantity - 1)} className="min-w-[44px] min-h-[44px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95">-</button>
-                    <span className="text-[var(--brand-text)] font-medium w-4 text-center">{item.quantity}</span>
-                    <button onClick={() => onUpdateQuantity(item.id, item.quantity + 1)} className="min-w-[44px] min-h-[44px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95">+</button>
-                  </div>
-                </div>
-              ))}
+            <div className="space-y-3">
+              <AnimatePresence initial={false}>
+                {items.map((item, idx) => (
+                  <motion.div
+                    key={item.id}
+                    layout
+                    initial={{ opacity: 0, x: -16, scale: 0.96 }}
+                    animate={{ opacity: 1, x: 0, scale: 1, transition: { duration: 0.22, delay: idx * 0.04 } }}
+                    exit={{ opacity: 0, x: 20, scale: 0.94, transition: { duration: 0.18 } }}
+                    className="flex items-center justify-between py-1"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[var(--brand-text)] font-medium truncate">{item.name}</div>
+                      <div className="text-[var(--brand-text-muted)] text-sm"><PriceDisplay amount={item.price} size="sm" /></div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <motion.button
+                        type="button"
+                        onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
+                        className="min-w-[40px] min-h-[40px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] flex items-center justify-center"
+                        whileTap={{ scale: 0.82 }}
+                        whileHover={{ backgroundColor: 'var(--brand-border)' }}
+                      >-</motion.button>
+                      <motion.span
+                        key={item.quantity}
+                        initial={{ scale: 1.3 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                        className="text-[var(--brand-text)] font-bold w-5 text-center"
+                      >{item.quantity}</motion.span>
+                      <motion.button
+                        type="button"
+                        onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                        className="min-w-[40px] min-h-[40px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] flex items-center justify-center"
+                        whileTap={{ scale: 0.82 }}
+                        whileHover={{ backgroundColor: 'var(--brand-border)' }}
+                      >+</motion.button>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           )}
         </div>
