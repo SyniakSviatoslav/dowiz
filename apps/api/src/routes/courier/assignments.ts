@@ -59,7 +59,12 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
        await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
        // Use the service to accept the assignment
-       await acceptCourierAssignment(client, id, locationId, { messageBus });
+       const { orderId: orderIdForStatus } = await acceptCourierAssignment(client, id, locationId, { messageBus });
+
+       // Advance order to CONFIRMED (idempotent — ignore if already at or past this state)
+       try {
+         await updateOrderStatus(client, orderIdForStatus, locationId, 'CONFIRMED', { messageBus });
+       } catch { /* order may already be confirmed or in a further state */ }
 
        await client.query('COMMIT');
        return reply.send({ success: true });
@@ -163,12 +168,17 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
         UPDATE courier_assignments SET status = 'picked_up', picked_up_at = now() WHERE id = $1
       `, [id]);
 
+      // Advance order to IN_DELIVERY (idempotent — ignore if already at or past this state)
+      try {
+        await updateOrderStatus(client, order_id, locationId, 'IN_DELIVERY', { messageBus });
+      } catch { /* order may already be in delivery or in a further state */ }
+
       await client.query('COMMIT');
 
-      await messageBus.publish(BUS_CHANNELS.ORDER_PICKED_UP, { 
-        orderId: order_id, 
+      await messageBus.publish(BUS_CHANNELS.ORDER_PICKED_UP, {
+        orderId: order_id,
         locationId,
-        courierId 
+        courierId
       });
 
       return reply.send({ success: true });
