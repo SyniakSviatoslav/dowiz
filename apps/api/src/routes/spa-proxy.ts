@@ -4,6 +4,7 @@ import { loadEnv } from '@deliveryos/config';
 import crypto from 'crypto';
 import { getImageUrl } from '../lib/image-url.js';
 import { maskStr } from '../lib/pii-mask.js';
+import { toCategoryApiShape } from '../lib/row-transformers.js';
 import { z } from 'zod';
 
 const env = loadEnv();
@@ -107,7 +108,6 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   fastify.get('/api/owner/menu/categories', async (request, reply) => {
     const locId = await getLocationId(request);
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    await db.query(`SELECT set_config('app.current_tenant', $1, true)`, [locId]);
     const res = await db.query(`
       SELECT c.id, c.name, c.sort_order, COUNT(p.id)::int AS product_count
       FROM categories c
@@ -116,7 +116,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       GROUP BY c.id, c.name, c.sort_order
       ORDER BY c.sort_order
     `, [locId]);
-    return reply.send(res.rows);
+    return reply.send(res.rows.map(toCategoryApiShape));
   });
 
   // POST /api/owner/menu/categories
