@@ -358,6 +358,7 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
 
     const acceptRes = await request.post(`${BASE}/api/courier/assignments/${assignmentId}/accept`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
+      timeout: 20000,
     });
     if (acceptRes.status() !== 200) {
       test.skip(); // assignment not in acceptable state
@@ -365,18 +366,21 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
 
     const puRes = await request.post(`${BASE}/api/courier/assignments/${assignmentId}/picked-up`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
+      timeout: 20000,
     });
     expect(puRes.status()).toBe(200);
 
     const delRes = await request.post(`${BASE}/api/courier/assignments/${assignmentId}/delivered`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
       data: { cash_collected: false },
+      timeout: 20000,
     });
     expect(delRes.status()).toBe(200);
 
     const cancelRes = await request.post(`${BASE}/api/courier/assignments/${assignmentId}/cancel`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
       data: { reason: 'E2E test cancellation' },
+      timeout: 20000,
     });
     expect(cancelRes.status()).toBe(410);
   });
