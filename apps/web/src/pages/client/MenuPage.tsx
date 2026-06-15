@@ -225,7 +225,7 @@ export function MenuPage() {
   const HEADER_H = 56;
   const scrollOffset = HEADER_H + stickyHeight + 8;
 
-  interface LocationInfo { lat: number; lng: number; googleRating?: number | null; googleReviewCount?: number | null; }
+  interface LocationInfo { lat: number; lng: number; googleRating?: number | null; googleReviewCount?: number | null; isOpen?: boolean; }
   const [locationInfo, setLocationInfo] = useState<LocationInfo | null>(null);
   const [deliveryETA, setDeliveryETA] = useState<number | null>(null);
   const [geoStatus, setGeoStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown');
@@ -235,7 +235,7 @@ export function MenuPage() {
     fetch(`/public/locations/${slug}/info`)
       .then(r => r.ok ? r.json() : null)
       .then((d: any) => {
-        if (d?.lat && d?.lng) setLocationInfo({ lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount });
+        if (d?.lat && d?.lng) setLocationInfo({ lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount, isOpen: d.isOpen });
       })
       .catch(() => {});
   }, [slug]);
@@ -511,6 +511,19 @@ export function MenuPage() {
           </div>
         )}
       </div>
+
+      {/* Delivery closed banner */}
+      {locationInfo?.isOpen === false && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mx-4 my-3 px-4 py-3 rounded-xl border flex items-center gap-3 text-sm font-medium"
+          style={{ background: 'var(--color-warning-light, rgba(217,119,6,0.08))', borderColor: 'var(--color-warning, #D97706)', color: 'var(--color-warning, #D97706)' }}
+        >
+          <i className="ti ti-clock-off text-lg shrink-0" />
+          <span>{t('client.delivery_closed', 'We are currently closed. Check back during opening hours.')}</span>
+        </motion.div>
+      )}
 
       {/* Menu Content — min-h prevents layout shifts when filtering/sorting changes product count */}
       <main className="max-w-5xl mx-auto pt-4 min-h-screen">

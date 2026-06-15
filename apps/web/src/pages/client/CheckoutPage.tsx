@@ -70,6 +70,8 @@ export function CheckoutPage() {
   const [customerName, setCustomerName] = useState('');
   const [pinLocation, setPinLocation] = useState<LngLatLike | null>(null);
   const [locationId, setLocationId] = useState<string | null>(null);
+  const [locationCenter, setLocationCenter] = useState<LngLatLike>([19.456, 41.324]); // Durrës default
+  const [notes, setNotes] = useState('');
   const [cashAmount, setCashAmount] = useState<number>(0);
   const [orderError, setOrderError] = useState('');
   const [instructionOption, setInstructionOption] = useState<string>('');
@@ -87,6 +89,7 @@ export function CheckoutPage() {
     fetch(`/public/locations/${slug}/info`).then(r => r.json())
       .then((info: any) => {
         setLocationId(info.id);
+        if (info.lng && info.lat) setLocationCenter([info.lng, info.lat]);
       })
       .catch((err) => {
         console.debug('[CheckoutPage] failed to load location info:', err);
@@ -172,9 +175,15 @@ export function CheckoutPage() {
     setEntranceError('');
     setApartmentError('');
     
+    if (deliveryType === 'delivery' && !notes.trim()) {
+      setOrderError(t('checkout.notes_required', 'Please describe how to find your location'));
+      return;
+    }
     setPlacing(true);
     try {
       const idempotencyKey = crypto.randomUUID();
+      const pinLat = (pinLocation as [number, number])?.[1] || (locationCenter as [number, number])?.[1] || 41.324;
+      const pinLng = (pinLocation as [number, number])?.[0] || (locationCenter as [number, number])?.[0] || 19.456;
       const orderRes = await apiClient<typeof OrderCreateResponse>('/orders', {
         method: 'POST',
         schema: OrderCreateResponse,
@@ -187,11 +196,9 @@ export function CheckoutPage() {
             name: customerName || undefined,
           },
           delivery: {
-            pin: {
-              lat: (pinLocation as [number, number])?.[1] || 41.331,
-              lng: (pinLocation as [number, number])?.[0] || 19.817,
-            },
+            pin: { lat: pinLat, lng: pinLng },
             address_text: address || undefined,
+            notes: notes.trim() || undefined,
           },
           payment: { method: 'cash' },
           cash_pay_with: cashAmount > 0 ? cashAmount : undefined,
@@ -212,8 +219,8 @@ export function CheckoutPage() {
       });
       try {
         localStorage.setItem(`dos_last_delivery_${slug}`, JSON.stringify({
-          lat: (pinLocation as [number, number])?.[1] || 41.331,
-          lng: (pinLocation as [number, number])?.[0] || 19.817,
+          lat: pinLat,
+          lng: pinLng,
           address,
           entrance,
           apartment,
@@ -309,7 +316,7 @@ export function CheckoutPage() {
             <div className="space-y-4">
               <div>
                 <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.delivery_address')}</label>
-                <MapWithPin className="h-48 w-full rounded-lg" initialCenter={[19.817, 41.331]} onPinChange={setPinLocation} confirmLabel={t('common.confirm')} placeholder={t('checkout.delivery_address')} />
+                <MapWithPin className="h-48 w-full rounded-lg" initialCenter={locationCenter} onPinChange={setPinLocation} confirmLabel={t('common.confirm')} placeholder={t('checkout.delivery_address')} />
               </div>
               <div>
                 <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.delivery_address')}</label>
@@ -334,6 +341,23 @@ export function CheckoutPage() {
                     <input required value={apartment} onChange={e => setApartment(e.target.value)} data-testid="checkout-apartment" placeholder={t('checkout.apartment_placeholder', 'Apartment or unit number')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                   </div>
                   {apartmentError && <p role="alert" className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{apartmentError}</p>}
+                </div>
+              </div>
+              <div>
+                <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>
+                  {t('checkout.notes', 'How to find you')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                </label>
+                <div className="relative">
+                  <i className="ti ti-map-2 absolute left-3 top-3 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
+                  <textarea
+                    required
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    rows={3}
+                    placeholder={t('checkout.notes_placeholder', 'Describe how to find the exact place: floor, building color, nearby landmark, gate code...')}
+                    className="w-full pl-10 pr-3 pt-2.5 pb-2 outline-none text-[14px] border rounded-[8px] transition-colors resize-none"
+                    style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
+                  />
                 </div>
               </div>
               <div>
