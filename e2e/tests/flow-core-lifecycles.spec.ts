@@ -118,10 +118,14 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
         idempotency_key: crypto.randomUUID(),
       },
     });
-    expect([201, 422]).toContain(orderRes.status());
     const body = await orderRes.json();
-    orderId = body.id || body.orderId;
-    expect(orderId).toBeTruthy();
+    if (orderRes.status() === 201) {
+      orderId = body.id || body.orderId;
+      expect(orderId).toBeTruthy();
+    } else {
+      console.log('Order creation 422 body:', JSON.stringify(body));
+      expect(orderRes.status()).toBe(201);
+    }
   });
 
   test('Flow 3: Owner — assign courier to order (tested in Flow 17)', async () => {
@@ -386,6 +390,7 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
 
     const shiftRes = await request.get(`${BASE}/api/courier/me/shift`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
+      timeout: 20000,
     });
     expect(shiftRes.status()).toBe(200);
 
