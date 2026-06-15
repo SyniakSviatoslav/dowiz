@@ -78,6 +78,8 @@ export function SettingsPage() {
     lng: 19.817,
     hoursJson: DEFAULT_SCHEDULE,
   });
+  const [deliveryPaused, setDeliveryPaused] = useState(false);
+  const [togglingDelivery, setTogglingDelivery] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -112,6 +114,7 @@ export function SettingsPage() {
           lng: (data as any).lng || 19.817,
         });
         if (data.id) setLocationId(data.id);
+        setDeliveryPaused((data as any).deliveryPaused ?? false);
       } else {
         setSettings(MOCK_SETTINGS);
       }
@@ -220,7 +223,7 @@ export function SettingsPage() {
     try {
       await apiClient('/owner/settings', {
         method: 'PUT',
-        body: settings,
+        body: { ...settings, deliveryPaused },
       });
       showToast(t('common.saved', 'Settings saved'), 'success');
     } catch (err: any) {
@@ -497,6 +500,35 @@ export function SettingsPage() {
                   <i className="ti ti-send" /> {t('admin.tg_test', 'Send Test')}
                 </Button>
               )}
+            </div>
+          </div>
+
+          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className="font-semibold text-sm">{t('admin.delivery_status', 'Delivery Status')}</h3>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>
+                  {deliveryPaused
+                    ? t('admin.delivery_paused_hint', 'Delivery is paused. Customers see a "Closed" message.')
+                    : t('admin.delivery_open_hint', 'Delivery is open based on your hours schedule.')}
+                </p>
+              </div>
+              <div style={{ opacity: togglingDelivery ? 0.5 : 1, pointerEvents: togglingDelivery ? 'none' : 'auto' }}>
+                <Toggle
+                  checked={!deliveryPaused}
+                  onChange={async (v) => {
+                    const newPaused = !v;
+                    setTogglingDelivery(true);
+                    try {
+                      await apiClient('/owner/settings', { method: 'PUT', body: { deliveryPaused: newPaused } });
+                      setDeliveryPaused(newPaused);
+                      showToast(newPaused ? t('admin.delivery_paused', 'Delivery paused') : t('admin.delivery_resumed', 'Delivery resumed'), 'success');
+                    } catch { showToast(t('common.error', 'Failed to update delivery status'), 'error'); }
+                    finally { setTogglingDelivery(false); }
+                  }}
+                  label={deliveryPaused ? t('admin.delivery_closed_label', 'Closed') : t('admin.delivery_open_label', 'Open')}
+                />
+              </div>
             </div>
           </div>
 
