@@ -8,12 +8,9 @@ async function fetchOrderDelta(client: PoolClient, orderId: string) {
     SELECT o.id, o.status, o.total, o.created_at, loc.currency_code,
       (SELECT count(*) FROM order_items oi WHERE oi.order_id = o.id)::int as item_count,
       (SELECT string_agg(oi.quantity::text || '\u00d7' || oi.name_snapshot, ', ')
-       FROM order_items oi WHERE oi.order_id = o.id) as items_summary,
-      courier.display_name as courier_name
+       FROM order_items oi WHERE oi.order_id = o.id) as items_summary
     FROM orders o
     LEFT JOIN locations loc ON loc.id = o.location_id
-    LEFT JOIN courier_assignments ca ON ca.order_id = o.id AND ca.status IN ('accepted','picked_up','delivered')
-    LEFT JOIN users courier ON courier.id = ca.courier_id
     WHERE o.id = $1
   `, [orderId]);
   const row = res.rows[0];
@@ -27,7 +24,7 @@ async function fetchOrderDelta(client: PoolClient, orderId: string) {
     shortId: '#' + row.id.substring(0, 4).toUpperCase(),
     itemCount: row.item_count || 0,
     itemsSummary: row.items_summary || '',
-    courierName: row.courier_name || null,
+    courierName: null,
   };
 }
 
