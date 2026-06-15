@@ -27,7 +27,7 @@ export default (async function courierSettlementRoutes(fastify: any, opts: any) 
 
     let sql = `
       SELECT p.id, p.location_id, l.name as location_name, p.deliveries_count, p.total_earned,
-             p.period_start, p.period_end, p.status, p.created_at, p.approved_at, p.paid_at,
+             p.period_start, p.period_end, p.status, p.created_at, p.approved_at,
              l.currency_code as currency
       FROM courier_payouts p
       JOIN locations l ON l.id = p.location_id
@@ -61,7 +61,7 @@ export default (async function courierSettlementRoutes(fastify: any, opts: any) 
 
     const payoutRes = await db.query(`
       SELECT p.id, p.location_id, l.name as location_name, p.deliveries_count, p.total_earned,
-             p.period_start, p.period_end, p.status, p.created_at, p.approved_at, p.paid_at,
+             p.period_start, p.period_end, p.status, p.created_at, p.approved_at,
              l.currency_code as currency
       FROM courier_payouts p
       JOIN locations l ON l.id = p.location_id
