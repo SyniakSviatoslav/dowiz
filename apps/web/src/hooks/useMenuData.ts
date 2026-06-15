@@ -23,7 +23,7 @@ export interface Product {
 export interface Category {
   id: string;
   name: string;
-  product_count?: number;
+  productCount?: number;
   products?: Product[];
 }
 

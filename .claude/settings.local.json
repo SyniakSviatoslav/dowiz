@@ -4,24 +4,27 @@
       "Bash(claude mcp *)",
       "mcp__figma-remote-mcp__generate_figma_design",
       "Bash(curl -s http://localhost:3845/)",
-      "PowerShell(Start-Process \"http://localhost:3845/#figmacapture=4f91faed-c76b-4d93-be56-0f53082f2808&figmaendpoint=https%3A%2F%2Fmcp.figma.com%2Fmcp%2Fcapture%2F4f91faed-c76b-4d93-be56-0f53082f2808%2Fsubmit&figmadelay=3000\")",
       "mcp__figma-remote-mcp__whoami",
       "mcp__figma-remote-mcp__get_screenshot",
       "mcp__figma-remote-mcp__get_design_context",
-      "Bash(Get-Content \"C:\\\\Users\\\\Dell5\\\\.claude\\\\projects\\\\C--Users-Dell5-Documents-delivery\\\\7d6a0a2b-5d2b-4dd1-b45b-317c0d8687da\\\\tool-results\\\\toolu_01WEcTy9dDK5hULVwq2Q2C3C.json\")",
-      "Bash(Measure-Object -Line)",
-      "PowerShell(Get-Content *)",
       "mcp__figma-remote-mcp__get_metadata",
       "Read(//c/Users/Dell5/.claude/skills/gstack/**)",
-      "Bash(./setup)",
-      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Dell5\\\\Documents\\\\dowiz\" -Directory)",
-      "Bash(Select-Object -First 20)",
-      "Bash(xargs -I {} bash -c 'echo \"=== {} ===\"; head -20 {}')",
-      "PowerShell($env:TEMP)",
-      "PowerShell(Start-Process \"C:\\\\Users\\\\Dell5\\\\AppData\\\\Local\\\\Temp\\\\architecture-review-20260615.html\")"
+      "Bash(git *)",
+      "Bash(git check-ignore *)",
+      "PowerShell(pnpm lint *)",
+      "Bash(graphify update *)",
+      "Bash(VITE_BASE_URL=https://dowiz.fly.dev npx playwright test --project=mobile --reporter=list)",
+      "Bash(Read /c/Users/Dell5/AppData/Local/Temp/claude/C--Users-Dell5-Documents-dowiz/7473fd35-0c0b-482d-8ad4-6dbf59818166/tasks/bhhtw8ran.output)",
+      "Bash(VITE_BASE_URL=https://dowiz.fly.dev npx playwright test e2e/tests/flow-regulatory-settlements.spec.ts --project=mobile --reporter=list)",
+      "Bash(pnpm -s lint:gates)",
+      "Bash(npx eslint *)",
+      "Bash(VITE_BASE_URL=https://dowiz.fly.dev npx playwright test e2e/tests/flow-regulatory-settlements.spec.ts e2e/tests/flow-owner-brand.spec.ts --project=mobile --reporter=list)",
+      "Bash(gh repo *)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(python3 *)",
+      "Bash(grep \"^C:\\\\\\\\\")"
     ]
-  },
-  "disabledMcpjsonServers": [
-    "repowise"
-  ]
+  }
 }
