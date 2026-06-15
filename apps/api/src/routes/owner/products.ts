@@ -15,7 +15,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
   server.post(
     '/api/owner/locations/:locationId/products',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: LocationParams,
         body: z.object({
@@ -50,7 +50,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
   server.get(
     '/api/owner/locations/:locationId/products',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: LocationParams,
         querystring: z.object({
@@ -97,7 +97,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
   server.get(
     '/api/owner/locations/:locationId/products/:id',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: { params: ProductParams }
     },
     async (request: any, reply: any) => {
@@ -115,7 +115,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
   server.patch(
     '/api/owner/locations/:locationId/products/:id',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: ProductParams,
         body: z.object({
@@ -165,7 +165,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
   server.delete(
     '/api/owner/locations/:locationId/products/:id',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: { params: ProductParams }
     },
     async (request: any, reply: any) => {
@@ -184,7 +184,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
   server.put(
     '/api/owner/locations/:locationId/products/:id/translations/:locale',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: TranslationParams,
         body: z.object({
@@ -225,7 +225,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
   server.get(
     '/api/owner/locations/:locationId/products/:id/translations',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: { params: ProductParams }
     },
     async (request: any, reply: any) => {
@@ -242,7 +242,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
   server.delete(
     '/api/owner/locations/:locationId/products/:id/translations/:locale',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: { params: TranslationParams }
     },
     async (request: any, reply: any) => {
@@ -261,7 +261,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
   server.put(
     '/api/owner/locations/:locationId/products/:id/modifier-groups',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: ProductParams,
         body: z.array(z.object({
@@ -293,7 +293,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
   server.get(
     '/api/owner/locations/:locationId/products/:id/modifier-groups',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: { params: ProductParams }
     },
     async (request: any, reply: any) => {

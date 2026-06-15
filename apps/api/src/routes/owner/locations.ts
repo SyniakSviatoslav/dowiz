@@ -9,7 +9,7 @@ export default async function locationRoutes(fastify: FastifyInstance) {
   server.patch(
     '/api/owner/locations/:locationId',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: z.object({
           locationId: z.string().uuid()

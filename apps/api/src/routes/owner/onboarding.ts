@@ -27,6 +27,8 @@ export default (async function onboardingRoutes(fastify: any, opts: any) {
   // ─── Auth hook for all routes ─────────────────────────────────────
   fastify.addHook('onRequest', fastify.verifyAuth);
   fastify.addHook('onRequest', fastify.requireRole(['owner']));
+  // Note: /onboarding/start has no locationId param (creates a new location), so
+  // requireLocationAccess is added per-route on handlers that use :locationId.
 
   // ─── Start / create location ──────────────────────────────────────
   fastify.post('/onboarding/start', {
@@ -116,6 +118,7 @@ export default (async function onboardingRoutes(fastify: any, opts: any) {
 
   // ─── Get onboarding state ─────────────────────────────────────────
   fastify.get('/onboarding/:locationId/state', {
+    preHandler: [fastify.requireLocationAccess],
     schema: {
       params: z.object({ locationId: z.string().uuid() }),
     },
@@ -145,6 +148,7 @@ export default (async function onboardingRoutes(fastify: any, opts: any) {
 
   // ─── Complete a step ──────────────────────────────────────────────
   fastify.post('/onboarding/:locationId/step/complete', {
+    preHandler: [fastify.requireLocationAccess],
     schema: {
       params: z.object({ locationId: z.string().uuid() }),
       body: z.object({
@@ -217,6 +221,7 @@ export default (async function onboardingRoutes(fastify: any, opts: any) {
 
   // ─── Skip a step ──────────────────────────────────────────────────
   fastify.post('/onboarding/:locationId/step/:stepNum/skip', {
+    preHandler: [fastify.requireLocationAccess],
     schema: {
       params: z.object({
         locationId: z.string().uuid(),
@@ -284,6 +289,7 @@ export default (async function onboardingRoutes(fastify: any, opts: any) {
 
   // ─── Dashboard redirect after onboarding complete ─────────────────
   fastify.get('/onboarding/:locationId/complete', {
+    preHandler: [fastify.requireLocationAccess],
     schema: {
       params: z.object({ locationId: z.string().uuid() }),
     },
