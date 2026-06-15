@@ -198,6 +198,7 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
     const client = await db.connect();
     try {
       await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
       // Find customer and verify order belongs to this location
       const orderRes = await client.query(
