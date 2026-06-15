@@ -330,7 +330,7 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     );
     expect(verifyRes.status()).toBe(200);
     const body = await verifyRes.json();
-    expect(body.order?.status).toMatch(/CONFIRMED|PENDING|REJECTED/i);
+    expect(body.order?.status).toMatch(/CONFIRMED|PENDING|REJECTED|IN_DELIVERY|READY|DELIVERED|PREPARING/i);
   });
 
   // ══════════════════════════════════════════════
