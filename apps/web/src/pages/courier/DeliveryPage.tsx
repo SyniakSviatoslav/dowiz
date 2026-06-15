@@ -80,7 +80,7 @@ export function DeliveryPage() {
 
   const fetchTask = async () => {
     try {
-      const data = await apiClient<typeof CourierTaskDetail>(`/courier/orders/${id}`, { schema: CourierTaskDetail });
+      const data = await apiClient<typeof CourierTaskDetail>(`/courier/assignments/${id}`, { schema: CourierTaskDetail });
       setTask(data);
     } catch (err: any) {
       if (err.status === 404) {
@@ -143,7 +143,7 @@ export function DeliveryPage() {
   const handlePickup = async () => {
     setPickupLoading(true);
     try {
-      await apiClient(`/orders/${id}/pickup`, { method: 'PATCH' });
+      await apiClient(`/courier/assignments/${id}/picked-up`, { method: 'POST' });
       setPickedUp(true);
     } catch (err) {
       console.warn('[DeliveryPage] pickup failed:', err);
@@ -155,10 +155,11 @@ export function DeliveryPage() {
   const handleComplete = async () => {
     setShowCelebration(true);
     try {
-      const body: Record<string, unknown> = {};
-      if (task?.cashPayWith && cashCollected != null) {
-        body.cash_collected = cashCollected;
-      }
+      const isCash = Boolean(task?.cashPayWith);
+      const body: Record<string, unknown> = {
+        cash_collected: isCash,
+        ...(isCash && task?.total != null ? { cash_amount: task.total } : {}),
+      };
       await apiClient(`/courier/assignments/${id}/delivered`, {
         method: 'POST',
         body,
