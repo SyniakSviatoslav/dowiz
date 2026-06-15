@@ -800,14 +800,32 @@ fastify.register(mockAuthRoutes, { db: pool });
       if (locRes.rowCount && locRes.rowCount > 0) {
         locationId = locRes.rows[0].id;
       } else {
+        const devUser = await pool.query(
+          `INSERT INTO users (email, display_name) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING RETURNING id`,
+          ['dev@deliveryos.com', 'Dev Owner']
+        );
+        let ownerId = devUser.rows[0]?.id;
+        if (!ownerId) {
+          const existing = await pool.query(`SELECT id FROM users WHERE email = 'dev@deliveryos.com' LIMIT 1`);
+          ownerId = existing.rows[0]?.id;
+        }
+        if (!ownerId) ownerId = '00000000-0000-0000-0000-000000000000';
+
         const orgRes = await pool.query(
           `INSERT INTO organizations (name, owner_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING id`,
-          ['Dev Org', '00000000-0000-0000-0000-000000000000']
+          ['Dev Org', ownerId]
         );
         let orgId = orgRes.rows[0]?.id;
         if (!orgId) {
           const existing = await pool.query(`SELECT id FROM organizations WHERE name = 'Dev Org' LIMIT 1`);
-          orgId = existing.rows[0]?.id || '00000000-0000-0000-0000-000000000001';
+          orgId = existing.rows[0]?.id;
+        }
+        if (!orgId) {
+          const org2 = await pool.query(
+            `INSERT INTO organizations (name, owner_id) VALUES ($1, $2) RETURNING id`,
+            ['Dev Org 2', ownerId]
+          );
+          orgId = org2.rows[0]?.id;
         }
         const newLoc = await pool.query(
           `INSERT INTO locations (org_id, slug, name, status, default_locale, supported_locales, currency_code, currency_minor_unit, delivery_fee_flat, min_order_value, free_delivery_threshold)
