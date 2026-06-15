@@ -129,26 +129,14 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
       }
 
       const res = await withTenant(server.db, userId, async (client) => {
-        const setClauses: string[] = [];
-        const values: any[] = [locationId, id];
-        let paramIdx = 3;
-
-        for (const [k, v] of Object.entries(updates)) {
-          setClauses.push(`${k} = $${paramIdx}`);
-          values.push(v);
-          paramIdx++;
-        }
-
         const query = `
           UPDATE categories
-          SET ${setClauses.join(', ')}
+          SET name = COALESCE($3, name),
+              sort_order = COALESCE($4, sort_order)
           WHERE location_id = $1 AND id = $2
           RETURNING *
         `;
-
-        /* eslint-disable local/no-raw-sql */
-        return client.query(query, values);
-        /* eslint-enable local/no-raw-sql */
+        return client.query(query, [locationId, id, updates.name ?? null, updates.sort_order ?? null]);
       });
 
       if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
