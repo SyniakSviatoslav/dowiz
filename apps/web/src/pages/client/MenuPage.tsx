@@ -87,6 +87,8 @@ export function MenuPage() {
     return { kcal: Math.round(kcal), protein: Math.round(protein), fat: Math.round(fat), carbs: Math.round(carbs), allergens: Array.from(allergens), ingredients };
   };
 
+  const CHEF_PICKS_ID = '__chefs_picks__';
+
   const MIN_SKELETON_DWELL = 300;
 
   const [menu, setMenu] = useState<MenuResponse | null>(null);
@@ -129,6 +131,17 @@ export function MenuPage() {
   }, [menuPrefsKey, sortBy, filterAllergen, searchQuery]);
 
   const categories = data;
+
+  const chefPicksCategory = useMemo((): MenuCategory | null => {
+    const picks: Product[] = [];
+    for (const cat of data) {
+      for (const p of cat.products) {
+        if (p.attributes?.chef_pick) picks.push(p);
+      }
+    }
+    if (picks.length === 0) return null;
+    return { id: CHEF_PICKS_ID, name: t('client.chefs_picks', "Chef's Picks"), sort_order: -1, products: picks };
+  }, [data]);
 
   const displayCategories = useMemo(() => {
     const all: (Product & { _catId: string; _catName: string })[] = [];
@@ -190,7 +203,9 @@ export function MenuPage() {
       setMenu(menuData);
       const cats = menuData.categories || [];
       setData(cats);
-      if (cats[0]) setActiveTab(cats[0].id);
+      const hasChefPicks = cats.some(c => c.products.some(p => p.attributes?.chef_pick));
+      if (hasChefPicks) setActiveTab(CHEF_PICKS_ID);
+      else if (cats[0]) setActiveTab(cats[0].id);
     } catch (err) {
       console.error('[MenuPage] Failed to load menu:', err);
       setMenu(null);
@@ -274,7 +289,7 @@ export function MenuPage() {
       if (el) observer.observe(el);
     });
     return () => observer.disconnect();
-  }, [loading, categories, scrollOffset]);
+  }, [loading, categories, chefPicksCategory, scrollOffset]);
 
   const handleScrollTo = (id: string) => {
     const el = document.getElementById(id);
@@ -446,8 +461,12 @@ export function MenuPage() {
                 <div className="w-14 h-3.5 skeleton-block" />
               </div>
             ) : (
-              categories.map(cat => {
+              [
+                ...(chefPicksCategory ? [chefPicksCategory] : []),
+                ...categories,
+              ].map(cat => {
                 const count = cat.products.filter(p => p.available).length;
+                const isChefCat = cat.id === CHEF_PICKS_ID;
                 return (
                   <motion.button
                     key={cat.id}
@@ -457,10 +476,11 @@ export function MenuPage() {
                     aria-selected={activeTab === cat.id}
                     className="h-[44px] flex items-center gap-1 px-3 whitespace-nowrap text-[12px] font-medium transition-all border-b-2 shrink-0"
                     style={{
-                      color: activeTab === cat.id ? 'var(--brand-text)' : 'var(--brand-text-muted)',
-                      borderColor: activeTab === cat.id ? 'var(--brand-primary)' : 'transparent',
+                      color: activeTab === cat.id ? (isChefCat ? '#f59e0b' : 'var(--brand-text)') : 'var(--brand-text-muted)',
+                      borderColor: activeTab === cat.id ? (isChefCat ? '#f59e0b' : 'var(--brand-primary)') : 'transparent',
                     }}
                   >
+                    {isChefCat && <span style={{ fontSize: '0.7rem' }}>✦</span>}
                     {cat.name}
                     <span className="text-[10px] opacity-40">({count})</span>
                   </motion.button>
@@ -583,7 +603,12 @@ export function MenuPage() {
             </motion.button>
           </div>
         ) : (
-          displayCategories.map(category => (
+          [
+            ...(chefPicksCategory ? [chefPicksCategory] : []),
+            ...displayCategories,
+          ].map(category => {
+            const isChefCat = category.id === CHEF_PICKS_ID;
+            return (
             <motion.section
               key={category.id}
               id={category.id}
@@ -595,7 +620,8 @@ export function MenuPage() {
               viewport={{ once: true, margin: '-60px' }}
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             >
-              <h2 className="text-lg font-bold px-4 mb-3" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
+              <h2 className="text-lg font-bold px-4 mb-3 flex items-center gap-2" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
+                {isChefCat && <span style={{ color: '#f59e0b', fontSize: '1rem' }}>✦</span>}
                 {category.name}
               </h2>
               <motion.div
@@ -626,6 +652,7 @@ export function MenuPage() {
                       allergens: nutrition.allergens.length ? nutrition.allergens : undefined,
                       ingredients: nutrition.ingredients.length ? nutrition.ingredients : undefined,
                       taste: getAttr(product, 'taste'),
+                      chefPick: !!product.attributes?.chef_pick,
                     }}
                     onClick={() => handleProductClick(product)}
                     onAdd={(e) => {
@@ -645,7 +672,8 @@ export function MenuPage() {
                 })}
               </motion.div>
             </motion.section>
-          ))
+            );
+          })
         )}
        </main>
 

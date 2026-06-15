@@ -56,6 +56,103 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 type DeliveryType = 'delivery' | 'pickup' | 'scheduled';
 
+interface MacroData { label: string; grams: number; color: string; kcalPer: number }
+function NutritionRing({ kcal, protein, fat, carbs }: { kcal: number; protein: number; fat: number; carbs: number }) {
+  const CX = 52, R = 38, SW = 10;
+  const macros: MacroData[] = [
+    { label: 'Protein', grams: protein, color: '#3b82f6', kcalPer: 4 },
+    { label: 'Carbs',   grams: carbs,   color: '#22c55e', kcalPer: 4 },
+    { label: 'Fat',     grams: fat,     color: '#f59e0b', kcalPer: 9 },
+  ];
+  const totalEnergy = macros.reduce((s, m) => s + m.grams * m.kcalPer, 0);
+  let cumulative = 0;
+  const arcs = macros
+    .filter(m => m.grams > 0)
+    .map(m => {
+      const fraction = (m.grams * m.kcalPer) / totalEnergy;
+      const startOffset = cumulative;
+      cumulative += fraction;
+      return { ...m, fraction, startOffset };
+    });
+  const hasMacros = arcs.length > 0;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-40px' }}
+      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      className="rounded-[12px] p-4 border shadow-sm"
+      style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--brand-text-muted)' }}>
+        <i className="ti ti-flame mr-1" />Order Nutrition
+      </p>
+      <div className="flex items-center gap-5">
+        <div className="relative shrink-0" style={{ width: CX * 2, height: CX * 2 }}>
+          <svg width={CX * 2} height={CX * 2} viewBox={`0 0 ${CX * 2} ${CX * 2}`} aria-hidden="true" style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx={CX} cy={CX} r={R} fill="none" stroke="var(--brand-border)" strokeWidth={SW} />
+            {hasMacros ? arcs.map((arc, i) => (
+              <motion.circle
+                key={arc.label}
+                cx={CX} cy={CX} r={R}
+                fill="none"
+                stroke={arc.color}
+                strokeWidth={SW}
+                strokeLinecap="butt"
+                initial={{ pathLength: 0, pathOffset: arc.startOffset }}
+                animate={{ pathLength: arc.fraction, pathOffset: arc.startOffset }}
+                transition={{ duration: 0.9, delay: 0.15 + i * 0.18, ease: [0.16, 1, 0.3, 1] }}
+              />
+            )) : (
+              <motion.circle
+                cx={CX} cy={CX} r={R}
+                fill="none"
+                stroke="var(--brand-primary)"
+                strokeWidth={SW}
+                strokeLinecap="round"
+                initial={{ pathLength: 0, pathOffset: 0 }}
+                animate={{ pathLength: 0.78, pathOffset: 0 }}
+                transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
+              />
+            )}
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <motion.span
+              className="text-[18px] font-bold leading-none"
+              style={{ color: 'var(--brand-text)' }}
+              initial={{ opacity: 0, scale: 0.7 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.55, type: 'spring', stiffness: 220, damping: 18 }}
+            >
+              {Math.round(kcal)}
+            </motion.span>
+            <span className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>kcal</span>
+          </div>
+        </div>
+        <div className="flex-1 space-y-2.5">
+          {hasMacros ? macros.filter(m => m.grams > 0).map((m, i) => (
+            <motion.div
+              key={m.label}
+              className="flex items-center gap-2"
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.35 + i * 0.1 }}
+            >
+              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: m.color }} />
+              <span className="text-[12px] flex-1" style={{ color: 'var(--brand-text-muted)' }}>{m.label}</span>
+              <span className="text-[13px] font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{Math.round(m.grams)}g</span>
+            </motion.div>
+          )) : (
+            <motion.p className="text-[12px]" style={{ color: 'var(--brand-text-muted)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
+              ~{Math.round(kcal)} kcal total
+            </motion.p>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export function CheckoutPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -156,7 +253,9 @@ export function CheckoutPage() {
   const nutritionTotal = items.reduce((acc, item: any) => ({
     kcal: acc.kcal + ((item as any).kcal ?? 0) * item.quantity,
     protein: acc.protein + ((item as any).protein ?? 0) * item.quantity,
-  }), { kcal: 0, protein: 0 });
+    fat: acc.fat + ((item as any).fat ?? 0) * item.quantity,
+    carbs: acc.carbs + ((item as any).carbs ?? 0) * item.quantity,
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
 
   const orderItems = items.map(i => ({
     product_id: i.productId,
@@ -501,6 +600,15 @@ export function CheckoutPage() {
               </div>
             </div>
           </motion.div>
+        )}
+
+        {hasNutrition && (
+          <NutritionRing
+            kcal={nutritionTotal.kcal}
+            protein={nutritionTotal.protein}
+            fat={nutritionTotal.fat}
+            carbs={nutritionTotal.carbs}
+          />
         )}
 
         <motion.div

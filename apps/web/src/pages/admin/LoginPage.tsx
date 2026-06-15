@@ -20,6 +20,11 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const sessionExpired = typeof window !== 'undefined' && sessionStorage.getItem('dos_auth_expired') === '1';
+  React.useEffect(() => {
+    if (sessionExpired) sessionStorage.removeItem('dos_auth_expired');
+  }, []);
+
   const isDev = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('dev') === 'true');
 
   const handleLocalLogin = async (e: React.FormEvent) => {
@@ -65,6 +70,13 @@ export function LoginPage() {
             <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>DeliveryOS</h1>
             <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.sign_in_owner', 'Sign in to your owner account')}</p>
           </div>
+
+          {sessionExpired && (
+            <div role="alert" className="p-3 text-sm text-center rounded-lg" style={{ background: 'rgba(234,179,8,0.10)', border: '1px solid rgba(234,179,8,0.30)', color: 'var(--brand-text)' }}>
+              <i className="ti ti-clock-exclamation mr-1.5" />
+              {t('admin.session_expired', 'Your session has expired. Please sign in again.')}
+            </div>
+          )}
 
           {error && (
             <div role="alert" aria-live="polite" className="p-3 text-sm text-center rounded-lg" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--color-danger)' }}>
