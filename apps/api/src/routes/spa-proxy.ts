@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { jwtVerify } from 'jose';
 import { loadEnv } from '@deliveryos/config';
 import crypto from 'crypto';
+import { withTenant } from '@deliveryos/platform';
 import { getImageUrl } from '../lib/image-url.js';
 import { maskStr } from '../lib/pii-mask.js';
 import { z } from 'zod';
@@ -66,6 +67,28 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
         );
         if (res.rows.length > 0) return res.rows[0].location_id;
       }
+      return null;
+    } catch (err: any) {
+      console.warn('[spa-proxy] JWT verification failed:', err?.message);
+      return null;
+    }
+  }
+
+  async function getOwnerContext(request: any): Promise<{ locId: string; userId: string } | null> {
+    const auth = request.headers.authorization;
+    if (!auth?.startsWith('Bearer ')) return null;
+    try {
+      const token = auth.slice(7);
+      const { payload } = await jwtVerify(token, getPublicKey(), { algorithms: ['RS256'] });
+      const claims = payload as any;
+      if (claims.role !== 'owner') return null;
+      const uid = claims.userId || claims.sub;
+      if (!uid) return null;
+      const res = await db.query(
+        `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+        [uid]
+      );
+      if (res.rows.length > 0) return { locId: res.rows[0].location_id, userId: uid };
       return null;
     } catch (err: any) {
       console.warn('[spa-proxy] JWT verification failed:', err?.message);
@@ -300,28 +323,32 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
 
   // GET /api/owner/brand
   fastify.get('/api/owner/brand', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const res = await db.query(`SELECT primary_color, bg_color, text_color, logo_url FROM location_themes WHERE location_id = $1`, [locId]);
+    const ctx = await getOwnerContext(request);
+    if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+    const res = await withTenant(db, ctx.userId, async (client) =>
+      client.query(`SELECT primary_color, bg_color, text_color, logo_url FROM location_themes WHERE location_id = $1`, [ctx.locId])
+    );
     return reply.send(res.rows[0] || {});
   });
 
   // PUT /api/owner/brand — update theme
   fastify.put('/api/owner/brand', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    const ctx = await getOwnerContext(request);
+    if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
     const parsed = brandSchema.parse(request.body);
     const logoUrl = parsed.logoUrl ? validateImageKey(parsed.logoUrl) : null;
-    await db.query(
-      `INSERT INTO location_themes (location_id, primary_color, bg_color, text_color, logo_url) VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (location_id) DO UPDATE SET
-         primary_color = COALESCE($2, location_themes.primary_color),
-         bg_color = COALESCE($3, location_themes.bg_color),
-         text_color = COALESCE($4, location_themes.text_color),
-         logo_url = COALESCE($5, location_themes.logo_url)`,
-      [locId, parsed.primaryColor || null, parsed.bgColor || null, parsed.textColor || null, logoUrl]
-    );
-    const res = await db.query(`SELECT primary_color, bg_color, text_color, logo_url FROM location_themes WHERE location_id = $1`, [locId]);
+    const res = await withTenant(db, ctx.userId, async (client) => {
+      await client.query(
+        `INSERT INTO location_themes (location_id, primary_color, bg_color, text_color, logo_url) VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (location_id) DO UPDATE SET
+           primary_color = COALESCE($2, location_themes.primary_color),
+           bg_color = COALESCE($3, location_themes.bg_color),
+           text_color = COALESCE($4, location_themes.text_color),
+           logo_url = COALESCE($5, location_themes.logo_url)`,
+        [ctx.locId, parsed.primaryColor || null, parsed.bgColor || null, parsed.textColor || null, logoUrl]
+      );
+      return client.query(`SELECT primary_color, bg_color, text_color, logo_url FROM location_themes WHERE location_id = $1`, [ctx.locId]);
+    });
     return reply.send(res.rows[0] || {});
   });
 

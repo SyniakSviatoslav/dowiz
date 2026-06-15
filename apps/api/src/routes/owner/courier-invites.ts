@@ -3,6 +3,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import argon2 from 'argon2';
+import { withTenant } from '@deliveryos/platform';
 import { verifyAuth, requireLocationAccess } from '../../plugins/auth.js';
 
 export default (async function ownerCourierInvitesRoutes(fastify: any, opts: any) {
@@ -79,12 +80,15 @@ export default (async function ownerCourierInvitesRoutes(fastify: any, opts: any
   // 2. List Active Invites
   fastify.get('/api/owner/locations/:locationId/courier-invites', async (request: any, reply: any) => {
     const { locationId } = request.params as any;
-    
-    const res = await db.query(
-      `SELECT id, role, expires_at, created_at 
-       FROM courier_invites 
-       WHERE location_id = $1 AND used_at IS NULL AND revoked_at IS NULL AND expires_at > now()`,
-      [locationId]
+    const ownerId = (request.user as any).userId;
+
+    const res = await withTenant(db, ownerId, async (client) =>
+      client.query(
+        `SELECT id, role, expires_at, created_at
+         FROM courier_invites
+         WHERE location_id = $1 AND used_at IS NULL AND revoked_at IS NULL AND expires_at > now()`,
+        [locationId]
+      )
     );
 
     return reply.send({ invites: res.rows });
