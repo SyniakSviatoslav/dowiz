@@ -109,7 +109,7 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
 
-    await page.goto(`${BASE}/s/${locationSlug}`, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT });
+    await page.goto(`${BASE}/s/${locationSlug}`, { waitUntil: 'load', timeout: PAGE_TIMEOUT });
     await page.waitForTimeout(3000);
 
     const bodyText = await page.textContent('body');
@@ -153,7 +153,7 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
 
-    await page.goto(`${BASE}/s/${locationSlug}/checkout`, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT });
+    await page.goto(`${BASE}/s/${locationSlug}/checkout`, { waitUntil: 'load', timeout: PAGE_TIMEOUT });
     await page.waitForTimeout(1000);
 
     const bodyText = await page.textContent('body');
@@ -170,7 +170,7 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     page.on('pageerror', err => errors.push(err.message));
 
     await page.addInitScript((t: string) => localStorage.setItem('dos_access_token', t), ownerToken);
-    await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT });
+    await page.goto(`${BASE}/admin`, { waitUntil: 'load', timeout: PAGE_TIMEOUT });
     await page.waitForTimeout(3000);
 
     const bodyText = await page.textContent('body');
@@ -206,8 +206,8 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     page.on('pageerror', err => errors.push(err.message));
 
     await page.addInitScript((t: string) => localStorage.setItem('dos_access_token', t), ownerToken);
-    await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT });
-    await page.waitForTimeout(2000);
+    await page.goto(`${BASE}/admin`, { waitUntil: 'load', timeout: PAGE_TIMEOUT });
+    await page.waitForTimeout(1000);
 
     const bodyText = await page.textContent('body');
     // Should show some order status badge or text
@@ -235,8 +235,8 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     page.on('pageerror', err => errors.push(err.message));
 
     await page.addInitScript((t: string) => localStorage.setItem('dos_access_token', t), ownerToken);
-    await page.goto(`${BASE}/admin/couriers`, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT });
-    await page.waitForTimeout(2000);
+    await page.goto(`${BASE}/admin/couriers`, { waitUntil: 'load', timeout: PAGE_TIMEOUT });
+    await page.waitForTimeout(1000);
 
     const bodyText = await page.textContent('body');
     expect(bodyText?.length).toBeGreaterThan(50);
@@ -252,7 +252,7 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     page.on('pageerror', err => errors.push(err.message));
 
     await page.addInitScript((t: string) => localStorage.setItem('dos_access_token', t), courierToken);
-    await page.goto(`${BASE}/courier`, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT });
+    await page.goto(`${BASE}/courier`, { waitUntil: 'load', timeout: PAGE_TIMEOUT });
     await page.waitForTimeout(3000);
 
     const bodyText = await page.textContent('body');
@@ -302,8 +302,8 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     page.on('pageerror', err => errors.push(err.message));
 
     await page.addInitScript((t: string) => localStorage.setItem('dos_access_token', t), courierToken);
-    await page.goto(`${BASE}/courier/delivery/${assignmentId}`, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT });
-    await page.waitForTimeout(2000);
+    await page.goto(`${BASE}/courier/delivery/${assignmentId}`, { waitUntil: 'load', timeout: PAGE_TIMEOUT });
+    await page.waitForTimeout(1000);
 
     const bodyText = await page.textContent('body');
     expect(bodyText?.length).toBeGreaterThan(100);
@@ -345,7 +345,7 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     page.on('pageerror', err => errors.push(err.message));
 
     await page.addInitScript((t: string) => localStorage.setItem('dos_access_token', t), courierToken);
-    await page.goto(`${BASE}/courier/delivery/${assignmentId}`, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT });
+    await page.goto(`${BASE}/courier/delivery/${assignmentId}`, { waitUntil: 'load', timeout: PAGE_TIMEOUT });
     await page.waitForTimeout(1500);
 
     const bodyText = await page.textContent('body');
@@ -376,8 +376,8 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
 
-    await page.goto(`${BASE}/s/${locationSlug}/order/${orderId}`, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT });
-    await page.waitForTimeout(2000);
+    await page.goto(`${BASE}/s/${locationSlug}/order/${orderId}`, { waitUntil: 'load', timeout: PAGE_TIMEOUT });
+    await page.waitForTimeout(1000);
 
     const bodyText = await page.textContent('body');
     expect(bodyText?.length).toBeGreaterThan(50);
