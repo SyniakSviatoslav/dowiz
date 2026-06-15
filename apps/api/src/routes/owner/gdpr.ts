@@ -44,42 +44,52 @@ export default (async function ownerGdprRoutes(fastify: any, opts: any) {
     const user = request.user as any;
 
     const result = await withTenant(db, user.userId, async (client) => {
-      if (customerId) {
-        const recentRes = await client.query(
-          `SELECT id FROM gdpr_erasure_requests
-           WHERE location_id = $1 AND customer_id = $2 AND status = 'completed'
-             AND completed_at > now() - interval '24 hours'
-           LIMIT 1`,
-          [locationId, customerId],
-        );
-        if ((recentRes.rowCount ?? 0) > 0) return { tooSoon: true };
-      }
-
+      // Resolve customerId from phone if not provided directly
+      let resolvedCustomerId = customerId || null;
       if (phone && !customerId) {
         const custRes = await client.query(
           `SELECT id FROM customers WHERE location_id = $1 AND phone = $2 LIMIT 1`,
           [locationId, phone],
         );
         if ((custRes.rowCount ?? 0) > 0) {
-          const recentRes = await client.query(
-            `SELECT id FROM gdpr_erasure_requests
-             WHERE location_id = $1 AND customer_id = $2 AND status = 'completed'
-               AND completed_at > now() - interval '24 hours'
-             LIMIT 1`,
-            [locationId, custRes.rows[0].id],
-          );
-          if ((recentRes.rowCount ?? 0) > 0) return { tooSoon: true };
+          resolvedCustomerId = custRes.rows[0].id;
         }
+      }
+
+      if (resolvedCustomerId) {
+        // Check for existing active (pending/in_progress) request — unique index covers these statuses
+        const activeRes = await client.query(
+          `SELECT id, status FROM gdpr_erasure_requests
+           WHERE location_id = $1 AND customer_id = $2
+             AND status IN ('pending', 'in_progress')
+           LIMIT 1`,
+          [locationId, resolvedCustomerId],
+        );
+        if ((activeRes.rowCount ?? 0) > 0) return { alreadyActive: true };
+
+        // Check for a recently completed request (cooldown)
+        const recentRes = await client.query(
+          `SELECT id FROM gdpr_erasure_requests
+           WHERE location_id = $1 AND customer_id = $2 AND status = 'completed'
+             AND completed_at > now() - interval '24 hours'
+           LIMIT 1`,
+          [locationId, resolvedCustomerId],
+        );
+        if ((recentRes.rowCount ?? 0) > 0) return { tooSoon: true };
       }
 
       const insertRes = await client.query(
         `INSERT INTO gdpr_erasure_requests (location_id, customer_id, subject_phone, reason, requested_by_owner_id, status)
          VALUES ($1, $2, $3, $4, $5, 'pending')
          RETURNING id`,
-        [locationId, customerId || null, phone || null, reason || null, user.userId],
+        [locationId, resolvedCustomerId, phone || null, reason || null, user.userId],
       );
       return { requestId: insertRes.rows[0].id };
     });
+
+    if (result.alreadyActive) {
+      return reply.status(409).send({ error: 'An erasure request for this customer is already pending or in progress' });
+    }
 
     if (result.tooSoon) {
       return reply.status(429).send({ error: 'A request for this customer was already completed in the last 24 hours' });
