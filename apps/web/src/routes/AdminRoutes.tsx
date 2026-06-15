@@ -129,8 +129,8 @@ function AdminLayout() {
         </div>
       </aside>
 
-      {/* Mobile top bar */}
-      <div className="lg:hidden flex items-center justify-between px-4 h-14 bg-[var(--brand-surface)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] shrink-0">
+      {/* Mobile top bar — sticky so currency/language switchers stay visible while scrolling */}
+      <div className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-4 h-14 bg-[var(--brand-surface)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] shrink-0">
         <div className="flex items-center gap-2">
           <i className="ti ti-tools-kitchen-2 text-lg" style={{ color: 'var(--brand-primary)' }} />
           <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Dowiz</h2>

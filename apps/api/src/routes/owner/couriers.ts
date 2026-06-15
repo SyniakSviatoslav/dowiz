@@ -34,15 +34,18 @@ export default (async function ownerCourierRoutes(fastify: any, opts: any) {
       );
 
       const couriers = res.rows.map((row: any) => {
-        const emailPlain = decryptPII(row.email_encrypted);
-        const phonePlain = row.phone_encrypted ? decryptPII(row.phone_encrypted) : null;
-        const fullName = decryptPII(row.full_name_encrypted);
+        let emailPlain: string | null = null;
+        let phonePlain: string | null = null;
+        let fullName: string | null = null;
+        try { emailPlain = decryptPII(row.email_encrypted); } catch {}
+        try { phonePlain = row.phone_encrypted ? decryptPII(row.phone_encrypted) : null; } catch {}
+        try { fullName = decryptPII(row.full_name_encrypted); } catch {}
 
         return {
           id: row.id,
           name: fullName || '',
           maskedPhone: phonePlain ? maskStr(phonePlain) : null,
-          maskedEmail: maskStr(emailPlain),
+          maskedEmail: emailPlain ? maskStr(emailPlain) : null,
           status: row.status,
           role: row.role,
           onlineStatus: null,
