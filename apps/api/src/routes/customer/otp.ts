@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import crypto from 'node:crypto';
 import { BUS_CHANNELS } from '../../lib/registry.js';
 
 const sendOtpSchema = z.object({
@@ -144,7 +145,7 @@ export default (async function customerOtpRoutes(fastify: any, opts: any) {
     }
 
     // 5. Find otp session token
-    const tokenHash = require('crypto').createHash('sha256').update(otp_token).digest('hex');
+    const tokenHash = crypto.createHash('sha256').update(otp_token).digest('hex');
     const sessionRes = await db.query(
       `SELECT id FROM customer_otp_sessions
        WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > now()`,
