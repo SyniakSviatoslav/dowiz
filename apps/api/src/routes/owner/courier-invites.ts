@@ -39,42 +39,41 @@ export default (async function ownerCourierInvitesRoutes(fastify: any, opts: any
     const codeHash = await argon2.hash(code, hashOptions);
     const emailHash = crypto.createHash('sha256').update(email).digest('hex');
 
-    const client = await db.connect();
-    try {
+    const { inviteId, expiresAt } = await withTenant(db, ownerId, async (client) => {
       await client.query('BEGIN');
+      try {
+        const res = await client.query(
+          `INSERT INTO courier_invites (location_id, created_by_owner_id, role, invited_email_hash, code_hash, expires_at)
+           VALUES ($1, $2, $3, $4, $5, now() + interval '1 hour' * $6) RETURNING id, expires_at`,
+          [locationId, ownerId, role, emailHash, codeHash, ttl_hours]
+        );
 
-      const res = await client.query(
-        `INSERT INTO courier_invites (location_id, created_by_owner_id, role, invited_email_hash, code_hash, expires_at)
-         VALUES ($1, $2, $3, $4, $5, now() + interval '1 hour' * $6) RETURNING id, expires_at`,
-        [locationId, ownerId, role, emailHash, codeHash, ttl_hours]
-      );
+        const invite = res.rows[0];
 
-      const invite = res.rows[0];
+        await client.query(
+          `INSERT INTO courier_audit_log (location_id, action, actor_kind, actor_id, ip_hash, user_agent_hash)
+           VALUES ($1, 'invite.created', 'owner', $2, $3, $4)`,
+          [locationId, ownerId, ipHash, uaHash]
+        );
 
-      await client.query(
-        `INSERT INTO courier_audit_log (location_id, action, actor_kind, actor_id, ip_hash, user_agent_hash)
-         VALUES ($1, 'invite.created', 'owner', $2, $3, $4)`,
-        [locationId, ownerId, ipHash, uaHash]
-      );
+        await client.query('COMMIT');
+        return { inviteId: invite.id, expiresAt: invite.expires_at };
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      }
+    });
 
-      await client.query('COMMIT');
+    const host = (request.headers as any).host || 'dowiz.fly.dev';
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const deepLink = `${protocol}://${host}/courier-invite/${inviteId}`;
 
-      const host = request.headers.host || 'dowiz.fly.dev';
-      const protocol = host.includes('localhost') ? 'http' : 'https';
-      const deepLink = `${protocol}://${host}/courier-invite/${invite.id}`;
-
-      return reply.send({
-        inviteId: invite.id,
-        code, // Return code ONCE, it is never stored in plaintext
-        deepLink,
-        expiresAt: invite.expires_at
-      });
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
-    }
+    return reply.send({
+      inviteId,
+      code, // Return code ONCE, it is never stored in plaintext
+      deepLink,
+      expiresAt
+    });
   });
 
   // 2. List Active Invites
@@ -101,32 +100,30 @@ export default (async function ownerCourierInvitesRoutes(fastify: any, opts: any
     const ipHash = crypto.createHash('sha256').update(request.ip).digest('hex');
     const uaHash = crypto.createHash('sha256').update(request.headers['user-agent'] || '').digest('hex');
 
-    const client = await db.connect();
-    try {
+    await withTenant(db, ownerId, async (client) => {
       await client.query('BEGIN');
-
-      const res = await client.query(
-        `UPDATE courier_invites SET revoked_at = now() 
-         WHERE id = $1 AND location_id = $2 AND used_at IS NULL AND revoked_at IS NULL`,
-        [inviteId, locationId]
-      );
-
-      if (res.rowCount > 0) {
-        await client.query(
-          `INSERT INTO courier_audit_log (location_id, action, actor_kind, actor_id, ip_hash, user_agent_hash)
-           VALUES ($1, 'invite.revoked', 'owner', $2, $3, $4)`,
-          [locationId, ownerId, ipHash, uaHash]
+      try {
+        const res = await client.query(
+          `UPDATE courier_invites SET revoked_at = now()
+           WHERE id = $1 AND location_id = $2 AND used_at IS NULL AND revoked_at IS NULL`,
+          [inviteId, locationId]
         );
-      }
 
-      await client.query('COMMIT');
-      return reply.send({ success: true });
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
-    }
+        if ((res.rowCount ?? 0) > 0) {
+          await client.query(
+            `INSERT INTO courier_audit_log (location_id, action, actor_kind, actor_id, ip_hash, user_agent_hash)
+             VALUES ($1, 'invite.revoked', 'owner', $2, $3, $4)`,
+            [locationId, ownerId, ipHash, uaHash]
+          );
+        }
+
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      }
+    });
+    return reply.send({ success: true });
   });
 
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;
