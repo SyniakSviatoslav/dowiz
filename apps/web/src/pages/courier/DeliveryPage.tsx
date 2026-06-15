@@ -303,6 +303,7 @@ export function DeliveryPage() {
           </a>
         </div>
 
+        {/* eslint-disable jsx-a11y/aria-role */}
         <MessageThread
           orderId={id!}
           role="courier"
@@ -311,6 +312,7 @@ export function DeliveryPage() {
           onSend={handleSendMessage}
           onMarkRead={handleMarkRead}
         />
+        {/* eslint-enable jsx-a11y/aria-role */}
 
         {!pickedUp ? (
           <motion.button

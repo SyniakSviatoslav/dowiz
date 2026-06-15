@@ -538,11 +538,11 @@ export function MenuPage() {
 
       {/* Product Detail Modal */}
       {detailProduct && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center backdrop-blur-sm transition-opacity duration-300" style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)' }} onClick={closeDetail}>
-          <div 
-            className="w-full md:max-w-lg max-h-[85vh] overflow-auto rounded-t-2xl md:rounded-2xl shadow-2xl animate-slide-up" 
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center transition-opacity duration-300" style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)', backdropFilter: 'blur(4px)' }} role="dialog" aria-modal="true">
+          <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={closeDetail} />
+          <div
+            className="relative w-full md:max-w-lg max-h-[85vh] overflow-auto rounded-t-2xl md:rounded-2xl shadow-2xl animate-slide-up"
             style={{ background: 'var(--brand-bg)' }}
-            onClick={e => e.stopPropagation()}
           >
             {/* Image */}
             <div className="relative w-full aspect-[16/9] md:aspect-[2/1] flex items-center justify-center overflow-hidden" style={{ background: 'var(--brand-surface-raised)' }}>

@@ -29,7 +29,7 @@
 | 10 | DB role guardrail — operational pool connects as superuser | `systemic` | 🔴 OPEN | 2026-06-07 | AGENTS.md §9 item 3 |
 | 11 | No composite `verify:all` script | `systemic` | ✅ CLOSED | 2026-06-09 | `scripts/verify-all.ts` + `pnpm verify:all` — 2026-06-11 |
 | 12 | No CI auto-run for Playwright E2E tests | `systemic` | ✅ CLOSED | 2026-06-09 | `.github/workflows/ci.yml` — post-deploy E2E smoke + regression — 2026-06-11 |
-| 13 | graphify knowledge graph stale (built pre-move) | `systemic` | 🔴 OPEN | 2026-06-07 | AGENTS.md §5 — graph built at `Documents\delivery\` not `dowiz` |
+| 13 | graphify knowledge graph stale (built pre-move) | `systemic` | ✅ CLOSED | 2026-06-07 | Graph rebuilt at correct path `C:\Users\Dell5\Documents\dowiz` with 14,433 nodes. Root confirmed in `graphify-out/manifest.json` (keys prefixed `C:\Users\Dell5\Documents\dowiz\`). Closed 2026-06-15. |
 | 14 | No harness validation script | `systemic` | ⚪ PENDING | 2026-06-09 | No script validates skill router mappings or reference integrity |
 | 15 | Permissive test assertions (`expect([200,400,500]).toContain(x)`) | `systemic` | ✅ CLOSED | 2026-06-11 | ESLint rule `local/no-permissive-status-assertion` |
 | 16 | Migration ordering drift (numeric prefix ≠ alpha order) | `systemic` | ✅ CLOSED | 2026-06-11 | `scripts/verify-migrations.ts` — exits 1 on ordering error |
@@ -61,6 +61,7 @@ _To be populated by Phase A1 (episode store). See `docs/harness/episodes/`._
 | 2026-06-11 | Closed #11 (verify:all), #12 (CI E2E), #15 (permissive assertion rule), #16 (migration ordering), #17 (CI verify gates). Added #15-17 from retro analysis. |
 | 2026-06-12 | NX audit: added #18-31 (10 OPEN failure modes from 10 error patterns + 4 closed). See `docs/harness/retro/NX-RETRO.md` and episode `docs/harness/episodes/2026-06-12--nx-audit.md`. |
 | 2026-06-14 | 🎉 lifecycle-e2e: 12 root causes, all fixed, test green. See AGENTS.md §15 for all rules. Below entries added by this session. |
+| 2026-06-15 | Closed #13 (graphify path). JSX a11y lint errors fixed across 8 pages. OpenRouter retry chain added to scripts/openrouter-implement.ts. |
 
 | # | Failure mode | Tag | Status | First seen | Evidence / artifacts |
 |---|---|---|---|---|---|

@@ -118,17 +118,29 @@ async function main() {
   }
 
   const models = buildModelChain();
+  const tried: string[] = [];
+  const MAX_ATTEMPTS = 3;
+  const RETRY_DELAY_MS = 1000;
 
   for (const model of models) {
-    process.stderr.write(`[openrouter-implement] Trying model: ${model}\n`);
-    const result = await callModel(model, prompt);
-    if (result !== null) {
-      process.stdout.write(result + '\n');
-      return;
+    tried.push(model);
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      process.stderr.write(`[openrouter-implement] Trying model: ${model} (attempt ${attempt}/${MAX_ATTEMPTS})\n`);
+      const result = await callModel(model, prompt);
+      if (result !== null) {
+        process.stdout.write(result + '\n');
+        return;
+      }
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+      }
     }
   }
 
-  process.stderr.write(`[openrouter-implement] All ${models.length} models failed\n`);
+  process.stderr.write(
+    `[openrouter-implement] All models failed after ${MAX_ATTEMPTS} attempts each.\n` +
+    `Models tried: ${tried.join(', ')}\n`
+  );
   process.exit(1);
 }
 

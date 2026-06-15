@@ -324,21 +324,21 @@ export function OnboardingPage() {
                 <p style={s.muted}>{t('admin.import_menu_desc', 'Import your existing menu or add items manually.')}</p>
 
                 <div className="grid grid-cols-3 gap-3">
-                  <div onClick={() => { setMenuMethod('import'); setMenuItems([{ name: 'Sample Item 1', price: 500 }, { name: 'Sample Item 2', price: 700 }]); }} style={s.option(menuMethod === 'import')}>
+                  <button type="button" onClick={() => { setMenuMethod('import'); setMenuItems([{ name: 'Sample Item 1', price: 500 }, { name: 'Sample Item 2', price: 700 }]); }} style={s.option(menuMethod === 'import')}>
                     <i className="ti ti-file-import text-xl mb-1 block" />
                     <div className="font-medium">{t('admin.import_csv', 'Import CSV/Photo')}</div>
                     <div className="text-[10px] opacity-70">{t('common.coming_soon', 'Coming soon')}</div>
-                  </div>
-                  <div onClick={() => setMenuMethod('manual')} style={s.option(menuMethod === 'manual')}>
+                  </button>
+                  <button type="button" onClick={() => setMenuMethod('manual')} style={s.option(menuMethod === 'manual')}>
                     <i className="ti ti-pencil text-xl mb-1 block" />
                     <div className="font-medium">{t('admin.add_manually', 'Add Manually')}</div>
                     <div className="text-[10px] opacity-70">{t('admin.one_by_one', 'One by one')}</div>
-                  </div>
-                  <div onClick={useDemoMenu} style={s.option(menuMethod === 'demo')}>
+                  </button>
+                  <button type="button" onClick={useDemoMenu} style={s.option(menuMethod === 'demo')}>
                     <i className="ti ti-tools-kitchen-2 text-xl mb-1 block" />
                     <div className="font-medium">{t('admin.demo_menu', 'Demo Menu')}</div>
                     <div className="text-[10px] opacity-70">{t('admin.sample_items', '3 sample items')}</div>
-                  </div>
+                  </button>
                 </div>
 
                 {menuMethod === 'manual' && (
@@ -390,21 +390,21 @@ export function OnboardingPage() {
                 <p style={s.muted}>{t('admin.add_courier_later', 'You can add couriers now or later.')}</p>
 
                 <div className="grid grid-cols-3 gap-3">
-                  <div onClick={() => setCourierOption('skip')} style={s.option(courierOption === 'skip')}>
+                  <button type="button" onClick={() => setCourierOption('skip')} style={s.option(courierOption === 'skip')}>
                     <i className="ti ti-player-skip-forward text-xl mb-1 block" />
                     <div className="font-medium">{t('admin.skip_for_now', 'Skip for now')}</div>
                     <div className="text-[10px] opacity-70">{t('admin.add_later_settings', 'Add later in settings')}</div>
-                  </div>
-                  <div onClick={() => { setCourierOption('invite'); }} style={s.option(courierOption === 'invite')}>
+                  </button>
+                  <button type="button" onClick={() => { setCourierOption('invite'); }} style={s.option(courierOption === 'invite')}>
                     <i className="ti ti-send text-xl mb-1 block" />
                     <div className="font-medium">{t('admin.invite_courier', 'Invite courier')}</div>
                     <div className="text-[10px] opacity-70">{t('admin.send_invite_link', 'Send invite link')}</div>
-                  </div>
-                  <div onClick={() => setCourierOption('self')} style={s.option(courierOption === 'self')}>
+                  </button>
+                  <button type="button" onClick={() => setCourierOption('self')} style={s.option(courierOption === 'self')}>
                     <i className="ti ti-motorbike text-xl mb-1 block" />
                     <div className="font-medium">{t('admin.ill_deliver', "I'll deliver")}</div>
                     <div className="text-[10px] opacity-70">{t('admin.owner_as_courier', 'Owner as courier')}</div>
-                  </div>
+                  </button>
                 </div>
 
                 {courierOption === 'invite' && (

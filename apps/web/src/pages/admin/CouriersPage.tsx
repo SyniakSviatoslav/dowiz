@@ -233,7 +233,7 @@ export function CouriersPage() {
               </div>
 
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-[var(--brand-text-muted)] block mb-1">Link</label>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--brand-text-muted)] block mb-1">Link</p>
                 <div className="flex gap-2 items-center">
                   <a 
                     href={inviteResult.link} 
@@ -247,9 +247,9 @@ export function CouriersPage() {
               </div>
 
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-[var(--brand-text-muted)] block mb-1">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--brand-text-muted)] block mb-1">
                   Kodi i Sigurisë / Security Code (16 chars)
-                </label>
+                </p>
                 <code className="block px-3 py-2 text-lg font-mono tracking-widest text-center font-bold rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-text)] select-all">
                   {inviteResult.code}
                 </code>
@@ -439,9 +439,9 @@ export function CouriersPage() {
 
       {/* Order Detail Modal */}
       {selectedOrderDetail && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center fade-in" onClick={() => setSelectedOrderDetail(null)}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <div className="relative w-full max-w-md bg-[var(--brand-surface)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 z-10 slide-in-up" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center fade-in" role="dialog" aria-modal="true">
+          <button type="button" className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-default" aria-label="Close" onClick={() => setSelectedOrderDetail(null)} />
+          <div className="relative w-full max-w-md bg-[var(--brand-surface)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 z-10 slide-in-up">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>
                 {t('admin.order_details', 'Order Details')} #{selectedOrderDetail.order_id.slice(0, 8)}
