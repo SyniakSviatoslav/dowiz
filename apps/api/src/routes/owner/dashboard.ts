@@ -5,6 +5,7 @@ import { decryptPII } from '../../lib/pii-cipher.js';
 import crypto from 'node:crypto';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { updateOrderStatus } from '../../lib/orderStatusService.js';
+import { withTenant } from '@deliveryos/platform';
 
 const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED', 'CANCELLED', 'REJECTED'] as const;
 
@@ -49,6 +50,7 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
 
     const limitIdx = queryParams.length + 1;
     queryParams.push(limit + 1);
+    const userId = (request.user as any).userId;
 
     const orderSql = `
       SELECT o.id, o.status, o.total, o.currency_code, o.created_at, o.confirmed_at,
@@ -70,10 +72,10 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
       GROUP BY o.status
     `;
 
-    const [ordersRes, countsRes, deliveryRes] = await Promise.all([
-      db.query(orderSql, queryParams),
-      db.query(countSql, [locationId]),
-      db.query(`
+    const [ordersRes, countsRes, deliveryRes] = await withTenant(db, userId, async (client) => Promise.all([
+      client.query(orderSql, queryParams),
+      client.query(countSql, [locationId]),
+      client.query(`
         SELECT o.id AS order_id, o.status,
                a.courier_id, a.status AS assignment_status,
                c.full_name_encrypted, c.phone_encrypted,
@@ -90,7 +92,7 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
         WHERE o.location_id = $1 AND o.status IN ('IN_DELIVERY', 'READY')
         ORDER BY o.created_at DESC
       `, [locationId]),
-    ]);
+    ]));
 
     const hasMore = ordersRes.rows.length > limit;
     const orders = (hasMore ? ordersRes.rows.slice(0, limit) : ordersRes.rows).map((row: any) => {
@@ -148,22 +150,23 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
     });
 
     const nextCursor = hasMore && orders.length > 0
-      ? Buffer.from(JSON.stringify({ createdAt: orders[orders.length - 1].createdAt })).toString('base64url')
+      ? Buffer.from(JSON.stringify({ createdAt: orders.at(-1)!.createdAt })).toString('base64url')
       : null;
 
     // Count active dwell alerts + signals for this location
-    const alertCountRes = await db.query(
-      `SELECT COUNT(*)::int AS cnt FROM location_alerts
-       WHERE location_id = $1 AND status = 'active' AND resolved_at IS NULL`,
-      [locationId],
-    );
+    const [alertCountRes, signalCountRes] = await withTenant(db, userId, async (client) => Promise.all([
+      client.query(
+        `SELECT COUNT(*)::int AS cnt FROM location_alerts
+         WHERE location_id = $1 AND status = 'active' AND resolved_at IS NULL`,
+        [locationId],
+      ),
+      client.query(
+        `SELECT COUNT(*)::int AS cnt FROM customer_signals
+         WHERE location_id = $1 AND acknowledged_at IS NULL AND dismissed_at IS NULL`,
+        [locationId],
+      ),
+    ]));
     const activeAlertCount = alertCountRes.rows[0]?.cnt || 0;
-
-    const signalCountRes = await db.query(
-      `SELECT COUNT(*)::int AS cnt FROM customer_signals
-       WHERE location_id = $1 AND acknowledged_at IS NULL AND dismissed_at IS NULL`,
-      [locationId],
-    );
     const activeSignalCount = signalCountRes.rows[0]?.cnt || 0;
 
     return reply.send({
@@ -471,9 +474,10 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
   }, async (request: any, reply: any) => {
     const { locationId, orderId } = request.params as any;
+    const userId = (request.user as any).userId;
 
-    const [orderRes, itemsRes, assignmentsRes, auditRes] = await Promise.all([
-      db.query(`
+    const [orderRes, itemsRes, assignmentsRes, auditRes] = await withTenant(db, userId, async (client) => Promise.all([
+      client.query(`
         SELECT o.id, o.status, o.created_at, o.confirmed_at, o.ready_at, o.delivered_at,
                o.total, o.subtotal, o.delivery_fee, o.currency_code,
                o.payment_method, o.payment_outcome,
@@ -483,14 +487,14 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
         LEFT JOIN customers c ON c.id = o.customer_id
         WHERE o.id = $1 AND o.location_id = $2
       `, [orderId, locationId]),
-      db.query(`
+      client.query(`
         SELECT oi.id, oi.product_id, oi.quantity, oi.price_snapshot AS unit_price, (oi.price_snapshot * oi.quantity) AS subtotal,
                p.name AS product_name, p.price AS product_current_price
         FROM order_items oi
         LEFT JOIN products p ON p.id = oi.product_id
         WHERE oi.order_id = $1
       `, [orderId]),
-      db.query(`
+      client.query(`
         SELECT a.id, a.order_id, a.courier_id, a.shift_id, a.status,
                a.assigned_at, a.accepted_at, a.picked_up_at, a.delivered_at,
                a.cash_collected, a.cash_amount,
@@ -502,7 +506,7 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
         WHERE a.order_id = $1
         ORDER BY a.created_at DESC
       `, [orderId]),
-      db.query(`
+      client.query(`
         SELECT action, actor_kind, actor_id, created_at
         FROM courier_audit_log
         WHERE courier_id IN (
@@ -510,7 +514,7 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
         )
         ORDER BY created_at ASC
       `, [orderId]),
-    ]);
+    ]));
 
     if (orderRes.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
 

@@ -8,7 +8,7 @@ export default (async function menuTranslateRoutes(fastify: any, opts: any) {
   const { db, messageBus, translation } = opts as any;
 
   fastify.post('/locations/:id/menu/translate', {
-    preHandler: [fastify.verifyAuth, fastify.requireRole(['owner'])],
+    preHandler: [fastify.verifyAuth, fastify.requireRole(['owner']), fastify.requireLocationAccess],
     schema: {
       body: z.object({
         target_locales: z.array(z.string()).optional(),

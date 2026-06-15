@@ -9,6 +9,7 @@ export default (async function ownerNotificationRoutes(fastify, opts) {
   // Auth: verify JWT
   fastify.addHook('onRequest', fastify.verifyAuth);
   fastify.addHook('onRequest', fastify.requireRole(['owner']));
+  fastify.addHook('onRequest', fastify.requireLocationAccess);
 
   // List targets
   fastify.get('/api/owner/locations/:locationId/notifications/targets', {
