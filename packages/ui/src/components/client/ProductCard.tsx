@@ -21,6 +21,23 @@ interface ProductCardProps {
 
 const TASTE_ICONS: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
 const TASTE_LABELS: Record<string, string> = { spicy: 'Spicy', sweet: 'Sweet', salty: 'Salty', sour: 'Sour', richness: 'Rich' };
+const SPRING_OUT = [0.16, 1, 0.3, 1] as [number, number, number, number];
+
+const cardVariants = {
+  rest: { y: 0, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', scale: 1 },
+  hover: { y: -4, boxShadow: '0 12px 32px rgba(0,0,0,0.13)', scale: 1.01, transition: { duration: 0.18, ease: SPRING_OUT } },
+  tap: { scale: 0.975, y: -1, transition: { duration: 0.08 } },
+};
+const imgVariants = {
+  rest: { scale: 1 },
+  hover: { scale: 1.06, transition: { duration: 0.35, ease: SPRING_OUT } },
+};
+const addBtnVariants = {
+  rest: { scale: 1, rotate: 0 },
+  hover: { scale: 1.14, rotate: 8, boxShadow: '0 6px 18px rgba(0,0,0,0.22)', transition: { duration: 0.18, ease: SPRING_OUT } },
+  tap: { scale: 0.82, rotate: 0, transition: { duration: 0.08 } },
+};
+
 export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
   const { t } = useI18n();
   const [imgError, setImgError] = useState(false);
@@ -40,15 +57,24 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
       }`}
       style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}
       onClick={onClick}
-      whileHover={product.isAvailable ? { y: -3, boxShadow: '0 8px 24px rgba(0,0,0,0.10)', borderColor: 'var(--brand-primary)', transition: { duration: 0.15 } } : undefined}
-      whileTap={product.isAvailable && onClick ? { scale: 0.97 } : undefined}
+      variants={product.isAvailable ? cardVariants : undefined}
+      initial="rest"
+      whileHover={product.isAvailable ? 'hover' : undefined}
+      whileTap={product.isAvailable && onClick ? 'tap' : undefined}
     >
-      <div 
-        className="w-full aspect-[4/3] flex items-center justify-center relative overflow-hidden" 
+      <div
+        className="w-full aspect-[4/3] flex items-center justify-center relative overflow-hidden"
         style={{ background: 'var(--brand-surface-raised)' }}
       >
         {product.image && !imgError ? (
-          <img src={product.image} alt={product.name} className="w-full h-full object-cover transition-transform duration-300 hover:scale-105" loading="lazy" onError={() => setImgError(true)} />
+          <motion.img
+            src={product.image}
+            alt={product.name}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={() => setImgError(true)}
+            variants={product.isAvailable ? imgVariants : undefined}
+          />
         ) : (
           <div className="flex flex-col items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
             <i className="ti ti-tools-kitchen-2 text-4xl opacity-25" />
@@ -128,8 +154,8 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             disabled={!product.isAvailable}
             aria-label="Add to cart"
             title={t('tooltip.add_to_cart', 'Add to cart')}
-            whileHover={product.isAvailable ? { scale: 1.12, boxShadow: '0 4px 16px rgba(0,0,0,0.20)' } : undefined}
-            whileTap={product.isAvailable ? { scale: 0.84 } : undefined}
+            variants={product.isAvailable ? addBtnVariants : undefined}
+            whileTap={product.isAvailable ? 'tap' : undefined}
           >
             <i className="ti ti-plus text-sm leading-none" />
           </motion.button>
