@@ -116,10 +116,10 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     });
     expect([200, 409]).toContain(shiftRes.status());
 
-    // --- Assign courier to order ---
+    // --- Assign courier to order (endpoint expects camelCase courierId) ---
     const assignRes = await request.post(
       `${BASE}/api/owner/locations/${locationId}/orders/${orderId}/assign-courier`,
-      { headers: { Authorization: `Bearer ${authToken}` }, data: { courier_id: courierId } }
+      { headers: { Authorization: `Bearer ${authToken}` }, data: { courierId } }
     );
     expect([200, 400, 422]).toContain(assignRes.status());
 
@@ -222,17 +222,23 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     expect(criticalErrors, `JS errors: ${criticalErrors.join('; ')}`).toEqual([]);
   });
 
-  test('Admin: Menu manager shows created product with price', async ({ page }) => {
+  test('Admin: Menu manager shows created product with price after clicking category', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
 
     await page.addInitScript((t: string) => localStorage.setItem('dos_access_token', t), authToken);
     await page.goto(`${BASE}/admin/menu`, { waitUntil: 'networkidle', timeout: 30000 });
-
     await page.waitForTimeout(2000);
-    const bodyText = await page.textContent('body');
 
-    // Product name should be visible
+    // Click on the category tab to load its products
+    const catTab = page.locator(`text="${CAT_NAME}"`).first();
+    if (await catTab.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await catTab.click();
+      await page.waitForTimeout(1500);
+    }
+
+    const bodyText = await page.textContent('body');
+    // Product name should now be visible after clicking the category
     expect(bodyText).toContain(PROD_NAME);
     // Price 850 should be visible in some format
     expect(bodyText).toMatch(/850|8\.50/);
@@ -505,7 +511,7 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
       await page.waitForTimeout(1000);
 
       // Look for an "Add to cart" button
-      const addBtn = page.locator('button').filter({ hasText: /add|shto|cart|+/i }).first();
+      const addBtn = page.locator('button').filter({ hasText: /add|shto|cart|\+/i }).first();
       if (await addBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
         await addBtn.click().catch(() => {});
         await page.waitForTimeout(1000);
