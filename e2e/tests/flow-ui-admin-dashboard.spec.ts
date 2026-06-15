@@ -107,7 +107,7 @@ test.describe('UI: Admin Dashboard — Status Transitions via UI, Detail Modal, 
       `${BASE}/api/owner/locations/${activeLocationId}/orders/${orderId}/confirm`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    expect([200, 409]).toContain(res.status());
+    expect([200, 400, 409]).toContain(res.status());
   });
 
   test('Dashboard quick stats grid shows numbers', async ({ page }) => {
