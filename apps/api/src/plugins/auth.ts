@@ -9,6 +9,7 @@ declare module 'fastify' {
   }
   interface FastifyInstance {
     verifyAuth: any;
+    softVerifyAuth: any;
     requireRole: (roles: AuthToken['role'][]) => any;
     requireLocationAccess: any;
   }
@@ -26,6 +27,17 @@ export const verifyAuth = async (request: FastifyRequest, reply: FastifyReply) =
   } catch (err) {
     request.log.error(err);
     return reply.status(401).send({ error: 'Token expired or invalid' });
+  }
+};
+
+/** Sets request.user if a valid Bearer token is present; silently skips if missing/invalid. */
+export const softVerifyAuth = async (request: FastifyRequest, _reply: FastifyReply) => {
+  const authHeader = request.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return;
+  try {
+    request.user = await verifyAuthToken(authHeader.substring(7));
+  } catch {
+    // Invalid token — treat as anonymous
   }
 };
 
@@ -86,6 +98,7 @@ export const requireLocationAccess = async (request: FastifyRequest, reply: Fast
 export default fp(async (fastify) => {
   fastify.decorateRequest('user', null);
   fastify.decorate('verifyAuth', verifyAuth);
+  fastify.decorate('softVerifyAuth', softVerifyAuth);
   fastify.decorate('requireRole', requireRole);
   fastify.decorate('requireLocationAccess', requireLocationAccess);
 });
