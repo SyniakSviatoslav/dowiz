@@ -17,7 +17,8 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Dell5\\\\Documents\\\\dowiz\" -Directory)",
       "Bash(Select-Object -First 20)",
       "Bash(xargs -I {} bash -c 'echo \"=== {} ===\"; head -20 {}')",
-      "PowerShell($env:TEMP)"
+      "PowerShell($env:TEMP)",
+      "PowerShell(Start-Process \"C:\\\\Users\\\\Dell5\\\\AppData\\\\Local\\\\Temp\\\\architecture-review-20260615.html\")"
     ]
   },
   "disabledMcpjsonServers": [
