@@ -47,11 +47,26 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { slug } = request.params as any;
       const res = await server.db.query(
-        `SELECT id, name, slug, currency_code, currency_minor_unit, default_locale FROM locations WHERE slug = $1`,
+        `SELECT l.id, l.name, l.slug, l.currency_code, l.currency_minor_unit, l.default_locale,
+                l.lat, l.lng,
+                lt.google_rating, lt.google_review_count, lt.google_maps_url
+         FROM locations l
+         LEFT JOIN location_themes lt ON lt.location_id = l.id
+         WHERE l.slug = $1`,
         [slug]
       );
       if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
-      return reply.send(res.rows[0]);
+      const r = res.rows[0];
+      return reply.send({
+        id: r.id, name: r.name, slug: r.slug,
+        currency_code: r.currency_code, currency_minor_unit: r.currency_minor_unit,
+        default_locale: r.default_locale,
+        lat: r.lat != null ? Number(r.lat) : null,
+        lng: r.lng != null ? Number(r.lng) : null,
+        googleRating: r.google_rating != null ? Number(r.google_rating) : null,
+        googleReviewCount: r.google_review_count != null ? Number(r.google_review_count) : null,
+        googleMapsUrl: r.google_maps_url ?? null,
+      });
     }
   );
 }

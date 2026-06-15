@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ProductCard, useI18n, useToast, PriceDisplay, getAllergenStyle } from '@deliveryos/ui';
@@ -209,6 +209,56 @@ export function MenuPage() {
     loadMenu();
   }, [loadMenu, retryCount]);
 
+  const stickyRef = useRef<HTMLDivElement>(null);
+  const [stickyHeight, setStickyHeight] = useState(44);
+
+  useLayoutEffect(() => {
+    const update = () => {
+      if (stickyRef.current) setStickyHeight(stickyRef.current.offsetHeight);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    if (stickyRef.current) ro.observe(stickyRef.current);
+    return () => ro.disconnect();
+  }, [loading]);
+
+  const HEADER_H = 56;
+  const scrollOffset = HEADER_H + stickyHeight + 8;
+
+  interface LocationInfo { lat: number; lng: number; googleRating?: number | null; googleReviewCount?: number | null; }
+  const [locationInfo, setLocationInfo] = useState<LocationInfo | null>(null);
+  const [deliveryETA, setDeliveryETA] = useState<number | null>(null);
+  const [geoStatus, setGeoStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+
+  useEffect(() => {
+    if (!slug) return;
+    fetch(`/public/locations/${slug}/info`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: any) => {
+        if (d?.lat && d?.lng) setLocationInfo({ lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount });
+      })
+      .catch(() => {});
+  }, [slug]);
+
+  useEffect(() => {
+    if (!locationInfo?.lat || !locationInfo?.lng) return;
+    if (!('geolocation' in navigator)) { setGeoStatus('denied'); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGeoStatus('granted');
+        const { latitude: uLat, longitude: uLng } = pos.coords;
+        const url = `https://router.project-osrm.org/route/v1/driving/${locationInfo.lng},${locationInfo.lat};${uLng},${uLat}?overview=false`;
+        fetch(url).then(r => r.ok ? r.json() : null)
+          .then((data: any) => {
+            const secs = data?.routes?.[0]?.duration;
+            if (typeof secs === 'number') setDeliveryETA(Math.ceil(secs / 60));
+          }).catch(() => {});
+      },
+      () => setGeoStatus('denied'),
+      { timeout: 8000, maximumAge: 300_000 }
+    );
+  }, [locationInfo]);
+
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   useEffect(() => {
     if (loading) return;
@@ -218,19 +268,18 @@ export function MenuPage() {
           setActiveTab(entry.target.id);
         }
       }
-    }, { rootMargin: '-120px 0px -60% 0px' });
+    }, { rootMargin: `-${scrollOffset}px 0px -60% 0px` });
 
     Object.values(sectionRefs.current).forEach(el => {
       if (el) observer.observe(el);
     });
     return () => observer.disconnect();
-  }, [loading, categories]);
+  }, [loading, categories, scrollOffset]);
 
   const handleScrollTo = (id: string) => {
     const el = document.getElementById(id);
     if (el) {
-      // 56px header + 44px category nav + 8px buffer = 108px
-      const top = el.getBoundingClientRect().top + window.scrollY - 108;
+      const top = el.getBoundingClientRect().top + window.scrollY - scrollOffset;
       window.scrollTo({ top, behavior: 'smooth' });
     }
   };
@@ -351,14 +400,22 @@ export function MenuPage() {
         <div className="absolute inset-0 opacity-[0.03]" style={{ background: 'radial-gradient(ellipse at 70% 30%, color-mix(in srgb, var(--brand-text) 15%, transparent) 0%, transparent 50%)' }} />
         <div className="relative z-10 w-full px-5 pb-5">
           <div className="flex items-center gap-1.5 text-[12px] font-medium mb-1.5" style={{ color: 'color-mix(in srgb, var(--color-on-primary) 70%, transparent)' }}>
-            <span className="inline-flex gap-0.5" style={{ color: 'var(--color-warning)' }}>
-              {[1,2,3,4,5].map(i => <i key={i} className="ti ti-star-filled" style={{ fontSize: '0.7rem' }} />)}
-            </span>
-            <span style={{ color: 'var(--color-on-primary)', fontWeight: 600 }}>4.8</span>
-            <span className="opacity-70">(124)</span>
-            <span className="mx-1.5 opacity-40">·</span>
-            <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} />
-            <span>30 min</span>
+            {locationInfo?.googleRating != null ? (
+              <>
+                <span className="inline-flex gap-0.5" style={{ color: 'var(--color-warning)' }}>
+                  {[1,2,3,4,5].map(i => <i key={i} className={`ti ${i <= Math.round(locationInfo.googleRating!) ? 'ti-star-filled' : 'ti-star'}`} style={{ fontSize: '0.7rem' }} />)}
+                </span>
+                <span style={{ color: 'var(--color-on-primary)', fontWeight: 600 }}>{locationInfo.googleRating.toFixed(1)}</span>
+                {locationInfo.googleReviewCount != null && <span className="opacity-70">({locationInfo.googleReviewCount})</span>}
+              </>
+            ) : null}
+            {geoStatus !== 'denied' && deliveryETA != null && (
+              <>
+                {locationInfo?.googleRating != null && <span className="mx-1.5 opacity-40">·</span>}
+                <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} />
+                <span>~{deliveryETA} min</span>
+              </>
+            )}
           </div>
           <h1 className="text-[22px] md:text-[26px] font-bold leading-tight" style={{ color: 'var(--color-on-primary)', fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 16px color-mix(in srgb, var(--brand-bg) 40%, transparent)' }}>
             {menu?.location_name || t('client.menu', 'Menu')}
@@ -366,102 +423,94 @@ export function MenuPage() {
         </div>
       </section>
 
-      {/* Category Nav — sits below the 56px (h-14) ClientLayout header */}
-      <nav className="sticky top-14 z-40 h-[44px] border-b w-full" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
-        <div className="h-full overflow-x-auto hide-scrollbar flex items-center gap-1 px-2 text-[13px]" role="tablist" aria-label={t('client.categories', 'Categories')}>
-          {loading ? (
-            <div className="flex gap-4 px-2 h-full items-center" role="tablist">
-              <div className="w-14 h-3.5 skeleton-block" />
-              <div className="w-14 h-3.5 skeleton-block" />
-              <div className="w-14 h-3.5 skeleton-block" />
-            </div>
-          ) : (
-            categories.map(cat => {
-              const count = cat.products.filter(p => p.available).length;
-              return (
-                  <motion.button 
+      {/* Unified sticky: Category nav + Search/Sort/Filter — sits below the 56px (h-14) header */}
+      <div ref={stickyRef} className="sticky top-14 z-40" style={{ background: 'var(--brand-bg)' }}>
+        {/* Category nav */}
+        <div className="relative border-b" style={{ borderColor: 'var(--brand-border)' }}>
+          <nav className="h-[44px] overflow-x-auto hide-scrollbar flex items-center gap-0.5 px-2" aria-label={t('client.categories', 'Categories')}>
+            {loading ? (
+              <div className="flex gap-4 px-2 h-full items-center">
+                <div className="w-14 h-3.5 skeleton-block" />
+                <div className="w-14 h-3.5 skeleton-block" />
+                <div className="w-14 h-3.5 skeleton-block" />
+              </div>
+            ) : (
+              categories.map(cat => {
+                const count = cat.products.filter(p => p.available).length;
+                return (
+                  <motion.button
                     key={cat.id}
                     whileTap={{ scale: 0.97 }}
                     onClick={() => handleScrollTo(cat.id)}
                     role="tab"
                     aria-selected={activeTab === cat.id}
-                    className="h-full flex items-center gap-1.5 px-3.5 whitespace-nowrap font-medium transition-all border-b-2 min-w-[44px]"
-                    style={{ 
-                      minHeight: 'var(--tap-min)',
+                    className="h-[44px] flex items-center gap-1 px-3 whitespace-nowrap text-[12px] font-medium transition-all border-b-2 shrink-0"
+                    style={{
                       color: activeTab === cat.id ? 'var(--brand-text)' : 'var(--brand-text-muted)',
                       borderColor: activeTab === cat.id ? 'var(--brand-primary)' : 'transparent',
                     }}
-                >
-                  {cat.name}
-                  <span className="text-[10px] opacity-50">({count})</span>
-                </motion.button>
-              );
-            })
-          )}
-        </div>
-      </nav>
-
-      {/* Search, Sort & Filter Bar — below header (56px) + category nav (44px) */}
-      {!loading && categories.length > 0 && (
-        <div className="sticky top-[100px] z-30 border-b px-4 py-2 space-y-2" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
-          <div className="relative">
-            <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: 'var(--brand-text-muted)' }} />
-            <input
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder={t('common.search', 'Search...')}
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg border text-sm outline-none min-h-11"
-              style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
-            />
-            {searchQuery && (
-              <motion.button onClick={() => setSearchQuery('')} whileTap={{ scale: 0.97 }} className="absolute right-3 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px]">
-                <i className="ti ti-x text-xs" style={{ color: 'var(--brand-text-muted)' }} />
-              </motion.button>
-            )}
-          </div>
-          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
-            <div className="flex items-center gap-1 shrink-0">
-              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-text-muted)' }}>
-                <i className="ti ti-arrows-sort" style={{ fontSize: '0.7rem' }} />
-              </span>
-              {(['default', 'price-asc', 'price-desc', 'name'] as const).map(mode => (
-                <motion.button key={mode} onClick={() => setSortBy(mode)} whileTap={{ scale: 0.97 }}
-                  title={t('tooltip.sort', 'Sort by...')}
-                  className="px-2 min-h-[44px] rounded-md text-[10px] font-medium transition-all whitespace-nowrap flex items-center"
-                  style={{
-                    background: sortBy === mode ? 'var(--brand-primary-light)' : 'var(--brand-surface-raised)',
-                    color: sortBy === mode ? 'var(--brand-text)' : 'var(--brand-text-muted)',
-                    border: sortBy === mode ? '1px solid var(--brand-primary)' : '1px solid transparent',
-                  }}
-                >
-                  {mode === 'default' ? '·' : mode === 'price-asc' ? '\u2191 Price' : mode === 'price-desc' ? '\u2193 Price' : 'A-Z'}
-                </motion.button>
-              ))}
-            </div>
-            {allAllergens.length > 0 && (
-              <div className="h-4 w-px shrink-0" style={{ background: 'var(--brand-border)' }} />
-            )}
-            <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
-              {allAllergens.map(a => {
-                const s = getAllergenStyle(a);
-                return (
-                  <motion.button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)} whileTap={{ scale: 0.97 }}
-                    title={t('tooltip.filter_allergen', 'Filter by allergen')}
-                    className="px-1.5 min-h-[44px] rounded text-[9px] font-semibold uppercase whitespace-nowrap transition-all flex items-center"
-                    style={{
-                      background: filterAllergen === a ? s.text : s.bg,
-                      color: filterAllergen === a ? 'var(--color-on-primary)' : s.text,
-                      opacity: filterAllergen && filterAllergen !== a ? 0.3 : 1,
-                    }}
                   >
-                    {t(`allergen.${a.toLowerCase()}`, a)}
+                    {cat.name}
+                    <span className="text-[10px] opacity-40">({count})</span>
                   </motion.button>
                 );
-              })}
-            </div>
-          </div>
+              })
+            )}
+          </nav>
+          {/* Right fade hint for horizontal scroll */}
+          <div className="absolute right-0 top-0 bottom-0 w-6 pointer-events-none" style={{ background: 'linear-gradient(to right, transparent, var(--brand-bg))' }} />
         </div>
-      )}
+
+        {/* Search + Sort + Allergen — single compact scrollable row */}
+        {!loading && categories.length > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-3 py-1.5 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+            {/* Compact search pill */}
+            <div className="relative shrink-0" style={{ width: searchQuery ? 130 : 90, transition: 'width 0.2s', minWidth: 90 }}>
+              <i className="ti ti-search absolute left-2 top-1/2 -translate-y-1/2 text-[10px]" style={{ color: 'var(--brand-text-muted)' }} />
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder={t('common.search', 'Search')}
+                className="w-full pl-6 pr-5 h-7 rounded-full text-[11px] outline-none"
+                style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center">
+                  <i className="ti ti-x text-[9px]" style={{ color: 'var(--brand-text-muted)' }} />
+                </button>
+              )}
+            </div>
+            <div className="w-px h-4 shrink-0" style={{ background: 'var(--brand-border)' }} />
+            {(['default', 'price-asc', 'price-desc', 'name'] as const).map(mode => (
+              <motion.button key={mode} onClick={() => setSortBy(mode)} whileTap={{ scale: 0.95 }}
+                className="px-2 h-7 rounded-full text-[10px] font-medium transition-all whitespace-nowrap shrink-0 flex items-center"
+                style={{
+                  background: sortBy === mode ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
+                  color: sortBy === mode ? '#fff' : 'var(--brand-text-muted)',
+                }}
+              >
+                {mode === 'default' ? <i className="ti ti-layout-list" style={{ fontSize: '0.65rem' }} /> : mode === 'price-asc' ? '↑ $' : mode === 'price-desc' ? '↓ $' : 'A–Z'}
+              </motion.button>
+            ))}
+            {allAllergens.length > 0 && <div className="w-px h-4 shrink-0" style={{ background: 'var(--brand-border)' }} />}
+            {allAllergens.map(a => {
+              const s = getAllergenStyle(a);
+              return (
+                <motion.button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)} whileTap={{ scale: 0.95 }}
+                  className="px-2 h-7 rounded-full text-[9px] font-semibold uppercase whitespace-nowrap shrink-0 transition-all"
+                  style={{
+                    background: filterAllergen === a ? s.text : s.bg,
+                    color: filterAllergen === a ? '#fff' : s.text,
+                    opacity: filterAllergen && filterAllergen !== a ? 0.35 : 1,
+                  }}
+                >
+                  {t(`allergen.${a.toLowerCase()}`, a)}
+                </motion.button>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Menu Content — min-h prevents layout shifts when filtering/sorting changes product count */}
       <main className="max-w-5xl mx-auto pt-4 min-h-screen">
@@ -515,7 +564,8 @@ export function MenuPage() {
               key={category.id}
               id={category.id}
               ref={el => { sectionRefs.current[category.id] = el }}
-              className="mb-7 scroll-mt-[108px]"
+              className="mb-7"
+              style={{ scrollMarginTop: scrollOffset + 'px' }}
               initial={{ opacity: 0, y: 16 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-60px' }}

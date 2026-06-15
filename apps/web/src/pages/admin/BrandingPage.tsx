@@ -24,6 +24,9 @@ export function BrandingPage() {
   const [logoDataUrl, setLogoDataUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [slug, setSlug] = useState('');
+  const [googleRating, setGoogleRating] = useState('');
+  const [googleReviewCount, setGoogleReviewCount] = useState('');
+  const [googleMapsUrl, setGoogleMapsUrl] = useState('');
 
   useEffect(() => {
     apiClient<typeof ThemeResponse>('/owner/brand', { schema: ThemeResponse }).then(res => {
@@ -31,6 +34,9 @@ export function BrandingPage() {
       if (res.bgColor) setConfig(prev => ({ ...prev, bg: res.bgColor! }));
       if (res.textColor) setConfig(prev => ({ ...prev, text: res.textColor! }));
       if (res.logoUrl) setLogoUrl(res.logoUrl!);
+      if (res.googleRating != null) setGoogleRating(String(res.googleRating));
+      if (res.googleReviewCount != null) setGoogleReviewCount(String(res.googleReviewCount));
+      if (res.googleMapsUrl) setGoogleMapsUrl(res.googleMapsUrl);
     }).catch(() => {});
     apiClient<any>('/owner/settings').then((res: any) => {
       if (res.slug) {
@@ -57,7 +63,14 @@ export function BrandingPage() {
     try {
       await apiClient('/owner/brand', {
         method: 'PUT',
-        body: { primaryColor: config.primary, bgColor: config.bg, logoUrl: logoDataUrl || logoUrl }
+        body: {
+          primaryColor: config.primary,
+          bgColor: config.bg,
+          logoUrl: logoDataUrl || logoUrl,
+          googleRating: googleRating ? parseFloat(googleRating) : null,
+          googleReviewCount: googleReviewCount ? parseInt(googleReviewCount, 10) : null,
+          googleMapsUrl: googleMapsUrl || null,
+        }
       });
       showToast(t('common.saved', 'Branding saved'), 'success');
     } catch (e) {
@@ -139,6 +152,21 @@ export function BrandingPage() {
                 </div>
               )}
             </div>
+          </div>
+          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-xl p-5 space-y-4">
+            <h3 className="font-semibold text-lg">{t('admin.google_info', 'Google Maps Info')}</h3>
+            <p className="text-xs text-[var(--brand-text-muted)]">{t('admin.google_info_hint', 'Displayed on client menu page. Update periodically from your Google Maps listing.')}</p>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField label={t('admin.google_rating', 'Rating (0–5)')}>
+                <Input type="number" min="0" max="5" step="0.1" value={googleRating} onChange={e => setGoogleRating(e.target.value)} placeholder="4.8" />
+              </FormField>
+              <FormField label={t('admin.google_review_count', 'Review Count')}>
+                <Input type="number" min="0" step="1" value={googleReviewCount} onChange={e => setGoogleReviewCount(e.target.value)} placeholder="124" />
+              </FormField>
+            </div>
+            <FormField label={t('admin.google_maps_url', 'Google Maps URL')}>
+              <Input value={googleMapsUrl} onChange={e => setGoogleMapsUrl(e.target.value)} placeholder="https://maps.app.goo.gl/..." />
+            </FormField>
           </div>
           <div className="flex items-center gap-4">
             <Button type="submit" isLoading={loading} size="lg">{t('common.save', 'Save Changes')}</Button>

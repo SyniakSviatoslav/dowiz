@@ -28,6 +28,9 @@ export const ThemeResponse = z.object({
   textColor: z.string().nullable(),
   logoUrl: z.string().nullable(),
   frameAncestors: z.array(z.string()).nullable(),
+  googleRating: z.number().nullable().optional(),
+  googleReviewCount: z.number().int().nullable().optional(),
+  googleMapsUrl: z.string().nullable().optional(),
 }).strict();
 export type ThemeResponse = z.infer<typeof ThemeResponse>;
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay } from '@deliveryos/ui';
+import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency } from '@deliveryos/ui';
+import { CURRENCIES } from '@deliveryos/shared-types';
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
@@ -60,6 +61,8 @@ export function CheckoutPage() {
   const navigate = useNavigate();
   const { items, clearCart } = useSharedCart();
   const { t } = useI18n();
+  const { currency: activeCurrency } = useCurrency();
+  const currencySymbol = CURRENCIES[activeCurrency]?.symbol ?? activeCurrency;
 
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('delivery');
   const [address, setAddress] = useState('');
@@ -67,7 +70,6 @@ export function CheckoutPage() {
   const [customerName, setCustomerName] = useState('');
   const [pinLocation, setPinLocation] = useState<LngLatLike | null>(null);
   const [locationId, setLocationId] = useState<string | null>(null);
-  const [currency, setCurrency] = useState('ALL');
   const [cashAmount, setCashAmount] = useState<number>(0);
   const [orderError, setOrderError] = useState('');
   const [instructionOption, setInstructionOption] = useState<string>('');
@@ -85,7 +87,6 @@ export function CheckoutPage() {
     fetch(`/public/locations/${slug}/info`).then(r => r.json())
       .then((info: any) => {
         setLocationId(info.id);
-        setCurrency(info.currency_code || 'ALL');
       })
       .catch((err) => {
         console.debug('[CheckoutPage] failed to load location info:', err);
@@ -419,7 +420,7 @@ export function CheckoutPage() {
               <label htmlFor="cash-amount" className="text-[12px] font-semibold mb-1.5 block" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.cash_amount', 'Cash amount')}</label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-bold" style={{ color: 'var(--brand-text-muted)' }}>{currency}</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-bold" style={{ color: 'var(--brand-text-muted)' }}>{currencySymbol}</span>
                   <input
                     id="cash-amount"
                     type="number"

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher, PriceDisplay } from '@deliveryos/ui';
+import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher, PriceDisplay, useCurrency } from '@deliveryos/ui';
+import { formatMoney } from '@deliveryos/shared-types';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../lib/index.js';
 import { z } from 'zod';
@@ -109,6 +110,7 @@ function ClientLayoutInner() {
     return () => window.removeEventListener('message', handleMessage);
   }, [slug, location.search]);
 
+  const { currency: activeCurrency, eurRate } = useCurrency();
   const itemsCount = items.reduce((sum, i) => sum + i.quantity, 0);
   const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
@@ -149,7 +151,7 @@ function ClientLayoutInner() {
                   </span>
                   <span className="mx-1">{t('cart.title', 'Cart')}</span>
                   <span className="opacity-40">·</span>
-                  <AnimatedNumber value={total} className="" formatter={(v) => `${v} ALL`} />
+                  <AnimatedNumber value={total} className="" formatter={(v) => formatMoney(Math.round(v), activeCurrency, eurRate ?? undefined)} />
                 </button>
               </Pressable>
             </StickyActionBar>
