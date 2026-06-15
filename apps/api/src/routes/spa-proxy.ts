@@ -32,6 +32,9 @@ const brandSchema = z.object({
   bgColor: z.string().regex(HEX_COLOR).optional().nullable(),
   textColor: z.string().regex(HEX_COLOR).optional().nullable(),
   logoUrl: z.string().max(1000).optional().nullable(),
+  googleRating: z.number().min(0).max(5).optional().nullable(),
+  googleReviewCount: z.number().int().nonnegative().optional().nullable(),
+  googleMapsUrl: z.string().max(500).optional().nullable(),
 }).strict();
 
 // pg returns NUMERIC columns as strings; coerce all numeric fields so the schema
@@ -364,7 +367,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
     const res = await withTenant(db, ctx.userId, async (client) =>
       client.query(
-        `SELECT primary_color, bg_color, text_color, logo_url, frame_ancestors
+        `SELECT primary_color, bg_color, text_color, logo_url, frame_ancestors,
+                google_rating, google_review_count, google_maps_url
          FROM location_themes WHERE location_id = $1`,
         [ctx.locId]
       )
@@ -378,6 +382,9 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       textColor: t.text_color || null,
       logoUrl: t.logo_url || null,
       frameAncestors: t.frame_ancestors || null,
+      googleRating: t.google_rating != null ? Number(t.google_rating) : null,
+      googleReviewCount: t.google_review_count != null ? Number(t.google_review_count) : null,
+      googleMapsUrl: t.google_maps_url ?? null,
     });
   });
 
@@ -389,17 +396,32 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const logoUrl = parsed.logoUrl ? validateImageKey(parsed.logoUrl) : null;
     const res = await withTenant(db, ctx.userId, async (client) => {
       await client.query(
-        `INSERT INTO location_themes (location_id, primary_color, bg_color, text_color, logo_url) VALUES ($1,$2,$3,$4,$5)
+        `INSERT INTO location_themes (location_id, primary_color, bg_color, text_color, logo_url, google_rating, google_review_count, google_maps_url)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          ON CONFLICT (location_id) DO UPDATE SET
            primary_color = COALESCE($2, location_themes.primary_color),
            bg_color = COALESCE($3, location_themes.bg_color),
            text_color = COALESCE($4, location_themes.text_color),
-           logo_url = COALESCE($5, location_themes.logo_url)`,
-        [ctx.locId, parsed.primaryColor || null, parsed.bgColor || null, parsed.textColor || null, logoUrl]
+           logo_url = COALESCE($5, location_themes.logo_url),
+           google_rating = COALESCE($6, location_themes.google_rating),
+           google_review_count = COALESCE($7, location_themes.google_review_count),
+           google_maps_url = COALESCE($8, location_themes.google_maps_url)`,
+        [ctx.locId, parsed.primaryColor || null, parsed.bgColor || null, parsed.textColor || null, logoUrl,
+         parsed.googleRating ?? null, parsed.googleReviewCount ?? null, parsed.googleMapsUrl ?? null]
       );
-      return client.query(`SELECT primary_color, bg_color, text_color, logo_url FROM location_themes WHERE location_id = $1`, [ctx.locId]);
+      return client.query(
+        `SELECT primary_color, bg_color, text_color, logo_url, google_rating, google_review_count, google_maps_url
+         FROM location_themes WHERE location_id = $1`,
+        [ctx.locId]
+      );
     });
-    return reply.send(res.rows[0] || {});
+    const t = res.rows[0] || {};
+    return reply.send({
+      primaryColor: t.primary_color, bgColor: t.bg_color, textColor: t.text_color, logoUrl: t.logo_url,
+      googleRating: t.google_rating != null ? Number(t.google_rating) : null,
+      googleReviewCount: t.google_review_count != null ? Number(t.google_review_count) : null,
+      googleMapsUrl: t.google_maps_url ?? null,
+    });
   });
 
   // GET /api/owner/settings

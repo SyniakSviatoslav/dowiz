@@ -26,7 +26,7 @@ export function setSecurityHeaders(reply: any, opts: SecurityHeadersOpts = {}): 
     `font-src 'self' https://fonts.gstatic.com`,
     `script-src 'self'${nonce ? ` 'nonce-${nonce}'` : ''} https://cdn.tailwindcss.com`,
     `worker-src 'self' blob:`,
-    `connect-src 'self' https://tiles.openfreemap.org`,
+    `connect-src 'self' https://tiles.openfreemap.org https://router.project-osrm.org`,
     `frame-ancestors ${frameAncestors}`,
     `base-uri 'self'`,
     `form-action 'self'`,
