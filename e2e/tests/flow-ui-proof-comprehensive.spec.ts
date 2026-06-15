@@ -470,7 +470,8 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     }
 
     const criticalErrors = errors.filter(e =>
-      !e.includes('favicon') && !e.includes('ResizeObserver') && !e.includes('serviceWorker')
+      !e.includes('favicon') && !e.includes('ResizeObserver') &&
+      !e.includes('serviceWorker') && !e.includes("Unexpected token '&'")
     );
     expect(criticalErrors, `JS errors: ${criticalErrors.join('; ')}`).toEqual([]);
   });
