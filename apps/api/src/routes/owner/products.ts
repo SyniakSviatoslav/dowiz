@@ -328,7 +328,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
       const userId = (request.user as any).userId;
       const catId = (request.query as any)?.category_id;
       const res = await withTenant(server.db, userId, async (client) => {
-        let q = `SELECT id, name, price, description, is_available, category_id, image_key, attributes FROM products WHERE location_id = $1`;
+        let q = `SELECT id, name, price, description, is_available, category_id, image_key, attributes, sort_order, created_at FROM products WHERE location_id = $1`;
         const params: any[] = [locId];
         if (catId) { q += ` AND category_id = $2`; params.push(catId); }
         q += ` ORDER BY sort_order`;

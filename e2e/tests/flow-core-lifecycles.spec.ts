@@ -458,7 +458,7 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     );
     expect(mgPatchRes.status()).toBe(200);
     const body = await mgPatchRes.json();
-    expect(body.max_select).toBe(2);
+    expect(body.maxSelect).toBe(2);
   });
 
   test('Flow 22: Owner — create modifier in group', async ({ request }) => {
