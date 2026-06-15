@@ -308,10 +308,10 @@ Client-side storage — ONLY localStorage/sessionStorage, NEVER cookies:
 ```html
 <!-- Owner inserts on their website: -->
 <script src='https://cdn.deliveryos.com/widget/v1.js'></script>
-<delivery-widget location='pizza-roma' lang='al'></delivery-widget>
+<delivery-widget location='sushi-durres' lang='al'></delivery-widget>
 
 <!-- Or via iframe directly: -->
-<iframe src='https://order.deliveryos.com/pizza-roma?embed=true'
+<iframe src='https://order.deliveryos.com/sushi-durres?embed=true'
   style='width:100%;border:none;' id='dos-widget'></iframe>
 <script>
   window.addEventListener('message', (e) => {
