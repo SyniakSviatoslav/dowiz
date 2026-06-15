@@ -800,10 +800,19 @@ fastify.register(mockAuthRoutes, { db: pool });
       if (locRes.rowCount && locRes.rowCount > 0) {
         locationId = locRes.rows[0].id;
       } else {
+        const orgRes = await pool.query(
+          `INSERT INTO organizations (name, owner_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING id`,
+          ['Dev Org', '00000000-0000-0000-0000-000000000000']
+        );
+        let orgId = orgRes.rows[0]?.id;
+        if (!orgId) {
+          const existing = await pool.query(`SELECT id FROM organizations WHERE name = 'Dev Org' LIMIT 1`);
+          orgId = existing.rows[0]?.id || '00000000-0000-0000-0000-000000000001';
+        }
         const newLoc = await pool.query(
-          `INSERT INTO locations (slug, name, status, default_locale, supported_locales, currency_code, currency_minor_unit, delivery_fee_flat, min_order_value, free_delivery_threshold)
-           VALUES ($1, $2, 'active', 'sq', ARRAY['sq','en','uk'], 'ALL', 0, 200, 500, 2000) RETURNING id`,
-          [slug, body.name || 'Demo Store']
+          `INSERT INTO locations (org_id, slug, name, status, default_locale, supported_locales, currency_code, currency_minor_unit, delivery_fee_flat, min_order_value, free_delivery_threshold)
+           VALUES ($1, $2, $3, 'active', 'sq', ARRAY['sq','en','uk'], 'ALL', 0, 200, 500, 2000) RETURNING id`,
+          [orgId, slug, body.name || 'Demo Store']
         );
         locationId = newLoc.rows[0].id;
       }
