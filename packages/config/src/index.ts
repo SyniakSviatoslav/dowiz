@@ -16,6 +16,9 @@ const EnvSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_BOT_SECRET: z.string().optional(),
   TELEGRAM_BOT_USERNAME: z.string().optional(),
+  // WhatsApp (Baileys) notification channel
+  WHATSAPP_ENABLED: z.enum(['true', 'false']).default('false'),
+  WHATSAPP_AUTH_DIR: z.string().optional(),
   // Backup Configuration
   BACKUP_ENCRYPTION_KEY: z.string().optional(), // 32 bytes base64 (required if BACKUP_ENABLED=true)
   R2_ACCESS_KEY_ID: z.string().optional(),
