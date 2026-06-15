@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Button, Input, ColorInput, FormField, useI18n, useToast } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
-import { ThemeResponse, LocationResponse } from '@deliveryos/shared-types';
+import { ThemeResponse } from '@deliveryos/shared-types';
 
 export function BrandingPage() {
   const { t } = useI18n();
@@ -32,11 +32,11 @@ export function BrandingPage() {
       if (res.textColor) setConfig(prev => ({ ...prev, text: res.textColor! }));
       if (res.logoUrl) setLogoUrl(res.logoUrl!);
     }).catch(() => {});
-    apiClient<typeof LocationResponse>('/owner/settings', { schema: LocationResponse }).then(res => {
+    apiClient<any>('/owner/settings').then((res: any) => {
       if (res.slug) {
         setSlug(res.slug);
-      } else if (res.name) {
-        const generated = res.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
+      } else if (res.locationName || res.name) {
+        const generated = (res.locationName || res.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
         setSlug(generated);
       }
     }).catch(() => {});
