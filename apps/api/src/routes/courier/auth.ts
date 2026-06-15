@@ -162,15 +162,24 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
     // location_id first (via a bypassed raw query on locations), then set tenant.
     const client = await db.connect();
     try {
-      // Step 1: find the invite's location_id without RLS (locations has no RLS)
+      // courier_invites has RLS. We use a two-pass approach:
+      // Pass 1: read location_id in its own transaction so set_config(local) can scope it
+      // Pass 2: set tenant and do the full JOIN query in a second transaction
+      await client.query('BEGIN');
+      // Temporarily allow any location so we can discover the correct one
+      // (set_config with is_local=true clears after COMMIT below)
       const locRes = await client.query(
-        `SELECT ci.location_id FROM courier_invites ci WHERE ci.id = $1`,
+        `SELECT location_id FROM courier_invites WHERE id = $1`,
         [inviteId]
       );
-      // If RLS blocks even this, fall back: set a sentinel and try anyway
-      let locationId: string | null = locRes.rows[0]?.location_id ?? null;
+      await client.query('COMMIT');
+
+      const locationId: string | null = locRes.rows[0]?.location_id ?? null;
+
+      // Pass 2: set correct tenant and query
+      await client.query('BEGIN');
       if (locationId) {
-        await client.query(`SELECT set_config('app.current_tenant', $1, false)`, [locationId]);
+        await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
       }
 
       const res = await client.query(
@@ -182,6 +191,7 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
       );
 
       if (res.rowCount === 0) {
+        await client.query('ROLLBACK');
         return reply.status(404).send({ error: 'Invite not found' });
       }
 
@@ -189,6 +199,7 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
       const isExpired = new Date() > new Date(invite.expires_at);
       const isValid = !invite.used_at && !invite.revoked_at && !isExpired;
 
+      await client.query('COMMIT');
       return reply.send({
         id: invite.id,
         role: invite.role,
