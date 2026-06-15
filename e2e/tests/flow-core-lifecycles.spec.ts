@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import crypto from 'node:crypto';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 let authToken: string;
@@ -112,7 +113,7 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
         customer: { phone: '+355600000001', name: 'E2E Test' },
         delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga e Barrikadave, Tirana' },
         payment: { method: 'cash' },
-        idempotency_key: '00000000-0000-0000-0000-000000000003',
+        idempotency_key: crypto.randomUUID(),
       },
     });
     expect(orderRes.status()).toBe(201);
