@@ -15,5 +15,8 @@
       "Read(//c/Users/Dell5/.claude/skills/gstack/**)",
       "Bash(./setup)"
     ]
-  }
+  },
+  "disabledMcpjsonServers": [
+    "repowise"
+  ]
 }

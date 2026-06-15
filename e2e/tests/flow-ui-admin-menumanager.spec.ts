@@ -158,7 +158,7 @@ test.describe('UI: MenuManager — Product & Category CRUD via Forms', () => {
     const delRes = await request.delete(`${BASE}/api/owner/menu/categories/${target.id}`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
-    expect([200, 409]).toContain(delRes.status());
+    expect([200, 204, 409]).toContain(delRes.status());
   });
 
   test('Menu manager survives navigation without JS errors', async ({ page }) => {

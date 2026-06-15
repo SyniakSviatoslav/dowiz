@@ -122,17 +122,6 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     expect(orderId).toBeTruthy();
   });
 
-  test('Flow 2: Owner — reject order', async ({ request }) => {
-    test.skip(!orderId, 'No order created');
-    const rejectRes = await request.post(
-      `${BASE}/api/owner/locations/${activeLocationId}/orders/${orderId}/reject`,
-      { headers: { Authorization: `Bearer ${authToken}` }, data: { reason: 'Out of stock' } }
-    );
-    expect(rejectRes.status()).toBe(200);
-    const body = await rejectRes.json();
-    expect(body.status).toBe('REJECTED');
-  });
-
   test('Flow 3: Owner — assign courier to order', async ({ request }) => {
     test.skip(!orderId, 'No order created');
     const status = await getOrderStatus(request);
@@ -198,6 +187,29 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     expect(cancelRes.status()).toBe(200);
     const body = await cancelRes.json();
     expect(body.success).toBe(true);
+  });
+
+  test('Flow 2: Owner — reject order (new second order)', async ({ request }) => {
+    const secondOrder = await request.post(`${BASE}/api/orders`, {
+      data: {
+        locationId: activeLocationId, type: 'delivery',
+        items: [{ product_id: productId, quantity: 1 }],
+        customer: { phone: '+355600000002', name: 'Reject Test' },
+        delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga Reject' },
+        payment: { method: 'cash' },
+        idempotency_key: crypto.randomUUID(),
+      },
+    });
+    expect(secondOrder.status()).toBe(201);
+    const rejectOrderId = (await secondOrder.json()).id;
+
+    const rejectRes = await request.post(
+      `${BASE}/api/owner/locations/${activeLocationId}/orders/${rejectOrderId}/reject`,
+      { headers: { Authorization: `Bearer ${authToken}` }, data: { reason: 'Out of stock' } }
+    );
+    expect(rejectRes.status()).toBe(200);
+    const body = await rejectRes.json();
+    expect(body.status).toBe('REJECTED');
   });
 
   // ════════════════════════════════════════════════════════════════
@@ -340,6 +352,26 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
   });
 
   test('Flow 17: Courier — assignment accept/pickup/deliver/cancel', async ({ request }) => {
+    // Create a fresh order + assignment for the courier
+    if (!assignmentId && courierJwt) {
+      const asgnOrder = await request.post(`${BASE}/api/orders`, {
+        data: {
+          locationId: activeLocationId, type: 'delivery',
+          items: [{ product_id: productId, quantity: 1 }],
+          customer: { phone: '+355600000003', name: 'Assignment Test' },
+          delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga Assign' },
+          payment: { method: 'cash' },
+          idempotency_key: crypto.randomUUID(),
+        },
+      });
+      if (asgnOrder.status() === 201) {
+        const asgnOrderId = (await asgnOrder.json()).id;
+        const devAsgn = await request.post(`${BASE}/api/dev/create-assignment`, {
+          data: { orderId: asgnOrderId, courierId: courierUserId, locationId: activeLocationId },
+        });
+        if (devAsgn.status() === 200) assignmentId = (await devAsgn.json()).assignmentId;
+      }
+    }
     test.skip(!courierJwt || !assignmentId, 'No courier auth or no assignment');
 
     const acceptRes = await request.post(`${BASE}/api/courier/assignments/${assignmentId}/accept`, {

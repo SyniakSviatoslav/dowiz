@@ -107,6 +107,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   fastify.get('/api/owner/menu/categories', async (request, reply) => {
     const locId = await getLocationId(request);
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    await db.query(`SELECT set_config('app.current_tenant', $1, true)`, [locId]);
     const res = await db.query(`
       SELECT c.id, c.name, c.sort_order, COUNT(p.id)::int AS product_count
       FROM categories c
