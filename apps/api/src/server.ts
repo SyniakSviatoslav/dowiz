@@ -828,9 +828,9 @@ fastify.register(mockAuthRoutes, { db: pool });
           orgId = org2.rows[0]?.id;
         }
         const newLoc = await pool.query(
-          `INSERT INTO locations (org_id, slug, name, status, default_locale, supported_locales, currency_code, currency_minor_unit, delivery_fee_flat, min_order_value, free_delivery_threshold)
-           VALUES ($1, $2, $3, 'active', 'sq', ARRAY['sq','en','uk'], 'ALL', 0, 200, 500, 2000) RETURNING id`,
-          [orgId, slug, body.name || 'Demo Store']
+          `INSERT INTO locations (org_id, slug, name, phone, status, default_locale, supported_locales, currency_code, currency_minor_unit, delivery_fee_flat, min_order_value, free_delivery_threshold)
+           VALUES ($1, $2, $3, $4, 'active', 'sq', ARRAY['sq','en','uk'], 'ALL', 0, 200, 500, 2000) RETURNING id`,
+          [orgId, slug, body.name || 'Demo Store', body.phone || '+355690000000']
         );
         locationId = newLoc.rows[0].id;
       }
