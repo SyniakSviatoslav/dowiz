@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { withTenant } from '@deliveryos/platform';
+import { mapProductRow } from '../../lib/product-mapper.js';
+import { getOwnerLocationId } from '../../lib/get-owner-location.js';
 
 export default async function productRoutes(fastify: FastifyInstance) {
   const server = fastify.withTypeProvider<ZodTypeProvider>();
@@ -300,7 +302,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(
-          `SELECT pmg.sort_order, mg.* 
+          `SELECT pmg.sort_order, mg.*
            FROM product_modifier_groups pmg
            JOIN modifier_groups mg ON pmg.group_id = mg.id
            WHERE pmg.product_id = $1
@@ -309,6 +311,153 @@ export default async function productRoutes(fastify: FastifyInstance) {
         );
       });
       return reply.send({ data: res.rows });
+    }
+  );
+
+  // ── Menu aliases: /api/owner/menu/products (JWT-based, no locationId in path) ──
+
+  server.get(
+    '/api/owner/menu/products',
+    {
+      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      schema: { querystring: z.object({ category_id: z.string().uuid().optional() }).strict() }
+    },
+    async (request: any, reply: any) => {
+      const locId = await getOwnerLocationId(request, server.db);
+      if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+      const userId = (request.user as any).userId;
+      const catId = (request.query as any)?.category_id;
+      const res = await withTenant(server.db, userId, async (client) => {
+        let q = `SELECT id, name, price, description, is_available, category_id, image_key, attributes FROM products WHERE location_id = $1`;
+        const params: any[] = [locId];
+        if (catId) { q += ` AND category_id = $2`; params.push(catId); }
+        q += ` ORDER BY sort_order`;
+        /* eslint-disable local/no-raw-sql */
+        return client.query(q, params);
+        /* eslint-enable local/no-raw-sql */
+      });
+      return reply.send(res.rows.map(mapProductRow));
+    }
+  );
+
+  server.post(
+    '/api/owner/menu/products',
+    {
+      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      schema: {
+        body: z.object({
+          name: z.string().min(1).max(200),
+          price: z.number().int().nonnegative(),
+          description: z.string().max(2000).optional().nullable(),
+          available: z.boolean().optional(),
+          category_id: z.string().uuid().optional().nullable(),
+          categoryId: z.string().uuid().optional().nullable(),
+          image_key: z.string().max(500).optional().nullable(),
+          stockCount: z.number().int().nonnegative().optional().nullable(),
+          taste: z.record(z.number().min(0).max(3)).optional().nullable(),
+          recipeLines: z.array(z.any()).optional().nullable(),
+          attributes: z.record(z.any()).optional().nullable(),
+        }).strip()
+      }
+    },
+    async (request: any, reply: any) => {
+      const locId = await getOwnerLocationId(request, server.db);
+      if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+      const userId = (request.user as any).userId;
+      const body = request.body as any;
+      const catId = body.category_id || body.categoryId || null;
+      const attrs: Record<string, any> = {};
+      if (body.stockCount !== undefined) attrs.stock_count = body.stockCount;
+      if (body.taste !== undefined) attrs.taste = body.taste;
+      if (body.recipeLines !== undefined) attrs.bom = body.recipeLines;
+      if (body.attributes) Object.assign(attrs, body.attributes);
+      const res = await withTenant(server.db, userId, async (client) => {
+        return client.query(
+          `INSERT INTO products (location_id, category_id, name, description, price, is_available, image_key, attributes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+          [locId, catId, body.name, body.description, body.price, body.available ?? true, body.image_key ?? null, attrs]
+        );
+      });
+      return reply.status(201).send(mapProductRow(res.rows[0]));
+    }
+  );
+
+  server.patch(
+    '/api/owner/menu/products/:productId',
+    {
+      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      schema: {
+        params: z.object({ productId: z.string().uuid() }).strict(),
+        body: z.object({
+          name: z.string().min(1).max(200).optional(),
+          price: z.number().int().nonnegative().optional(),
+          description: z.string().max(2000).optional().nullable(),
+          available: z.boolean().optional(),
+          category_id: z.string().uuid().optional().nullable(),
+          categoryId: z.string().uuid().optional().nullable(),
+          image_key: z.string().max(500).optional().nullable(),
+          stockCount: z.number().int().nonnegative().optional().nullable(),
+          taste: z.record(z.number().min(0).max(3)).optional().nullable(),
+          recipeLines: z.array(z.any()).optional().nullable(),
+        }).strip()
+      }
+    },
+    async (request: any, reply: any) => {
+      const locId = await getOwnerLocationId(request, server.db);
+      if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+      const userId = (request.user as any).userId;
+      const { productId } = request.params as any;
+      const body = request.body as any;
+      const res = await withTenant(server.db, userId, async (client) => {
+        const existing = await client.query(
+          `SELECT attributes FROM products WHERE id = $1 AND location_id = $2`,
+          [productId, locId]
+        );
+        if (existing.rowCount === 0) return null;
+        const existingAttrs = existing.rows[0].attributes || {};
+        const attrs = { ...existingAttrs };
+        if (body.stockCount !== undefined) attrs.stock_count = body.stockCount;
+        if (body.taste !== undefined) attrs.taste = body.taste;
+        if (body.recipeLines !== undefined) attrs.bom = body.recipeLines;
+        const catId = body.category_id ?? body.categoryId;
+        return client.query(
+          `UPDATE products SET
+             name = COALESCE($3, name),
+             price = COALESCE($4, price),
+             description = COALESCE($5, description),
+             is_available = COALESCE($6, is_available),
+             category_id = COALESCE($7, category_id),
+             image_key = COALESCE($8, image_key),
+             attributes = $9
+           WHERE id = $1 AND location_id = $2
+           RETURNING *`,
+          [productId, locId, body.name, body.price, body.description, body.available, catId, body.image_key, attrs]
+        );
+      });
+      if (res === null || res.rowCount === 0) return reply.status(404).send({ error: 'Product not found' });
+      return reply.send(mapProductRow(res.rows[0]));
+    }
+  );
+
+  server.delete(
+    '/api/owner/menu/products/:productId',
+    {
+      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      schema: { params: z.object({ productId: z.string().uuid() }).strict() }
+    },
+    async (request: any, reply: any) => {
+      const locId = await getOwnerLocationId(request, server.db);
+      if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+      const userId = (request.user as any).userId;
+      const { productId } = request.params as any;
+      const res = await withTenant(server.db, userId, async (client) => {
+        return client.query(
+          `DELETE FROM products WHERE id = $1 AND location_id = $2 RETURNING id`,
+          [productId, locId]
+        );
+      });
+      if (res.rowCount === 0) return reply.status(404).send({ error: 'Product not found' });
+      return reply.status(204).send();
     }
   );
 }

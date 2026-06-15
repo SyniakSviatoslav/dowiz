@@ -1,4 +1,4 @@
-import { z } from 'zod';
+﻿import { z } from 'zod';
 
 export const CreateCategoryBody = z.object({
   name: z.string().min(1).max(200),
@@ -16,7 +16,8 @@ export type UpdateCategoryBody = z.infer<typeof UpdateCategoryBody>;
 export const CategoryResponse = z.object({
   id: z.string(),
   name: z.string(),
-  sort_order: z.number().int(),
-  product_count: z.number().int(),
-}).passthrough();
+  sortOrder: z.number().int(),
+  productCount: z.number().int(),
+}).strict();
 export type CategoryResponse = z.infer<typeof CategoryResponse>;
+

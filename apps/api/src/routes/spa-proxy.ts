@@ -4,7 +4,6 @@ import { loadEnv } from '@deliveryos/config';
 import crypto from 'crypto';
 import { getImageUrl } from '../lib/image-url.js';
 import { maskStr } from '../lib/pii-mask.js';
-import { toCategoryApiShape } from '../lib/row-transformers.js';
 import { z } from 'zod';
 
 const env = loadEnv();
@@ -25,36 +24,6 @@ function validateImageKey(val: unknown): string | null | undefined {
   }
   return s;
 }
-
-const productSchema = z.object({
-  name: z.string().min(1).max(200),
-  price: z.number().int().nonnegative(),
-  description: z.string().max(2000).optional().nullable(),
-  available: z.boolean().optional(),
-  category_id: z.string().uuid().optional().nullable(),
-  categoryId: z.string().uuid().optional().nullable(),
-  image_key: z.string().max(500).optional().nullable(),
-  imageUrl: z.string().max(500).optional().nullable(),
-  stockCount: z.number().int().nonnegative().optional().nullable(),
-  taste: z.record(z.number().min(0).max(3)).optional().nullable(),
-  recipeLines: z.array(z.object({
-    supplyId: z.string(),
-    supplyName: z.string(),
-    qty: z.number(),
-    unit: z.string(),
-    kind: z.string(),
-    kcal: z.number().nullable().optional(),
-    proteinG: z.number().nullable().optional(),
-    fatG: z.number().nullable().optional(),
-    carbsG: z.number().nullable().optional(),
-    allergens: z.array(z.string()).optional(),
-  })).optional().nullable(),
-  attributes: z.record(z.any()).optional().nullable(),
-}).strict();
-
-const categorySchema = z.object({
-  name: z.string().min(1).max(100),
-}).strict();
 
 const brandSchema = z.object({
   primaryColor: z.string().regex(HEX_COLOR).optional().nullable(),
@@ -104,54 +73,6 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     }
   }
 
-  // GET /api/owner/menu/categories
-  fastify.get('/api/owner/menu/categories', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const res = await db.query(`
-      SELECT c.id, c.name, c.sort_order, COUNT(p.id)::int AS product_count
-      FROM categories c
-      LEFT JOIN products p ON p.category_id = c.id AND p.location_id = $1
-      WHERE c.location_id = $1
-      GROUP BY c.id, c.name, c.sort_order
-      ORDER BY c.sort_order
-    `, [locId]);
-    return reply.send(res.rows.map(toCategoryApiShape));
-  });
-
-  // POST /api/owner/menu/categories
-  fastify.post('/api/owner/menu/categories', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const parsed = categorySchema.parse(request.body);
-    const id = crypto.randomUUID();
-    const res = await db.query(
-      `INSERT INTO categories (id, location_id, name) VALUES ($1, $2, $3) RETURNING id, name`,
-      [id, locId, parsed.name]
-    );
-    return reply.status(201).send(res.rows[0]);
-  });
-
-  // DELETE /api/owner/menu/categories/:id
-  fastify.delete('/api/owner/menu/categories/:id', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const { id } = request.params as { id: string };
-    const prodRes = await db.query(
-      `SELECT id FROM products WHERE category_id = $1 AND location_id = $2 LIMIT 1`,
-      [id, locId]
-    );
-    if (prodRes.rowCount && prodRes.rowCount > 0) {
-      return reply.status(409).send({ error: 'Category contains products. Move or delete them first.' });
-    }
-    const res = await db.query(
-      `DELETE FROM categories WHERE id = $1 AND location_id = $2 RETURNING id`,
-      [id, locId]
-    );
-    if (res.rowCount === 0) return reply.status(404).send({ error: 'Category not found' });
-    return reply.status(204).send();
-  });
-
   const APP_BASE = process.env.APP_BASE_URL || 'https://dowiz.fly.dev';
 
    // Serve product images from local storage (CDN placeholder until Cloudflare R2 is set up)
@@ -168,114 +89,6 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       console.warn('[spa-proxy] image fetch failed:', err?.message);
       return reply.status(404).send({ error: 'Image not found' });
     }
-  });
-
-  function mapProductRow(r: any): any {
-    const bom: any[] = r.attributes?.bom ?? [];
-    const allergens = new Set<string>();
-    for (const line of bom) {
-      if (Array.isArray(line.allergens)) line.allergens.forEach((a: string) => allergens.add(a));
-    }
-    return {
-      id: r.id,
-      name: r.name,
-      price: r.price,
-      description: r.description,
-      available: r.is_available,
-      categoryId: r.category_id,
-      imageUrl: getImageUrl(r.image_key, APP_BASE),
-      imageKey: r.image_key,
-      stockCount: r.attributes?.stock_count ?? null,
-      taste: r.attributes?.taste ?? null,
-      recipeLines: bom.length ? bom : null,
-      allergens: allergens.size ? Array.from(allergens).sort() : null,
-      attributes: r.attributes || null,
-    };
-  }
-
-  // GET /api/owner/menu/products
-  fastify.get('/api/owner/menu/products', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const catId = (request.query as any)?.category_id;
-    let q = `SELECT id, name, price, description, is_available, category_id, image_key, attributes FROM products WHERE location_id = $1`;
-    const params: any[] = [locId];
-    if (catId) { q += ` AND category_id = $2`; params.push(catId); }
-    q += ` ORDER BY sort_order`;
-    const res = await db.query(q, params);
-    return reply.send(res.rows.map(mapProductRow));
-  });
-
-  function mergeAttributes(existing: any, parsed: any): any {
-    const attrs = { ...(existing || {}) };
-    if (parsed.stockCount !== undefined) { attrs.stock_count = parsed.stockCount; }
-    if (parsed.taste !== undefined) { attrs.taste = parsed.taste; }
-    if (parsed.recipeLines !== undefined) { attrs.bom = parsed.recipeLines; }
-    if (parsed.attributes !== undefined) { Object.assign(attrs, parsed.attributes); }
-    return attrs;
-  }
-
-  // POST /api/owner/menu/products
-  fastify.post('/api/owner/menu/products', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const parsed = productSchema.parse(request.body);
-    const finalCategoryId = parsed.category_id ?? parsed.categoryId ?? null;
-    const finalImageKey = validateImageKey(parsed.image_key ?? parsed.imageUrl) ?? null;
-    const id = crypto.randomUUID();
-    const attrs = mergeAttributes({}, parsed);
-    const res = await db.query(
-      `INSERT INTO products (id, location_id, category_id, name, price, description, is_available, image_key, attributes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       RETURNING *`,
-      [id, locId, finalCategoryId, parsed.name, parsed.price, parsed.description ?? null, parsed.available !== false, finalImageKey, JSON.stringify(attrs)]
-    );
-    return reply.status(201).send(mapProductRow(res.rows[0]));
-  });
-
-  // PATCH /api/owner/menu/products/:productId
-  fastify.patch('/api/owner/menu/products/:productId', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const pid = (request.params as any).productId;
-    const parsed = productSchema.partial().parse(request.body);
-    if (Object.keys(parsed).length === 0) return reply.status(400).send({ error: 'No fields to update' });
-    const sets: string[] = [];
-    const vals: any[] = [];
-    let idx = 1;
-    if (parsed.name !== undefined) { sets.push(`name = $${idx++}`); vals.push(parsed.name); }
-    if (parsed.price !== undefined) { sets.push(`price = $${idx++}`); vals.push(parsed.price); }
-    if (parsed.description !== undefined) { sets.push(`description = $${idx++}`); vals.push(parsed.description); }
-    if (parsed.available !== undefined) { sets.push(`is_available = $${idx++}`); vals.push(parsed.available); }
-    const finalCategoryId = parsed.category_id ?? parsed.categoryId;
-    if (finalCategoryId !== undefined) { sets.push(`category_id = $${idx++}`); vals.push(finalCategoryId); }
-    const imageVal = validateImageKey(parsed.image_key ?? parsed.imageUrl);
-    if (imageVal !== undefined) { sets.push(`image_key = $${idx++}`); vals.push(imageVal); }
-    // Handle attributes merge (taste, stockCount, recipeLines, attributes)
-    if (parsed.stockCount !== undefined || parsed.taste !== undefined || parsed.recipeLines !== undefined || parsed.attributes !== undefined) {
-      const curr = await db.query(`SELECT attributes FROM products WHERE id = $1 AND location_id = $2`, [pid, locId]);
-      const existing = curr.rows[0]?.attributes || {};
-      const merged = JSON.stringify(mergeAttributes(existing, parsed));
-      sets.push(`attributes = $${idx++}`);
-      vals.push(merged);
-    }
-    vals.push(pid, locId);
-    const res = await db.query(
-      `UPDATE products SET ${sets.join(', ')} WHERE id = $${idx++} AND location_id = $${idx++}
-       RETURNING *`,
-      vals
-    );
-    if (!res.rows[0]) return reply.status(404).send({ error: 'Product not found' });
-    return reply.send(mapProductRow(res.rows[0]));
-  });
-
-  // DELETE /api/owner/menu/products/:productId
-  fastify.delete('/api/owner/menu/products/:productId', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const pid = (request.params as any).productId;
-    await db.query(`DELETE FROM products WHERE id = $1 AND location_id = $2`, [pid, locId]);
-    return reply.status(204).send();
   });
 
   // POST /api/owner/menu/products/:productId/image — upload product image
