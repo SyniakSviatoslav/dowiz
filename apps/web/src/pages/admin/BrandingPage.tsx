@@ -104,7 +104,7 @@ export function BrandingPage() {
     if (config.bg && !config.bg.startsWith('var(')) params.set('draft_bg', config.bg);
     if (config.text && !config.text.startsWith('var(')) params.set('draft_text', config.text);
     // Logo excluded from URL — base64 data URLs cause 431 (header too large)
-    return `/s/${slug}?${params.toString()}`;
+    return `/branding-preview/${slug}?${params.toString()}`;
   }, [slug, config.primary, config.bg, config.text, logoPreview]);
 
   return (
