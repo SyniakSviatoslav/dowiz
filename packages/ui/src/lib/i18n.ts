@@ -877,6 +877,12 @@ const messages: Record<Locale, Record<string, string>> = {
     'client.order_delivered': 'Porosia u dorëzua',
     'client.order_cancelled': 'Porosia u anulua',
     'client.order_rejected': 'Porosia u refuzua',
+    'client.chefs_picks': "Zgjedhja e Kuzhinierit",
+    'client.chefs_pick_badge': "✦ Kuzhinieri Rekomandon",
+    'client.delivery_closed': 'Jemi momentalisht të mbyllur. Kthehuni gjatë orarit të punës.',
+    'client.no_results': 'Asnjë produkt nuk përputhet me filtrat tuaj',
+    'client.browse_menu': 'Shfleto menunë e plotë',
+    'admin.session_expired': 'Sesioni juaj ka skaduar. Ju lutem hyni sërish.',
   },
   en: {
     'menu.title': 'Menu',
@@ -1748,6 +1754,12 @@ const messages: Record<Locale, Record<string, string>> = {
     'client.order_delivered': 'Order delivered',
     'client.order_cancelled': 'Order cancelled',
     'client.order_rejected': 'Order rejected',
+    'client.chefs_picks': "Chef's Picks",
+    'client.chefs_pick_badge': "✦ Chef's Pick",
+    'client.delivery_closed': 'We are currently closed. Check back during opening hours.',
+    'client.no_results': 'No products match your filters',
+    'client.browse_menu': 'Browse full menu',
+    'admin.session_expired': 'Your session has expired. Please sign in again.',
   },
   uk: {
     'menu.title': 'Меню',
@@ -2619,6 +2631,12 @@ const messages: Record<Locale, Record<string, string>> = {
     'client.order_delivered': 'Замовлення доставлено',
     'client.order_cancelled': 'Замовлення скасовано',
     'client.order_rejected': 'Замовлення відхилено',
+    'client.chefs_picks': "Вибір Шефа",
+    'client.chefs_pick_badge': "✦ Вибір Шефа",
+    'client.delivery_closed': 'Ми зараз зачинені. Повертайтесь у робочі години.',
+    'client.no_results': 'Жодного продукту не відповідає вашим фільтрам',
+    'client.browse_menu': 'Переглянути повне меню',
+    'admin.session_expired': 'Ваша сесія завершилась. Будь ласка, увійдіть знову.',
   },
 };
 
