@@ -54,7 +54,22 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
   // ─── POST /orders ──────────────────────────────────────────────────
   fastify.post('/orders', {
-    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: '1 minute',
+        keyGenerator: (req: any) => {
+          const phone = req.body?.customer?.phone || req.body?.phone;
+          return phone ? `phone:${phone.replace(/\s/g, '').toLowerCase()}` : req.ip;
+        },
+        errorResponseBuilder: (_req: any, context: any) => ({
+          statusCode: 429,
+          error: 'Too many orders from this phone',
+          code: 'PHONE_THROTTLE',
+          message: `Rate limit exceeded, retry in ${context.after}`,
+        }),
+      },
+    },
   }, async (request: any, reply: any) => {
     let input;
     try {
@@ -703,7 +718,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
   // ─── GET /orders/:id ───────────────────────────────────────────────
   fastify.get('/orders/:id', {
-    preHandler: [(fastify as any).verifyAuth],
+    preHandler: [(fastify as any).softVerifyAuth],
   }, async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
     if (!isValidUUID(id)) {
