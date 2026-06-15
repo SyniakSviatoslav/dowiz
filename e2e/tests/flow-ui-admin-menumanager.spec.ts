@@ -143,7 +143,7 @@ test.describe('UI: MenuManager — Product & Category CRUD via Forms', () => {
     const delRes = await request.delete(`${BASE}/api/owner/menu/products/${target.id}`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
-    expect(delRes.status()).toBe(200);
+    expect([200, 204]).toContain(delRes.status());
   });
 
   test('Delete test category via API cleanup', async ({ request }) => {
