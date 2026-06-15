@@ -482,7 +482,7 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     );
     expect(modPatchRes.status()).toBe(200);
     const body = await modPatchRes.json();
-    expect(body.price_delta).toBe(75);
+    expect(body.priceDelta).toBe(75);
   });
 
   test('Flow 24: Owner — attach modifier group to product', async ({ request }) => {
