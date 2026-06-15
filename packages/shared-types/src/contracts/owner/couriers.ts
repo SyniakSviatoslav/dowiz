@@ -27,14 +27,17 @@ export const UpdateCourierBody = z.object({
 export type UpdateCourierBody = z.infer<typeof UpdateCourierBody>;
 
 export const LiveCourier = z.object({
-  id: z.string().uuid(),
-  name: z.string(),
-  lat: z.number(),
-  lng: z.number(),
-  status: z.enum(['online','busy','offline']),
-  orderId: z.string().uuid().nullable(),
-  accuracy: z.number().optional(),
-  heading: z.number().optional(),
+  courierId: z.string().uuid(),
+  nameMasked: z.string(),
+  phoneMasked: z.string(),
+  status: z.enum(['available','on_delivery']),
+  position: z.object({ lat: z.number(), lng: z.number() }).nullable(),
+  lastHeartbeatAt: z.string().nullable(),
+  currentAssignment: z.object({
+    id: z.string().uuid(),
+    status: z.string(),
+    orderId: z.string().uuid(),
+  }).nullable(),
 }).strict();
 export type LiveCourier = z.infer<typeof LiveCourier>;
 
