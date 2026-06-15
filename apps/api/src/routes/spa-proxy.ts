@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { withTenant } from '@deliveryos/platform';
 import { getImageUrl } from '../lib/image-url.js';
 import { maskStr } from '../lib/pii-mask.js';
+import { decryptPII } from '../lib/pii-cipher.js';
 import { z } from 'zod';
 
 const env = loadEnv();
@@ -59,8 +60,11 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       const { payload } = await jwtVerify(token, getPublicKey(), { algorithms: ['RS256'] });
       const claims = payload as any;
       if (claims.role !== 'owner') return null;
-      if (claims.userId || claims.sub) {
-        const uid = claims.userId || claims.sub;
+      // Prefer activeLocationId from JWT (new auth system)
+      if (claims.activeLocationId) return claims.activeLocationId;
+      // Fall back to memberships lookup (legacy auth)
+      const uid = claims.userId || claims.sub;
+      if (uid) {
         const res = await db.query(
           `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
           [uid]
@@ -84,6 +88,9 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       if (claims.role !== 'owner') return null;
       const uid = claims.userId || claims.sub;
       if (!uid) return null;
+      // Prefer activeLocationId from JWT (new auth system)
+      if (claims.activeLocationId) return { locId: claims.activeLocationId, userId: uid };
+      // Fall back to memberships lookup (legacy auth)
       const res = await db.query(
         `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
         [uid]
@@ -291,21 +298,24 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const locId = await getLocationId(request);
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
     const res = await db.query(
-      `SELECT u.id, COALESCE(u.display_name, u.email) as display_name, u.phone,
-              COALESCE(cs.status, 'offline') as courier_status,
-              (SELECT COUNT(*) FROM courier_assignments ca2 WHERE ca2.courier_id = u.id AND ca2.status = 'delivered') as deliveries_completed
-       FROM users u JOIN memberships m ON m.user_id = u.id
+      `SELECT c.id, c.full_name_encrypted, c.phone_encrypted, c.status,
+              COALESCE(cs.shift_status, 'offline') as courier_status,
+              (SELECT COUNT(*) FROM courier_assignments ca2 WHERE ca2.courier_id = c.id AND ca2.status = 'delivered') as deliveries_completed
+       FROM couriers c
+       JOIN courier_locations cl ON c.id = cl.courier_id
        LEFT JOIN LATERAL (
-         SELECT status FROM courier_shifts
-         WHERE courier_id = u.id AND status IN ('available', 'on_delivery')
+         SELECT status as shift_status FROM courier_shifts
+         WHERE courier_id = c.id AND location_id = $1 AND status IN ('available', 'on_delivery')
            AND (ended_at IS NULL OR ended_at > NOW())
          ORDER BY started_at DESC NULLS LAST LIMIT 1
        ) cs ON true
-       WHERE m.location_id = $1 AND m.role = 'courier'`,
+       WHERE cl.location_id = $1`,
       [locId]
     );
     return reply.send(res.rows.map((r: any) => ({
-      id: r.id, name: r.display_name || 'Unknown', phone: r.phone || '',
+      id: r.id,
+      name: r.full_name_encrypted ? (decryptPII(r.full_name_encrypted) || 'Unknown') : 'Unknown',
+      phone: '',
       status: r.courier_status === 'available' ? 'online' : r.courier_status === 'on_delivery' ? 'busy' : 'offline',
       deliveriesCompleted: parseInt(r.deliveries_completed) || 0, rating: 0,
     })));
@@ -420,6 +430,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
        parsed.address || null, parsed.hoursJson ? JSON.stringify(parsed.hoursJson) : null, locId]
     );
     const r = res.rows[0];
+    if (!r) return reply.status(404).send({ error: 'Location not found' });
     return reply.send({
       id: r.id, slug: r.slug, locationName: r.name, phone: r.phone || '',
       deliveryFee: r.delivery_fee_flat || 0, minOrder: r.min_order_value || 0,
