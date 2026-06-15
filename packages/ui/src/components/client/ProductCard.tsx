@@ -31,13 +31,14 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
   const ingredients = product.ingredients || [];
 
   return (
-    <motion.article 
+    <motion.article
       data-testid="menu-item"
-      className={`flex flex-col cursor-pointer overflow-hidden border rounded-xl transition-all duration-150 h-full ${
-        product.isAvailable ? 'hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98]' : 'opacity-55'
+      className={`flex flex-col cursor-pointer overflow-hidden border rounded-xl h-full ${
+        product.isAvailable ? '' : 'opacity-55'
       }`}
       style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}
       onClick={onClick}
+      whileHover={product.isAvailable ? { y: -3, boxShadow: '0 8px 24px rgba(0,0,0,0.10)', borderColor: 'var(--brand-primary)', transition: { duration: 0.15 } } : undefined}
       whileTap={product.isAvailable && onClick ? { scale: 0.97 } : undefined}
     >
       <div 
@@ -98,12 +99,10 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
       <div className="p-2.5 flex flex-col flex-1 gap-1 min-h-0">
         <div className="flex items-start justify-between gap-1.5">
           <h3 className="font-semibold text-[13px] leading-tight line-clamp-2 flex-1" style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
-          <motion.button 
+          <motion.button
             data-testid="menu-item-add"
-            className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-white rounded-full transition-all duration-150 ease-in-out mt-0.5 ${
-              product.isAvailable 
-                ? 'hover:brightness-110 hover:scale-110 active:scale-[0.88]' 
-                : 'opacity-30 cursor-not-allowed'
+            className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-white rounded-full mt-0.5 ${
+              product.isAvailable ? 'cursor-pointer' : 'opacity-30 cursor-not-allowed'
             }`}
             style={{ background: 'var(--brand-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
             onClick={(e) => {
@@ -114,7 +113,8 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             disabled={!product.isAvailable}
             aria-label="Add to cart"
             title={t('tooltip.add_to_cart', 'Add to cart')}
-            whileTap={product.isAvailable ? { scale: 0.97 } : undefined}
+            whileHover={product.isAvailable ? { scale: 1.12, boxShadow: '0 4px 16px rgba(0,0,0,0.20)' } : undefined}
+            whileTap={product.isAvailable ? { scale: 0.84 } : undefined}
           >
             <i className="ti ti-plus text-sm leading-none" />
           </motion.button>

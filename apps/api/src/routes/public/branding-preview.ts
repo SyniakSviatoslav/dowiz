@@ -9,7 +9,7 @@ export default (async function brandingPreviewRoutes(fastify: any, opts: any) {
     if (r2PublicUrl) {
       try { r2ImgSrc = ' ' + new URL(r2PublicUrl).origin; } catch (_) {}
     }
-    const csp = `default-src 'self'; img-src 'self' data: https:${r2ImgSrc}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://plausible.io; worker-src 'self' blob:; connect-src 'self' https://cdn.jsdelivr.net https://tiles.openfreemap.org https://router.project-osrm.org; frame-ancestors *`;
+    const csp = `default-src 'self'; img-src 'self' data: https:${r2ImgSrc}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://plausible.io; worker-src 'self' blob:; connect-src 'self' https://cdn.jsdelivr.net https://tiles.openfreemap.org https://router.project-osrm.org https://en.wikipedia.org; frame-ancestors *`;
 
     reply.header('Content-Security-Policy', csp);
     reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');

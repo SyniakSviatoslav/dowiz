@@ -83,6 +83,7 @@ export function CheckoutPage() {
   const [apartmentError, setApartmentError] = useState('');
   const [placing, setPlacing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [cityFact, setCityFact] = useState<string | null>(null);
 
     useEffect(() => {
     if (!slug) return;
@@ -90,6 +91,18 @@ export function CheckoutPage() {
       .then((info: any) => {
         setLocationId(info.id);
         if (info.lng && info.lat) setLocationCenter([info.lng, info.lat]);
+        if (info.address) {
+          const parts = info.address.split(',');
+          const city = parts.length > 1 ? parts[parts.length - 1].trim() : parts[0].trim();
+          if (city) {
+            fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(city)}`)
+              .then(r => r.json())
+              .then((wiki: any) => {
+                if (wiki.extract) setCityFact(wiki.extract.split('.')[0] + '.');
+              })
+              .catch(() => {/* silently ignore */});
+          }
+        }
       })
       .catch((err) => {
         console.debug('[CheckoutPage] failed to load location info:', err);
@@ -473,6 +486,22 @@ export function CheckoutPage() {
             </div>
           </div>
         </motion.div>
+
+        {cityFact && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="rounded-[12px] p-4 border" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)' }}>
+            <div className="flex items-start gap-3">
+              <span className="text-xl shrink-0 mt-0.5">🌍</span>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--brand-text-muted)' }}>Did you know?</p>
+                <p className="text-[13px] leading-relaxed" style={{ color: 'var(--brand-text)' }}>{cityFact}</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 12 }}
