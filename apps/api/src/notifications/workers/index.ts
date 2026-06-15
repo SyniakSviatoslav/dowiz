@@ -311,52 +311,57 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
       try {
         console.log(`[TelegramSend] Processing job: event=${event}, entity_id=${entity_id || 'none'}, location_id=${location_id}`);
         
-        // 1. Find all active telegram targets for the location that have this event enabled
+        // 1. Find all active chat-style targets (telegram + whatsapp) for the
+        //    location. Both channels share this handler: the dispatcher routes by
+        //    target.channel, and buildTelegramData() is channel-agnostic.
         const targetsRes = await client.query(
-          `SELECT id, address, user_id, prefs, locale
-           FROM owner_notification_targets 
-           WHERE location_id = $1 AND channel = 'telegram' AND status = 'active'`,
+          `SELECT id, channel, address, user_id, prefs, locale
+           FROM owner_notification_targets
+           WHERE location_id = $1 AND channel IN ('telegram', 'whatsapp') AND status = 'active'`,
           [location_id]
         );
-        
+
         console.log(`[TelegramSend] Found ${targetsRes.rows.length} active targets`);
 
         if (targetsRes.rows.length === 0) {
-          console.warn(`[TelegramSend] No active Telegram targets for location ${location_id} — notification not delivered`);
+          console.warn(`[TelegramSend] No active Telegram/WhatsApp targets for location ${location_id} — notification not delivered`);
           await writeAudit(client, { event, locationId: location_id, channel: 'telegram', status: 'no_target' });
           return;
         }
 
         for (const target of targetsRes.rows) {
+          const channel = target.channel as string;
           try {
             const prefs = target.prefs || {};
             if (prefs[event] === false) {
               console.log(`[TelegramSend] Skipping target ${target.id}: prefs[${event}] = false`);
-              await writeAudit(client, { event, targetId: target.id, locationId: location_id, channel: 'telegram', status: 'prefs_disabled' });
+              await writeAudit(client, { event, targetId: target.id, locationId: location_id, channel, status: 'prefs_disabled' });
               continue;
             }
   
-            // NX-5: Per-chat circuit breaker
-            const chatState = this.circuitState.get(target.address) || { failures: 0, lastFailure: 0, tripped: false };
+            // NX-5: Per-chat circuit breaker (scoped by channel:address so a
+            //        telegram chat and a whatsapp number never share state).
+            const chatKey = `${channel}:${target.address}`;
+            const chatState = this.circuitState.get(chatKey) || { failures: 0, lastFailure: 0, tripped: false };
             if (chatState.tripped) {
               const cooldownElapsed = Date.now() - chatState.lastFailure;
               if (cooldownElapsed < this.CIRCUIT_COOLDOWN_MS) {
-                console.log(`[TelegramSend] NX-5: Circuit open for chat ${target.address}, skipping (${Math.round((this.CIRCUIT_COOLDOWN_MS - cooldownElapsed) / 1000)}s remaining)`);
-                await writeAudit(client, { event, targetId: target.id, locationId: location_id, channel: 'telegram', status: 'circuit_open' });
+                console.log(`[TelegramSend] NX-5: Circuit open for chat ${chatKey}, skipping (${Math.round((this.CIRCUIT_COOLDOWN_MS - cooldownElapsed) / 1000)}s remaining)`);
+                await writeAudit(client, { event, targetId: target.id, locationId: location_id, channel, status: 'circuit_open' });
                 continue;
               }
               // Reset circuit after cooldown
               chatState.tripped = false;
               chatState.failures = 0;
-              this.circuitState.set(target.address, chatState);
-              console.log(`[TelegramSend] NX-5: Circuit reset for chat ${target.address} after cooldown`);
+              this.circuitState.set(chatKey, chatState);
+              console.log(`[TelegramSend] NX-5: Circuit reset for chat ${chatKey} after cooldown`);
             }
 
             // NX-5: Per-chat rate limiting
-            const lastSend = this.lastSendPerChat.get(target.address) || 0;
+            const lastSend = this.lastSendPerChat.get(chatKey) || 0;
             const elapsed = Date.now() - lastSend;
             if (elapsed < this.CHAT_RATE_LIMIT_MS) {
-              console.log(`[TelegramSend] NX-5: Rate limited chat ${target.address}, delaying ${this.CHAT_RATE_LIMIT_MS - elapsed}ms`);
+              console.log(`[TelegramSend] NX-5: Rate limited chat ${chatKey}, delaying ${this.CHAT_RATE_LIMIT_MS - elapsed}ms`);
               await new Promise(resolve => setTimeout(resolve, this.CHAT_RATE_LIMIT_MS - elapsed));
             }
   
@@ -381,17 +386,17 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
             // 3. Audit: log attempt
             await client.query(
               `INSERT INTO notification_outbox_audit (event, target_id, location_id, channel, status, attempts)
-               VALUES ($1, $2, $3, 'telegram', 'sending', 1)
+               VALUES ($1, $2, $3, $4, 'sending', 1)
                ON CONFLICT DO NOTHING`,
-              [event, target.id, location_id]
+              [event, target.id, location_id, channel]
             );
 
             // 4. Dispatch
-            console.log(`[TelegramSend] Dispatching to target ${target.id}, channel=${target.channel}, address=${target.address}`);
+            console.log(`[TelegramSend] Dispatching to target ${target.id}, channel=${channel}, address=${target.address}`);
             const result = await this.dispatcher.dispatch(targetObj, eventObj, data);
 
             // NX-5: Update rate limit tracker
-            this.lastSendPerChat.set(target.address, Date.now());
+            this.lastSendPerChat.set(chatKey, Date.now());
   
             // 5. Handle success/failure
             if (!result.delivered) {
@@ -402,16 +407,16 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
               chatState.lastFailure = Date.now();
               if (chatState.failures >= this.CIRCUIT_FAILURE_THRESHOLD) {
                 chatState.tripped = true;
-                console.log(`[TelegramSend] NX-5: Circuit tripped for chat ${target.address} (${chatState.failures} failures)`);
+                console.log(`[TelegramSend] NX-5: Circuit tripped for chat ${chatKey} (${chatState.failures} failures)`);
               }
-              this.circuitState.set(target.address, chatState);
+              this.circuitState.set(chatKey, chatState);
 
               // NX-5: Audit failure
               await client.query(
                 `INSERT INTO notification_outbox_audit (event, target_id, location_id, channel, status, attempts, error_message)
-                 VALUES ($1, $2, $3, 'telegram', 'failed', 1, $4)
+                 VALUES ($1, $2, $3, $4, 'failed', 1, $5)
                  ON CONFLICT DO NOTHING`,
-                [event, target.id, location_id, result.reason]
+                [event, target.id, location_id, channel, result.reason]
               );
             } else {
               console.log(`[TelegramSend] Successfully sent notification to target ${target.id}`);
@@ -420,7 +425,7 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
               if (chatState.failures > 0) {
                 chatState.failures = 0;
                 chatState.tripped = false;
-                this.circuitState.set(target.address, chatState);
+                this.circuitState.set(chatKey, chatState);
               }
 
               // NX-5: Mark as delivered in dedup cache
@@ -433,23 +438,24 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
               // NX-5: Audit success
               await client.query(
                 `INSERT INTO notification_outbox_audit (event, target_id, location_id, channel, status, attempts)
-                 VALUES ($1, $2, $3, 'telegram', 'delivered', 1, $4)
+                 VALUES ($1, $2, $3, $4, 'delivered', 1)
                  ON CONFLICT DO NOTHING`,
-                [event, target.id, location_id]
+                [event, target.id, location_id, channel]
               );
             }
           } catch (targetErr: any) {
             console.error(`[TelegramSend] Error processing target ${target.id}: ${targetErr.message}`);
 
             // NX-5: Circuit breaker on error
-            const errChatState = this.circuitState.get(target.address) || { failures: 0, lastFailure: 0, tripped: false };
+            const errChatKey = `${channel}:${target.address}`;
+            const errChatState = this.circuitState.get(errChatKey) || { failures: 0, lastFailure: 0, tripped: false };
             errChatState.failures++;
             errChatState.lastFailure = Date.now();
             if (errChatState.failures >= this.CIRCUIT_FAILURE_THRESHOLD) {
               errChatState.tripped = true;
-              console.log(`[TelegramSend] NX-5: Circuit tripped for chat ${target.address} (${errChatState.failures} failures)`);
+              console.log(`[TelegramSend] NX-5: Circuit tripped for chat ${errChatKey} (${errChatState.failures} failures)`);
             }
-            this.circuitState.set(target.address, errChatState);
+            this.circuitState.set(errChatKey, errChatState);
           }
         }
       } catch (err: any) {
