@@ -23,7 +23,7 @@ async function requestPushPermission(_slug: string) {
   if (result !== 'granted') return;
   try {
     const reg = await navigator.serviceWorker.register('/sw.js');
-    const publicKeyRes: any = await apiClient('/api/push/vapid-public-key');
+    const publicKeyRes: any = await apiClient('/push/vapid-public-key');
     const publicKey: string | undefined = publicKeyRes?.publicKey;
     if (!publicKey) return;
     const sub = await reg.pushManager.subscribe({
@@ -33,7 +33,7 @@ async function requestPushPermission(_slug: string) {
     const p256dhKey = sub.getKey('p256dh');
     const authKey = sub.getKey('auth');
     if (!p256dhKey || !authKey) return;
-    await apiClient('/api/customer/push/subscribe', {
+    await apiClient('/customer/push/subscribe', {
       method: 'POST',
       body: {
         endpoint: sub.endpoint,

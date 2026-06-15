@@ -5,7 +5,7 @@ import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@delive
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
 import { z } from 'zod';
-import { LocationResponse, CourierListResponse, CategoryResponse } from '@deliveryos/shared-types';
+import { CategoryResponse } from '@deliveryos/shared-types';
 
 const AnyResponse = z.any();
 
@@ -57,7 +57,7 @@ export function DashboardPage() {
 
   useEffect(() => {
     fetchOrders();
-    apiClient<typeof LocationResponse>('/owner/settings', { schema: LocationResponse }).then(res => {
+    apiClient<any>('/owner/settings').then((res: any) => {
       if (res.id) setTenantId(res.id);
       if ((res as any).locationName || res.name) {
         const generated = ((res as any).locationName || res.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
@@ -79,7 +79,7 @@ export function DashboardPage() {
     // Check menu + couriers in parallel
     Promise.all([
       apiClient('/owner/menu/categories', { schema: z.array(CategoryResponse) }).catch(() => []),
-      apiClient<typeof CourierListResponse>('/owner/couriers', { schema: CourierListResponse }).catch(() => ({ couriers: [] })),
+      apiClient<any>('/owner/couriers').catch(() => []),
     ]).then(([cats, couriers]) => {
       setReadiness(prev => ({
         ...prev,

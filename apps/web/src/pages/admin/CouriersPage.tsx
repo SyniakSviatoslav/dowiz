@@ -4,7 +4,6 @@ import { Button, Input, EmptyState, CourierLiveMap, useI18n, PriceDisplay, useTo
 import type { CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
-import { LocationResponse, CourierListResponse } from '@deliveryos/shared-types';
 
 const CourierDetailsResponse = z.object({
   shifts: z.array(z.object({ id: z.string(), status: z.string(), started_at: z.string(), ended_at: z.string().nullable() })),
@@ -68,7 +67,7 @@ export function CouriersPage() {
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<HistoryItem | null>(null);
 
   useEffect(() => {
-    apiClient<typeof LocationResponse>('/owner/settings', { schema: LocationResponse }).then(res => {
+    apiClient<any>('/owner/settings').then((res: any) => {
       if (res.id) setLocationId(res.id);
     }).catch((err) => console.debug('[CouriersPage] failed to load settings:', err));
   }, []);
@@ -130,15 +129,15 @@ export function CouriersPage() {
     if (!locationId) return;
     try {
       setLoading(true);
-      const data = await apiClient<typeof CourierListResponse>(`/owner/locations/${locationId}/couriers`, { schema: CourierListResponse });
+      const data = await apiClient<any>(`/owner/locations/${locationId}/couriers`);
       const list = data?.couriers;
       if (Array.isArray(list) && list.length > 0) {
         setCouriers(list.map((c: any) => ({
           id: c.id,
-          name: c.full_name || 'Unknown',
-          phone: c.masked_phone || '',
+          name: c.full_name || c.name || 'Unknown',
+          phone: c.masked_phone || c.maskedPhone || '',
           status: c.status === 'active' || c.status === 'available' ? 'online' : c.status === 'on_delivery' ? 'busy' : 'offline',
-          deliveriesCompleted: c.deliveries_completed || 0,
+          deliveriesCompleted: c.deliveries_completed || c.ordersToday || 0,
           rating: c.rating || 0,
         })));
       } else {
