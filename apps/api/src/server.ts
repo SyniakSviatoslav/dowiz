@@ -791,6 +791,85 @@ fastify.register(mockAuthRoutes, { db: pool });
       return reply.status(500).send({ error: 'Assignment failed: ' + (e?.message || '') });
     }
   });
+  fastify.post('/api/dev/seed-data', async (request, reply) => {
+    const body = (request.body || {}) as Record<string, unknown>;
+    const slug = (body.slug as string) || 'demo';
+    try {
+      const locRes = await pool.query(`SELECT id FROM locations WHERE slug = $1 LIMIT 1`, [slug]);
+      let locationId: string;
+      if (locRes.rowCount && locRes.rowCount > 0) {
+        locationId = locRes.rows[0].id;
+      } else {
+        const newLoc = await pool.query(
+          `INSERT INTO locations (slug, name, status, default_locale, supported_locales, currency_code, currency_minor_unit, delivery_fee_flat, min_order_value, free_delivery_threshold)
+           VALUES ($1, $2, 'active', 'sq', ARRAY['sq','en','uk'], 'ALL', 0, 200, 500, 2000) RETURNING id`,
+          [slug, body.name || 'Demo Store']
+        );
+        locationId = newLoc.rows[0].id;
+      }
+
+      await pool.query(`INSERT INTO menu_versions (location_id, version) VALUES ($1, 1) ON CONFLICT (location_id) DO NOTHING`, [locationId]);
+
+      const catNames = ['Pizzas', 'Pastas', 'Salads', 'Beverages'];
+      const catIds: string[] = [];
+      for (const name of catNames) {
+        const existing = await pool.query(`SELECT id FROM categories WHERE location_id = $1 AND name = $2`, [locationId, name]);
+        if (existing.rowCount && existing.rowCount > 0) {
+          catIds.push(existing.rows[0].id);
+        } else {
+          const c = await pool.query(`INSERT INTO categories (location_id, name) VALUES ($1, $2) RETURNING id`, [locationId, name]);
+          catIds.push(c.rows[0].id);
+        }
+      }
+
+      const products = [
+        { name: 'Margherita', price: 1200, cat: 0, taste: { spicy: 0, sweet: 1, salty: 2, richness: 2, sour: 1 } },
+        { name: 'Pepperoni', price: 1500, cat: 0, taste: { spicy: 2, sweet: 0, salty: 2, richness: 2, sour: 0 } },
+        { name: 'Carbonara', price: 1300, cat: 1, taste: { spicy: 0, sweet: 0, salty: 2, richness: 3, sour: 1 } },
+        { name: 'Caesar Salad', price: 800, cat: 2, taste: { spicy: 0, sweet: 1, salty: 2, richness: 1, sour: 2 } },
+        { name: 'Cola', price: 200, cat: 3, taste: { spicy: 0, sweet: 3, salty: 0, richness: 0, sour: 0 } },
+      ];
+      const prodIds: string[] = [];
+      for (const p of products) {
+        const existing = await pool.query(`SELECT id FROM products WHERE location_id = $1 AND name = $2`, [locationId, p.name]);
+        if (existing.rowCount && existing.rowCount > 0) {
+          prodIds.push(existing.rows[0].id);
+        } else {
+          const r = await pool.query(
+            `INSERT INTO products (location_id, category_id, name, price, is_available, attributes)
+             VALUES ($1, $2, $3, $4, true, $5) RETURNING id`,
+            [locationId, catIds[p.cat], p.name, p.price, JSON.stringify({ taste: p.taste })]
+          );
+          prodIds.push(r.rows[0].id);
+        }
+      }
+
+      const themeCheck = await pool.query(`SELECT 1 FROM location_themes WHERE location_id = $1`, [locationId]);
+      if (themeCheck.rowCount === 0) {
+        await pool.query(`INSERT INTO location_themes (location_id, frame_ancestors) VALUES ($1, ARRAY['*'])`, [locationId]);
+      }
+      const tvCheck = await pool.query(`SELECT 1 FROM theme_versions WHERE location_id = $1`, [locationId]);
+      if (tvCheck.rowCount === 0) {
+        await pool.query(
+          `INSERT INTO theme_versions (location_id, version, css_hash, css_body)
+           VALUES ($1, 1, md5(random()::text),
+           E':root{--brand-primary:#ea4f16;--brand-bg:#121212;--brand-surface:#1e1e1e;--brand-text:#ffffff}')`,
+          [locationId]
+        );
+      }
+
+      return reply.send({
+        success: true,
+        locationId,
+        slug,
+        categories: catIds.length,
+        products: prodIds.length,
+        names: products.map(p => p.name),
+      });
+    } catch (e: any) {
+      return reply.status(500).send({ error: 'Seed failed: ' + (e?.message || '') });
+    }
+  });
   fastify.post('/api/auth/local/login', async (request, reply) => {
     const { email, password } = request.body as any || {};
     if (!email || !password) return reply.status(400).send({ error: 'Missing email or password' });

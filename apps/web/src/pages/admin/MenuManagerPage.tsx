@@ -864,8 +864,8 @@ export function MenuManagerPage() {
 
       {/* ── PDF Import Modal ── */}
       {showImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <div className="w-full max-w-lg rounded-2xl border shadow-xl overflow-hidden" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/50 backdrop-blur-sm pointer-events-none" />
+          <div className="w-full max-w-lg rounded-2xl border shadow-xl overflow-hidden relative" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', zIndex: 1 }}>
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
               <div className="flex items-center gap-2">

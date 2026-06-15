@@ -4,6 +4,7 @@ import { maskName, maskPhone } from '../../lib/pii-mask.js';
 import { decryptPII } from '../../lib/pii-cipher.js';
 import crypto from 'node:crypto';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
+import { updateOrderStatus } from '../../lib/orderStatusService.js';
 
 const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED', 'CANCELLED', 'REJECTED'] as const;
 
@@ -438,10 +439,7 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
         [shiftId],
       );
 
-      await client.query(
-        `UPDATE orders SET status = 'DELIVERED', delivered_at = now() WHERE id = $1`,
-        [orderId],
-      );
+      await updateOrderStatus(client, orderId, locationId, 'DELIVERED' as any, { messageBus });
 
       await client.query(
         `INSERT INTO courier_audit_log (courier_id, location_id, action, actor_kind, actor_id)
@@ -450,15 +448,6 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
       );
 
       await client.query('COMMIT');
-
-      await messageBus.publish(orderChannel(orderId), {
-        type: BUS_CHANNELS.ORDER_DELIVERED, orderId, locationId, courierId,
-        cashCollected, cashAmount: finalCashAmount, timestamp: new Date().toISOString(),
-      });
-      await messageBus.publish(dashboardChannel(locationId), {
-        type: 'order.status',
-        data: { orderId, status: 'DELIVERED', statusUpdatedAt: new Date().toISOString() },
-      });
 
       return reply.send({
         success: true,
