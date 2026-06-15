@@ -8,7 +8,7 @@ export async function acceptCourierAssignment(
   assignmentId: string,
   locationId: string,
   opts: { messageBus: MessageBus }
-): Promise<void> {
+): Promise<{ orderId: string }> {
   const env = loadEnv();
   const acceptWindowMs = parseInt((env as any).COURIER_ACCEPT_WINDOW_MS || '30000', 10);
 
@@ -52,4 +52,6 @@ export async function acceptCourierAssignment(
     locationId,
     courierId: assignment.courier_id
   });
+
+  return { orderId: assignment.order_id };
 }
