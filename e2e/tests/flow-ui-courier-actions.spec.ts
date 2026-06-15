@@ -110,7 +110,8 @@ test.describe('UI: Courier — Accept via UI, Delivery Page, Shift Controls', ()
     page.on('pageerror', err => errors.push(err.message));
 
     await page.addInitScript((token: string) => localStorage.setItem('dos_access_token', token), courierToken);
-    await page.goto(`${BASE}/courier`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/courier`, { waitUntil: 'load', timeout: 30000 });
+    await page.waitForTimeout(2000);
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
     const body = await page.textContent('body');
