@@ -549,7 +549,7 @@ const retryPolicy = new RetryPolicy();
 
   // Auth-guarded path prefixes return 401 (not 404) for unauthenticated requests
   const AUTH_PREFIXES = ['/api/owner/', '/api/courier/', '/api/customer/'];
-  const NO_AUTH_PATHS = ['/api/courier/auth/invites/']; // public endpoints under auth prefix
+  const NO_AUTH_PATHS = ['/api/courier/auth/']; // public endpoints under auth prefix
   fastify.addHook('onRequest', async (request, reply) => {
     if (request.method === 'OPTIONS') return;
     const url = request.url.split('?')[0];
