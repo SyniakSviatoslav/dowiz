@@ -101,9 +101,32 @@ export function MenuPage() {
   const [modifierGroupSelection, setModifierGroupSelection] = useState<Record<string, string[]>>({});
   const [quantity, setQuantity] = useState(1);
   const [imageLoadError, setImageLoadError] = useState(false);
-  const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc' | 'name'>('default');
-  const [filterAllergen, setFilterAllergen] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const menuPrefsKey = `dos_menu_prefs_${slug}`;
+  const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc' | 'name'>(() => {
+    try {
+      const s = localStorage.getItem(`dos_menu_prefs_${slug}`);
+      const p = s ? JSON.parse(s) : null;
+      return (['default', 'price-asc', 'price-desc', 'name'] as const).includes(p?.sortBy) ? p.sortBy : 'default';
+    } catch { return 'default'; }
+  });
+  const [filterAllergen, setFilterAllergen] = useState<string | null>(() => {
+    try {
+      const s = localStorage.getItem(`dos_menu_prefs_${slug}`);
+      const p = s ? JSON.parse(s) : null;
+      return typeof p?.filterAllergen === 'string' ? p.filterAllergen : null;
+    } catch { return null; }
+  });
+  const [searchQuery, setSearchQuery] = useState<string>(() => {
+    try {
+      const s = localStorage.getItem(`dos_menu_prefs_${slug}`);
+      const p = s ? JSON.parse(s) : null;
+      return typeof p?.searchQuery === 'string' ? p.searchQuery : '';
+    } catch { return ''; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(menuPrefsKey, JSON.stringify({ sortBy, filterAllergen, searchQuery })); } catch {}
+  }, [menuPrefsKey, sortBy, filterAllergen, searchQuery]);
 
   const categories = data;
 
@@ -206,7 +229,8 @@ export function MenuPage() {
   const handleScrollTo = (id: string) => {
     const el = document.getElementById(id);
     if (el) {
-      const top = el.getBoundingClientRect().top + window.scrollY - 110;
+      // 56px header + 44px category nav + 8px buffer = 108px
+      const top = el.getBoundingClientRect().top + window.scrollY - 108;
       window.scrollTo({ top, behavior: 'smooth' });
     }
   };
@@ -342,8 +366,8 @@ export function MenuPage() {
         </div>
       </section>
 
-      {/* Category Nav */}
-      <nav className="sticky top-0 z-40 h-[44px] border-b w-full" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+      {/* Category Nav — sits below the 56px (h-14) ClientLayout header */}
+      <nav className="sticky top-14 z-40 h-[44px] border-b w-full" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
         <div className="h-full overflow-x-auto hide-scrollbar flex items-center gap-1 px-2 text-[13px]" role="tablist" aria-label={t('client.categories', 'Categories')}>
           {loading ? (
             <div className="flex gap-4 px-2 h-full items-center" role="tablist">
@@ -377,9 +401,9 @@ export function MenuPage() {
         </div>
       </nav>
 
-      {/* Search, Sort & Filter Bar */}
+      {/* Search, Sort & Filter Bar — below header (56px) + category nav (44px) */}
       {!loading && categories.length > 0 && (
-        <div className="sticky top-[44px] z-30 border-b px-4 py-2 space-y-2" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+        <div className="sticky top-[100px] z-30 border-b px-4 py-2 space-y-2" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
           <div className="relative">
             <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: 'var(--brand-text-muted)' }} />
             <input
@@ -439,8 +463,8 @@ export function MenuPage() {
         </div>
       )}
 
-      {/* Menu Content */}
-      <main className="max-w-5xl mx-auto pt-4">
+      {/* Menu Content — min-h prevents layout shifts when filtering/sorting changes product count */}
+      <main className="max-w-5xl mx-auto pt-4 min-h-screen">
         {loading ? (
           <div className="px-4 grid grid-cols-2 md:grid-cols-3 gap-3">
             {[1,2,3,4,5,6].map(i => (
@@ -470,13 +494,28 @@ export function MenuPage() {
               </motion.button>
             )}
           </div>
-) : (
+) : displayCategories.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+            <i className="ti ti-search-off text-5xl opacity-20 mb-3" style={{ color: 'var(--brand-text-muted)' }} />
+            <p className="text-sm font-medium mb-4" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('client.no_results', 'No products match your filters')}
+            </p>
+            <motion.button
+              onClick={() => { setSortBy('default'); setFilterAllergen(null); setSearchQuery(''); }}
+              whileTap={{ scale: 0.97 }}
+              className="px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all active:scale-95 min-h-11"
+              style={{ background: 'var(--brand-primary)' }}
+            >
+              {t('client.browse_menu', 'Browse full menu')}
+            </motion.button>
+          </div>
+        ) : (
           displayCategories.map(category => (
             <motion.section
               key={category.id}
               id={category.id}
               ref={el => { sectionRefs.current[category.id] = el }}
-              className="mb-7 scroll-mt-[100px]"
+              className="mb-7 scroll-mt-[108px]"
               initial={{ opacity: 0, y: 16 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-60px' }}

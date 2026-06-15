@@ -21,7 +21,7 @@ export function setSecurityHeaders(reply: any, opts: SecurityHeadersOpts = {}): 
   }
   const cspParts = [
     `default-src 'self'`,
-    `img-src 'self' data: https://tiles.openfreemap.org` + r2ImgSrc,
+    `img-src 'self' data: https:` + r2ImgSrc,
     `style-src 'self'${nonce ? ` 'nonce-${nonce}'` : ''} https://fonts.googleapis.com`,
     `font-src 'self' https://fonts.gstatic.com`,
     `script-src 'self'${nonce ? ` 'nonce-${nonce}'` : ''} https://cdn.tailwindcss.com`,

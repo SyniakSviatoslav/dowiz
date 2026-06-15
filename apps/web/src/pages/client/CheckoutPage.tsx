@@ -108,7 +108,28 @@ export function CheckoutPage() {
         }
       }
     } catch (err) { console.debug('[CheckoutPage] corrupt localStorage:', err); }
+    try {
+      const draft = localStorage.getItem(`dos_checkout_draft_${slug}`);
+      if (draft) {
+        const d = JSON.parse(draft);
+        if (d.phone) setPhone(d.phone);
+        if (d.customerName) setCustomerName(d.customerName);
+        if (d.deliveryType) setDeliveryType(d.deliveryType);
+        if (d.instructionOption) setInstructionOption(d.instructionOption);
+        if (d.instructionCustom) setInstructionCustom(d.instructionCustom);
+        if (d.cashAmount) setCashAmount(d.cashAmount);
+      }
+    } catch {}
   }, [slug]);
+
+  useEffect(() => {
+    if (!slug) return;
+    try {
+      localStorage.setItem(`dos_checkout_draft_${slug}`, JSON.stringify({
+        phone, customerName, deliveryType, instructionOption, instructionCustom, cashAmount,
+      }));
+    } catch {}
+  }, [slug, phone, customerName, deliveryType, instructionOption, instructionCustom, cashAmount]);
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const deliveryFee = deliveryType === 'delivery' ? 200 : 0;
@@ -197,6 +218,7 @@ export function CheckoutPage() {
           apartment,
         }));
       } catch (err) { console.debug('[CheckoutPage] localStorage write failed:', err); }
+      try { localStorage.removeItem(`dos_checkout_draft_${slug}`); } catch {}
       if (orderRes.authToken) {
         localStorage.setItem('dos_access_token', orderRes.authToken);
       }

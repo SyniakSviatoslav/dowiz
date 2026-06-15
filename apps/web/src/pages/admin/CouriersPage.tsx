@@ -12,8 +12,8 @@ const CourierDetailsResponse = z.object({
 }).passthrough();
 
 const CourierInviteResponse = z.object({
-  deepLink: z.string(),
-  link: z.string(),
+  deepLink: z.string().optional(),
+  link: z.string().optional(),
   code: z.string(),
 }).passthrough();
 
