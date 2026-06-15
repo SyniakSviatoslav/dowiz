@@ -123,13 +123,13 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     // Issue tokens
     const familyId = crypto.randomUUID();
-    const accessToken = await signAuthToken({ role: 'owner', userId } as any, '15m');
+    const accessToken = await signAuthToken({ role: 'owner', userId } as any, '7d');
     const refreshToken = crypto.randomBytes(32).toString('hex');
     const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
     await (fastify as any).db.query(
       `INSERT INTO auth_refresh_tokens (user_id, family_id, token_hash, expires_at)
-       VALUES ($1, $2, $3, now() + interval '7 days')`,
+       VALUES ($1, $2, $3, now() + interval '30 days')`,
       [userId, familyId, refreshTokenHash]
     );
 
@@ -205,7 +205,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const userRes = await (fastify as any).db.query(`SELECT google_sub FROM users WHERE id = $1`, [tokenRecord.user_id]);
     const role = userRes.rows[0].google_sub ? 'owner' : 'courier';
 
-    const newAccessToken = await signAuthToken({ role, userId: tokenRecord.user_id } as any, '15m');
+    const newAccessToken = await signAuthToken({ role, userId: tokenRecord.user_id } as any, '7d');
     const newRefreshToken = crypto.randomBytes(32).toString('hex');
     const newRefreshTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
 
@@ -285,7 +285,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
       // Issue tokens
       const familyId = crypto.randomUUID();
-      const accessToken = await signAuthToken({ role: 'courier', userId } as any, '15m');
+      const accessToken = await signAuthToken({ role: 'courier', userId } as any, '7d');
       const refreshToken = crypto.randomBytes(32).toString('hex');
       const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
 

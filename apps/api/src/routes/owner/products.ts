@@ -399,6 +399,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
           stockCount: z.number().int().nonnegative().optional().nullable(),
           taste: z.record(z.number().min(0).max(3)).optional().nullable(),
           recipeLines: z.array(z.any()).optional().nullable(),
+          attributes: z.record(z.any()).optional().nullable(),
         }).strip()
       }
     },
@@ -419,6 +420,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
         if (body.stockCount !== undefined) attrs.stock_count = body.stockCount;
         if (body.taste !== undefined) attrs.taste = body.taste;
         if (body.recipeLines !== undefined) attrs.bom = body.recipeLines;
+        if (body.attributes !== undefined && body.attributes !== null) Object.assign(attrs, body.attributes);
         const catId = body.category_id ?? body.categoryId;
         return client.query(
           `UPDATE products SET

@@ -82,7 +82,11 @@ export const apiClient = async <T extends z.ZodType>(
       // Status -> Action mapping (G2)
       switch (response.status) {
         case 401:
-          // TODO: handle 401 (e.g. refresh token or redirect to login)
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('dos_access_token');
+            sessionStorage.setItem('dos_auth_expired', '1');
+            window.location.href = '/admin';
+          }
           break;
         case 403:
           break;

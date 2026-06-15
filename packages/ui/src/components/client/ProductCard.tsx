@@ -13,6 +13,7 @@ interface ProductCardProps {
     fat?: number | null;
     carbs?: number | null;
     ingredients?: string[];
+    chefPick?: boolean;
   };
   onAdd: (e: React.MouseEvent) => void;
   onClick?: (e: React.MouseEvent) => void;
@@ -29,6 +30,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
   const hasNutrition = product.kcal != null;
   const allergens = product.allergens || [];
   const ingredients = product.ingredients || [];
+  const isChefPick = !!product.chefPick;
 
   return (
     <motion.article
@@ -77,12 +79,25 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             </span>
           </div>
         )}
-        {hasNutrition && (
+        {hasNutrition && !isChefPick && (
           <div className="absolute top-1.5 right-1.5 z-10">
               <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-1" style={{ background: 'rgba(0,0,0,0.6)', color: 'var(--color-on-primary)' }}>
               <i className="ti ti-flame" style={{ fontSize: '0.6rem' }} />
               {product.kcal}
             </span>
+          </div>
+        )}
+        {isChefPick && (
+          <div className="absolute top-1.5 right-1.5 z-10">
+            <motion.span
+              className="text-[8px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
+              style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)', color: '#fff', boxShadow: '0 2px 6px rgba(245,158,11,0.45)' }}
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+            >
+              ✦ {t('client.chefs_pick_badge', "Chef's Pick")}
+            </motion.span>
           </div>
         )}
         {!product.isAvailable && (
