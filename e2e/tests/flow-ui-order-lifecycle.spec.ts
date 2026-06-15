@@ -394,8 +394,8 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     page.on('pageerror', err => errors.push(err.message));
 
     await page.addInitScript((t: string) => localStorage.setItem('dos_access_token', t), courierToken);
-    await page.goto(`${BASE}/courier/earnings`, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT });
-    await page.waitForTimeout(2000);
+    await page.goto(`${BASE}/courier/earnings`, { waitUntil: 'load', timeout: PAGE_TIMEOUT });
+    await page.waitForTimeout(1000);
 
     const bodyText = await page.textContent('body');
     expect(bodyText?.length).toBeGreaterThan(50);
@@ -410,8 +410,8 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     page.on('pageerror', err => errors.push(err.message));
 
     await page.addInitScript((t: string) => localStorage.setItem('dos_access_token', t), courierToken);
-    await page.goto(`${BASE}/courier/history`, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT });
-    await page.waitForTimeout(2000);
+    await page.goto(`${BASE}/courier/history`, { waitUntil: 'load', timeout: PAGE_TIMEOUT });
+    await page.waitForTimeout(1000);
 
     const bodyText = await page.textContent('body');
     expect(bodyText?.length).toBeGreaterThan(50);
@@ -426,8 +426,8 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     page.on('pageerror', err => errors.push(err.message));
 
     await page.addInitScript((t: string) => localStorage.setItem('dos_access_token', t), ownerToken);
-    await page.goto(`${BASE}/admin/analytics`, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT });
-    await page.waitForTimeout(2000);
+    await page.goto(`${BASE}/admin/analytics`, { waitUntil: 'load', timeout: PAGE_TIMEOUT });
+    await page.waitForTimeout(1000);
 
     const bodyText = await page.textContent('body');
     expect(bodyText?.length).toBeGreaterThan(100);
