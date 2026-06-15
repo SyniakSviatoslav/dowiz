@@ -17,7 +17,7 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 const TRANSITIONS: Record<OrderStatus, ReadonlyArray<OrderStatus>> = {
   PENDING: ['CONFIRMED', 'REJECTED', 'CANCELLED'],
-  CONFIRMED: ['PREPARING'],
+  CONFIRMED: ['PREPARING', 'IN_DELIVERY'],
   PREPARING: ['READY'],
   READY: ['IN_DELIVERY'],
   IN_DELIVERY: ['DELIVERED'],
