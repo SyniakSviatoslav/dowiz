@@ -48,13 +48,28 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
       userId = updateRes.rows[0].id;
     }
 
-    const memberRes = await (fastify as any).db.query(
-      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
-      [userId]
-    );
-    const activeLocationId = memberRes.rowCount > 0 ? memberRes.rows[0].location_id : undefined;
+    let activeLocationId: string | undefined;
 
-    const accessToken = await signAuthToken({ role: 'owner', userId, activeLocationId } as any, '1d');
+    if (body.locationSlug) {
+      const locRes = await (fastify as any).db.query(
+        `SELECT id FROM locations WHERE slug = $1 AND status = 'active' LIMIT 1`,
+        [body.locationSlug]
+      );
+      if (locRes.rowCount > 0) activeLocationId = locRes.rows[0].id;
+    }
+
+    if (!activeLocationId) {
+      const memberRes = await (fastify as any).db.query(
+        `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+        [userId]
+      );
+      if (memberRes.rowCount > 0) activeLocationId = memberRes.rows[0].location_id;
+    }
+
+    const tokenPayload: Record<string, unknown> = { role: 'owner', userId };
+    if (activeLocationId) tokenPayload.activeLocationId = activeLocationId;
+
+    const accessToken = await signAuthToken(tokenPayload as any, '1d');
     return reply.send({ access_token: accessToken, userId, activeLocationId });
   });
 
