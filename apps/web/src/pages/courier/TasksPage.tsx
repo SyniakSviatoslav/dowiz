@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { TaskCard, EmptyState, useI18n } from '@deliveryos/ui';
 import type { CourierTask } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
-import { AssignmentListResponse } from '@deliveryos/shared-types';
 
 const containerVariants = { hidden: {}, visible: { transition: { staggerChildren: 0.04, delayChildren: 0.05 } } };
 const itemVariants = { hidden: { opacity: 0, y: 10, scale: 0.98 }, visible: { opacity: 1, y: 0, scale: 1 } };
@@ -34,9 +33,9 @@ export function TasksPage() {
   const fetchTasks = async () => {
     try {
       setLoading(true);
-      const data = await apiClient<typeof AssignmentListResponse>('/courier/me/assignments', { schema: AssignmentListResponse });
+      const data = await apiClient<any>('/courier/me/assignments');
       const raw = data?.success && Array.isArray(data.assignments) ? data.assignments : [];
-      setTasks(raw.map((a: any) => ({ ...a, cashPayWith: a.cash_amount != null ? a.cash_amount : a.cashPayWith })));
+      setTasks(raw);
     } catch (err: any) {
       setError('Failed to fetch tasks');
     } finally {

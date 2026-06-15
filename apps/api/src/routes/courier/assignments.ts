@@ -13,6 +13,49 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
   fastify.addHook('preValidation', fastify.verifyAuth);
   fastify.addHook('preValidation', fastify.requireRole(['courier']));
 
+  function toTaskShape(row: any) {
+    return {
+      id: row.id,
+      order_id: row.order_id,
+      status: row.status,
+      assigned_at: row.assigned_at,
+      accepted_at: row.accepted_at,
+      picked_up_at: row.picked_up_at,
+      delivered_at: row.delivered_at,
+      cash_collected: row.cash_collected,
+      cash_amount: row.cash_amount,
+      total: parseInt(row.total) || 0,
+      eta: '~15 min',
+      restaurant: {
+        name: row.restaurant_name || '',
+        address: row.restaurant_address || '',
+        lat: row.restaurant_lat ? parseFloat(row.restaurant_lat) : null,
+        lng: row.restaurant_lng ? parseFloat(row.restaurant_lng) : null,
+      },
+      customer: {
+        address: row.delivery_address || '',
+        phone: row.customer_phone || null,
+        instructions: row.delivery_instructions || null,
+        lat: row.delivery_lat ? parseFloat(row.delivery_lat) : null,
+        lng: row.delivery_lng ? parseFloat(row.delivery_lng) : null,
+      },
+      cashPayWith: row.cash_amount ? parseInt(row.cash_amount) : null,
+    };
+  }
+
+  const ENRICHED_ASSIGNMENTS_QUERY = `
+    SELECT ca.id, ca.order_id, ca.status, ca.assigned_at, ca.accepted_at,
+           ca.picked_up_at, ca.delivered_at, ca.cash_collected, ca.cash_amount,
+           o.total, o.delivery_address, o.delivery_lat, o.delivery_lng, o.delivery_instructions,
+           l.name as restaurant_name, l.address as restaurant_address,
+           l.lat as restaurant_lat, l.lng as restaurant_lng,
+           c.phone as customer_phone
+    FROM courier_assignments ca
+    JOIN orders o ON o.id = ca.order_id
+    JOIN locations l ON l.id = o.location_id
+    LEFT JOIN customers c ON c.id = o.customer_id
+  `;
+
   // 1. Get assignments
   fastify.get('/me/assignments', async (request: any, reply: any) => {
     const courierId = request.user.sub;
@@ -22,20 +65,43 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
     try {
       await client.query('BEGIN');
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
-      
-      const res = await client.query(`
-        SELECT id, order_id, status, assigned_at, accepted_at, picked_up_at, delivered_at, cash_collected, cash_amount
-        FROM courier_assignments
-        WHERE courier_id = $1 AND location_id = $2
-          AND (status IN ('assigned', 'accepted', 'picked_up') OR created_at > now() - interval '24 hours')
-        ORDER BY created_at DESC
-      `, [courierId, locationId]);
+
+      const res = await client.query(
+        ENRICHED_ASSIGNMENTS_QUERY +
+        `WHERE ca.courier_id = $1 AND ca.location_id = $2
+           AND (ca.status IN ('assigned', 'accepted', 'picked_up') OR ca.created_at > now() - interval '24 hours')
+         ORDER BY ca.created_at DESC`,
+        [courierId, locationId]
+      );
 
       await client.query('COMMIT');
-      return reply.send({ success: true, assignments: res.rows });
+      return reply.send({ success: true, assignments: res.rows.map(toTaskShape) });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
+    } finally {
+      client.release();
+    }
+  });
+
+  // 1b. Get single assignment (used by DeliveryPage)
+  fastify.get('/assignments/:id', {
+    schema: { params: z.object({ id: z.string().uuid() }) }
+  }, async (request: any, reply: any) => {
+    const courierId = request.user.sub;
+    const locationId = request.user.activeLocationId;
+    const { id } = request.params;
+
+    const client = await db.connect();
+    try {
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
+      const res = await client.query(
+        ENRICHED_ASSIGNMENTS_QUERY +
+        `WHERE ca.id = $1 AND ca.courier_id = $2`,
+        [id, courierId]
+      );
+      if (res.rowCount === 0) return reply.status(404).send({ error: 'Assignment not found' });
+      return reply.send(toTaskShape(res.rows[0]));
     } finally {
       client.release();
     }
