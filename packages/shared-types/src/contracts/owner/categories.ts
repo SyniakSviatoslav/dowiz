@@ -14,11 +14,9 @@ export const UpdateCategoryBody = z.object({
 export type UpdateCategoryBody = z.infer<typeof UpdateCategoryBody>;
 
 export const CategoryResponse = z.object({
-  id: z.string().uuid(),
+  id: z.string(),
   name: z.string(),
-  sortOrder: z.number().int(),
-  imageKey: z.string().nullable(),
-  productCount: z.number().int(),
-  createdAt: z.string(),
-}).strict();
+  sort_order: z.number().int(),
+  product_count: z.number().int(),
+}).passthrough();
 export type CategoryResponse = z.infer<typeof CategoryResponse>;
