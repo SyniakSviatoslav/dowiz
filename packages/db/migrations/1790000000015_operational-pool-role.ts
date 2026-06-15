@@ -23,7 +23,7 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
   `);
 
   // Grant connect on the database
-  pgm.sql(`GRANT CONNECT ON DATABASE ${process.env.PG_DATABASE || 'deliveryos'} TO deliveryos_operational_user;`);
+  pgm.sql(`GRANT CONNECT ON DATABASE ${process.env.PG_DATABASE || 'postgres'} TO deliveryos_operational_user;`);
 
   // Grant usage on schema
   pgm.sql(`GRANT USAGE ON SCHEMA public TO deliveryos_operational_user;`);

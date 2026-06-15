@@ -277,25 +277,33 @@ export function MenuPage() {
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   useEffect(() => {
     if (loading) return;
+    const container = document.querySelector('.app-shell-main') as HTMLElement | null;
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         if (entry.isIntersecting) {
           setActiveTab(entry.target.id);
         }
       }
-    }, { rootMargin: `-${scrollOffset}px 0px -60% 0px` });
+    }, {
+      root: container || null,
+      rootMargin: `-${stickyHeight + 8}px 0px -60% 0px`,
+    });
 
     Object.values(sectionRefs.current).forEach(el => {
       if (el) observer.observe(el);
     });
     return () => observer.disconnect();
-  }, [loading, categories, chefPicksCategory, scrollOffset]);
+  }, [loading, categories, chefPicksCategory, stickyHeight]);
 
   const handleScrollTo = (id: string) => {
     const el = document.getElementById(id);
-    if (el) {
-      const top = el.getBoundingClientRect().top + window.scrollY - scrollOffset;
-      window.scrollTo({ top, behavior: 'smooth' });
+    if (!el) return;
+    const container = document.querySelector('.app-shell-main') as HTMLElement | null;
+    if (container) {
+      const top = container.scrollTop + el.getBoundingClientRect().top - container.getBoundingClientRect().top - stickyHeight - 8;
+      container.scrollTo({ top, behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - scrollOffset, behavior: 'smooth' });
     }
   };
 
@@ -449,8 +457,8 @@ export function MenuPage() {
         </motion.div>
       </section>
 
-      {/* Unified sticky: Category nav + Search/Sort/Filter — sits below the 56px (h-14) header */}
-      <div ref={stickyRef} className="sticky top-14 z-40" style={{ background: 'var(--brand-bg)' }}>
+      {/* Unified sticky: Category nav + Search/Sort/Filter — sits below the h-14 header which is outside this scroll container */}
+      <div ref={stickyRef} className="sticky top-0 z-40" style={{ background: 'var(--brand-bg)' }}>
         {/* Category nav */}
         <div className="relative border-b" style={{ borderColor: 'var(--brand-border)' }}>
           <nav className="h-[44px] overflow-x-auto hide-scrollbar flex items-center gap-0.5 px-2" aria-label={t('client.categories', 'Categories')}>
