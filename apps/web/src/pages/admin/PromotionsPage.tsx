@@ -300,9 +300,9 @@ export function PromotionsPage() {
         ) : (
           <div className="space-y-2" data-testid="promotions-list">
             {editing && (
-              <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center fade-in" onClick={() => setEditing(null)}>
-                <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-                <div className="relative w-full max-w-lg mx-4 mb-0 sm:mb-auto rounded-t-2xl sm:rounded-2xl" onClick={e => e.stopPropagation()}>
+              <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center fade-in" role="dialog" aria-modal="true">
+                <button type="button" className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-default" aria-label="Close" onClick={() => setEditing(null)} />
+                <div className="relative w-full max-w-lg mx-4 mb-0 sm:mb-auto rounded-t-2xl sm:rounded-2xl">
                   <PromotionForm initial={editing} onSave={handleEdit} onCancel={() => setEditing(null)} />
                 </div>
               </div>

@@ -397,6 +397,7 @@ export function OrderStatusPage() {
         )}
 
         {/* CR-8: Message Thread */}
+        {/* eslint-disable jsx-a11y/aria-role */}
         <MessageThread
           orderId={id!}
           role="customer"
@@ -405,6 +406,7 @@ export function OrderStatusPage() {
           onSend={handleSendMessage}
           onMarkRead={handleMarkRead}
         />
+        {/* eslint-enable jsx-a11y/aria-role */}
 
       </div>
     </div>
