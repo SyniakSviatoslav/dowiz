@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { dashboardChannel } from '../../lib/registry.js';
+import { withTenant } from '@deliveryos/platform';
 
 export default (async function ownerRevealContactRoutes(fastify: any, opts: any) {
   const { db, messageBus } = opts;
@@ -29,27 +30,35 @@ export default (async function ownerRevealContactRoutes(fastify: any, opts: any)
     const { reason } = request.body;
     const user = request.user as any;
 
-    const orderRes = await db.query(
-      `SELECT o.id, o.customer_id, c.name, c.phone
-       FROM orders o
-       LEFT JOIN customers c ON c.id = o.customer_id
-       WHERE o.id = $1 AND o.location_id = $2`,
-      [orderId, locationId],
-    );
+    const { orderRes, order } = await withTenant(db, user.userId, async (client) => {
+      const orderRes = await client.query(
+        `SELECT o.id, o.customer_id, c.name, c.phone
+         FROM orders o
+         LEFT JOIN customers c ON c.id = o.customer_id
+         WHERE o.id = $1 AND o.location_id = $2`,
+        [orderId, locationId],
+      );
+
+      if (orderRes.rowCount === 0) return { orderRes, order: null };
+
+      const order = orderRes.rows[0];
+      if (!order.customer_id) return { orderRes, order };
+
+      // Audit the reveal
+      await client.query(
+        `INSERT INTO customer_contact_reveals (order_id, customer_id, location_id, revealed_by_owner_id, reason)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [orderId, order.customer_id, locationId, user.userId, reason || null],
+      );
+
+      return { orderRes, order };
+    });
 
     if (orderRes.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
 
-    const order = orderRes.rows[0];
     if (!order.customer_id) {
       return reply.status(404).send({ error: 'Customer not found' });
     }
-
-    // Audit the reveal
-    await db.query(
-      `INSERT INTO customer_contact_reveals (order_id, customer_id, location_id, revealed_by_owner_id, reason)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [orderId, order.customer_id, locationId, user.userId, reason || null],
-    );
 
     // Emit event (PII-free)
     await messageBus.publish(`location:${locationId}:dashboard`, {

@@ -14,7 +14,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
   server.post(
     '/api/owner/locations/:locationId/modifier-groups',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: LocationParams,
         body: z.object({
@@ -45,7 +45,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
   server.get(
     '/api/owner/locations/:locationId/modifier-groups',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: { params: LocationParams }
     },
     async (request: any, reply: any) => {
@@ -62,7 +62,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
   server.patch(
     '/api/owner/locations/:locationId/modifier-groups/:id',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: GroupParams,
         body: z.object({
@@ -103,7 +103,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
   server.delete(
     '/api/owner/locations/:locationId/modifier-groups/:id',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: { params: GroupParams }
     },
     async (request: any, reply: any) => {
@@ -122,7 +122,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
   server.post(
     '/api/owner/locations/:locationId/modifier-groups/:groupId/modifiers',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: GroupModifierParams,
         body: z.object({
@@ -153,7 +153,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
   server.patch(
     '/api/owner/locations/:locationId/modifiers/:id',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: ModifierParams,
         body: z.object({
@@ -194,7 +194,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
   server.delete(
     '/api/owner/locations/:locationId/modifiers/:id',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: { params: ModifierParams }
     },
     async (request: any, reply: any) => {

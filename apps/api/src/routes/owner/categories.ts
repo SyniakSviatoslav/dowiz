@@ -20,7 +20,7 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
   server.post(
     '/api/owner/locations/:locationId/categories',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: LocationParams,
         body: z.object({
@@ -51,7 +51,7 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
   server.get(
     '/api/owner/locations/:locationId/categories',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: LocationParams,
         querystring: z.object({
@@ -88,7 +88,7 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
   server.get(
     '/api/owner/locations/:locationId/categories/:id',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: CategoryParams
       }
@@ -112,7 +112,7 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
   server.patch(
     '/api/owner/locations/:locationId/categories/:id',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: CategoryParams,
         body: z.object({
@@ -149,7 +149,7 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
   server.delete(
     '/api/owner/locations/:locationId/categories/:id',
     {
-      preValidation: [server.verifyAuth, server.requireRole(['owner'])],
+      preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: CategoryParams
       }

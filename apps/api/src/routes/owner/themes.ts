@@ -11,6 +11,7 @@ export default (async function ownerThemeRoutes(fastify, opts) {
   // Auth: verify owner JWT + require owner role for all theme routes
   fastify.addHook('onRequest', fastify.verifyAuth);
   fastify.addHook('onRequest', fastify.requireRole(['owner']));
+  fastify.addHook('onRequest', fastify.requireLocationAccess);
 
   // GET theme
   fastify.get('/api/owner/locations/:locationId/theme', {

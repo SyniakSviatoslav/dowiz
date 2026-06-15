@@ -3,6 +3,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { maskName, maskPhone } from '../../lib/pii-mask.js';
 import { dashboardChannel } from '../../lib/registry.js';
+import { withTenant } from '@deliveryos/platform';
 
 export default (async function ownerAlertRoutes(fastify: any, opts: any) {
   const { db, messageBus, queue } = opts as any;
@@ -25,6 +26,7 @@ export default (async function ownerAlertRoutes(fastify: any, opts: any) {
   }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const { status, kind, limit, cursor } = request.query;
+    const userId = (request.user as any).userId;
 
     const params: any[] = [locationId];
     let clauses = 'WHERE la.location_id = $1';
@@ -55,7 +57,7 @@ export default (async function ownerAlertRoutes(fastify: any, opts: any) {
     const limitIdx = params.length + 1;
     params.push(limit + 1);
 
-    const res = await db.query(`
+    const res = await withTenant(db, userId, async (client) => client.query(`
       SELECT la.id, la.order_id, la.kind, la.status, la.created_at, la.resolved_at,
              la.acknowledged_at, la.escalation_level, la.last_error,
              o.total, o.currency_code,
@@ -67,7 +69,7 @@ export default (async function ownerAlertRoutes(fastify: any, opts: any) {
       ${clauses}
       ORDER BY la.created_at DESC
       LIMIT $${limitIdx}
-    `, params);
+    `, params));
 
     const hasMore = res.rows.length > limit;
     const alerts = (hasMore ? res.rows.slice(0, limit) : res.rows).map((row: any) => ({
@@ -88,7 +90,7 @@ export default (async function ownerAlertRoutes(fastify: any, opts: any) {
     }));
 
     const nextCursor = hasMore && alerts.length > 0
-      ? Buffer.from(JSON.stringify({ createdAt: alerts[alerts.length - 1].createdAt })).toString('base64url')
+      ? Buffer.from(JSON.stringify({ createdAt: alerts.at(-1)!.createdAt })).toString('base64url')
       : null;
 
     return reply.send({ alerts, nextCursor });
@@ -103,7 +105,7 @@ export default (async function ownerAlertRoutes(fastify: any, opts: any) {
     const { locationId, alertId } = request.params;
     const user = request.user as any;
 
-    const res = await db.query(
+    const res = await withTenant(db, user.userId, async (client) => client.query(
       `UPDATE location_alerts
        SET status = 'resolved',
            acknowledged_at = now(),
@@ -115,7 +117,7 @@ export default (async function ownerAlertRoutes(fastify: any, opts: any) {
          AND resolved_at IS NULL
        RETURNING id, order_id, kind`,
       [user.userId, alertId, locationId],
-    );
+    ));
 
     if (res.rowCount === 0) return reply.status(404).send({ error: 'Alert not found or already resolved' });
 
@@ -157,7 +159,7 @@ export default (async function ownerAlertRoutes(fastify: any, opts: any) {
       params.push(body.kind);
     }
 
-    const res = await db.query(`
+    const res = await withTenant(db, user.userId, async (client) => client.query(`
       UPDATE location_alerts
       SET status = 'resolved',
           acknowledged_at = now(),
@@ -168,7 +170,7 @@ export default (async function ownerAlertRoutes(fastify: any, opts: any) {
         AND resolved_at IS NULL
         ${kindClause}
       RETURNING id, order_id, kind
-    `, params);
+    `, params));
 
     for (const row of res.rows) {
       await messageBus.publish(dashboardChannel(locationId), {

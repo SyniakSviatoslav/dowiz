@@ -5,6 +5,7 @@ import { maskName, maskPhone } from '../../lib/pii-mask.js';
 import { computeSignals } from '../../lib/signals/compute.js';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { updateOrderStatus } from '../../lib/orderStatusService';
+import { withTenant } from '@deliveryos/platform';
 
 const KIND_VALUES = ['no_show_recent', 'velocity_rapid', 'velocity_high_volume', 'ip_velocity_rapid', 'ip_velocity_high_volume', 'manual_flag'] as const;
 
@@ -29,6 +30,7 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
   }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const { status, kind, limit, cursor } = request.query;
+    const userId = (request.user as any).userId;
 
     const params: any[] = [locationId];
     let clauses = 'WHERE cs.location_id = $1';
@@ -61,7 +63,7 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
     const limitIdx = params.length + 1;
     params.push(limit + 1);
 
-    const res = await db.query(`
+    const res = await withTenant(db, userId, async (client) => client.query(`
       SELECT cs.id, cs.customer_id, cs.kind, cs.severity, cs.evidence,
              cs.raised_at, cs.acknowledged_at, cs.dismissed_at,
              c.name AS customer_name, c.phone AS customer_phone
@@ -70,7 +72,7 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
       ${clauses}
       ORDER BY cs.raised_at DESC
       LIMIT $${limitIdx}
-    `, params);
+    `, params));
 
     const hasMore = res.rows.length > limit;
     const signals = (hasMore ? res.rows.slice(0, limit) : res.rows).map((row: any) => ({
@@ -87,7 +89,7 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
     }));
 
     const nextCursor = hasMore && signals.length > 0
-      ? Buffer.from(JSON.stringify({ raisedAt: signals[signals.length - 1].raisedAt })).toString('base64url')
+      ? Buffer.from(JSON.stringify({ raisedAt: signals.at(-1)!.raisedAt })).toString('base64url')
       : null;
 
     return reply.send({ signals, nextCursor });
@@ -126,25 +128,25 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
     const { locationId, signalId } = request.params;
     const user = request.user as any;
 
-    const res = await db.query(
+    const res = await withTenant(db, user.userId, async (client) => client.query(
       `UPDATE customer_signals
        SET acknowledged_at = now(), acknowledged_by_owner_id = $1
        WHERE id = $2 AND location_id = $3
          AND acknowledged_at IS NULL AND dismissed_at IS NULL
        RETURNING id, customer_id, kind`,
       [user.userId, signalId, locationId],
-    );
+    ));
 
     if (res.rowCount === 0) return reply.status(404).send({ error: 'Signal not found or already resolved' });
 
     // Shift last_no_show_at by -7 days (forgive)
     if (res.rows[0].kind === 'no_show_recent') {
-      await db.query(
+      await withTenant(db, user.userId, async (client) => client.query(
         `UPDATE customers
          SET last_no_show_at = GREATEST(last_no_show_at - interval '7 days', now() - interval '90 days')
          WHERE id = $1 AND last_no_show_at IS NOT NULL`,
         [res.rows[0].customer_id],
-      );
+      ));
     }
 
     await messageBus.publish(dashboardChannel(locationId), {
@@ -166,7 +168,7 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
     const body = request.body || {};
     const user = request.user as any;
 
-    const res = await db.query(
+    const res = await withTenant(db, user.userId, async (client) => client.query(
       `UPDATE customer_signals
        SET dismissed_at = now(), dismissed_by_owner_id = $1,
            evidence = evidence || $2::jsonb
@@ -174,7 +176,7 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
          AND dismissed_at IS NULL
        RETURNING id`,
       [user.userId, JSON.stringify({ dismissReason: body.reason || null, dismissedBy: user.userId }), signalId, locationId],
-    );
+    ));
 
     if (res.rowCount === 0) return reply.status(404).send({ error: 'Signal not found or already dismissed' });
 
@@ -195,9 +197,7 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
     const { locationId, orderId } = request.params;
     const user = request.user as any;
 
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
+    const { customer_id } = await withTenant(db, user.userId, async (client) => {
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
       // Find customer and verify order belongs to this location
@@ -206,14 +206,12 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
         [orderId, locationId],
       );
       if (orderRes.rowCount === 0) {
-        await client.query('ROLLBACK');
-        return reply.status(404).send({ error: 'Order not found' });
+        throw Object.assign(new Error('Order not found'), { statusCode: 404 });
       }
       const { customer_id, status } = orderRes.rows[0];
 
       if (!customer_id) {
-        await client.query('ROLLBACK');
-        return reply.status(400).send({ error: 'Order has no customer' });
+        throw Object.assign(new Error('Order has no customer'), { statusCode: 400 });
       }
 
       // Increment no-show counters
@@ -232,17 +230,18 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
         [orderId],
       );
 
-      await client.query('COMMIT');
-
-      await messageBus.publish(BUS_CHANNELS.ORDER_CANCELLED, { orderId, locationId, reason: 'no_show' });
-      await messageBus.publish(BUS_CHANNELS.CUSTOMER_NO_SHOW, { customerId: customer_id, orderId, locationId });
-
-      return reply.send({ success: true, customerId: customer_id });
-    } catch (err) {
-      await client.query('ROLLBACK');
+      return { customer_id };
+    }).catch((err: any) => {
+      if (err.statusCode === 404) return reply.status(404).send({ error: err.message });
+      if (err.statusCode === 400) return reply.status(400).send({ error: err.message });
       throw err;
-    } finally {
-      client.release();
-    }
+    }) as any;
+
+    if (!customer_id) return; // reply already sent
+
+    await messageBus.publish(BUS_CHANNELS.ORDER_CANCELLED, { orderId, locationId, reason: 'no_show' });
+    await messageBus.publish(BUS_CHANNELS.CUSTOMER_NO_SHOW, { customerId: customer_id, orderId, locationId });
+
+    return reply.send({ success: true, customerId: customer_id });
   });
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;
