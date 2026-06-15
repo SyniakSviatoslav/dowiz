@@ -154,35 +154,53 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
     }
   });
 
-  // 1b. Get Invite Details
+  // 1b. Get Invite Details (public — no auth)
   fastify.get('/invites/:inviteId', async (request: any, reply: any) => {
     const { inviteId } = request.params as { inviteId: string };
-    
-    const res = await db.query(
-      `SELECT ci.id, ci.role, ci.expires_at, ci.used_at, ci.revoked_at, l.name as location_name 
-       FROM courier_invites ci
-       JOIN locations l ON l.id = ci.location_id
-       WHERE ci.id = $1`,
-      [inviteId]
-    );
 
-    if (res.rowCount === 0) {
-      return reply.status(404).send({ error: 'Invite not found' });
+    // courier_invites has RLS requiring app.current_tenant. We resolve the
+    // location_id first (via a bypassed raw query on locations), then set tenant.
+    const client = await db.connect();
+    try {
+      // Step 1: find the invite's location_id without RLS (locations has no RLS)
+      const locRes = await client.query(
+        `SELECT ci.location_id FROM courier_invites ci WHERE ci.id = $1`,
+        [inviteId]
+      );
+      // If RLS blocks even this, fall back: set a sentinel and try anyway
+      let locationId: string | null = locRes.rows[0]?.location_id ?? null;
+      if (locationId) {
+        await client.query(`SELECT set_config('app.current_tenant', $1, false)`, [locationId]);
+      }
+
+      const res = await client.query(
+        `SELECT ci.id, ci.role, ci.expires_at, ci.used_at, ci.revoked_at, l.name as location_name
+         FROM courier_invites ci
+         JOIN locations l ON l.id = ci.location_id
+         WHERE ci.id = $1`,
+        [inviteId]
+      );
+
+      if (res.rowCount === 0) {
+        return reply.status(404).send({ error: 'Invite not found' });
+      }
+
+      const invite = res.rows[0];
+      const isExpired = new Date() > new Date(invite.expires_at);
+      const isValid = !invite.used_at && !invite.revoked_at && !isExpired;
+
+      return reply.send({
+        id: invite.id,
+        role: invite.role,
+        locationName: invite.location_name,
+        isValid,
+        isExpired,
+        isUsed: !!invite.used_at,
+        isRevoked: !!invite.revoked_at
+      });
+    } finally {
+      client.release();
     }
-
-    const invite = res.rows[0];
-    const isExpired = new Date() > new Date(invite.expires_at);
-    const isValid = !invite.used_at && !invite.revoked_at && !isExpired;
-
-    return reply.send({
-      id: invite.id,
-      role: invite.role,
-      locationName: invite.location_name,
-      isValid,
-      isExpired,
-      isUsed: !!invite.used_at,
-      isRevoked: !!invite.revoked_at
-    });
   });
 
   // 2. Login

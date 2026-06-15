@@ -123,17 +123,13 @@ test.describe('UI: Full Courier Lifecycle — Invite, Register, Use App, Prove o
     const hasForm = bodyText.includes('Join as') || bodyText.includes('Courier') || bodyText.includes('Full Name') || bodyText.includes('Accept');
     expect(hasForm, `Invite page at ${inviteUrl} did not render properly`).toBe(true);
 
-    // Full Name
-    const nameInput = page.locator('input').filter({ hasAttribute: 'placeholder' }).filter({ has: page.locator('[placeholder*="Alban"], [placeholder*="name"], [placeholder*="Name"]') }).first();
-    // Try all inputs
-    const inputs = await page.locator('input').all();
-    // Fill by order: full name, email, [phone skip], password, code
-    // Find by type/placeholder
-    const fullNameInput = page.locator('input:not([type="email"]):not([type="password"]):not([type="tel"]):not([maxlength="16"])').first();
+    // Fill form fields — use getByLabel first (FormField renders a <label>), fall back to type selectors
+    const fullNameInput = page.getByLabel(/full name/i).first();
     await fullNameInput.fill(COURIER_NAME);
 
     const emailInput = page.locator('input[type="email"]').first();
     await emailInput.fill(COURIER_EMAIL);
+    // Phone is optional — skip it
 
     const passwordInput = page.locator('input[type="password"]').first();
     await passwordInput.fill(COURIER_PASSWORD);
