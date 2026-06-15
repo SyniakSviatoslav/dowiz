@@ -399,6 +399,7 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
 
     const endRes = await request.post(`${BASE}/api/courier/me/shift/end`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
+      timeout: 20000,
     });
     expect(endRes.status()).toBe(200);
   });
