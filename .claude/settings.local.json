@@ -13,7 +13,11 @@
       "PowerShell(Get-Content *)",
       "mcp__figma-remote-mcp__get_metadata",
       "Read(//c/Users/Dell5/.claude/skills/gstack/**)",
-      "Bash(./setup)"
+      "Bash(./setup)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Dell5\\\\Documents\\\\dowiz\" -Directory)",
+      "Bash(Select-Object -First 20)",
+      "Bash(xargs -I {} bash -c 'echo \"=== {} ===\"; head -20 {}')",
+      "PowerShell($env:TEMP)"
     ]
   },
   "disabledMcpjsonServers": [
