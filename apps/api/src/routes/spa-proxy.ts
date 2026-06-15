@@ -297,28 +297,34 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   fastify.get('/api/owner/couriers', async (request, reply) => {
     const locId = await getLocationId(request);
     if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const res = await db.query(
-      `SELECT c.id, c.full_name_encrypted, c.phone_encrypted, c.status,
-              COALESCE(cs.shift_status, 'offline') as courier_status,
-              (SELECT COUNT(*) FROM courier_assignments ca2 WHERE ca2.courier_id = c.id AND ca2.status = 'delivered') as deliveries_completed
-       FROM couriers c
-       JOIN courier_locations cl ON c.id = cl.courier_id
-       LEFT JOIN LATERAL (
-         SELECT status as shift_status FROM courier_shifts
-         WHERE courier_id = c.id AND location_id = $1 AND status IN ('available', 'on_delivery')
-           AND (ended_at IS NULL OR ended_at > NOW())
-         ORDER BY started_at DESC NULLS LAST LIMIT 1
-       ) cs ON true
-       WHERE cl.location_id = $1`,
-      [locId]
-    );
-    return reply.send(res.rows.map((r: any) => ({
-      id: r.id,
-      name: r.full_name_encrypted ? (decryptPII(r.full_name_encrypted) || 'Unknown') : 'Unknown',
-      phone: '',
-      status: r.courier_status === 'available' ? 'online' : r.courier_status === 'on_delivery' ? 'busy' : 'offline',
-      deliveriesCompleted: parseInt(r.deliveries_completed) || 0, rating: 0,
-    })));
+    const client = await db.connect();
+    try {
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locId]);
+      const res = await client.query(
+        `SELECT c.id, c.full_name_encrypted, c.phone_encrypted, c.status,
+                COALESCE(cs.shift_status, 'offline') as courier_status,
+                (SELECT COUNT(*) FROM courier_assignments ca2 WHERE ca2.courier_id = c.id AND ca2.status = 'delivered') as deliveries_completed
+         FROM couriers c
+         JOIN courier_locations cl ON c.id = cl.courier_id
+         LEFT JOIN LATERAL (
+           SELECT status as shift_status FROM courier_shifts
+           WHERE courier_id = c.id AND location_id = $1 AND status IN ('available', 'on_delivery')
+             AND (ended_at IS NULL OR ended_at > NOW())
+           ORDER BY started_at DESC NULLS LAST LIMIT 1
+         ) cs ON true
+         WHERE cl.location_id = $1`,
+        [locId]
+      );
+      return reply.send(res.rows.map((r: any) => ({
+        id: r.id,
+        name: r.full_name_encrypted ? (decryptPII(r.full_name_encrypted) || 'Unknown') : 'Unknown',
+        phone: '',
+        status: r.courier_status === 'available' ? 'online' : r.courier_status === 'on_delivery' ? 'busy' : 'offline',
+        deliveriesCompleted: parseInt(r.deliveries_completed) || 0, rating: 0,
+      })));
+    } finally {
+      client.release();
+    }
   });
 
   // GET /api/public/theme/:slug
