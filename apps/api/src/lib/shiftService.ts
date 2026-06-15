@@ -16,9 +16,9 @@ export async function openShift(
     `SELECT id, status, started_at
      FROM courier_shifts
      WHERE courier_id = $1 AND location_id = $2 AND DATE(started_at) = CURRENT_DATE
-     FOR UPDATE
      ORDER BY started_at DESC
-     LIMIT 1`,
+     LIMIT 1
+     FOR UPDATE`,
     [courierId, locationId]
   );
 
