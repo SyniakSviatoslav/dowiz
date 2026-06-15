@@ -106,11 +106,12 @@ export class PgMessageBus implements MessageBus {
   async publish(channel: string, msg: any): Promise<void> {
     try {
       console.log('[PgMessageBus] Publishing to:', channel, 'msg:', JSON.stringify(msg));
-      // Use the listener client for NOTIFY to ensure delivery
-      // If listenerClient is not available, fall back to pool
       const client = this.listenerClient || this.pool;
-      const payload = JSON.stringify(msg).replace(/'/g, "''"); // Escape single quotes for SQL
-      await client.query(`NOTIFY "${channel}", '${payload}'`);
+      const payload = JSON.stringify(msg).replace(/'/g, "''");
+      await Promise.race([
+        client.query(`NOTIFY "${channel}", '${payload}'`),
+        new Promise<void>((_, reject) => setTimeout(() => reject(new Error('NOTIFY timeout')), 5000)),
+      ]);
       console.log('[PgMessageBus] ✓ Published to:', channel);
     } catch (err) {
       console.error('[PgMessageBus] Publish error:', err);
