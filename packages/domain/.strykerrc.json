@@ -1,0 +1,10 @@
+{
+  "testRunner": "command",
+  "commandRunner": { "command": "tsx --test src/__tests__/order-machine.prop.test.ts" },
+  "checkers": ["typescript"],
+  "tsconfigFile": "tsconfig.json",
+  "mutate": ["src/order-machine.ts", "src/errors.ts"],
+  "reporters": ["html", "clear-text", "progress"],
+  "thresholds": { "high": 80, "low": 60, "break": 50 },
+  "incremental": true
+}
