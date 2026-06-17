@@ -2,7 +2,7 @@
 # require-classification.sh — Stop: don't finish without a CHANGE-MANIFEST when code changed
 set -euo pipefail
 
-PROJECT_ROOT="/c/Users/Dell5/Documents/dowiz"
+PROJECT_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 
 # Check if there are uncommitted changes to apps/ or packages/ (code directories)
 if command -v git &>/dev/null; then

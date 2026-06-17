@@ -30,6 +30,19 @@
 - **No output of code unless requested**: Use edit tools silently. Keep chat focused on intent and decisions, not diffs.
 - **Non-interactive flags**: Always pass `--yes`, `--non-interactive`, etc. for automation-context commands. Never assume a human can respond to a prompt.
 
+## Mandatory Proof Rule (applies to ALL changes — from user OR assistant)
+
+> Every fix, new feature, or behavior change MUST have programmatic proof.
+> "It should work" is not proof. Proof means an assertion that fails when the code is wrong.
+
+- **If the change has any UI surface** → Playwright E2E test against `https://dowiz.fly.dev` (or `VITE_BASE_URL`).
+  - Test must use `expect(...).toBeVisible()` / `toContainText()` / `not.toBeVisible()` on real DOM elements.
+  - Run via `pnpm exec playwright test <spec-file> --reporter=list` and paste the result.
+  - A passing typecheck or build is NOT proof of UI correctness.
+- **If the change is API-only** → at minimum one `request.*` assertion in an E2E test or existing test coverage must be cited.
+- **Never declare a task complete without pasting proof output** (test run result, curl response, or screenshot).
+- When creating or editing E2E tests: navigate to **`/s/:slug`** for public menu pages (SSR route), **`/admin/*`** for owner UI. Never invent non-existent routes.
+
 ## Ponytail Skills (source: DietrichGebert/ponytail)
 
 Lazy senior dev mode — the best code is the code never written.
