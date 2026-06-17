@@ -26,7 +26,8 @@ export default (async function ownerCourierRoutes(fastify: any, opts: any) {
 
       const res = await client.query(
         `SELECT c.id, c.email_encrypted, c.phone_encrypted, c.full_name_encrypted, c.status, c.last_login_at, c.created_at, cl.role,
-                (SELECT COUNT(*) FROM courier_assignments ca WHERE ca.courier_id = c.id AND ca.status = 'delivered') as deliveries_completed
+                (SELECT COUNT(*) FROM courier_assignments ca WHERE ca.courier_id = c.id AND ca.status = 'delivered' AND ca.delivered_at >= CURRENT_DATE) as deliveries_completed,
+                (SELECT ROUND(AVG(r.stars)::numeric, 1) FROM order_ratings r WHERE r.courier_id = c.id AND r.location_id = $1) as avg_rating
          FROM couriers c
          JOIN courier_locations cl ON c.id = cl.courier_id
          WHERE cl.location_id = $1`,
@@ -50,7 +51,7 @@ export default (async function ownerCourierRoutes(fastify: any, opts: any) {
           role: row.role,
           onlineStatus: null,
           ordersToday: parseInt(row.deliveries_completed) || 0,
-          rating: 0,
+          rating: row.avg_rating ? parseFloat(row.avg_rating) : null,
           lastLoginAt: row.last_login_at ?? null,
           createdAt: row.created_at ?? new Date().toISOString(),
         };
@@ -193,15 +194,18 @@ export default (async function ownerCourierRoutes(fastify: any, opts: any) {
   fastify.get('/api/owner/locations/:locationId/couriers/:courierId/details', async (request: any, reply: any) => {
     const { locationId, courierId } = request.params as any;
 
-    const [shiftsRes, earningsRes, historyRes] = await Promise.all([
-      db.query(
+    const client = await db.connect();
+    try {
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
+
+      const shiftsRes = await client.query(
         `SELECT id, status, started_at, ended_at, last_heartbeat_at
          FROM courier_shifts
          WHERE courier_id = $1 AND location_id = $2
          ORDER BY started_at DESC LIMIT 10`,
         [courierId, locationId]
-      ),
-      db.query(
+      );
+      const earningsRes = await client.query(
         `SELECT
            COALESCE(SUM(CASE WHEN a.delivered_at >= CURRENT_DATE THEN a.cash_amount ELSE 0 END), 0) AS today,
            COALESCE(SUM(CASE WHEN a.delivered_at >= date_trunc('week', CURRENT_DATE) THEN a.cash_amount ELSE 0 END), 0) AS week,
@@ -212,8 +216,8 @@ export default (async function ownerCourierRoutes(fastify: any, opts: any) {
          JOIN orders o ON o.id = a.order_id
          WHERE a.courier_id = $1 AND o.location_id = $2 AND a.status = 'delivered'`,
         [courierId, locationId]
-      ),
-      db.query(
+      );
+      const historyRes = await client.query(
         `SELECT a.id, a.order_id, a.status, a.assigned_at, a.accepted_at, a.picked_up_at, a.delivered_at, a.cash_amount,
                 o.total, o.currency_code, o.delivery_address,
                 c.name AS customer_name, c.phone AS customer_phone
@@ -223,14 +227,25 @@ export default (async function ownerCourierRoutes(fastify: any, opts: any) {
          WHERE a.courier_id = $1 AND o.location_id = $2
          ORDER BY a.created_at DESC LIMIT 20`,
         [courierId, locationId]
-      )
-    ]);
+      );
+      const ratingsRes = await client.query(
+        `SELECT
+           ROUND(AVG(r.stars)::numeric, 1) AS avg_rating,
+           COUNT(r.id)::int AS rating_count
+         FROM order_ratings r
+         WHERE r.courier_id = $1 AND r.location_id = $2`,
+        [courierId, locationId]
+      );
 
-    return reply.send({
-      shifts: shiftsRes.rows,
-      earnings: earningsRes.rows[0] || { today: 0, week: 0, month: 0, today_deliveries: 0, month_deliveries: 0 },
-      history: historyRes.rows
-    });
+      return reply.send({
+        shifts: shiftsRes.rows,
+        earnings: earningsRes.rows[0] || { today: 0, week: 0, month: 0, today_deliveries: 0, month_deliveries: 0 },
+        history: historyRes.rows,
+        ratings: ratingsRes.rows[0] || { avg_rating: null, rating_count: 0 },
+      });
+    } finally {
+      client.release();
+    }
   });
 
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;

@@ -89,13 +89,19 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
       
       if (Object.keys(updates).length === 0) return reply.status(400).send({ error: 'No updates provided' });
 
+      const ALLOWED: Record<string, string> = {
+        name: 'name', min_select: 'min_select', max_select: 'max_select', required: 'required',
+      };
+
       const res = await withTenant(server.db, userId, async (client) => {
         const setClauses: string[] = [];
         const values: any[] = [locationId, id];
         let paramIdx = 3;
 
         for (const [k, v] of Object.entries(updates)) {
-          setClauses.push(`${k} = $${paramIdx}`);
+          const col = ALLOWED[k];
+          if (!col) continue;
+          setClauses.push(`${col} = $${paramIdx}`);
           values.push(v);
           paramIdx++;
         }
@@ -182,13 +188,19 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
       
       if (Object.keys(updates).length === 0) return reply.status(400).send({ error: 'No updates provided' });
 
+      const ALLOWED: Record<string, string> = {
+        name: 'name', price_delta: 'price_delta', available: 'available', sort_order: 'sort_order',
+      };
+
       const res = await withTenant(server.db, userId, async (client) => {
         const setClauses: string[] = [];
         const values: any[] = [locationId, id];
         let paramIdx = 3;
 
         for (const [k, v] of Object.entries(updates)) {
-          setClauses.push(`${k} = $${paramIdx}`);
+          const col = ALLOWED[k];
+          if (!col) continue;
+          setClauses.push(`${col} = $${paramIdx}`);
           values.push(v);
           paramIdx++;
         }

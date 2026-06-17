@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button, Input, EmptyState, MapWithRadius, Toggle, useI18n, LanguageSwitcher, useToast } from '@deliveryos/ui';
 import type { LngLatLike, Locale } from '@deliveryos/ui';
 import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
@@ -92,6 +92,8 @@ export function SettingsPage() {
   const [tgTesting, setTgTesting] = useState(false);
   const [tgMessage, setTgMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [tgQrDataUrl, setTgQrDataUrl] = useState<string | null>(null);
+  const [expandedTarget, setExpandedTarget] = useState<string | null>(null);
+  const [prefsSaving, setPrefsSaving] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!tgDeepLink) { setTgQrDataUrl(null); return; }
@@ -133,18 +135,18 @@ export function SettingsPage() {
     fetchSettings();
   }, []);
 
-  useEffect(() => {
-    if (!locationId) return;
-    fetchTgTargets();
-  }, [locationId]);
-
-  const fetchTgTargets = async () => {
+  const fetchTgTargets = useCallback(async () => {
     if (!locationId) return;
     try {
       const res = await apiClient<typeof NotificationTargetsResponse>(`/owner/locations/${locationId}/notifications/targets`, { schema: NotificationTargetsResponse });
       setTgTargets(res?.targets || []);
     } catch (err) { console.warn('[SettingsPage] fetch tg targets failed:', err); }
-  };
+  }, [locationId]);
+
+  useEffect(() => {
+    if (!locationId) return;
+    fetchTgTargets();
+  }, [locationId, fetchTgTargets]);
 
   const handleTgConnect = async () => {
     if (!locationId) return;
@@ -185,6 +187,22 @@ export function SettingsPage() {
       await fetchTgTargets();
     } catch (err) { console.warn('[SettingsPage] toggle tg target failed:', err); }
   };
+
+  const handleSavePrefs = useCallback(async (targetId: string, patch: Record<string, any>) => {
+    if (!locationId) return;
+    setPrefsSaving(prev => ({ ...prev, [targetId]: true }));
+    try {
+      await apiClient(`/owner/locations/${locationId}/notifications/targets/${targetId}`, {
+        method: 'PUT',
+        body: { prefs: patch }
+      });
+      await fetchTgTargets();
+    } catch (err) {
+      console.warn('[SettingsPage] save prefs failed:', err);
+    } finally {
+      setPrefsSaving(prev => ({ ...prev, [targetId]: false }));
+    }
+  }, [locationId, fetchTgTargets]);
 
   const handleChange = (field: keyof LocationSettings, value: any) => {
     setSettings((prev) => ({
@@ -424,29 +442,168 @@ export function SettingsPage() {
             {/* Connected targets */}
             {tgTargets.length > 0 && (
               <div className="space-y-2">
-                {tgTargets.map((tgt: any) => (
-                  <div key={tgt.id} className="flex items-center justify-between p-3 rounded-lg border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${tgt.status === 'active' ? 'bg-[var(--color-success)]' : 'bg-[var(--brand-text-muted)]'}`} />
-                      <div>
-                        <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>
-                          {tgt.channel === 'telegram' ? 'Telegram' : tgt.channel}
+                {tgTargets.map((tgt: any) => {
+                  const prefs = tgt.prefs || {};
+                  const isExpanded = expandedTarget === tgt.id;
+                  const opsOn = prefs.category_operations !== false;
+                  const analyticsOn = prefs.category_analytics === true;
+                  const quietStart: string = prefs.quiet_start || '';
+                  const quietEnd: string = prefs.quiet_end || '';
+                  return (
+                    <div key={tgt.id} className="rounded-xl border overflow-hidden" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+                      {/* Header row */}
+                      <div className="flex items-center gap-3 p-3">
+                        <div className={`w-2 h-2 rounded-full shrink-0 ${tgt.status === 'active' ? 'bg-[var(--color-success)]' : 'bg-[var(--brand-text-muted)]'}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>
+                            {tgt.channel === 'telegram' ? 'Telegram' : tgt.channel}
+                          </div>
+                          <div className="text-[10px] font-mono" style={{ color: 'var(--brand-text-muted)' }}>
+                            {tgt.address?.slice(0, 14)}…
+                          </div>
                         </div>
-                        <div className="text-[10px] font-mono" style={{ color: 'var(--brand-text-muted)' }}>
-                          {tgt.address?.slice(0, 12)}...
-                        </div>
+                        <button
+                          onClick={() => setExpandedTarget(isExpanded ? null : tgt.id)}
+                          className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md transition-colors"
+                          style={{ color: 'var(--brand-text-muted)', background: 'var(--brand-surface-raised)' }}
+                          aria-expanded={isExpanded}
+                        >
+                          <i className={`ti ti-settings text-xs`} />
+                          {t('admin.prefs', 'Prefs')}
+                          <i className={`ti ti-chevron-${isExpanded ? 'up' : 'down'} text-[9px]`} />
+                        </button>
+                        <button
+                          onClick={() => handleTgToggle(tgt.id, tgt.status)}
+                          aria-label={tgt.status === 'active' ? t('admin.disable', 'Disable') : t('admin.enable', 'Enable')}
+                          title={tgt.status === 'active' ? t('admin.disable', 'Disable') : t('admin.enable', 'Enable')}
+                          className={`w-8 h-8 shrink-0 flex items-center justify-center rounded-lg transition-colors ${tgt.status === 'active' ? 'bg-[var(--color-success-light)]' : 'bg-[var(--brand-surface-raised)]'}`}
+                        >
+                          <i className={`ti ti-${tgt.status === 'active' ? 'check' : 'power'} text-xs`} style={{ color: tgt.status === 'active' ? 'var(--color-success)' : 'var(--brand-text-muted)' }} />
+                        </button>
                       </div>
+
+                      {/* Expanded: category prefs + quiet hours */}
+                      {isExpanded && (
+                        <div className="border-t px-4 py-4 space-y-4" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
+
+                          {/* Category toggles */}
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--brand-text-muted)' }}>
+                              {t('admin.notif_categories', 'Notification types')}
+                            </p>
+                            <div className="space-y-2">
+                              {/* 🔴 Orders — locked */}
+                              <div className="flex items-start gap-3 p-2.5 rounded-lg" style={{ background: 'color-mix(in srgb, var(--color-danger) 6%, var(--brand-surface))' }}>
+                                <div className="w-8 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: 'var(--color-danger)', opacity: 0.9 }}>
+                                  <i className="ti ti-lock text-white" style={{ fontSize: '9px' }} />
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-[12px] font-semibold" style={{ color: 'var(--brand-text)' }}>
+                                    {t('admin.notif_orders', 'Orders')}
+                                  </div>
+                                  <div className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
+                                    {t('admin.notif_orders_desc', 'New orders, confirmations, escalations — always on')}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* 🟠 Operations */}
+                              <div className="flex items-start gap-3 p-2.5 rounded-lg" style={{ background: 'var(--brand-bg)' }}>
+                                <div className="shrink-0 mt-0.5">
+                                  <button
+                                    role="switch"
+                                    aria-checked={opsOn}
+                                    onClick={() => handleSavePrefs(tgt.id, { category_operations: !opsOn })}
+                                    disabled={!!prefsSaving[tgt.id]}
+                                    className={`relative w-8 h-5 rounded-full transition-colors duration-200 ${opsOn ? 'bg-[var(--color-warning)]' : 'bg-[var(--brand-border)]'}`}
+                                    style={{ opacity: prefsSaving[tgt.id] ? 0.5 : 1 }}
+                                  >
+                                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${opsOn ? 'left-[14px]' : 'left-0.5'}`} />
+                                  </button>
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-[12px] font-semibold" style={{ color: 'var(--brand-text)' }}>
+                                    {t('admin.notif_operations', 'Operations')}
+                                  </div>
+                                  <div className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
+                                    {t('admin.notif_operations_desc', 'Cash discrepancies, timeout cancellations, system alerts')}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* 🟡 Analytics */}
+                              <div className="flex items-start gap-3 p-2.5 rounded-lg" style={{ background: 'var(--brand-bg)' }}>
+                                <div className="shrink-0 mt-0.5">
+                                  <button
+                                    role="switch"
+                                    aria-checked={analyticsOn}
+                                    onClick={() => handleSavePrefs(tgt.id, { category_analytics: !analyticsOn })}
+                                    disabled={!!prefsSaving[tgt.id]}
+                                    className={`relative w-8 h-5 rounded-full transition-colors duration-200 ${analyticsOn ? 'bg-[var(--brand-primary)]' : 'bg-[var(--brand-border)]'}`}
+                                    style={{ opacity: prefsSaving[tgt.id] ? 0.5 : 1 }}
+                                  >
+                                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${analyticsOn ? 'left-[14px]' : 'left-0.5'}`} />
+                                  </button>
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-[12px] font-semibold" style={{ color: 'var(--brand-text)' }}>
+                                    {t('admin.notif_analytics', 'Insights & Ratings')}
+                                  </div>
+                                  <div className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
+                                    {t('admin.notif_analytics_desc', 'Low ratings, daily summaries — off by default')}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Quiet hours */}
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--brand-text-muted)' }}>
+                              {t('admin.quiet_hours', 'Quiet hours')}
+                            </p>
+                            <p className="text-[10px] mb-2" style={{ color: 'var(--brand-text-muted)' }}>
+                              {t('admin.quiet_hours_desc', 'Operations and insights are held. Orders always break through.')}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="time"
+                                value={quietStart}
+                                onChange={e => handleSavePrefs(tgt.id, { quiet_start: e.target.value || null })}
+                                className="h-8 px-2 text-[12px] rounded-lg border outline-none"
+                                style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)', minWidth: 90 }}
+                                placeholder="23:00"
+                              />
+                              <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.to', 'to')}</span>
+                              <input
+                                type="time"
+                                value={quietEnd}
+                                onChange={e => handleSavePrefs(tgt.id, { quiet_end: e.target.value || null })}
+                                className="h-8 px-2 text-[12px] rounded-lg border outline-none"
+                                style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)', minWidth: 90 }}
+                                placeholder="08:00"
+                              />
+                              {(quietStart || quietEnd) && (
+                                <button
+                                  onClick={() => handleSavePrefs(tgt.id, { quiet_start: null, quiet_end: null })}
+                                  className="text-[10px] px-2 py-1 rounded-md transition-colors"
+                                  style={{ color: 'var(--color-danger)', background: 'var(--color-danger-light)' }}
+                                >
+                                  {t('common.clear', 'Clear')}
+                                </button>
+                              )}
+                            </div>
+                            {!quietStart && !quietEnd && (
+                              <p className="text-[10px] mt-1" style={{ color: 'var(--brand-text-muted)' }}>
+                                {t('admin.quiet_hours_default', 'Default: 22:00 – 08:00 UTC')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => handleTgToggle(tgt.id, tgt.status)}
-                        aria-label={tgt.status === 'active' ? t('admin.disable', 'Disable') : t('admin.enable', 'Enable')}
-                        className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${tgt.status === 'active' ? 'bg-[var(--color-success-light)]' : 'bg-[var(--brand-surface-raised)]'}`}
-                        title={tgt.status === 'active' ? t('admin.disable', 'Disable') : t('admin.enable', 'Enable')}>
-                        <i className={`ti ti-${tgt.status === 'active' ? 'check' : 'power'}`} style={{ fontSize: '0.85rem', color: tgt.status === 'active' ? 'var(--color-success)' : 'var(--brand-text-muted)' }} aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 

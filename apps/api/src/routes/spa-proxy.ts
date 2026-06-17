@@ -4,9 +4,11 @@ import { loadEnv } from '@deliveryos/config';
 import crypto from 'crypto';
 import { withTenant } from '@deliveryos/platform';
 import { getImageUrl } from '../lib/image-url.js';
+import { assertImageMagicBytes } from '../lib/upload-guard.js';
 import { maskStr } from '../lib/pii-mask.js';
 import { decryptPII } from '../lib/pii-cipher.js';
 import { z } from 'zod';
+import { invalidateSsrCache } from '../lib/ssr-renderer.js';
 
 const env = loadEnv();
 
@@ -138,6 +140,11 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const data = await request.file();
     if (!data) return reply.status(400).send({ error: 'No file uploaded' });
     const buffer = await data.toBuffer();
+
+    try { assertImageMagicBytes(buffer); } catch (e: any) {
+      return reply.status(400).send({ error: 'INVALID_FILE_TYPE', detail: e.message });
+    }
+
     let processed: Buffer;
     try {
       const sharp = (await import('sharp')).default;
@@ -165,93 +172,101 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
 
   // GET /api/owner/analytics
   fastify.get('/api/owner/analytics', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const { rows: todayOrders } = await db.query(
-      `SELECT total, created_at, confirmed_at, delivered_at, delivery_lat, delivery_lng
-       FROM orders WHERE location_id = $1 AND created_at >= NOW() - INTERVAL '7 days'`,
-      [locId]
-    );
-    let totalRev = 0, orderCount = 0, totalTime = 0, deliveredCount = 0;
-    const geoLocations = [];
-    for (const o of todayOrders) {
-      totalRev += o.total || 0; orderCount++;
-      if (o.delivered_at && o.created_at) {
-        totalTime += (new Date(o.delivered_at).getTime() - new Date(o.created_at).getTime()) / 60000;
-        deliveredCount++;
+    const ctx = await getOwnerContext(request);
+    if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+    const { locId, userId } = ctx;
+    const result = await withTenant(db, userId, async (client) => {
+      const { rows: todayOrders } = await client.query(
+        `SELECT total, created_at, confirmed_at, delivered_at, delivery_lat, delivery_lng
+         FROM orders WHERE location_id = $1 AND created_at >= NOW() - INTERVAL '7 days'`,
+        [locId]
+      );
+      let totalRev = 0, orderCount = 0, totalTime = 0, deliveredCount = 0;
+      const geoLocations = [];
+      for (const o of todayOrders) {
+        totalRev += o.total || 0; orderCount++;
+        if (o.delivered_at && o.created_at) {
+          totalTime += (new Date(o.delivered_at).getTime() - new Date(o.created_at).getTime()) / 60000;
+          deliveredCount++;
+        }
+        if (o.delivery_lat && o.delivery_lng) geoLocations.push({ lat: o.delivery_lat, lng: o.delivery_lng });
       }
-      if (o.delivery_lat && o.delivery_lng) geoLocations.push({ lat: o.delivery_lat, lng: o.delivery_lng });
-    }
-    const avgOrderValue = orderCount > 0 ? Math.round(totalRev / orderCount) : 0;
-    const avgTime = deliveredCount > 0 ? Math.round(totalTime / deliveredCount) : 0;
-    const { rows: topProducts } = await db.query(
-      `SELECT oi.name_snapshot AS name, COUNT(DISTINCT oi.order_id)::int AS orders,
-              SUM(oi.price_snapshot * oi.quantity)::int AS revenue, p.image_key AS "imageUrl"
-       FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id
-       JOIN orders o ON o.id = oi.order_id WHERE o.location_id = $1
-       GROUP BY oi.name_snapshot, p.image_key ORDER BY revenue DESC LIMIT 20`,
-      [locId]
-    );
-    const { rows: chartRows } = await db.query(
-      `SELECT to_char(date_trunc('day', created_at), 'Dy') AS day, SUM(total)::int AS revenue
-       FROM orders WHERE location_id = $1 AND created_at >= NOW() - INTERVAL '7 days'
-       GROUP BY date_trunc('day', created_at) ORDER BY MIN(created_at)`,
-      [locId]
-    );
-    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const chart = weekdays.map(day => {
-      const match = chartRows.find((r: any) => r.day === day);
-      return { day, revenue: match ? match.revenue : 0 };
-    });
-    const { rows: heatmapRows } = await db.query(
-      `SELECT EXTRACT(DOW FROM o.created_at)::int AS dow,
-              CASE WHEN EXTRACT(HOUR FROM o.created_at) BETWEEN 0 AND 3 THEN 0
-                   WHEN EXTRACT(HOUR FROM o.created_at) BETWEEN 4 AND 7 THEN 1
-                   WHEN EXTRACT(HOUR FROM o.created_at) BETWEEN 8 AND 11 THEN 2
-                   WHEN EXTRACT(HOUR FROM o.created_at) BETWEEN 12 AND 15 THEN 3
-                   WHEN EXTRACT(HOUR FROM o.created_at) BETWEEN 16 AND 19 THEN 4 ELSE 5 END AS slot,
-              COUNT(*)::int AS cnt,
-              jsonb_agg(DISTINCT oi.name_snapshot) FILTER (WHERE oi.name_snapshot IS NOT NULL) AS products
-       FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.id
-       WHERE o.location_id = $1 AND o.created_at >= NOW() - INTERVAL '30 days'
-       GROUP BY dow, slot ORDER BY dow, slot`,
-      [locId]
-    );
-    const heatmap = [];
-    for (let di = 0; di < weekdays.length; di++) {
-      const pgDow = di === 6 ? 0 : di + 1;
-      const hours = []; const products = [];
-      for (let s = 0; s < 6; s++) {
-        const match = heatmapRows.find((r: any) => r.dow === pgDow && r.slot === s);
-        hours.push(match ? match.cnt : 0);
-        products.push(match ? (match.products || []) : []);
+      const avgOrderValue = orderCount > 0 ? Math.round(totalRev / orderCount) : 0;
+      const avgTime = deliveredCount > 0 ? Math.round(totalTime / deliveredCount) : 0;
+      const { rows: topProducts } = await client.query(
+        `SELECT oi.name_snapshot AS name, COUNT(DISTINCT oi.order_id)::int AS orders,
+                SUM(oi.price_snapshot * oi.quantity)::int AS revenue, p.image_key AS "imageUrl"
+         FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id
+         JOIN orders o ON o.id = oi.order_id WHERE o.location_id = $1
+         GROUP BY oi.name_snapshot, p.image_key ORDER BY revenue DESC LIMIT 20`,
+        [locId]
+      );
+      const { rows: chartRows } = await client.query(
+        `SELECT to_char(date_trunc('day', created_at), 'Dy') AS day, SUM(total)::int AS revenue
+         FROM orders WHERE location_id = $1 AND created_at >= NOW() - INTERVAL '7 days'
+         GROUP BY date_trunc('day', created_at) ORDER BY MIN(created_at)`,
+        [locId]
+      );
+      const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const chart = weekdays.map(day => {
+        const match = chartRows.find((r: any) => r.day === day);
+        return { day, revenue: match ? match.revenue : 0 };
+      });
+      const { rows: heatmapRows } = await client.query(
+        `SELECT EXTRACT(DOW FROM o.created_at)::int AS dow,
+                CASE WHEN EXTRACT(HOUR FROM o.created_at) BETWEEN 0 AND 3 THEN 0
+                     WHEN EXTRACT(HOUR FROM o.created_at) BETWEEN 4 AND 7 THEN 1
+                     WHEN EXTRACT(HOUR FROM o.created_at) BETWEEN 8 AND 11 THEN 2
+                     WHEN EXTRACT(HOUR FROM o.created_at) BETWEEN 12 AND 15 THEN 3
+                     WHEN EXTRACT(HOUR FROM o.created_at) BETWEEN 16 AND 19 THEN 4 ELSE 5 END AS slot,
+                COUNT(*)::int AS cnt,
+                jsonb_agg(DISTINCT oi.name_snapshot) FILTER (WHERE oi.name_snapshot IS NOT NULL) AS products
+         FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.id
+         WHERE o.location_id = $1 AND o.created_at >= NOW() - INTERVAL '30 days'
+         GROUP BY dow, slot ORDER BY dow, slot`,
+        [locId]
+      );
+      const heatmap = [];
+      for (let di = 0; di < weekdays.length; di++) {
+        const pgDow = di === 6 ? 0 : di + 1;
+        const hours = []; const products = [];
+        for (let s = 0; s < 6; s++) {
+          const match = heatmapRows.find((r: any) => r.dow === pgDow && r.slot === s);
+          hours.push(match ? match.cnt : 0);
+          products.push(match ? (match.products || []) : []);
+        }
+        heatmap.push({ day: weekdays[di], hours, products });
       }
-      heatmap.push({ day: weekdays[di], hours, products });
-    }
-    return reply.send({
-      revenue: { today: totalRev, trend: '+15%' },
-      orders: { today: orderCount, trend: '+5' },
-      avgOrderValue: { value: avgOrderValue, trend: '+2%' },
-      deliveryTime: { avg: avgTime, trend: '-2%' },
-      chart, topProducts, geoLocations, heatmap,
+      return {
+        revenue: { today: totalRev, trend: '+15%' },
+        orders: { today: orderCount, trend: '+5' },
+        avgOrderValue: { value: avgOrderValue, trend: '+2%' },
+        deliveryTime: { avg: avgTime, trend: '-2%' },
+        chart, topProducts, geoLocations, heatmap,
+      };
     });
+    return reply.send(result);
   });
 
   // GET /api/owner/analytics/product-orders
   fastify.get('/api/owner/analytics/product-orders', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    const ctx = await getOwnerContext(request);
+    if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+    const { locId, userId } = ctx;
     const name = (request.query as any).name;
     if (!name) return reply.status(400).send({ error: 'Missing product name' });
-    const { rows } = await db.query(
-      `SELECT o.id, o.total, o.currency_code, o.created_at, o.status,
-              c.name AS customer_name, oi.quantity, oi.price_snapshot AS price
-       FROM order_items oi JOIN orders o ON o.id = oi.order_id
-       JOIN customers c ON c.id = o.customer_id
-       WHERE o.location_id = $1 AND oi.name_snapshot = $2
-       ORDER BY o.created_at DESC LIMIT 50`,
-      [locId, name]
-    );
+    const rows = await withTenant(db, userId, async (client) => {
+      const { rows: r } = await client.query(
+        `SELECT o.id, o.total, o.currency_code, o.created_at, o.status,
+                c.name AS customer_name, oi.quantity, oi.price_snapshot AS price
+         FROM order_items oi JOIN orders o ON o.id = oi.order_id
+         JOIN customers c ON c.id = o.customer_id
+         WHERE o.location_id = $1 AND oi.name_snapshot = $2
+         ORDER BY o.created_at DESC LIMIT 50`,
+        [locId, name]
+      );
+      return r;
+    });
     return reply.send(rows);
   });
 
@@ -478,6 +493,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     );
     const r = res.rows[0];
     if (!r) return reply.status(404).send({ error: 'Location not found' });
+    invalidateSsrCache(r.slug);
     return reply.send({
       id: r.id, slug: r.slug, locationName: r.name, phone: r.phone || '',
       deliveryFee: Number(r.delivery_fee_flat) || 0,

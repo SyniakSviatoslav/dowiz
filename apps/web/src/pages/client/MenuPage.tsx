@@ -241,7 +241,13 @@ export function MenuPage() {
   const scrollOffset = HEADER_H + stickyHeight + 8;
 
   interface LocationInfo { lat: number; lng: number; googleRating?: number | null; googleReviewCount?: number | null; isOpen?: boolean; }
-  const [locationInfo, setLocationInfo] = useState<LocationInfo | null>(null);
+  const [locationInfo, setLocationInfo] = useState<LocationInfo | null>(() => {
+    // Seed isOpen from SSR __INITIAL_STATE__ to prevent flash of menu before /info resolves
+    if (typeof window === 'undefined') return null;
+    const init = (window as any).__INITIAL_STATE__;
+    if (typeof init?.isOpen === 'boolean') return { lat: 0, lng: 0, isOpen: init.isOpen };
+    return null;
+  });
   const [deliveryETA, setDeliveryETA] = useState<number | null>(null);
   const [geoStatus, setGeoStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown');
 
@@ -250,7 +256,13 @@ export function MenuPage() {
     fetch(`/public/locations/${slug}/info`)
       .then(r => r.ok ? r.json() : null)
       .then((d: any) => {
-        if (d?.lat && d?.lng) setLocationInfo({ lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount, isOpen: d.isOpen });
+        if (d) setLocationInfo({
+          lat: d.lat ?? 0,
+          lng: d.lng ?? 0,
+          googleRating: d.googleRating,
+          googleReviewCount: d.googleReviewCount,
+          isOpen: d.isOpen,
+        });
       })
       .catch(() => {});
   }, [slug]);
@@ -413,13 +425,20 @@ export function MenuPage() {
     return Object.entries(p.attributes as Record<string, any>).filter(([k]) => !['kcal', 'protein', 'fat', 'carbs', 'allergens', 'tags', 'taste', 'bom', 'stock_count'].includes(k));
   };
 
+  const isClosed = locationInfo?.isOpen === false;
+
   return (
     <div className="relative min-h-screen pb-28">
 
       {/* Hero Section */}
       <section className="relative w-full h-[160px] md:h-[200px] flex items-end overflow-hidden" style={{ background: 'linear-gradient(160deg, var(--brand-surface-raised) 0%, var(--brand-accent) 50%, var(--brand-primary) 100%)' }}>
         <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, color-mix(in srgb, var(--brand-bg) 80%, transparent) 0%, color-mix(in srgb, var(--brand-bg) 40%, transparent) 50%, color-mix(in srgb, var(--brand-bg) 5%, transparent) 100%)' }} />
-        <div className="absolute inset-0 opacity-[0.06]" style={{ background: 'radial-gradient(ellipse at 30% 50%, color-mix(in srgb, var(--brand-primary) 20%, transparent) 0%, transparent 60%)' }} />
+        <motion.div
+          className="absolute inset-0 opacity-[0.12]"
+          animate={{ opacity: [0.08, 0.16, 0.08] }}
+          transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+          style={{ background: 'radial-gradient(ellipse at 30% 50%, color-mix(in srgb, var(--brand-primary) 30%, transparent) 0%, transparent 60%)' }}
+        />
         <div className="absolute inset-0 opacity-[0.03]" style={{ background: 'radial-gradient(ellipse at 70% 30%, color-mix(in srgb, var(--brand-text) 15%, transparent) 0%, transparent 50%)' }} />
         <motion.div
           className="relative z-10 w-full px-5 pb-5"
@@ -458,7 +477,7 @@ export function MenuPage() {
       </section>
 
       {/* Unified sticky: Category nav + Search/Sort/Filter — sits below the h-14 header which is outside this scroll container */}
-      <div ref={stickyRef} className="sticky top-0 z-40" style={{ background: 'var(--brand-bg)' }}>
+      {!isClosed && (<div ref={stickyRef} className="sticky top-0 z-40" style={{ background: 'var(--brand-bg)' }}>
         {/* Category nav */}
         <div className="relative border-b" style={{ borderColor: 'var(--brand-border)' }}>
           <nav className="h-[44px] overflow-x-auto hide-scrollbar flex items-center gap-0.5 px-2" aria-label={t('client.categories', 'Categories')}>
@@ -482,15 +501,22 @@ export function MenuPage() {
                     onClick={() => handleScrollTo(cat.id)}
                     role="tab"
                     aria-selected={activeTab === cat.id}
-                    className="h-[44px] flex items-center gap-1 px-3 whitespace-nowrap text-[12px] font-medium transition-all border-b-2 shrink-0"
+                    className="relative h-[44px] flex items-center gap-1 px-3 whitespace-nowrap text-[12px] font-medium shrink-0 transition-colors"
                     style={{
                       color: activeTab === cat.id ? (isChefCat ? '#f59e0b' : 'var(--brand-text)') : 'var(--brand-text-muted)',
-                      borderColor: activeTab === cat.id ? (isChefCat ? '#f59e0b' : 'var(--brand-primary)') : 'transparent',
                     }}
                   >
                     {isChefCat && <span style={{ fontSize: '0.7rem' }}>✦</span>}
                     {cat.name}
                     <span className="text-[10px] opacity-40">({count})</span>
+                    {activeTab === cat.id && (
+                      <motion.span
+                        layoutId="tab-indicator"
+                        className="absolute bottom-0 left-0 right-0 h-[2px] rounded-t-sm"
+                        style={{ background: isChefCat ? '#f59e0b' : 'var(--brand-primary)' }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+                      />
+                    )}
                   </motion.button>
                 );
               })
@@ -549,23 +575,28 @@ export function MenuPage() {
             })}
           </div>
         )}
-      </div>
+      </div>)}
 
-      {/* Delivery closed banner */}
-      {locationInfo?.isOpen === false && (
+      {/* Delivery closed — full-page message, no menu content shown */}
+      {isClosed && (
         <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mx-4 my-3 px-4 py-3 rounded-xl border flex items-center gap-3 text-sm font-medium"
-          style={{ background: 'var(--color-warning-light, rgba(217,119,6,0.08))', borderColor: 'var(--color-warning, #D97706)', color: 'var(--color-warning, #D97706)' }}
+          data-testid="closed-overlay"
+          initial={{ opacity: 0, scale: 0.97 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col items-center justify-center min-h-[55vh] px-8 text-center gap-5"
         >
-          <i className="ti ti-clock-off text-lg shrink-0" />
-          <span>{t('client.delivery_closed', 'We are currently closed. Check back during opening hours.')}</span>
+          <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: 'var(--brand-surface-raised)' }}>
+            <i className="ti ti-clock-off text-4xl" style={{ color: 'var(--brand-text-muted)' }} />
+          </div>
+          <p className="text-base font-medium max-w-xs leading-relaxed" style={{ color: 'var(--brand-text-muted)' }}>
+            {t('client.delivery_closed', 'We are currently closed. Check back during opening hours.')}
+          </p>
         </motion.div>
       )}
 
       {/* Menu Content — min-h prevents layout shifts when filtering/sorting changes product count */}
-      <main className="max-w-5xl mx-auto pt-4 min-h-screen">
+      {!isClosed && (<main className="max-w-5xl mx-auto pt-4 min-h-screen">
         {loading ? (
           <div className="px-4 grid grid-cols-2 md:grid-cols-3 gap-3">
             {[1,2,3,4,5,6].map(i => (
@@ -645,6 +676,7 @@ export function MenuPage() {
                   <motion.div
                     key={product.id}
                     variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } } }}
+                    whileHover={{ y: -3, transition: { duration: 0.15, ease: 'easeOut' } }}
                   >
                     <ProductCard product={{
                       id: product.id,
@@ -683,7 +715,7 @@ export function MenuPage() {
             );
           })
         )}
-       </main>
+       </main>)}
 
       {/* Product Detail Modal */}
       {detailProduct && (

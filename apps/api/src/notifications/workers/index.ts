@@ -2,7 +2,7 @@ import type { Job } from 'pg-boss';
 import type { NotificationDispatcher, NotificationEvent as NotifEvent, NotificationEventType, NotificationTarget } from '../provider.js';
 import { formatMoney } from '@deliveryos/shared-types';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
-import { isEventAllowedDuringQuietHours } from '../event-registry.js';
+import { isEventAllowedDuringQuietHours, isEventAllowedByPrefs, getEventCategory } from '../event-registry.js';
 import { writeAudit } from '../audit.js';
 import { RetryPolicy } from '../retry.js';
 import { WebPushAdapter } from '../adapters/webpush.js';
@@ -206,21 +206,41 @@ export class NotificationWorker {
         return;
       }
       
-      // 2. Check prefs
-      if (eventType !== 'test') {
-        const prefs = targetRow.prefs || {};
-        if (prefs[eventType] === false) {
-          await writeAudit(client, { event: eventType, targetId, locationId, channel: targetRow.channel, status: 'prefs_disabled' });
+      // 2. Check prefs (category-based, with legacy event-level fallback)
+      const prefs = targetRow.prefs || {};
+      if (!isEventAllowedByPrefs(eventType, prefs)) {
+        await writeAudit(client, { event: eventType, targetId, locationId, channel: targetRow.channel, status: 'prefs_disabled' });
+        return;
+      }
+
+      // 3. Quiet hours: per-target config, fall back to UTC 22:00–08:00
+      //    Critical ('orders') category always breaks through quiet hours.
+      const category = getEventCategory(eventType);
+      if (category !== 'orders' && isEventAllowedDuringQuietHours(eventType) === false) {
+        const quietStart: string | undefined = prefs.quiet_start;
+        const quietEnd: string | undefined = prefs.quiet_end;
+        let inQuiet = false;
+        if (quietStart && quietEnd) {
+          const now = new Date();
+          const parts = quietStart.split(':').map(Number);
+          const eParts = quietEnd.split(':').map(Number);
+          const sh = parts[0] ?? 0, sm = parts[1] ?? 0;
+          const eh = eParts[0] ?? 0, em = eParts[1] ?? 0;
+          const nowMins = now.getUTCHours() * 60 + now.getUTCMinutes();
+          const startMins = sh * 60 + sm;
+          const endMins = eh * 60 + em;
+          inQuiet = startMins <= endMins
+            ? nowMins >= startMins && nowMins < endMins
+            : nowMins >= startMins || nowMins < endMins; // overnight span
+        } else {
+          // default hardcoded UTC 22:00–08:00
+          const hour = new Date().getUTCHours();
+          inQuiet = hour >= 22 || hour < 8;
+        }
+        if (inQuiet) {
+          await writeAudit(client, { event: eventType, targetId, locationId, channel: targetRow.channel, status: 'quiet_hours' });
           return;
         }
-      }
-      
-      // 3. Quiet hours logic (simplified for P16, assume UTC 22:00-08:00)
-      const hour = new Date().getUTCHours();
-      const isQuietHours = hour >= 22 || hour < 8;
-      if (isQuietHours && !isEventAllowedDuringQuietHours(eventType)) {
-        await writeAudit(client, { event: eventType, targetId, locationId, channel: targetRow.channel, status: 'quiet_hours' });
-        return;
       }
       
       // 4. Re-fetch order strictly under location_id (Tenant Isolation + 0 PII payload check)
@@ -333,8 +353,8 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
           const channel = target.channel as string;
           try {
             const prefs = target.prefs || {};
-            if (prefs[event] === false) {
-              console.log(`[TelegramSend] Skipping target ${target.id}: prefs[${event}] = false`);
+            if (!isEventAllowedByPrefs(event, prefs)) {
+              console.log(`[TelegramSend] Skipping target ${target.id}: prefs block for ${event}`);
               await writeAudit(client, { event, targetId: target.id, locationId: location_id, channel, status: 'prefs_disabled' });
               continue;
             }
@@ -369,7 +389,7 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
             let data: any = { location_id, locale: target.locale || 'sq' };
             if (entity_id) {
               console.log(`[TelegramSend] Building data for event=${event}, entity_id=${entity_id}`);
-              data = await this.buildTelegramData(event, entity_id, location_id, client, data.locale);
+              data = await this.buildTelegramData(event, entity_id, location_id, client, data.locale, job.data);
               console.log(`[TelegramSend] Built data: ${JSON.stringify({shortOrderId: data.shortOrderId, total: data.total, currency: data.currency})}`);
             }
   
@@ -537,7 +557,7 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
   }
 
   // Helper function to build the NotificationData for a given event and entity_id
-  private async buildTelegramData(event: NotificationEventType, entity_id: string, location_id: string, client: any, locale?: string): Promise<any> {
+  private async buildTelegramData(event: NotificationEventType, entity_id: string, location_id: string, client: any, locale?: string, hints?: Record<string, any>): Promise<any> {
     const data: any = { location_id, locale };
 
     switch (event) {
@@ -550,9 +570,16 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
       case 'order.timeout_cancelled':
       case 'order.pending_aging':
       case 'order.ready_for_pickup':
-      case 'delivery.flag_raised':
+      case 'delivery.flag_raised': {
+        Object.assign(data, await this.fetchOrderDetails(entity_id, location_id, client));
+        break;
+      }
+
       case 'rating.low_received': {
         Object.assign(data, await this.fetchOrderDetails(entity_id, location_id, client));
+        if (hints?.rating != null) {
+          data.rating = hints.rating;
+        }
         break;
       }
 

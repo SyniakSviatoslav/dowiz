@@ -45,13 +45,23 @@ export default async function locationRoutes(fastify: FastifyInstance) {
         }
       }
 
+      const ALLOWED: Record<string, string> = {
+        default_locale: 'default_locale', supported_locales: 'supported_locales',
+        name: 'name', phone: 'phone', currency_code: 'currency_code',
+        delivery_fee_flat: 'delivery_fee_flat', min_order_value: 'min_order_value',
+        free_delivery_threshold: 'free_delivery_threshold', delivery_radius_km: 'delivery_radius_km',
+        tax_rate: 'tax_rate', lat: 'lat', lng: 'lng', delivery_address: 'delivery_address',
+      };
+
       const res = await withTenant(server.db, userId, async (client) => {
         const setClauses: string[] = [];
         const values: any[] = [locationId];
         let paramIdx = 2;
 
         for (const [k, v] of Object.entries(updates)) {
-          setClauses.push(`${k} = $${paramIdx}`);
+          const col = ALLOWED[k];
+          if (!col) continue;
+          setClauses.push(`${col} = $${paramIdx}`);
           values.push(v);
           paramIdx++;
         }

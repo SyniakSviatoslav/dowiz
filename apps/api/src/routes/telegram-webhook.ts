@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import crypto from 'crypto';
 import type { Pool } from 'pg';
 import type { PgBoss } from 'pg-boss';
 import type { MessageBus } from '@deliveryos/platform';
@@ -33,7 +34,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
     // log a warning but process the request — don't break existing connect flows.
     const secretToken = request.headers['x-telegram-bot-api-secret-token'];
     if (telegramBotSecret) {
-      if (secretToken && secretToken !== telegramBotSecret) {
+      if (secretToken && !crypto.timingSafeEqual(Buffer.from(secretToken as string), Buffer.from(telegramBotSecret))) {
         request.log.warn({
           received: secretToken,
           expectedLength: telegramBotSecret.length
@@ -209,8 +210,13 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
       }
 
       // Answer the callback query IMMEDIATELY to remove the loading indicator
-      // Telegram best practice: answer first, process, then send follow-up messages
-      await answerCallbackQuery(callbackQuery.id, {});
+      // Telegram best practice: answer first, process, then send follow-up messages.
+      // Non-fatal: if Telegram API is down or callback expired (>60s), continue processing anyway.
+      try {
+        await answerCallbackQuery(callbackQuery.id, {});
+      } catch (answerErr) {
+        console.warn('[TelegramWebhook] answerCallbackQuery failed (callback may have expired):', (answerErr as Error).message);
+      }
 
       // Process the action and build result
       let resultText = '';
@@ -504,6 +510,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) {
       throw new Error(`Telegram API error (${method}): ${response.status}`);
@@ -528,7 +535,8 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
         chat_id: chatId,
         text,
         parse_mode: 'HTML'
-      })
+      }),
+      signal: AbortSignal.timeout(5000),
     });
 
     if (!response.ok) {

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { renderTheme, ALLOWED_FONTS } from '../../lib/theme-renderer.js';
 import sharp from 'sharp';
 import { getImageUrl } from '../../lib/image-url.js';
+import { assertImageMagicBytes } from '../../lib/upload-guard.js';
 
 export default (async function ownerThemeRoutes(fastify, opts) {
   const { db, storage } = opts as any;
@@ -122,7 +123,11 @@ export default (async function ownerThemeRoutes(fastify, opts) {
     if (!data) return reply.status(400).send({ error: 'No file uploaded' });
 
     const buffer = await data.toBuffer();
-    
+
+    try { assertImageMagicBytes(buffer); } catch (e: any) {
+      return reply.status(400).send({ error: 'INVALID_FILE_TYPE', detail: e.message });
+    }
+
     // Process with sharp: strip EXIF, resize
     const processed = await sharp(buffer)
       .resize({ width: 512, height: 512, fit: 'inside' })

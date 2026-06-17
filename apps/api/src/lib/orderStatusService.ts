@@ -66,20 +66,27 @@ export async function updateOrderStatus(
   if (newStatus === 'CONFIRMED') {
     res = await client.query(
       `UPDATE orders SET status = $1, confirmed_at = now(), timeout_at = NULL
-       WHERE id = $2 AND status = $3 RETURNING id`,
-      [newStatus, orderId, currentStatus]
+       WHERE id = $2 AND status = $3 AND location_id = $4 RETURNING id`,
+      [newStatus, orderId, currentStatus, locationId]
     );
   } else {
     res = await client.query(
       `UPDATE orders SET status = $1, timeout_at = NULL
-       WHERE id = $2 AND status = $3 RETURNING id`,
-      [newStatus, orderId, currentStatus]
+       WHERE id = $2 AND status = $3 AND location_id = $4 RETURNING id`,
+      [newStatus, orderId, currentStatus, locationId]
     );
   }
 
   if (!res.rowCount || res.rowCount === 0) {
     throw { statusCode: 409, error: 'Order status already changed', code: 'CONFLICT' };
   }
+
+  // 3b. Write audit trail
+  await client.query(
+    `INSERT INTO order_status_history (order_id, location_id, from_status, to_status)
+     VALUES ($1, $2, $3, $4)`,
+    [orderId, locationId, currentStatus, newStatus]
+  );
 
   // 4. Broadcast via MessageBus
   await opts.messageBus.publish(orderChannel(orderId), {
@@ -109,5 +116,22 @@ export async function updateOrderStatus(
     await opts.messageBus.publish(BUS_CHANNELS.ORDER_CONFIRMED, { orderId, locationId: dbLocationId });
   } else if (newStatus === 'REJECTED' && dbLocationId) {
     await opts.messageBus.publish(BUS_CHANNELS.ORDER_REJECTED, { orderId, locationId: dbLocationId });
+  }
+
+  // 6. Notify assigned courier when order is READY for pickup
+  if (newStatus === 'READY') {
+    const courierRes = await client.query(
+      `SELECT courier_id FROM orders WHERE id = $1`,
+      [orderId]
+    );
+    const courierId = courierRes.rows[0]?.courier_id;
+    if (courierId) {
+      await opts.messageBus.publish(`courier:${courierId}`, {
+        type: 'order.ready',
+        orderId,
+        locationId: cur.rows[0].location_id,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 }

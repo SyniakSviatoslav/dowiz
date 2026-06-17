@@ -137,17 +137,21 @@ export default async function productRoutes(fastify: FastifyInstance) {
 
       if (Object.keys(updates).length === 0) return reply.status(400).send({ error: 'No updates provided' });
 
+      const ALLOWED: Record<string, string> = {
+        category_id: 'category_id', name: 'name', description: 'description',
+        price: 'price', available: 'is_available', image_key: 'image_key',
+        attributes: 'attributes', sort_order: 'sort_order',
+      };
+
       const res = await withTenant(server.db, userId, async (client) => {
         const setClauses: string[] = [];
         const values: any[] = [locationId, id];
         let paramIdx = 3;
 
         for (const [k, v] of Object.entries(updates)) {
-          if (k === 'available') {
-            setClauses.push(`is_available = $${paramIdx}`);
-          } else {
-            setClauses.push(`${k} = $${paramIdx}`);
-          }
+          const col = ALLOWED[k];
+          if (!col) continue;
+          setClauses.push(`${col} = $${paramIdx}`);
           values.push(v);
           paramIdx++;
         }

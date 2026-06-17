@@ -6,6 +6,160 @@ import { apiClient, useWebSocket } from '../../lib/index.js';
 import { z } from 'zod';
 import { calcETA } from '@deliveryos/shared-types';
 
+// ── Star Rating Block ─────────────────────────────────────────────────────────
+
+function StarRatingBlock({ orderId }: { orderId: string }) {
+  const { t } = useI18n();
+  const { showToast } = useToast();
+  const [rating, setRating] = useState<{ stars: number; comment: string | null; updatedAt: string } | null>(null);
+  const [canEdit, setCanEdit] = useState(false);
+  const [canSubmit, setCanSubmit] = useState(false);
+  const [hovered, setHovered] = useState(0);
+  const [selected, setSelected] = useState(0);
+  const [comment, setComment] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    apiClient<any>(`/customer/orders/${orderId}/rating`)
+      .then(data => {
+        if (data.rating) {
+          setRating(data.rating);
+          setSelected(data.rating.stars);
+          setComment(data.rating.comment || '');
+          setCanEdit(data.canEdit ?? false);
+          setCanSubmit(false);
+        } else {
+          setCanSubmit(data.canSubmit ?? false);
+        }
+      })
+      .catch(() => {});
+  }, [orderId]);
+
+  const handleSubmit = async () => {
+    if (!selected) return;
+    setSubmitting(true);
+    try {
+      const data = await apiClient<any>(`/customer/orders/${orderId}/rating`, {
+        method: 'POST',
+        body: { stars: selected, comment: comment.trim() || null },
+      });
+      setRating({ stars: data.stars, comment: data.comment, updatedAt: data.updatedAt });
+      setCanEdit(data.canEdit ?? false);
+      setEditing(false);
+      setSubmitted(true);
+      showToast(t('client.rating_thanks', 'Thank you for your feedback!'), 'success');
+    } catch {
+      showToast(t('common.error', 'Something went wrong'), 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const showForm = !rating || editing;
+  const canInteract = !rating ? canSubmit : canEdit;
+
+  if (!canInteract && !rating) return null;
+
+  return (
+    <div className="bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4">
+      <h3 className="font-semibold mb-3 text-[var(--brand-text)]">{t('client.rate_order', 'Rate your order')}</h3>
+
+      {/* Stars */}
+      <div className="flex gap-1 mb-3">
+        {[1, 2, 3, 4, 5].map(star => {
+          const filled = showForm ? star <= (hovered || selected) : star <= (rating?.stars ?? 0);
+          return (
+            <button
+              key={star}
+              type="button"
+              disabled={!showForm || submitting}
+              onMouseEnter={() => showForm && setHovered(star)}
+              onMouseLeave={() => showForm && setHovered(0)}
+              onClick={() => showForm && setSelected(star)}
+              className="text-3xl transition-transform active:scale-90 disabled:cursor-default"
+              style={{ color: filled ? '#f59e0b' : 'var(--brand-border)', lineHeight: 1 }}
+              aria-label={`${star} star`}
+            >
+              ★
+            </button>
+          );
+        })}
+      </div>
+
+      {showForm && (
+        <>
+          <textarea
+            value={comment}
+            onChange={e => setComment(e.target.value)}
+            placeholder={t('client.rating_comment_placeholder', 'Share your experience... (optional)')}
+            maxLength={2000}
+            rows={3}
+            className="w-full text-sm rounded-lg px-3 py-2 resize-none outline-none border"
+            style={{
+              background: 'var(--brand-surface)',
+              color: 'var(--brand-text)',
+              borderColor: 'var(--brand-border)',
+            }}
+          />
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!selected || submitting}
+              className="flex-1 py-2.5 rounded-[var(--brand-radius)] text-sm font-semibold transition-opacity disabled:opacity-50"
+              style={{ background: 'var(--brand-primary)', color: '#fff' }}
+            >
+              {submitting ? '…' : t('client.rating_submit', 'Submit rating')}
+            </button>
+            {editing && (
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="px-4 py-2.5 rounded-[var(--brand-radius)] text-sm border"
+                style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
+              >
+                {t('common.cancel', 'Cancel')}
+              </button>
+            )}
+          </div>
+          {canEdit && (
+            <p className="text-xs mt-2" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('client.rating_can_edit_hint', 'You can update your rating within 24 hours')}
+            </p>
+          )}
+        </>
+      )}
+
+      {!showForm && rating && (
+        <div className="flex items-center justify-between">
+          {submitted && (
+            <span className="text-sm" style={{ color: 'var(--color-success)' }}>
+              {t('client.rating_thanks', 'Thank you for your feedback!')}
+            </span>
+          )}
+          {canEdit && !submitted && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="text-sm underline"
+              style={{ color: 'var(--brand-primary)' }}
+            >
+              {t('client.rating_edit', 'Edit rating')}
+            </button>
+          )}
+          {!canEdit && (
+            <span className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('client.rating_locked', 'Rating locked')}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const MessagesResponse = z.object({
   messages: z.array(z.any()),
 }).passthrough();
@@ -361,8 +515,8 @@ export function OrderStatusPage() {
           <div className="space-y-2 text-sm">
             {order.items?.map((item: any, i: number) => (
               <div key={i} className="flex justify-between">
-                <span>{item.quantity}x {item.name}</span>
-                <span><PriceDisplay amount={item.price} /></span>
+                <span>{item.quantity}x {item.nameSnapshot ?? item.name}</span>
+                <span><PriceDisplay amount={item.priceSnapshot ?? item.price} /></span>
               </div>
             ))}
           </div>
@@ -407,6 +561,11 @@ export function OrderStatusPage() {
           onMarkRead={handleMarkRead}
         />
         {/* eslint-enable jsx-a11y/aria-role */}
+
+        {/* Star rating — visible when DELIVERED */}
+        {order.status === 'DELIVERED' && id && (
+          <StarRatingBlock orderId={id} />
+        )}
 
       </div>
     </div>

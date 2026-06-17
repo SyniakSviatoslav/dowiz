@@ -1,14 +1,15 @@
 import { z } from 'zod';
 import { loadEnv } from '@deliveryos/config';
 import { acceptCourierAssignment } from '../../lib/courierAssignmentService';
-import type { MessageBus } from '@deliveryos/platform';
+import type { MessageBus, QueueProvider } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { updateOrderStatus } from '../../lib/orderStatusService';
+import { distanceKm } from '../../lib/geo.js';
 
 const env = loadEnv();
 
 export default (async function courierAssignmentsRoutes(fastify: any, opts: any) {
-  const { db, messageBus } = opts as { db: any, messageBus: MessageBus };
+  const { db, messageBus, queue } = opts as { db: any, messageBus: MessageBus, queue: QueueProvider };
 
   fastify.addHook('preValidation', fastify.verifyAuth);
   fastify.addHook('preValidation', fastify.requireRole(['courier']));
@@ -263,7 +264,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       params: z.object({ id: z.string().uuid() }),
       body: z.object({
         cash_collected: z.boolean(),
-        cash_amount: z.number().optional()
+        cash_amount: z.number().int().nonnegative().optional()
       }).strict()
     }
   }, async (request: any, reply: any) => {
@@ -278,7 +279,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
       const res = await client.query(`
-        SELECT ca.order_id, ca.shift_id, o.total 
+        SELECT ca.order_id, ca.shift_id, o.total, o.delivery_lat, o.delivery_lng
         FROM courier_assignments ca
         JOIN orders o ON ca.order_id = o.id
         WHERE ca.id = $1 AND ca.courier_id = $2 AND ca.status = 'picked_up' FOR UPDATE
@@ -289,7 +290,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
         return reply.status(404).send({ error: 'ASSIGNMENT_NOT_FOUND_OR_NOT_PICKED_UP' });
       }
 
-      const { order_id, shift_id, total } = res.rows[0];
+      const { order_id, shift_id, total, delivery_lat, delivery_lng } = res.rows[0];
 
       if (cash_collected && cash_amount !== total) {
         await client.query('ROLLBACK');
@@ -309,16 +310,72 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       // Canonical path: update orders status + publish WS events (customer + owner)
       await updateOrderStatus(client, order_id, locationId, 'DELIVERED', { messageBus });
 
+      await client.query(`
+        INSERT INTO delivery_trace (order_id, courier_id, location_id, started_at, ended_at)
+        VALUES ($1, $2, $3,
+          (SELECT started_at FROM courier_shifts WHERE id = $4),
+          now())
+        ON CONFLICT (order_id) DO NOTHING
+      `, [order_id, courierId, locationId, shift_id]);
+
+      if (cash_collected) {
+        await client.query(`
+          INSERT INTO courier_cash_ledger (courier_id, location_id, order_id, amount, currency_code, type)
+          SELECT $1, $2, $3, o.total, o.currency_code, 'hold'
+          FROM orders o WHERE o.id = $3
+        `, [courierId, locationId, order_id]);
+      }
+
       await client.query('COMMIT');
 
+      // GPS proximity check — soft signal only, never blocks delivery
+      void (async () => {
+        const GPS_STALE_MS = 30 * 60 * 1000;
+        const GPS_FLAG_KM = 0.5;
+        try {
+          const posRes = await db.query(
+            `SELECT lat, lng, recorded_at FROM courier_positions
+             WHERE courier_id = $1 AND shift_id = $2
+             ORDER BY recorded_at DESC LIMIT 1`,
+            [courierId, shift_id],
+          );
+          let flag = false;
+          if (posRes.rowCount === 0) {
+            flag = true; // no GPS pings during this shift
+          } else {
+            const pos = posRes.rows[0];
+            if (Date.now() - new Date(pos.recorded_at).getTime() > GPS_STALE_MS) {
+              flag = true; // last ping too old (>30 min)
+            } else if (delivery_lat != null && delivery_lng != null) {
+              flag = distanceKm(Number(pos.lat), Number(pos.lng), delivery_lat, delivery_lng) > GPS_FLAG_KM;
+            }
+          }
+          if (flag) {
+            await queue.enqueue(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, {
+              event: 'delivery.flag_raised',
+              entity_id: order_id,
+              location_id: locationId,
+            });
+          }
+        } catch (err) {
+          fastify.log.warn({ err }, '[delivery] GPS flag check failed');
+        }
+      })();
+
       // Integrate with Phase 1 lifecycle
-      await messageBus.publish(BUS_CHANNELS.ORDER_DELIVERED, { 
-        orderId: order_id, 
+      await messageBus.publish(BUS_CHANNELS.ORDER_DELIVERED, {
+        orderId: order_id,
         locationId,
         courierId,
         cashCollected: cash_collected,
         cashAmount: cash_collected ? cash_amount : null
       });
+
+      void queue.enqueue(
+        QUEUE_NAMES.ORDER_FEEDBACK_REMINDER,
+        { orderId: order_id },
+        { startAfter: 30 * 60 } // 30 minutes in seconds
+      ).catch((err: Error) => fastify.log.warn({ err }, '[delivery] feedback reminder enqueue failed'));
 
       return reply.send({ success: true });
     } catch (err) {

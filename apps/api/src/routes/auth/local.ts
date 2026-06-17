@@ -35,9 +35,10 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
 
       let valid = false;
 
-      // Dev bypass: allow login for test user with known password
-      if ((email === 'test@dowiz.com' && password === 'test123456') ||
-          (email === 'empty@dowiz.com' && password === 'empty123456')) {
+      // Dev-only bypass: never active in production
+      if (process.env.NODE_ENV !== 'production' &&
+          ((email === 'test@dowiz.com' && password === 'test123456') ||
+           (email === 'empty@dowiz.com' && password === 'empty123456'))) {
         valid = true;
       } else if (user.password_hash) {
         try {

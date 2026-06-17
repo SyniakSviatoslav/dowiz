@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency } from '@deliveryos/ui';
 import { CURRENCIES } from '@deliveryos/shared-types';
 import type { LngLatLike } from '@deliveryos/ui';
@@ -180,7 +180,6 @@ export function CheckoutPage() {
   const [apartmentError, setApartmentError] = useState('');
   const [placing, setPlacing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const [cityFact, setCityFact] = useState<string | null>(null);
 
     useEffect(() => {
     if (!slug) return;
@@ -188,18 +187,6 @@ export function CheckoutPage() {
       .then((info: any) => {
         setLocationId(info.id);
         if (info.lng && info.lat) setLocationCenter([info.lng, info.lat]);
-        if (info.address) {
-          const parts = info.address.split(',');
-          const city = parts.length > 1 ? parts[parts.length - 1].trim() : parts[0].trim();
-          if (city) {
-            fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(city)}`)
-              .then(r => r.json())
-              .then((wiki: any) => {
-                if (wiki.extract) setCityFact(wiki.extract.split('.')[0] + '.');
-              })
-              .catch(() => {/* silently ignore */});
-          }
-        }
       })
       .catch((err) => {
         console.debug('[CheckoutPage] failed to load location info:', err);
@@ -310,7 +297,6 @@ export function CheckoutPage() {
           delivery: {
             pin: { lat: pinLat, lng: pinLng },
             address_text: address || undefined,
-            notes: notes.trim() || undefined,
           },
           payment: { method: 'cash' },
           cash_pay_with: cashAmount > 0 ? cashAmount : undefined,
@@ -322,11 +308,14 @@ export function CheckoutPage() {
               apartment: apartment.trim(),
             }
           },
-          delivery_instructions: instructionOption
-            ? instructionCustom
-              ? `${instructionOption}: ${instructionCustom}`
-              : instructionOption
-            : undefined,
+          delivery_instructions: [
+            notes.trim(),
+            instructionOption
+              ? instructionCustom
+                ? `${instructionOption}: ${instructionCustom}`
+                : instructionOption
+              : '',
+          ].filter(Boolean).join('\n') || undefined,
         },
       });
       try {
@@ -428,7 +417,7 @@ export function CheckoutPage() {
             <div className="space-y-4">
               <div>
                 <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.delivery_address')}</label>
-                <MapWithPin className="h-48 w-full rounded-lg" initialCenter={locationCenter} onPinChange={setPinLocation} confirmLabel={t('common.confirm')} placeholder={t('checkout.delivery_address')} />
+                <MapWithPin className="h-48 w-full rounded-lg" initialCenter={locationCenter} onPinChange={setPinLocation} confirmLabel={t('common.confirm')} placeholder={t('checkout.delivery_address')} cooperativeGestures />
               </div>
               <div>
                 <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.delivery_address')}</label>
@@ -586,22 +575,6 @@ export function CheckoutPage() {
           </div>
         </motion.div>
 
-        {cityFact && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="rounded-[12px] p-4 border" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)' }}>
-            <div className="flex items-start gap-3">
-              <span className="text-xl shrink-0 mt-0.5">🌍</span>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--brand-text-muted)' }}>Did you know?</p>
-                <p className="text-[13px] leading-relaxed" style={{ color: 'var(--brand-text)' }}>{cityFact}</p>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
         {hasNutrition && (
           <NutritionRing
             kcal={nutritionTotal.kcal}
@@ -643,15 +616,25 @@ export function CheckoutPage() {
         </motion.div>
       </form>
 
-      {orderError && (
-        <div role="alert" className="p-4 rounded-xl border text-sm flex items-start gap-3" style={{ background: 'var(--color-danger-light)', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>
-          <i className="ti ti-alert-triangle text-lg shrink-0 mt-0.5" />
-          <div>
-            <p className="font-semibold mb-1">Order cannot be placed</p>
-            <p>{orderError}</p>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {orderError && (
+          <motion.div
+            role="alert"
+            initial={{ opacity: 0, y: -8, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            className="p-4 rounded-xl border text-sm flex items-start gap-3"
+            style={{ background: 'var(--color-danger-light)', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}
+          >
+            <i className="ti ti-alert-triangle text-lg shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold mb-1">Order cannot be placed</p>
+              <p>{orderError}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <StickyActionBar>
         <motion.button
@@ -659,8 +642,10 @@ export function CheckoutPage() {
           form="checkout-form"
           data-testid="order-confirm-button"
           disabled={placing}
+          whileHover={placing ? {} : { scale: 1.02, boxShadow: '0 8px 24px color-mix(in srgb, var(--brand-primary) 45%, transparent)' }}
           whileTap={{ scale: placing ? 1 : 0.97 }}
-          className="w-full h-14 rounded-full bg-[var(--brand-primary)] text-white font-bold text-base shadow-xl transition-all active:scale-[0.97] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          className="w-full h-14 rounded-full bg-[var(--brand-primary)] text-white font-bold text-base shadow-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ minHeight: 'var(--tap-critical)' }}
         >
           {placing ? (

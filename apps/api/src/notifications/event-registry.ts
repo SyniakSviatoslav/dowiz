@@ -5,12 +5,16 @@ export type QuietHoursPolicy = 'always' | 'during_business' | 'never';
 export type RenderGroup = 'confirm_reject' | 'open_in_app' | 'aging_confirm' | 'track' | 'close_shift' | 'no_buttons';
 export type TargetScope = 'order' | 'shift' | 'system' | 'test';
 
+/** UI-visible category shown to the owner. 'orders' = critical, cannot be disabled. */
+export type NotificationCategory = 'orders' | 'operations' | 'analytics';
+
 export interface EventEntry {
   type: string;
   description: string;
   quietHours: QuietHoursPolicy;
   renderGroup: RenderGroup;
   targetScope: TargetScope;
+  category: NotificationCategory;
 }
 
 export const EVENT_REGISTRY: Record<string, EventEntry> = {
@@ -20,6 +24,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'confirm_reject',
     targetScope: 'order',
+    category: 'orders',
   },
   'order.confirmed': {
     type: 'order.confirmed',
@@ -27,6 +32,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'open_in_app',
     targetScope: 'order',
+    category: 'orders',
   },
   'order.rejected': {
     type: 'order.rejected',
@@ -34,6 +40,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'open_in_app',
     targetScope: 'order',
+    category: 'orders',
   },
   'order.delivered': {
     type: 'order.delivered',
@@ -41,6 +48,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'open_in_app',
     targetScope: 'order',
+    category: 'orders',
   },
   'order.substitution_needs_human': {
     type: 'order.substitution_needs_human',
@@ -48,6 +56,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'confirm_reject',
     targetScope: 'order',
+    category: 'orders',
   },
   'order.dwell_escalation': {
     type: 'order.dwell_escalation',
@@ -55,6 +64,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'open_in_app',
     targetScope: 'order',
+    category: 'orders',
   },
   'order.timeout_cancelled': {
     type: 'order.timeout_cancelled',
@@ -62,6 +72,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'open_in_app',
     targetScope: 'order',
+    category: 'operations',
   },
   'cash.reconcile_discrepancy': {
     type: 'cash.reconcile_discrepancy',
@@ -69,6 +80,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'open_in_app',
     targetScope: 'order',
+    category: 'operations',
   },
   'delivery.flag_raised': {
     type: 'delivery.flag_raised',
@@ -76,6 +88,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'open_in_app',
     targetScope: 'order',
+    category: 'operations',
   },
   'rating.low_received': {
     type: 'rating.low_received',
@@ -83,6 +96,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'during_business',
     renderGroup: 'open_in_app',
     targetScope: 'order',
+    category: 'analytics',
   },
   'ops.worker_liveness': {
     type: 'ops.worker_liveness',
@@ -90,6 +104,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'no_buttons',
     targetScope: 'system',
+    category: 'operations',
   },
   'ops.backup_failed': {
     type: 'ops.backup_failed',
@@ -97,6 +112,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'no_buttons',
     targetScope: 'system',
+    category: 'operations',
   },
   'ops.degradation_changed': {
     type: 'ops.degradation_changed',
@@ -104,6 +120,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'no_buttons',
     targetScope: 'system',
+    category: 'operations',
   },
   'courier.assigned': {
     type: 'courier.assigned',
@@ -111,6 +128,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'track',
     targetScope: 'order',
+    category: 'operations',
   },
   'order.pending_aging': {
     type: 'order.pending_aging',
@@ -118,6 +136,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'aging_confirm',
     targetScope: 'order',
+    category: 'orders',
   },
   'order.ready_for_pickup': {
     type: 'order.ready_for_pickup',
@@ -125,6 +144,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'open_in_app',
     targetScope: 'order',
+    category: 'orders',
   },
   'shift.started': {
     type: 'shift.started',
@@ -132,6 +152,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'close_shift',
     targetScope: 'shift',
+    category: 'operations',
   },
   'shift.closed': {
     type: 'shift.closed',
@@ -139,6 +160,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'always',
     renderGroup: 'close_shift',
     targetScope: 'shift',
+    category: 'operations',
   },
   'shift.close_reminder': {
     type: 'shift.close_reminder',
@@ -146,6 +168,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'during_business',
     renderGroup: 'close_shift',
     targetScope: 'shift',
+    category: 'operations',
   },
   'test': {
     type: 'test',
@@ -153,6 +176,7 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     quietHours: 'never',
     renderGroup: 'no_buttons',
     targetScope: 'test',
+    category: 'orders',
   },
 };
 
@@ -160,4 +184,31 @@ export function isEventAllowedDuringQuietHours(event: string): boolean {
   const entry = EVENT_REGISTRY[event];
   if (!entry) return false;
   return entry.quietHours === 'always';
+}
+
+export function getEventCategory(event: string): NotificationCategory | null {
+  return EVENT_REGISTRY[event]?.category ?? null;
+}
+
+/**
+ * Check if an event should be sent given target prefs.
+ * - 'orders' category is always allowed (critical, cannot be disabled via category toggle).
+ * - 'operations' category: allowed unless prefs.category_operations === false.
+ * - 'analytics' category: allowed only if prefs.category_analytics === true.
+ * Legacy event-level prefs (e.g. `prefs["order.created"] = false`) are still honoured
+ * if present, taking precedence over category-level.
+ */
+export function isEventAllowedByPrefs(event: string, prefs: Record<string, any>): boolean {
+  if (event === 'test') return true;
+
+  // Legacy event-level override (explicit false = suppressed, explicit true = allowed)
+  if (typeof prefs[event] === 'boolean') return prefs[event];
+
+  const category = getEventCategory(event);
+  if (!category) return true; // unknown event → allow
+
+  if (category === 'orders') return true; // critical, cannot be disabled
+  if (category === 'operations') return prefs.category_operations !== false;
+  if (category === 'analytics') return prefs.category_analytics === true;
+  return true;
 }

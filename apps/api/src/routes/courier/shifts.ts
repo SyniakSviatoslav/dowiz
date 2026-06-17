@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { roundCoordinate, isWithinGeofence } from '../../lib/geo.js';
+import { roundCoordinate, isWithinGeofence, distanceKm } from '../../lib/geo.js';
 import { loadEnv } from '@deliveryos/config';
 import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
@@ -331,13 +331,37 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
     }
     const { lat, lng, accuracy_meters } = bodyResult.data;
 
+    // Reject low-accuracy or physically impossible readings up front
+    if (accuracy_meters != null && accuracy_meters > 100) {
+      return reply.status(400).send({ error: 'GPS_ACCURACY_TOO_LOW' });
+    }
+
     const courierId = request.user.sub;
     const locationId = request.user.activeLocationId;
-    
+
     const client = await db.connect();
     try {
       await client.query('BEGIN');
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
+
+      // Speed plausibility: compare with previous ping
+      const prevRes = await client.query(
+        `SELECT lat, lng, recorded_at FROM courier_positions
+         WHERE courier_id = $1 ORDER BY recorded_at DESC LIMIT 1`,
+        [courierId],
+      );
+      if (prevRes.rowCount > 0) {
+        const prev = prevRes.rows[0];
+        const dtHours = (Date.now() - new Date(prev.recorded_at).getTime()) / 3_600_000;
+        if (dtHours > 0) {
+          const distKm = distanceKm(Number(prev.lat), Number(prev.lng), lat, lng);
+          const speedKmh = distKm / dtHours;
+          if (speedKmh > 150) {
+            await client.query('ROLLBACK');
+            return reply.status(400).send({ error: 'GPS_SPEED_IMPLAUSIBLE' });
+          }
+        }
+      }
 
       // Range check vs location pin
       const locRes = await client.query(`SELECT lat, lng FROM locations WHERE id = $1`, [locationId]);

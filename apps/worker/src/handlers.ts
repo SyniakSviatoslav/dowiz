@@ -1,8 +1,8 @@
-import type { QueueProvider } from '@deliveryos/platform';
+import type { MessageBus, QueueProvider } from '@deliveryos/platform';
 import type { Pool } from 'pg';
 import { QUEUE_NAMES } from '@deliveryos/shared-types';
 
-export function registerHandlers(queue: QueueProvider, pool: Pool) {
+export function registerHandlers(queue: QueueProvider, pool: Pool, messageBus: MessageBus) {
 
   queue.work('health-job', async (payload: Record<string, unknown>) => {
     console.log(`[Worker] Processed health-job at ${new Date().toISOString()}`, payload);
@@ -26,6 +26,27 @@ export function registerHandlers(queue: QueueProvider, pool: Pool) {
       );
 
       if (res.rowCount && res.rowCount > 0) {
+        const { location_id } = res.rows[0];
+
+        await pool.query(
+          `INSERT INTO order_status_history (order_id, location_id, from_status, to_status, created_at)
+           VALUES ($1, $2, 'PENDING', 'CANCELLED', now())`,
+          [orderId, location_id]
+        );
+
+        await messageBus.publish(`order:${orderId}`, {
+          type: 'order.status',
+          orderId,
+          status: 'CANCELLED',
+          locationId: location_id,
+          timestamp: new Date().toISOString(),
+        });
+
+        await messageBus.publish(`location:${location_id}:dashboard`, {
+          type: 'order.status',
+          data: { orderId, status: 'CANCELLED', statusUpdatedAt: new Date().toISOString() },
+        });
+
         console.log(`[Worker] Order ${orderId} auto-cancelled (timeout)`);
       } else {
         console.log(`[Worker] Order ${orderId} already transitioned, timeout no-op`);
@@ -33,5 +54,12 @@ export function registerHandlers(queue: QueueProvider, pool: Pool) {
     } catch (err) {
       console.error(`[Worker] Error processing order.timeout for ${orderId}:`, err);
     }
+  });
+
+  queue.work(QUEUE_NAMES.ORDER_FEEDBACK_REMINDER, async (payload: Record<string, unknown>) => {
+    const { orderId } = payload;
+    if (!orderId || typeof orderId !== 'string') return;
+    console.log(`[Worker] ORDER_FEEDBACK_REMINDER for order ${orderId}`);
+    // TODO: dispatch push notification / email to customer
   });
 }

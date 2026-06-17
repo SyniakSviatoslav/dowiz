@@ -164,51 +164,61 @@ function ClientLayoutInner() {
               </div>
             ) : (
               <div className="flex flex-col">
-                <motion.div
-                  className="flex-1 overflow-y-auto space-y-4 pb-4 max-h-[50vh]"
-                  variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
-                  initial="hidden"
-                  animate="visible"
-                >
+                <div className="flex-1 overflow-y-auto space-y-4 pb-4 max-h-[50vh]">
+                  <AnimatePresence initial={false}>
                   {items.map(item => (
                     <motion.div
                       key={item.id}
-                      variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } } }}
-                      className="flex items-center justify-between">
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } }}
+                      exit={{ opacity: 0, x: 16, height: 0, marginBottom: 0, transition: { duration: 0.18, ease: 'easeIn' } }}
+                      className="flex items-center justify-between overflow-hidden">
                       <div className="flex-1 min-w-0">
                         <div className="text-[var(--brand-text)] font-medium truncate">{item.name}</div>
                         <div className="text-[var(--brand-text-muted)] text-sm"><PriceDisplay amount={item.price} size="sm" /></div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
-                        <button
+                        <motion.button
                           onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          className="min-w-[44px] min-h-[44px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95 flex items-center justify-center"
+                          whileTap={{ scale: 0.82 }}
+                          className="min-w-[44px] min-h-[44px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors flex items-center justify-center"
                         >
                           <i className="ti ti-minus text-sm" />
-                        </button>
-                        <span className="text-[var(--brand-text)] font-medium w-6 text-center">{item.quantity}</span>
-                        <button
+                        </motion.button>
+                        <motion.span
+                          key={item.quantity}
+                          initial={{ scale: 1.3 }}
+                          animate={{ scale: 1 }}
+                          transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                          className="text-[var(--brand-text)] font-medium w-6 text-center inline-block"
+                        >{item.quantity}</motion.span>
+                        <motion.button
                           onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          className="min-w-[44px] min-h-[44px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95 flex items-center justify-center"
+                          whileTap={{ scale: 0.82 }}
+                          className="min-w-[44px] min-h-[44px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors flex items-center justify-center"
                         >
                           <i className="ti ti-plus text-sm" />
-                        </button>
+                        </motion.button>
                       </div>
                     </motion.div>
                   ))}
-                </motion.div>
+                  </AnimatePresence>
+                </div>
                 <div className="pt-4 border-t border-[var(--brand-border)] space-y-3">
                   <div className="flex justify-between font-bold text-lg text-[var(--brand-text)]">
                     <span>{t('cart.total', 'Total')}</span>
                     <PriceDisplay amount={total} />
                   </div>
-                  <button
+                  <motion.button
                     data-testid="cart-checkout"
                     onClick={() => { setCartOpen(false); navigate(`/s/${slug}/checkout`); }}
-                    className="w-full h-12 rounded-full bg-[var(--brand-primary)] text-white font-bold text-base shadow-xl transition-all active:scale-[0.97]"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.96 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                    className="w-full h-12 rounded-full bg-[var(--brand-primary)] text-white font-bold text-base shadow-xl"
                   >
                     {t('cart.checkout', 'Checkout')}
-                  </button>
+                  </motion.button>
                   {items.length > 1 && (
                     <button
                       onClick={() => clearCart()}

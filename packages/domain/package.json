@@ -7,10 +7,14 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test src/__tests__/order-machine.prop.test.ts",
+    "test:mutation": "stryker run"
   },
-  "dependencies": {},
   "devDependencies": {
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/typescript-checker": "^9.6.1",
+    "fast-check": "^4.8.0",
     "typescript": "^5.6.2"
   }
 }

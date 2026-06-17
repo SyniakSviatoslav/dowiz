@@ -78,7 +78,7 @@ export function decryptPII(ciphertext: Buffer | string | null): string | null {
     }
   }
   
-  if (ciphertextBuf.length === 0) return null;
+  if (ciphertextBuf.length === 0) return '';
   if (ciphertextBuf.length < IV_LENGTH + AUTH_TAG_LENGTH) {
     throw new Error('Invalid ciphertext length: ' + ciphertextBuf.length);
   }

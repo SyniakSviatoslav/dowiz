@@ -4,7 +4,7 @@
       "command": "repowise",
       "args": [
         "mcp",
-        "C:/Users/Dell5/Documents/dowiz",
+        "/root/dowiz",
         "--transport",
         "stdio"
       ],

@@ -65,4 +65,15 @@ describe('i18n', () => {
     assert.equal(mod.t('cart.empty'), 'Cart is empty');
     assert.equal(mod.t('cart.checkout'), 'Order');
   });
+
+  it('cart.checkout is action-word (Order-intent) across all locales', () => {
+    mod.setLocale('sq');
+    const sq = mod.t('cart.checkout');
+    mod.setLocale('en');
+    const en = mod.t('cart.checkout');
+    // Albanian: Porosit, English: Order — both convey "place order", not generic "Checkout"
+    assert.ok(sq.length > 0, 'sq translation must be non-empty');
+    assert.ok(en.length > 0, 'en translation must be non-empty');
+    assert.notEqual(en, 'Checkout', 'en must not use generic e-commerce "Checkout"');
+  });
 });

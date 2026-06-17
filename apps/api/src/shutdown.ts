@@ -33,6 +33,13 @@ export function setupShutdown(fastify: FastifyInstance, pool: Pool, messageBus: 
     shuttingDown = true;
     console.log(`\n[API] Received ${signal}. Starting graceful shutdown...`);
 
+    // Kill-timeout watchdog: guarantee container termination even if a shutdown step hangs.
+    const killTimer = setTimeout(() => {
+      console.error('[API] Shutdown watchdog: graceful shutdown exceeded 30s, forcing exit');
+      process.exit(1);
+    }, 30000);
+    killTimer.unref();
+
     // 1. Forward SIGTERM to child processes (e.g., pg_dump)
     for (const cp of childProcesses) {
       try { cp.kill('SIGTERM'); } catch (err: any) {

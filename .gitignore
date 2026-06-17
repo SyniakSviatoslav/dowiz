@@ -19,4 +19,8 @@ eval-layer/deepeval-result.json
 
 # graphify cache
 graphify-out/
-# claude installed skills.claude/skills/
+# claude installed skills
+.claude/skills/
+
+# windows temp-file artifacts (leaked into repo from a windows dev box)
+*AppDataLocalTemp*

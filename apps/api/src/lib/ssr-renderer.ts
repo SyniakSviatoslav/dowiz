@@ -22,7 +22,7 @@ function loadAssetTags(): string {
     try {
       if (existsSync(candidate)) {
         const content = readFileSync(candidate, 'utf-8');
-        const scriptMatch = content.match(/<script[^>]+src="[^"]+"[^>]*><\/script>/);
+        const scriptMatch = content.match(/<script[^>]+type="module"[^>]*src="[^"]+"[^>]*><\/script>/);
         const linkMatches = [...content.matchAll(/<link[^>]+rel="(?:stylesheet|modulepreload)"[^>]+>/g)];
         const tags: string[] = [];
         if (scriptMatch) tags.push(scriptMatch[0]);
@@ -77,6 +77,10 @@ const cache = new LRUCache<string, { html: string; slug: string }>({
   max: 50,
   ttl: 60_000,
 });
+
+export function invalidateSsrCache(slug: string): void {
+  cache.delete(`ssr:menu:${slug}`);
+}
 
 function escapeHtml(str: string): string {
   return str
@@ -287,8 +291,8 @@ export async function renderMenuPage(
   const client = await pool.connect();
   try {
     const locRes = await client.query(
-      `SELECT id, name, slug, currency_code, currency_minor_unit, default_locale, 
-              supported_locales, address, public_phone, hours_json, geo
+      `SELECT id, name, slug, currency_code, currency_minor_unit, default_locale,
+              supported_locales, address, public_phone, hours_json, geo, delivery_paused
        FROM locations WHERE slug = $1`,
       [slug],
     );
@@ -319,6 +323,32 @@ export async function renderMenuPage(
     const currencyCode = menu.currency?.code || loc.currency_code || 'ALL';
     const minorUnit = menu.currency?.minor_unit ?? loc.currency_minor_unit ?? 0;
 
+    // Compute isOpen with Albania timezone — same logic as /public/locations/:slug/info
+    let isOpen = !(loc.delivery_paused ?? false);
+    if (isOpen && loc.hours_json) {
+      try {
+        const TZ = 'Europe/Tirane';
+        const parts = new Intl.DateTimeFormat('en-US', {
+          timeZone: TZ, weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false,
+        }).formatToParts(new Date());
+        const weekday = parts.find((p: Intl.DateTimeFormatPart) => p.type === 'weekday')?.value ?? '';
+        const hour = parseInt(parts.find((p: Intl.DateTimeFormatPart) => p.type === 'hour')?.value ?? '0', 10) % 24;
+        const minute = parseInt(parts.find((p: Intl.DateTimeFormatPart) => p.type === 'minute')?.value ?? '0', 10);
+        const dayName = weekday.toLowerCase();
+        const nowMins = hour * 60 + minute;
+        const dayData = (loc.hours_json as Record<string, any>)[dayName];
+        if (dayData && typeof dayData === 'object') {
+          if (dayData.isOpen === false) {
+            isOpen = false;
+          } else if (dayData.open && dayData.close) {
+            const [oh, om] = dayData.open.split(':').map(Number);
+            const [ch, cm] = dayData.close.split(':').map(Number);
+            isOpen = nowMins >= oh * 60 + om && nowMins < ch * 60 + cm;
+          }
+        }
+      } catch { /* ignore parse errors */ }
+    }
+
     const jsonld = buildJsonLd(menu, slug, appBase);
 
     const initialData = {
@@ -328,13 +358,23 @@ export async function renderMenuPage(
       currency: { code: currencyCode, minor_unit: minorUnit },
       location: menu.location,
       categories: menu.categories,
+      isOpen,
     };
 
-    const menuContent = menu.categories?.length
-      ? menu.categories.map((cat: CategoryData) =>
-          html`<${MenuSection} category=${cat} locale=${defaultLocale} currencyCode=${currencyCode} minorUnit=${minorUnit} />`
-        )
-      : html`<p class="empty-menu">Menu not available yet.</p>`;
+    const menuContent = isOpen
+      ? (menu.categories?.length
+          ? menu.categories.map((cat: CategoryData) =>
+              html`<${MenuSection} category=${cat} locale=${defaultLocale} currencyCode=${currencyCode} minorUnit=${minorUnit} />`
+            )
+          : html`<p class="empty-menu">Menu not available yet.</p>`)
+      : html`
+        <div data-testid="closed-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:55vh;padding:2rem;text-align:center;gap:1.25rem;">
+          <i class="ti ti-clock-off" style="font-size:3rem;opacity:0.5;"></i>
+          <p style="font-size:1rem;font-weight:500;max-width:18rem;line-height:1.6;color:#aaa;">
+            We are currently closed. Check back during opening hours.
+          </p>
+        </div>
+      `;
 
     const title = `${loc.name} — Order Online | Dowiz`;
     const metaDesc = loc.address
@@ -361,7 +401,6 @@ export async function renderMenuPage(
           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
           <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-          <!--SSR_ASSETS-->
           <script type="application/ld+json">${jsonld}</script>
           <style>
             *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -408,13 +447,23 @@ export async function renderMenuPage(
               <p>Order delivery from ${escapeHtml(menu.location.name)} via Dowiz</p>
             </footer>
           </div>
-          <script>window.__INITIAL_STATE__ = ${JSON.stringify(initialData)};</script>
         </body>
       </html>
     `;
 
-    const fullHtml = ('<!DOCTYPE html>\n' + render(vdom as any)).replace('<!--SSR_ASSETS-->', loadAssetTags());
-    cache.set(cacheKey, { html: fullHtml, slug });
+    // Inject __INITIAL_STATE__ as raw string — Preact HTML-encodes script text content,
+    // turning & in JSON values into &amp; which then throws "Unexpected token '&'" in the browser.
+    const safeJson = JSON.stringify(initialData)
+      .replace(/&/g, '\\u0026')
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e');
+    const initScript = `<script>window.__INITIAL_STATE__ = ${safeJson};</script>`;
+
+    const fullHtml = ('<!DOCTYPE html>\n' + render(vdom as any))
+      .replace('</head>', loadAssetTags() + '</head>')
+      .replace('</body>', initScript + '\n</body>');
+    // Only cache open pages — closed pages must stay fresh so reopening is instant
+    if (isOpen) cache.set(cacheKey, { html: fullHtml, slug });
     return fullHtml;
   } finally {
     client.release();

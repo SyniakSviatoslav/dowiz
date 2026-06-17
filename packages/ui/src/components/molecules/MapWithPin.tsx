@@ -13,6 +13,7 @@ interface MapWithPinProps {
   onPinChange?: (lngLat: LngLatLike) => void;
   confirmLabel?: string;
   placeholder?: string;
+  cooperativeGestures?: boolean;
 }
 
 function getCurrentPosition(): Promise<GeolocationPosition> {
@@ -36,6 +37,7 @@ export function MapWithPin({
   onPinChange,
   confirmLabel = 'Confirm location',
   placeholder = 'Tap the map to place your delivery pin',
+  cooperativeGestures = false,
 }: MapWithPinProps) {
   const [pin, setPin] = useState<LngLatLike | null>(initialPin || null);
   const [confirmed, setConfirmed] = useState(false);
@@ -77,6 +79,7 @@ export function MapWithPin({
         zoom={pin ? 15 : 13}
         markers={markers}
         onClick={handleMapClick}
+        cooperativeGestures={cooperativeGestures}
       />
       <button
         type="button"

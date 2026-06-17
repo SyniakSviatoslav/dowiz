@@ -13,7 +13,7 @@ export default (async function ssrRoutes(fastify: any, opts: any) {
     const locale = (request.query as any)?.locale || '';
 
     const html = await renderMenuPage(slug, db);
-    reply.type('text/html').send(html);
+    reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300').type('text/html').send(html);
   });
 
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;

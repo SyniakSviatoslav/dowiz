@@ -18,6 +18,7 @@ interface MapLibreBaseProps {
   onClick?: (lngLat: LngLatLike) => void;
   onMapReady?: (map: unknown) => void;
   interactive?: boolean;
+  cooperativeGestures?: boolean;
 }
 
 export function MapLibreBase({
@@ -31,6 +32,7 @@ export function MapLibreBase({
   onClick,
   onMapReady,
   interactive = true,
+  cooperativeGestures = false,
 }: MapLibreBaseProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -59,6 +61,7 @@ export function MapLibreBase({
           center,
           zoom,
           interactive,
+          cooperativeGestures,
         });
 
         map.addControl(new maplibregl.NavigationControl(), 'top-right');

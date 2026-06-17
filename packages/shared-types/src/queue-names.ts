@@ -24,4 +24,5 @@ export const QUEUE_NAMES = {
   BACKUP_VERIFY_R2: 'backup.verify.r2',
   RECONCILIATION_NIGHTLY: 'reconciliation.nightly',
   RATES_REFRESH: 'rates.refresh',
+  ORDER_FEEDBACK_REMINDER: 'order.feedback_reminder',
 } as const;

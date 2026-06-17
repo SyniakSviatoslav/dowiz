@@ -216,6 +216,17 @@ export class AnonymizerService {
         [orderId],
       );
 
+      // Clear rating comment (PII) while preserving stars for analytics.
+      // Guard: ignore if migration hasn't run yet on this environment.
+      try {
+        await client.query(
+          `UPDATE order_ratings SET comment = NULL WHERE order_id = $1 AND comment IS NOT NULL`,
+          [orderId],
+        );
+      } catch (err: any) {
+        if (err.code !== '42P01') throw err; // 42P01 = undefined_table
+      }
+
       await this.insertAuditLog(client, {
         scope: options.scope,
         subjectKind: 'order',

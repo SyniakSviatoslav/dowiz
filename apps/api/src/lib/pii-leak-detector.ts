@@ -39,8 +39,8 @@ const DANGEROUS_JSON_KEYS = [
   /^invited_email_hash$/i,
 ];
 
-export function detectPiiLeak(input: string, contextLabel: string = 'unknown'): PiiLeakResult[] {
-  const leaks: PiiLeakResult[] = [];
+export function detectPiiLeak(input: string, contextLabel: string = 'unknown'): string[] {
+  const leaks: string[] = [];
 
   let parsed: any;
   let isJson = false;
@@ -59,12 +59,7 @@ export function detectPiiLeak(input: string, contextLabel: string = 'unknown'): 
   for (const pattern of PII_VALUE_PATTERNS) {
     let match;
     while ((match = pattern.exec(input)) !== null) {
-      leaks.push({
-        source: 'string_value',
-        pattern: pattern.source.substring(0, 30),
-        value: match[0],
-        context: contextLabel,
-      });
+      leaks.push(match[0]);
     }
   }
 
@@ -78,19 +73,14 @@ export function detectPiiLeak(input: string, contextLabel: string = 'unknown'): 
   for (const pattern of htmlPatterns) {
     let match;
     while ((match = pattern.exec(input)) !== null) {
-      leaks.push({
-        source: 'html_attribute',
-        pattern: pattern.source.substring(0, 30),
-        value: match[0],
-        context: contextLabel,
-      });
+      leaks.push(match[0]);
     }
   }
 
   return leaks;
 }
 
-function scanJsonValue(value: any, path: string, leaks: PiiLeakResult[], contextLabel: string) {
+function scanJsonValue(value: any, path: string, leaks: string[], contextLabel: string) {
   if (value === null || value === undefined) return;
 
   if (typeof value === 'object' && !Array.isArray(value)) {
@@ -102,12 +92,7 @@ function scanJsonValue(value: any, path: string, leaks: PiiLeakResult[], context
         if (pattern.test(key)) {
           // Only flag if the value itself looks like raw data (UUID, long string, etc.)
           if (typeof val === 'string' && val.length > 4) {
-            leaks.push({
-              source: 'json_key',
-              pattern: key,
-              value: `${key}: ${maskValue(val)}`,
-              context: contextLabel,
-            });
+            leaks.push(`${key}: ${maskValue(val)}`);
           }
         }
       }
@@ -122,12 +107,7 @@ function scanJsonValue(value: any, path: string, leaks: PiiLeakResult[], context
         for (const piiPattern of PII_VALUE_PATTERNS) {
           let match;
           while ((match = piiPattern.exec(val)) !== null) {
-            leaks.push({
-              source: 'json_value',
-              pattern: piiPattern.source.substring(0, 30),
-              value: `${fullPath}: ${match[0]}`,
-              context: contextLabel,
-            });
+            leaks.push(`${fullPath}: ${match[0]}`);
           }
         }
       }

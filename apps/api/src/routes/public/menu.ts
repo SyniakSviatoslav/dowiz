@@ -58,13 +58,19 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
       if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
       const r = res.rows[0];
 
-      // Compute isOpen from hours_json + delivery_paused
+      // Compute isOpen from hours_json + delivery_paused (Albania timezone)
       let isOpen = !(r.delivery_paused ?? false);
       if (isOpen && r.hours_json) {
         try {
-          const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-          const now = new Date();
-          const dayName = days[now.getDay()] as string;
+          const TZ = 'Europe/Tirane';
+          const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: TZ, weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false,
+          }).formatToParts(new Date());
+          const weekday = parts.find(p => p.type === 'weekday')?.value ?? '';
+          const hour = parseInt(parts.find(p => p.type === 'hour')?.value ?? '0', 10) % 24;
+          const minute = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0', 10);
+          const dayName = weekday.toLowerCase();
+          const nowMins = hour * 60 + minute;
           const dayData = (r.hours_json as Record<string, any>)[dayName];
           if (dayData && typeof dayData === 'object') {
             if (dayData.isOpen === false) {
@@ -72,15 +78,13 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
             } else if (dayData.open && dayData.close) {
               const [oh, om] = dayData.open.split(':').map(Number);
               const [ch, cm] = dayData.close.split(':').map(Number);
-              const nowMins = now.getHours() * 60 + now.getMinutes();
-              const openMins = oh * 60 + om;
-              const closeMins = ch * 60 + cm;
-              isOpen = nowMins >= openMins && nowMins < closeMins;
+              isOpen = nowMins >= oh * 60 + om && nowMins < ch * 60 + cm;
             }
           }
         } catch { /* ignore parse errors */ }
       }
 
+      reply.header('Cache-Control', 'no-store');
       return reply.send({
         id: r.id, name: r.name, slug: r.slug,
         currency_code: r.currency_code, currency_minor_unit: r.currency_minor_unit,

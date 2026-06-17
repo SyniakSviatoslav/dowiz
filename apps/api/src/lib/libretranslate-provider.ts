@@ -32,7 +32,8 @@ export class LibreTranslateProvider implements TranslationProvider {
           format: 'text',
           api_key: ''
         }),
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(6000),
       });
 
       if (!res.ok) {

@@ -6,6 +6,9 @@ import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
 import { z } from 'zod';
 import { CategoryResponse } from '@deliveryos/shared-types';
+import { exportCSV } from '../../lib/exportCSV.js';
+import { mergeDelta } from './dashboard-utils.js';
+import { DispatchView } from './DispatchView.js';
 
 const AnyResponse = z.any();
 
@@ -14,8 +17,6 @@ const NotificationStatusResponse = z.object({
 }).passthrough();
 
 const OrdersListResponse = z.any();
-import { exportCSV } from '../../lib/exportCSV.js';
-import { mergeDelta } from './dashboard-utils.js';
 
 export function DashboardPage() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
@@ -25,7 +26,7 @@ export function DashboardPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'highest'>('newest');
-  const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
+  const [viewMode, setViewMode] = useState<'live' | 'history' | 'dispatch'>('live');
   const [showHint, setShowHint] = useState(() => localStorage.getItem('dos_dash_hint_dismissed') !== '1');
   const { t } = useI18n();
   const isMobile = useIsMobile();
@@ -209,8 +210,11 @@ export function DashboardPage() {
     let result = orders;
     if (viewMode === 'live') {
       result = result.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED');
-    } else {
+    } else if (viewMode === 'history') {
       result = result.filter(o => o.status === 'DELIVERED' || o.status === 'CANCELLED');
+    } else {
+      // dispatch view fetches its own data; return empty so stats are unaffected
+      result = [];
     }
 
     if (search) {
@@ -228,9 +232,11 @@ export function DashboardPage() {
     return result;
   }, [orders, search, statusFilter, sortBy, viewMode]);
 
-  const STATUSES = viewMode === 'live' 
+  const STATUSES = viewMode === 'live'
     ? ['all', 'PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY']
-    : ['all', 'DELIVERED', 'CANCELLED'];
+    : viewMode === 'history'
+    ? ['all', 'DELIVERED', 'CANCELLED']
+    : [];
 
   const readinessItems = [
     { label: t('admin.menu', 'Menu'), done: readiness.menu, icon: 'ti ti-tools-kitchen-2' },
@@ -297,7 +303,7 @@ export function DashboardPage() {
             <div className="flex items-center gap-4 shrink-0">
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{viewMode === 'live' ? t('admin.live_orders', 'Live Orders') : t('courier.history', 'Order History')}</h2>
+                  <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{viewMode === 'live' ? t('admin.live_orders', 'Live Orders') : viewMode === 'dispatch' ? t('admin.delivered', 'Delivered') : t('courier.history', 'Order History')}</h2>
                   <div data-testid="ws-status-dot" data-connected={connectionStatus === 'connected' ? 'true' : 'false'}><WSStatusDot status={connectionStatus === 'disabled' ? 'disconnected' : connectionStatus} /></div>
                 </div>
                 <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{filteredOrders.length}</p>
@@ -311,6 +317,10 @@ export function DashboardPage() {
                   onClick={() => { setViewMode('history'); setStatusFilter('all'); }}
                   className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors text-center ${viewMode === 'history' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}
                 >{t('courier.history', 'History')}</motion.button>
+                <motion.button role="tab" whileTap={{ scale: 0.97 }} aria-selected={viewMode === 'dispatch'}
+                  onClick={() => { setViewMode('dispatch'); setStatusFilter('all'); }}
+                  className={`w-20 sm:w-24 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors text-center ${viewMode === 'dispatch' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}
+                >{t('admin.delivered', 'Delivered')}</motion.button>
               </div>
               {clientSlug && (
                 <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
@@ -415,7 +425,9 @@ export function DashboardPage() {
         </div>
 
       {/* Orders grid */}
-      {error ? (
+      {viewMode === 'dispatch' ? (
+        <DispatchView locationId={tenantId} />
+      ) : error ? (
         <EmptyState title={t('common.error', 'Error')} description={error} />
       ) : loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

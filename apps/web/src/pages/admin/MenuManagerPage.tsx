@@ -57,6 +57,7 @@ export function MenuManagerPage() {
   const [formPrice, setFormPrice] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formAvailable, setFormAvailable] = useState(true);
+  const [formChefPick, setFormChefPick] = useState(false);
   const [formImage, setFormImage] = useState<string | null>(null);
   const [formStock, setFormStock] = useState('');
 
@@ -104,6 +105,7 @@ export function MenuManagerPage() {
     setFormPrice('');
     setFormDesc('');
     setFormAvailable(true);
+    setFormChefPick(false);
     setFormImage(null);
     setFormStock('');
 
@@ -118,6 +120,7 @@ export function MenuManagerPage() {
     setFormPrice(String(product.price));
     setFormDesc(product.description || '');
     setFormAvailable(product.available);
+    setFormChefPick(!!(product.attributes?.chef_pick));
     setFormImage(product.imageUrl || null);
     setFormStock(product.stockCount != null ? String(product.stockCount) : '');
 
@@ -129,7 +132,7 @@ export function MenuManagerPage() {
     setShowForm(false);
     setEditingProduct(null);
     setFormName(''); setFormPrice(''); setFormDesc('');
-    setFormImage(null); setFormStock(''); setPendingImageFile(null);
+    setFormImage(null); setFormStock(''); setFormChefPick(false); setPendingImageFile(null);
     setSaving(false);
   };
 
@@ -151,6 +154,7 @@ export function MenuManagerPage() {
       taste: hasTaste ? formTaste : undefined,
       stockCount: stock,
       recipeLines: hasRecipeLines ? formRecipeLines : undefined,
+      attributes: { chef_pick: formChefPick ? true : null },
     };
 
     try {
@@ -571,6 +575,11 @@ export function MenuManagerPage() {
                             {product.stockCount}
                           </span>
                         )}
+                        {!!(product.attributes as any)?.chef_pick && (
+                          <span className="text-[10px] font-semibold flex items-center gap-0.5" style={{ color: '#f59e0b' }}>
+                            <span style={{ fontSize: '0.6rem' }}>✦</span>Chef's Pick
+                          </span>
+                        )}
                       </div>
                       {getProductAllergens(product).length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
@@ -778,6 +787,17 @@ export function MenuManagerPage() {
               </div>
               <span className="text-sm font-medium" style={{ color: formAvailable ? 'var(--brand-text)' : 'var(--brand-text-muted)' }}>
                 {t('admin.available_for_order', 'Available for order')}
+              </span>
+            </label>
+
+            {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
+            <label className="flex items-center gap-3 cursor-pointer select-none" onClick={() => setFormChefPick(!formChefPick)}>
+              <div className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${formChefPick ? 'bg-amber-400' : 'bg-[var(--brand-border)]'}`}>
+                <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200 shadow-sm ${formChefPick ? 'translate-x-5' : 'translate-x-0'}`} />
+              </div>
+              <span className="text-sm font-medium flex items-center gap-1.5" style={{ color: formChefPick ? 'var(--brand-text)' : 'var(--brand-text-muted)' }}>
+                <span style={{ fontSize: '0.8rem', color: formChefPick ? '#f59e0b' : 'inherit' }}>✦</span>
+                {t('admin.chefs_pick', "Chef's Pick")}
               </span>
             </label>
 

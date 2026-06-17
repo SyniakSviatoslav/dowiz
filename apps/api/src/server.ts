@@ -88,6 +88,8 @@ import ownerPushRoutes from './routes/owner/push.js';
 import ownerOrderMetaRoutes from './routes/owner/order-meta.js';
 import ownerSignalRoutes from './routes/owner/signals.js';
 import ownerGdprRoutes from './routes/owner/gdpr.js';
+import ownerRatingsRoutes from './routes/owner/ratings.js';
+import customerRatingsRoutes from './routes/customer/ratings.js';
 import ownerPromotionRoutes from './routes/owner/promotions.js';
 import telegramWebhookRoutes from './routes/telegram-webhook.js';
 import { AnonymizerService } from './lib/anonymizer/index.js';
@@ -423,7 +425,8 @@ const retryPolicy = new RetryPolicy();
 
   await fastify.register(fastifyRateLimit, {
     max: 100,
-    timeWindow: '1 minute'
+    timeWindow: '1 minute',
+    redis,
   });
 
   // Allow POST with Content-Type: application/json but empty body
@@ -493,7 +496,7 @@ const retryPolicy = new RetryPolicy();
   // Individual routes can override via route config if needed.
   fastify.register(authRoutes);
   const { default: localAuthRoutes } = await import('./routes/auth/local.js');
-  // localAuthRoutes registered inline below for reliability
+  fastify.register(localAuthRoutes, { prefix: '/api', db: pool });
   fastify.register(courierRoutes);
   fastify.register(orderRoutes, { prefix: '/api', db: pool, messageBus, queue });
   fastify.register(categoryRoutes);
@@ -528,12 +531,14 @@ const retryPolicy = new RetryPolicy();
   fastify.register(ownerFallbackRoutes, { prefix: '/api/owner/locations', db: pool, messageBus, queue });
   fastify.register(ownerRevealContactRoutes, { prefix: '/api/owner/locations', db: pool, messageBus, queue });
   fastify.register(ownerGdprRoutes, { prefix: '/api/owner/locations', db: pool, messageBus, queue });
+  fastify.register(ownerRatingsRoutes, { prefix: '/api/owner/locations', db: pool });
+  fastify.register(customerRatingsRoutes, { prefix: '/api/customer', db: pool, queue });
   fastify.register(ownerPromotionRoutes, { db: pool });
   fastify.register(onboardingRoutes, { prefix: '/api/owner', db: pool, messageBus, queue });
   fastify.register(customerOtpRoutes, { prefix: '/api/customer', db: pool, messageBus });
   fastify.register(customerPushRoutes, { prefix: '/api/customer', db: pool, messageBus });
   fastify.register(courierSettlementRoutes, { prefix: '/api/courier', db: pool, messageBus });
-  fastify.register(courierAssignmentsRoutes, { prefix: '/api/courier', db: pool, messageBus });
+  fastify.register(courierAssignmentsRoutes, { prefix: '/api/courier', db: pool, messageBus, queue });
   fastify.register(courierShiftsRoutes, { prefix: '/api/courier', db: pool, messageBus });
   fastify.register(orderMessageRoutes, { db: pool, messageBus });
 
@@ -792,20 +797,6 @@ fastify.register(mockAuthRoutes, { db: pool });
     } catch (e: any) {
       return reply.status(500).send({ error: 'Seed failed: ' + (e?.message || '') });
     }
-  });
-  fastify.post('/api/auth/local/login', async (request, reply) => {
-    const { email, password } = request.body as any || {};
-    if (!email || !password) return reply.status(400).send({ error: 'Missing email or password' });
-    if (email === 'test@dowiz.com' && password === 'test123456') {
-      const res = await pool.query(`SELECT id FROM users WHERE email = $1`, [email.toLowerCase()]);
-      if (res.rowCount === 0) return reply.status(401).send({ error: 'User not found' });
-      const userId = res.rows[0].id;
-      const memRes = await pool.query(`SELECT location_id FROM memberships WHERE user_id = $1 LIMIT 1`, [userId]);
-      const { signAuthToken } = await import('@deliveryos/platform');
-      const token = await signAuthToken({ role: 'owner', userId, sub: userId } as any, '1d');
-      return reply.send({ access_token: token, userId, activeLocationId: memRes.rows[0]?.location_id || null });
-    }
-    return reply.status(401).send({ error: 'Invalid credentials' });
   });
 
   // SPA proxy — maps React SPA URL patterns to real backend routes

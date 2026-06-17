@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { ParseModeEnum } from '@deliveryos/shared-types';
 import { withTenant } from '@deliveryos/platform';
 import { BUS_CHANNELS } from '../../lib/registry.js';
+import { assertTextFileMagicBytes } from '../../lib/upload-guard.js';
 
 export default (async function menuImportRoutes(fastify: any, opts: any) {
   const { db, messageBus, parsers, storage } = opts as any;
@@ -42,7 +43,11 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
     }
 
     const buffer = await data.toBuffer();
-    
+
+    try { assertTextFileMagicBytes(buffer); } catch (e: any) {
+      return reply.status(400).send({ error: 'INVALID_FILE_TYPE', detail: e.message });
+    }
+
     let mode = 'merge';
     if (data.fields.mode && 'value' in data.fields.mode) {
       mode = String(data.fields.mode.value);

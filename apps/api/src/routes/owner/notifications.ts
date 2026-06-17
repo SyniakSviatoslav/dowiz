@@ -122,7 +122,12 @@ export default (async function ownerNotificationRoutes(fastify, opts) {
       }),
       body: z.object({
         status: z.enum(['active', 'disabled', 'disconnected']).optional(),
-        prefs: z.record(z.boolean()).optional(),
+        prefs: z.object({
+          category_operations: z.boolean().optional(),
+          category_analytics: z.boolean().optional(),
+          quiet_start: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+          quiet_end: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+        }).catchall(z.union([z.boolean(), z.string(), z.null()])).optional(),
         locale: z.enum(['sq', 'en', 'uk']).optional()
       }).strict()
     }

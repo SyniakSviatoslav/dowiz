@@ -39,4 +39,21 @@ test('PII Cipher Helper', async (t) => {
     const c2 = encryptPII(plain);
     assert.notDeepEqual(c1, c2);
   });
+
+  await t.test('null input returns null (distinct from empty string)', () => {
+    assert.equal(decryptPII(null), null);
+    assert.notEqual(decryptPII(null), '');
+  });
+
+  await t.test('cross-tenant: ciphertext from one key rejected by another key', () => {
+    const cipher = encryptPII('tenant-a-secret');
+    // Rotate to a different key (simulates tenant B having a different key)
+    const originalKey = process.env.COURIER_PII_ENCRYPTION_KEY;
+    process.env.COURIER_PII_ENCRYPTION_KEY = crypto.randomBytes(32).toString('base64');
+    delete (globalThis as any)['DOWIZ_PII_ENCRYPTION_KEY_BUFFER'];
+    assert.throws(() => decryptPII(cipher), { message: 'Unsupported state or unable to authenticate data' });
+    // Restore
+    process.env.COURIER_PII_ENCRYPTION_KEY = originalKey;
+    delete (globalThis as any)['DOWIZ_PII_ENCRYPTION_KEY_BUFFER'];
+  });
 });

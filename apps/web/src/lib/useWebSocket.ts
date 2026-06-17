@@ -67,11 +67,14 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'auth_success') {
+            const wasReconnect = reconnectAttempts.current > 0;
             reconnectAttempts.current = 0;
             if (room) {
               ws.send(JSON.stringify({ type: 'subscribe', room }));
             }
-            onReconnectRef.current?.();
+            if (wasReconnect) {
+              onReconnectRef.current?.();
+            }
             return;
           }
           onMessageRef.current?.(data);

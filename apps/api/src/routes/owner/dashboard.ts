@@ -68,7 +68,7 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
     const countSql = `
       SELECT o.status, COUNT(*)::int AS cnt
       FROM orders o
-      WHERE o.location_id = $1
+      WHERE o.location_id = $1 AND DATE(o.created_at) = CURRENT_DATE
       GROUP BY o.status
     `;
 
@@ -575,6 +575,18 @@ async function transitionOrder(db: any, messageBus: any, orderId: string, user: 
     // Canonical path: use updateOrderStatus which handles state machine, anti-race, and event publishing
     const { updateOrderStatus } = await import('../../lib/orderStatusService.js');
     await updateOrderStatus(client, orderId, locationId, newStatus as any, { messageBus });
+
+    if (newStatus === 'CONFIRMED') {
+      // Cancel the ORDER_TIMEOUT job — it's now redundant; failure is non-critical (job is a WHERE-guarded no-op)
+      try {
+        await client.query(
+          `UPDATE pgboss.job
+           SET state = 'cancelled', completedon = now()
+           WHERE name = $1 AND singletonkey = $2 AND state IN ('created', 'retry')`,
+          [QUEUE_NAMES.ORDER_TIMEOUT, orderId]
+        );
+      } catch { /* non-critical: job runs as no-op if cancel fails */ }
+    }
 
     // Handle rejection_reason separately (updateOrderStatus doesn't set it)
     if (reason && newStatus === 'REJECTED') {

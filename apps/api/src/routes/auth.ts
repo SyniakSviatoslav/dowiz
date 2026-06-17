@@ -69,7 +69,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
         code_verifier: codeVerifier,
         redirect_uri: redirectUri,
         grant_type: 'authorization_code'
-      })
+      }),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!tokenRes.ok) {
