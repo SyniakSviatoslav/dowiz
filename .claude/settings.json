@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"/c/Users/Dell5/Documents/dowiz/.claude/hooks/protect-paths.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/protect-paths.sh\""
           }
         ]
       }
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"/c/Users/Dell5/Documents/dowiz/.claude/hooks/post-edit-gates.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-gates.sh\""
           }
         ]
       }
@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"/c/Users/Dell5/Documents/dowiz/.claude/hooks/require-classification.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/require-classification.sh\""
           }
         ]
       }
