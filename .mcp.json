@@ -13,7 +13,15 @@
         "OLLAMA_EMBEDDING_MODEL": "qwen3-embedding:0.6b",
         "OLLAMA_BASE_URL": "http://127.0.0.1:11434"
       },
-      "description": "repowise: codebase intelligence \u2014 docs, graph, git signals, dead code, decisions"
+      "description": "repowise: codebase intelligence — docs, graph, git signals, dead code, decisions"
+    },
+    "playwright-test": {
+      "command": "npx",
+      "args": [
+        "playwright",
+        "run-test-mcp-server"
+      ],
+      "description": "playwright agents: planner/generator/healer drive tests against the running app"
     }
   }
 }
