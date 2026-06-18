@@ -52,7 +52,7 @@ export class PgMessageBus implements MessageBus {
             parsed = msg.payload;
           }
           console.log('[PgMessageBus] Calling', channelHandlers.length, 'handlers for', msg.channel);
-          channelHandlers.forEach(h => h(parsed));
+          this.dispatch(msg.channel, channelHandlers, parsed);
         } else {
           console.warn('[PgMessageBus] No handlers found for channel:', msg.channel, 'handlers map size:', this.handlers.size);
         }
@@ -115,6 +115,33 @@ export class PgMessageBus implements MessageBus {
       console.log('[PgMessageBus] ✓ Published to:', channel);
     } catch (err) {
       console.error('[PgMessageBus] Publish error:', err);
+    }
+  }
+
+  /**
+   * Fan a parsed message out to subscriber handlers in isolation.
+   *
+   * A subscriber that throws synchronously OR returns a rejecting promise must
+   * never escape this method. The previous `handlers.forEach(h => h(parsed))`
+   * discarded each handler's returned promise, so an async handler that rejected
+   * (e.g. a courier-events worker referencing a non-existent column on
+   * `order.courier_accepted`) surfaced as an unhandled rejection and crashed the
+   * entire API process (Node exits 1) — taking the order loop down for every
+   * tenant on a single courier accept. We log and swallow per-handler so one bad
+   * subscriber degrades a single broadcast, not the whole service.
+   */
+  private dispatch(channel: string, handlers: Array<(msg: any) => void>, parsed: any): void {
+    for (const h of handlers) {
+      try {
+        const result = h(parsed) as unknown;
+        if (result && typeof (result as Promise<unknown>).then === 'function') {
+          (result as Promise<unknown>).catch((err) => {
+            console.error(`[PgMessageBus] Subscriber handler rejected on ${channel}:`, err);
+          });
+        }
+      } catch (err) {
+        console.error(`[PgMessageBus] Subscriber handler threw on ${channel}:`, err);
+      }
     }
   }
 
