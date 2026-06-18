@@ -1,0 +1,178 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import { apiClient } from '../../lib/index.js';
+import { useI18n, useToast } from '@deliveryos/ui';
+
+// Menu-first onboarding — split-screen activation tool (O2).
+// Left: the gate checklist + Publish. Right: the live draft storefront preview.
+// Tool-as-onboarding: see your menu as a real storefront (aha), publish when the
+// trinity is green. Mobile: Edit ↔ Preview tabs.
+
+interface GateStatus {
+  published: boolean;
+  publishedAt: string | null;
+  slug: string;
+  menuVersion: number;
+  gate: { menuConfirmed: boolean; notificationsConnected: boolean; fulfillmentReady: boolean };
+  canPublish: boolean;
+  missing: Array<{ key: string; message: string }>;
+}
+
+export function ActivationPage() {
+  const { t } = useI18n();
+  const { showToast } = useToast();
+  const [locationId, setLocationId] = useState('');
+  const [slug, setSlug] = useState('');
+  const [status, setStatus] = useState<GateStatus | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [tab, setTab] = useState<'edit' | 'preview'>('edit');
+
+  useEffect(() => {
+    apiClient<any>('/owner/settings')
+      .then((res: any) => { if (res.id) setLocationId(res.id); if (res.slug) setSlug(res.slug); })
+      .catch(() => {});
+  }, []);
+
+  const refresh = useCallback(async () => {
+    if (!locationId) return;
+    try { setStatus(await apiClient<any>(`/owner/activation/${locationId}/status`)); } catch { /* keep last */ }
+  }, [locationId]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+  // Poll while a draft so connecting notifications / committing the menu lights the
+  // checklist without a manual refresh.
+  useEffect(() => {
+    if (status?.published) return;
+    const iv = setInterval(refresh, 8000);
+    return () => clearInterval(iv);
+  }, [status?.published, refresh]);
+
+  const publish = async () => {
+    if (!status?.canPublish || !locationId) return;
+    setPublishing(true);
+    try {
+      await apiClient<any>(`/owner/activation/${locationId}/publish`, { method: 'POST' });
+      showToast(t('activation.published_toast', 'Published — your storefront is live!'), 'success');
+      await refresh();
+    } catch {
+      showToast(t('activation.publish_failed', 'Could not publish. Check the checklist.'), 'error');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const previewUrl = slug ? `/s/${slug}?embed=true` : '';
+
+  const Check = ({ done }: { done: boolean }) => (
+    <span
+      className="inline-flex items-center justify-center w-6 h-6 rounded-full shrink-0"
+      style={{ background: done ? 'var(--color-success)' : 'var(--brand-surface)', color: done ? '#fff' : 'var(--brand-text-muted)', border: done ? 'none' : '2px solid var(--brand-text-muted)' }}
+      aria-hidden
+    >
+      <i className={done ? 'ti ti-check' : 'ti ti-minus'} />
+    </span>
+  );
+
+  const gateItems = status ? [
+    { key: 'menu', done: status.gate.menuConfirmed, title: t('activation.gate_menu', 'Confirm your menu'), hint: t('activation.gate_menu_hint', 'Review prices & allergens — tap items in the preview to edit.') },
+    { key: 'notifications', done: status.gate.notificationsConnected, title: t('activation.gate_notifs', 'Connect notifications'), hint: t('activation.gate_notifs_hint', 'So you see new orders instantly (Telegram).') },
+    { key: 'fulfillment', done: status.gate.fulfillmentReady, title: t('activation.gate_fulfillment', 'Set up fulfillment'), hint: t('activation.gate_fulfillment_hint', 'Enable pickup or add a courier, plus a contact phone.') },
+  ] : [];
+
+  const Checklist = (
+    <div className="flex flex-col h-full">
+      <div className="px-5 pt-5 pb-3">
+        <h1 className="text-xl font-bold" style={{ color: 'var(--brand-text)' }}>
+          {status?.published ? t('activation.title_live', 'Your storefront is live') : t('activation.title', 'Get your storefront live')}
+        </h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--brand-text-muted)' }}>
+          {status?.published
+            ? t('activation.subtitle_live', 'Customers can order now. Keep polishing on the right.')
+            : t('activation.subtitle', 'Three steps left. Watch it come together on the right.')}
+        </p>
+      </div>
+
+      <div className="flex-1 overflow-auto px-5 space-y-3">
+        {gateItems.map((it) => (
+          <div key={it.key} className="flex gap-3 p-3 rounded-xl" style={{ background: 'var(--brand-bg)' }}>
+            <Check done={it.done} />
+            <div className="min-w-0">
+              <div className="font-semibold text-sm" style={{ color: 'var(--brand-text)' }}>{it.title}</div>
+              <div className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{it.hint}</div>
+            </div>
+          </div>
+        ))}
+        {!status && <div className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{t('common.loading', 'Loading…')}</div>}
+
+        {/* Optional, visually separate from the must-do trinity (§4). */}
+        <div className="pt-2 text-xs uppercase tracking-wide" style={{ color: 'var(--brand-text-muted)' }}>
+          {t('activation.optional', 'Recommended (optional)')}
+        </div>
+        <div className="flex gap-3 p-3 rounded-xl opacity-80" style={{ background: 'var(--brand-bg)' }}>
+          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full shrink-0" style={{ border: '2px dashed var(--brand-text-muted)', color: 'var(--brand-text-muted)' }}><i className="ti ti-flask" /></span>
+          <div className="min-w-0">
+            <div className="font-semibold text-sm" style={{ color: 'var(--brand-text)' }}>{t('activation.test_order', 'Place a test order')}</div>
+            <div className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{t('activation.test_order_hint', 'Try the flow end-to-end before going live.')}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-5 border-t" style={{ borderColor: 'var(--brand-bg)' }}>
+        {!status?.published ? (
+          <>
+            <button
+              onClick={publish}
+              disabled={!status?.canPublish || publishing}
+              className="w-full py-3 rounded-xl font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: 'var(--brand-primary)', color: '#fff' }}
+            >
+              {publishing ? t('activation.publishing', 'Publishing…') : t('activation.publish', 'Publish storefront')}
+            </button>
+            {status && !status.canPublish && status.missing.length > 0 && (
+              <p className="text-xs mt-2 text-center" style={{ color: 'var(--color-warning)' }}>
+                {t('activation.still_needed', 'Still needed:')} {status.missing.map((m) => m.message).join(' · ')}
+              </p>
+            )}
+          </>
+        ) : (
+          <a href={`/s/${slug}`} target="_blank" rel="noreferrer" className="block w-full py-3 rounded-xl font-bold text-center" style={{ background: 'var(--color-success)', color: '#fff' }}>
+            {t('activation.view_live', 'View live storefront')} ↗
+          </a>
+        )}
+      </div>
+    </div>
+  );
+
+  const Preview = (
+    <div className="h-full w-full relative" style={{ background: 'var(--brand-bg)' }}>
+      {previewUrl ? (
+        <iframe key={status?.menuVersion} src={previewUrl} title="storefront preview" className="w-full h-full border-0" />
+      ) : (
+        <div className="flex items-center justify-center h-full text-sm" style={{ color: 'var(--brand-text-muted)' }}>{t('common.loading', 'Loading…')}</div>
+      )}
+      {status && !status.published && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs font-semibold shadow" style={{ background: 'var(--color-warning)', color: '#fff' }}>
+          {t('activation.draft_badge', 'Draft preview — not accepting orders yet')}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="h-full" style={{ background: 'var(--brand-surface)' }}>
+      {/* Mobile tabs */}
+      <div className="md:hidden flex border-b" style={{ borderColor: 'var(--brand-bg)' }}>
+        {(['edit', 'preview'] as const).map((tk) => (
+          <button key={tk} onClick={() => setTab(tk)} className="flex-1 py-3 text-sm font-semibold" style={{ color: tab === tk ? 'var(--brand-primary)' : 'var(--brand-text-muted)', borderBottom: tab === tk ? '2px solid var(--brand-primary)' : '2px solid transparent' }}>
+            {tk === 'edit' ? t('activation.tab_edit', 'Checklist') : t('activation.tab_preview', 'Preview')}
+          </button>
+        ))}
+      </div>
+
+      {/* Desktop split / mobile single */}
+      <div className="md:grid md:grid-cols-2 h-[calc(100%-49px)] md:h-full">
+        <div className={`${tab === 'edit' ? 'block' : 'hidden'} md:block h-full overflow-hidden`}>{Checklist}</div>
+        <div className={`${tab === 'preview' ? 'block' : 'hidden'} md:block h-full border-l`} style={{ borderColor: 'var(--brand-bg)' }}>{Preview}</div>
+      </div>
+    </div>
+  );
+}
