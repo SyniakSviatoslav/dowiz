@@ -59,7 +59,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     renderApp();
   } catch (err) {
-    document.getElementById('app')!.innerHTML = '<p>Error loading menu. Please refresh.</p>';
+    // Surface the real error — this catch previously swallowed render-time
+    // exceptions (e.g. schema-drift on product fields) as a misleading
+    // "failed to load" message while the fetch had actually succeeded.
+    console.error('[checkout] render failed:', err);
+    document.getElementById('app')!.innerHTML = '<p>Something went wrong loading your cart. Please refresh.</p>';
   }
 });
 
@@ -119,8 +123,10 @@ function renderCartView() {
   cart.items.forEach((item, idx) => {
     const prod = getProductDetails(item.productId);
     if (!prod) return;
-    const name = prod.available_names[menuData.default_locale] || 'Unknown Product';
-    const desc = prod.available_descriptions ? (prod.available_descriptions[menuData.default_locale] || '') : '';
+    // /public/locations/:slug/menu returns flat, single-locale products
+    // (name/description), NOT the all-locales available_names shape.
+    const name = prod.name || 'Unknown Product';
+    const desc = prod.description || '';
     
     itemsHtml += `
       <div class="py-4 border-b flex gap-3 last:border-0" style="border-color:var(--brand-border)">
@@ -261,7 +267,7 @@ function renderCheckoutView() {
       typeContent = `
         <div class="mt-6 border rounded-[12px] p-4" style="background:var(--brand-surface);border-color:var(--brand-border)">
           <h3 class="text-[14px] font-bold mb-1" style="color:var(--brand-text)">Pickup address</h3>
-          <p class="text-[14px] mb-4" style="color:var(--brand-text-muted)">${menuData.location.address}</p>
+          <p class="text-[14px] mb-4" style="color:var(--brand-text-muted)">${menuData.location_name || ''}</p>
         </div>
       `;
     }

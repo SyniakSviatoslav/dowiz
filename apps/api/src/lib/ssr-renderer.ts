@@ -393,7 +393,7 @@ export async function renderMenuPage(
               <div id="root">${menuContent}</div>
             </main>
             <div id="cartFabWrapper" class="cart-fab-wrapper hidden">
-              <a id="cartFabBtn" class="cart-fab" href="/s/${slug}/cart" aria-label="View cart">
+              <a id="cartFabBtn" class="cart-fab" href="/s/${slug}/checkout" aria-label="View cart">
                 🛒 <span id="fabCount">0</span>
               </a>
             </div>
