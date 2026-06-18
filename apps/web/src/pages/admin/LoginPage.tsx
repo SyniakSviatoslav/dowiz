@@ -33,24 +33,23 @@ export function LoginPage() {
     setError('');
     setTgWaiting(true);
     try {
-      const res = await apiClient<any>('/auth/telegram/start', { method: 'POST' });
+      // Auth routes are mounted at /auth/* (not /api/auth) — call them directly.
+      const res = await (await fetch('/auth/telegram/start', { method: 'POST', headers: { 'Content-Type': 'application/json' } })).json();
       setTgLink(res.deepLink);
       window.open(res.deepLink, '_blank');
       const token = res.token;
       const deadline = Date.now() + 5 * 60 * 1000;
       const poll = async () => {
         if (Date.now() > deadline) { setTgWaiting(false); setError(t('admin.tg_timeout', 'Telegram login timed out. Please try again.')); return; }
-        try {
-          const p = await apiClient<any>(`/auth/telegram/poll?token=${token}`);
-          if (p.status === 'authenticated' && p.access_token) {
-            sessionStorage.setItem('dos_access_token', p.access_token);
-            localStorage.setItem('dos_access_token', p.access_token);
-            if (p.refresh_token) localStorage.setItem('dos_refresh_token', p.refresh_token);
-            navigate('/admin');
-            return;
-          }
-        } catch (e: any) {
-          if (e?.status === 410) { setTgWaiting(false); setError(t('admin.tg_expired', 'Telegram login link expired. Please try again.')); return; }
+        const pr = await fetch(`/auth/telegram/poll?token=${token}`);
+        if (pr.status === 410) { setTgWaiting(false); setError(t('admin.tg_expired', 'Telegram login link expired. Please try again.')); return; }
+        const p = await pr.json().catch(() => ({}));
+        if (p.status === 'authenticated' && p.access_token) {
+          sessionStorage.setItem('dos_access_token', p.access_token);
+          localStorage.setItem('dos_access_token', p.access_token);
+          if (p.refresh_token) localStorage.setItem('dos_refresh_token', p.refresh_token);
+          navigate('/admin');
+          return;
         }
         setTimeout(poll, 2000);
       };
