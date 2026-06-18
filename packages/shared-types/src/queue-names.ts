@@ -4,6 +4,7 @@ export const QUEUE_NAMES = {
   NOTIFY_TELEGRAM_SEND: 'notify.telegram.send',
   ORDER_PENDING_AGING: 'order.pending_aging',
   ORDER_TIMEOUT: 'order.timeout',
+  ORDER_FEEDBACK_REMINDER: 'order.feedback_reminder',
   COURIER_DISPATCH: 'courier.dispatch',
   COURIER_STALE_CHECK: 'courier.stale_check',
   SETTLEMENT_CRON: 'settlement.cron',

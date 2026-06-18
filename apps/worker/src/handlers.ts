@@ -61,4 +61,23 @@ export function registerHandlers(queue: QueueProvider, pool: Pool, messageBus: M
       console.error(`[Worker] Error processing order.timeout for ${orderId}:`, err);
     }
   });
+
+  // Post-delivery feedback nudge (~30 min after delivery, within the 24h window).
+  // If the order is still unrated, push a reminder to the order channel so a client
+  // that's still on the status page can prompt for a rating.
+  // ponytail: WS nudge only — a real push would route via the notification pipeline.
+  queue.work(QUEUE_NAMES.ORDER_FEEDBACK_REMINDER, async (payload: Record<string, unknown>) => {
+    const { orderId } = payload;
+    if (!orderId || typeof orderId !== 'string') return;
+    try {
+      const rated = await pool.query(`SELECT 1 FROM order_ratings WHERE order_id = $1`, [orderId]);
+      if (rated.rowCount && rated.rowCount > 0) return; // already rated → no nudge
+      await messageBus.publish(orderChannel(orderId), {
+        type: 'order.feedback_reminder',
+        payload: { orderId },
+      });
+    } catch (err) {
+      console.error(`[Worker] feedback reminder failed for ${orderId}:`, err);
+    }
+  });
 }

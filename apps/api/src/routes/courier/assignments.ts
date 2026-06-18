@@ -8,7 +8,7 @@ import { updateOrderStatus } from '../../lib/orderStatusService';
 const env = loadEnv();
 
 export default (async function courierAssignmentsRoutes(fastify: any, opts: any) {
-  const { db, messageBus } = opts as { db: any, messageBus: MessageBus };
+  const { db, messageBus, queue } = opts as { db: any, messageBus: MessageBus, queue: any };
 
   fastify.addHook('preValidation', fastify.verifyAuth);
   fastify.addHook('preValidation', fastify.requireRole(['courier']));
@@ -309,16 +309,45 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       // Canonical path: update orders status + publish WS events (customer + owner)
       await updateOrderStatus(client, order_id, locationId, 'DELIVERED', { messageBus });
 
+      // Immutable delivery audit (one per order; idempotent).
+      await client.query(`
+        INSERT INTO delivery_trace (order_id, location_id, courier_id, total, delivered_at)
+        VALUES ($1, $2, $3, $4, now())
+        ON CONFLICT (order_id) DO NOTHING
+      `, [order_id, locationId, courierId, total]);
+
+      // Cash-collected → append a 'hold' audit row (NOT the settlement source of
+      // truth; settlement_items remains authoritative). Idempotent per (order_id,type).
+      if (cash_collected) {
+        await client.query(`
+          INSERT INTO courier_cash_ledger (courier_id, location_id, order_id, type, amount)
+          VALUES ($1, $2, $3, 'hold', $4)
+          ON CONFLICT (order_id, type) DO NOTHING
+        `, [courierId, locationId, order_id, cash_amount]);
+      }
+
       await client.query('COMMIT');
 
       // Integrate with Phase 1 lifecycle
-      await messageBus.publish(BUS_CHANNELS.ORDER_DELIVERED, { 
-        orderId: order_id, 
+      await messageBus.publish(BUS_CHANNELS.ORDER_DELIVERED, {
+        orderId: order_id,
         locationId,
         courierId,
         cashCollected: cash_collected,
         cashAmount: cash_collected ? cash_amount : null
       });
+
+      // Feedback reminder ~30 min after delivery (within the 24h rating window).
+      // After COMMIT, best-effort: a failure here must not fail the delivery.
+      try {
+        await queue.enqueue(
+          QUEUE_NAMES.ORDER_FEEDBACK_REMINDER,
+          { orderId: order_id, locationId },
+          { startAfter: new Date(Date.now() + 30 * 60 * 1000), singletonKey: order_id },
+        );
+      } catch (err) {
+        request.log.warn({ err }, 'failed to enqueue feedback reminder (non-fatal)');
+      }
 
       return reply.send({ success: true });
     } catch (err) {
