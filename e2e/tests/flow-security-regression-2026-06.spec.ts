@@ -65,4 +65,13 @@ test.describe('Security regression 2026-06', () => {
     );
     expect(res.status()).toBe(404);
   });
+
+  // ── U1: /admin requires auth (no shell for anonymous users) ───────────────
+  test('U1: /admin redirects unauthenticated users to /login', async ({ page }) => {
+    await page.goto(`${BASE}/admin`);
+    await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+    await page.goto(`${BASE}/admin`);
+    await page.waitForURL('**/login', { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/login/);
+  });
 });
