@@ -48,8 +48,14 @@
 - **Full LLM wiki-gen** (rich `get_answer` synthesis, full doc pages) — blocked by free-tier **429 rate-limits** (single free models can't rotate like `openrouter-implement.ts`). This is the **"Headroom / paid LLM lane"** park-with-trigger: backfill via `repowise init --resume` once a non-rate-limited LLM lane exists (paid OpenRouter / BYOK / off-peak). Until then the corpus is 14 pages (symbol spotlights + 2 ADRs); structural tools are fully usable.
 - **`~/.claude/settings.json` (global, protected zone — needs manual approval):** `init` auto-added a 2nd `repowise` MCP entry (lacks the embedder `env` block) + a global `PostToolUse: repowise-augment` hook. Decide: keep / align env / remove. Project `.mcp.json` is the canonical, correctly-wired registration.
 
+## Browse/extract (dev/ops research seam) — browser-use chosen over Hyperbrowser
+- **Decision:** browser-use (MIT) is the browse/extract tool; **Hyperbrowser dropped from the queue** (the duplicate — pick one). browser-use's actual consumer (Open Deep Research / ODR) is **not in this repo yet**, so the ODR-MCP wiring + a live ODR research-run are **deferred until ODR lands**.
+- **Form:** **on-demand MCP server, NOT self-hosted** — registered in project `.mcp.json` as `browser-use` via `uvx browser-use[cli] --mcp` (pulled + run only when an MCP client connects, then exits; nothing persistent, nothing always-on — I4). **Self-host lib, never the cloud plan** (cloud trains on input without opt-out). Telemetry forced off.
+- **LLM (BYOK):** LLM-backed tools (`browser_extract_content`, `retry_with_browser_use_agent`) need OpenRouter at launch: `OPENAI_API_KEY=$***REDACTED***` + `OPENAI_BASE_URL=https://openrouter.ai/api/v1` (not committed — supplied in the launch env). Pure browse tools (`browser_navigate`, `browser_get_html`, `browser_get_state`, …) need no LLM.
+- **Verified:** MCP server enumerated 16 browse/extract tools over stdio JSON-RPC (`browser_navigate, browser_click, browser_type, browser_get_state, browser_extract_content, browser_get_html, browser_screenshot, browser_scroll, …, retry_with_browser_use_agent`). A live browse run was intentionally **not hosted** (no persistent install).
+
 ## Parked (with triggers — see build plan §4)
-Headroom · Mem0/OpenMemory · Airweave · Octogent (`hesamsheikh/octogent`, MIT) · Hyperbrowser · Pake.
+Headroom · Mem0/OpenMemory · Airweave · Octogent (`hesamsheikh/octogent`, MIT) · Pake.
 
 ## Privacy gate (§2.2 — build into architecture before any owner-data tool)
 Any text → vector must pass ONE ingest contract: (a) strip/pseudonymize PII, (b) tag tenant, (c) then embed locally. Tenant-isolate vectors (extend `verify:rls` to vector tables). Support erasure. Applies to Airweave / Mem0 / product AI features — NOT to Repowise (code corpus: no PII risk, only proprietary-code risk, closed by locality).
