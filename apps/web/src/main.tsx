@@ -8,6 +8,7 @@ import './index.css';
 
 import { Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/admin/LoginPage.js';
+import { AuthCallback } from './pages/admin/AuthCallback.js';
 
 // Lazy-loaded surfaces
 const ClientRoutes = lazy(() => import('./routes/ClientRoutes.js').then(m => ({ default: m.ClientRoutes })));
@@ -38,6 +39,7 @@ function AnimatedRoutes() {
           <Routes location={location}>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/s/:slug/*" element={<ClientRoutes />} />
             <Route path="/branding-preview/:slug/*" element={<ClientRoutes />} />
             <Route path="/admin/*" element={<AdminRoutes />} />
