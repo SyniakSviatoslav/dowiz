@@ -401,6 +401,13 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
           [finalCommitToken, import_session_id]
         );
 
+        // Committing a reviewed menu satisfies the human-review publish gate (Z2):
+        // stamp menu_confirmed_at if not already set.
+        await client.query(
+          `UPDATE locations SET menu_confirmed_at = COALESCE(menu_confirmed_at, now()) WHERE id = $1`,
+          [locationId]
+        );
+
         // Explicitly touch menu_version via the existing bump_menu_version() function or let triggers handle it
         // The trigger on categories/products handles it natively!
         // But to return the new version, we read it
