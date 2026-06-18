@@ -37,6 +37,16 @@ export class AnonymizerRetentionWorker {
       }
 
       try {
+        // Housekeeping: drop expired customer track grants (the ?t= tracking-link
+        // codes). Expired grants are already inert at exchange time (WHERE
+        // expires_at > now()); this just keeps the table small. Lives here rather
+        // than its own pg-boss queue because the app role lacks runtime DDL on the
+        // pgboss schema (migration 009), so it can't create a new queue.
+        const grantPurge = await client.query(
+          `DELETE FROM customer_track_grants WHERE expires_at < now()`,
+        );
+        console.log(`[AnonymizerRetention] Purged ${grantPurge.rowCount} expired track grants`);
+
         const locationsRes = await client.query(`
           SELECT id, name, retention_days FROM locations
         `);
