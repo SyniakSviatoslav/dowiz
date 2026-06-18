@@ -46,8 +46,9 @@ test.describe('Client Checkout Flow', () => {
     // Cart bar is absent while the cart is empty
     await expect(page.getByRole('button', { name: /Shporta/i })).toHaveCount(0);
 
-    // 2. Add the first available item to the cart
-    await firstCard.getByRole('button', { name: /add to cart/i }).click();
+    // 2. Add the first available item to the cart (testid is locale-independent;
+    //    the aria-label is translated, so a text selector would be locale-fragile).
+    await firstCard.getByTestId('menu-item-add').click();
 
     // The cart bar appears showing one item and its line total
     const cartBar = page.getByRole('button', { name: /Shporta/i });
