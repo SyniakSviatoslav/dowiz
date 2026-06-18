@@ -51,6 +51,22 @@ export function OrderStatusPage() {
   const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
   const [sharingLocation, setSharingLocation] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
+  const [ratingComment, setRatingComment] = useState('');
+  const [ratingBusy, setRatingBusy] = useState(false);
+
+  const submitRating = useCallback(async (stars: number) => {
+    if (ratingBusy) return;
+    setRatingBusy(true);
+    try {
+      await apiClient(`/orders/${id}/rating`, { method: 'POST', body: { rating: stars, feedback: ratingComment || undefined } });
+      setOrder((o: any) => ({ ...o, rating: stars, feedback: ratingComment || null, canRate: false }));
+      showToast(t('client.rating_thanks', 'Thanks for your feedback!'), 'success');
+    } catch {
+      showToast(t('client.rating_failed', 'Could not submit rating. Please try again.'), 'error');
+    } finally {
+      setRatingBusy(false);
+    }
+  }, [id, ratingComment, ratingBusy, showToast, t]);
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -371,6 +387,39 @@ export function OrderStatusPage() {
             <span><PriceDisplay amount={order.total} /></span>
           </div>
         </div>
+
+        {/* Rate your order — shown once DELIVERED; tap a star to submit */}
+        {order.status === 'DELIVERED' && (
+          <div className="bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4" data-testid="rating-block">
+            <h2 className="font-semibold mb-3">{t('client.rate_order', 'Rate your order')}</h2>
+            {order.rating ? (
+              <div>
+                <div className="flex gap-1 text-2xl" aria-label={`${order.rating}/5`} data-testid="rating-submitted">
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <i key={s} className={`ti ti-star-filled ${s <= order.rating ? '' : 'opacity-25'}`} style={{ color: 'var(--brand-primary)' }} aria-hidden="true" />
+                  ))}
+                </div>
+                {order.feedback && <p className="text-sm mt-2" style={{ color: 'var(--brand-text-muted)' }}>{order.feedback}</p>}
+                <p className="text-xs mt-2" style={{ color: 'var(--brand-text-muted)' }}>{t('client.rating_saved', 'Thanks — your feedback was saved.')}</p>
+              </div>
+            ) : (
+              <div>
+                <div className="flex gap-2 text-3xl mb-3">
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <button key={s} type="button" disabled={ratingBusy} aria-label={`${s} ${t('client.stars', 'stars')}`}
+                      data-testid={`rate-star-${s}`} onClick={() => submitRating(s)}
+                      className="transition-transform active:scale-90 disabled:opacity-50" style={{ color: 'var(--brand-primary)' }}>
+                      <i className="ti ti-star" aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+                <textarea value={ratingComment} onChange={e => setRatingComment(e.target.value)} maxLength={1000} rows={2}
+                  placeholder={t('client.feedback_placeholder', 'Add a comment (optional)')}
+                  className="w-full text-sm rounded-[var(--brand-radius)] p-2 bg-[var(--brand-surface)] border border-[var(--brand-border)]" />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Nutrition snapshot */}
         {order.kcal_total != null && (
