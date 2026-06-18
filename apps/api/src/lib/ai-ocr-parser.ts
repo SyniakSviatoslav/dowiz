@@ -5,6 +5,10 @@ import { PiiRedactor } from './pii-redactor.js';
 import Tesseract from 'tesseract.js';
 import crypto from 'crypto';
 import { z } from 'zod';
+import { execFileSync } from 'child_process';
+import { writeFileSync, unlinkSync, existsSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 function coerceNum() {
   return z.preprocess((v) => {
@@ -170,6 +174,37 @@ export class AiOcrParser implements MenuParserProvider {
     this.memoryService = memoryService;
   }
 
+  /**
+   * On-demand PaddleOCR (PP-OCRv5/v6) via a Python subprocess. Engine swap is
+   * config only (I5), selected by config.ocr_engine or MENU_OCR_ENGINE. NOT a
+   * daemon (I4): one process per image, then it exits. Menu-image content only,
+   * no PII / product-runtime state (I1). Returns text + a 0..1 confidence.
+   */
+  private paddleOcr(bytes: Buffer, mime: string): { text: string; confidence: number; version: string } {
+    const py = process.env.PADDLE_OCR_PYTHON || 'python3';
+    const script = process.env.PADDLE_OCR_SCRIPT || join(process.cwd(), 'scripts', 'paddle-ocr.py');
+    if (!existsSync(script)) throw new Error(`paddle-ocr.py not found at ${script} (set PADDLE_OCR_SCRIPT)`);
+    const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
+    const tmp = join(tmpdir(), `dowiz-ocr-${crypto.randomBytes(6).toString('hex')}.${ext}`);
+    writeFileSync(tmp, bytes);
+    try {
+      const out = execFileSync(py, [script, tmp], {
+        timeout: 120_000,
+        maxBuffer: 16 * 1024 * 1024,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).toString();
+      const j = JSON.parse(out);
+      if (j.error) throw new Error(j.error);
+      return {
+        text: j.text || '',
+        confidence: typeof j.confidence === 'number' ? j.confidence : 0,
+        version: j.version || 'paddleocr',
+      };
+    } finally {
+      try { unlinkSync(tmp); } catch { /* best-effort temp cleanup */ }
+    }
+  }
+
   async parse(input: ParserInputType): Promise<ParseResult> {
     const issues: ParseIssue[] = [];
     const t0 = Date.now();
@@ -177,6 +212,7 @@ export class AiOcrParser implements MenuParserProvider {
     let rawText = '';
     let ocrConfidence = 1;
     let ocrMs = 0;
+    let ocrEngineUsed = 'tesseract.js';
 
     if (input.kind === 'pdf') {
       // Extract text directly from PDF, skip OCR
@@ -208,15 +244,24 @@ export class AiOcrParser implements MenuParserProvider {
         return this.fallbackError(issues);
       }
     } else if (input.kind === 'image') {
-      // 1. OCR
+      // 1. OCR — engine selectable by config (I5): config.ocr_engine wins, then
+      // MENU_OCR_ENGINE, default 'tesseract'. 'paddle' shells out to PaddleOCR.
+      const engine = ((input.config as any)?.ocr_engine || process.env.MENU_OCR_ENGINE || 'tesseract').toLowerCase();
       try {
-        const result = await Tesseract.recognize(input.bytes, 'sqi+eng', {
-          logger: m => {}
-        });
-        rawText = result.data.text;
-        ocrConfidence = result.data.confidence / 100.0;
+        if (engine === 'paddle') {
+          const p = this.paddleOcr(input.bytes, input.mime);
+          rawText = p.text;
+          ocrConfidence = p.confidence;
+          ocrEngineUsed = `paddleocr ${p.version}`;
+        } else {
+          const result = await Tesseract.recognize(input.bytes, 'sqi+eng', {
+            logger: m => {}
+          });
+          rawText = result.data.text;
+          ocrConfidence = result.data.confidence / 100.0;
+        }
       } catch (e: any) {
-        issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `OCR Failed: ${e.message}`, severity: 'error' });
+        issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `OCR Failed (${engine}): ${e.message}`, severity: 'error' });
         return this.fallbackError(issues);
       }
       ocrMs = Date.now() - t0;
@@ -386,7 +431,7 @@ CRITICAL RULES:
       source: 'ai-ocr',
       raw_text_hash: crypto.createHash('sha256').update(redactedText).digest('hex'),
       model_id: llmModel,
-      ocr_engine: 'tesseract.js',
+      ocr_engine: ocrEngineUsed,
       ocr_ms: ocrMs,
       llm_ms: llmMs
     };
