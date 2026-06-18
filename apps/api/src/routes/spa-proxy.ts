@@ -148,8 +148,22 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     } catch (sharpErr: any) {
       return reply.status(400).send({ error: 'Invalid image file', detail: sharpErr.message });
     }
-    const key = `${locId}/${pid}.webp`;
+    // Content-hash the key so each distinct image gets a unique URL. /images/*
+    // serves with a 1-year immutable cache, so a fixed key would pin the FIRST
+    // upload forever — re-uploads (image "change") would never show. A hashed
+    // key means a changed image is a new URL the browser/CDN fetches fresh.
+    const crypto = await import('node:crypto');
+    const hash = crypto.createHash('sha256').update(processed).digest('hex').slice(0, 12);
+    const key = `${locId}/${pid}-${hash}.webp`;
     const imageUrl = getImageUrl(key, APP_BASE);
+
+    // Capture the prior key so we can drop the orphaned object after the swap.
+    let oldKey: string | null = null;
+    try {
+      const cur = await db.query(`SELECT image_key FROM products WHERE id = $1 AND location_id = $2`, [pid, locId]);
+      oldKey = cur.rows[0]?.image_key ?? null;
+    } catch { /* non-fatal — cleanup is best-effort */ }
+
     try {
       await storage.put(key, processed);
     } catch (putErr: any) {
@@ -159,6 +173,10 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       await db.query(`UPDATE products SET image_key = $1, image_url = $2 WHERE id = $3 AND location_id = $4`, [key, imageUrl, pid, locId]);
     } catch (dbErr: any) {
       return reply.status(500).send({ error: 'Failed to update product record', detail: dbErr.message });
+    }
+    // Best-effort: remove the replaced object (skip external-URL legacy keys).
+    if (oldKey && oldKey !== key && !/^https?:\/\//.test(oldKey)) {
+      try { await storage.delete(oldKey); } catch (e: any) { console.warn('[spa-proxy] old image cleanup failed:', e?.message); }
     }
     return reply.send({ imageUrl, imageKey: key });
   });
