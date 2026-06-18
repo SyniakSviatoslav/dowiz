@@ -19,8 +19,12 @@
       "command": "npx",
       "args": [
         "playwright",
-        "run-test-mcp-server"
+        "run-test-mcp-server",
+        "--headless"
       ],
+      "env": {
+        "VITE_BASE_URL": "https://dowiz.fly.dev"
+      },
       "description": "playwright agents: planner/generator/healer drive tests against the running app"
     }
   }
