@@ -115,9 +115,9 @@ export function ActivationPage() {
   );
 
   const gateItems = status ? [
-    { key: 'menu', done: status.gate.menuConfirmed, title: t('activation.gate_menu', 'Confirm your menu'), hint: t('activation.gate_menu_hint', 'Review prices & allergens — tap items in the preview to edit.') },
-    { key: 'notifications', done: status.gate.notificationsConnected, title: t('activation.gate_notifs', 'Connect notifications'), hint: t('activation.gate_notifs_hint', 'So you see new orders instantly (Telegram).') },
-    { key: 'fulfillment', done: status.gate.fulfillmentReady, title: t('activation.gate_fulfillment', 'Set up fulfillment'), hint: t('activation.gate_fulfillment_hint', 'Enable pickup or add a courier, plus a contact phone.') },
+    { key: 'menu', done: status.gate.menuConfirmed, href: '/admin/menu', title: t('activation.gate_menu', 'Confirm your menu'), hint: t('activation.gate_menu_hint', 'Upload & review prices/allergens — or tap items in the preview to edit.') },
+    { key: 'notifications', done: status.gate.notificationsConnected, href: '/admin/settings', title: t('activation.gate_notifs', 'Connect notifications'), hint: t('activation.gate_notifs_hint', 'So you see new orders instantly (Telegram).') },
+    { key: 'fulfillment', done: status.gate.fulfillmentReady, href: '/admin/couriers', title: t('activation.gate_fulfillment', 'Set up fulfillment'), hint: t('activation.gate_fulfillment_hint', 'Enable pickup or add a courier, plus a contact phone.') },
   ] : [];
 
   const Checklist = (
@@ -134,15 +134,23 @@ export function ActivationPage() {
       </div>
 
       <div className="flex-1 overflow-auto px-5 space-y-3">
-        {gateItems.map((it) => (
-          <div key={it.key} className="flex gap-3 p-3 rounded-xl" style={{ background: 'var(--brand-bg)' }}>
-            <Check done={it.done} />
-            <div className="min-w-0">
-              <div className="font-semibold text-sm" style={{ color: 'var(--brand-text)' }}>{it.title}</div>
-              <div className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{it.hint}</div>
-            </div>
-          </div>
-        ))}
+        {gateItems.map((it) => {
+          const body = (
+            <>
+              <Check done={it.done} />
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-sm" style={{ color: 'var(--brand-text)' }}>{it.title}</div>
+                <div className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{it.hint}</div>
+              </div>
+              {!it.done && <i className="ti ti-chevron-right self-center" style={{ color: 'var(--brand-text-muted)' }} />}
+            </>
+          );
+          return it.done ? (
+            <div key={it.key} className="flex gap-3 p-3 rounded-xl" style={{ background: 'var(--brand-bg)' }}>{body}</div>
+          ) : (
+            <a key={it.key} href={it.href} className="flex gap-3 p-3 rounded-xl transition hover:opacity-90" style={{ background: 'var(--brand-bg)' }}>{body}</a>
+          );
+        })}
         {!status && <div className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{t('common.loading', 'Loading…')}</div>}
 
         {/* Optional, visually separate from the must-do trinity (§4). */}
