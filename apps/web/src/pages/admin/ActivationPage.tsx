@@ -25,6 +25,12 @@ export function ActivationPage() {
   const [status, setStatus] = useState<GateStatus | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [tab, setTab] = useState<'edit' | 'preview'>('edit');
+  // Inline product edit (driven by taps inside the preview iframe, O2.2).
+  const [editing, setEditing] = useState<{ id: string; name: string; price: number } | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [savingProduct, setSavingProduct] = useState(false);
+  const [iframeKey, setIframeKey] = useState(0);
 
   useEffect(() => {
     apiClient<any>('/owner/settings')
@@ -46,6 +52,42 @@ export function ActivationPage() {
     return () => clearInterval(iv);
   }, [status?.published, refresh]);
 
+  // Tap-to-edit from the preview iframe (MenuPage posts in activation mode).
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'dos_activation_edit_product' && e.data.product) {
+        const p = e.data.product;
+        setEditing({ id: p.id, name: p.name, price: p.price });
+        setEditName(p.name ?? '');
+        setEditPrice(String(p.price ?? ''));
+        setTab('edit');
+      }
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const saveProduct = async () => {
+    if (!editing) return;
+    const price = parseInt(editPrice, 10);
+    if (!editName.trim() || !Number.isFinite(price) || price < 0) {
+      showToast(t('activation.invalid_product', 'Enter a name and a valid price.'), 'error');
+      return;
+    }
+    setSavingProduct(true);
+    try {
+      await apiClient<any>(`/owner/menu/products/${editing.id}`, { method: 'PATCH', body: { name: editName.trim(), price } });
+      setEditing(null);
+      setIframeKey((k) => k + 1); // reload preview with the edit
+      await refresh();
+      showToast(t('activation.saved', 'Saved'), 'success');
+    } catch {
+      showToast(t('activation.save_failed', 'Could not save.'), 'error');
+    } finally {
+      setSavingProduct(false);
+    }
+  };
+
   const publish = async () => {
     if (!status?.canPublish || !locationId) return;
     setPublishing(true);
@@ -60,7 +102,7 @@ export function ActivationPage() {
     }
   };
 
-  const previewUrl = slug ? `/s/${slug}?embed=true` : '';
+  const previewUrl = slug ? `/s/${slug}?embed=true&activation=1` : '';
 
   const Check = ({ done }: { done: boolean }) => (
     <span
@@ -145,7 +187,7 @@ export function ActivationPage() {
   const Preview = (
     <div className="h-full w-full relative" style={{ background: 'var(--brand-bg)' }}>
       {previewUrl ? (
-        <iframe key={status?.menuVersion} src={previewUrl} title="storefront preview" className="w-full h-full border-0" />
+        <iframe key={iframeKey} src={previewUrl} title="storefront preview" className="w-full h-full border-0" />
       ) : (
         <div className="flex items-center justify-center h-full text-sm" style={{ color: 'var(--brand-text-muted)' }}>{t('common.loading', 'Loading…')}</div>
       )}
@@ -173,6 +215,22 @@ export function ActivationPage() {
         <div className={`${tab === 'edit' ? 'block' : 'hidden'} md:block h-full overflow-hidden`}>{Checklist}</div>
         <div className={`${tab === 'preview' ? 'block' : 'hidden'} md:block h-full border-l`} style={{ borderColor: 'var(--brand-bg)' }}>{Preview}</div>
       </div>
+
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center" style={{ background: 'var(--brand-overlay, rgba(0,0,0,0.4))' }}>
+          <div className="w-full md:max-w-sm rounded-t-2xl md:rounded-2xl p-5" style={{ background: 'var(--brand-surface)' }}>
+            <h3 className="font-bold mb-3" style={{ color: 'var(--brand-text)' }}>{t('activation.edit_item', 'Edit menu item')}</h3>
+            <label className="block text-xs mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('activation.item_name', 'Name')}</label>
+            <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full mb-3 px-3 py-2 rounded-lg outline-none" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }} />
+            <label className="block text-xs mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('activation.item_price', 'Price (minor units, e.g. 850 = 8.50)')}</label>
+            <input value={editPrice} onChange={(e) => setEditPrice(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" className="w-full mb-4 px-3 py-2 rounded-lg outline-none" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }} />
+            <div className="flex gap-2">
+              <button onClick={() => setEditing(null)} className="flex-1 py-2 rounded-lg font-semibold" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }}>{t('common.cancel', 'Cancel')}</button>
+              <button onClick={saveProduct} disabled={savingProduct} className="flex-1 py-2 rounded-lg font-semibold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: '#fff' }}>{savingProduct ? t('common.saving', 'Saving…') : t('common.save', 'Save')}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
