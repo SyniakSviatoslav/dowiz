@@ -4,41 +4,13 @@ import htm from 'htm';
 import { LRUCache } from 'lru-cache';
 import { getImageUrl } from './image-url.js';
 import { formatMoney, ensureCurrency as ensureCurr } from '@deliveryos/shared-types';
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
 
-let assetTags: string | null = null;
-
-function loadAssetTags(): string {
-  if (assetTags !== null) return assetTags;
-  const base = process.cwd();
-  const candidates = [
-    join(base, 'dist', 'public', 'index.html'),
-    join(base, 'apps', 'web', 'dist', 'index.html'),
-    'dist/public/index.html',
-    'apps/web/dist/index.html',
-  ];
-  for (const candidate of candidates) {
-    try {
-      if (existsSync(candidate)) {
-        const content = readFileSync(candidate, 'utf-8');
-        const scriptMatch = content.match(/<script[^>]+src="[^"]+"[^>]*><\/script>/);
-        const linkMatches = [...content.matchAll(/<link[^>]+rel="(?:stylesheet|modulepreload)"[^>]+>/g)];
-        const tags: string[] = [];
-        if (scriptMatch) tags.push(scriptMatch[0]);
-        linkMatches.forEach(m => tags.push(m[0]));
-        assetTags = tags.join('\n          ');
-        console.log('[SSR] Loaded asset tags from:', candidate);
-        return assetTags;
-      }
-    } catch {
-      console.warn('[SSR] Failed to load asset tags from:', candidate);
-    }
-  }
-  console.warn('[SSR] No asset tags found, SPA will not hydrate');
-  return '';
-}
-
+// The menu page is hydrated by its dedicated, stable client bundle
+// (apps/api/src/client/menu/app.ts → built by build-client.js → served at
+// /dist/menu/app.js), referenced directly in the body below — the same way the
+// cart/checkout/status routes reference their bundles. A prior version scanned
+// the Vite index.html for a script tag and returned '' in production, so the
+// menu shipped with no script, never hydrated, and customers could not order.
 const html = htm.bind(h);
 
 interface MenuData {
@@ -226,7 +198,10 @@ function ProductCard({ product, locale, currencyCode, minorUnit }: {
       <div class="product-info">
         <h3 class="product-name">${name}</h3>
         ${desc ? html`<p class="product-desc">${desc}</p>` : null}
-        <span class="product-price">${price}</span>
+        <div class="product-foot">
+          <span class="product-price">${price}</span>
+          <button class="product-add" aria-label="Add to cart" onclick=${`DowizMenu.addToCart(event, '${product.id}', ${Number(product.price) || 0})`}>+</button>
+        </div>
       </div>
     </div>
   `;
@@ -357,13 +332,14 @@ export async function renderMenuPage(
           <meta property="og:image" content="${appBase}/og-image.png" />
           <${HreflangLinks} slug=${slug} supportedLocales=${supportedLocales} defaultLocale=${defaultLocale} baseUrl=${appBase} />
           <link rel="canonical" href="${appBase}/s/${slug}" />
+          <meta name="dos-location-id" content="${loc.id}" />
+          <meta name="dos-menu-version" content="${menu.menu_version}" />
           <link rel="manifest" href="/s/${slug}/manifest.webmanifest" />
           <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
           <link rel="preconnect" href="https://fonts.googleapis.com" />
           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
           <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-          <!--SSR_ASSETS-->
           <script type="application/ld+json" dangerouslySetInnerHTML=${{ __html: jsonld }}></script>
           <style>
             *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -383,7 +359,16 @@ export async function renderMenuPage(
             .product-info { padding: 0.85rem; display: flex; flex-direction: column; gap: 0.35rem; flex: 1; }
             .product-name { font-size: 1rem; font-weight: 600; color: #fff; }
             .product-desc { font-size: 0.8rem; color: #999; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-            .product-price { font-size: 0.95rem; font-weight: 700; color: #ea4f16; margin-top: auto; padding-top: 0.35rem; }
+            .product-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: auto; padding-top: 0.35rem; }
+            .product-price { font-size: 0.95rem; font-weight: 700; color: #ea4f16; }
+            .product-add { flex-shrink: 0; width: 32px; height: 32px; border: none; border-radius: 8px; background: #ea4f16; color: #fff; font-size: 1.25rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.1s, background 0.15s; }
+            .product-add:hover { background: #ff5a1f; }
+            .product-add:active { transform: scale(0.9); }
+            .cart-fab-wrapper { position: fixed; bottom: 1.25rem; right: 1.25rem; z-index: 50; }
+            .cart-fab-wrapper.hidden { display: none; }
+            .cart-fab { display: flex; align-items: center; gap: 0.5rem; background: #ea4f16; color: #fff; text-decoration: none; padding: 0.85rem 1.25rem; border-radius: 999px; font-weight: 700; box-shadow: 0 6px 18px rgba(0,0,0,0.4); }
+            .cart-bounce { animation: cartBounce 0.3s ease; }
+            @keyframes cartBounce { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }
             .empty-menu { text-align: center; padding: 3rem 1rem; color: #666; font-size: 1.1rem; }
             @media (max-width: 540px) { .product-grid { grid-template-columns: 1fr; } }
             footer { text-align: center; padding: 2rem 0; color: #555; font-size: 0.8rem; border-top: 1px solid #2a2a2a; margin-top: 2rem; }
@@ -406,16 +391,22 @@ export async function renderMenuPage(
             <main>
               <div id="root">${menuContent}</div>
             </main>
+            <div id="cartFabWrapper" class="cart-fab-wrapper hidden">
+              <a id="cartFabBtn" class="cart-fab" href="/s/${slug}/cart" aria-label="View cart">
+                🛒 <span id="fabCount">0</span>
+              </a>
+            </div>
             <footer>
               <p>Order delivery from ${menu.location.name} via Dowiz</p>
             </footer>
           </div>
           <script>window.__INITIAL_STATE__ = ${JSON.stringify(initialData)};</script>
+          <script type="module" src="/dist/menu/app.js"></script>
         </body>
       </html>
     `;
 
-    const fullHtml = ('<!DOCTYPE html>\n' + render(vdom as any)).replace('<!--SSR_ASSETS-->', loadAssetTags());
+    const fullHtml = '<!DOCTYPE html>\n' + render(vdom as any);
     cache.set(cacheKey, { html: fullHtml, slug });
     return fullHtml;
   } finally {
