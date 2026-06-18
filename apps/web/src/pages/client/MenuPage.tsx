@@ -308,6 +308,17 @@ export function MenuPage() {
   };
 
   const handleProductClick = (product: Product) => {
+    // Activation tool: when embedded with ?activation=1, tapping an item edits it in
+    // the parent tool instead of opening the order detail. Gated by the param + being
+    // inside an iframe → zero effect for real customers.
+    if (typeof window !== 'undefined' && window.parent !== window &&
+        new URLSearchParams(window.location.search).get('activation') === '1') {
+      window.parent.postMessage(
+        { type: 'dos_activation_edit_product', product: { id: product.id, name: product.name, price: product.price } },
+        '*',
+      );
+      return;
+    }
     setDetailProduct(product);
     setQuantity(1);
     setImageLoadError(false);
