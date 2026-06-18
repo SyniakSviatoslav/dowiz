@@ -90,5 +90,39 @@ deliberate, reviewed extension. **No tier ever merges to `main` (A2).**
 | A8 read-mostly | T2 is read + analysis + report; mutation (draft-PR) is gated & off |
 | A9 observability | per-day log + aggregated Telegram-ops report; OTel when endpoint set |
 
-## Tier 3 (NOT built — gated)
-- **T3 `/batch`**: bounded fan-out (≤ a few subagents) for mechanical sweeps only, each diff adversarially reviewed (read-only reviewer), result = PR via OpenSpec `propose→apply` for human approval. Build last (highest risk/cost), after the T2 gate.
+## Tier 3 — bounded fan-out sweep + adversarial review (BUILT)
+
+Bounded fan-out for **mechanical, well-scoped sweeps only** (cross-workspace
+rename/codemod, dependency-bump, lint-fix) — NOT architectural change. Mutation
+happens ONLY inside a **fresh throwaway clone** (A6). Each per-target diff is
+gated by a **read-only adversarial reviewer** (A4) before surviving diffs become
+a **proposal for human approval** — never an auto-merge (A2).
+
+**Files**
+- `prompts/sweeps/<name>.md` — a mechanical sweep RULE (shipped: `ts-ignore-to-expect-error.md`).
+- `prompts/sweep-review.md` — the read-only adversarial reviewer (`VERDICT: PASS|REJECT`).
+- `tier3-batch.sh <sweep> <target…>` — runner: fresh clone + branch (A6), bounded fan-out (`TIER3_MAX_PARALLEL`, units) of executor agents (Edit scoped to one file each; `Write`/`commit`/`push` disallowed — A4), each diff sent to a separate read-only reviewer (rejected → reverted), batch `$` cap (A5), surviving diffs → branch/patch/draft-PR proposal (A2), clone cleaned up (A7).
+
+**Run**
+```bash
+scripts/automation/tier3-batch.sh ts-ignore-to-expect-error \
+  apps/api/src/lib/libretranslate-provider.ts apps/api/src/lib/ai-ocr-parser.ts
+```
+
+**Proposal emission** (in preference order; **never merges** — A2): OpenSpec
+`propose→apply` if installed → else `gh pr create --draft` → else a `.patch` saved
+under `logs/` for manual review. The internal packaging commit uses `--no-verify`
+(repo husky/CI gates need a built workspace a shallow clone lacks — they run for
+real at the human's PR; the agent's CC guardrails already fired, no `--bare`).
+
+## Invariant compliance (T3)
+| | How |
+|---|---|
+| A1 dev/ops≠product | sweeps repo source only; no DB/PII/product-runtime access |
+| A2 propose, not merge | surviving diffs → branch/patch/draft-PR for a human; **never auto-merge** |
+| A3 guardrails in automation | no `--bare` → CC hooks fire in-clone (`.claude/` present) |
+| A4 explicit perms | executor: `Edit` scoped + `Write`/`commit`/`push` disallowed; reviewer: separate **read-only** process |
+| A5 budget | Haiku + per-agent `--max-turns` + **batch `$` cap** + hard parallel cap (units); `timeout` wall-clock |
+| A6 fresh clone | `mktemp -d` writable throwaway clone + branch; `trap` cleanup |
+| A8 mutation gated | the one mutating tier — bounded, mechanical-only, adversarially pre-filtered |
+| A9 observability | per-day log + Telegram-ops summary; OTel when endpoint set |
