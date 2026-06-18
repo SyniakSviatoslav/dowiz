@@ -553,7 +553,7 @@ const retryPolicy = new RetryPolicy();
   fastify.register(customerTrackRoutes, { prefix: '/api/customer', db: pool });
   fastify.register(customerPushRoutes, { prefix: '/api/customer', db: pool, messageBus });
   fastify.register(courierSettlementRoutes, { prefix: '/api/courier', db: pool, messageBus });
-  fastify.register(courierAssignmentsRoutes, { prefix: '/api/courier', db: pool, messageBus, queue });
+  fastify.register(courierAssignmentsRoutes, { prefix: '/api/courier', db: pool, messageBus });
   fastify.register(courierShiftsRoutes, { prefix: '/api/courier', db: pool, messageBus });
   fastify.register(orderMessageRoutes, { db: pool, messageBus });
 
