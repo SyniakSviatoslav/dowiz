@@ -100,7 +100,7 @@ export function OrderStatusPage() {
     }
   }, [id]);
 
-  const fetchOrder = async () => {
+  const fetchOrder = async (allowExchange = true) => {
     try {
       const data = await apiClient<any>(`/customer/orders/${id}/status`);
       setOrder(data);
@@ -111,11 +111,37 @@ export function OrderStatusPage() {
         setEtaMinutes(data.etaMinutes);
       }
     } catch (err: any) {
-      if (err?.status === 403) {
+      // 401 (no/expired token) or 403 (wrong role) → no valid customer session.
+      if (err?.status === 401 || err?.status === 403) {
+        // Tracking-link handoff: if the order URL carries a ?t= grant code, trade
+        // it for a real customer JWT once, then retry. This is how a visitor who
+        // opened the link on a fresh device (no stored token) gets a session.
+        const code = typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('t')
+          : null;
+        if (allowExchange && code) {
+          try {
+            const res = await apiClient<any>('/customer/track/exchange', {
+              method: 'POST',
+              body: { code },
+            });
+            if (res?.token) {
+              localStorage.setItem('dos_access_token', res.token);
+              // Strip ?t= so the secret never persists in history or leaks via Referer.
+              window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+              return await fetchOrder(false); // retry once with the fresh token
+            }
+          } catch {
+            // Exchange failed (expired/invalid grant) → fall through to the message.
+          }
+        }
+        // No valid session and no usable grant. Show a clear "reload the menu"
+        // message instead of bouncing to the owner login (the global apiClient
+        // redirect is scoped to /admin) or fabricating a fake order.
         setError(t('order.auth_expired', 'Session expired. Please reload the menu and try again.'));
         return;
       }
-      if (err?.status === 404 || err?.status === 401) {
+      if (err?.status === 404) {
         setOrder({
           id,
           status: 'PENDING',

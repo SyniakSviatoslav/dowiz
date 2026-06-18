@@ -3,10 +3,14 @@ import { CreateOrderInput, StatusUpdateInput } from '@deliveryos/shared-types';
 import { assertTransition, type OrderStatus } from '@deliveryos/domain';
 import { issueCustomerToken, withTenant } from '@deliveryos/platform';
 import type { QueueProvider, MessageBus } from '@deliveryos/platform';
+import { loadEnv } from '@deliveryos/config';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel } from '../lib/registry.js';
 import { updateOrderStatus } from '../lib/orderStatusService';
+import { generateOpaqueToken } from '../lib/otp.js';
 import type { Pool } from 'pg';
 import crypto from 'crypto';
+
+const env = loadEnv();
 import { applyTax, assertNonNegative, computeLineTotal } from '../lib/money.js';
 import { distanceKm } from '../lib/geo.js';
 
@@ -93,7 +97,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
       // 1. Location config (FOR UPDATE lock optionally, but standard read is fine if config updates are rare, wait we should lock locations? No need to lock config, just read it).
       const locRes = await client.query(
-         `SELECT lat, lng, confirm_timeout_min, busy_mode, phone,
+         `SELECT lat, lng, confirm_timeout_min, busy_mode, phone, slug,
                  currency_code, currency_minor_unit, tax_rate, price_includes_tax,
                  min_order_value, free_delivery_threshold, delivery_fee_flat
           FROM locations WHERE id = $1`,
@@ -607,6 +611,22 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         [idempotency_key, locationId, requestHash, order.id]
       );
 
+      // 13b. Customer track grant — single-use opaque code backing the ?t= tracking
+      // link. Only minted when there's a resolved customer (same condition as the
+      // customer JWT below); anonymous orders have no JWT to reissue at exchange.
+      // Raw code stays in this local var for the post-commit trackUrl; only its
+      // sha256 hash is persisted. 14-day TTL outlives the 7-day JWT comfortably.
+      let trackCode: string | undefined;
+      if (cust?.phone && resolvedCustomerId) {
+        const { token, hash } = generateOpaqueToken();
+        await client.query(
+          `INSERT INTO customer_track_grants (order_id, location_id, token_hash, expires_at)
+           VALUES ($1, $2, $3, now() + interval '14 days')`,
+          [order.id, locationId, hash]
+        );
+        trackCode = token;
+      }
+
       // 14. Transactional Enqueue
       await queue.enqueue(QUEUE_NAMES.ORDER_TIMEOUT, { orderId: order.id, locationId }, {
         singletonKey: order.id,
@@ -695,6 +715,9 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         deliveryInstructions: rawInstructions || null,
         createdAt: order.created_at,
         authToken,
+        trackUrl: trackCode
+          ? `${env.APP_BASE_URL}/s/${location.slug}/order/${order.id}?t=${trackCode}`
+          : undefined,
         preflight: {
           outcome: 'clean',
           reasons: preflight.reasons,
