@@ -85,6 +85,7 @@ import ratesRoutes from './routes/public/rates.js';
 import mockAuthRoutes from './routes/dev/mock-auth.js';
 import spaProxyRoutes from './routes/spa-proxy.js';
 import customerOtpRoutes from './routes/customer/otp.js';
+import customerTrackRoutes from './routes/customer/track.js';
 import customerPushRoutes from './routes/customer/push.js';
 import ownerPushRoutes from './routes/owner/push.js';
 import ownerOrderMetaRoutes from './routes/owner/order-meta.js';
@@ -420,6 +421,21 @@ const retryPolicy = new RetryPolicy();
   });
   await queue.boss.schedule(QUEUE_NAMES.FREE_TIER_WATCH, '0 * * * *');
 
+  // Customer track-grant cleanup (daily 4 AM) — purge expired ?t= tracking grants.
+  // singletonKey prevents double-execution across N replicas. Literal queue name
+  // (not in QUEUE_NAMES, which lives in the governance-protected shared-types pkg).
+  const TRACK_GRANT_CLEANUP = 'track.grant_cleanup';
+  await queue.boss.createQueue(TRACK_GRANT_CLEANUP);
+  await queue.boss.work(TRACK_GRANT_CLEANUP, { singletonKey: TRACK_GRANT_CLEANUP }, async () => {
+    try {
+      const res = await pool.query(`DELETE FROM customer_track_grants WHERE expires_at < now()`);
+      console.log(`[TrackGrant] cleanup removed ${res.rowCount} expired grants`);
+    } catch (err: any) {
+      console.error('[TrackGrant] cleanup failed:', err.message);
+    }
+  });
+  await queue.boss.schedule(TRACK_GRANT_CLEANUP, '0 4 * * *', null, { singletonKey: TRACK_GRANT_CLEANUP });
+
   const redis = new Redis(env.REDIS_URL);
   fastify.decorate('redis', redis);
 
@@ -452,7 +468,10 @@ const retryPolicy = new RetryPolicy();
 
   // Auth-guarded path prefixes return 401 (not 404) for unauthenticated requests
   const AUTH_PREFIXES = ['/api/owner/', '/api/courier/', '/api/customer/'];
-  const NO_AUTH_PATHS = ['/api/courier/auth/']; // public endpoints under auth prefix
+  const NO_AUTH_PATHS = [
+    '/api/courier/auth/',            // public endpoints under auth prefix
+    '/api/customer/track/exchange',  // pre-auth: trades opaque ?t= code for a customer JWT
+  ];
   fastify.addHook('onRequest', async (request, reply) => {
     if (request.method === 'OPTIONS') return;
     const url = request.url.split('?')[0];
@@ -546,6 +565,7 @@ const retryPolicy = new RetryPolicy();
   fastify.register(ownerPromotionRoutes, { db: pool });
   fastify.register(onboardingRoutes, { prefix: '/api/owner', db: pool, messageBus, queue });
   fastify.register(customerOtpRoutes, { prefix: '/api/customer', db: pool, messageBus });
+  fastify.register(customerTrackRoutes, { prefix: '/api/customer', db: pool });
   fastify.register(customerPushRoutes, { prefix: '/api/customer', db: pool, messageBus });
   fastify.register(courierSettlementRoutes, { prefix: '/api/courier', db: pool, messageBus });
   fastify.register(courierAssignmentsRoutes, { prefix: '/api/courier', db: pool, messageBus });
