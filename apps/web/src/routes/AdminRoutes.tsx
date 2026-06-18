@@ -1,4 +1,4 @@
-import React, { useState, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ToastProvider, LanguageSwitcher, useI18n, BottomTabBar, ResponsiveDialog, CurrencySwitcher } from '@deliveryos/ui';
 import type { TabItem } from '@deliveryos/ui';
@@ -48,6 +48,13 @@ function AdminLayout() {
   const isDev = typeof window !== 'undefined' && (sessionStorage.getItem('dos_dev') === '1' || new URLSearchParams(window.location.search).get('dev') === 'true');
   const devSuffix = isDev ? '?dev=true' : '';
 
+  // Auth guard: unauthenticated users must not reach the owner dashboard shell.
+  // Dev mode (?dev=true) uses mocked APIs with no real token, so it is exempt.
+  const isAuthed = typeof window !== 'undefined' && !!localStorage.getItem('dos_access_token');
+  useEffect(() => {
+    if (!isAuthed && !isDev) navigate('/login', { replace: true });
+  }, [isAuthed, isDev, navigate]);
+
   const navTo = (href: string) => {
     navigate(href + devSuffix);
   };
@@ -93,6 +100,10 @@ function AdminLayout() {
       ))}
     </nav>
   );
+
+  // Don't paint the dashboard shell for unauthenticated users while the
+  // redirect effect above runs.
+  if (!isAuthed && !isDev) return null;
 
   return (
     <div className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] overflow-hidden lg:flex-row">
