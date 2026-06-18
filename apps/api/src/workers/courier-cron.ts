@@ -57,8 +57,9 @@ export class CourierCronWorker {
       for (const row of res.rows) {
         // Create an alert
         await client.query(`
-          INSERT INTO location_alerts (location_id, kind, target_id, message)
-          VALUES ($1, 'courier_offline', $2, 'Courier went offline during delivery.')
+          INSERT INTO location_alerts (location_id, order_id, kind, status, escalation_level)
+          VALUES ($1, $2, 'courier_offline', 'active', 0)
+          ON CONFLICT DO NOTHING
         `, [row.location_id, row.order_id]);
 
         // Publish event to trigger notification workflow

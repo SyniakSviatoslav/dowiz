@@ -33,7 +33,7 @@ export class CourierEventsWorker {
     try {
       // Find active assignment
       let assignmentQuery = `
-        SELECT a.order_id, o.delivery_pin_lat, o.delivery_pin_lng, a.status as assignment_status 
+        SELECT a.order_id, o.delivery_lat, o.delivery_lng, a.status as assignment_status
         FROM courier_assignments a
         JOIN orders o ON a.order_id = o.id
         WHERE a.courier_id = $1 AND a.status IN ('accepted', 'picked_up', 'delivered')
@@ -43,7 +43,7 @@ export class CourierEventsWorker {
 
       if (orderId) {
         assignmentQuery = `
-          SELECT a.order_id, o.delivery_pin_lat, o.delivery_pin_lng, a.status as assignment_status 
+          SELECT a.order_id, o.delivery_lat, o.delivery_lng, a.status as assignment_status
           FROM courier_assignments a
           JOIN orders o ON a.order_id = o.id
           WHERE a.order_id = $1 AND a.courier_id = $2
@@ -54,7 +54,7 @@ export class CourierEventsWorker {
       const assignmentRes = await client.query(assignmentQuery, params);
       if (assignmentRes.rowCount === 0) return null;
 
-      const { order_id, delivery_pin_lat, delivery_pin_lng, assignment_status } = assignmentRes.rows[0];
+      const { order_id, delivery_lat, delivery_lng, assignment_status } = assignmentRes.rows[0];
 
       // Find courier PII and latest position
       const courierRes = await client.query(`
@@ -77,7 +77,7 @@ export class CourierEventsWorker {
         courierName: this.maskName(name),
         phoneMasked: this.maskPhone(phone),
         position: lat !== null && lng !== null ? { lat: Number(lat), lng: Number(lng) } : null,
-        destination: delivery_pin_lat !== null && delivery_pin_lng !== null ? { lat: Number(delivery_pin_lat), lng: Number(delivery_pin_lng) } : null,
+        destination: delivery_lat !== null && delivery_lng !== null ? { lat: Number(delivery_lat), lng: Number(delivery_lng) } : null,
         assignmentStatus: assignment_status
       };
     } finally {
