@@ -57,6 +57,15 @@ test('SSR menu page escapes ampersands exactly once', async (t) => {
     assert.ok(!out.includes('Fish & Chips'), 'raw unescaped product name leaked');
   });
 
+  // Hydration contract: the menu must ship the bundle + the DOM hooks it needs,
+  // or the page is a dead static menu (customers cannot add items / order).
+  await t.test('emits the menu hydration bundle + DOM hooks', () => {
+    assert.ok(out.includes('<script type="module" src="/dist/menu/app.js">'), 'menu bundle script missing');
+    assert.ok(out.includes('name="dos-location-id" content="l1"'), 'dos-location-id meta missing');
+    assert.ok(out.includes(`onclick="DowizMenu.addToCart(event, 'p1', 1000)"`), 'add-to-cart button/handler missing');
+    assert.ok(out.includes('id="cartFabWrapper"') && out.includes('id="fabCount"'), 'cart FAB missing');
+  });
+
   // U5 regression: the JSON-LD <script> must contain PARSEABLE json, not
   // HTML-entity-escaped text (preact escapes script text children by default).
   await t.test('emits valid, parseable JSON-LD (not HTML-escaped)', () => {
