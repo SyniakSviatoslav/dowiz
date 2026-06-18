@@ -81,7 +81,7 @@ export function ConfirmDialog({
         <button
           onClick={onClose}
           className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] transition-colors"
-          aria-label="Close"
+          aria-label={t('common.close', 'Close')}
         >
           &#x2715;
         </button>

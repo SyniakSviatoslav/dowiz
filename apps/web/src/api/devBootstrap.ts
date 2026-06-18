@@ -1,6 +1,6 @@
 import { getMockResponse } from './mockData.js';
 
-const PROXIED_PREFIXES = ['/api/', '/public/', '/auth/'];
+const PROXIED_PREFIXES = ['/api/', '/public/', '/auth/', '/v1/'];
 const DELAY_MS = 150;
 
 const paramDev = new URLSearchParams(window.location.search).get('dev');

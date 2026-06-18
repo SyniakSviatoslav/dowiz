@@ -688,7 +688,7 @@ export function MenuPage() {
       {/* Product Detail Modal */}
       {detailProduct && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center transition-opacity duration-300" style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)', backdropFilter: 'blur(4px)' }} role="dialog" aria-modal="true">
-          <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={closeDetail} />
+          <button type="button" className="absolute inset-0 cursor-default" aria-label={t('common.close', 'Close')} onClick={closeDetail} />
           <div
             className="relative w-full md:max-w-lg max-h-[85vh] overflow-auto rounded-t-2xl md:rounded-2xl shadow-2xl animate-slide-up"
             style={{ background: 'var(--brand-bg)' }}
@@ -713,7 +713,7 @@ export function MenuPage() {
                 className="absolute top-4 right-4 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center backdrop-blur-md active:scale-[0.95] transition-transform"
                 style={{ background: 'color-mix(in srgb, var(--brand-bg) 50%, transparent)', color: 'var(--color-on-primary)' }}
                 onClick={closeDetail}
-                aria-label="Close"
+                aria-label={t('common.close', 'Close')}
               >
                 <i className="ti ti-x text-xl" />
               </motion.button>
@@ -917,7 +917,7 @@ export function MenuPage() {
                     whileTap={{ scale: 0.9 }}
                     className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium transition-colors hover:opacity-80 active:scale-90"
                     style={{ color: 'var(--brand-text)' }}
-                    aria-label="Decrease quantity"
+                    aria-label={t('common.decrease_quantity', 'Decrease quantity')}
                   >
                     <i className="ti ti-minus" />
                   </motion.button>
@@ -927,7 +927,7 @@ export function MenuPage() {
                     whileTap={{ scale: 0.9 }}
                     className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium transition-colors hover:opacity-80 active:scale-90"
                     style={{ color: 'var(--brand-text)' }}
-                    aria-label="Increase quantity"
+                    aria-label={t('common.increase_quantity', 'Increase quantity')}
                   >
                     <i className="ti ti-plus" />
                   </motion.button>

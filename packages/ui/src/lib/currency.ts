@@ -28,6 +28,6 @@ export function subscribeToCurrency(fn: () => void): () => void {
 export function getCurrencies(): { code: CurrencyCode; name: string; symbol: string }[] {
   return [
     { code: 'ALL', name: 'Lek', symbol: 'L' },
-    { code: 'EUR', name: '\u20AC', symbol: '\u20AC' },
+    { code: 'EUR', name: 'Euro', symbol: '\u20AC' },
   ];
 }
