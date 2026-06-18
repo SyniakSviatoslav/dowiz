@@ -8,7 +8,7 @@ import { updateOrderStatus } from '../../lib/orderStatusService';
 const env = loadEnv();
 
 export default (async function courierAssignmentsRoutes(fastify: any, opts: any) {
-  const { db, messageBus, queue } = opts as { db: any, messageBus: MessageBus, queue: any };
+  const { db, messageBus } = opts as { db: any, messageBus: MessageBus };
 
   fastify.addHook('preValidation', fastify.verifyAuth);
   fastify.addHook('preValidation', fastify.requireRole(['courier']));
@@ -337,17 +337,13 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
         cashAmount: cash_collected ? cash_amount : null
       });
 
-      // Feedback reminder ~30 min after delivery (within the 24h rating window).
-      // After COMMIT, best-effort: a failure here must not fail the delivery.
-      try {
-        await queue.enqueue(
-          QUEUE_NAMES.ORDER_FEEDBACK_REMINDER,
-          { orderId: order_id, locationId },
-          { startAfter: new Date(Date.now() + 30 * 60 * 1000), singletonKey: order_id },
-        );
-      } catch (err) {
-        request.log.warn({ err }, 'failed to enqueue feedback reminder (non-fatal)');
-      }
+      // NOTE: a post-delivery feedback reminder was intended here, but registering a
+      // new pg-boss queue is infeasible on this infra — pgboss.queue is owned by the
+      // operational role (which lacks CREATE on the pgboss schema, revoked by
+      // migration 009) while the migration role lacks REFERENCES on that table, so
+      // neither can create_queue. Enqueue to an unregistered queue silently no-ops
+      // (order.timeout has the same fate). Tracked as known-debt in the reliability
+      // gate; revisit via an existing registered queue or a cron sweep.
 
       return reply.send({ success: true });
     } catch (err) {
