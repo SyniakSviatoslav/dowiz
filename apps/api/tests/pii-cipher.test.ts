@@ -26,11 +26,15 @@ test('PII Cipher Helper', async (t) => {
     }, { message: 'Unsupported state or unable to authenticate data' });
   });
 
-  await t.test('handles empty string', () => {
+  await t.test('handles empty string (null-sentinel contract)', () => {
+    // encryptPII('') short-circuits to an empty buffer; decryptPII treats an
+    // empty/absent buffer as "no value" and returns null (string | null). All
+    // call sites coalesce that null (`|| ''` / `|| 'Unknown'`), so empty/absent
+    // PII reads back as null, not ''.
     const cipher = encryptPII('');
     assert.equal(cipher.length, 0);
     const decrypted = decryptPII(cipher);
-    assert.equal(decrypted, '');
+    assert.equal(decrypted, null);
   });
 
   await t.test('different IVs yield different ciphertexts', () => {
