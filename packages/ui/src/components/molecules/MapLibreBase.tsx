@@ -7,6 +7,16 @@ function getCSSVar(name: string, fallback: string): string {
 
 type LngLatLike = [number, number];
 
+// TileSource seam (G3): the map style comes from VITE_TILE_STYLE_URL, never a
+// hardcoded provider URL. packages/ui can't import apps/web's tileConfig, so the
+// env var is read here directly; the fallback equals tileConfig's documented
+// default (openfreemap), so behavior is unchanged until the env is set. Swapping to
+// a self-hosted tileserver-gl / Protomaps in `fra` is one env change — see
+// docs/adr/ADR-GEO-SEAMS.md.
+const TILE_STYLE_URL: string =
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_TILE_STYLE_URL) ||
+  'https://tiles.openfreemap.org/styles/liberty';
+
 interface MapLibreBaseProps {
   center?: LngLatLike;
   zoom?: number;
@@ -62,7 +72,7 @@ export function MapLibreBase({
 
         const map = new maplibregl.Map({
           container: containerRef.current,
-          style: 'https://tiles.openfreemap.org/styles/liberty',
+          style: TILE_STYLE_URL,
           center,
           zoom,
           interactive,

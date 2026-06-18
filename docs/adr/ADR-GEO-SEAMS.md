@@ -105,8 +105,20 @@ untouched as the safety net.
 
 **Tiles (free → self-host):** raise `tileserver-gl` / `Protomaps` in `fra` on the
 same extract; generate a style → set `VITE_TILE_PROVIDER=self`,
-`VITE_TILE_STYLE_URL=<self>`; add a Cloudflare cache-rule → verify render at
-390/768/1280, embed still MapLibre-free → `fly deploy`.
+`VITE_TILE_STYLE_URL=<self>`; **⚠ update the CSP `connect-src` to allow the new
+tile/style domain** in `apps/api/src/lib/security/headers.ts`,
+`apps/api/src/lib/spa-shell.ts`, and `apps/api/src/routes/public/branding-preview.ts`
+(plus the `tiles.openfreemap.org` assertion in `apps/api/scripts/config-drift.ts`) —
+otherwise the browser silently blocks every tile fetch; add a Cloudflare cache-rule →
+verify render at 390/768/1280, embed still MapLibre-free → `fly deploy`.
+
+**G3 ops checklist (provider console — not code, must be done by a human):**
+- MapTiler (or chosen free vector provider): set a **spending cap** so an overage
+  can't produce a surprise bill.
+- Restrict the tile API key to the **production domain(s)** (referer/origin lock).
+- Put **Cloudflare** in front of the tile origin with a cache-rule so origin egress
+  stays ~zero. The CSP already allows `tiles.openfreemap.org`; the current free
+  default needs no key, so these apply once a keyed provider is adopted.
 
 **Triggers:** routing — approaching the ORS-free directions ceiling (~2000/day) *and*
 a 2–3-month bill projection > server cost + maintenance time. Tiles — approaching the
