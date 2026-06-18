@@ -1,9 +1,12 @@
+import Redis from 'ioredis';
 import {
+  createRoutingProvider,
   haversineMeters,
   type LatLng,
   type RouteResult,
   type RoutingProvider,
 } from '@deliveryos/platform';
+import { loadEnv } from '@deliveryos/config';
 
 // Per-leg routing service. Wraps a RoutingProvider with:
 //   • a short-TTL, in-process, NON-AUTHORITATIVE cache (kill → re-fetch; never the
@@ -100,4 +103,60 @@ export function shouldReroute(
   thresholdM: number = DEFAULT_REROUTE_THRESHOLD_M,
 ): boolean {
   return deviationMeters(polyline, pos) > thresholdM;
+}
+
+// ── Process-wide singletons + Redis-backed route state (N-safe) ─────────────────
+//
+// The RouteResult is authoritative state, not the in-process cache: it lives in
+// Redis keyed by order so it survives a process kill and is shared across the N
+// instances. The status endpoint reads it for reconnecting clients; the worker
+// writes it once at picked_up (+ on a re-route).
+
+let _service: RoutingService | null = null;
+/** Lazy singleton — shares one provider + leg-cache across the process. */
+export function getRoutingService(): RoutingService {
+  if (!_service) _service = new RoutingService(createRoutingProvider(loadEnv()));
+  return _service;
+}
+
+let _redis: Redis | null = null;
+function routeRedis(): Redis {
+  // Lazy: no connection at boot. Separate logical use from MessageBus (PG NOTIFY).
+  if (!_redis) _redis = new Redis(loadEnv().REDIS_URL, { maxRetriesPerRequest: 2 });
+  return _redis;
+}
+
+/** Test-only: close the lazy Redis connection so a test process can exit. */
+export async function closeRouteRedis(): Promise<void> {
+  if (_redis) { await _redis.quit().catch(() => {}); _redis = null; }
+}
+
+const routeKey = (orderId: string) => `route:${orderId}`;
+const ROUTE_TTL_S = 2 * 60 * 60; // outlives a delivery; cleaned up by TTL
+
+export async function saveRoute(orderId: string, r: RouteResult): Promise<void> {
+  await routeRedis().set(routeKey(orderId), JSON.stringify(r), 'EX', ROUTE_TTL_S);
+}
+
+export async function loadRoute(orderId: string): Promise<RouteResult | null> {
+  try {
+    const v = await routeRedis().get(routeKey(orderId));
+    return v ? (JSON.parse(v) as RouteResult) : null;
+  } catch {
+    return null; // routing is advisory — never let a Redis hiccup break the read
+  }
+}
+
+/**
+ * NX claim so exactly one of the N instances computes/publishes for a given key
+ * within the window (PG NOTIFY fans out to every listener, so all instances see
+ * the same picked-up / reroute trigger). Returns true iff this instance won.
+ */
+export async function claimOnce(key: string, ttlS: number): Promise<boolean> {
+  try {
+    const res = await routeRedis().set(`claim:${key}`, '1', 'EX', ttlS, 'NX');
+    return res === 'OK';
+  } catch {
+    return false; // on Redis error, don't compute — fallback ETA still flows
+  }
 }

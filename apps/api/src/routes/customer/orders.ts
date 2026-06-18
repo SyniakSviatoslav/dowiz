@@ -5,6 +5,7 @@ import { loadEnv } from '@deliveryos/config';
 import { CustomerOrderStatusResponse } from '@deliveryos/shared-types';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { distanceKm } from '../../lib/geo.js';
+import { loadRoute } from '../../lib/routing.js';
 
 const env = loadEnv();
 
@@ -87,11 +88,18 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
         if (rr.rowCount > 0) { rating = rr.rows[0].rating; feedback = rr.rows[0].feedback; }
       } catch { /* table not yet migrated */ }
 
+      // Stored road route (advisory) for reconnecting clients — the worker pushes it
+      // live to order:{id} once at picked_up; this serves a client that joined late.
+      const storedRoute = await loadRoute(orderId);
+
       return reply.status(200).send({
         id: row.id,
         status: row.status,
         rating,
         feedback,
+        route: storedRoute
+          ? { polyline: storedRoute.polyline, durationSeconds: storedRoute.duration_s, distanceMeters: storedRoute.distance_m }
+          : null,
         canRate: row.status === 'DELIVERED' && rating == null,
         deliveryAddress: row.delivery_address,
         deliveryInstructions: row.delivery_instructions,
