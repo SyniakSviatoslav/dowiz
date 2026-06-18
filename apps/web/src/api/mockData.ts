@@ -209,6 +209,16 @@ export const MOCK: Record<string, Handler> = {
     categories: CATEGORIES.map(c => ({ ...c, products: PRODUCTS.filter(p => p.categoryId === c.id) })),
   }),
 
+  // CheckoutPage loads this to resolve locationId + map center; without it
+  // locationId stays null and order placement silently no-ops (early return).
+  'GET /public/locations/:slug/info': () => ({
+    id: LOCATION.id,
+    name: LOCATION.name,
+    address: LOCATION.address,
+    lat: LOCATION.lat,
+    lng: LOCATION.lng,
+  }),
+
   'POST /api/orders': () => ({
     id: 'ord_dev001', status: 'PENDING' as const, outcome: 'clean' as const,
   }),
