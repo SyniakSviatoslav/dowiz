@@ -341,41 +341,46 @@ export async function renderMenuPage(
           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
           <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
+          <link rel="stylesheet" href="/public/locations/${loc.id}/theme.css" />
           <script type="application/ld+json" dangerouslySetInnerHTML=${{ __html: jsonld }}></script>
           <style>
+            /* Colours flow through the per-tenant --brand-* tokens (loaded via
+               the location theme.css below). Fallbacks equal the previous
+               hardcoded values, so an un-themed render is byte-identical. */
+            :root { color-scheme: dark; }
             *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-            body { font-family: Inter, DM Sans, system-ui, sans-serif; background: #121212; color: #e0e0e0; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+            body { font-family: Inter, DM Sans, system-ui, sans-serif; background: var(--brand-bg, #121212); color: var(--brand-text, #e0e0e0); line-height: 1.6; -webkit-font-smoothing: antialiased; }
             .container { max-width: 800px; margin: 0 auto; padding: 1rem; }
-            header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 0; border-bottom: 1px solid #2a2a2a; margin-bottom: 1.5rem; }
-            header h1 { font-size: 1.5rem; font-weight: 700; color: #fff; }
+            header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 0; border-bottom: 1px solid var(--brand-border, #2a2a2a); margin-bottom: 1.5rem; }
+            header h1 { font-size: 1.5rem; font-weight: 700; color: var(--brand-text, #fff); }
             header .brand { display: flex; align-items: center; gap: 0.5rem; }
-            header .brand svg { width: 28px; height: 28px; }
+            header .brand svg { width: 28px; height: 28px; stroke: var(--brand-primary, #ea4f16); }
             .menu-section { margin-bottom: 2rem; }
-            .category-title { font-size: 1.25rem; font-weight: 600; color: #fff; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid #ea4f16; display: inline-block; }
+            .category-title { font-size: 1.25rem; font-weight: 600; color: var(--brand-text, #fff); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--brand-primary, #ea4f16); display: inline-block; }
             .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
-            .product-card { background: #1e1e1e; border-radius: 12px; overflow: hidden; transition: transform 0.15s, box-shadow 0.15s; cursor: pointer; border: 1px solid #2a2a2a; display: flex; flex-direction: column; }
-            .product-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); border-color: #ea4f16; }
+            .product-card { background: var(--brand-surface, #1e1e1e); border-radius: 12px; overflow: hidden; transition: transform 0.15s, box-shadow 0.15s; cursor: pointer; border: 1px solid var(--brand-border, #2a2a2a); display: flex; flex-direction: column; }
+            .product-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); border-color: var(--brand-primary, #ea4f16); }
             .product-image { width: 100%; height: 160px; object-fit: cover; }
-            .product-image-placeholder { width: 100%; height: 160px; background: linear-gradient(135deg, #2a2a2a 0%, #1e1e1e 100%); }
+            .product-image-placeholder { width: 100%; height: 160px; background: linear-gradient(135deg, var(--brand-border, #2a2a2a) 0%, var(--brand-surface, #1e1e1e) 100%); }
             .product-info { padding: 0.85rem; display: flex; flex-direction: column; gap: 0.35rem; flex: 1; }
-            .product-name { font-size: 1rem; font-weight: 600; color: #fff; }
-            .product-desc { font-size: 0.8rem; color: #999; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+            .product-name { font-size: 1rem; font-weight: 600; color: var(--brand-text, #fff); }
+            .product-desc { font-size: 0.8rem; color: var(--brand-text-muted, #999); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
             .product-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: auto; padding-top: 0.35rem; }
-            .product-price { font-size: 0.95rem; font-weight: 700; color: #ea4f16; }
-            .product-add { flex-shrink: 0; width: 32px; height: 32px; border: none; border-radius: 8px; background: #ea4f16; color: #fff; font-size: 1.25rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.1s, background 0.15s; }
-            .product-add:hover { background: #ff5a1f; }
+            .product-price { font-size: 0.95rem; font-weight: 700; color: var(--brand-primary, #ea4f16); }
+            .product-add { flex-shrink: 0; width: 32px; height: 32px; border: none; border-radius: 8px; background: var(--brand-primary, #ea4f16); color: #fff; font-size: 1.25rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.1s, background 0.15s; }
+            .product-add:hover { background: var(--brand-primary-hover, #ff5a1f); }
             .product-add:active { transform: scale(0.9); }
             .cart-fab-wrapper { position: fixed; bottom: 1.25rem; right: 1.25rem; z-index: 50; }
             .cart-fab-wrapper.hidden { display: none; }
-            .cart-fab { display: flex; align-items: center; gap: 0.5rem; background: #ea4f16; color: #fff; text-decoration: none; padding: 0.85rem 1.25rem; border-radius: 999px; font-weight: 700; box-shadow: 0 6px 18px rgba(0,0,0,0.4); }
+            .cart-fab { display: flex; align-items: center; gap: 0.5rem; background: var(--brand-primary, #ea4f16); color: #fff; text-decoration: none; padding: 0.85rem 1.25rem; border-radius: 999px; font-weight: 700; box-shadow: 0 6px 18px rgba(0,0,0,0.4); }
             .cart-bounce { animation: cartBounce 0.3s ease; }
             @keyframes cartBounce { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }
-            .empty-menu { text-align: center; padding: 3rem 1rem; color: #666; font-size: 1.1rem; }
+            .empty-menu { text-align: center; padding: 3rem 1rem; color: var(--brand-text-muted, #666); font-size: 1.1rem; }
             @media (max-width: 540px) { .product-grid { grid-template-columns: 1fr; } }
-            footer { text-align: center; padding: 2rem 0; color: #555; font-size: 0.8rem; border-top: 1px solid #2a2a2a; margin-top: 2rem; }
+            footer { text-align: center; padding: 2rem 0; color: var(--brand-text-muted, #555); font-size: 0.8rem; border-top: 1px solid var(--brand-border, #2a2a2a); margin-top: 2rem; }
             .locale-switcher { display: flex; gap: 0.5rem; }
-            .locale-switcher a { color: #ea4f16; text-decoration: none; font-size: 0.85rem; font-weight: 500; padding: 0.25rem 0.5rem; border-radius: 4px; }
-            .locale-switcher a:hover { background: rgba(234,79,22,0.1); }
+            .locale-switcher a { color: var(--brand-primary, #ea4f16); text-decoration: none; font-size: 0.85rem; font-weight: 500; padding: 0.25rem 0.5rem; border-radius: 4px; }
+            .locale-switcher a:hover { background: var(--brand-primary-light, rgba(234,79,22,0.1)); }
           </style>
         </head>
         <body>

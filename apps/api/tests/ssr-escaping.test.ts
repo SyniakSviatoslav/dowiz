@@ -66,6 +66,18 @@ test('SSR menu page escapes ampersands exactly once', async (t) => {
     assert.ok(out.includes('id="cartFabWrapper"') && out.includes('id="fabCount"'), 'cart FAB missing');
   });
 
+  // Theming (P0): the menu must drive colours through --brand-* tokens and load
+  // the per-tenant theme.css, so each restaurant re-skins. Fallbacks keep an
+  // un-themed render identical.
+  await t.test('themes via --brand-* tokens + per-tenant theme.css', () => {
+    assert.ok(out.includes('href="/public/locations/l1/theme.css"'), 'per-tenant theme.css link missing');
+    assert.ok(out.includes('var(--brand-bg, #121212)'), 'body bg not tokenized');
+    assert.ok(out.includes('var(--brand-primary, #ea4f16)'), 'brand primary not tokenized');
+    assert.ok(out.includes('var(--brand-surface, #1e1e1e)'), 'surface not tokenized');
+    // no raw brand hexes left as standalone color declarations (fallbacks excepted)
+    assert.ok(!/color:\s*#ea4f16/.test(out), 'hardcoded #ea4f16 color still present');
+  });
+
   // U5 regression: the JSON-LD <script> must contain PARSEABLE json, not
   // HTML-entity-escaped text (preact escapes script text children by default).
   await t.test('emits valid, parseable JSON-LD (not HTML-escaped)', () => {
