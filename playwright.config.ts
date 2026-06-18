@@ -11,6 +11,11 @@ export default defineConfig({
 
   use: {
     baseURL: process.env.VITE_BASE_URL || 'http://localhost:3000',
+    // Test-only /dev endpoints are gated by DEV_AUTH_SECRET; send it on every
+    // request so the harness keeps working while anonymous callers get 404.
+    extraHTTPHeaders: process.env.DEV_AUTH_SECRET
+      ? { 'x-dev-auth-secret': process.env.DEV_AUTH_SECRET }
+      : {},
     trace: 'on-first-retry',
     video: 'on',
     screenshot: 'on',

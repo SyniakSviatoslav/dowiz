@@ -58,6 +58,7 @@ import securityHeadersPlugin from './lib/security/headers.js';
 // Safe __dirname fallback for dual ESM/CJS bundling
 const dirName = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath((import.meta as any).url));
 import authPlugin from './plugins/auth.js';
+import { isDevPath, isDevRequestAuthorized, devLoginAllowed } from './plugins/dev-guard.js';
 import multipart from '@fastify/multipart';
 import { setupWebSocket } from './websocket.js';
 import { setupShutdown } from './shutdown.js';
@@ -449,6 +450,14 @@ const retryPolicy = new RetryPolicy();
   fastify.addHook('onRequest', async (request, reply) => {
     if (request.method === 'OPTIONS') return;
     const url = request.url.split('?')[0];
+    // Test-only /dev + /api/dev endpoints (mock-auth, create-assignment, seed-data)
+    // require the shared DEV_AUTH_SECRET. Fails closed: with no secret configured
+    // (production), they 404 as if they do not exist — never leak their presence.
+    if (isDevPath(url)) {
+      if (!isDevRequestAuthorized(url, request.headers['x-dev-auth-secret'], env.DEV_AUTH_SECRET)) {
+        return reply.status(404).send({ error: 'Not found' });
+      }
+    }
     if (NO_AUTH_PATHS.some(p => url.startsWith(p))) return;
     if (AUTH_PREFIXES.some(p => url.startsWith(p))) {
       const token = request.headers.authorization;
@@ -796,7 +805,10 @@ fastify.register(mockAuthRoutes, { db: pool });
   fastify.post('/api/auth/local/login', async (request, reply) => {
     const { email, password } = request.body as any || {};
     if (!email || !password) return reply.status(400).send({ error: 'Missing email or password' });
-    if (email === 'test@dowiz.com' && password === 'test123456') {
+    // Dev-only password login. Active ONLY when DEV_AUTH_SECRET is configured
+    // (local / e2e). In production the secret is unset and the seeded test
+    // account has no usable password_hash, so this always rejects.
+    if (devLoginAllowed(env.DEV_AUTH_SECRET) && email === 'test@dowiz.com' && password === 'test123456') {
       const res = await pool.query(`SELECT id FROM users WHERE email = $1`, [email.toLowerCase()]);
       if (res.rowCount === 0) return reply.status(401).send({ error: 'User not found' });
       const userId = res.rows[0].id;

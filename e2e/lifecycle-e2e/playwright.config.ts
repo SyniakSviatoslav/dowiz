@@ -12,6 +12,9 @@ export default defineConfig({
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
     baseURL: env.customerBaseURL,
+    extraHTTPHeaders: process.env.DEV_AUTH_SECRET
+      ? { 'x-dev-auth-secret': process.env.DEV_AUTH_SECRET }
+      : {},
     trace: 'retain-on-failure',
     video: 'retain-on-failure',
     screenshot: 'only-on-failure',
