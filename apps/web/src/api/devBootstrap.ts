@@ -8,7 +8,10 @@ const isDev = paramDev === 'true' || paramDev === '1' || (paramDev !== null && p
 
 function extractPath(url: string): string {
   try {
-    const u = new URL(url);
+    // Most fetches are relative ("/api/...", "/v1/rates"); new URL needs a base
+    // for those or it throws "Invalid URL" on every call (dev console spam).
+    const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+    const u = new URL(url, base);
     return u.pathname.replace(/^\/api/, '') || '/';
   } catch (err) {
     console.debug('[devBootstrap] extractPath URL parse failed:', err);
