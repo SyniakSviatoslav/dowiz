@@ -546,36 +546,6 @@ const retryPolicy = new RetryPolicy();
   fastify.register(courierShiftsRoutes, { prefix: '/api/courier', db: pool, messageBus });
   fastify.register(orderMessageRoutes, { db: pool, messageBus });
 
-  // DEBUG: Manual notification test endpoint
-  fastify.post('/api/debug/test-notification', async (request, reply) => {
-    try {
-      const { locationId } = request.body as any;
-      if (!locationId) return reply.status(400).send({ error: 'locationId required' });
-      console.log('[DEBUG] Test notification requested for location:', locationId);
-      const targetsRes = await pool.query(
-        `SELECT id, channel, address FROM owner_notification_targets WHERE location_id = $1 AND channel = 'telegram' AND status = 'active'`,
-        [locationId]
-      );
-      console.log('[DEBUG] Found', targetsRes.rowCount, 'active Telegram targets');
-      if (targetsRes.rowCount === 0) {
-        return reply.status(404).send({ error: 'No active Telegram targets found' });
-      }
-      for (const target of targetsRes.rows) {
-        console.log('[DEBUG] Sending test message to:', target.address);
-        const result = await telegramAdapter.notify(
-          { id: target.id, channel: 'telegram', address: target.address, locationId },
-          { type: 'test' },
-          { location_id: locationId, message: '🔔 TEST NOTIFICATION - If you see this, the notification system works!' }
-        );
-        console.log('[DEBUG] Result:', result);
-      }
-      return reply.send({ ok: true, sent: targetsRes.rowCount });
-    } catch (err: any) {
-      console.error('[DEBUG] Test notification failed:', err);
-      return reply.status(500).send({ error: err.message });
-    }
-  });
-
   fastify.register(ratesRoutes, { db: pool });
   fastify.register(publicFallbackConfigRoutes, { db: pool });
 
