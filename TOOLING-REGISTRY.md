@@ -59,6 +59,14 @@
 - **Installed:** `engineering-backend-architect` (Backend Architect) · `security-appsec-engineer` (Application Security Engineer) · `testing-api-tester` (API Tester — fits the API-heavy stack + proof-by-test rule).
 - **Governance non-conflict (verified):** the agent files carry no `tools:` restriction → they inherit the full toolset, so the session hooks fire for them too. `settings.json` untouched; `protect-paths` re-tested post-install — blocks a protected path (exit 2), allows a normal path (exit 0). `require-classification` (Stop) + `post-edit-gates` (PostToolUse) unchanged → governance holds.
 
+## Research agent — Open Deep Research (ODR), Stage A done
+- **Location:** `/root/open_deep_research` (cloned, **outside the product repo** — dev/ops plane, not product N=1/PII). LangGraph app; Python 3.11 venv via `uv`. MIT.
+- **Models:** all roles (summarization/research/compression/final_report) via **OpenRouter** — redirect is env-only: `OPENAI_BASE_URL=https://openrouter.ai/api/v1` + `OPENAI_API_KEY=<OpenRouter key>` (ODR `.env`, gitignored, key never printed). Capability footgun cleared: **`nvidia/nemotron-3-super-120b-a12b:free`** passes structured-output + tool-calling (gpt-oss-120b failed structured; qwen3-next/llama-3.3 were 429).
+- **Search (no Tavily, OSS rule):** ODR's `search_api` enum has **no searxng** value and `mcp_config` is a **single Streamable-HTTP server** (not the multi-server block the plan assumed). So: `search_api=none` + `mcp_config.url=http://127.0.0.1:8765` → **`oss_search_mcp.py`** (FastMCP + `ddgs` DuckDuckGo, both MIT) — Docker-free, keyless, on-demand. Replaces Tavily.
+- **Tracing:** LangSmith OFF (empty `LANGSMITH_*`).
+- **DoD A proven:** one dowiz query (PaddleOCR vs Tesseract for menu OCR) → 10.2k-char cited report (9 citations); 22 OSS-search MCP tool hits; **zero Tavily**; zero structured-output/tool-calling/429 errors. Report is ADVISORY (G3) — single-model output has likely-fabricated specifics; the factcheck + **decorrelated** adversarial verifier (different OpenRouter model, G4) are Stage B/C + agent-system §6 step 4.
+- **Stage B/C deferred:** grounding on Repowise/Airweave needs an HTTP MCP gateway (ODR takes ONE http url; Repowise/browser-use are stdio). Notes/signals (Mem0 + pg-boss→Telegram) later.
+
 ## Parked (with triggers — see build plan §4)
 Headroom · Mem0/OpenMemory · Airweave · Octogent (`hesamsheikh/octogent`, MIT) · Pake.
 
