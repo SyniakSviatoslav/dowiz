@@ -33,6 +33,7 @@ export function renderClientShell({ title, slug, scriptUrl, nonce, cssHash, them
         ${locationId ? html`<meta name="dos-location-id" content="${locationId}" />` : null}
         <link rel="manifest" href="/s/${slug}/manifest.webmanifest" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="icon" type="image/png" href="/favicon.png" />
         <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet" />
         <script src="https://cdn.tailwindcss.com"></script>
         ${cssHash ? html`<link rel="stylesheet" href="/public/locations/${locationId}/theme.css?hash=${cssHash}&v=${themeVersion}" />` : null}

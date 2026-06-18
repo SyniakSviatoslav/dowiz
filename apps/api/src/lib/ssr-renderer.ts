@@ -336,6 +336,7 @@ export async function renderMenuPage(
           <meta name="dos-menu-version" content="${menu.menu_version}" />
           <link rel="manifest" href="/s/${slug}/manifest.webmanifest" />
           <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+          <link rel="icon" type="image/png" href="/favicon.png" />
           <link rel="preconnect" href="https://fonts.googleapis.com" />
           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
