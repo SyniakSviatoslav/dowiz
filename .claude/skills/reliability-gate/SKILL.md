@@ -32,13 +32,13 @@ Files to audit:
 - `apps/api/src/routes/public/menu.ts` — SSR, cache headers, menu_version
 - `apps/api/src/routes/orders.ts` — transaction atomicity, idempotency, server-side pricing
 - `packages/db/migrations/1780310074262_orders.ts` — idempotency_keys PK
-- `packages/db/migrations/1790000000031_idempotency-composite-pk.ts` — composite PK migration
+- `packages/db/migrations/1790000000029_idempotency-composite-pk.ts` — composite PK migration
 - `apps/web/src/pages/client/MenuPage.tsx` — cart localStorage, is_available check
 
 PASS criteria:
 - SSR route exists with cache headers ≤60s
 - `POST /orders` is one BEGIN/COMMIT with idempotency_keys + orders + items + timeout-job
-- `idempotency_keys` PK is now `(location_id, key)` (composite after migration 031)
+- `idempotency_keys` PK is now `(location_id, key)` (composite after migration 029)
 - Server recomputes total from `products` table (no client total trusted)
 - Double POST with same key → same response (idempotency guard)
 
@@ -60,8 +60,8 @@ PASS criteria:
 ### Agent 3 — L6 · L7 (IN_DELIVERY → DELIVERED termination node)
 Files to audit:
 - `apps/api/src/routes/courier/assignments.ts` — DELIVERED handler (lines 270–385)
-- `packages/db/migrations/1790000000029_delivery-trace.ts` — delivery_trace schema
-- `packages/db/migrations/1790000000030_courier-cash-ledger.ts` — courier_cash_ledger schema
+- `packages/db/migrations/1790000000027_delivery-trace.ts` — delivery_trace schema
+- `packages/db/migrations/1790000000028_courier-cash-ledger.ts` — courier_cash_ledger schema
 - `apps/api/src/routes/courier/shifts.ts` — GPS accuracy/speed filters
 
 PASS criteria:
@@ -103,10 +103,10 @@ PASS criteria per surface:
 4. QuickStats countSql: DATE(created_at)=CURRENT_DATE filter present
 5. Analytics: wrapped with withTenant in spa-proxy.ts
 6. CourierDailyStats: avg_rating from order_ratings, ordersToday date-filtered
-7. delivery_trace (DB): migration 029 exists with UNIQUE(order_id)
-8. courier_cash_ledger (DB): migration 030 exists with CHECK(type)
+7. delivery_trace (DB): migration 027 exists with UNIQUE(order_id)
+8. courier_cash_ledger (DB): migration 028 exists with CHECK(type)
 9. Ratings (DB): UPSERT ON CONFLICT(order_id) in ratings route
-10. idempotency_keys (DB): migration 031 composite PK (location_id, key)
+10. idempotency_keys (DB): migration 029 composite PK (location_id, key)
 
 N=2 check: `PgMessageBus.publish` uses `NOTIFY` via pool → broadcasts to ALL Postgres LISTEN clients → cross-instance works
 Tenant: analytics wrapped with withTenant; orderStatusService no-SQL-level location_id in UPDATE (relies on state machine + existing order FK)
@@ -150,3 +150,20 @@ When user types `/reliability-gate`:
 For autonomous periodic runs, this gate can be scheduled via CronCreate:
 - Weekly before Monday deploy: `0 8 * * 1`
 - After each major fix session
+
+## Reconciliation notes (source-of-truth as of the lifecycle build)
+
+**Now BUILT** (were phantom FAILs against an aspirational spec; the .ignored_db copies were never tracked):
+- delivery_trace — migration 1790000000027; DELIVERED handler INSERTs it (ON CONFLICT order_id DO NOTHING).
+- courier_cash_ledger — migration 1790000000028; AUDIT-ONLY (settlement_items stays authoritative); DELIVERED writes a hold on cash_collected.
+- idempotency_keys composite PK (location_id, key) — migration 1790000000029.
+- ORDER_FEEDBACK_REMINDER — queue provisioned by migration 1790000000030; enqueued after COMMIT in the DELIVERED handler (startAfter 30m); handler registered in apps/worker/src/handlers.ts.
+
+**Known debt (FLAG-ONLY — do NOT treat as NO-GO blockers; never implemented in tracked source):**
+- DispatchView.tsx does not exist; the owner DELIVERED/in-flight snapshot is served by apps/api/src/routes/owner/dashboard.ts (status IN (IN_DELIVERY,READY)).
+- dashboard countSql has no DATE(created_at)=CURRENT_DATE filter — status counts are all-time.
+- transitionOrder neutralizes the order timeout via timeout_at=NULL in the UPDATE, NOT a pgboss job cancel (functionally equivalent; the worker also guards WHERE status=PENDING).
+- updateOrderStatus does not publish to courier:{courierId} on READY; courier fan-out happens on assign→IN_DELIVERY (dashboard.ts).
+- courier GPS ping (shifts.ts) enforces only a geofence range check; no accuracy>100m / speed>150km/h bounds.
+
+A run is GO when L0–L11 pass OR the only failures are in this Known-debt list.
