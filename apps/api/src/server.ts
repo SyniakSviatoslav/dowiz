@@ -296,7 +296,10 @@ async function main() {
       'csv': new CsvMenuParser(),
       'ai-ocr': new AiOcrParser(memoryService)
     };
-  const storage = new LocalFsStorageProvider();
+  // STORAGE_DIR lets us point at a durable path (e.g. a mounted fly volume at
+  // /data/images) instead of the ephemeral default; without it uploaded product
+  // images are lost on every redeploy. Defaults preserve current behaviour.
+  const storage = new LocalFsStorageProvider(process.env.STORAGE_DIR || 'tmp/imports');
   const translation = new LibreTranslateProvider();
 
   // Notification Providers
