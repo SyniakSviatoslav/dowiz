@@ -3,9 +3,12 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { signAuthToken } from '@deliveryos/platform';
+import { loadEnv } from '@deliveryos/config';
+import { devLoginAllowed } from '../../plugins/dev-guard.js';
 
 export default (async function localAuthRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
+  const env = loadEnv();
 
   fastify.post('/auth/local/login', {
     schema: {
@@ -35,9 +38,11 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
 
       let valid = false;
 
-      // Dev bypass: allow login for test user with known password
-      if ((email === 'test@dowiz.com' && password === 'test123456') ||
-          (email === 'empty@dowiz.com' && password === 'empty123456')) {
+      // Dev bypass: only when DEV_AUTH_SECRET is configured (non-prod / e2e).
+      // In production the secret is unset, so these hardcoded creds never work.
+      if (devLoginAllowed(env.DEV_AUTH_SECRET) &&
+          ((email === 'test@dowiz.com' && password === 'test123456') ||
+           (email === 'empty@dowiz.com' && password === 'empty123456'))) {
         valid = true;
       } else if (user.password_hash) {
         try {

@@ -2,6 +2,32 @@ import fp from 'fastify-plugin';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { verifyAuthToken } from '@deliveryos/platform';
 import { AuthToken } from '@deliveryos/shared-types';
+import { loadEnv } from '@deliveryos/config';
+import { devLoginAllowed } from './dev-guard.js';
+
+const env = loadEnv();
+
+export interface CourierSessionRow {
+  courier_id: string;
+  revoked_at: Date | string | null;
+  expires_at: Date | string | null;
+  has_location: boolean;
+}
+
+/**
+ * Decide whether a courier's access token is still live. A signed JWT alone is
+ * not enough: the token must map to a courier_sessions row that is (a) present,
+ * (b) not revoked — logout / password-change / refresh-rotation all set
+ * revoked_at — (c) not past its own expiry, and (d) the courier must STILL hold
+ * membership in the token's activeLocationId. Pure so it is unit-testable.
+ */
+export function courierSessionValid(row: CourierSessionRow | null | undefined, nowMs: number): boolean {
+  if (!row) return false;
+  if (row.revoked_at) return false;
+  if (row.expires_at && new Date(row.expires_at).getTime() < nowMs) return false;
+  if (!row.has_location) return false;
+  return true;
+}
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -27,6 +53,41 @@ export const verifyAuth = async (request: FastifyRequest, reply: FastifyReply) =
   } catch (err) {
     request.log.error(err);
     return reply.status(401).send({ error: 'Token expired or invalid' });
+  }
+
+  // Couriers: bind the access token to live server-side state (session +
+  // membership), so revocation and removal take effect immediately rather than
+  // waiting out the JWT's 24h–14d expiry.
+  const user = request.user;
+  if (user && user.role === 'courier') {
+    if (!user.jti) {
+      // Real courier logins always carry a session jti; a courier token without
+      // one can only originate from the DEV_AUTH_SECRET-gated mock endpoint.
+      if (!devLoginAllowed(env.DEV_AUTH_SECRET)) {
+        return reply.status(401).send({ error: 'Token expired or invalid' });
+      }
+      return;
+    }
+    const pool = request.server.db;
+    if (!pool) throw new Error('Database pool not attached to fastify');
+    try {
+      const res = await pool.query(
+        `SELECT s.courier_id, s.revoked_at, s.expires_at,
+                EXISTS(
+                  SELECT 1 FROM courier_locations cl
+                  WHERE cl.courier_id = s.courier_id AND cl.location_id = $2
+                ) AS has_location
+         FROM courier_sessions s
+         WHERE s.id = $1 AND s.courier_id = $3`,
+        [user.jti, user.activeLocationId, user.sub]
+      );
+      if (!courierSessionValid(res.rows[0], Date.now())) {
+        return reply.status(401).send({ error: 'Session revoked or access removed' });
+      }
+    } catch (err) {
+      request.log.error(err);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
   }
 };
 

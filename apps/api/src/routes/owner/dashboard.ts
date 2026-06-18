@@ -184,9 +184,9 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
   fastify.post('/:locationId/orders/:orderId/confirm', {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
   }, async (request: any, reply: any) => {
-    const { orderId } = request.params as any;
+    const { locationId, orderId } = request.params as any;
     const user = request.user as any;
-    const result = await transitionOrder(db, messageBus, orderId, user, 'CONFIRMED');
+    const result = await transitionOrder(db, messageBus, orderId, locationId, user, 'CONFIRMED');
     return reply.status(200).send(result);
   });
 
@@ -194,11 +194,11 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
   fastify.post('/:locationId/orders/:orderId/reject', {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
   }, async (request: any, reply: any) => {
-    const { orderId } = request.params as any;
+    const { locationId, orderId } = request.params as any;
     const body = request.body as any;
     const reason = body?.reason as string | undefined;
     const user = request.user as any;
-    const result = await transitionOrder(db, messageBus, orderId, user, 'REJECTED', reason);
+    const result = await transitionOrder(db, messageBus, orderId, locationId, user, 'REJECTED', reason);
     return reply.status(200).send(result);
   });
 
@@ -557,37 +557,31 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
   });
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;
 
-async function transitionOrder(db: any, messageBus: any, orderId: string, user: any, newStatus: string, reason?: string) {
-  const client = await db.connect();
-  try {
+async function transitionOrder(db: any, messageBus: any, orderId: string, locationId: string, user: any, newStatus: string, reason?: string) {
+  // Run under the owner's tenant context so RLS on `orders` (keyed to
+  // app.user_id → member locations) acts as a backstop, and scope the order
+  // read to the URL location the caller was authorized for. Without both, an
+  // owner of location A could transition another tenant's order by id (IDOR).
+  return withTenant(db, user.userId, async (client) => {
     const cur = await client.query(
-      `SELECT id, status, location_id FROM orders WHERE id = $1`,
-      [orderId],
+      `SELECT id, status FROM orders WHERE id = $1 AND location_id = $2`,
+      [orderId, locationId],
     );
     if (!cur.rowCount) throw { statusCode: 404, error: 'Order not found' };
 
-    const locationId = cur.rows[0].location_id;
-
-    if (user.role !== 'owner' && (!user.activeLocationId || user.activeLocationId !== locationId)) {
-      throw { statusCode: 404, error: 'Not found' };
-    }
-
-    // Canonical path: use updateOrderStatus which handles state machine, anti-race, and event publishing
-    const { updateOrderStatus } = await import('../../lib/orderStatusService.js');
+    // Canonical path: updateOrderStatus handles state machine, anti-race, and events.
     await updateOrderStatus(client, orderId, locationId, newStatus as any, { messageBus });
 
     // Handle rejection_reason separately (updateOrderStatus doesn't set it)
     if (reason && newStatus === 'REJECTED') {
       await client.query(
-        `UPDATE orders SET rejection_reason = $1 WHERE id = $2`,
-        [reason, orderId],
+        `UPDATE orders SET rejection_reason = $1 WHERE id = $2 AND location_id = $3`,
+        [reason, orderId, locationId],
       );
     }
 
     return { id: orderId, status: newStatus, statusUpdatedAt: new Date().toISOString() };
-  } finally {
-    client.release();
-  }
+  });
 }
 
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
