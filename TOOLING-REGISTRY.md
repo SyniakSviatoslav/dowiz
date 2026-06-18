@@ -54,6 +54,11 @@
 - **LLM (BYOK):** LLM-backed tools (`browser_extract_content`, `retry_with_browser_use_agent`) need OpenRouter at launch: `OPENAI_API_KEY=$OPENROUTER_API_KEY` + `OPENAI_BASE_URL=https://openrouter.ai/api/v1` (not committed — supplied in the launch env). Pure browse tools (`browser_navigate`, `browser_get_html`, `browser_get_state`, …) need no LLM.
 - **Verified:** MCP server enumerated 16 browse/extract tools over stdio JSON-RPC (`browser_navigate, browser_click, browser_type, browser_get_state, browser_extract_content, browser_get_html, browser_screenshot, browser_scroll, …, retry_with_browser_use_agent`). A live browse run was intentionally **not hosted** (no persistent install).
 
+## Subagents (dev) — 3 hand-picked from agency-agents (MIT)
+- **Source:** `msitarzewski/agency-agents` (MIT — license gate I3 ✓). Installed by copying into **`~/.claude/agents/`** (user-global, outside this repo — not committed). The other ~46 agents were **not** installed (took 2–3, not all — DoD D).
+- **Installed:** `engineering-backend-architect` (Backend Architect) · `security-appsec-engineer` (Application Security Engineer) · `testing-api-tester` (API Tester — fits the API-heavy stack + proof-by-test rule).
+- **Governance non-conflict (verified):** the agent files carry no `tools:` restriction → they inherit the full toolset, so the session hooks fire for them too. `settings.json` untouched; `protect-paths` re-tested post-install — blocks a protected path (exit 2), allows a normal path (exit 0). `require-classification` (Stop) + `post-edit-gates` (PostToolUse) unchanged → governance holds.
+
 ## Parked (with triggers — see build plan §4)
 Headroom · Mem0/OpenMemory · Airweave · Octogent (`hesamsheikh/octogent`, MIT) · Pake.
 
