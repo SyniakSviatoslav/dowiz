@@ -343,13 +343,25 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
          WHERE cl.location_id = $1`,
         [locId]
       );
+      // Average rating per courier from order_ratings. SAVEPOINT-guarded so a
+      // missing table (before its migration) can't abort the transaction.
+      const ratingByCourier: Record<string, number> = {};
+      try {
+        await client.query('SAVEPOINT r');
+        const rr = await client.query(
+          `SELECT courier_id, ROUND(AVG(rating)::numeric, 1) AS avg
+             FROM order_ratings WHERE courier_id = ANY($1) GROUP BY courier_id`,
+          [res.rows.map((r: any) => r.id)]
+        );
+        for (const x of rr.rows) ratingByCourier[x.courier_id] = Number(x.avg);
+      } catch { await client.query('ROLLBACK TO SAVEPOINT r').catch(() => {}); }
       const rows = res.rows.map((r: any) => {
         let name = 'Unknown';
         try { name = r.full_name_encrypted ? (decryptPII(r.full_name_encrypted) || 'Unknown') : 'Unknown'; } catch {}
         return {
           id: r.id, name, phone: '',
           status: r.courier_status === 'available' ? 'online' : r.courier_status === 'on_delivery' ? 'busy' : 'offline',
-          deliveriesCompleted: parseInt(r.deliveries_completed) || 0, rating: 0,
+          deliveriesCompleted: parseInt(r.deliveries_completed) || 0, rating: ratingByCourier[r.id] ?? 0,
         };
       });
       await client.query('COMMIT');

@@ -79,9 +79,20 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
         }
       }
 
+      // Existing rating, if the customer already rated. order_ratings may not
+      // exist until its migration is applied — fail soft so the page still loads.
+      let rating: number | null = null, feedback: string | null = null;
+      try {
+        const rr = await db.query(`SELECT rating, feedback FROM order_ratings WHERE order_id = $1`, [orderId]);
+        if (rr.rowCount > 0) { rating = rr.rows[0].rating; feedback = rr.rows[0].feedback; }
+      } catch { /* table not yet migrated */ }
+
       return reply.status(200).send({
         id: row.id,
         status: row.status,
+        rating,
+        feedback,
+        canRate: row.status === 'DELIVERED' && rating == null,
         deliveryAddress: row.delivery_address,
         deliveryInstructions: row.delivery_instructions,
         total: row.total,
@@ -100,6 +111,49 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
         deliveryLat: row.delivery_lat != null ? Number(row.delivery_lat) : null,
         deliveryLng: row.delivery_lng != null ? Number(row.delivery_lng) : null,
       });
+    } catch (err) {
+      request.log.error(err);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  });
+
+  // Customer leaves a 1–5 star rating + optional feedback on a DELIVERED order.
+  // Exactly-once (UPSERT on order_id), editable within a 24h window, ownership
+  // enforced by customer_id = token.sub.
+  fastify.post('/orders/:orderId/rating', {
+    schema: {
+      params: z.object({ orderId: z.string().uuid() }),
+      body: z.object({
+        rating: z.number().int().min(1).max(5),
+        feedback: z.string().max(1000).optional(),
+      }),
+    },
+  }, async (request: any, reply: any) => {
+    const { orderId } = request.params;
+    const { rating, feedback } = request.body;
+    const userId = (request.user as any).sub;
+    try {
+      const o = await db.query(`
+        SELECT o.location_id, o.status, o.delivered_at, ca.courier_id
+        FROM orders o
+        LEFT JOIN courier_assignments ca ON ca.order_id = o.id AND ca.status = 'delivered'
+        WHERE o.id = $1 AND o.customer_id = $2
+      `, [orderId, userId]);
+      if (o.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      const row = o.rows[0];
+      if (row.status !== 'DELIVERED') {
+        return reply.status(409).send({ error: 'Order not delivered yet', code: 'NOT_DELIVERED' });
+      }
+      if (row.delivered_at && Date.now() - new Date(row.delivered_at).getTime() > 24 * 60 * 60 * 1000) {
+        return reply.status(409).send({ error: 'Rating window has closed', code: 'RATING_WINDOW_CLOSED' });
+      }
+      await db.query(`
+        INSERT INTO order_ratings (order_id, location_id, courier_id, customer_id, rating, feedback)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (order_id) DO UPDATE
+          SET rating = EXCLUDED.rating, feedback = EXCLUDED.feedback, updated_at = now()
+      `, [orderId, row.location_id, row.courier_id, userId, rating, feedback ?? null]);
+      return reply.status(200).send({ success: true, rating, feedback: feedback ?? null });
     } catch (err) {
       request.log.error(err);
       return reply.status(500).send({ error: 'Internal server error' });
