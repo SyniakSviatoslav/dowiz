@@ -1,5 +1,5 @@
 import { createSessionPool } from '@deliveryos/db';
-import { PgBossQueueProvider } from '@deliveryos/platform';
+import { PgBossQueueProvider, PgMessageBus } from '@deliveryos/platform';
 import { Heartbeat } from './heartbeat.js';
 import { registerHandlers } from './handlers.js';
 import { setupShutdown } from './shutdown.js';
@@ -9,11 +9,14 @@ async function main() {
 
   const pool = createSessionPool();
   const queue = new PgBossQueueProvider();
+  // Publish-only bus: publish() falls back to the pool (NOTIFY), so the worker
+  // can broadcast lifecycle events without holding a listener connection.
+  const messageBus = new PgMessageBus(pool);
 
   await queue.start();
   console.log('[Worker] QueueProvider started');
 
-  registerHandlers(queue, pool);
+  registerHandlers(queue, pool, messageBus);
   console.log('[Worker] Handlers registered');
 
   const heartbeat = new Heartbeat(pool);
