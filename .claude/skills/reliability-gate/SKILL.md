@@ -157,7 +157,8 @@ For autonomous periodic runs, this gate can be scheduled via CronCreate:
 - delivery_trace — migration 1790000000027; DELIVERED handler INSERTs it (ON CONFLICT order_id DO NOTHING).
 - courier_cash_ledger — migration 1790000000028; AUDIT-ONLY (settlement_items stays authoritative); DELIVERED writes a hold on cash_collected.
 - idempotency_keys composite PK (location_id, key) — migration 1790000000029.
-- ORDER_FEEDBACK_REMINDER — queue provisioned by migration 1790000000030; enqueued after COMMIT in the DELIVERED handler (startAfter 30m); handler registered in apps/worker/src/handlers.ts.
+
+- A post-delivery feedback reminder is infeasible as a dedicated pg-boss queue: pgboss.queue is owned by the operational role (no CREATE on the pgboss schema, revoked by migration 009) and the migration role lacks REFERENCES on it, so create_queue fails for every available role (order.timeout has the same fate — unregistered queues never enqueue). Revisit via an existing registered queue (notify.*) or a cron sweep.
 
 **Known debt (FLAG-ONLY — do NOT treat as NO-GO blockers; never implemented in tracked source):**
 - DispatchView.tsx does not exist; the owner DELIVERED/in-flight snapshot is served by apps/api/src/routes/owner/dashboard.ts (status IN (IN_DELIVERY,READY)).
