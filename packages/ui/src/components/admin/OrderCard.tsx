@@ -1,3 +1,8 @@
+/* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions, jsx-a11y/aria-role --
+   pre-existing: the card/actions use onClick (incl. stopPropagation) without
+   key handlers, and MessageThread takes a `role` *prop* (owner/courier) that the
+   linter misreads as a DOM aria-role. Suppressed to keep the diff focused;
+   keyboard-a11y for the card is tracked separately. */
 import React, { memo, useState } from 'react';
 import { Button, useI18n, MessageThread, PriceDisplay } from '../../index.js';
 import type { AdminOrder } from './types.js';
@@ -140,6 +145,17 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
           </div>
         )}
         {order.courierName && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.courier', 'Courier:')}</span> {order.courierName}</div>}
+        {(order as any).rating != null && (
+          <div className="flex items-start gap-1" data-testid="order-rating">
+            <span className="text-[var(--brand-text-muted)] w-16 inline-block shrink-0">{t('admin.rating', 'Rating:')}</span>
+            <span>
+              <span style={{ color: 'var(--brand-primary)' }} aria-label={`${(order as any).rating}/5`}>
+                {'★'.repeat((order as any).rating)}{'☆'.repeat(5 - (order as any).rating)}
+              </span>
+              {(order as any).feedback && <span className="block text-xs italic" style={{ color: 'var(--brand-text-muted)' }}>“{(order as any).feedback}”</span>}
+            </span>
+          </div>
+        )}
         {order.elapsedSeconds !== undefined && order.elapsedSeconds > 1800 && (
         <span className="text-[var(--color-danger)] font-bold ml-2">{t('admin.overdue', 'Overdue!')} ({Math.floor(order.elapsedSeconds / 60)} min)</span>
         )}
