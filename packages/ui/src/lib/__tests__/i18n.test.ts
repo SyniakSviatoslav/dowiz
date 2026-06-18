@@ -63,6 +63,22 @@ describe('i18n', () => {
   it('returns cart translations in English', () => {
     mod.setLocale('en');
     assert.equal(mod.t('cart.empty'), 'Cart is empty');
-    assert.equal(mod.t('cart.checkout'), 'Order');
+    assert.equal(mod.t('cart.checkout'), 'Checkout');
+  });
+
+  // U3 regression: the admin login page now uses these keys instead of
+  // hardcoded English, so they must resolve AND be localized per locale.
+  it('localizes admin login-error keys across all locales', () => {
+    for (const key of ['admin.error_login_failed', 'admin.error_invalid_credentials']) {
+      const en = mod.translate('en', key);
+      const sq = mod.translate('sq', key);
+      const uk = mod.translate('uk', key);
+      assert.notEqual(en, key, `${key} missing in en (returned the key)`);
+      assert.notEqual(sq, key, `${key} missing in sq`);
+      assert.notEqual(uk, key, `${key} missing in uk`);
+      // non-English locales must differ from the English text (actually translated)
+      assert.notEqual(sq, en, `${key} not localized for sq`);
+      assert.notEqual(uk, en, `${key} not localized for uk`);
+    }
   });
 });

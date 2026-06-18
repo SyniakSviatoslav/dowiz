@@ -42,7 +42,9 @@ export function LoginPage() {
       localStorage.setItem('dos_access_token', res.access_token);
       navigate('/admin');
     } catch (err: any) {
-      setError(err.status === 401 ? 'Invalid email or password.' : 'Login failed.');
+      setError(err.status === 401
+        ? t('admin.error_invalid_credentials', 'Invalid email or password.')
+        : t('admin.error_login_failed', 'Login failed.'));
     } finally {
       setLoading(false);
     }
@@ -55,7 +57,7 @@ export function LoginPage() {
       localStorage.setItem('dos_access_token', res.access_token);
       navigate('/admin');
     } catch (err: any) {
-      setError('Dev login failed.');
+      setError(t('admin.error_login_failed', 'Login failed.'));
     }
   };
 
