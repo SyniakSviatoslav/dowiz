@@ -35,7 +35,7 @@ export function renderClientShell({ title, slug, scriptUrl, nonce, cssHash, them
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="icon" type="image/png" href="/favicon.png" />
         <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet" />
-        <script src="https://cdn.tailwindcss.com"></script>
+        <link rel="stylesheet" href="/dist/tailwind.css" />
         ${cssHash ? html`<link rel="stylesheet" href="/public/locations/${locationId}/theme.css?hash=${cssHash}&v=${themeVersion}" />` : null}
         <style nonce="${nonce}">
           :root {
