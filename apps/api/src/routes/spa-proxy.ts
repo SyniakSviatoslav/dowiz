@@ -297,6 +297,16 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       params
     );
     const { decryptPII } = await import('../lib/pii-cipher.js').catch(() => ({ decryptPII: (_s: string) => '' }));
+    // Per-order rating/feedback (separate query + try/catch so a missing
+    // order_ratings table — before its migration — can't break the list).
+    const ratingByOrder: Record<string, any> = {};
+    try {
+      const ids = res.rows.map((r: any) => r.id);
+      if (ids.length) {
+        const rr = await db.query(`SELECT order_id, rating, feedback FROM order_ratings WHERE order_id = ANY($1)`, [ids]);
+        for (const x of rr.rows) ratingByOrder[x.order_id] = x;
+      }
+    } catch { /* table not yet migrated */ }
     return reply.send(res.rows.map((r: any) => {
       const meta = r.metadata || {};
       const courierRaw = r.courier_name_enc ? decryptPII(r.courier_name_enc) : null;
@@ -311,6 +321,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
         itemCount: r.items ? r.items.length : 0,
         itemsSummary: r.items ? r.items.map((i: any) => `${i.name} x${i.qty}`).join(', ') : '',
         confirmSeconds: r.confirm_seconds, courierName,
+        rating: ratingByOrder[r.id]?.rating ?? null,
+        feedback: ratingByOrder[r.id]?.feedback ?? null,
         elapsedSeconds: Math.floor((Date.now() - new Date(r.created_at).getTime()) / 1000),
         signals: {
           otpVerified: meta.otp_verified === true,
