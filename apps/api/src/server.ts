@@ -421,21 +421,6 @@ const retryPolicy = new RetryPolicy();
   });
   await queue.boss.schedule(QUEUE_NAMES.FREE_TIER_WATCH, '0 * * * *');
 
-  // Customer track-grant cleanup (daily 4 AM) — purge expired ?t= tracking grants.
-  // singletonKey prevents double-execution across N replicas. Literal queue name
-  // (not in QUEUE_NAMES, which lives in the governance-protected shared-types pkg).
-  const TRACK_GRANT_CLEANUP = 'track.grant_cleanup';
-  await queue.boss.createQueue(TRACK_GRANT_CLEANUP);
-  await queue.boss.work(TRACK_GRANT_CLEANUP, { singletonKey: TRACK_GRANT_CLEANUP }, async () => {
-    try {
-      const res = await pool.query(`DELETE FROM customer_track_grants WHERE expires_at < now()`);
-      console.log(`[TrackGrant] cleanup removed ${res.rowCount} expired grants`);
-    } catch (err: any) {
-      console.error('[TrackGrant] cleanup failed:', err.message);
-    }
-  });
-  await queue.boss.schedule(TRACK_GRANT_CLEANUP, '0 4 * * *', null, { singletonKey: TRACK_GRANT_CLEANUP });
-
   const redis = new Redis(env.REDIS_URL);
   fastify.decorate('redis', redis);
 
