@@ -173,7 +173,13 @@ function buildJsonLd(menu: MenuData, slug: string, baseUrl: string): string {
     });
   }
 
-  return JSON.stringify(parts.length === 1 ? parts[0] : parts);
+  // Emitted raw (unescaped) into a <script> via dangerouslySetInnerHTML so the
+  // JSON-LD stays valid/parseable. Escape <, >, & to \uXXXX (still valid JSON,
+  // parses back to the same chars) to make a </script> breakout impossible.
+  return JSON.stringify(parts.length === 1 ? parts[0] : parts)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
 }
 
 function buildHours(hours: Record<string, { open: string; close: string }[]>): any[] {
@@ -358,7 +364,7 @@ export async function renderMenuPage(
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
           <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
           <!--SSR_ASSETS-->
-          <script type="application/ld+json">${jsonld}</script>
+          <script type="application/ld+json" dangerouslySetInnerHTML=${{ __html: jsonld }}></script>
           <style>
             *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
             body { font-family: Inter, DM Sans, system-ui, sans-serif; background: #121212; color: #e0e0e0; line-height: 1.6; -webkit-font-smoothing: antialiased; }
