@@ -13,6 +13,9 @@ interface MapLibreBaseProps {
   className?: string;
   children?: ReactNode;
   markers?: Array<{ lngLat: LngLatLike; color?: string; label?: string; id?: string }>;
+  /** Single persistent, imperatively-updated marker (live courier) — moved via
+   *  setLngLat + rotated by bearing each frame, never recreated. */
+  courier?: { lngLat: LngLatLike; bearing?: number } | null;
   routeLine?: LngLatLike[];
   radiusCircle?: { center: LngLatLike; radiusKm: number };
   onClick?: (lngLat: LngLatLike) => void;
@@ -26,6 +29,7 @@ export function MapLibreBase({
   className = '',
   children,
   markers = [],
+  courier,
   routeLine,
   radiusCircle,
   onClick,
@@ -34,7 +38,9 @@ export function MapLibreBase({
 }: MapLibreBaseProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
+  const maplibreRef = useRef<any>(null);
   const markerRefs = useRef<any[]>([]);
+  const courierMarkerRef = useRef<any>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +58,7 @@ export function MapLibreBase({
       try {
         const maplibregl = await import('maplibre-gl');
         if (cancelled || !containerRef.current) return;
+        maplibreRef.current = maplibregl;
 
         const map = new maplibregl.Map({
           container: containerRef.current,
@@ -129,6 +136,61 @@ export function MapLibreBase({
 
     updateMarkers();
   }, [markers, loaded, clearMarkers]);
+
+  // Live courier marker — created once, then moved/rotated imperatively each frame
+  // (no DOM recreation, so it's cheap to drive at animation framerate).
+  useEffect(() => {
+    const maplibregl = maplibreRef.current;
+    if (!loaded || !mapRef.current || !maplibregl) return;
+
+    if (!courier) {
+      courierMarkerRef.current?.remove();
+      courierMarkerRef.current = null;
+      return;
+    }
+
+    if (!courierMarkerRef.current) {
+      const el = document.createElement('div');
+      el.style.width = '34px';
+      el.style.height = '34px';
+      el.style.transform = 'translate(-50%, -50%)';
+      el.style.display = 'flex';
+      el.style.alignItems = 'center';
+      el.style.justifyContent = 'center';
+      const dot = document.createElement('div');
+      dot.style.width = '18px';
+      dot.style.height = '18px';
+      dot.style.borderRadius = '50%';
+      dot.style.background = getCSSVar('--brand-primary', '#ea4f16');
+      dot.style.border = '3px solid white';
+      dot.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+      const arrow = document.createElement('div');
+      arrow.className = 'dos-courier-arrow';
+      arrow.style.position = 'absolute';
+      arrow.style.top = '-2px';
+      arrow.style.width = '0';
+      arrow.style.height = '0';
+      arrow.style.borderLeft = '5px solid transparent';
+      arrow.style.borderRight = '5px solid transparent';
+      arrow.style.borderBottom = `8px solid ${getCSSVar('--brand-primary', '#ea4f16')}`;
+      el.style.position = 'relative';
+      el.appendChild(dot);
+      el.appendChild(arrow);
+      courierMarkerRef.current = new maplibregl.Marker({ element: el })
+        .setLngLat(courier.lngLat)
+        .addTo(mapRef.current);
+    } else {
+      courierMarkerRef.current.setLngLat(courier.lngLat);
+    }
+
+    const arrowEl = courierMarkerRef.current.getElement()?.querySelector('.dos-courier-arrow') as HTMLElement | null;
+    if (arrowEl) {
+      // Rotate the whole marker element around its centre so the arrow points along travel.
+      const markerEl = courierMarkerRef.current.getElement() as HTMLElement;
+      markerEl.style.transformOrigin = 'center';
+      markerEl.style.transform = `translate(-50%, -50%) rotate(${courier.bearing ?? 0}deg)`;
+    }
+  }, [courier, loaded]);
 
   // Update route line
   useEffect(() => {

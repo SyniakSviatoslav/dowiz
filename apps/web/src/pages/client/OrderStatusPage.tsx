@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay } from '@deliveryos/ui';
+import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay, useDeliveryEta } from '@deliveryos/ui';
 import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { z } from 'zod';
@@ -48,7 +48,11 @@ export function OrderStatusPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [courierPos, setCourierPos] = useState<LngLatLike>([19.817, 41.331]);
+  const [hasCourierFix, setHasCourierFix] = useState(false);
   const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
+  // Real road route (G1/G2): polyline drawn on the map; duration paces local ETA.
+  const [routePolyline, setRoutePolyline] = useState<{ lat: number; lng: number }[] | null>(null);
+  const [routeDuration, setRouteDuration] = useState<number | null>(null);
   const [sharingLocation, setSharingLocation] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [ratingComment, setRatingComment] = useState('');
@@ -106,9 +110,15 @@ export function OrderStatusPage() {
       setOrder(data);
       if (data.courierPosition) {
         setCourierPos([data.courierPosition.lng, data.courierPosition.lat]);
+        setHasCourierFix(true);
       }
       if (data.etaMinutes != null) {
         setEtaMinutes(data.etaMinutes);
+      }
+      // Stored road route (served for reconnecting clients).
+      if (Array.isArray(data.route?.polyline) && data.route.polyline.length >= 2) {
+        setRoutePolyline(data.route.polyline);
+        setRouteDuration(data.route.durationSeconds ?? null);
       }
     } catch (err: any) {
       // 401 (no/expired token) or 403 (wrong role) → no valid customer session.
@@ -183,10 +193,21 @@ export function OrderStatusPage() {
       if (!msg.data) return;
       const inner = msg.data;
 
+      // Real road route pushed once at picked_up (G1/G2). Draw it + pace ETA.
+      if (inner.type === 'order.route') {
+        const p = inner.payload;
+        if (Array.isArray(p?.polyline) && p.polyline.length >= 2) {
+          setRoutePolyline(p.polyline);
+          setRouteDuration(p.durationSeconds ?? null);
+        }
+        return;
+      }
+
       if (inner.type === 'order.courier_updated') {
         const p = inner.payload;
         if (p.position) {
           setCourierPos([p.position.lng, p.position.lat]);
+          setHasCourierFix(true);
         }
         if (p.etaSeconds != null) {
           setEtaMinutes(Math.ceil(p.etaSeconds / 60));
@@ -287,16 +308,33 @@ export function OrderStatusPage() {
     return [];
   }, [order?.courierName, courierPos]);
 
+  // Live courier position as {lat,lng} for the tweened marker + local ETA.
+  const courierLatLng = useMemo(
+    () => (hasCourierFix ? { lat: courierPos[1], lng: courierPos[0] } : null),
+    [hasCourierFix, courierPos],
+  );
+  const routeLine: LngLatLike[] | undefined = useMemo(
+    () => routePolyline?.map((p) => [p.lng, p.lat] as LngLatLike),
+    [routePolyline],
+  );
+  // Local, smoothed ETA along the real polyline — zero routing calls per ping.
+  const eta = useDeliveryEta(routePolyline, routeDuration, courierLatLng);
+
   const destPin: LngLatLike = order?.deliveryLat
     ? [order.deliveryLng || 19.817, order.deliveryLat || 41.331]
     : [19.817, 41.331];
 
   const isInDelivery = order?.status === 'IN_DELIVERY';
-  const displayEta = etaMinutes != null
-    ? `${etaMinutes} min`
-    : order?.createdAt
-      ? calcETA(order.createdAt, order.elapsedSeconds || 0)
-      : '';
+  // Prefer the smoothed route-based ETA; fall back to the WS naive ETA, then calcETA.
+  const displayEta = eta.arriving
+    ? t('order.arriving', 'Arriving')
+    : eta.etaSeconds != null
+      ? `${Math.max(1, Math.round(eta.etaSeconds / 60))} ${t('order.eta_min', 'min')}`
+      : etaMinutes != null
+        ? `${etaMinutes} min`
+        : order?.createdAt
+          ? calcETA(order.createdAt, order.elapsedSeconds || 0)
+          : '';
 
   if (loading) {
     return <div className="p-6 space-y-4"><SkeletonBase className="h-40 w-full" /></div>;
@@ -322,7 +360,9 @@ export function OrderStatusPage() {
       <div className="h-64 relative w-full" title={t('tooltip.courier_location', 'Courier current location')}>
         <CourierLiveMap
           className="h-full w-full"
-          couriers={couriers}
+          couriers={courierLatLng ? [] : couriers}
+          liveCourier={courierLatLng}
+          routeLine={routeLine}
           destinationPin={destPin}
           center={courierPos}
           zoom={14}
