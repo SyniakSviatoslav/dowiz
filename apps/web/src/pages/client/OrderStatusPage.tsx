@@ -361,8 +361,8 @@ export function OrderStatusPage() {
           <div className="space-y-2 text-sm">
             {order.items?.map((item: any, i: number) => (
               <div key={i} className="flex justify-between">
-                <span>{item.quantity}x {item.name}</span>
-                <span><PriceDisplay amount={item.price} /></span>
+                <span>{item.quantity}x {item.nameSnapshot ?? item.name}</span>
+                <span><PriceDisplay amount={item.priceSnapshot ?? item.price} /></span>
               </div>
             ))}
           </div>

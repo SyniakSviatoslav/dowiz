@@ -5,9 +5,13 @@ import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 import { RevealContactResponse } from '@deliveryos/shared-types';
 
-const CustomerListResponse = z.object({
-  customers: z.array(z.any()),
-}).passthrough();
+// The API returns a bare array of customers; older mocks wrapped it as
+// { customers: [...] }. Accept either so schema validation doesn't reject the
+// real response (which silently showed "0 customers").
+const CustomerListResponse = z.union([
+  z.array(z.any()),
+  z.object({ customers: z.array(z.any()) }).passthrough(),
+]);
 
 const CustomerAnalyticsResponse = z.object({
   orders: z.array(z.any()).optional(),
@@ -42,7 +46,7 @@ export function CRMPage() {
 
   useEffect(() => {
     apiClient<typeof CustomerListResponse>('/owner/customers', { schema: CustomerListResponse })
-      .then(d => { setCustomers(d.customers || (d as any) || []); setLoading(false); })
+      .then(d => { setCustomers(Array.isArray(d) ? d : ((d as any).customers || [])); setLoading(false); })
       .catch(() => {
         setCustomers([]);
         setLoading(false);

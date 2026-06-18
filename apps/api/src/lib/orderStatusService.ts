@@ -69,6 +69,16 @@ export async function updateOrderStatus(
        WHERE id = $2 AND status = $3 RETURNING id`,
       [newStatus, orderId, currentStatus]
     );
+  } else if (newStatus === 'DELIVERED') {
+    // Stamp delivered_at on the ORDER. /verify, /owner/orders and the analytics
+    // avg-delivery-time metric all read orders.delivered_at, which was otherwise
+    // never written (only courier_assignments.delivered_at was set) — so the
+    // metric was permanently 0 and the order's deliveredAt always NULL.
+    res = await client.query(
+      `UPDATE orders SET status = $1, delivered_at = now(), timeout_at = NULL
+       WHERE id = $2 AND status = $3 RETURNING id`,
+      [newStatus, orderId, currentStatus]
+    );
   } else {
     res = await client.query(
       `UPDATE orders SET status = $1, timeout_at = NULL

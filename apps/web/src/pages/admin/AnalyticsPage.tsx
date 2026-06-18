@@ -157,7 +157,7 @@ export function AnalyticsPage() {
   const heatmapMax = Math.max(...heatmapData.flatMap(d => d.hours), 1);
 
   const statCards = [
-    { label: t('admin.revenue', 'Revenue'), value: `${Math.round(data.revenue.today)}k`, trend: data.revenue.trend, icon: 'ti ti-wallet', colorVar: '--color-success' },
+    { label: t('admin.revenue', 'Revenue'), value: new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(Math.round(data.revenue.today)), trend: data.revenue.trend, icon: 'ti ti-wallet', colorVar: '--color-success' },
     { label: t('admin.orders', 'Orders'), value: data.orders.today.toString(), trend: data.orders.trend, icon: 'ti ti-shopping-cart', colorVar: '--color-info' },
     { label: t('admin.avg_order', 'Avg Order'), value: String(data.avgOrderValue.value), trend: data.avgOrderValue.trend, icon: 'ti ti-receipt', colorVar: '--status-scheduled' },
     { label: t('admin.delivery_time', 'Delivery'), value: `${data.deliveryTime.avg} min`, trend: data.deliveryTime.trend, icon: 'ti ti-truck-delivery', colorVar: '--color-warning' },

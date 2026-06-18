@@ -70,7 +70,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       const res = await client.query(
         ENRICHED_ASSIGNMENTS_QUERY +
         `WHERE ca.courier_id = $1 AND ca.location_id = $2
-           AND (ca.status IN ('assigned', 'accepted', 'picked_up') OR ca.created_at > now() - interval '24 hours')
+           AND ca.status IN ('assigned', 'accepted', 'picked_up')
          ORDER BY ca.created_at DESC`,
         [courierId, locationId]
       );
