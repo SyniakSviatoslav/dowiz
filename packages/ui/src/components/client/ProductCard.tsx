@@ -152,7 +152,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
               if (product.isAvailable) onAdd(e);
             }}
             disabled={!product.isAvailable}
-            aria-label="Add to cart"
+            aria-label={t('tooltip.add_to_cart', 'Add to cart')}
             title={t('tooltip.add_to_cart', 'Add to cart')}
             variants={product.isAvailable ? addBtnVariants : undefined}
             whileTap={product.isAvailable ? 'tap' : undefined}

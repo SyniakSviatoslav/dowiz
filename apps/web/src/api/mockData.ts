@@ -219,6 +219,12 @@ export const MOCK: Record<string, Handler> = {
     lng: LOCATION.lng,
   }),
 
+  // Exchange rate for the currency switcher (ALL→EUR). Without it eurRate stays
+  // null and the switcher silently shows ALL even when EUR is selected.
+  'GET /v1/rates': () => ({
+    base: 'ALL', target: 'EUR', rate: 0.0085, fetchedAt: '2026-06-13T10:24:13.910Z',
+  }),
+
   'POST /api/orders': () => ({
     id: 'ord_dev001', status: 'PENDING' as const, outcome: 'clean' as const,
   }),
