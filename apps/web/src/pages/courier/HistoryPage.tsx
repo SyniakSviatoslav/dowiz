@@ -12,8 +12,8 @@ const HistoryItem = z.object({
   customerAddress: z.string(),
   amount: z.number(),
   status: z.string(),
-  rating: z.number().optional(),
-  feedback: z.string().optional(),
+  rating: z.number().nullish(),
+  feedback: z.string().nullish(),
 });
 
 const HistoryListResponse = z.array(HistoryItem);
@@ -26,8 +26,8 @@ interface DeliveryHistory {
   customerAddress: string;
   amount: number;
   status: string;
-  rating?: number;
-  feedback?: string;
+  rating?: number | null;
+  feedback?: string | null;
 }
 
 export function HistoryPage() {
@@ -60,7 +60,7 @@ export function HistoryPage() {
     return d.toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   };
 
-  const renderStars = (rating?: number) => {
+  const renderStars = (rating?: number | null) => {
     if (!rating) return <span className="text-xs text-[var(--brand-text-muted)]">{t('courier.no_rating', 'No rating')}</span>;
     return (
       <div className="flex items-center gap-0.5">
