@@ -4,6 +4,7 @@ import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 import { decryptPII } from '../lib/pii-cipher.js';
 import { calculateNaiveETASeconds } from '../lib/geo.js';
+import { getRoutingService, saveRoute, loadRoute, claimOnce, shouldReroute } from '../lib/routing.js';
 
 export class CourierEventsWorker {
   constructor(
@@ -94,6 +95,35 @@ export class CourierEventsWorker {
     }
   }
 
+  // Compute one road route (per-leg) and push it to the order channel exactly once
+  // across the N instances (claimOnce). Authoritative copy stored in Redis for
+  // reconnecting clients (served by the status endpoint). Routing is advisory: any
+  // failure degrades to haversine inside the provider, so this never throws.
+  private async publishRouteOnce(
+    orderId: string,
+    from: { lat: number; lng: number },
+    to: { lat: number; lng: number },
+    claimKey: string,
+    claimTtlS: number,
+  ) {
+    try {
+      if (!(await claimOnce(claimKey, claimTtlS))) return; // another instance owns it
+      const route = await getRoutingService().getLegRoute(from, to);
+      await saveRoute(orderId, route);
+      await this.messageBus.publish(orderChannel(orderId), {
+        type: 'order.route',
+        payload: {
+          orderId,
+          polyline: route.polyline,
+          durationSeconds: route.duration_s,
+          distanceMeters: route.distance_m,
+        },
+      });
+    } catch (err) {
+      console.error('[CourierEvents] publishRouteOnce failed (advisory):', err);
+    }
+  }
+
   async handlePositionUpdated(msg: { courierId: string; locationId: string; shiftId: string }) {
     const details = await this.fetchCourierDetailsAndOrder(msg.courierId);
     if (!details) return; // Courier not active on any order
@@ -110,6 +140,15 @@ export class CourierEventsWorker {
       etaSeconds = calculateNaiveETASeconds(
         haversineDistanceKm(details.position, details.destination)
       );
+
+      // Per-leg routing — NOT per-ping. Only (re)compute when there's no stored
+      // route yet, or the live position has strayed past the threshold.
+      const existing = await loadRoute(details.orderId);
+      if (!existing) {
+        await this.publishRouteOnce(details.orderId, details.position, details.destination, `route:init:${details.orderId}`, 300);
+      } else if (shouldReroute(existing.polyline, details.position)) {
+        await this.publishRouteOnce(details.orderId, details.position, details.destination, `route:re:${details.orderId}`, 30);
+      }
     }
 
     await this.messageBus.publish(orderChannel(details.orderId), {
@@ -134,6 +173,10 @@ export class CourierEventsWorker {
       etaSeconds = calculateNaiveETASeconds(
         haversineDistanceKm(details.position, details.destination)
       );
+      // The single per-delivery route() call: courier just picked up → heading to
+      // the customer. Pushed once to order:{id}; reconnecting clients read it back
+      // from the status endpoint.
+      await this.publishRouteOnce(msg.orderId, details.position, details.destination, `route:init:${msg.orderId}`, 300);
     }
 
     // Owner live map assignment status update
