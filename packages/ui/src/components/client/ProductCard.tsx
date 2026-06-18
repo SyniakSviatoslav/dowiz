@@ -76,8 +76,20 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             variants={product.isAvailable ? imgVariants : undefined}
           />
         ) : (
-          <div className="flex flex-col items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
-            <i className="ti ti-tools-kitchen-2 text-4xl opacity-25" />
+          // Crafted, on-brand fallback when a dish has no (or a broken) image —
+          // the initial in the brand colour on a subtle brand gradient, themed
+          // per tenant. Intentional, not a dead grey box.
+          <div
+            className="flex items-center justify-center w-full h-full select-none"
+            style={{ background: 'linear-gradient(135deg, var(--brand-surface-raised), var(--brand-surface))' }}
+            aria-hidden="true"
+          >
+            <span
+              className="font-bold leading-none"
+              style={{ fontSize: 'clamp(2.5rem, 8vw, 3.75rem)', color: 'var(--brand-primary)', opacity: 0.2, fontFamily: 'var(--brand-font-heading, inherit)' }}
+            >
+              {product.name?.trim().charAt(0).toUpperCase() || '\u{1F37D}'}
+            </span>
           </div>
         )}
         {hasAllergens && (
