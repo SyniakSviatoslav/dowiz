@@ -31,7 +31,7 @@ export default async function courierRoutes(fastify: FastifyInstance) {
         const codeHash = crypto.createHash('sha256').update(code).digest('hex');
 
         await client.query(
-          `INSERT INTO courier_invites (location_id, code_hash, created_by, expires_at)
+          `INSERT INTO courier_invites (location_id, code_hash, created_by_owner_id, expires_at)
            VALUES ($1, $2, $3, now() + interval '7 days')`,
           [locationId, codeHash, user.userId]
         );

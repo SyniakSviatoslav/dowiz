@@ -82,8 +82,8 @@ test.describe('Client Checkout Flow', () => {
     await expect(page.getByTestId('order-confirm-button')).toBeVisible();
 
     // 5. Fill the order details
-    await nameInput.fill('Test Customer');
-    await expect(nameInput).toHaveValue('Test Customer');
+    await nameInput.fill('Sara Mancini');
+    await expect(nameInput).toHaveValue('Sara Mancini');
 
     await phoneInput.fill('+355691234567');
     await expect(phoneInput).toHaveValue('+355691234567');

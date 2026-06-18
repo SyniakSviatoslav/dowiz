@@ -30,7 +30,7 @@ async function createOrder(request: any): Promise<string> {
       locationId,
       type: 'delivery',
       items: [{ product_id: productId, quantity: 1 }],
-      customer: { phone: `+35560${String(Date.now()).slice(-6)}`, name: 'Lifecycle Trace' },
+      customer: { phone: `+35560${String(Date.now()).slice(-6)}`, name: 'Erion Berisha' },
       delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga e Barrikadave, Tirana' },
       payment: { method: 'cash' },
       idempotency_key: crypto.randomUUID(),
