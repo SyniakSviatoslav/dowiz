@@ -78,14 +78,10 @@ const cache = new LRUCache<string, { html: string; slug: string }>({
   ttl: 60_000,
 });
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+// NOTE: do NOT hand-escape values interpolated into the html`` (htm + preact)
+// templates below — preact-render-to-string already escapes text and attribute
+// interpolations. Manual escaping here caused double-encoding (e.g. a venue
+// name "X & Y" rendered as "X &amp;amp; Y" in <title>/OG/body).
 
 function getName(item: { available_names: Record<string, string> }, locale: string, fallback: string): string {
   return item.available_names?.[locale] || item.available_names?.['en'] || fallback;
@@ -220,11 +216,11 @@ function ProductCard({ product, locale, currencyCode, minorUnit }: {
 
   return html`
     <div class="product-card" data-product-id="${product.id}">
-      ${imgUrl ? html`<img class="product-image" src="${escapeHtml(imgUrl)}" alt="${escapeHtml(name)}" loading="lazy" />` : html`<div class="product-image-placeholder"></div>`}
+      ${imgUrl ? html`<img class="product-image" src="${imgUrl}" alt="${name}" loading="lazy" />` : html`<div class="product-image-placeholder"></div>`}
       <div class="product-info">
-        <h3 class="product-name">${escapeHtml(name)}</h3>
-        ${desc ? html`<p class="product-desc">${escapeHtml(desc)}</p>` : null}
-        <span class="product-price">${escapeHtml(price)}</span>
+        <h3 class="product-name">${name}</h3>
+        ${desc ? html`<p class="product-desc">${desc}</p>` : null}
+        <span class="product-price">${price}</span>
       </div>
     </div>
   `;
@@ -239,7 +235,7 @@ function MenuSection({ category, locale, currencyCode, minorUnit }: {
   const catName = getName(category, locale, 'Category');
   return html`
     <section class="menu-section" data-category-id="${category.id}">
-      <h2 class="category-title">${escapeHtml(catName)}</h2>
+      <h2 class="category-title">${catName}</h2>
       <div class="product-grid">
         ${category.products.map((p: ProductData) => html`<${ProductCard} product=${p} locale=${locale} currencyCode=${currencyCode} minorUnit=${minorUnit} />`)}
       </div>
@@ -262,15 +258,15 @@ function OgMetaTags({ loc, slug, baseUrl }: { loc: { name: string; address: stri
   const url = `${baseUrl}/s/${slug}`;
 
   return [
-    html`<meta property="og:title" content="${escapeHtml(title)}" />`,
-    html`<meta property="og:description" content="${escapeHtml(desc)}" />`,
-    html`<meta property="og:url" content="${escapeHtml(url)}" />`,
+    html`<meta property="og:title" content="${title}" />`,
+    html`<meta property="og:description" content="${desc}" />`,
+    html`<meta property="og:url" content="${url}" />`,
     html`<meta property="og:type" content="website" />`,
     html`<meta property="og:site_name" content="Dowiz" />`,
     html`<meta property="og:locale" content="sq_AL" />`,
     html`<meta name="twitter:card" content="summary_large_image" />`,
-    html`<meta name="twitter:title" content="${escapeHtml(title)}" />`,
-    html`<meta name="twitter:description" content="${escapeHtml(desc)}" />`,
+    html`<meta name="twitter:title" content="${title}" />`,
+    html`<meta name="twitter:description" content="${desc}" />`,
   ];
 }
 
@@ -349,8 +345,8 @@ export async function renderMenuPage(
           <meta name="theme-color" content="#ea4f16" />
           <meta name="apple-mobile-web-app-capable" content="yes" />
           <meta name="mobile-web-app-capable" content="yes" />
-          <meta name="description" content="${escapeHtml(metaDesc)}" />
-          <title>${escapeHtml(title)}</title>
+          <meta name="description" content="${metaDesc}" />
+          <title>${title}</title>
           <${OgMetaTags} loc=${menu.location} slug=${slug} baseUrl=${appBase} />
           <meta property="og:image" content="${appBase}/og-image.png" />
           <${HreflangLinks} slug=${slug} supportedLocales=${supportedLocales} defaultLocale=${defaultLocale} baseUrl=${appBase} />
@@ -395,7 +391,7 @@ export async function renderMenuPage(
             <header>
               <div class="brand">
                 <svg viewBox="0 0 24 24" fill="none" stroke="#ea4f16" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
-                <h1>${escapeHtml(menu.location.name)}</h1>
+                <h1>${menu.location.name}</h1>
               </div>
               <div class="locale-switcher">
                 ${supportedLocales.map((l: string) => html`<a href="/s/${slug}?locale=${l}">${l.toUpperCase()}</a>`)}
@@ -405,7 +401,7 @@ export async function renderMenuPage(
               <div id="root">${menuContent}</div>
             </main>
             <footer>
-              <p>Order delivery from ${escapeHtml(menu.location.name)} via Dowiz</p>
+              <p>Order delivery from ${menu.location.name} via Dowiz</p>
             </footer>
           </div>
           <script>window.__INITIAL_STATE__ = ${JSON.stringify(initialData)};</script>

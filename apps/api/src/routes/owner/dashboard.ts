@@ -221,10 +221,11 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
         `SELECT id, status FROM orders WHERE id = $1 AND location_id = $2 FOR UPDATE`,
         [orderId, locationId],
       );
-      if (orderCheck.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (orderCheck.rowCount === 0) { await client.query('ROLLBACK'); return reply.status(404).send({ error: 'Not found' }); }
 
       const order = orderCheck.rows[0];
       if (order.status !== 'CONFIRMED' && order.status !== 'PREPARING' && order.status !== 'READY') {
+        await client.query('ROLLBACK');
         return reply.status(409).send({ error: 'Order must be CONFIRMED, PREPARING, or READY to assign courier' });
       }
 
@@ -234,7 +235,7 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
          WHERE c.id = $1 AND cl.location_id = $2 AND c.status = 'active'`,
         [courierId, locationId],
       );
-      if (courierCheck.rowCount === 0) return reply.status(404).send({ error: 'Courier not found in this location' });
+      if (courierCheck.rowCount === 0) { await client.query('ROLLBACK'); return reply.status(404).send({ error: 'Courier not found in this location' }); }
 
       const busyCheck = await client.query(
         `SELECT ca.id, ca.shift_id, ca.order_id, o.status AS order_status
@@ -343,8 +344,9 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
         `SELECT id, status FROM orders WHERE id = $1 AND location_id = $2 FOR UPDATE`,
         [orderId, locationId],
       );
-      if (orderCheck.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (orderCheck.rowCount === 0) { await client.query('ROLLBACK'); return reply.status(404).send({ error: 'Not found' }); }
       if (orderCheck.rows[0].status !== 'IN_DELIVERY') {
+        await client.query('ROLLBACK');
         return reply.status(409).send({ error: 'Order must be IN_DELIVERY to pick up' });
       }
 
@@ -354,6 +356,7 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
         [orderId],
       );
       if (assignmentRes.rowCount === 0) {
+        await client.query('ROLLBACK');
         return reply.status(409).send({ error: 'No accepted assignment found for this order' });
       }
 
@@ -412,8 +415,9 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
         `SELECT id, status, total FROM orders WHERE id = $1 AND location_id = $2 FOR UPDATE`,
         [orderId, locationId],
       );
-      if (orderCheck.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (orderCheck.rowCount === 0) { await client.query('ROLLBACK'); return reply.status(404).send({ error: 'Not found' }); }
       if (orderCheck.rows[0].status !== 'IN_DELIVERY') {
+        await client.query('ROLLBACK');
         return reply.status(409).send({ error: 'Order must be IN_DELIVERY to deliver' });
       }
 
@@ -425,6 +429,7 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
         [orderId],
       );
       if (assignmentRes.rowCount === 0) {
+        await client.query('ROLLBACK');
         return reply.status(409).send({ error: 'No active assignment found for this order' });
       }
 
