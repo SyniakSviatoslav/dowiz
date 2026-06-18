@@ -9,6 +9,7 @@ import { CouriersPage } from '../pages/admin/CouriersPage.js';
 import { CRMPage } from '../pages/admin/CRMPage.js';
 import { SettingsPage } from '../pages/admin/SettingsPage.js';
 import { OnboardingPage } from '../pages/admin/OnboardingPage.js';
+import { ActivationPage } from '../pages/admin/ActivationPage.js';
 import { SupplyLibraryPage } from '../pages/admin/SupplyLibraryPage.js';
 import { PromotionsPage } from '../pages/admin/PromotionsPage.js';
 import { FlowTestPage } from '../pages/admin/FlowTestPage.js';
@@ -16,6 +17,7 @@ import { FlowTestPage } from '../pages/admin/FlowTestPage.js';
 const AnalyticsPage = React.lazy(() => import('../pages/admin/AnalyticsPage.js').then(m => ({ default: m.AnalyticsPage })));
 
 const ALL_NAV_ITEMS = [
+  { key: 'admin.activation', href: '/admin/activation', icon: 'ti ti-rocket' },
   { key: 'admin.dashboard', href: '/admin', icon: 'ti ti-layout-dashboard' },
   { key: 'admin.orders', href: '/admin/orders', icon: 'ti ti-clipboard-list' },
   { key: 'admin.menu', href: '/admin/menu', icon: 'ti ti-tools-kitchen-2' },
@@ -221,6 +223,7 @@ export function AdminRoutes() {
           <Route path="crm" element={<CRMPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="onboarding" element={<OnboardingPage />} />
+          <Route path="activation" element={<ActivationPage />} />
           <Route path="_flow-test" element={<FlowTestPage />} />
         </Route>
       </Routes>
