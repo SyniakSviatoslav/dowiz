@@ -212,21 +212,22 @@ function AdminLayout() {
 // tool (tool-as-onboarding) — the first thing the owner sees is their menu coming to
 // life, with the gate showing what's left. Published storefronts get the dashboard.
 function AdminHome() {
-  const [draft, setDraft] = useState<boolean | null>(null);
+  // undefined = loading · null = show dashboard · string = redirect path
+  const [dest, setDest] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const s = await apiClient<any>('/owner/settings');
-        if (!s?.id) { if (alive) setDraft(false); return; }
+        if (!s?.id) { if (alive) setDest('/admin/onboarding'); return; } // brand-new owner → create a storefront
         const st = await apiClient<any>(`/owner/activation/${s.id}/status`);
-        if (alive) setDraft(!st?.published);
-      } catch { if (alive) setDraft(false); }
+        if (alive) setDest(st?.published ? null : '/admin/activation'); // draft → activation tool
+      } catch { if (alive) setDest(null); }
     })();
     return () => { alive = false; };
   }, []);
-  if (draft === null) return null; // brief flash-prevention while we check
-  return draft ? <Navigate to="/admin/activation" replace /> : <DashboardPage />;
+  if (dest === undefined) return null; // brief flash-prevention while we check
+  return dest ? <Navigate to={dest} replace /> : <DashboardPage />;
 }
 
 export function AdminRoutes() {

@@ -173,6 +173,54 @@ export default async function authRoutes(fastify: FastifyInstance) {
     return JSON.parse(dataRaw);
   });
 
+  // ── Telegram owner login (TG) ───────────────────────────────────────────────
+  // Web mints a short-lived token → deep-link /start login_<token> → the bot binds
+  // the Telegram identity to an owner (creating one on first login) → web polls here.
+
+  fastify.post('/auth/telegram/start', {
+    config: { rateLimit: { max: 10, timeWindow: '5 minutes' } },
+  }, async (_request: any, reply: any) => {
+    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'dowiz_bot';
+    const res = await (fastify as any).db.query(
+      `INSERT INTO telegram_login_tokens (expires_at) VALUES (now() + interval '5 minutes') RETURNING token`,
+    );
+    const token = res.rows[0].token;
+    return reply.send({ token, botUsername, deepLink: `https://t.me/${botUsername}?start=login_${token}` });
+  });
+
+  fastify.get('/auth/telegram/poll', {
+    config: { rateLimit: { max: 120, timeWindow: '5 minutes' } },
+    schema: { querystring: z.object({ token: z.string().uuid() }) },
+  }, async (request: any, reply: any) => {
+    const { token } = request.query as { token: string };
+    const res = await (fastify as any).db.query(
+      `SELECT status, user_id, expires_at FROM telegram_login_tokens WHERE token = $1::uuid`,
+      [token],
+    );
+    if (res.rowCount === 0) return reply.status(404).send({ status: 'unknown' });
+    const row = res.rows[0];
+    if (new Date(row.expires_at) < new Date()) return reply.status(410).send({ status: 'expired' });
+    if (row.status !== 'authenticated' || !row.user_id) return reply.send({ status: row.status === 'consumed' ? 'consumed' : 'pending' });
+
+    // Single-use: atomically flip authenticated → consumed; loser of the race gets nothing.
+    const upd = await (fastify as any).db.query(
+      `UPDATE telegram_login_tokens SET status = 'consumed' WHERE token = $1::uuid AND status = 'authenticated' RETURNING user_id`,
+      [token],
+    );
+    if (upd.rowCount === 0) return reply.status(410).send({ status: 'consumed' });
+
+    const userId = upd.rows[0].user_id;
+    const accessToken = await signAuthToken({ role: 'owner', userId } as any, '7d');
+    const refreshToken = crypto.randomBytes(32).toString('hex');
+    const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    await (fastify as any).db.query(
+      `INSERT INTO auth_refresh_tokens (user_id, family_id, token_hash, expires_at)
+       VALUES ($1, $2, $3, now() + interval '30 days')`,
+      [userId, crypto.randomUUID(), refreshTokenHash],
+    );
+    return reply.send({ status: 'authenticated', access_token: accessToken, refresh_token: refreshToken });
+  });
+
   fastify.post('/auth/refresh', {
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     schema: {
