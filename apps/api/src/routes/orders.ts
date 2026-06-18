@@ -97,7 +97,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
       // 1. Location config (FOR UPDATE lock optionally, but standard read is fine if config updates are rare, wait we should lock locations? No need to lock config, just read it).
       const locRes = await client.query(
-         `SELECT lat, lng, confirm_timeout_min, busy_mode, phone, slug,
+         `SELECT lat, lng, confirm_timeout_min, busy_mode, phone, slug, published_at,
                  currency_code, currency_minor_unit, tax_rate, price_includes_tax,
                  min_order_value, free_delivery_threshold, delivery_fee_flat
           FROM locations WHERE id = $1`,
@@ -110,6 +110,13 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       }
 
       const location = locRes.rows[0];
+
+      // Z7: a DRAFT storefront (never published) shows a preview but must NOT accept
+      // real orders. Existing live locations were backfilled with published_at.
+      if (location.published_at == null) {
+        await client.query('ROLLBACK');
+        return reply.status(409).send({ error: 'Storefront is not published yet', code: 'NOT_PUBLISHED' });
+      }
 
       // OTP verification (if column exists)
       let otpVerified = false;
