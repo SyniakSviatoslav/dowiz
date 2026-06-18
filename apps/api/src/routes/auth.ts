@@ -6,6 +6,18 @@ import { signAuthToken, verifyAuthToken, withTenant } from '@deliveryos/platform
 
 const env = loadEnv();
 
+/**
+ * The /auth/refresh endpoint exclusively serves the owner login family (Google
+ * OAuth + local owner login). Couriers refresh via courier_sessions and never
+ * reach this table, so the refreshed access token's role is ALWAYS 'owner'.
+ * Centralised + exported so the invariant is covered by a regression test —
+ * previously the role was inferred from a nullable `google_sub` column, which
+ * could flip a dual-identity user's role.
+ */
+export function refreshedOwnerClaims(userId: string): { role: 'owner'; userId: string } {
+  return { role: 'owner', userId };
+}
+
 export default async function authRoutes(fastify: FastifyInstance) {
 
   // ============================================================================
@@ -191,21 +203,10 @@ export default async function authRoutes(fastify: FastifyInstance) {
     // Mark as used
     await (fastify as any).db.query(`UPDATE auth_refresh_tokens SET used = true WHERE id = $1`, [tokenRecord.id]);
 
-    // We need the user's role to mint a new access token. For simplicity, we assume we can fetch it, 
-    // or we store the role in the refresh token? Wait, the access token had the role.
-    // If it's an owner or courier, we can deduce it from memberships or we just query it.
-    // Actually, `users` doesn't strictly have a "role" column, the role comes from `memberships` OR we assume Google login = owner.
-    // Wait, the prompt says: "для owner/courier — active-memberships". So the user might have memberships.
-    // For now, if they logged in via Google, they are 'owner'. If they logged in via invite, they are 'courier'.
-    // To properly mint the access token, we need to know if they are an owner or courier.
-    // Let's add a `role` column to `auth_refresh_tokens` or fetch from `memberships`.
-    // Actually, a user can have both roles in different locations. The auth token needs A role.
-    // Let's assume role is 'owner' if `google_sub` is present, else 'courier'. 
-    // This is safe per requirements since owner = Google, courier = invite.
-    const userRes = await (fastify as any).db.query(`SELECT google_sub FROM users WHERE id = $1`, [tokenRecord.user_id]);
-    const role = userRes.rows[0].google_sub ? 'owner' : 'courier';
-
-    const newAccessToken = await signAuthToken({ role, userId: tokenRecord.user_id } as any, '7d');
+    // This endpoint only ever issues owner tokens (couriers refresh via
+    // courier_sessions). Mint the role explicitly rather than inferring it from
+    // a nullable google_sub column, which let a dual-identity user's role flip.
+    const newAccessToken = await signAuthToken(refreshedOwnerClaims(tokenRecord.user_id) as any, '7d');
     const newRefreshToken = crypto.randomBytes(32).toString('hex');
     const newRefreshTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
 

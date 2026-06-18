@@ -13,6 +13,9 @@ const EnvSchema = z.object({
   JWT_KID: z.string().min(1),
   ***REDACTED***: z.string().min(1),
   ***REDACTED***: z.string().min(1),
+  // Shared secret gating the /dev and /api/dev test-only endpoints (mock-auth, etc).
+  // When unset/empty, those endpoints are fully disabled (404) — the safe prod default.
+  DEV_AUTH_SECRET: z.string().optional(),
   ***REDACTED***: z.string().optional(),
   ***REDACTED***: z.string().optional(),
   TELEGRAM_BOT_USERNAME: z.string().optional(),

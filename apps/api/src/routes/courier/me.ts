@@ -6,6 +6,26 @@ import argon2 from 'argon2';
 import { decryptPII } from '../../lib/pii-cipher.js';
 import { maskStr } from '../../lib/pii-mask.js';
 
+/**
+ * Shape a courier delivery-history row for the client. The customer name is
+ * MASKED here — couriers are a lower-trust role and must not receive plaintext
+ * customer PII for past deliveries (consistent with every other courier-facing
+ * surface). Exported so the masking is covered by a regression test.
+ */
+export function mapCourierHistoryRow(row: any) {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    date: row.delivered_at || row.created_at,
+    restaurant: row.location_name,
+    customerAddress: maskStr(row.customer_name),
+    amount: parseInt(row.cash_amount) || parseInt(row.total) || 0,
+    status: row.status === 'delivered' ? 'DELIVERED' : row.status === 'cancelled' ? 'CANCELLED' : row.status,
+    rating: null,
+    feedback: null,
+  };
+}
+
 export default (async function courierMeRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
 
@@ -208,16 +228,6 @@ export default (async function courierMeRoutes(fastify: any, opts: any) {
       LIMIT 50
     `, [courierId]);
 
-    return reply.send(res.rows.map((row: any) => ({
-      id: row.id,
-      orderId: row.order_id,
-      date: row.delivered_at || row.created_at,
-      restaurant: row.location_name,
-      customerAddress: row.customer_name,
-      amount: parseInt(row.cash_amount) || parseInt(row.total) || 0,
-      status: row.status === 'delivered' ? 'DELIVERED' : row.status === 'cancelled' ? 'CANCELLED' : row.status,
-      rating: null,
-      feedback: null,
-    })));
+    return reply.send(res.rows.map(mapCourierHistoryRow));
   });
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;
