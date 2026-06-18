@@ -21,8 +21,8 @@ export function mapCourierHistoryRow(row: any) {
     customerAddress: maskStr(row.customer_name),
     amount: parseInt(row.cash_amount) || parseInt(row.total) || 0,
     status: row.status === 'delivered' ? 'DELIVERED' : row.status === 'cancelled' ? 'CANCELLED' : row.status,
-    rating: null,
-    feedback: null,
+    rating: row.rating ?? null,
+    feedback: row.feedback ?? null,
   };
 }
 
@@ -228,6 +228,21 @@ export default (async function courierMeRoutes(fastify: any, opts: any) {
       LIMIT 50
     `, [courierId]);
 
-    return reply.send(res.rows.map(mapCourierHistoryRow));
+    // Attach ratings (separate query + try/catch so a missing order_ratings
+    // table — before its migration — can't break the history list).
+    let ratingsByOrder: Record<string, any> = {};
+    try {
+      const orderIds = res.rows.map((r: any) => r.order_id);
+      if (orderIds.length) {
+        const rr = await db.query(`SELECT order_id, rating, feedback FROM order_ratings WHERE order_id = ANY($1)`, [orderIds]);
+        ratingsByOrder = Object.fromEntries(rr.rows.map((x: any) => [x.order_id, x]));
+      }
+    } catch { /* table not yet migrated */ }
+
+    return reply.send(res.rows.map((r: any) => mapCourierHistoryRow({
+      ...r,
+      rating: ratingsByOrder[r.order_id]?.rating ?? null,
+      feedback: ratingsByOrder[r.order_id]?.feedback ?? null,
+    })));
   });
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;
