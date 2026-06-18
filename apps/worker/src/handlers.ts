@@ -1,8 +1,12 @@
-import type { QueueProvider } from '@deliveryos/platform';
+import type { QueueProvider, MessageBus } from '@deliveryos/platform';
 import type { Pool } from 'pg';
 import { QUEUE_NAMES } from '@deliveryos/shared-types';
 
-export function registerHandlers(queue: QueueProvider, pool: Pool) {
+// Channel names mirror apps/api/src/lib/registry.ts (orderChannel / dashboardChannel).
+const orderChannel = (id: string) => `order:${id}`;
+const dashboardChannel = (id: string) => `location:${id}:dashboard`;
+
+export function registerHandlers(queue: QueueProvider, pool: Pool, messageBus: MessageBus) {
 
   queue.work('health-job', async (payload: Record<string, unknown>) => {
     console.log(`[Worker] Processed health-job at ${new Date().toISOString()}`, payload);
@@ -27,6 +31,29 @@ export function registerHandlers(queue: QueueProvider, pool: Pool) {
 
       if (res.rowCount && res.rowCount > 0) {
         console.log(`[Worker] Order ${orderId} auto-cancelled (timeout)`);
+        const locationId = res.rows[0].location_id;
+        const ts = new Date().toISOString();
+
+        // Audit trail (best-effort — never block the broadcast on it).
+        try {
+          await pool.query(
+            `INSERT INTO order_status_history (order_id, location_id, from_status, to_status, actor)
+             VALUES ($1, $2, 'PENDING', 'CANCELLED', 'system:timeout')`,
+            [orderId, locationId]
+          );
+        } catch (e) {
+          console.error(`[Worker] order.timeout history insert failed for ${orderId}:`, e);
+        }
+
+        // Cross-surface live update: the customer status page + owner dashboard
+        // must see the auto-cancel without a refresh (previously this handler was
+        // silent, so a timed-out order only flipped on the next page load).
+        await messageBus.publish(orderChannel(orderId), {
+          type: 'order.status', orderId, status: 'CANCELLED', locationId, timestamp: ts,
+        });
+        await messageBus.publish(dashboardChannel(locationId), {
+          type: 'order.status', data: { orderId, status: 'CANCELLED', statusUpdatedAt: ts },
+        });
       } else {
         console.log(`[Worker] Order ${orderId} already transitioned, timeout no-op`);
       }
