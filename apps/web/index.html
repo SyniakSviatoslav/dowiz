@@ -15,8 +15,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=Cormorant+Garamond:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
     <script>
+      // Register the service worker so the PWA installs and order push
+      // notifications persist. sw.js is non-caching (skipWaiting + clients.claim),
+      // so it cleanly takes over from any stale worker without serving cached
+      // assets — previously this block UN-registered all workers, which defeated
+      // the push registration in CheckoutPage.
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
       }
     </script>
     <script defer data-domain="dowiz.fly.dev" src="https://plausible.io/js/script.js"></script>
