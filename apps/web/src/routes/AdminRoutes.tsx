@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Suspense } from 'react';
-import { Routes, Route, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { apiClient } from '../lib/index.js';
 import { ToastProvider, LanguageSwitcher, useI18n, BottomTabBar, ResponsiveDialog, CurrencySwitcher } from '@deliveryos/ui';
 import type { TabItem } from '@deliveryos/ui';
 import { DashboardPage } from '../pages/admin/DashboardPage.js';
@@ -207,12 +208,33 @@ function AdminLayout() {
   );
 }
 
+// Entry flow (O3): a not-yet-published storefront lands straight in the activation
+// tool (tool-as-onboarding) — the first thing the owner sees is their menu coming to
+// life, with the gate showing what's left. Published storefronts get the dashboard.
+function AdminHome() {
+  const [draft, setDraft] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const s = await apiClient<any>('/owner/settings');
+        if (!s?.id) { if (alive) setDraft(false); return; }
+        const st = await apiClient<any>(`/owner/activation/${s.id}/status`);
+        if (alive) setDraft(!st?.published);
+      } catch { if (alive) setDraft(false); }
+    })();
+    return () => { alive = false; };
+  }, []);
+  if (draft === null) return null; // brief flash-prevention while we check
+  return draft ? <Navigate to="/admin/activation" replace /> : <DashboardPage />;
+}
+
 export function AdminRoutes() {
   return (
     <ToastProvider>
       <Routes>
         <Route path="/" element={<AdminLayout />}>
-          <Route index element={<DashboardPage />} />
+          <Route index element={<AdminHome />} />
           <Route path="orders" element={<DashboardPage />} />
           <Route path="menu" element={<MenuManagerPage />} />
           <Route path="supplies" element={<SupplyLibraryPage />} />
