@@ -2,14 +2,13 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { renderMenuPage } from '../../lib/ssr-renderer.js';
+import { isBot, serveSpaShell } from '../../lib/spa-shell.js';
 
-// NOTE: a previous iteration served the React SPA here for human visitors. That
-// broke the order flow — the SPA menu writes the cart to dos_cart_<id> while the
-// SSR checkout (routes/public/client-flow.ts) reads dos_cart, and the SPA's own
-// checkout doesn't carry the cart either. Until the SPA storefront's cart +
-// checkout work end to end, /s/:slug stays on the SSR menu so menu → checkout is
-// one consistent flow. "SPA as the only storefront" is a dedicated follow-up
-// (fix the SPA cart/checkout first, then route /s/:slug/* to it).
+// /s/:slug is the menu. Humans get the React SPA storefront (one cart, shared
+// across menu → cart → checkout → order via /s/:slug/* in client-flow.ts).
+// Crawlers/social scrapers get the SSR menu so JSON-LD + OG tags survive (the
+// only SEO-relevant surface; cart/checkout/order are noindex). The SPA's cart
+// is dos_cart_<slug>, used end-to-end, so there is no SSR↔SPA cart crossing.
 export default (async function ssrRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
 
@@ -17,8 +16,13 @@ export default (async function ssrRoutes(fastify: any, opts: any) {
 
   fastify.get('/s/:slug', async (request: any, reply: any) => {
     const { slug } = request.params as any;
-    const html = await renderMenuPage(slug, db);
-    reply.type('text/html').send(html);
+
+    if (isBot(request.headers['user-agent'])) {
+      const html = await renderMenuPage(slug, db);
+      return reply.type('text/html').send(html);
+    }
+
+    return serveSpaShell(reply, db, slug);
   });
 
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;
