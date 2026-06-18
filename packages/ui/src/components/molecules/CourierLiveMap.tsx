@@ -1,4 +1,5 @@
 import { MapLibreBase, type LngLatLike } from './MapLibreBase.js';
+import { useCourierMarker } from '../../hooks/use-courier-marker.js';
 
 function getCSSVar(name: string, fallback = ''): string {
   if (typeof document === 'undefined') return fallback;
@@ -17,6 +18,9 @@ interface CourierOnMap {
 interface CourierLiveMapProps {
   className?: string;
   couriers?: CourierOnMap[];
+  /** Single live courier (client view) — smoothly tweened + rotated by heading.
+   *  Pass the RAW latest ping; the rAF tween is isolated inside this component. */
+  liveCourier?: { lat: number; lng: number; recordedAt?: number } | null;
   destinationPin?: LngLatLike;
   clientLocation?: LngLatLike;
   routeLine?: LngLatLike[];
@@ -27,12 +31,20 @@ interface CourierLiveMapProps {
 export function CourierLiveMap({
   className = 'h-64 w-full rounded-lg',
   couriers = [],
+  liveCourier,
   destinationPin,
   clientLocation,
   routeLine,
   center = [19.817, 41.331],
   zoom = 13,
 }: CourierLiveMapProps) {
+  const smoothed = useCourierMarker(
+    liveCourier ? { lat: liveCourier.lat, lng: liveCourier.lng, recordedAt: liveCourier.recordedAt } : null,
+    { pingIntervalMs: 3000 },
+  );
+  const courierMarker = smoothed
+    ? { lngLat: [smoothed.lng, smoothed.lat] as LngLatLike, bearing: smoothed.bearing }
+    : null;
   const statusColors: Record<string, string> = {
     online: getCSSVar('--color-success'),
     busy: getCSSVar('--color-warning'),
@@ -70,6 +82,7 @@ export function CourierLiveMap({
       center={center}
       zoom={zoom}
       markers={markers}
+      courier={courierMarker}
       routeLine={routeLine}
     >
       {couriers.length === 0 && !destinationPin && (
