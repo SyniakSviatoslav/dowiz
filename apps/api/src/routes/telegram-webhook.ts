@@ -387,6 +387,39 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
           return;
         }
 
+        // Telegram owner LOGIN (TG): /start login_<token> binds the Telegram identity
+        // to an owner (creating one on first login) and authenticates the web token.
+        if (token.startsWith('login_')) {
+          const loginToken = token.slice('login_'.length);
+          if (!/^[0-9a-f-]{36}$/i.test(loginToken)) {
+            await sendMessage(chatId, '⚠️ Invalid login link.');
+            return;
+          }
+          const tgUserId = String(message.from?.id ?? chat.id);
+          const name = message.from?.first_name || message.from?.username || 'Owner';
+          const lt = await client.query(
+            `SELECT status, expires_at FROM telegram_login_tokens WHERE token = $1::uuid FOR UPDATE`,
+            [loginToken],
+          );
+          if (lt.rows.length === 0 || new Date(lt.rows[0].expires_at) < new Date() || lt.rows[0].status !== 'pending') {
+            await sendMessage(chatId, '⚠️ This login link has expired. Please start again from your browser.');
+            return;
+          }
+          const ur = await client.query(
+            `INSERT INTO users (telegram_user_id, display_name) VALUES ($1, $2)
+             ON CONFLICT (telegram_user_id) DO UPDATE SET display_name = COALESCE(users.display_name, EXCLUDED.display_name)
+             RETURNING id`,
+            [tgUserId, name],
+          );
+          const ownerId = ur.rows[0].id;
+          await client.query(
+            `UPDATE telegram_login_tokens SET status = 'authenticated', user_id = $2, telegram_user_id = $3 WHERE token = $1::uuid`,
+            [loginToken, ownerId, tgUserId],
+          );
+          await sendMessage(chatId, '✅ Logged in! Return to your browser — it will continue automatically.');
+          return;
+        }
+
         // Verify the token is valid and unused
         const tokenRes = await client.query(
           `SELECT tct.location_id, tct.user_id
