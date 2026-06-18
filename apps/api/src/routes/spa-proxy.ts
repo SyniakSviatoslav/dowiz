@@ -183,9 +183,13 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
 
   // GET /api/owner/analytics
   fastify.get('/api/owner/analytics', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const { rows: todayOrders } = await db.query(
+    const ctx = await getOwnerContext(request);
+    if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+    const locId = ctx.locId;
+    // withTenant: RLS tenant scoping (set app.user_id) as defense-in-depth on top of
+    // the explicit WHERE location_id binding below.
+    return withTenant(db, ctx.userId, async (client) => {
+    const { rows: todayOrders } = await client.query(
       `SELECT total, created_at, confirmed_at, delivered_at, delivery_lat, delivery_lng
        FROM orders WHERE location_id = $1 AND created_at >= NOW() - INTERVAL '7 days'`,
       [locId]
@@ -202,7 +206,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     }
     const avgOrderValue = orderCount > 0 ? Math.round(totalRev / orderCount) : 0;
     const avgTime = deliveredCount > 0 ? Math.round(totalTime / deliveredCount) : 0;
-    const { rows: topProducts } = await db.query(
+    const { rows: topProducts } = await client.query(
       `SELECT oi.name_snapshot AS name, COUNT(DISTINCT oi.order_id)::int AS orders,
               SUM(oi.price_snapshot * oi.quantity)::int AS revenue, p.image_key AS "imageUrl"
        FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id
@@ -210,7 +214,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
        GROUP BY oi.name_snapshot, p.image_key ORDER BY revenue DESC LIMIT 20`,
       [locId]
     );
-    const { rows: chartRows } = await db.query(
+    const { rows: chartRows } = await client.query(
       `SELECT to_char(date_trunc('day', created_at), 'Dy') AS day, SUM(total)::int AS revenue
        FROM orders WHERE location_id = $1 AND created_at >= NOW() - INTERVAL '7 days'
        GROUP BY date_trunc('day', created_at) ORDER BY MIN(created_at)`,
@@ -221,7 +225,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       const match = chartRows.find((r: any) => r.day === day);
       return { day, revenue: match ? match.revenue : 0 };
     });
-    const { rows: heatmapRows } = await db.query(
+    const { rows: heatmapRows } = await client.query(
       `SELECT EXTRACT(DOW FROM o.created_at)::int AS dow,
               CASE WHEN EXTRACT(HOUR FROM o.created_at) BETWEEN 0 AND 3 THEN 0
                    WHEN EXTRACT(HOUR FROM o.created_at) BETWEEN 4 AND 7 THEN 1
@@ -252,6 +256,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       avgOrderValue: { value: avgOrderValue, trend: '+2%' },
       deliveryTime: { avg: avgTime, trend: '-2%' },
       chart, topProducts, geoLocations, heatmap,
+    });
     });
   });
 
