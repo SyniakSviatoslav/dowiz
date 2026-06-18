@@ -82,7 +82,11 @@ export const apiClient = async <T extends z.ZodType>(
       // Status -> Action mapping (G2)
       switch (response.status) {
         case 401:
-          if (typeof window !== 'undefined') {
+          // Owner-session-expiry handling is scoped to the owner app. A 401 on a
+          // customer surface (/s/:slug/...) or the courier app must NOT bounce the
+          // visitor to the owner login — the page handles its own missing/expired
+          // session (e.g. OrderStatusPage shows a "reload the menu" message).
+          if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
             localStorage.removeItem('dos_access_token');
             sessionStorage.setItem('dos_auth_expired', '1');
             window.location.href = '/admin';

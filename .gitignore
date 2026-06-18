@@ -23,3 +23,5 @@ graphify-out/
 # Stage A: local PaddleOCR venv (on-demand OCR engine; not committed)
 .venv-paddle/
 # claude installed skills.claude/skills/
+# local-only secrets (never commit)
+.secrets.local
