@@ -65,6 +65,7 @@ import { setupShutdown } from './shutdown.js';
 import { CsvMenuParser } from './lib/csv-parser.js';
 import { AiOcrParser } from './lib/ai-ocr-parser.js';
 import { LocalFsStorageProvider } from './lib/local-storage.js';
+import { R2StorageProvider } from './lib/r2-storage.js';
 import { LibreTranslateProvider } from './lib/libretranslate-provider.js';
 import { TelegramAdapter } from './notifications/adapters/telegram.js';
 import { WebPushAdapter } from './notifications/adapters/webpush.js';
@@ -296,10 +297,12 @@ async function main() {
       'csv': new CsvMenuParser(),
       'ai-ocr': new AiOcrParser(memoryService)
     };
-  // STORAGE_DIR lets us point at a durable path (e.g. a mounted fly volume at
-  // /data/images) instead of the ephemeral default; without it uploaded product
-  // images are lost on every redeploy. Defaults preserve current behaviour.
-  const storage = new LocalFsStorageProvider(process.env.STORAGE_DIR || 'tmp/imports');
+  // Durable object storage for product images. Cloudflare R2 when configured
+  // (survives redeploys, shared across machines); otherwise the local fs
+  // (STORAGE_DIR for a mounted volume, or the ephemeral default in dev).
+  const storage = process.env.R2_BUCKET && process.env.R2_ENDPOINT
+    ? new R2StorageProvider()
+    : new LocalFsStorageProvider(process.env.STORAGE_DIR || 'tmp/imports');
   const translation = new LibreTranslateProvider();
 
   // Notification Providers
