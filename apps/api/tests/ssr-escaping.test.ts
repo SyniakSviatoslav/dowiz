@@ -56,4 +56,43 @@ test('SSR menu page escapes ampersands exactly once', async (t) => {
     assert.ok(out.includes('Mains &amp; Sides'), 'category name not single-escaped');
     assert.ok(!out.includes('Fish & Chips'), 'raw unescaped product name leaked');
   });
+
+  // U5 regression: the JSON-LD <script> must contain PARSEABLE json, not
+  // HTML-entity-escaped text (preact escapes script text children by default).
+  await t.test('emits valid, parseable JSON-LD (not HTML-escaped)', () => {
+    const m = out.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
+    assert.ok(m, 'no JSON-LD block found');
+    const body = m![1];
+    assert.ok(!body.includes('&quot;'), 'JSON-LD is HTML-escaped (invalid)');
+    const parsed = JSON.parse(body); // throws if invalid
+    const nodes = Array.isArray(parsed) ? parsed : [parsed];
+    const restaurant = nodes.find((n: any) => n['@type'] === 'Restaurant');
+    assert.ok(restaurant, 'no Restaurant node in JSON-LD');
+    assert.equal(restaurant.name, 'Dubin & Sushi'); // & round-trips to &
+  });
+});
+
+test('JSON-LD cannot break out of the <script> tag', async () => {
+  // A venue name containing </script> must not terminate the script element.
+  const loc = {
+    id: 'l1', name: 'Evil</script><script>alert(1)</script>', slug: 'x',
+    currency_code: 'EUR', currency_minor_unit: 2, default_locale: 'en',
+    supported_locales: ['en'], address: 'A', public_phone: null, hours_json: null, geo: null,
+  };
+  const menu = { menu_version: 1, default_locale: 'en', supported_locales: ['en'], currency: { code: 'EUR', minor_unit: 2 }, categories: [] };
+  const pool = {
+    connect: async () => ({
+      query: async (sql: string) =>
+        sql.includes('FROM locations') ? { rowCount: 1, rows: [loc] }
+        : sql.includes('read_public_menu_all_locales') ? { rowCount: 1, rows: [{ menu }] }
+        : { rowCount: 0, rows: [] },
+      release: () => {},
+    }),
+  };
+  const out = await renderMenuPage('breakout-test', pool as any, 'https://example.test');
+  const m = out.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
+  assert.ok(m, 'no JSON-LD block');
+  // the injected name must be unicode-escaped, never a literal closing tag
+  assert.ok(!m![1].includes('</script>'), 'literal </script> leaked into JSON-LD (breakout!)');
+  assert.ok(m![1].includes('\\u003c/script\\u003e'), 'name not unicode-escaped');
 });
