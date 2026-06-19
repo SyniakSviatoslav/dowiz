@@ -394,7 +394,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // GET /api/public/theme/:slug
   fastify.get('/api/public/theme/:slug', async (request, reply) => {
     const slug = (request.params as any).slug;
-    const locRes = await db.query(`SELECT id, name FROM locations WHERE slug = $1`, [slug]);
+    const locRes = await db.query(`SELECT id, name, supported_locales FROM locations WHERE slug = $1`, [slug]);
     if (locRes.rows.length === 0) return reply.status(404).send({ error: 'Not found' });
     const locId = locRes.rows[0].id;
     const locName = locRes.rows[0].name;
@@ -406,6 +406,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     return reply.send({
       primaryColor: t.primary_color || null, bgColor: t.bg_color || null,
       textColor: t.text_color || null, logoUrl: t.logo_url || null, locationName: locName,
+      supportedLocales: Array.isArray(locRes.rows[0].supported_locales) ? locRes.rows[0].supported_locales : null,
     });
   });
 

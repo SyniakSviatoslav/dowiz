@@ -13,6 +13,7 @@ const PublicThemeResponse = z.object({
   primaryColor: z.string().optional(),
   bgColor: z.string().optional(),
   textColor: z.string().optional(),
+  supportedLocales: z.array(z.string()).nullable().optional(),
 }).passthrough();
 import { CartProvider, useSharedCart } from '../lib/CartProvider.js';
 
@@ -48,6 +49,7 @@ function ClientLayoutInner() {
 
   const [locationName, setLocationName] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
+  const [supportedLocales, setSupportedLocales] = useState<string[] | undefined>(undefined);
 
   useEffect(() => {
     if (!slug) return;
@@ -92,6 +94,7 @@ function ClientLayoutInner() {
       .then((res) => {
         setLocationName(res.locationName || '');
         setLogoUrl(res.logoUrl || '');
+        setSupportedLocales(res.supportedLocales || undefined);
         setTheme({
           primary: res.primaryColor || 'var(--brand-primary)',
           primaryHover: 'var(--brand-primary-hover)',
@@ -122,9 +125,11 @@ function ClientLayoutInner() {
             {logoUrl ? (
               <img src={logoUrl} alt="" className="h-8 w-8 rounded object-contain shrink-0" />
             ) : null}
-            <h1 className="text-base font-bold flex-1 truncate" style={{ fontFamily: 'var(--brand-font-heading)' }}>{locationName || t('client.menu', 'Menu')}</h1>
+            {/* Persistent brand chrome — not the page <h1>; each route owns its own h1
+               (menu hero, Checkout, Order) so the document has a single top heading. */}
+            <div className="text-base font-bold flex-1 truncate" style={{ fontFamily: 'var(--brand-font-heading)' }}>{locationName || t('client.menu', 'Menu')}</div>
             <CurrencySwitcher />
-            <LanguageSwitcher variant="full" />
+            <LanguageSwitcher variant="full" allowed={supportedLocales} />
           </header>
           <div className="app-shell-main">
             <Outlet />
