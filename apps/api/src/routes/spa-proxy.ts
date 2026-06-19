@@ -87,6 +87,20 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     }
   }
 
+  // True when the request carries a valid owner JWT, regardless of whether that
+  // owner has created a location yet. Used to tell a brand-new owner (no location)
+  // apart from an unauthenticated/expired caller — see GET /api/owner/settings (O1).
+  async function isValidOwnerToken(request: any): Promise<boolean> {
+    const auth = request.headers.authorization;
+    if (!auth?.startsWith('Bearer ')) return false;
+    try {
+      const { payload } = await jwtVerify(auth.slice(7), getPublicKey(), { algorithms: ['RS256'] });
+      return (payload as any).role === 'owner';
+    } catch {
+      return false;
+    }
+  }
+
   async function getOwnerContext(request: any): Promise<{ locId: string; userId: string } | null> {
     const auth = request.headers.authorization;
     if (!auth?.startsWith('Bearer ')) return null;
@@ -476,7 +490,14 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // GET /api/owner/settings
   fastify.get('/api/owner/settings', async (request, reply) => {
     const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!locId) {
+      // A valid owner who hasn't created a location yet is a fresh signup that
+      // belongs in onboarding — NOT an expired session. Returning 401 here makes
+      // apiClient treat first-run as "session expired" and bounce to /login (O1).
+      // Hand back a benign empty profile so AdminHome routes to /admin/onboarding.
+      if (await isValidOwnerToken(request)) return reply.send({ id: null });
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
     const res = await db.query(
       `SELECT id, name, slug, phone, delivery_fee_flat, min_order_value, free_delivery_threshold, delivery_radius_km, currency_code, tax_rate, lat, lng, address, hours_json, delivery_paused
        FROM locations WHERE id = $1`,

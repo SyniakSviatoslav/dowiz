@@ -66,6 +66,38 @@ describe('i18n', () => {
     assert.equal(mod.t('cart.checkout'), 'Checkout');
   });
 
+  // Onboarding QA O2: the stepper label must use a dedicated `admin.courier_step`
+  // key WITHOUT the trailing colon that `admin.courier` carries (the latter is an
+  // OrderCard label "Courier: John"). Reusing admin.courier dragged the colon into
+  // the stepper, rendering "Courier:".
+  it('O2: admin.courier_step exists in every locale and has no trailing colon', () => {
+    for (const locale of ['en', 'sq', 'uk'] as const) {
+      const step = mod.translate(locale, 'admin.courier_step');
+      const card = mod.translate(locale, 'admin.courier');
+      assert.notEqual(step, 'admin.courier_step', `admin.courier_step missing in ${locale}`);
+      assert.ok(!step.endsWith(':'), `admin.courier_step must not end with ':' in ${locale} (got "${step}")`);
+      assert.ok(card.endsWith(':'), `admin.courier (OrderCard label) should still keep its colon in ${locale}`);
+    }
+  });
+
+  // Onboarding QA O4: the onboarding step uses a customer-facing label, not the
+  // developer-flavoured "Order Flow Test".
+  it('O4: admin.flow_test_step resolves in every locale', () => {
+    for (const locale of ['en', 'sq', 'uk'] as const) {
+      const v = mod.translate(locale, 'admin.flow_test_step');
+      assert.notEqual(v, 'admin.flow_test_step', `admin.flow_test_step missing in ${locale}`);
+    }
+  });
+
+  // Onboarding QA O3: the menu-step subhead must not promise a "PDF" import while
+  // the only card offers CSV — keep the copy format-neutral.
+  it('O3: admin.import_menu_desc no longer mentions PDF', () => {
+    for (const locale of ['en', 'sq', 'uk'] as const) {
+      const v = mod.translate(locale, 'admin.import_menu_desc');
+      assert.ok(!/pdf/i.test(v), `admin.import_menu_desc still mentions PDF in ${locale} (got "${v}")`);
+    }
+  });
+
   // U3 regression: the admin login page now uses these keys instead of
   // hardcoded English, so they must resolve AND be localized per locale.
   it('localizes admin login-error keys across all locales', () => {
