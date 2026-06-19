@@ -28,6 +28,14 @@ function coerceBool() {
 }
 
 const llmSchema = z.object({
+  // Restaurant-level contact extracted from the menu header/footer (business
+  // contact info, NOT customer PII). Optional — older prompts won't return it.
+  restaurant: z.object({
+    name: coerceStr().optional().default(''),
+    address: coerceStr().optional().default(''),
+    phone: coerceStr().optional().default(''),
+    hoursText: coerceStr().optional().default(''),
+  }).optional(),
   categories: z.array(z.object({
     externalKey: coerceStr(),
     name: z.string()
@@ -273,11 +281,11 @@ export class AiOcrParser implements MenuParserProvider {
       throw new Error(`AiOcrParser does not support kind: ${input.kind}`);
     }
 
-    // 2. PII Redaction
-    const { text: redactedText, redactions } = this.piiRedactor.redact(rawText);
-    for (const r of redactions) {
-      issues.push({ rowNumber: 1, code: 'POTENTIALLY_UNSAFE_VALUE', message: `PII redacted (${r.kind})`, severity: 'warning' });
-    }
+    // PII note (Z1): the menu document is fed to the model un-redacted so the
+    // venue's OWN contact (name/address/phone/hours) can be extracted for
+    // onboarding. A menu contains no customer PII. The redacted copy is kept only
+    // for the provenance hash below.
+    const { text: redactedText } = this.piiRedactor.redact(rawText);
 
     const t1 = Date.now();
 
@@ -354,6 +362,7 @@ export class AiOcrParser implements MenuParserProvider {
       const prompt = `Extract the complete menu structure from the text below. Return ONLY valid JSON matching this schema:
 
 {
+  "restaurant": { "name": "Pizza Roma", "address": "Rruga Sami Frasheri 12, Tirana", "phone": "+355 69 123 4567", "hoursText": "Mon-Sun 10:00-23:00" },
   "categories": [{ "externalKey": "cat1", "name": "Appetizers" }],
   "products": [
     {
@@ -383,7 +392,8 @@ CRITICAL RULES:
 2. INGREDIENTS: If ingredients are listed in the menu text, add them to "attributesJson.bom" as an array of objects with "name" (string), "quantity" (string, optional), and "allergens" (string array of common allergens: dairy, eggs, nuts, soy, gluten, shellfish, fish).
 3. DESCRIPTION: Include the product description if present. Combine ingredient list into a description if no separate description exists.
 4. TYPES: "price" must be a NUMBER, "available" must be BOOLEAN, "externalKey"/"categoryKey" must be STRINGS.
-5. FORMAT: Output ONLY the JSON object. No markdown fences, no commentary.\n\n${redactedText}`;
+5. FORMAT: Output ONLY the JSON object. No markdown fences, no commentary.
+6. RESTAURANT: From the header/footer, extract the venue "name", full street "address", contact "phone", and opening-"hoursText" if present. Use "" for any field not found. Do NOT invent these. This is the venue's OWN business contact — never any customer's details.\n\n${rawText}`;
 
       llmResponse = await callLlm(provider, prompt, modelForProvider, 120000);
     } catch (e: any) {
@@ -439,6 +449,13 @@ CRITICAL RULES:
     // Note: since provenance isn't in CanonicalMenuDraft interface directly,
     // it will be attached via the server route handling to the import_sessions.draft_json._provenance
 
+    // Restaurant metadata (business contact) for onboarding pre-fill — only when
+    // the model actually returned non-empty values.
+    const rm = (draft as any).restaurant;
+    const restaurant = rm && (rm.name || rm.address || rm.phone || rm.hoursText)
+      ? { name: rm.name || undefined, address: rm.address || undefined, phone: rm.phone || undefined, hoursText: rm.hoursText || undefined }
+      : undefined;
+
     return {
       draft: canonicalDraft,
       issues,
@@ -448,7 +465,8 @@ CRITICAL RULES:
         warnings: issues.length,
         mode: 'merge',
         low_confidence_count: lowConfidenceCount
-      }
+      },
+      ...(restaurant ? { restaurant } : {}),
     };
   }
 

@@ -90,9 +90,6 @@ importers:
 
   apps/api:
     dependencies:
-      '@anthropic-ai/sdk':
-        specifier: ^0.105.0
-        version: 0.105.0(zod@3.25.76)
       '@aws-sdk/client-s3':
         specifier: ^3.1058.0
         version: 3.1066.0

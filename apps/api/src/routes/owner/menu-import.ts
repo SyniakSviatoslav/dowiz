@@ -117,6 +117,11 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
         raw_text_hash: crypto.createHash('sha256').update(buffer).digest('hex')
       };
     }
+    // Persist extracted restaurant contact (name/address/phone/hours) in the draft
+    // so the commit can pre-fill the location after the owner reviews it.
+    if ((parseResult as any).restaurant) {
+      (parseResult.draft as any)._restaurant = (parseResult as any).restaurant;
+    }
 
     // Save to import_sessions
     let importSessionId: string;
@@ -150,7 +155,8 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
       expires_at: new Date(Date.now() + 30 * 60000).toISOString(),
       summary: parseResult.summary,
       issues: parseResult.issues,
-      draft_preview: draftPreview
+      draft_preview: draftPreview,
+      restaurant: (parseResult as any).restaurant || null,
     });
   });
 
@@ -407,6 +413,20 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
           `UPDATE locations SET menu_confirmed_at = COALESCE(menu_confirmed_at, now()) WHERE id = $1`,
           [locationId]
         );
+
+        // Pre-fill the location's contact from the menu document (fill-if-empty —
+        // never clobber owner-edited values). The owner reviewed the draft before
+        // committing, so this is human-approved. Phone also helps the publish gate.
+        const rmeta = (draft as any)._restaurant;
+        if (rmeta && (rmeta.address || rmeta.phone)) {
+          await client.query(
+            `UPDATE locations
+                SET address = CASE WHEN COALESCE(NULLIF(btrim(address), ''), '') = '' THEN COALESCE($2, address) ELSE address END,
+                    phone   = CASE WHEN COALESCE(NULLIF(btrim(phone), ''), '')   = '' THEN COALESCE($3, phone)   ELSE phone   END
+              WHERE id = $1`,
+            [locationId, rmeta.address || null, rmeta.phone || null],
+          );
+        }
 
         // Explicitly touch menu_version via the existing bump_menu_version() function or let triggers handle it
         // The trigger on categories/products handles it natively!
