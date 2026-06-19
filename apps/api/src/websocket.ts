@@ -74,7 +74,42 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
     }
   }, 60000);
 
+  // Per-tenant authorization for owner subscriptions. An authenticated owner must
+  // only stream rooms for locations they are a member of — otherwise any owner
+  // could subscribe to another tenant's `location:*`/`order:*` channel and watch
+  // their live order feed. `fastify.db` is the operational Pg pool (decorated on
+  // the instance at startup).
+  async function ownerCanAccessRoom(userId: string, room: string): Promise<boolean> {
+    try {
+      if (room.startsWith('location:')) {
+        const locId = room.split(':')[1];
+        if (!locId) return false;
+        const r = await fastify.db.query(
+          `SELECT 1 FROM memberships WHERE user_id = $1 AND location_id = $2 AND role = 'owner' LIMIT 1`,
+          [userId, locId],
+        );
+        return (r.rowCount ?? 0) > 0;
+      }
+      if (room.startsWith('order:')) {
+        const orderId = room.split(':')[1];
+        if (!orderId) return false;
+        const r = await fastify.db.query(
+          `SELECT 1 FROM orders o
+             JOIN memberships m ON m.location_id = o.location_id
+            WHERE o.id = $1 AND m.user_id = $2 AND m.role = 'owner' LIMIT 1`,
+          [orderId, userId],
+        );
+        return (r.rowCount ?? 0) > 0;
+      }
+      return false;
+    } catch (err: any) {
+      console.error('[WS] owner room authz query failed:', err?.message);
+      return false;
+    }
+  }
+
   wss.on('connection', (ws, req) => {
+    (ws as any).isAlive = true; // seed before the first heartbeat tick
     ws.on('pong', () => { (ws as any).isAlive = true; });
 
     let isAuthenticated = false;
@@ -142,9 +177,19 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
               ws.send(JSON.stringify({ type: 'error', error: 'Invalid room' }));
               return;
             }
+            const ownerId = (user as any).userId ?? user!.sub;
+            if (!ownerId || !(await ownerCanAccessRoom(ownerId, room))) {
+              ws.send(JSON.stringify({ type: 'error', error: 'Forbidden room' }));
+              return;
+            }
           } else if (user!.role === 'courier') {
             if (!room.startsWith('courier:') && !room.startsWith('location:') && !room.startsWith('order:')) {
               ws.send(JSON.stringify({ type: 'error', error: 'Invalid room' }));
+              return;
+            }
+            // A courier may only watch their OWN task room (courier:<sub>).
+            if (room.startsWith('courier:') && room !== `courier:${user!.sub}`) {
+              ws.send(JSON.stringify({ type: 'error', error: 'Forbidden room' }));
               return;
             }
           }
