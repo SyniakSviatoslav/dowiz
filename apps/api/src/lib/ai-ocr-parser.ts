@@ -74,17 +74,25 @@ const llmSchema = z.object({
 });
 
 // ── LLM Adapter ─────────────────────────────────────────────────────
-type LlmProvider = 'ollama' | 'groq' | 'openai' | 'mock';
+// 'heuristic' is the zero-dependency, no-API-key structurer (pure code) used
+// when no LLM provider is configured — so menu import works on a server with
+// nothing wired up (open-source, free). A real LLM, when configured, still wins.
+type LlmProvider = 'ollama' | 'groq' | 'openai' | 'mock' | 'heuristic';
 
 function detectProvider(model: string): LlmProvider {
   if (model === 'mock') return 'mock';
-  const env = (process.env.LLM_ADAPTER || '').toLowerCase();
+  const env = (process.env.LLM_ADAPTER || process.env.LLM_PROVIDER || '').toLowerCase();
+  if (env === 'heuristic' || env === 'none' || env === 'offline') return 'heuristic';
   if (env === 'groq') return 'groq';
   if (env === 'openai') return 'openai';
   if (env === 'ollama') return 'ollama';
   if (process.env.GROQ_API_KEY) return 'groq';
   if (process.env.OPENAI_API_KEY) return 'openai';
-  return 'ollama';
+  // An explicit ollama endpoint/model means "ollama configured" → honour it
+  // (and surface its failure). With nothing configured at all, fall back to the
+  // heuristic structurer instead of an ollama endpoint that will never answer.
+  if (process.env.LLM_ENDPOINT || process.env.LLM_PROVIDER) return 'ollama';
+  return 'heuristic';
 }
 
 async function callLlm(provider: LlmProvider, prompt: string, model: string, timeoutMs: number): Promise<string> {
@@ -237,7 +245,25 @@ export class AiOcrParser implements MenuParserProvider {
         for (let i = 1; i <= doc.numPages; i++) {
           const page = await doc.getPage(i);
           const content = await page.getTextContent();
-          pages.push(content.items.map((item: any) => item.str).join(' '));
+          // Reconstruct visual lines: PDF text comes as positioned fragments, so
+          // join by row (y-coordinate) instead of flattening everything to one
+          // line — otherwise every menu item collapses into a single string.
+          const pageLines: string[] = [];
+          let line = '';
+          let lastY: number | null = null;
+          for (const item of content.items as any[]) {
+            if (typeof item.str !== 'string') continue;
+            const y = item.transform?.[5];
+            if (lastY !== null && typeof y === 'number' && Math.abs(y - lastY) > 2 && line) {
+              pageLines.push(line);
+              line = '';
+            }
+            line += (line && !line.endsWith(' ') && item.str ? ' ' : '') + item.str;
+            if (item.hasEOL && line) { pageLines.push(line); line = ''; }
+            if (typeof y === 'number') lastY = y;
+          }
+          if (line) pageLines.push(line);
+          pages.push(pageLines.join('\n'));
         }
         await doc.destroy();
         rawText = pages.join('\n\n');
@@ -295,6 +321,10 @@ export class AiOcrParser implements MenuParserProvider {
 
     if (provider === 'mock') {
       return this.mockResult(input.config, issues);
+    }
+
+    if (provider === 'heuristic') {
+      return this.heuristicResult(rawText, input.config, issues, ocrEngineUsed, ocrMs, redactedText);
     }
 
     const modelForProvider = provider === 'groq'
@@ -468,6 +498,172 @@ CRITICAL RULES:
       },
       ...(restaurant ? { restaurant } : {}),
     };
+  }
+
+  /**
+   * Zero-dependency, no-API-key menu structurer. Turns the OCR/PDF text into a
+   * canonical draft using deterministic line heuristics (no LLM). Open-source &
+   * free — the fallback so import works on a server with no LLM provider. The
+   * owner reviews every draft before commit, so rough extraction is acceptable.
+   */
+  private heuristicResult(
+    rawText: string,
+    config: any,
+    preIssues: ParseIssue[],
+    ocrEngineUsed: string,
+    ocrMs: number,
+    redactedText: string,
+  ): ParseResult {
+    const t1 = Date.now();
+    const currency = config.expectedCurrency || 'ALL';
+    const minorUnit = typeof config.currencyMinorUnit === 'number' ? config.currencyMinorUnit : 0;
+    const issues = [...preIssues];
+
+    const lines = rawText
+      .split(/\r?\n/)
+      .flatMap((l) => l.split(/\s{3,}/)) // PDF text often joins rows with wide gaps
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    // ── Restaurant header (business contact, not customer PII) ──────────
+    const phoneMatch = rawText.match(/(\+?\d[\d\s().-]{6,}\d)/);
+    const phoneRaw = phoneMatch?.[1];
+    const phone = phoneRaw && phoneRaw.replace(/[^\d+]/g, '').length >= 7
+      ? phoneRaw.trim()
+      : undefined;
+    const addressLine = lines.find((l) =>
+      /\b(rrug[ae]n?|rr\.|bulevardi|bul\.|blvd|sheshi|lagj[ei]a|street|st\.|avenue|ave\.?|road|rd\.)\b/i.test(l)
+      && !this.priceOf(l, minorUnit),
+    );
+    const hoursLine = lines.find((l) =>
+      /\d{1,2}[:.]\d{2}/.test(l)
+      && /(mon|tue|wed|thu|fri|sat|sun|hën|mar|mër|enj|pre|sht|die|open|hap|-|–|every|çdo)/i.test(l)
+      && !this.priceOf(l, minorUnit),
+    );
+    // Only claim a venue name when there's a real header (address/phone present),
+    // and only from the top line — avoids mislabelling a category as the venue.
+    const hasHeader = !!(addressLine || phone);
+    const top = lines[0] || '';
+    const nameLine = hasHeader && top.length >= 2 && top.length <= 40
+      && !this.priceOf(top, minorUnit) && !/@|\d{4,}/.test(top)
+      ? top
+      : undefined;
+    const restaurant = (nameLine || addressLine || phone || hoursLine)
+      ? {
+          name: nameLine || undefined,
+          address: addressLine || undefined,
+          phone,
+          hoursText: hoursLine || undefined,
+        }
+      : undefined;
+
+    // ── Categories + products ───────────────────────────────────────────
+    const categories: any[] = [];
+    const products: any[] = [];
+    const catKeyByName = new Map<string, string>();
+    let currentCatKey: string | null = null;
+
+    const ensureCategory = (name: string): string => {
+      const key = catKeyByName.get(name.toLowerCase());
+      if (key) return key;
+      const newKey = `cat${categories.length + 1}`;
+      categories.push({ externalKey: newKey, name });
+      catKeyByName.set(name.toLowerCase(), newKey);
+      return newKey;
+    };
+
+    for (const line of lines) {
+      // Skip lines we already consumed as header metadata.
+      if (line === nameLine || line === addressLine || line === hoursLine || (phone && line.includes(phone))) continue;
+      if (/@/.test(line)) continue; // email / handle line
+
+      const price = this.priceOf(line, minorUnit);
+      if (price !== null) {
+        // Product line: name is everything before the price token, dot leaders stripped.
+        let name = line.slice(0, price.index).replace(/[.\s·•—–-]+$/u, '').trim();
+        if (!name) name = line.replace(price.raw, '').replace(/[.\s·•—–-]+$/u, '').trim();
+        if (!name) continue;
+        if (!currentCatKey) currentCatKey = ensureCategory('Menu');
+        products.push({
+          externalKey: `prod${products.length + 1}`,
+          categoryKey: currentCatKey,
+          name,
+          description: null,
+          price: price.minor,
+          currency,
+          available: true,
+        });
+      } else if (line.length <= 40 && /[a-zA-ZÀ-ſ]/.test(line)) {
+        // No price + short alpha line → treat as a category header.
+        currentCatKey = ensureCategory(line.replace(/[:\s]+$/, ''));
+      }
+    }
+
+    if (products.length === 0) {
+      issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: 'No menu items could be detected in the document.', severity: 'error' } as any);
+      return this.fallbackError(issues);
+    }
+
+    const canonicalDraft: CanonicalMenuDraft = {
+      categories,
+      products,
+      modifierGroups: [],
+      modifiers: [],
+      links: [],
+      translations: [],
+    };
+
+    return {
+      draft: canonicalDraft,
+      issues,
+      summary: {
+        valid: products.length,
+        errors: 0,
+        warnings: issues.length,
+        mode: 'merge',
+        low_confidence_count: 0,
+      },
+      ...(restaurant ? { restaurant } : {}),
+      // provenance fields surfaced for parity with the LLM path
+      _provenance: {
+        source: 'ai-ocr',
+        raw_text_hash: crypto.createHash('sha256').update(redactedText).digest('hex'),
+        model_id: 'heuristic',
+        ocr_engine: ocrEngineUsed,
+        ocr_ms: ocrMs,
+        llm_ms: Date.now() - t1,
+      },
+    } as any;
+  }
+
+  /**
+   * Extract a trailing price token from a menu line. Returns null when the line
+   * has no plausible price. `minor` is the integer price in the currency's minor
+   * units (e.g. "8.50" with minorUnit 2 → 850, "800 Lek" with minorUnit 0 → 800).
+   */
+  private priceOf(line: string, minorUnit: number): { minor: number; index: number; raw: string } | null {
+    // Currency-tagged or trailing number: "... 8.50 EUR", "... 800 Lek", "... €12", "... 1.200".
+    const re = /(?:€|£|\$|lek|all|eur|usd|gbp)?\s*([0-9][0-9.,\s]*[0-9]|[0-9])\s*(?:€|£|\$|lek|all|eur|usd|gbp)?\s*$/i;
+    const m = line.match(re);
+    if (!m || !m[1]) return null;
+    const raw = m[1];
+    let num = raw.replace(/\s/g, '');
+    // Normalise decimal separator: both '.' and ',' present → '.'=thousands? assume
+    // last separator is decimal. Single ',' → decimal. '.' as thousands if 3 trailing.
+    if (num.includes('.') && num.includes(',')) {
+      num = num.lastIndexOf(',') > num.lastIndexOf('.')
+        ? num.replace(/\./g, '').replace(',', '.')
+        : num.replace(/,/g, '');
+    } else if (num.includes(',')) {
+      num = /,\d{3}$/.test(num) ? num.replace(/,/g, '') : num.replace(',', '.');
+    } else if (/\.\d{3}$/.test(num)) {
+      num = num.replace(/\./g, ''); // "1.200" → 1200 (thousands)
+    }
+    const value = Number(num);
+    if (!isFinite(value) || value <= 0 || value > 1_000_000) return null;
+    const minor = Math.round(value * Math.pow(10, minorUnit));
+    if (minor <= 0) return null;
+    return { minor, index: m.index ?? line.lastIndexOf(raw), raw: m[0] };
   }
 
   private fallbackError(issues: ParseIssue[]): ParseResult {
