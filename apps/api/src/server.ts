@@ -592,6 +592,20 @@ fastify.register(mockAuthRoutes, { db: pool });
       return reply.send({ access_token: accessToken, userId: courierId, activeLocationId: locationId });
     }
 
+    // Fresh-owner E2E mode: mint a brand-new owner with NO location membership so
+    // the admin flow lands on the onboarding wizard (/admin/onboarding) instead of
+    // the demo dashboard. Each call is a distinct throwaway user.
+    if (body.fresh === true) {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const fRes = await pool.query(
+        `INSERT INTO users (email, google_sub, display_name) VALUES ($1, $2, 'E2E Fresh Owner') RETURNING id`,
+        [`fresh-${suffix}@e2e.dowiz`, `mock-fresh-${suffix}`],
+      );
+      const fUserId = fRes.rows[0].id;
+      const fToken = await signAuthToken({ role: 'owner', userId: fUserId, sub: fUserId } as any, '1d');
+      return reply.send({ access_token: fToken, userId: fUserId, activeLocationId: undefined });
+    }
+
     // Owner role: create/upsert dev user and return owner token
     const email = 'dev@deliveryos.com';
     const googleSub = 'mock-google-12345';
