@@ -100,8 +100,8 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
             [orderId],
           );
           if (dr.rowCount > 0) {
-            // provider is metrics-only and not persisted; tag the durable copy as 'self'.
-            storedRoute = { polyline: dr.rows[0].polyline, distance_m: dr.rows[0].distance_meters, duration_s: dr.rows[0].duration_seconds, provider: 'self' };
+            // polyline is stored as JSON text; provider is metrics-only and not persisted.
+            storedRoute = { polyline: JSON.parse(dr.rows[0].polyline), distance_m: dr.rows[0].distance_meters, duration_s: dr.rows[0].duration_seconds, provider: 'self' };
           }
         } catch { /* order_routes may not be migrated yet — advisory, fail soft */ }
       }
