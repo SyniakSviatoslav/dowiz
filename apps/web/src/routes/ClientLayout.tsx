@@ -8,11 +8,13 @@ import { apiClient } from '../lib/index.js';
 import { z } from 'zod';
 
 const PublicThemeResponse = z.object({
-  locationName: z.string().optional(),
-  logoUrl: z.string().optional(),
-  primaryColor: z.string().optional(),
-  bgColor: z.string().optional(),
-  textColor: z.string().optional(),
+  // The API sends null (not undefined) for unset fields — accept null or the
+  // parse throws and the whole theme/branding/supported-locales fetch is lost.
+  locationName: z.string().nullable().optional(),
+  logoUrl: z.string().nullable().optional(),
+  primaryColor: z.string().nullable().optional(),
+  bgColor: z.string().nullable().optional(),
+  textColor: z.string().nullable().optional(),
   supportedLocales: z.array(z.string()).nullable().optional(),
 }).passthrough();
 import { CartProvider, useSharedCart } from '../lib/CartProvider.js';

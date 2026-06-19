@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal } from '@deliveryos/ui';
 import { CURRENCIES } from '@deliveryos/shared-types';
 import type { LngLatLike } from '@deliveryos/ui';
-import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
+import { PHONE_E164_REGEX } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 
@@ -499,7 +499,7 @@ export function CheckoutPage() {
               <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.phone', 'Phone')}</label>
               <div className="relative">
                 <i className="ti ti-phone absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} placeholder="+355 6X XXX XXXX" pattern={PHONE_E164_PATTERN} title="+355 followed by 7-14 digits" type="tel" inputMode="tel" autoComplete="tel" data-testid="checkout-phone" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} placeholder="+355 6X XXX XXXX" title="+355 followed by 7-14 digits" type="tel" inputMode="tel" autoComplete="tel" data-testid="checkout-phone" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
                 {phoneError && <p role="alert" className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{phoneError}</p>}
               </div>
             </div>
