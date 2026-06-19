@@ -215,10 +215,21 @@ export interface ParseIssue {
   raw?: string;
 }
 
+// Restaurant-level metadata extracted from a menu document (PDF/photo). Business
+// contact info only — NOT customer PII. Surfaced for review and written to the
+// location on commit so onboarding can pre-fill address/phone from the menu.
+export interface RestaurantMeta {
+  name?: string;
+  address?: string;
+  phone?: string;
+  hoursText?: string;
+}
+
 export interface ParseResult {
   draft: CanonicalMenuDraft;
   issues: ParseIssue[];
   summary: { valid: number; errors: number; warnings: number; mode: ParseMode; low_confidence_count?: number };
+  restaurant?: RestaurantMeta;
 }
 
 export interface CsvParseConfig {
