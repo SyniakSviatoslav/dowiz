@@ -43,6 +43,18 @@ export default async function healthRoutes(
   fastify: FastifyInstance,
   opts: { db: Pool; messageBus: MessageBus },
 ) {
+  // Liveness probe — the ONLY endpoint Fly's machine health check should hit.
+  // It must answer well within Fly's check timeout (3s). The rich /health below
+  // runs ~11 sequential DB queries plus external Telegram/R2 calls and can blow
+  // past 3s under load, which made Fly kill the machine and drop every live
+  // WebSocket ("service falling down"). Liveness only asks "is the event loop
+  // responsive?" — it deliberately does NOT touch Postgres, because restarting
+  // the machine can't fix an external DB blip and would just sever all sockets.
+  // Use /health for DB-aware readiness/ops monitoring.
+  fastify.get('/livez', { config: { rateLimit: false } }, async (_request, reply) => {
+    return reply.status(200).send({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   fastify.get('/health', { config: { rateLimit: false } }, async (request, reply) => {
     // ── 1. Postgres (Critical) ──────────────────────────────────────
     const pgResult = await withTimeout<{ rows: Array<{ alive: number }> }>(

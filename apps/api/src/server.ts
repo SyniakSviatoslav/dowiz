@@ -51,7 +51,7 @@ import fastifyCors from '@fastify/cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getFastifyLoggerConfig, generateCorrelationId, correlationStore } from './lib/logger.js';
-import { initSentry } from './lib/sentry.js';
+import { initSentry, getSentry } from './lib/sentry.js';
 import { WorkerHeartbeat } from './lib/worker/heartbeat.js';
 import { LivenessChecker } from './workers/liveness-checker.js';
 import securityHeadersPlugin from './lib/security/headers.js';
@@ -117,6 +117,22 @@ async function main() {
     initSentry(env.SENTRY_DSN, env.GIT_SHA);
     console.log('[API] Sentry initialized');
   }
+
+  // Last-resort process guards. A single floating promise rejection or uncaught
+  // error must NOT take the whole web process down — that drops every live
+  // WebSocket (owner dashboard, courier, customer tracking) with it. Sentry only
+  // installs its own handlers when a DSN is set, so register ours unconditionally:
+  // log, forward to Sentry if present, and keep serving. Registering an
+  // 'uncaughtException' listener also suppresses Node's default crash-and-exit.
+  // Genuinely wedged states are still caught by Fly's liveness probe (/livez).
+  process.on('unhandledRejection', (reason: unknown) => {
+    console.error('[API] unhandledRejection (kept alive):', reason);
+    getSentry()?.captureException(reason);
+  });
+  process.on('uncaughtException', (err: Error) => {
+    console.error('[API] uncaughtException (kept alive):', err);
+    getSentry()?.captureException(err);
+  });
 
   const fastify = Fastify({
     logger: getFastifyLoggerConfig(),
