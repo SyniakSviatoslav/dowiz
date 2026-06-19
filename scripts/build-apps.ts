@@ -10,6 +10,11 @@ async function build() {
     format: 'cjs',
     minify: false,
     sourcemap: true,
+    // CJS output: `import.meta.url` is undefined, which crashes code that does
+    // fileURLToPath(import.meta.url) at boot (e.g. the static-root dirName). Inject a
+    // CJS-safe value from the native __filename so import.meta.url resolves correctly.
+    define: { 'import.meta.url': '__IMPORT_META_URL__' },
+    banner: { js: "const __IMPORT_META_URL__ = require('url').pathToFileURL(__filename).href;" },
     // We want all workspaces (which are essentially local packages) bundled 
     // into the single file. We mark external generic node_modules that should
     // not be bundled or are native modules.
