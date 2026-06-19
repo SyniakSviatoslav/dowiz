@@ -22,7 +22,10 @@ test.describe('Onboarding QA fixes', () => {
     const token = await freshOwnerToken(request);
     test.skip(!token, 'mock-auth fresh owner unavailable (no DEV_AUTH_SECRET on target)');
 
-    await page.addInitScript((t) => localStorage.setItem('dos_access_token', t), token);
+    await page.addInitScript((t) => {
+      localStorage.setItem('dos_access_token', t);
+      localStorage.setItem('dos_locale', 'en'); // assert against English copy deterministically
+    }, token);
     await page.goto('/admin');
     await page.waitForLoadState('networkidle');
 
@@ -37,20 +40,28 @@ test.describe('Onboarding QA fixes', () => {
     const token = await freshOwnerToken(request);
     test.skip(!token, 'mock-auth fresh owner unavailable (no DEV_AUTH_SECRET on target)');
 
-    await page.addInitScript((t) => localStorage.setItem('dos_access_token', t), token);
+    await page.addInitScript((t) => {
+      localStorage.setItem('dos_access_token', t);
+      localStorage.setItem('dos_locale', 'en'); // assert against English copy deterministically
+    }, token);
     await page.goto('/admin/onboarding');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.getByText('Couriers', { exact: true })).toBeVisible();      // O2
-    await expect(page.getByText('Test order', { exact: true })).toBeVisible();     // O4
-    await expect(page.getByText('Courier:', { exact: true })).toHaveCount(0);      // O2 (no leaked colon)
+    // Scope to the wizard body — "Couriers" also appears in the admin bottom-nav.
+    const main = page.getByRole('main');
+    await expect(main.getByText('Couriers', { exact: true })).toBeVisible();       // O2
+    await expect(main.getByText('Test order', { exact: true })).toBeVisible();      // O4
+    await expect(page.getByText('Courier:', { exact: true })).toHaveCount(0);       // O2 (no leaked colon)
   });
 
   test('O3: menu step subhead does not promise a PDF import', async ({ page, request }) => {
     const token = await freshOwnerToken(request);
     test.skip(!token, 'mock-auth fresh owner unavailable (no DEV_AUTH_SECRET on target)');
 
-    await page.addInitScript((t) => localStorage.setItem('dos_access_token', t), token);
+    await page.addInitScript((t) => {
+      localStorage.setItem('dos_access_token', t);
+      localStorage.setItem('dos_locale', 'en'); // assert against English copy deterministically
+    }, token);
     await page.goto('/admin/onboarding');
     await page.waitForLoadState('networkidle');
 
