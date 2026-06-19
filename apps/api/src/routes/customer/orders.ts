@@ -28,7 +28,7 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
 
     try {
       const orderRes = await db.query(`
-         SELECT o.id, o.status, o.delivery_address, o.delivery_instructions,
+         SELECT o.id, o.status, o.type, o.delivery_address, o.delivery_instructions,
                 o.total, o.created_at::text as created_at,
                 o.delivery_lat, o.delivery_lng,
                ca.courier_id, ca.status as assignment_status
@@ -95,6 +95,7 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
       return reply.status(200).send({
         id: row.id,
         status: row.status,
+        type: row.type,
         rating,
         feedback,
         route: storedRoute
