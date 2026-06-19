@@ -47,12 +47,12 @@ export function OnboardingPage() {
     t('admin.restaurant', 'Restaurant'),
     t('admin.menu', 'Menu'),
     t('admin.location_zone', 'Location & Zone'),
-    t('admin.courier', 'Courier'),
+    t('admin.courier_step', 'Couriers'),
     t('admin.branding', 'Branding'),
     t('admin.preview', 'Preview'),
     t('admin.share', 'Share'),
     t('admin.publish', 'Publish'),
-    t('admin.flow_test', 'Flow Test'),
+    t('admin.flow_test_step', 'Test order'),
   ];
 
   const [name, setName] = useState('');
@@ -612,7 +612,7 @@ export function OnboardingPage() {
             {/* Step 8: Flow Test */}
             {step === 8 && (
               <div style={s.card} className="space-y-4">
-                <h2 className="text-xl font-bold" style={s.heading}>{t('admin.flow_test', 'Flow Test')}</h2>
+                <h2 className="text-xl font-bold" style={s.heading}>{t('admin.flow_test_step', 'Test order')}</h2>
                 <p style={s.muted}>{t('admin.flow_test_desc', 'Run a real order through the full lifecycle to verify everything works.')}</p>
 
                 {!flowTestPassed ? (
