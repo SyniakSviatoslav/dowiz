@@ -213,3 +213,26 @@ Driving the **real API endpoints** end-to-end succeeded (no source changes; one 
    prod in a separate confirmed step.
 
 Each fix ships with programmatic proof (test/E2E) per the Mandatory Proof Rule.
+
+---
+
+## 6. Post-fix final verification (2026-06-19) — 🟢 GREEN, GO for staging
+
+Re-ran on a **clean reseed** of the local stack (branch `feat/v1-hardening`):
+
+- **Lifecycle (launch gate):** order→PENDING→CONFIRMED→PREPARING→READY→IN_DELIVERY (auto-assigns the
+  seeded on-shift courier)→accept→picked-up→delivered, cash matched, final **DELIVERED** — all 200/201.
+- **Idempotency:** same-key replay → same order id. **OTP:** required→`soft_confirm/requiresOtp`,
+  send→200, verify reachable+public. **PII:** customer JWT has no `phone` claim. **Cross-tenant:**
+  owner-A→demo2 = 404, own = 200. **anon order fetch** = 401. **sitemap** 200, **SSR title** per-tenant.
+  **WS dedup** churn test passes. **Suites:** preflight 17/17, 71 unit tests pass, both phase5 suites
+  now execute (0×42601).
+
+**Follow-ups (non-blocking — test-fixture only):**
+- **TI-6:** `phase5/integrity` R1/R2 write `orders.idempotency_key` (column lives in the `idempotency_keys`
+  table) → fixture drift. Real idempotency proven green via the live lifecycle.
+- **TI-7:** `phase5/rls-adversarial` applies `WHERE location_id` to the `locations` table (no such column;
+  it *is* the tenant) → aborts the txn, cascading. Real RLS proven green via the cross-tenant 404.
+- The `:3003` phase-test harness (TI-3) and lifecycle UI test-seams (TI-4) remain as test-infra follow-ups.
+- New regional/DR note: the bundled `dist/api/server.cjs` resolves native externals (argon2/sharp/aws-sdk)
+  at runtime (installed in the Docker runtime stage / present in prod), as designed.

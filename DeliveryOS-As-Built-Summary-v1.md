@@ -4,6 +4,15 @@
 > **Version:** v1 · **Status:** DRAFT — pre-pilot readiness assessment  
 > **Tests:** 92 unique tests × 3 breakpoints = 276 total, ALL GREEN, 0 failures, 0 flaky
 
+> 🔄 **UPDATE 2026-06-19 (v1 hardening):** §5/§6 below are superseded — see
+> [`docs/audit/v1-verification-2026-06-19.md`](./docs/audit/v1-verification-2026-06-19.md). Security
+> re-verified: **HOLDS 13 · WEAK 2 · BROKEN 0**. Shipped on branch `feat/v1-hardening`: phone PII
+> removed from the customer JWT; the **dead-stubbed preflight/anti-fraud + OTP layer restored** (it
+> was silently no-op in prod); **from-scratch DB provisioning fixed** (4 migration bugs + role &
+> pg-boss bootstrap + a CI smoke); `'open'/'active'` storefront break, sitemap 500, per-tenant SSR
+> SEO, WS duplicate-delivery, 40 a11y lint errors, checkout-OTP UI, and storefront image/allergen
+> polish. Remaining must-fix from §6 (per-phone throttle, non-superuser role) were already shipped.
+
 ---
 
 ## 1. Overview & Scope

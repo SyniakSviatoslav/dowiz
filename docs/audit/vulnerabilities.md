@@ -2,6 +2,16 @@
 
 > **Method:** Each red line (V1-V16) tested against code. Result: HOLDS / WEAK / BROKEN / N/A-deferred.
 
+> ⚠️ **RECONCILED 2026-06-19 (v1 hardening).** The per-line text below is the original Phase-D pass
+> and is **stale**. Re-verified against live code + a local full-stack run — see
+> [`v1-verification-2026-06-19.md`](./v1-verification-2026-06-19.md). Corrected tally: **HOLDS 13 ·
+> WEAK 2 (V10 WS N=1-only, V15 SCA unrun) · BROKEN 0**. Changes since this doc was written:
+> - **V1 → HOLDS**: non-superuser guardrail exists (`packages/db/src/index.ts`); prod connects as `deliveryos_api_user`, not `postgres`.
+> - **V4/V11/V12/V16 → HOLDS**: idempotency is location-scoped; per-phone throttle + custom error handler exist; courier routes are registered. (FX-4/5/6 shipped.)
+> - **V8 → HOLDS (fixed 2026-06-19)**: raw phone was still in the customer JWT despite the earlier "removed" claim — now dropped from the claim/schema and resolved server-side.
+> - **V3 is RS256** (not HS256). **V6 uses `textContent`** (no innerHTML XSS).
+> - **Also fixed 2026-06-19**: the anti-fraud **preflight module was missing → silently stubbed to `clean`**, disabling OTP + velocity/no-show signals in dev *and* prod; now wired fail-loud. From-scratch DB provisioning (migrations, roles, pg-boss) was broken; now green with a CI smoke.
+
 ---
 
 ## V1 · Tenant Isolation / RLS
