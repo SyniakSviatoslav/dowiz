@@ -325,6 +325,7 @@ export function OrderStatusPage() {
     : [19.817, 41.331];
 
   const isInDelivery = order?.status === 'IN_DELIVERY';
+  const isPickup = order?.type === 'pickup';
   // Prefer the smoothed route-based ETA; fall back to the WS naive ETA, then calcETA.
   const displayEta = eta.arriving
     ? t('order.arriving', 'Arriving')
@@ -356,21 +357,23 @@ export function OrderStatusPage() {
         </div>
       )}
 
-      {/* Live Courier Map */}
-      <div className="h-64 relative w-full" title={t('tooltip.courier_location', 'Courier current location')}>
-        <CourierLiveMap
-          className="h-full w-full"
-          couriers={courierLatLng ? [] : couriers}
-          liveCourier={courierLatLng}
-          routeLine={routeLine}
-          destinationPin={destPin}
-          center={courierPos}
-          zoom={14}
-        />
-        <div className="absolute top-4 left-4 bg-white/90 p-1.5 rounded-full shadow-md z-10" title={t('tooltip.ws_status', 'Connection status')}>
-          <WSStatusDot status={wsStatus === 'disabled' ? 'disconnected' : wsStatus} />
+      {/* Live Courier Map — delivery only (pickup has no courier) */}
+      {!isPickup && (
+        <div className="h-64 relative w-full" title={t('tooltip.courier_location', 'Courier current location')}>
+          <CourierLiveMap
+            className="h-full w-full"
+            couriers={courierLatLng ? [] : couriers}
+            liveCourier={courierLatLng}
+            routeLine={routeLine}
+            destinationPin={destPin}
+            center={courierPos}
+            zoom={14}
+          />
+          <div className="absolute top-4 left-4 bg-white/90 p-1.5 rounded-full shadow-md z-10" title={t('tooltip.ws_status', 'Connection status')}>
+            <WSStatusDot status={wsStatus === 'disabled' ? 'disconnected' : wsStatus} />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Screen-reader accessible courier status */}
       {order?.courierName && (
@@ -385,9 +388,15 @@ export function OrderStatusPage() {
         
         <div className="text-center">
           <h1 className="text-2xl font-bold text-[var(--brand-text)] mb-1" style={{ fontFamily: 'var(--brand-font-heading)' }}>
-            {displayEta}
+            {isPickup
+              ? (order.status === 'READY' ? t('order.ready_for_pickup', 'Ready for pickup')
+                 : order.status === 'PICKED_UP' ? t('order.picked_up', 'Picked up')
+                 : t('order.preparing', 'Preparing your order'))
+              : displayEta}
           </h1>
-          <p className="text-[var(--brand-text-muted)] text-sm">{t('client.estimated_arrival', 'Estimated arrival')}</p>
+          <p className="text-[var(--brand-text-muted)] text-sm">
+            {isPickup ? t('order.pickup_at_restaurant', 'Collect at the restaurant') : t('client.estimated_arrival', 'Estimated arrival')}
+          </p>
         </div>
 
         <div data-testid="order-status-badge" data-status={order?.status} aria-live="polite" aria-atomic="true">
