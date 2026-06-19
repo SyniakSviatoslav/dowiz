@@ -135,6 +135,9 @@ export function MapLibreBase({
         el.style.color = 'white';
         el.style.transform = 'translate(-50%, -50%)';
         el.textContent = label;
+        // Stable hooks for tests/automation (e.g. asserting live courier pins).
+        el.dataset.testid = 'map-marker';
+        if (m.id) el.dataset.markerId = m.id;
 
         const marker = new maplibregl.Marker({ element: el })
           .setLngLat(m.lngLat)
