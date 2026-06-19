@@ -8,6 +8,20 @@ import { PHONE_E164_REGEX } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 
+// Albania has no other realistic country here, so accept how people actually type
+// their number — local "069...", "0 69 ...", "00355...", bare "69..." — and coerce
+// to the E.164 (+355...) the backend requires, instead of silently rejecting it.
+function normalizeAlbanianPhone(raw: string): string {
+  const compact = (raw || '').replace(/[\s()\-.]/g, '');
+  if (!compact) return raw;
+  if (compact.startsWith('+')) return compact;
+  let digits = compact.replace(/\D/g, '');
+  if (digits.startsWith('00')) return '+' + digits.slice(2);
+  if (digits.startsWith('355')) return '+' + digits;
+  if (digits.startsWith('0')) digits = digits.slice(1); // drop the national trunk 0
+  return digits ? '+355' + digits : raw;
+}
+
 const OrderCreateResponse = z.object({
   id: z.string(),
   authToken: z.string().optional(),
@@ -284,10 +298,12 @@ export function CheckoutPage() {
     e.preventDefault();
     setOrderError('');
     if (items.length === 0 || !slug || !locationId) return;
-    if (!phone || !PHONE_E164_REGEX.test(phone)) {
+    const e164 = normalizeAlbanianPhone(phone);
+    if (!e164 || !PHONE_E164_REGEX.test(e164)) {
       setPhoneError(t('checkout.phone_invalid', 'Enter a valid phone number (+355...)'));
       return;
     }
+    if (e164 !== phone) setPhone(e164); // reflect the normalized value back in the field
     setPhoneError('');
     
     // Validate entrance and apartment for delivery orders
@@ -330,7 +346,7 @@ export function CheckoutPage() {
           type: 'delivery',
           items: orderItems,
           customer: {
-            phone: phone,
+            phone: normalizeAlbanianPhone(phone),
             name: customerName || undefined,
           },
           delivery: {
@@ -427,7 +443,7 @@ export function CheckoutPage() {
       method: 'POST',
       schema: OtpSendResponse,
       body: {
-        phone,
+        phone: normalizeAlbanianPhone(phone),
         order_intent: {
           items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
           total,
@@ -444,7 +460,7 @@ export function CheckoutPage() {
       method: 'POST',
       schema: OtpVerifyResponse,
       body: {
-        phone,
+        phone: normalizeAlbanianPhone(phone),
         code,
         otp_token: otpToken,
         order_intent_hash: orderIntentHashHex(),
@@ -499,7 +515,7 @@ export function CheckoutPage() {
               <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.phone', 'Phone')}</label>
               <div className="relative">
                 <i className="ti ti-phone absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} placeholder="+355 6X XXX XXXX" title="+355 followed by 7-14 digits" type="tel" inputMode="tel" autoComplete="tel" data-testid="checkout-phone" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} onBlur={() => setPhone(p => normalizeAlbanianPhone(p))} placeholder="+355 6X XXX XXXX" title="+355 followed by 7-14 digits" type="tel" inputMode="tel" autoComplete="tel" data-testid="checkout-phone" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
                 {phoneError && <p role="alert" className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{phoneError}</p>}
               </div>
             </div>
