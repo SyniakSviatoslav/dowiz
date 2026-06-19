@@ -29,13 +29,27 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-// The built SPA shell lives at apps/api/public/index.html (same root fastify-static
-// serves). Read once and cache — it is immutable per deploy.
-const SHELL_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'public', 'index.html');
+// The built SPA shell lives next to fastify-static's root. The relative depth
+// differs between the source layout (apps/api/src/lib → ../../public) and the
+// bundled deploy (dist/api/server.cjs → ../public, where index.html is at
+// dist/public). The old single hard-coded '../../public' resolved to /app/public
+// in the bundle — which doesn't exist — so readShell threw and every human page
+// load fell back to the generic <title>Dowiz</title> shell. Try candidates and
+// cache the first that exists, mirroring server.ts's __dirname-first resolution.
+const _here = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
+const SHELL_CANDIDATES = [
+  path.join(_here, '..', 'public', 'index.html'),         // bundled: dist/api → dist/public
+  path.join(_here, '..', '..', 'public', 'index.html'),   // source:  apps/api/src/lib → apps/api/public
+  path.join(process.cwd(), 'dist', 'public', 'index.html'),
+  path.join(process.cwd(), 'public', 'index.html'),
+];
 let _shellCache: string | null = null;
 function readShell(): string {
-  if (_shellCache == null) _shellCache = fs.readFileSync(SHELL_PATH, 'utf8');
-  return _shellCache;
+  if (_shellCache != null) return _shellCache;
+  for (const p of SHELL_CANDIDATES) {
+    try { _shellCache = fs.readFileSync(p, 'utf8'); return _shellCache; } catch { /* try next */ }
+  }
+  throw new Error('SPA shell index.html not found in: ' + SHELL_CANDIDATES.join(', '));
 }
 
 interface TenantMeta {
