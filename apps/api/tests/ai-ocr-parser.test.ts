@@ -110,7 +110,7 @@ test('AiOcrParser - corrupt PDF: returns parse error', async () => {
 //  3. PII Redaction
 // ═══════════════════════════════════════════════════════════════════
 
-test('AiOcrParser - PDF with PII: redacts phone, email before LLM stage', async () => {
+test('AiOcrParser - menu document is fed un-redacted so the venue contact survives', async () => {
   const prev = process.env.LLM_PROVIDER;
   process.env.LLM_PROVIDER = 'mock';
 
@@ -123,11 +123,12 @@ test('AiOcrParser - PDF with PII: redacts phone, email before LLM stage', async 
 
   process.env.LLM_PROVIDER = prev;
 
-  // The mock result bypasses redaction, but we should still see
-  // that PII-related warnings exist from pre-LLM redaction.
-  // Since mock skips LLM stage, the redaction issues should appear.
+  // Behaviour change (approved): a menu document carries only the business's OWN
+  // contact (no customer PII), and onboarding needs to extract the venue
+  // address/phone — so the document is no longer pre-redacted before the model.
+  // The parser must therefore NOT emit PII-redaction warnings for a menu.
   const piiIssues = res.issues.filter(i => i.code === 'POTENTIALLY_UNSAFE_VALUE');
-  assert.ok(piiIssues.length > 0, 'should flag PII redactions');
+  assert.equal(piiIssues.length, 0, 'menu contact is intentionally not redacted');
 });
 
 // ═══════════════════════════════════════════════════════════════════
