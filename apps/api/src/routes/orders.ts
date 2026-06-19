@@ -85,6 +85,10 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       return reply.status(400).send({ code: 400, error: issues || 'Validation error' });
     }
     const { locationId, items, customer: cust, delivery, idempotency_key, cash_pay_with: cashPayWith, delivery_instructions: rawInstructions } = input;
+    // Pickup orders carry no delivery pin/address and incur no delivery fee.
+    const isPickup = input.type === 'pickup';
+    const pin = isPickup ? null : delivery!.pin;
+    const deliveryAddressText = isPickup ? null : (delivery?.address_text ?? null);
 
     let client;
     try {
@@ -172,15 +176,16 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         quantity: i.quantity,
         modifier_ids: [...(i.modifier_ids || [])].sort()
       }));
-      const lat_rounded_5 = Math.round(delivery.pin.lat * 100000) / 100000;
-      const lng_rounded_5 = Math.round(delivery.pin.lng * 100000) / 100000;
+      const lat_rounded_5 = pin ? Math.round(pin.lat * 100000) / 100000 : null;
+      const lng_rounded_5 = pin ? Math.round(pin.lng * 100000) / 100000 : null;
       const customerId = request.user?.role === 'customer' ? request.user.userId : 'anonymous';
 
       const canonicalBody = JSON.stringify({
         locationId,
+        type: input.type,
         items: canonicalItems,
-        pin: { lat: lat_rounded_5, lng: lng_rounded_5 },
-        address_text: delivery.address_text || null,
+        pin: pin ? { lat: lat_rounded_5, lng: lng_rounded_5 } : null,
+        address_text: deliveryAddressText,
         cash_pay_with: cashPayWith || null,
         currency_code: location.currency_code,
         menu_version: menuVersion,
@@ -490,6 +495,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       }
 
       let deliveryFee = 0;
+      if (!isPickup) {
       if (location.free_delivery_threshold !== null && subtotal >= location.free_delivery_threshold) {
         deliveryFee = 0;
       } else {
@@ -500,7 +506,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         const tiers = distRes.rows;
 
         if (tiers.length > 0 && location.lat != null && location.lng != null) {
-          const distKm = distanceKm(delivery.pin.lat, delivery.pin.lng, location.lat, location.lng);
+          const distKm = distanceKm(pin!.lat, pin!.lng, location.lat, location.lng);
           let foundTier = false;
           for (const tier of tiers) {
             if (distKm <= Number(tier.max_distance_km)) {
@@ -520,6 +526,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           return reply.status(422).send({ error: 'Delivery not configured', code: 'DELIVERY_NOT_CONFIGURED' });
         }
       }
+      } // end if (!isPickup) — pickup orders pay no delivery fee
 
       // 9. Taxes and Total
       const taxTotal = applyTax(subtotal, Number(location.tax_rate), location.price_includes_tax, location.currency_minor_unit);
@@ -563,16 +570,17 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           metadata,
           preflight
          )
-         VALUES ($1, $2, 'delivery', 'PENDING', $3, $4, $5, $6, $7, $8, $9, $10, 'cash', $11, $12, $13, $14, $15, $16, $17, $18, $19)
+         VALUES ($1, $2, $20, 'PENDING', $3, $4, $5, $6, $7, $8, $9, $10, 'cash', $11, $12, $13, $14, $15, $16, $17, $18, $19)
          RETURNING id, status, subtotal, total, created_at::text, timeout_at::text`,
         [
-          locationId, resolvedCustomerId, delivery.address_text || null, delivery.pin.lat, delivery.pin.lng,
+          locationId, resolvedCustomerId, deliveryAddressText, pin?.lat ?? null, pin?.lng ?? null,
           subtotal, deliveryFee, taxTotal, discountTotal, total,
-          cashPayWith ?? null, location.currency_code, 
+          cashPayWith ?? null, location.currency_code,
           menuVersion, (input as any).client_menu_version || null, requestHash, timeoutAt,
           rawInstructions || null,
           JSON.stringify({ otp_verified: otpServerVerified, client_ip_hash: clientIpHash }),
           preflightMeta,
+          input.type,
         ]
       );
       const order = orderRes.rows[0];
@@ -842,7 +850,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
        await withTenant(db, user.userId, async (client) => {
          // 1. Read current status
          const cur = await client.query(
-           `SELECT id, status, location_id FROM orders WHERE id = $1`,
+           `SELECT id, status, location_id, type FROM orders WHERE id = $1`,
            [id]
          );
 
@@ -856,8 +864,9 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
             messageBus
           });
 
-          // 3. If transitioning to IN_DELIVERY, find and assign available courier synchronously
-          if (newStatus === 'IN_DELIVERY') {
+          // 3. If transitioning to IN_DELIVERY, find and assign available courier synchronously.
+          // Pickup orders are never dispatched to a courier (READY → PICKED_UP instead).
+          if (newStatus === 'IN_DELIVERY' && cur.rows[0].type === 'delivery') {
             const availRes = await client.query(
               `SELECT c.id AS courier_id, cs.id AS shift_id
                FROM couriers c

@@ -39,7 +39,7 @@ export type OrderItemInput = z.infer<typeof OrderItemInput>;
   // ─── Create Order Input ──────────────────────────────────────────────
   export const CreateOrderInput = z.object({
     locationId: z.string().uuid(),
-    type: z.literal('delivery'),
+    type: z.enum(['delivery', 'pickup']),
     items: z.array(OrderItemInput).min(1),
     customer: z.object({
       phone: z.string().min(6).max(20).optional(),
@@ -51,7 +51,7 @@ export type OrderItemInput = z.infer<typeof OrderItemInput>;
         lng: z.number().min(-180).max(180),
       }).strict(),
       address_text: z.string().min(1).max(500).optional(),
-    }).strict(),
+    }).strict().optional(),
     payment: z.object({
       method: z.literal('cash'),
     }).strict(),
@@ -62,7 +62,12 @@ export type OrderItemInput = z.infer<typeof OrderItemInput>;
     // Preflight (E27)
     acknowledged_codes: z.array(z.string()).max(10).optional().default([]),
     otp_code: z.string().length(6).regex(/^\d{6}$/).optional(),
-  }).strict();
+  }).strict().superRefine((val, ctx) => {
+    // Delivery orders must carry a delivery pin; pickup orders must not.
+    if (val.type === 'delivery' && !val.delivery) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['delivery'], message: 'delivery is required for delivery orders' });
+    }
+  });
 
 export type CreateOrderInput = z.infer<typeof CreateOrderInput>;
 
@@ -103,7 +108,7 @@ export const OrderResponse = z.object({
   locationId: z.string().uuid(),
   customerId: z.string().uuid().nullable(),
   status: OrderStatusEnum,
-  type: z.literal('delivery'),
+  type: z.enum(['delivery', 'pickup']),
   deliveryAddress: z.string().nullable(),
   deliveryInstructions: z.string().nullable(),
   subtotal: z.number().int(),
@@ -120,6 +125,7 @@ export type OrderResponse = z.infer<typeof OrderResponse>;
 export const CustomerOrderStatusResponse = z.object({
   id: z.string().uuid(),
   status: OrderStatusEnum,
+  type: z.enum(['delivery', 'pickup']).optional(),
   deliveryAddress: z.string().nullable(),
   deliveryInstructions: z.string().nullable(),
   total: z.number().int(),

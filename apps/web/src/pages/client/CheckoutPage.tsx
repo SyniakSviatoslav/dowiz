@@ -343,17 +343,20 @@ export function CheckoutPage() {
         headers: verifiedToken ? { 'x-otp-verified': verifiedToken } : undefined,
         body: {
           locationId: locationId,
-          type: 'delivery',
+          type: deliveryType === 'pickup' ? 'pickup' : 'delivery',
           items: orderItems,
           customer: {
             phone: normalizeAlbanianPhone(phone),
             name: customerName || undefined,
           },
-          delivery: {
-            pin: { lat: pinLat, lng: pinLng },
-            address_text: address || undefined,
-            notes: notes.trim() || undefined,
-          },
+          // Pickup orders carry no delivery pin/address (no delivery fee).
+          ...(deliveryType === 'pickup' ? {} : {
+            delivery: {
+              pin: { lat: pinLat, lng: pinLng },
+              address_text: address || undefined,
+              notes: notes.trim() || undefined,
+            },
+          }),
           payment: { method: 'cash' },
           cash_pay_with: cashAmount > 0 ? cashAmount : undefined,
           idempotency_key: idempotencyKey,
@@ -531,7 +534,7 @@ export function CheckoutPage() {
           <div className="flex p-1 rounded-[10px] mb-6 gap-0.5" role="tablist" aria-label={t('checkout.delivery_type', 'Delivery type')} style={{ background: 'var(--brand-surface)' }}>
             <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'delivery'} onClick={() => setDeliveryType('delivery')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('delivery')}>{t('courier.deliver')}</motion.button>
             <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'pickup'} onClick={() => setDeliveryType('pickup')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('pickup')}>{t('courier.pickup')}</motion.button>
-            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'scheduled'} onClick={() => setDeliveryType('scheduled')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('scheduled')}>{t('order.scheduled')}</motion.button>
+            {/* Scheduled is scaffold (not yet implemented end-to-end) — hidden until supported. */}
           </div>
 
           {deliveryType === 'delivery' && (
