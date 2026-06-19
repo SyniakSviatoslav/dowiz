@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LanguageSwitcher, BottomTabBar, CurrencySwitcher } from '@deliveryos/ui';
+import { LanguageSwitcher, BottomTabBar, CurrencySwitcher, useI18n } from '@deliveryos/ui';
 import type { TabItem } from '@deliveryos/ui';
 import { TasksPage } from '../pages/courier/TasksPage.js';
 import { DeliveryPage } from '../pages/courier/DeliveryPage.js';
@@ -9,16 +9,18 @@ import { EarningsPage } from '../pages/courier/EarningsPage.js';
 import { HistoryPage } from '../pages/courier/HistoryPage.js';
 import { ShiftPage } from '../pages/courier/ShiftPage.js';
 
-const TABS: TabItem[] = [
-  { key: 'tasks', label: 'Tasks', icon: 'ti ti-clipboard-list', href: '/courier' },
-  { key: 'earnings', label: 'Earnings', icon: 'ti ti-coin', href: '/courier/earnings' },
-  { key: 'history', label: 'History', icon: 'ti ti-history', href: '/courier/history' },
-  { key: 'shift', label: 'Shift', icon: 'ti ti-clock', href: '/courier/shift' },
+const TAB_DEFS = [
+  { key: 'tasks', icon: 'ti ti-clipboard-list', href: '/courier' },
+  { key: 'earnings', icon: 'ti ti-coin', href: '/courier/earnings' },
+  { key: 'history', icon: 'ti ti-history', href: '/courier/history' },
+  { key: 'shift', icon: 'ti ti-clock', href: '/courier/shift' },
 ];
 
 function CourierLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useI18n();
+  const TABS: TabItem[] = TAB_DEFS.map(d => ({ ...d, label: t(`courier.${d.key}`) }));
   const isDev = typeof window !== 'undefined' && (sessionStorage.getItem('dos_dev') === '1' || new URLSearchParams(window.location.search).get('dev') === 'true');
   const devSuffix = isDev ? '?dev=true' : '';
 

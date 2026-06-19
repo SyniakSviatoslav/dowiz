@@ -179,6 +179,35 @@ async function run() {
       [product1Id, modGrp2Id, realDemoLocId]
     );
 
+    // Modifier translations — sq (default) + en + uk, so the product modal
+    // localizes group/option labels instead of leaking the seeded language.
+    await pool.query(
+      `INSERT INTO modifier_group_translations (group_id, locale, name)
+       SELECT mg.id, v.locale, v.name
+       FROM modifier_groups mg
+       JOIN (VALUES
+         ('Розмір','sq','Madhësia'), ('Розмір','en','Size'), ('Розмір','uk','Розмір'),
+         ('Додатки','sq','Shtesa'), ('Додатки','en','Add-ons'), ('Додатки','uk','Додатки')
+       ) AS v(src, locale, name) ON v.src = mg.name
+       WHERE mg.location_id = $1
+       ON CONFLICT (group_id, locale) DO UPDATE SET name = EXCLUDED.name`,
+      [realDemoLocId]
+    );
+    await pool.query(
+      `INSERT INTO modifier_translations (modifier_id, locale, name)
+       SELECT m.id, v.locale, v.name
+       FROM modifiers m
+       JOIN (VALUES
+         ('Мала','sq','E vogël'), ('Мала','en','Small'), ('Мала','uk','Мала'),
+         ('Велика','sq','E madhe'), ('Велика','en','Large'), ('Велика','uk','Велика'),
+         ('Сирок','sq','Djathë'), ('Сирок','en','Cheese'), ('Сирок','uk','Сирок'),
+         ('Гриби','sq','Kërpudha'), ('Гриби','en','Mushrooms'), ('Гриби','uk','Гриби')
+       ) AS v(src, locale, name) ON v.src = m.name
+       WHERE m.location_id = $1
+       ON CONFLICT (modifier_id, locale) DO UPDATE SET name = EXCLUDED.name`,
+      [realDemoLocId]
+    );
+
     // Translations — Albanian + English
     await pool.query(
       `INSERT INTO product_translations (product_id, locale, name, description)

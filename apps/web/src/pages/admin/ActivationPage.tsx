@@ -173,7 +173,7 @@ export function ActivationPage() {
               onClick={publish}
               disabled={!status?.canPublish || publishing}
               className="w-full py-3 rounded-xl font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ background: 'var(--brand-primary)', color: '#fff' }}
+              style={{ background: 'var(--brand-primary-strong)', color: '#fff' }}
             >
               {publishing ? t('activation.publishing', 'Publishing…') : t('activation.publish', 'Publish storefront')}
             </button>
@@ -234,7 +234,7 @@ export function ActivationPage() {
             <input value={editPrice} onChange={(e) => setEditPrice(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" className="w-full mb-4 px-3 py-2 rounded-lg outline-none" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }} />
             <div className="flex gap-2">
               <button onClick={() => setEditing(null)} className="flex-1 py-2 rounded-lg font-semibold" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }}>{t('common.cancel', 'Cancel')}</button>
-              <button onClick={saveProduct} disabled={savingProduct} className="flex-1 py-2 rounded-lg font-semibold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: '#fff' }}>{savingProduct ? t('common.saving', 'Saving…') : t('common.save', 'Save')}</button>
+              <button onClick={saveProduct} disabled={savingProduct} className="flex-1 py-2 rounded-lg font-semibold disabled:opacity-50" style={{ background: 'var(--brand-primary-strong)', color: '#fff' }}>{savingProduct ? t('common.saving', 'Saving…') : t('common.save', 'Save')}</button>
             </div>
           </div>
         </div>
