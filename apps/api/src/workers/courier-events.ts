@@ -86,6 +86,18 @@ export class CourierEventsWorker {
     }
   }
 
+  // Latest known position for a courier, independent of any order assignment —
+  // used to keep idle (on-shift but unassigned) couriers visible on the owner map.
+  private async fetchLatestPosition(courierId: string): Promise<{ lat: number; lng: number } | null> {
+    const res = await this.pool.query(
+      `SELECT lat, lng FROM courier_positions WHERE courier_id = $1 ORDER BY recorded_at DESC LIMIT 1`,
+      [courierId],
+    );
+    if (!res.rowCount) return null;
+    const { lat, lng } = res.rows[0];
+    return lat !== null && lng !== null ? { lat: Number(lat), lng: Number(lng) } : null;
+  }
+
   private mapAssignmentStatusToDisplay(status: string): string {
     switch (status) {
       case 'accepted': return 'heading_to_pickup';
@@ -125,14 +137,20 @@ export class CourierEventsWorker {
   }
 
   async handlePositionUpdated(msg: { courierId: string; locationId: string; shiftId: string }) {
-    const details = await this.fetchCourierDetailsAndOrder(msg.courierId);
-    if (!details) return; // Courier not active on any order
+    // Always surface the courier on the owner live map — even when idle (no active
+    // order). The dashboard tracks every on-shift courier, not only those mid-delivery.
+    const livePosition = await this.fetchLatestPosition(msg.courierId);
+    if (livePosition) {
+      await this.messageBus.publish(courierChannel(msg.locationId), {
+        type: 'courier.position_updated',
+        payload: { courierId: msg.courierId, position: livePosition },
+      });
+    }
 
-    // Dispatch to owner live map
-    await this.messageBus.publish(courierChannel(msg.locationId), {
-      type: 'courier.position_updated',
-      payload: { courierId: msg.courierId, position: details.position }
-    });
+    // The customer-facing fan-out below only applies while the courier is actively
+    // on an order.
+    const details = await this.fetchCourierDetailsAndOrder(msg.courierId);
+    if (!details) return;
 
     // Dispatch to customer WS
     let etaSeconds = null;

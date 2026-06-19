@@ -192,6 +192,55 @@ export default (async function ownerCourierRoutes(fastify: any, opts: any) {
     }
   });
 
+  // 4b. Saved route for an order — the breadcrumb trail the courier actually
+  // travelled, reconstructed from the persisted courier_positions rows within the
+  // assignment's accepted→delivered window. (Positions are persisted on every
+  // /shifts/ping; this assembles them into a route per delivery.)
+  fastify.get('/api/owner/locations/:locationId/orders/:orderId/route', async (request: any, reply: any) => {
+    const { locationId, orderId } = request.params as any;
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
+
+      const asg = await client.query(
+        `SELECT a.courier_id,
+                COALESCE(a.accepted_at, a.assigned_at) AS start_at,
+                COALESCE(a.delivered_at, now())        AS end_at
+         FROM courier_assignments a
+         JOIN orders o ON o.id = a.order_id
+         WHERE a.order_id = $1 AND o.location_id = $2`,
+        [orderId, locationId],
+      );
+      if (asg.rowCount === 0) {
+        await client.query('COMMIT');
+        return reply.status(404).send({ error: 'No assignment for this order' });
+      }
+
+      const { courier_id, start_at, end_at } = asg.rows[0];
+      const pts = await client.query(
+        `SELECT lat, lng, recorded_at
+         FROM courier_positions
+         WHERE courier_id = $1 AND recorded_at BETWEEN $2 AND $3
+         ORDER BY recorded_at ASC`,
+        [courier_id, start_at, end_at],
+      );
+      await client.query('COMMIT');
+
+      return reply.send({
+        orderId,
+        courierId: courier_id,
+        points: pts.rows.map((r: any) => ({ lat: Number(r.lat), lng: Number(r.lng), at: r.recorded_at })),
+      });
+    } catch (err: any) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
   // 5. Per-courier detail (shifts, earnings, history)
   fastify.get('/api/owner/locations/:locationId/couriers/:courierId/details', async (request: any, reply: any) => {
     const { locationId, courierId } = request.params as any;
