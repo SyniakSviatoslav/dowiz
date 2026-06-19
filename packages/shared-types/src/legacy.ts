@@ -146,7 +146,8 @@ export const AuthToken = z.discriminatedUnion('role', [
     role: z.literal('customer'),
     orderId: z.string().uuid(),
     locationId: z.string().uuid(),
-    phone: z.string(),
+    // P0-PII: phone intentionally NOT in the customer claim (PII in a long-lived
+    // bearer token). Consumers resolve the phone server-side via orderId / sub.
     ...AuthBase,
   }).strict(),
 ]);

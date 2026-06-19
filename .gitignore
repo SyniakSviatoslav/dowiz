@@ -1,5 +1,8 @@
 node_modules/
 dist/
+# locally-assembled web SPA into the api static root (prod assembles into dist/public)
+apps/api/public/assets/
+apps/api/public/index.html
 .env
 .env.*
 !.env.example

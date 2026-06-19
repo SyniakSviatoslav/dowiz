@@ -1,4 +1,3 @@
-import './api/devBootstrap.js';
 import { StrictMode, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
@@ -83,6 +82,13 @@ function NotFound() {
       <a href="/" className="text-[var(--color-info)] hover:underline">Return home</a>
     </div>
   );
+}
+
+// Dev-only fetch mock + demo/mock-courier data. Conditionally imported so the
+// mock bootstrap and mockData payload are tree-shaken out of production builds
+// (import.meta.env.DEV is statically false in prod → the import is dropped).
+if (import.meta.env.DEV) {
+  await import('./api/devBootstrap.js');
 }
 
 createRoot(document.getElementById('root')!).render(<App />);

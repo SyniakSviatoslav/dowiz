@@ -172,7 +172,7 @@ async function main() {
   fastify.addHook('onRequest', async (request, reply) => {
     if (request.url.startsWith('/public/locations/') ||
         request.url.startsWith('/s/') ||
-        request.url.startsWith('/api/orders') && request.method === 'POST') {
+        (request.url.startsWith('/api/orders') && request.method === 'POST')) {
       reply.header('Access-Control-Allow-Origin', '*');
     }
   });
@@ -470,6 +470,9 @@ const retryPolicy = new RetryPolicy();
       }
     }
     if (NO_AUTH_PATHS.some(p => url.startsWith(p))) return;
+    // Public pre-auth customer phone OTP: a diner verifies their phone at checkout
+    // before any customer token exists, so send/verify must be reachable unauthenticated.
+    if (/^\/api\/customer\/locations\/[^/]+\/otp\/(send|verify)$/.test(url)) return;
     if (AUTH_PREFIXES.some(p => url.startsWith(p))) {
       const token = request.headers.authorization;
       if (!token || !token.startsWith('Bearer ')) {

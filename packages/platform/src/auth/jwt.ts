@@ -63,14 +63,16 @@ export async function verifyAuthToken(token: string): Promise<AuthToken> {
 export async function issueCustomerToken(params: {
   orderId: string;
   locationId: string;
-  phone: string;
   customerId: string;
 }): Promise<string> {
+  // P0-PII: never embed the customer phone in the JWT. Phone is PII and the token
+  // is a long-lived (7d) bearer credential held client-side; consumers must look
+  // the phone up server-side via orderId / sub. The token's authority is the
+  // (orderId, locationId, customerId) tuple, which is sufficient for scoping.
   return signAuthToken({
     role: 'customer',
     orderId: params.orderId,
     locationId: params.locationId,
-    phone: params.phone,
     sub: params.customerId,
   } as any, '7d');
 }

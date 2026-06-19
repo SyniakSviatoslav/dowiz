@@ -21,6 +21,14 @@ const NotificationTargetsResponse = z.object({
 const TelegramConnectResponse = z.object({
   deepLink: z.string().optional(),
 }).passthrough();
+
+const FallbackConfigResponse = z.object({
+  phone: z.string().nullable().optional(),
+  showPhoneOnError: z.boolean().optional(),
+  showPhoneOnOffline: z.boolean().optional(),
+  wsRetryMax: z.number().optional(),
+  wsRetryBaseMs: z.number().optional(),
+}).passthrough();
 import QRCode from 'qrcode';
 
 interface DaySchedule {
@@ -93,6 +101,16 @@ export function SettingsPage() {
   const [tgMessage, setTgMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [tgQrDataUrl, setTgQrDataUrl] = useState<string | null>(null);
 
+  // Fallback phone state
+  const [fallbackPhone, setFallbackPhone] = useState('');
+  const [fallbackPhoneError, setFallbackPhoneError] = useState('');
+  const [fallbackSaving, setFallbackSaving] = useState(false);
+  // Preserve the other fallback flags the PUT contract requires sending back.
+  const fallbackFlagsRef = useRef<{ showPhoneOnError: boolean; showPhoneOnOffline: boolean }>({
+    showPhoneOnError: true,
+    showPhoneOnOffline: true,
+  });
+
   useEffect(() => {
     if (!tgDeepLink) { setTgQrDataUrl(null); return; }
     QRCode.toDataURL(tgDeepLink, {
@@ -136,7 +154,46 @@ export function SettingsPage() {
   useEffect(() => {
     if (!locationId) return;
     fetchTgTargets();
+    fetchFallbackConfig();
   }, [locationId]);
+
+  const fetchFallbackConfig = async () => {
+    if (!locationId) return;
+    try {
+      const res = await apiClient<typeof FallbackConfigResponse>(`/owner/locations/${locationId}/settings/fallback`, { schema: FallbackConfigResponse });
+      setFallbackPhone(res?.phone || '');
+      fallbackFlagsRef.current = {
+        showPhoneOnError: res?.showPhoneOnError ?? true,
+        showPhoneOnOffline: res?.showPhoneOnOffline ?? true,
+      };
+    } catch (err) { console.warn('[SettingsPage] fetch fallback config failed:', err); }
+  };
+
+  const handleFallbackSave = async () => {
+    if (!locationId) return;
+    const trimmed = fallbackPhone.trim();
+    if (trimmed && !PHONE_E164_REGEX.test(trimmed)) {
+      setFallbackPhoneError(t('admin.phone_format_hint', '+355 followed by 7-14 digits'));
+      return;
+    }
+    setFallbackPhoneError('');
+    setFallbackSaving(true);
+    try {
+      await apiClient(`/owner/locations/${locationId}/settings/fallback`, {
+        method: 'PUT',
+        body: {
+          phone: trimmed,
+          showPhoneOnError: fallbackFlagsRef.current.showPhoneOnError,
+          showPhoneOnOffline: fallbackFlagsRef.current.showPhoneOnOffline,
+        },
+      });
+      showToast(t('common.saved', 'Settings saved'), 'success');
+    } catch (err: any) {
+      showToast(err?.message || t('common.error', 'Failed to save settings'), 'error');
+    } finally {
+      setFallbackSaving(false);
+    }
+  };
 
   const fetchTgTargets = async () => {
     if (!locationId) return;
@@ -502,6 +559,50 @@ export function SettingsPage() {
               )}
             </div>
           </div>
+
+          {/* ── Fallback Phone ── */}
+          {locationId && (
+            <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <i className="ti ti-phone-call text-lg" style={{ color: 'var(--color-info)' }} aria-hidden="true" />
+                <h3 className="font-semibold text-sm text-[var(--brand-text-muted)]">
+                  {t('admin.fallback_phone', 'Fallback Phone')}
+                </h3>
+              </div>
+              <p className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>
+                {t('admin.fallback_phone_desc', 'Shown to customers if notifications fail or the connection drops, so they can reach you directly. Leave empty to disable.')}
+              </p>
+              <div>
+                <label htmlFor="settings-fallbackPhone" className="block text-sm font-medium mb-1" style={labelStyle}>
+                  {t('admin.fallback_phone', 'Fallback Phone')}
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input
+                    id="settings-fallbackPhone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={fallbackPhone}
+                    onChange={(e) => { setFallbackPhone(e.target.value); if (fallbackPhoneError) setFallbackPhoneError(''); }}
+                    placeholder={t('admin.placeholder_phone', '+355...')}
+                    pattern={PHONE_E164_PATTERN}
+                    title={t('admin.phone_format_hint', '+355 followed by 7-14 digits')}
+                    aria-invalid={fallbackPhoneError ? true : undefined}
+                    aria-describedby={fallbackPhoneError ? 'settings-fallbackPhone-error' : undefined}
+                    className="flex-1 min-h-[44px]"
+                  />
+                  <Button onClick={handleFallbackSave} isLoading={fallbackSaving} variant="ghost" className="min-h-[44px]">
+                    {t('common.save', 'Save')}
+                  </Button>
+                </div>
+                {fallbackPhoneError && (
+                  <span id="settings-fallbackPhone-error" role="alert" className="block mt-1 text-[var(--color-danger)] text-sm">
+                    {fallbackPhoneError}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5">
             <div className="flex items-center justify-between gap-4">

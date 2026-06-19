@@ -68,7 +68,11 @@ export function ConfirmDialog({
         className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${
           visible ? 'opacity-100' : 'opacity-0'
         }`}
+        role="button"
+        tabIndex={0}
+        aria-label={t('common.close', 'Close')}
         onClick={onClose}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}
       />
       <div
         className={`relative z-modal bg-[var(--brand-surface)] rounded-xl shadow-elevation-4 max-w-sm w-full p-6 transition-all duration-300 ${

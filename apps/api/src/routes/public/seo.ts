@@ -8,7 +8,10 @@ export default (async function seoRoutes(fastify: any, opts: any) {
 
   async function getActiveLocations(client: any) {
     const res = await client.query(`
-      SELECT l.slug, l.supported_locales, l.menu_version, l.updated_at,
+      -- locations has no updated_at column; lastmod is derived from the menu
+      -- version timestamp (mv.updated_at) with created_at as a fallback floor.
+      SELECT l.slug, l.supported_locales, l.menu_version, l.created_at,
+        mv.updated_at AS mv_updated_at,
         COALESCE(mv.version, 1) as mv_version,
         EXISTS(
           SELECT 1 FROM products p
@@ -135,7 +138,7 @@ Sitemap: ${sitemapUrl}`;
         for (const row of slice) {
           const loc = `${baseUrl}/s/${row.slug}`;
           const version = row.mv_version || row.menu_version || 1;
-          const updated = row.updated_at || new Date(version * 1000).toISOString();
+          const updated = row.mv_updated_at || row.created_at || new Date(version * 1000).toISOString();
           const lastmod = updated ? new Date(updated).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
           xml += buildUrlTag(loc, lastmod as string, row.supported_locales);
         }
