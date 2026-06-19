@@ -20,7 +20,8 @@ export function createOperationalPool(): pg.Pool {
     max: 8,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
-    ssl: { rejectUnauthorized: false }
+    // Honor sslmode=disable (local / tunneled DBs without TLS); default to TLS otherwise.
+    ssl: /[?&]sslmode=disable/.test(env.DATABASE_URL_OPERATIONAL) ? false : { rejectUnauthorized: false }
   });
 
   // FX-9: statement_timeout for operational queries — kill slow queries fast
@@ -47,7 +48,7 @@ export function createSessionPool(): pg.Pool {
     max: 3,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
-    ssl: { rejectUnauthorized: false }
+    ssl: /[?&]sslmode=disable/.test(env.DATABASE_URL_SESSION) ? false : { rejectUnauthorized: false }
   });
 
   // FX-9: statement_timeout for session queries — longer, for workers/analytics
