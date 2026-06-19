@@ -53,7 +53,13 @@ export function TasksPage() {
     onMessage: (msg) => {
       const envelope = msg?.data || msg;
       if (envelope.type === 'task_assigned') {
-        setTasks(prev => [envelope.payload, ...prev]);
+        const incoming = envelope.payload;
+        setTasks(prev => {
+          // Guard against duplicate task_assigned events (reconnect / re-delivery)
+          // creating a second card for the same assignment.
+          if (prev.some(t => t.id === incoming?.id)) return prev;
+          return [incoming, ...prev];
+        });
         playPing();
       }
     },
