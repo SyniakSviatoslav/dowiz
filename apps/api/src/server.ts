@@ -65,7 +65,6 @@ import { setupWebSocket } from './websocket.js';
 import { setupShutdown } from './shutdown.js';
 import { CsvMenuParser } from './lib/csv-parser.js';
 import { AiOcrParser } from './lib/ai-ocr-parser.js';
-import { ClaudeMenuParser } from './lib/claude-menu-parser.js';
 import { LocalFsStorageProvider } from './lib/local-storage.js';
 import { R2StorageProvider } from './lib/r2-storage.js';
 import { LibreTranslateProvider } from './lib/libretranslate-provider.js';
@@ -312,18 +311,9 @@ async function main() {
   });
   fastify.decorate('memory', memoryService);
 
-  // Menu PDF/photo extraction: prefer the Claude vision parser when an API key is
-  // configured (extracts items + descriptions + per-item allergens/photo flag AND
-  // restaurant name/address/phone/hours from the document natively). Falls back to
-  // the legacy OCR+LLM parser when no key is set. Same 'ai-ocr' slot, so the
-  // import route is unchanged.
-  const aiParser = process.env.ANTHROPIC_API_KEY
-    ? new ClaudeMenuParser()
-    : new AiOcrParser(memoryService);
-  if (process.env.ANTHROPIC_API_KEY) console.log(`[API] Menu parser: Claude (${process.env.ANTHROPIC_MENU_MODEL || 'claude-opus-4-8'})`);
   const parsers = {
       'csv': new CsvMenuParser(),
-      'ai-ocr': aiParser,
+      'ai-ocr': new AiOcrParser(memoryService),
     };
   // Durable object storage for product images. Cloudflare R2 when configured
   // (survives redeploys, shared across machines); otherwise the local fs
