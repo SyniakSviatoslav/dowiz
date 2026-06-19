@@ -133,7 +133,7 @@ export class CourierEventsWorker {
            ON CONFLICT (order_id) DO UPDATE
              SET polyline = EXCLUDED.polyline, distance_meters = EXCLUDED.distance_meters,
                  duration_seconds = EXCLUDED.duration_seconds, updated_at = now()`,
-          [orderId, locationId, route.polyline, route.distance_m, route.duration_s],
+          [orderId, locationId, JSON.stringify(route.polyline), route.distance_m, route.duration_s],
         );
       } catch (err) {
         console.error('[CourierEvents] persist order_routes failed (advisory):', err);
