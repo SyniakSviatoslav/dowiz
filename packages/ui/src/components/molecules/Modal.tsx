@@ -39,7 +39,11 @@ export function Modal({ open, onClose, title, children, className = '' }: ModalP
     >
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        role="button"
+        tabIndex={0}
+        aria-label="Close"
         onClick={onClose}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}
       />
       <div
         className={`relative z-modal bg-[var(--brand-surface)] rounded-xl shadow-elevation-4 max-w-md w-full max-h-[85vh] overflow-y-auto ${className}`}

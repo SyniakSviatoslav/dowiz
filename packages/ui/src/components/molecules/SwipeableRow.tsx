@@ -93,6 +93,7 @@ export function SwipeableRow({ children, actions, threshold = 80, className = ''
       <div
         className="relative bg-[var(--brand-surface)] transition-transform duration-200 select-none"
         style={{ transform: `translateX(-${offsetX}px)`, touchAction: 'pan-y' }}
+        role="presentation"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency } from '@deliveryos/ui';
+import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal } from '@deliveryos/ui';
 import { CURRENCIES } from '@deliveryos/shared-types';
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
@@ -12,6 +12,17 @@ const OrderCreateResponse = z.object({
   id: z.string(),
   authToken: z.string().optional(),
 }).passthrough();
+
+// The /orders endpoint returns 200 with this body (NO order created) when the
+// location requires phone verification and it hasn't been satisfied yet.
+const PreflightResponse = z.object({
+  outcome: z.enum(['clean', 'soft_confirm', 'hard_block']),
+  requiresOtp: z.boolean().optional(),
+  reasons: z.array(z.object({ code: z.string() }).passthrough()).optional(),
+}).passthrough();
+
+const OtpSendResponse = z.object({ otp_token: z.string() }).passthrough();
+const OtpVerifyResponse = z.object({ verified_token: z.string() }).passthrough();
 import { useSharedCart } from '../../lib/CartProvider.js';
 
 const isDevMode = () => typeof window !== 'undefined' && sessionStorage.getItem('dos_dev') === '1';
@@ -181,12 +192,18 @@ export function CheckoutPage() {
   const [placing, setPlacing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [cityFact, setCityFact] = useState<string | null>(null);
+  const [currencyCode, setCurrencyCode] = useState<string>('ALL');
+  // Phone-verification (OTP) state — only engaged when the backend signals
+  // `requiresOtp` on a soft_confirm. Otherwise checkout behaves exactly as before.
+  const [otpOpen, setOtpOpen] = useState(false);
+  const [otpToken, setOtpToken] = useState<string | null>(null);
 
     useEffect(() => {
     if (!slug) return;
     fetch(`/public/locations/${slug}/info`).then(r => r.json())
       .then((info: any) => {
         setLocationId(info.id);
+        if (info.currency_code) setCurrencyCode(info.currency_code);
         if (info.lng && info.lat) setLocationCenter([info.lng, info.lat]);
         if (info.address) {
           const parts = info.address.split(',');
@@ -292,13 +309,22 @@ export function CheckoutPage() {
       return;
     }
     setPlacing(true);
+    await submitOrder();
+  };
+
+  // Submits the order. When `verifiedToken` is provided it is passed back to the
+  // backend (header + acknowledged code) so a require-OTP location lets it through.
+  // Returns true if the order was created (or OTP flow was started), false on hard error.
+  const submitOrder = async (verifiedToken?: string) => {
+    if (!slug || !locationId) { setPlacing(false); return false; }
+    setOrderError('');
     try {
       const idempotencyKey = crypto.randomUUID();
       const pinLat = (pinLocation as [number, number])?.[1] || (locationCenter as [number, number])?.[1] || 41.324;
       const pinLng = (pinLocation as [number, number])?.[0] || (locationCenter as [number, number])?.[0] || 19.456;
-      const orderRes = await apiClient<typeof OrderCreateResponse>('/orders', {
+      const raw = await apiClient<typeof PreflightResponse>('/orders', {
         method: 'POST',
-        schema: OrderCreateResponse,
+        headers: verifiedToken ? { 'x-otp-verified': verifiedToken } : undefined,
         body: {
           locationId: locationId,
           type: 'delivery',
@@ -315,7 +341,8 @@ export function CheckoutPage() {
           payment: { method: 'cash' },
           cash_pay_with: cashAmount > 0 ? cashAmount : undefined,
           idempotency_key: idempotencyKey,
-          acknowledged_codes: [],
+          // Acknowledge the OTP soft-reason once we've verified the phone.
+          acknowledged_codes: verifiedToken ? ['otp_required'] : [],
           prefs: {
             dropoff: {
               entrance: entrance.trim(),
@@ -329,6 +356,15 @@ export function CheckoutPage() {
             : undefined,
         },
       });
+
+      // Phone verification required but not yet satisfied → start the OTP flow.
+      const pre = PreflightResponse.safeParse(raw);
+      if (pre.success && pre.data.outcome === 'soft_confirm' && pre.data.requiresOtp) {
+        await beginOtpFlow();
+        return true;
+      }
+
+      const orderRes = OrderCreateResponse.parse(raw);
       try {
         localStorage.setItem(`dos_last_delivery_${slug}`, JSON.stringify({
           lat: pinLat,
@@ -344,22 +380,80 @@ export function CheckoutPage() {
       }
       requestPushPermission(slug!);
       clearCart();
+      setOtpOpen(false);
       setPlacing(false);
       setShowConfirmation(true);
       setTimeout(() => navigate(`/s/${slug}/order/${orderRes.id}`), 1500);
+      return true;
     } catch (err: any) {
       setPlacing(false);
-      if (isDevMode()) { clearCart(); navigate(`/s/${slug}/order/o_mock_123`); return; }
-      if (err?.status === 422 && err?.body?.code === 'MIN_ORDER_NOT_MET') {
+      if (isDevMode()) { clearCart(); navigate(`/s/${slug}/order/o_mock_123`); return false; }
+      if (err?.status === 422 && err?.data?.code === 'MIN_ORDER_NOT_MET') {
         setOrderError(t('checkout.min_order_error', 'Minimum order is {{min}} {{currency}}. Your total is {{subtotal}}.', {
-          min: err.body.details?.min_order_value,
-          currency: 'ALL',
-          subtotal: err.body.details?.subtotal,
+          min: err.data.details?.min_order_value,
+          currency: currencyCode,
+          subtotal: err.data.details?.subtotal,
         }));
-        return;
+        return false;
       }
       setOrderError(t('checkout.order_failed', 'Failed to place order. Please try again.'));
+      return false;
     }
+  };
+
+  // hex(JSON.stringify(items)) — the backend re-hashes this to bind the OTP to the cart.
+  const orderIntentHashHex = () => {
+    const intentItems = orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity }));
+    const json = JSON.stringify(intentItems);
+    let hex = '';
+    for (let i = 0; i < json.length; i++) hex += json.charCodeAt(i).toString(16).padStart(2, '0');
+    return hex;
+  };
+
+  // Send the first code and reveal the verification modal.
+  const beginOtpFlow = async () => {
+    try {
+      await sendOtp();
+      setOtpOpen(true);
+    } catch (err: any) {
+      setOrderError(err?.message || t('otp.send_failed', 'Couldn’t send the verification code. Try again.'));
+    } finally {
+      setPlacing(false);
+    }
+  };
+
+  const sendOtp = async () => {
+    const res = await apiClient<typeof OtpSendResponse>(`/customer/locations/${slug}/otp/send`, {
+      method: 'POST',
+      schema: OtpSendResponse,
+      body: {
+        phone,
+        order_intent: {
+          items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
+          total,
+          currency: currencyCode,
+        },
+      },
+    });
+    setOtpToken(res.otp_token);
+  };
+
+  const verifyOtp = async (code: string) => {
+    if (!otpToken) throw new Error(t('otp.send_failed', 'Couldn’t send the verification code. Try again.'));
+    const res = await apiClient<typeof OtpVerifyResponse>(`/customer/locations/${slug}/otp/verify`, {
+      method: 'POST',
+      schema: OtpVerifyResponse,
+      body: {
+        phone,
+        code,
+        otp_token: otpToken,
+        order_intent_hash: orderIntentHashHex(),
+      },
+    });
+    // Re-submit the order with the verified token; OTPModal closes on success.
+    setPlacing(true);
+    const ok = await submitOrder(res.verified_token);
+    if (!ok) throw new Error(t('otp.verify_then_failed', 'Verified, but the order could not be placed. Try again.'));
   };
 
   if (items.length === 0) {
@@ -676,6 +770,15 @@ export function CheckoutPage() {
           )}
         </motion.button>
       </StickyActionBar>
+
+      <OTPModal
+        open={otpOpen}
+        onClose={() => { setOtpOpen(false); setPlacing(false); }}
+        phone={phone}
+        alreadySent
+        onResend={sendOtp}
+        onVerify={verifyOtp}
+      />
 
       {showConfirmation && (
         <motion.div

@@ -7,6 +7,8 @@ import { loadEnv } from '@deliveryos/config';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel } from '../lib/registry.js';
 import { updateOrderStatus } from '../lib/orderStatusService';
 import { generateOpaqueToken } from '../lib/otp.js';
+import { evaluatePreflight } from '../lib/preflight.js';
+import { computeSignals } from '../lib/signals/compute.js';
 import type { Pool } from 'pg';
 import crypto from 'crypto';
 
@@ -99,7 +101,8 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       const locRes = await client.query(
          `SELECT lat, lng, confirm_timeout_min, busy_mode, phone, slug, published_at,
                  currency_code, currency_minor_unit, tax_rate, price_includes_tax,
-                 min_order_value, free_delivery_threshold, delivery_fee_flat
+                 min_order_value, free_delivery_threshold, delivery_fee_flat,
+                 require_phone_otp
           FROM locations WHERE id = $1`,
         [locationId]
       );
@@ -185,19 +188,9 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       });
       const requestHash = crypto.createHash('sha256').update(canonicalBody).digest('hex');
 
-      // 4. Preflight (E27) — check menu availability + signals + OTP before idempotency
-      let evaluatePreflight, computeSignals;
-      try {
-        // @ts-expect-error — preflight module may not exist; try/catch handles fallback
-        const pfModule = await import('../lib/preflight.js');
-        evaluatePreflight = pfModule.evaluatePreflight;
-        const sigModule = await import('../lib/signals/compute.js');
-        computeSignals = sigModule.computeSignals;
-      } catch (err: any) {
-        console.debug('[orders] preflight/signals module import failed, using stubs:', err?.message);
-        evaluatePreflight = (ctx: any) => ({ outcome: 'clean', reasons: [], confirmedReasons: [] });
-        computeSignals = async () => [];
-      }
+      // 4. Preflight (E27) — check menu availability + signals + OTP before idempotency.
+      // Statically imported (fail-loud): a missing module must break the build, never
+      // silently degrade to "clean" — that previously disabled OTP + all risk signals.
 
       // 4a. Product/modifier availability for preflight
       let productIds = items.map(i => i.product_id);
@@ -227,10 +220,10 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         productId: item.product_id,
         quantity: item.quantity,
         modifierIds: item.modifier_ids || [],
-        productAvailable: prodAvail.has(item.product_id) ? prodAvail.get(item.product_id) : null,
+        productAvailable: prodAvail.get(item.product_id) ?? null,
         modifierAvailability: Object.fromEntries(
-          (item.modifier_ids || []).map(mid => [mid, modAvailMap.has(`${item.product_id}_${mid}`) ? modAvailMap.get(`${item.product_id}_${mid}`) : null])
-        ),
+          (item.modifier_ids || []).map(mid => [mid, modAvailMap.get(`${item.product_id}_${mid}`) ?? null])
+        ) as Record<string, boolean | null>,
       }));
 
       // 4b. Per-phone order throttle (FX-4) — hard block, not advisory
@@ -705,7 +698,6 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           authToken = await issueCustomerToken({
             orderId: order.id,
             locationId,
-            phone: cust.phone,
             customerId: resolvedCustomerId,
           });
         } catch (err) {
@@ -757,6 +749,11 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
     const user = request.user;
     let locationId: string | null = null;
 
+    // P2-ANONORDER: this route uses softVerifyAuth (anonymous-permitting), but an
+    // order is private. Require a recognized principal — a customer token (scoped
+    // to its own orderId/locationId) or an owner/courier (tenant-scoped below via
+    // withTenant). An unauthenticated/unknown caller gets 401; no bare
+    // WHERE id=$1 fallback that would let anyone enumerate orders by UUID.
     if (user?.role === 'customer') {
       locationId = user.locationId;
       if (user.orderId !== id) {
@@ -764,6 +761,9 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       }
     } else if (user?.role === 'owner' || user?.role === 'courier') {
       // Owner/courier — tenant isolation via withTenant
+    } else {
+      // Anonymous or unrecognized role — no access without a scoping credential.
+      return reply.status(401).send({ error: 'Authentication required' });
     }
 
     try {

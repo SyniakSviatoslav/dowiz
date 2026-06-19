@@ -14,7 +14,7 @@ async function authHeaders(token: string) {
 }
 
 test.describe('Service event notifications pipeline', () => {
-  test('should create order and advance through lifecycle', async ({}) => {
+  test('should create order and advance through lifecycle', async () => {
     // 1. Get owner token
     const authRes = await fetch(`${BASE}/api/dev/mock-auth`, { method: 'POST' });
     expect(authRes.status).toBe(200);

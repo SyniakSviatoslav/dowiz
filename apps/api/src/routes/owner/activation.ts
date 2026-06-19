@@ -82,8 +82,31 @@ export default (async function activationRoutes(fastify: any, opts: any) {
 
       // First publish stamps published_at; re-publish is idempotent. Flip the daily
       // switch to open so the storefront accepts orders immediately.
+      //
+      // P1-FALLBACK: the order-fallback path (orders.ts) calls the venue when no
+      // courier/notification path responds. It needs fallback_config.phone, but the
+      // publish gate already guarantees a base l.phone (has_phone). Seed
+      // fallback_config.phone from l.phone when unset so /health's fallback coverage
+      // check is satisfied for every published venue. Only fills when absent — an
+      // explicitly-configured fallback phone (owner/fallback.ts) is never clobbered.
+      //
+      // Prod backfill for already-published locations missing a fallback phone:
+      //   UPDATE locations
+      //      SET fallback_config = jsonb_set(fallback_config, '{phone}', to_jsonb(phone))
+      //    WHERE published_at IS NOT NULL
+      //      AND phone IS NOT NULL AND length(btrim(phone)) > 0
+      //      AND COALESCE(NULLIF(fallback_config->>'phone', ''), '') = '';
       await client.query(
-        `UPDATE locations SET published_at = COALESCE(published_at, now()), status = 'open' WHERE id = $1`,
+        `UPDATE locations
+            SET published_at = COALESCE(published_at, now()),
+                status = 'open',
+                fallback_config = CASE
+                  WHEN COALESCE(NULLIF(fallback_config->>'phone', ''), '') = ''
+                       AND phone IS NOT NULL AND length(btrim(phone)) > 0
+                  THEN jsonb_set(fallback_config, '{phone}', to_jsonb(btrim(phone)))
+                  ELSE fallback_config
+                END
+          WHERE id = $1`,
         [locationId],
       );
       // Bump the SSR menu cache key (Stage 13) so the live page reflects publish.

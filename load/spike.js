@@ -82,6 +82,7 @@ export function placeOrder() {
     } catch {
       // menu response is not JSON — use fallback locationId
     }
+  }
 
   const headers = { 'Content-Type': 'application/json' };
   if (locationId) {

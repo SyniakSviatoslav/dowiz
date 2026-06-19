@@ -42,7 +42,14 @@ export function BottomSheet({
 
   return createPortal(
     <div className="fixed inset-0 z-modal-backdrop">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        role="button"
+        tabIndex={0}
+        aria-label="Close"
+        onClick={onClose}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}
+      />
       <div
         ref={sheetRef}
         className={`absolute bottom-0 left-0 right-0 max-h-[85vh] bg-[var(--brand-surface)] rounded-t-2xl shadow-elevation-4 flex flex-col animate-slide-up ${className}`}
