@@ -13,9 +13,15 @@ import { OnboardingPage } from '../pages/admin/OnboardingPage.js';
 import { ActivationPage } from '../pages/admin/ActivationPage.js';
 import { SupplyLibraryPage } from '../pages/admin/SupplyLibraryPage.js';
 import { PromotionsPage } from '../pages/admin/PromotionsPage.js';
-import { FlowTestPage } from '../pages/admin/FlowTestPage.js';
 
 const AnalyticsPage = React.lazy(() => import('../pages/admin/AnalyticsPage.js').then(m => ({ default: m.AnalyticsPage })));
+
+// Dev-only diagnostic surface. Lazily + conditionally imported so the page and
+// its mock-courier/demo helpers are tree-shaken out of production builds
+// (import.meta.env.DEV is statically false in prod → the dynamic import is dropped).
+const FlowTestPage = import.meta.env.DEV
+  ? React.lazy(() => import('../pages/admin/FlowTestPage.js').then(m => ({ default: m.FlowTestPage })))
+  : null;
 
 const ALL_NAV_ITEMS = [
   { key: 'admin.activation', href: '/admin/activation', icon: 'ti ti-rocket' },
@@ -68,7 +74,9 @@ function AdminLayout() {
     const next = logoClicks + 1;
     setLogoClicks(next);
     if (next >= 5) {
-      setShowFlowTest(true);
+      // The flow-test surface only exists in dev builds (route + page are gated
+      // behind import.meta.env.DEV), so don't reveal the nav entry in prod.
+      if (import.meta.env.DEV) setShowFlowTest(true);
       setLogoClicks(0);
     }
     setTimeout(() => { if (logoClicks < 5) setLogoClicks(0); }, 3000);
@@ -86,7 +94,7 @@ function AdminLayout() {
 
   const SidebarNav = () => (
     <nav className="flex-1 p-2 space-y-0.5 overflow-auto">
-      {[...ALL_NAV_ITEMS, ...(showFlowTest ? [{ key: 'admin.flow_test', href: '/admin/_flow-test', icon: 'ti ti-flask' }] : [])].map(item => (
+      {[...ALL_NAV_ITEMS, ...(import.meta.env.DEV && showFlowTest ? [{ key: 'admin.flow_test', href: '/admin/_flow-test', icon: 'ti ti-flask' }] : [])].map(item => (
         <button
           key={item.href}
           onClick={() => navTo(item.href)}
@@ -186,7 +194,7 @@ function AdminLayout() {
       {/* More sheet */}
       <ResponsiveDialog open={moreOpen} onClose={() => setMoreOpen(false)} title={t('admin.more', 'More')}>
         <div className="grid grid-cols-2 gap-2">
-          {[...MORE_ITEMS, ...(showFlowTest ? [{ key: 'admin.flow_test', href: '/admin/_flow-test', icon: 'ti ti-flask' }] : [])].map(item => {
+          {[...MORE_ITEMS, ...(import.meta.env.DEV && showFlowTest ? [{ key: 'admin.flow_test', href: '/admin/_flow-test', icon: 'ti ti-flask' }] : [])].map(item => {
             const active = isActive(item.href);
             return (
               <button
@@ -247,7 +255,9 @@ export function AdminRoutes() {
           <Route path="settings" element={<SettingsPage />} />
           <Route path="onboarding" element={<OnboardingPage />} />
           <Route path="activation" element={<ActivationPage />} />
-          <Route path="_flow-test" element={<FlowTestPage />} />
+          {import.meta.env.DEV && FlowTestPage && (
+            <Route path="_flow-test" element={<Suspense fallback={null}><FlowTestPage /></Suspense>} />
+          )}
         </Route>
       </Routes>
     </ToastProvider>

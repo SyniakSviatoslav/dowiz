@@ -94,7 +94,14 @@ export function AdminShell({ children, activeKey }: AdminShellProps) {
 
           {mobileNavOpen && (
             <div className="lg:hidden fixed inset-0 z-modal flex">
-              <div className="absolute inset-0 bg-black/50" onClick={() => setMobileNavOpen(false)} />
+              <div
+                className="absolute inset-0 bg-black/50"
+                role="button"
+                tabIndex={0}
+                aria-label={t('admin.close_menu', 'Close menu')}
+                onClick={() => setMobileNavOpen(false)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setMobileNavOpen(false); } }}
+              />
               <aside className="relative w-64 bg-brand-surface border-r border-brand-border flex flex-col z-10">
                 {asideContent}
               </aside>

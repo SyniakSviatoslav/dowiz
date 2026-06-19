@@ -14,11 +14,26 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
 
   const rooms = new Map<string, Set<RoomMember>>();
   const userBySocket = new Map<WebSocket, AuthToken>();
+  // P1-WSDUP: each room registers exactly one messageBus handler. We MUST keep the
+  // exact handler reference so we can unsubscribe when the room is torn down —
+  // otherwise re-creating a room (member rejoins after the room was GC'd) stacks a
+  // second messageBus subscription on the same channel, and every event is then
+  // delivered N times (the "Calling N handlers" leak).
+  const roomHandlers = new Map<string, (msg: unknown) => void>();
+
+  function deleteRoom(room: string) {
+    rooms.delete(room);
+    const handler = roomHandlers.get(room);
+    if (handler) {
+      roomHandlers.delete(room);
+      messageBus.unsubscribe(room, handler);
+    }
+  }
 
   async function subscribeToRoom(room: string, member: RoomMember) {
     if (!rooms.has(room)) {
       rooms.set(room, new Set());
-      await messageBus.subscribe(room, (msg: unknown) => {
+      const handler = (msg: unknown) => {
         const members = rooms.get(room);
         if (!members) return;
         const payload = JSON.stringify({ room, data: msg });
@@ -27,7 +42,9 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
             m.ws.send(payload);
           }
         }
-      });
+      };
+      roomHandlers.set(room, handler);
+      await messageBus.subscribe(room, handler);
       console.log('[WS] Created room:', room);
     }
     rooms.get(room)!.add(member);
@@ -51,7 +68,7 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
   const roomCleanup = setInterval(() => {
     for (const [room, members] of rooms) {
       if (members.size === 0) {
-        rooms.delete(room);
+        deleteRoom(room);
         console.log('[WS] Cleaned up empty room:', room);
       }
     }
@@ -148,7 +165,7 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
               }
             }
             if (members.size === 0) {
-              rooms.delete(msg.room);
+              deleteRoom(msg.room);
               console.log('[WS] Room deleted (empty):', msg.room);
             }
           }
@@ -200,12 +217,18 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
     ws.on('close', (code, reason) => {
       userBySocket.delete(ws);
       if (user) {
-        for (const [, members] of rooms) {
+        // P1-WSDUP: on disconnect, drop the member and tear the room down (incl.
+        // messageBus.unsubscribe) the moment it empties, rather than waiting for the
+        // 60s GC. A reconnect then re-creates exactly one subscription.
+        for (const [room, members] of rooms) {
           for (const m of members) {
             if (m.ws === ws) {
               members.delete(m);
               break;
             }
+          }
+          if (members.size === 0) {
+            deleteRoom(room);
           }
         }
         console.log('[WS] Client disconnected:', user.role, user.sub, 'code:', code, 'ip:', clientIp);

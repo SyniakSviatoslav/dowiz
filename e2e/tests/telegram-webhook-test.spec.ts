@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Telegram Webhook Management', () => {
-  test('should be able to delete webhook', async ({}) => {
+  test('should be able to delete webhook', async () => {
     const BOT_TOKEN = process.env.***REDACTED*** || '8996764379:AAHkuc5mgYQdkWG5rLZEjHc8a8k5MQsHDIk';
     const deleteUrl = `https://api.telegram.org/bot${BOT_TOKEN}/deleteWebhook`;
     const deleteResp = await fetch(deleteUrl, { method: 'POST' });
@@ -11,7 +11,7 @@ test.describe('Telegram Webhook Management', () => {
     console.log('Webhook delete result:', deleteData);
   });
   
-  test('should be able to get updates after deleting webhook', async ({}) => {
+  test('should be able to get updates after deleting webhook', async () => {
     const BOT_TOKEN = process.env.***REDACTED*** || '8996764379:AAHkuc5mgYQdkWG5rLZEjHc8a8k5MQsHDIk';
     
     // Delete webhook first
@@ -33,7 +33,7 @@ test.describe('Telegram Webhook Management', () => {
     }
   });
   
-  test('should be able to set webhook again', async ({}) => {
+  test('should be able to set webhook again', async () => {
     const BOT_TOKEN = process.env.***REDACTED*** || '8996764379:AAHkuc5mgYQdkWG5rLZEjHc8a8k5MQsHDIk';
     const BOT_SECRET = process.env.***REDACTED*** || 'Ihatenuclearwar';
     const BASE_URL = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';

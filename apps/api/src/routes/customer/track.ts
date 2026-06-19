@@ -10,7 +10,8 @@ import { issueCustomerToken } from '@deliveryos/platform';
 // auth.ts and otp.ts.
 //
 // The grant table holds only order_id + location_id, but issueCustomerToken needs
-// phone + customerId too, so we JOIN grant -> orders -> customers to recover them.
+// customerId too, so we JOIN grant -> orders to recover it. (Phone is no longer
+// embedded in the JWT — P0-PII — so we no longer join customers here.)
 // Runs on the operational pool with no tenant context and an explicit
 // WHERE token_hash = $1 (RLS bypassed on this path, exactly like order creation).
 
@@ -43,11 +44,9 @@ export default (async function customerTrackRoutes(fastify: any, opts: any) {
       `SELECT g.id            AS grant_id,
               g.order_id      AS order_id,
               g.location_id   AS location_id,
-              o.customer_id   AS customer_id,
-              c.phone         AS phone
+              o.customer_id   AS customer_id
          FROM customer_track_grants g
          JOIN orders    o ON o.id = g.order_id
-         JOIN customers c ON c.id = o.customer_id
         WHERE g.token_hash = $1
           AND g.expires_at > now()`,
       [tokenHash],
@@ -76,7 +75,6 @@ export default (async function customerTrackRoutes(fastify: any, opts: any) {
       token = await issueCustomerToken({
         orderId: grant.order_id,
         locationId: grant.location_id,
-        phone: grant.phone,
         customerId: grant.customer_id,
       });
     } catch (err) {

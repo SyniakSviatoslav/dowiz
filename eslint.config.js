@@ -63,7 +63,7 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'src/**', '.opencode/**', '**/build-client.js', '**/churn-report.cjs', '.agents/skills/**', '.claude/skills/**'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'src/**', '.opencode/**', '**/build-client.js', '**/churn-report.cjs', '.agents/skills/**', '.claude/skills/**', 'apps/api/public/assets/**', 'apps/api/public/dist/**'],
   },
   {
     files: ['tools/eslint-plugin-local/__fixtures__/**'],
