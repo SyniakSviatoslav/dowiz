@@ -54,20 +54,24 @@ export function useI18n(): I18nContextValue {
 
 const DISPLAY_MAP: Record<string, string> = { sq: 'SQ', en: 'EN', uk: 'UA' };
 
-export function LanguageSwitcher({ variant = 'compact' }: { variant?: 'compact' | 'full' }) {
+export function LanguageSwitcher({ variant = 'compact', allowed }: { variant?: 'compact' | 'full'; allowed?: string[] }) {
   const { locale, locales, setLocale: changeLocale } = useI18n();
   const [open, setOpen] = useState(false);
+  // Storefronts pass the tenant's supported_locales so we never offer a language
+  // the menu can't render (it would silently fall back to the default locale).
+  const shown = allowed && allowed.length ? locales.filter(l => allowed.includes(l.code)) : locales;
   const currentLoc = locales.find(l => l.code === locale);
+  if (shown.length <= 1) return null;
   const currentDisplay = DISPLAY_MAP[locale] || locale.toUpperCase();
 
   if (variant === 'full') {
     return (
       <div className="inline-flex items-center rounded-lg overflow-hidden" style={{ background: 'var(--brand-surface-raised)', border: '1px solid var(--brand-border)' }}>
-        {locales.map((l) => (
+        {shown.map((l) => (
           <button
             key={l.code}
             onClick={() => changeLocale(l.code)}
-            className={`px-2.5 py-1.5 text-xs font-medium transition-all duration-200 ${
+            className={`px-3 min-h-11 inline-flex items-center text-xs font-medium transition-all duration-200 ${
               locale === l.code ? 'text-white' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'
             }`}
             style={locale === l.code ? { background: 'var(--brand-primary)' } : {}}
@@ -83,7 +87,7 @@ export function LanguageSwitcher({ variant = 'compact' }: { variant?: 'compact' 
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors hover:bg-[var(--brand-surface-raised)]"
+        className="flex items-center gap-1 px-2.5 min-h-11 text-xs font-medium rounded-lg transition-colors hover:bg-[var(--brand-surface-raised)]"
         style={{ color: 'var(--brand-text-muted)', border: '1px solid var(--brand-border)' }}
         aria-label={`Switch language. Current: ${currentLoc?.name || locale}`}
       >
@@ -101,7 +105,7 @@ export function LanguageSwitcher({ variant = 'compact' }: { variant?: 'compact' 
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(false); } }}
           />
           <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[130px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-            {locales.map((l) => (
+            {shown.map((l) => (
               <button key={l.code} onClick={() => { changeLocale(l.code); setOpen(false); }}
                 className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${locale === l.code ? 'font-semibold' : ''}`}
                 style={{ color: locale === l.code ? 'var(--brand-primary)' : 'var(--brand-text)' }}

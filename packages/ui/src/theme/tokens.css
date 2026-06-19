@@ -38,6 +38,10 @@
   --brand-primary: #ea4f16;
   --brand-primary-hover: #ffa12e;
   --brand-primary-light: rgba(234, 79, 22, 0.12);
+  /* Darker variant for solid buttons so white label text clears WCAG AA (4.5:1).
+     color-mix re-resolves against the active preset's --brand-primary on :root,
+     so every theme gets an AA-safe button background without per-theme tuning. */
+  --brand-primary-strong: color-mix(in srgb, var(--brand-primary) 85%, #000000);
   --brand-accent: #2a2a2a;
   --brand-bg: #121212;
   --brand-surface: #1e1e1e;

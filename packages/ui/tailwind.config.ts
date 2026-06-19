@@ -9,6 +9,7 @@ const config: Config = {
           primary: 'var(--brand-primary)',
           'primary-hover': 'var(--brand-primary-hover)',
           'primary-light': 'var(--brand-primary-light)',
+          'primary-strong': 'var(--brand-primary-strong)',
           accent: 'var(--brand-accent)',
           bg: 'var(--brand-bg)',
           surface: 'var(--brand-surface)',
