@@ -324,6 +324,9 @@ importers:
       pg:
         specifier: ^8.21.0
         version: 8.21.0
+      pg-boss:
+        specifier: ^10.1.5
+        version: 10.4.2
     devDependencies:
       tsx:
         specifier: ^4.19.0

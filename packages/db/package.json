@@ -13,7 +13,8 @@
   "dependencies": {
     "@deliveryos/config": "workspace:*",
     "argon2": "^0.44.0",
-    "pg": "^8.21.0"
+    "pg": "^8.21.0",
+    "pg-boss": "^10.1.5"
   },
   "devDependencies": {
     "tsx": "^4.19.0",
