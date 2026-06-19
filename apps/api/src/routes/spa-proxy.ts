@@ -101,6 +101,21 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     }
   }
 
+  // The owner's user id from a valid owner token, regardless of whether they have
+  // a location yet. Used to provision a brand-new owner's first storefront.
+  async function getOwnerUserId(request: any): Promise<string | null> {
+    const auth = request.headers.authorization;
+    if (!auth?.startsWith('Bearer ')) return null;
+    try {
+      const { payload } = await jwtVerify(auth.slice(7), getPublicKey(), { algorithms: ['RS256'] });
+      const claims = payload as any;
+      if (claims.role !== 'owner') return null;
+      return claims.userId || claims.sub || null;
+    } catch {
+      return null;
+    }
+  }
+
   async function getOwnerContext(request: any): Promise<{ locId: string; userId: string } | null> {
     const auth = request.headers.authorization;
     if (!auth?.startsWith('Bearer ')) return null;
@@ -565,26 +580,58 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // POST /api/owner/courier-invites
   fastify.post('/api/owner/courier-invites', async (request, reply) => {
     const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
     const { phone } = request.body as any;
     const code = crypto.randomUUID().substring(0, 8);
+    if (!locId) {
+      // Fresh owner mid-wizard (no location yet) — return a placeholder invite
+      // instead of 401, which the client would turn into a logout, ejecting the
+      // owner from onboarding. Real courier setup happens after the storefront exists.
+      if (!(await isValidOwnerToken(request))) return reply.status(401).send({ error: 'Unauthorized' });
+      return reply.send({ link: `https://app.dowiz.org/courier/join?code=${code}`, code, phone: phone || null, pending: true });
+    }
     const link = `https://${locId}.dowiz.org/courier/join?code=${code}`;
     return reply.send({ link, code, phone: phone || null });
   });
 
   // POST /api/owner/onboarding
   fastify.post('/api/owner/onboarding', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
     const { name, phone, slug, lat, lng, delivery_radius_km, address, menu_items,
             courier_option, courier_phone, primary_color, logo_url, test_order_completed } = request.body as any;
 
-    await db.query(
-      `UPDATE locations SET name = COALESCE($1, name), phone = COALESCE($2, phone),
-       lat = COALESCE($3, lat), lng = COALESCE($4, lng),
-       delivery_radius_km = COALESCE($5, delivery_radius_km) WHERE id = $6`,
-      [name || null, phone || null, lat ?? null, lng ?? null, delivery_radius_km ?? null, locId]
-    );
+    let locId = await getLocationId(request);
+    if (!locId) {
+      // Brand-new owner (no location yet) — PROVISION their first storefront here.
+      // The wizard's "publish" is this call; previously it 401'd (getLocationId is
+      // null for a fresh owner), and the client turned that into a logout, so a new
+      // owner could never finish onboarding. Create org + location + membership,
+      // then continue with menu/theme below. The location starts as a DRAFT
+      // (published_at NULL) — going order-capable happens via the activation gate.
+      const userId = await getOwnerUserId(request);
+      if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
+      if (!name || !phone || !slug) return reply.status(400).send({ error: 'name, phone and slug are required' });
+      const taken = await db.query(`SELECT 1 FROM locations WHERE slug = $1`, [slug]);
+      if (taken.rowCount > 0) return reply.status(409).send({ error: 'Slug already taken', code: 'SLUG_TAKEN' });
+      const orgRes = await db.query(`SELECT id FROM organizations WHERE owner_id = $1 LIMIT 1`, [userId]);
+      let orgId = orgRes.rows[0]?.id;
+      if (!orgId) {
+        const o = await db.query(`INSERT INTO organizations (id, name, owner_id) VALUES ($1, $2, $3) RETURNING id`, [crypto.randomUUID(), `${name} Org`, userId]);
+        orgId = o.rows[0].id;
+      }
+      locId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO locations (id, org_id, slug, name, phone, status, widget_enabled, delivery_fee_flat, lat, lng, delivery_radius_km)
+         VALUES ($1, $2, $3, $4, $5, 'open', true, 0, $6, $7, $8)`,
+        [locId, orgId, slug, name, phone, lat ?? null, lng ?? null, delivery_radius_km ?? null],
+      );
+      await db.query(`INSERT INTO memberships (user_id, location_id, role) VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING`, [userId, locId]);
+    } else {
+      await db.query(
+        `UPDATE locations SET name = COALESCE($1, name), phone = COALESCE($2, phone),
+         lat = COALESCE($3, lat), lng = COALESCE($4, lng),
+         delivery_radius_km = COALESCE($5, delivery_radius_km) WHERE id = $6`,
+        [name || null, phone || null, lat ?? null, lng ?? null, delivery_radius_km ?? null, locId]
+      );
+    }
 
     if (Array.isArray(menu_items)) {
       for (const item of menu_items) {

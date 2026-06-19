@@ -12,6 +12,7 @@ const GATE_SQL = `
   SELECT
     l.slug,
     l.menu_version,
+    l.pickup_enabled,
     (l.published_at IS NOT NULL)                                   AS published,
     l.published_at,
     (l.menu_confirmed_at IS NOT NULL)                             AS menu_confirmed,
@@ -41,6 +42,7 @@ function buildGate(row: any) {
     slug: row.slug,
     menuVersion: row.menu_version,
     gate: { menuConfirmed, notificationsConnected, fulfillmentReady },
+    pickupEnabled: !!row.pickup_enabled,
     canPublish: menuConfirmed && notificationsConnected && fulfillmentReady,
     missing,
   };
@@ -60,6 +62,26 @@ export default (async function activationRoutes(fastify: any, opts: any) {
     const { locationId } = request.params;
     const res = await db.query(GATE_SQL, [locationId]);
     if (res.rowCount === 0) return reply.status(404).send({ error: 'Location not found' });
+    return reply.send(buildGate(res.rows[0]));
+  });
+
+  // ─── Pickup toggle (zero-friction fulfillment) ───────────────────────────
+  // The publish gate accepts `pickup_enabled` as a fulfillment path so an owner
+  // can go live without a courier (Plan v2 §4/§9). Nothing wrote the column until
+  // now — owners were forced to add a courier. This is the missing writer.
+  fastify.post('/activation/:locationId/pickup', {
+    schema: {
+      params: z.object({ locationId: z.string().uuid() }),
+      body: z.object({ enabled: z.boolean() }),
+    },
+    preHandler: [fastify.requireLocationAccess],
+  }, async (request: any, reply: any) => {
+    const { locationId } = request.params;
+    const { enabled } = request.body;
+    const upd = await db.query(`UPDATE locations SET pickup_enabled = $2 WHERE id = $1`, [locationId, enabled]);
+    if (upd.rowCount === 0) return reply.status(404).send({ error: 'Location not found' });
+    // Return the refreshed gate so the checklist re-renders without a second call.
+    const res = await db.query(GATE_SQL, [locationId]);
     return reply.send(buildGate(res.rows[0]));
   });
 
