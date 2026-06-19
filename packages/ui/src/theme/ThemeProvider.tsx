@@ -44,17 +44,25 @@ export function ThemeProvider({
     const prev: Record<string, string> = {};
     vars.forEach(v => { prev[v] = root.style.getPropertyValue(v); });
 
+    // Skip empty or self-referential values (e.g. 'var(--brand-bg)' when a tenant
+    // hasn't set that color) — setting --brand-bg: var(--brand-bg) is an invalid
+    // self-reference that wipes the stylesheet default (white flash). removeProperty
+    // lets the tokens.css default stand instead.
+    const applyVar = (prop: string, value: string | undefined) => {
+      if (value && !value.startsWith('var(')) root.style.setProperty(prop, value);
+      else root.style.removeProperty(prop);
+    };
     if (theme) {
-      root.style.setProperty('--brand-primary', theme.primary);
-      root.style.setProperty('--brand-primary-hover', theme.primaryHover);
-      root.style.setProperty('--brand-primary-light', theme.primaryLight);
-      root.style.setProperty('--brand-accent', theme.accent);
-      root.style.setProperty('--brand-bg', theme.bg);
-      root.style.setProperty('--brand-surface', theme.surface);
-      root.style.setProperty('--brand-surface-raised', theme.surfaceRaised);
-      root.style.setProperty('--brand-text', theme.text);
-      root.style.setProperty('--brand-text-muted', theme.textMuted);
-      root.style.setProperty('--brand-border', theme.border);
+      applyVar('--brand-primary', theme.primary);
+      applyVar('--brand-primary-hover', theme.primaryHover);
+      applyVar('--brand-primary-light', theme.primaryLight);
+      applyVar('--brand-accent', theme.accent);
+      applyVar('--brand-bg', theme.bg);
+      applyVar('--brand-surface', theme.surface);
+      applyVar('--brand-surface-raised', theme.surfaceRaised);
+      applyVar('--brand-text', theme.text);
+      applyVar('--brand-text-muted', theme.textMuted);
+      applyVar('--brand-border', theme.border);
     } else {
       vars.forEach(v => root.style.removeProperty(v));
     }
