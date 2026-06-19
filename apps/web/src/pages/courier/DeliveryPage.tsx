@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot, PriceDisplay } from '@deliveryos/ui';
@@ -104,7 +104,7 @@ export function DeliveryPage() {
     fetchMessages();
   }, [id, fetchMessages]);
 
-  const { status: wsStatus, sendMessage } = useWebSocket({
+  const { status: wsStatus } = useWebSocket({
     room: `order:${id}`,
     onMessage: (msg: any) => {
       if (msg.type === 'client_location' && msg.payload) {
@@ -125,20 +125,30 @@ export function DeliveryPage() {
     }
   });
 
+  // Push the courier's real GPS to the server via REST /shifts/ping. This both
+  // (a) drives every role's live map (the worker fans the position out to the
+  // owner :couriers room and the customer's order room) and (b) persists the
+  // breadcrumb into courier_positions so the delivery's route is saved. The old
+  // code sent a WS 'location_update' the server never handled, so positions were
+  // silently dropped — no live map, no saved route. Server caps pings at 1/10s,
+  // so throttle to ~12s; NO_ACTIVE_SHIFT / GPS_OUT_OF_RANGE are non-fatal here.
+  const lastPingRef = useRef(0);
   useEffect(() => {
-    if (position && wsStatus === 'connected') {
-      sendMessage({
-        type: 'location_update',
-        payload: {
-          lat: position.lat,
-          lng: position.lng,
-          heading: position.heading,
-          speed: position.speed,
-          timestamp: Date.now()
-        }
-      });
-    }
-  }, [position, wsStatus, sendMessage]);
+    if (!position) return;
+    const now = Date.now();
+    if (now - lastPingRef.current < 12000) return;
+    lastPingRef.current = now;
+    apiClient('/courier/shifts/ping', {
+      method: 'POST',
+      body: {
+        lat: position.lat,
+        lng: position.lng,
+        ...(Number.isFinite(position.accuracy) ? { accuracy_meters: Math.round(position.accuracy) } : {}),
+      },
+    }).catch((err: any) => {
+      console.debug('[DeliveryPage] shift ping skipped:', err?.status || err?.message);
+    });
+  }, [position]);
 
   const handlePickup = async () => {
     setPickupLoading(true);
