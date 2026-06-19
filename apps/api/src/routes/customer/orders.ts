@@ -90,7 +90,21 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
 
       // Stored road route (advisory) for reconnecting clients — the worker pushes it
       // live to order:{id} once at picked_up; this serves a client that joined late.
-      const storedRoute = await loadRoute(orderId);
+      // Redis is the fast path; order_routes is the durable fallback once the Redis
+      // entry has expired (2h TTL).
+      let storedRoute = await loadRoute(orderId);
+      if (!storedRoute) {
+        try {
+          const dr = await db.query(
+            `SELECT polyline, distance_meters, duration_seconds FROM order_routes WHERE order_id = $1`,
+            [orderId],
+          );
+          if (dr.rowCount > 0) {
+            // provider is metrics-only and not persisted; tag the durable copy as 'self'.
+            storedRoute = { polyline: dr.rows[0].polyline, distance_m: dr.rows[0].distance_meters, duration_s: dr.rows[0].duration_seconds, provider: 'self' };
+          }
+        } catch { /* order_routes may not be migrated yet — advisory, fail soft */ }
+      }
 
       return reply.status(200).send({
         id: row.id,

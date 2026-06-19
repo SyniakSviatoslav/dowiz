@@ -113,6 +113,7 @@ export class CourierEventsWorker {
   // failure degrades to haversine inside the provider, so this never throws.
   private async publishRouteOnce(
     orderId: string,
+    locationId: string,
     from: { lat: number; lng: number },
     to: { lat: number; lng: number },
     claimKey: string,
@@ -122,6 +123,21 @@ export class CourierEventsWorker {
       if (!(await claimOnce(claimKey, claimTtlS))) return; // another instance owns it
       const route = await getRoutingService().getLegRoute(from, to);
       await saveRoute(orderId, route);
+
+      // Durable copy so the planned route survives the Redis TTL / a flush. Advisory:
+      // a failure here must never break the live route push below.
+      try {
+        await this.pool.query(
+          `INSERT INTO order_routes (order_id, location_id, polyline, distance_meters, duration_seconds, updated_at)
+           VALUES ($1, $2, $3, $4, $5, now())
+           ON CONFLICT (order_id) DO UPDATE
+             SET polyline = EXCLUDED.polyline, distance_meters = EXCLUDED.distance_meters,
+                 duration_seconds = EXCLUDED.duration_seconds, updated_at = now()`,
+          [orderId, locationId, route.polyline, route.distance_m, route.duration_s],
+        );
+      } catch (err) {
+        console.error('[CourierEvents] persist order_routes failed (advisory):', err);
+      }
       await this.messageBus.publish(orderChannel(orderId), {
         type: 'order.route',
         payload: {
@@ -163,9 +179,9 @@ export class CourierEventsWorker {
       // route yet, or the live position has strayed past the threshold.
       const existing = await loadRoute(details.orderId);
       if (!existing) {
-        await this.publishRouteOnce(details.orderId, details.position, details.destination, `route:init:${details.orderId}`, 300);
+        await this.publishRouteOnce(details.orderId, msg.locationId, details.position, details.destination, `route:init:${details.orderId}`, 300);
       } else if (shouldReroute(existing.polyline, details.position)) {
-        await this.publishRouteOnce(details.orderId, details.position, details.destination, `route:re:${details.orderId}`, 30);
+        await this.publishRouteOnce(details.orderId, msg.locationId, details.position, details.destination, `route:re:${details.orderId}`, 30);
       }
     }
 
@@ -194,7 +210,7 @@ export class CourierEventsWorker {
       // The single per-delivery route() call: courier just picked up → heading to
       // the customer. Pushed once to order:{id}; reconnecting clients read it back
       // from the status endpoint.
-      await this.publishRouteOnce(msg.orderId, details.position, details.destination, `route:init:${msg.orderId}`, 300);
+      await this.publishRouteOnce(msg.orderId, msg.locationId, details.position, details.destination, `route:init:${msg.orderId}`, 300);
     }
 
     // Owner live map assignment status update

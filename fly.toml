@@ -15,7 +15,10 @@ primary_region = "fra"
   auto_stop_machines = false
 
 [[http_service.checks]]
-  path = "/health"
+  # Liveness only — keep this cheap. /health runs ~11 DB queries + external
+  # Telegram/R2 calls and can exceed the timeout under load, which would restart
+  # the machine and drop every live WebSocket. /health stays for ops/readiness.
+  path = "/livez"
   interval = "15s"
   timeout = "3s"
 
