@@ -13,6 +13,7 @@ interface GateStatus {
   slug: string;
   menuVersion: number;
   gate: { menuConfirmed: boolean; notificationsConnected: boolean; fulfillmentReady: boolean };
+  pickupEnabled: boolean;
   canPublish: boolean;
   missing: Array<{ key: string; message: string }>;
 }
@@ -88,6 +89,24 @@ export function ActivationPage() {
     }
   };
 
+  const [togglingPickup, setTogglingPickup] = useState(false);
+  const togglePickup = async () => {
+    if (!locationId) return;
+    setTogglingPickup(true);
+    try {
+      // The route returns the refreshed gate, so the checklist + Publish button
+      // update in one round-trip (enabling pickup can flip fulfillment → green).
+      const next = await apiClient<any>(`/owner/activation/${locationId}/pickup`, {
+        method: 'POST', body: { enabled: !status?.pickupEnabled },
+      });
+      setStatus(next);
+    } catch {
+      showToast(t('activation.pickup_failed', 'Could not update pickup.'), 'error');
+    } finally {
+      setTogglingPickup(false);
+    }
+  };
+
   const publish = async () => {
     if (!status?.canPublish || !locationId) return;
     setPublishing(true);
@@ -151,6 +170,32 @@ export function ActivationPage() {
             <a key={it.key} href={it.href} className="flex gap-3 p-3 rounded-xl transition hover:opacity-90" style={{ background: 'var(--brand-bg)' }}>{body}</a>
           );
         })}
+
+        {/* Zero-friction fulfillment: pickup-only publish (no courier needed). */}
+        {status && (
+          <button
+            type="button"
+            onClick={togglePickup}
+            disabled={togglingPickup}
+            className="flex items-center gap-3 w-full p-3 rounded-xl transition hover:opacity-90 disabled:opacity-60"
+            style={{ background: 'var(--brand-bg)' }}
+          >
+            <span
+              className="inline-flex items-center justify-center w-6 h-6 rounded-full shrink-0"
+              style={{ background: status.pickupEnabled ? 'var(--color-success)' : 'var(--brand-surface)', color: status.pickupEnabled ? '#fff' : 'var(--brand-text-muted)', border: status.pickupEnabled ? 'none' : '2px solid var(--brand-text-muted)' }}
+            >
+              <i className={status.pickupEnabled ? 'ti ti-check' : 'ti ti-shopping-bag'} />
+            </span>
+            <div className="min-w-0 flex-1 text-left">
+              <div className="font-semibold text-sm" style={{ color: 'var(--brand-text)' }}>{t('activation.pickup_toggle', 'Offer pickup')}</div>
+              <div className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{t('activation.pickup_hint', 'Go live without a courier — customers collect at the venue.')}</div>
+            </div>
+            <span className="text-xs font-bold uppercase tracking-wide" style={{ color: status.pickupEnabled ? 'var(--color-success)' : 'var(--brand-text-muted)' }}>
+              {togglingPickup ? '…' : status.pickupEnabled ? t('common.on', 'On') : t('common.off', 'Off')}
+            </span>
+          </button>
+        )}
+
         {!status && <div className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{t('common.loading', 'Loading…')}</div>}
 
         {/* Optional, visually separate from the must-do trinity (§4). */}
