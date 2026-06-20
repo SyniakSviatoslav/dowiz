@@ -5,6 +5,7 @@ import { loadEnv } from '@deliveryos/config';
 import { CustomerOrderStatusResponse } from '@deliveryos/shared-types';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { distanceKm } from '../../lib/geo.js';
+import { loadRoute } from '../../lib/routing.js';
 
 const env = loadEnv();
 
@@ -27,8 +28,8 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
 
     try {
       const orderRes = await db.query(`
-         SELECT o.id, o.status, o.delivery_address, o.delivery_instructions,
-                o.total, o.created_at::text as created_at,
+         SELECT o.id, o.status, o.type, o.delivery_address, o.delivery_instructions,
+                o.total, o.tip_amount, o.created_at::text as created_at,
                 o.delivery_lat, o.delivery_lng,
                ca.courier_id, ca.status as assignment_status
         FROM orders o
@@ -49,9 +50,10 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
       );
 
       let courierLat = null, courierLng = null, courierName = null, courierPhone = null;
+      let courierMsgKind: string | null = null, courierMsgHandle: string | null = null;
       if (row.courier_id) {
         const courierRes = await db.query(`
-          SELECT cp.lat, cp.lng, c.full_name_encrypted, c.phone_encrypted
+          SELECT cp.lat, cp.lng, c.full_name_encrypted, c.phone_encrypted, c.messenger_kind, c.messenger_handle
           FROM courier_positions cp
           JOIN couriers c ON c.id = cp.courier_id
           WHERE cp.courier_id = $1
@@ -65,8 +67,13 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
           courierName = enc ? String(enc).charAt(0) + '***' : null;
           const phoneEnc = courierRes.rows[0].phone_encrypted;
           courierPhone = phoneEnc ? '+*** *** ' + String(phoneEnc).substring(String(phoneEnc).length - 4) : null;
+          courierMsgKind = courierRes.rows[0].messenger_kind ?? null;
+          courierMsgHandle = courierRes.rows[0].messenger_handle ?? null;
         }
       }
+      // UX-2: expose the courier's messenger only within an active order (parity
+      // with phone; hidden once the order is terminal).
+      const courierActive = !['DELIVERED', 'REJECTED', 'CANCELLED'].includes(row.status);
 
       let etaMinutes = null;
       if (row.assignment_status === 'picked_up' && courierLat != null && courierLng != null && row.delivery_lat != null && row.delivery_lng != null) {
@@ -87,15 +94,38 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
         if (rr.rowCount > 0) { rating = rr.rows[0].rating; feedback = rr.rows[0].feedback; }
       } catch { /* table not yet migrated */ }
 
+      // Stored road route (advisory) for reconnecting clients — the worker pushes it
+      // live to order:{id} once at picked_up; this serves a client that joined late.
+      // Redis is the fast path; order_routes is the durable fallback once the Redis
+      // entry has expired (2h TTL).
+      let storedRoute = await loadRoute(orderId);
+      if (!storedRoute) {
+        try {
+          const dr = await db.query(
+            `SELECT polyline, distance_meters, duration_seconds FROM order_routes WHERE order_id = $1`,
+            [orderId],
+          );
+          if (dr.rowCount > 0) {
+            // polyline is stored as JSON text; provider is metrics-only and not persisted.
+            storedRoute = { polyline: JSON.parse(dr.rows[0].polyline), distance_m: dr.rows[0].distance_meters, duration_s: dr.rows[0].duration_seconds, provider: 'self' };
+          }
+        } catch { /* order_routes may not be migrated yet — advisory, fail soft */ }
+      }
+
       return reply.status(200).send({
         id: row.id,
         status: row.status,
+        type: row.type,
         rating,
         feedback,
+        route: storedRoute
+          ? { polyline: storedRoute.polyline, durationSeconds: storedRoute.duration_s, distanceMeters: storedRoute.distance_m }
+          : null,
         canRate: row.status === 'DELIVERED' && rating == null,
         deliveryAddress: row.delivery_address,
         deliveryInstructions: row.delivery_instructions,
         total: row.total,
+        tipAmount: row.tip_amount || 0,
         items: itemsRes.rows.map((r: any) => ({
           id: r.id,
           productId: r.product_id,
@@ -107,6 +137,9 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
         etaMinutes,
         courierName: row.courier_id ? courierName : null,
         courierPhoneMasked: row.courier_id ? courierPhone : null,
+        courierMessenger: row.courier_id && courierActive && courierMsgKind && courierMsgHandle
+          ? { kind: courierMsgKind, handle: courierMsgHandle }
+          : null,
         courierPosition: courierLat != null && courierLng != null ? { lat: Number(courierLat), lng: Number(courierLng) } : null,
         deliveryLat: row.delivery_lat != null ? Number(row.delivery_lat) : null,
         deliveryLng: row.delivery_lng != null ? Number(row.delivery_lng) : null,

@@ -16,6 +16,12 @@ export * from './components/admin/AdminUI.js';
 
 export * from './components/courier/CourierUI.js';
 export * from './hooks/use-geolocation.js';
+export * from './hooks/use-geo-stream.js';
+export { useCourierMarker } from './hooks/use-courier-marker.js';
+export type { CourierTarget, SmoothedMarker } from './hooks/use-courier-marker.js';
+export { useDeliveryEta } from './hooks/use-delivery-eta.js';
+export type { DeliveryEta } from './hooks/use-delivery-eta.js';
+export * from './lib/geo-anim.js';
 export { useBreakpoint, useIsMobile } from './hooks/use-breakpoint.js';
 export { useHaptics } from './hooks/use-haptics.js';
 export { SoundPrefsProvider, useSoundPrefs } from './lib/sound-prefs.js';

@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import crypto from 'node:crypto';
+import { seedMenuFromDraft } from '../../lib/menu-seed.js';
 
 const STEP_COUNT = 8;
 const STEP_LABELS: Record<number, string> = {
@@ -40,6 +41,9 @@ export default (async function onboardingRoutes(fastify: any, opts: any) {
         currency_code: z.string().length(3).default('ALL'),
         default_locale: z.string().min(2).default('sq'),
         supported_locales: z.array(z.string().min(2)).default(['sq', 'en']),
+        // Menu-first onboarding: claim an anonymous parse (POST /menu/import/anonymous)
+        // and seed this new location's menu from its stashed draft.
+        anonymous_import_id: z.string().uuid().optional(),
       }).strict(),
     },
     config: { rateLimit: { max: 3, timeWindow: '1 minute' } },
@@ -105,11 +109,53 @@ export default (async function onboardingRoutes(fastify: any, opts: any) {
         [JSON.stringify(initState), locId],
       );
 
+      // 7. Menu-first claim: seed the new location from a stashed anonymous parse.
+      // Best-effort and atomic — the account/location must succeed regardless; a
+      // failed seed just lands the owner in activation with an empty menu (the
+      // pre-menu-first behaviour). The location rows above are already committed,
+      // so this runs in its own transaction.
+      let seeded: { categories: number; products: number } | null = null;
+      if (body.anonymous_import_id) {
+        const redis = (fastify as any).redis;
+        try {
+          const raw = redis ? await redis.get(`import:anon:${body.anonymous_import_id}`) : null;
+          if (raw) {
+            const { draft } = JSON.parse(raw);
+            await client.query('BEGIN');
+            const counts = await seedMenuFromDraft(client, locId, draft);
+            // Committing a reviewed menu satisfies the human-review publish gate (Z2).
+            await client.query(
+              `UPDATE locations SET menu_confirmed_at = COALESCE(menu_confirmed_at, now()) WHERE id = $1`,
+              [locId],
+            );
+            // Pre-fill contact from the menu document (fill-if-empty — phone was
+            // already set from the form above, so this mainly fills address).
+            const rmeta = (draft as any)?._restaurant;
+            if (rmeta && (rmeta.address || rmeta.phone)) {
+              await client.query(
+                `UPDATE locations
+                    SET address = CASE WHEN COALESCE(NULLIF(btrim(address), ''), '') = '' THEN COALESCE($2, address) ELSE address END,
+                        phone   = CASE WHEN COALESCE(NULLIF(btrim(phone), ''), '')   = '' THEN COALESCE($3, phone)   ELSE phone   END
+                  WHERE id = $1`,
+                [locId, rmeta.address || null, rmeta.phone || null],
+              );
+            }
+            await client.query('COMMIT');
+            await redis.del(`import:anon:${body.anonymous_import_id}`).catch(() => {});
+            seeded = { categories: counts.categories, products: counts.products };
+          }
+        } catch (err: any) {
+          await client.query('ROLLBACK').catch(() => {});
+          request.log?.warn?.(`[onboarding] menu seed from anonymous import failed: ${err?.message}`);
+        }
+      }
+
       return reply.status(201).send({
         locationId: locId,
         slug: body.slug,
         onboardingState: initState,
         currentStep: 1,
+        seeded,
       });
     } finally {
       client.release();

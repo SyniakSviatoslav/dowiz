@@ -114,9 +114,11 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
       <div className="absolute inset-0 bg-[var(--status-delivered-bg)]" style={{ width: `${slideRatio * 100}%` }} />
       <span className="font-bold text-[var(--brand-text-muted)] z-10 pointer-events-none" style={{ opacity: 1 - slideRatio }}>                  {loading ? t('common.processing', 'Processing...') : resolvedLabel}</span>
       
-      <div 
+      <div
         className="absolute left-1 top-1 bottom-1 w-12 bg-[var(--brand-primary)] rounded-full shadow-md flex items-center justify-center cursor-grab active:cursor-grabbing z-20 transition-transform"
         style={{ transform: `translateX(${slideRatio * (containerRef.current ? containerRef.current.clientWidth - 56 : 0)}px)` }}
+        role="presentation"
+        aria-hidden="true"
         onMouseDown={handleDragStart}
         onTouchStart={handleDragStart}
       >

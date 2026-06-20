@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Suspense } from 'react';
-import { Routes, Route, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { apiClient } from '../lib/index.js';
 import { ToastProvider, LanguageSwitcher, useI18n, BottomTabBar, ResponsiveDialog, CurrencySwitcher } from '@deliveryos/ui';
 import type { TabItem } from '@deliveryos/ui';
 import { DashboardPage } from '../pages/admin/DashboardPage.js';
@@ -9,13 +10,21 @@ import { CouriersPage } from '../pages/admin/CouriersPage.js';
 import { CRMPage } from '../pages/admin/CRMPage.js';
 import { SettingsPage } from '../pages/admin/SettingsPage.js';
 import { OnboardingPage } from '../pages/admin/OnboardingPage.js';
+import { ActivationPage } from '../pages/admin/ActivationPage.js';
 import { SupplyLibraryPage } from '../pages/admin/SupplyLibraryPage.js';
 import { PromotionsPage } from '../pages/admin/PromotionsPage.js';
-import { FlowTestPage } from '../pages/admin/FlowTestPage.js';
 
 const AnalyticsPage = React.lazy(() => import('../pages/admin/AnalyticsPage.js').then(m => ({ default: m.AnalyticsPage })));
 
+// Dev-only diagnostic surface. Lazily + conditionally imported so the page and
+// its mock-courier/demo helpers are tree-shaken out of production builds
+// (import.meta.env.DEV is statically false in prod → the dynamic import is dropped).
+const FlowTestPage = import.meta.env.DEV
+  ? React.lazy(() => import('../pages/admin/FlowTestPage.js').then(m => ({ default: m.FlowTestPage })))
+  : null;
+
 const ALL_NAV_ITEMS = [
+  { key: 'admin.activation', href: '/admin/activation', icon: 'ti ti-rocket' },
   { key: 'admin.dashboard', href: '/admin', icon: 'ti ti-layout-dashboard' },
   { key: 'admin.orders', href: '/admin/orders', icon: 'ti ti-clipboard-list' },
   { key: 'admin.menu', href: '/admin/menu', icon: 'ti ti-tools-kitchen-2' },
@@ -65,7 +74,9 @@ function AdminLayout() {
     const next = logoClicks + 1;
     setLogoClicks(next);
     if (next >= 5) {
-      setShowFlowTest(true);
+      // The flow-test surface only exists in dev builds (route + page are gated
+      // behind import.meta.env.DEV), so don't reveal the nav entry in prod.
+      if (import.meta.env.DEV) setShowFlowTest(true);
       setLogoClicks(0);
     }
     setTimeout(() => { if (logoClicks < 5) setLogoClicks(0); }, 3000);
@@ -83,7 +94,7 @@ function AdminLayout() {
 
   const SidebarNav = () => (
     <nav className="flex-1 p-2 space-y-0.5 overflow-auto">
-      {[...ALL_NAV_ITEMS, ...(showFlowTest ? [{ key: 'admin.flow_test', href: '/admin/_flow-test', icon: 'ti ti-flask' }] : [])].map(item => (
+      {[...ALL_NAV_ITEMS, ...(import.meta.env.DEV && showFlowTest ? [{ key: 'admin.flow_test', href: '/admin/_flow-test', icon: 'ti ti-flask' }] : [])].map(item => (
         <button
           key={item.href}
           onClick={() => navTo(item.href)}
@@ -183,7 +194,7 @@ function AdminLayout() {
       {/* More sheet */}
       <ResponsiveDialog open={moreOpen} onClose={() => setMoreOpen(false)} title={t('admin.more', 'More')}>
         <div className="grid grid-cols-2 gap-2">
-          {[...MORE_ITEMS, ...(showFlowTest ? [{ key: 'admin.flow_test', href: '/admin/_flow-test', icon: 'ti ti-flask' }] : [])].map(item => {
+          {[...MORE_ITEMS, ...(import.meta.env.DEV && showFlowTest ? [{ key: 'admin.flow_test', href: '/admin/_flow-test', icon: 'ti ti-flask' }] : [])].map(item => {
             const active = isActive(item.href);
             return (
               <button
@@ -205,12 +216,34 @@ function AdminLayout() {
   );
 }
 
+// Entry flow (O3): a not-yet-published storefront lands straight in the activation
+// tool (tool-as-onboarding) — the first thing the owner sees is their menu coming to
+// life, with the gate showing what's left. Published storefronts get the dashboard.
+function AdminHome() {
+  // undefined = loading · null = show dashboard · string = redirect path
+  const [dest, setDest] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const s = await apiClient<any>('/owner/settings');
+        if (!s?.id) { if (alive) setDest('/admin/onboarding'); return; } // brand-new owner → create a storefront
+        const st = await apiClient<any>(`/owner/activation/${s.id}/status`);
+        if (alive) setDest(st?.published ? null : '/admin/activation'); // draft → activation tool
+      } catch { if (alive) setDest(null); }
+    })();
+    return () => { alive = false; };
+  }, []);
+  if (dest === undefined) return null; // brief flash-prevention while we check
+  return dest ? <Navigate to={dest} replace /> : <DashboardPage />;
+}
+
 export function AdminRoutes() {
   return (
     <ToastProvider>
       <Routes>
         <Route path="/" element={<AdminLayout />}>
-          <Route index element={<DashboardPage />} />
+          <Route index element={<AdminHome />} />
           <Route path="orders" element={<DashboardPage />} />
           <Route path="menu" element={<MenuManagerPage />} />
           <Route path="supplies" element={<SupplyLibraryPage />} />
@@ -221,7 +254,10 @@ export function AdminRoutes() {
           <Route path="crm" element={<CRMPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="onboarding" element={<OnboardingPage />} />
-          <Route path="_flow-test" element={<FlowTestPage />} />
+          <Route path="activation" element={<ActivationPage />} />
+          {import.meta.env.DEV && FlowTestPage && (
+            <Route path="_flow-test" element={<Suspense fallback={null}><FlowTestPage /></Suspense>} />
+          )}
         </Route>
       </Routes>
     </ToastProvider>

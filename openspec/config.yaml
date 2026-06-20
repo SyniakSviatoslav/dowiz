@@ -1,0 +1,41 @@
+schema: spec-driven
+
+context: |
+  Project: dowiz / DeliveryOS — multi-tenant restaurant ordering + delivery
+  platform (storefront `/s/:slug`, owner `/admin/*`, courier app). Albanian
+  market (locale `sq`), solo-maintained.
+
+  Tech stack: TypeScript, pnpm monorepo (13 workspaces) — apps/api (Fastify),
+  apps/web (React + Vite), apps/worker, packages/{db,ui,config,domain,
+  shared-types,platform}. Postgres. Deployed on Fly.io (dowiz.fly.dev).
+
+  Conventions:
+  - Conventional Commits; commits end with the Co-Authored-By trailer.
+  - Match existing patterns; edit-over-create; read before edit.
+  - Verification: typecheck + build via husky pre-commit (`pnpm typecheck`,
+    `pnpm build`); lint is warn-only.
+
+  Red lines (override default instincts — see .claude/CLAUDE.md / AGENTS.md):
+  - AI proposes, a human approves — zero autonomous unreviewed mutation. In
+    OpenSpec terms: a human approves the proposal/spec BEFORE `apply`.
+  - Mandatory Proof Rule: every behavior change needs programmatic proof — UI
+    change -> Playwright E2E vs dowiz.fly.dev; API-only -> a request.* assertion
+    or cited test. Never declare done without pasting proof output.
+  - Governance-protected zones (a PreToolUse hook blocks edits without manual
+    approval): packages/shared-types (contracts), package.json/lockfile and
+    other infra/schema. Changes there must be human-approved.
+  - Product vs dev/ops are separate; never route dev/ops tooling into the
+    product runtime, N=1 budget, or customer PII.
+
+  Migration note: adopt OpenSpec gradually — NEW changes flow through
+  propose -> apply -> archive; existing handoff docs remain reference.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours

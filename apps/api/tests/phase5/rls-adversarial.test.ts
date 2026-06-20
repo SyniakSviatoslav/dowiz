@@ -71,7 +71,7 @@ test('H1: Adversarial cross-tenant RLS audit', async (t) => {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        await client.query('SET LOCAL app.user_id = $1', [ownerAId]);
+        await client.query("SELECT set_config('app.user_id', $1, true)", [ownerAId]);
         const res = await client.query(
           `SELECT * FROM ${table} WHERE location_id = $1 LIMIT 1`,
           [tenantBLocationId],
@@ -89,7 +89,7 @@ test('H1: Adversarial cross-tenant RLS audit', async (t) => {
         const client = await pool.connect();
         try {
           await client.query('BEGIN');
-          await client.query('SET LOCAL app.user_id = $1', [ownerAId]);
+          await client.query("SELECT set_config('app.user_id', $1, true)", [ownerAId]);
           try {
             await client.query(
               `INSERT INTO ${table} (id, location_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
@@ -116,7 +116,7 @@ test('H1: Adversarial cross-tenant RLS audit', async (t) => {
         const client = await pool.connect();
         try {
           await client.query('BEGIN');
-          await client.query('SET LOCAL app.user_id = $1', [ownerAId]);
+          await client.query("SELECT set_config('app.user_id', $1, true)", [ownerAId]);
           const res = await client.query(
             `UPDATE ${table} SET updated_at = now() WHERE location_id = $1`,
             [tenantBLocationId],
@@ -133,7 +133,7 @@ test('H1: Adversarial cross-tenant RLS audit', async (t) => {
         const client = await pool.connect();
         try {
           await client.query('BEGIN');
-          await client.query('SET LOCAL app.user_id = $1', [ownerAId]);
+          await client.query("SELECT set_config('app.user_id', $1, true)", [ownerAId]);
           const res = await client.query(
             `DELETE FROM ${table} WHERE location_id = $1`,
             [tenantBLocationId],

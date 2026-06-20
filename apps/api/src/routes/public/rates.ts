@@ -20,7 +20,18 @@ export default (async function ratesRoutes(fastify, opts) {
       );
 
       if (res.rowCount === 0) {
-        return reply.status(503).send({ error: 'rates_not_available', message: 'Exchange rates not yet loaded' });
+        // Fallback: the rates-refresh worker populates exchange_rates hourly, but a
+        // fresh deploy (or a transient upstream FX outage) leaves the table empty.
+        // Serve a sane static ALL→EUR rate so the storefront's secondary-currency
+        // display keeps working instead of 503-ing the whole pricing UI. Short
+        // cache so the live worker value is picked up as soon as it lands.
+        reply.header('Cache-Control', 'public, max-age=300');
+        return {
+          base: 'ALL',
+          target: 'EUR',
+          rate: 0.0099,
+          fetchedAt: new Date(0).toISOString(),
+        };
       }
 
       const { rate, fetched_at } = res.rows[0];

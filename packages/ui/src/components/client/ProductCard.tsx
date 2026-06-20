@@ -76,19 +76,41 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             variants={product.isAvailable ? imgVariants : undefined}
           />
         ) : (
-          // Crafted, on-brand fallback when a dish has no (or a broken) image —
-          // the initial in the brand colour on a subtle brand gradient, themed
-          // per tenant. Intentional, not a dead grey box.
+          // Crafted, on-brand no-photo fallback. Not a dead grey box and not a
+          // giant monogram: a warm brand-tinted gradient, a faint repeating
+          // dotted "tablecloth" texture, and a centred cutlery glyph in a soft
+          // brand-coloured medallion. Themed per tenant via --brand-* tokens.
           <div
-            className="flex items-center justify-center w-full h-full select-none"
-            style={{ background: 'linear-gradient(135deg, var(--brand-surface-raised), var(--brand-surface))' }}
+            className="flex items-center justify-center w-full h-full select-none relative"
+            style={{
+              background:
+                'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 14%, var(--brand-surface)) 0%, var(--brand-surface-raised) 55%, color-mix(in srgb, var(--brand-primary) 7%, var(--brand-surface)) 100%)',
+            }}
             aria-hidden="true"
           >
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundImage:
+                  'radial-gradient(color-mix(in srgb, var(--brand-primary) 30%, transparent) 1px, transparent 1.4px)',
+                backgroundSize: '14px 14px',
+                opacity: 0.35,
+              }}
+            />
             <span
-              className="font-bold leading-none"
-              style={{ fontSize: 'clamp(2.5rem, 8vw, 3.75rem)', color: 'var(--brand-primary)', opacity: 0.2, fontFamily: 'var(--brand-font-heading, inherit)' }}
+              className="relative flex items-center justify-center rounded-full"
+              style={{
+                width: 'clamp(2.75rem, 22%, 3.75rem)',
+                aspectRatio: '1 / 1',
+                background: 'color-mix(in srgb, var(--brand-surface) 78%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--brand-primary) 28%, transparent)',
+                boxShadow: '0 2px 10px color-mix(in srgb, var(--brand-primary) 16%, transparent)',
+              }}
             >
-              {product.name?.trim().charAt(0).toUpperCase() || '\u{1F37D}'}
+              <i
+                className="ti ti-tools-kitchen-2 leading-none"
+                style={{ fontSize: 'clamp(1.25rem, 9vw, 1.75rem)', color: 'var(--brand-primary)' }}
+              />
             </span>
           </div>
         )}
@@ -103,7 +125,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
               );
             })}
             {allergens.length > 3 && (
-              <span className="text-[7px] font-semibold px-1 py-0.5 rounded-sm" style={{ background: 'rgba(220,38,38,0.15)', color: 'var(--color-danger)' }}>
+              <span className="text-[7px] font-semibold px-1 py-0.5 rounded-sm" style={{ background: '#fee2e2', color: '#991b1b' }}>
                 +{allergens.length - 3}
               </span>
             )}
@@ -189,18 +211,10 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
           </div>
         )}
 
-        {hasAllergens && (
-          <div className="flex gap-0.5 flex-wrap">
-            {allergens.map(a => {
-              const s = getAllergenStyle(a);
-              return (
-                <span key={a} className="px-1 py-0 rounded text-[8px] font-semibold uppercase leading-tight" style={{ background: s.bg, color: s.text }}>
-                  {t(`allergen.${a.toLowerCase()}`, a)}
-                </span>
-              );
-            })}
-          </div>
-        )}
+        {/* Allergen scent lives on the image corner badges (top-3 + overflow) and
+            the full labelled list is in the detail modal — rendering the loud
+            uppercase colour row again here was redundant noise that broke the
+            card's palette discipline, so it's intentionally omitted. */}
 
         <div className="flex items-center justify-between mt-auto pt-1">
           <div className="flex items-baseline gap-1">

@@ -19,7 +19,7 @@ const TRANSITIONS: Record<OrderStatus, ReadonlyArray<OrderStatus>> = {
   PENDING: ['CONFIRMED', 'REJECTED', 'CANCELLED'],
   CONFIRMED: ['PREPARING', 'IN_DELIVERY'],
   PREPARING: ['READY'],
-  READY: ['IN_DELIVERY'],
+  READY: ['IN_DELIVERY', 'PICKED_UP'],
   IN_DELIVERY: ['DELIVERED'],
   DELIVERED: [],
   REJECTED: [],
@@ -28,7 +28,9 @@ const TRANSITIONS: Record<OrderStatus, ReadonlyArray<OrderStatus>> = {
   PICKED_UP: [],
 };
 
-const SCAFFOLD_STATUSES: ReadonlySet<OrderStatus> = new Set(['SCHEDULED', 'PICKED_UP']);
+// PICKED_UP is a live terminal state for pickup orders (READY → PICKED_UP).
+// SCHEDULED remains scaffold (the scheduled flow isn't implemented yet).
+const SCAFFOLD_STATUSES: ReadonlySet<OrderStatus> = new Set(['SCHEDULED']);
 
 export function assertTransition(from: OrderStatus, to: OrderStatus): void {
   if (from === to) throw new SameStatusError(from);
@@ -40,5 +42,5 @@ export function assertTransition(from: OrderStatus, to: OrderStatus): void {
 }
 
 export function isTerminal(status: OrderStatus): boolean {
-  return ['DELIVERED', 'REJECTED', 'CANCELLED'].includes(status);
+  return ['DELIVERED', 'PICKED_UP', 'REJECTED', 'CANCELLED'].includes(status);
 }

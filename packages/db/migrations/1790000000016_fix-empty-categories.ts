@@ -73,7 +73,6 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
     $$;
   `);
 
-  pgm.sql(`INSERT INTO pgmigrations (name, run_on) VALUES ('1790000000016_fix-empty-categories', NOW()) ON CONFLICT DO NOTHING`);
 }
 
 export async function down(pgm: MigrationBuilder): Promise<void> {}

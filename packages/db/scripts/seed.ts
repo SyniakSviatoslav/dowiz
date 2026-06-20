@@ -1,5 +1,5 @@
 import { createSessionPool } from '../src/index.js';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 
 async function run() {
   const pool = createSessionPool();
@@ -74,10 +74,14 @@ async function run() {
     const realOrgId = orgRes.rows[0].id;
 
     // Locations — with locale and commerce columns that exist in schema
+    // Demo location is a fully PUBLISHED, live storefront:
+    //   status='open' (daily switch ON), published_at + menu_confirmed_at set,
+    //   lat/lng populated so delivery-distance pricing works. This is the
+    //   complete-lifecycle fixture the E2E suite consumes without manual setup.
     const loc1Res = await pool.query(
-      `INSERT INTO locations (id, org_id, slug, name, phone, default_locale, supported_locales, currency_code, currency_minor_unit, delivery_fee_flat, min_order_value, free_delivery_threshold, status)
-       VALUES ($1, $2, $3, $4, $5, 'sq', ARRAY['sq','en'], 'ALL', 0, 200, 500, 2000, 'active')
-       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, default_locale = 'sq', supported_locales = ARRAY['sq','en'], status = 'active', delivery_fee_flat = 200, min_order_value = 500, free_delivery_threshold = 2000 RETURNING id`,
+      `INSERT INTO locations (id, org_id, slug, name, phone, lat, lng, default_locale, supported_locales, currency_code, currency_minor_unit, delivery_fee_flat, min_order_value, free_delivery_threshold, status, published_at, menu_confirmed_at, pickup_enabled)
+       VALUES ($1, $2, $3, $4, $5, 41.3275, 19.8187, 'sq', ARRAY['sq','en'], 'ALL', 0, 200, 500, 2000, 'open', now(), now(), true)
+       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, lat = 41.3275, lng = 19.8187, default_locale = 'sq', supported_locales = ARRAY['sq','en'], status = 'open', published_at = COALESCE(locations.published_at, now()), menu_confirmed_at = COALESCE(locations.menu_confirmed_at, now()), pickup_enabled = true, delivery_fee_flat = 200, min_order_value = 500, free_delivery_threshold = 2000 RETURNING id`,
       [demoLocationId, realOrgId, 'demo', 'Demo Location', '+355691234567']
     );
     const realDemoLocId = loc1Res.rows[0].id;
@@ -175,6 +179,35 @@ async function run() {
       [product1Id, modGrp2Id, realDemoLocId]
     );
 
+    // Modifier translations — sq (default) + en + uk, so the product modal
+    // localizes group/option labels instead of leaking the seeded language.
+    await pool.query(
+      `INSERT INTO modifier_group_translations (group_id, locale, name)
+       SELECT mg.id, v.locale, v.name
+       FROM modifier_groups mg
+       JOIN (VALUES
+         ('Розмір','sq','Madhësia'), ('Розмір','en','Size'), ('Розмір','uk','Розмір'),
+         ('Додатки','sq','Shtesa'), ('Додатки','en','Add-ons'), ('Додатки','uk','Додатки')
+       ) AS v(src, locale, name) ON v.src = mg.name
+       WHERE mg.location_id = $1
+       ON CONFLICT (group_id, locale) DO UPDATE SET name = EXCLUDED.name`,
+      [realDemoLocId]
+    );
+    await pool.query(
+      `INSERT INTO modifier_translations (modifier_id, locale, name)
+       SELECT m.id, v.locale, v.name
+       FROM modifiers m
+       JOIN (VALUES
+         ('Мала','sq','E vogël'), ('Мала','en','Small'), ('Мала','uk','Мала'),
+         ('Велика','sq','E madhe'), ('Велика','en','Large'), ('Велика','uk','Велика'),
+         ('Сирок','sq','Djathë'), ('Сирок','en','Cheese'), ('Сирок','uk','Сирок'),
+         ('Гриби','sq','Kërpudha'), ('Гриби','en','Mushrooms'), ('Гриби','uk','Гриби')
+       ) AS v(src, locale, name) ON v.src = m.name
+       WHERE m.location_id = $1
+       ON CONFLICT (modifier_id, locale) DO UPDATE SET name = EXCLUDED.name`,
+      [realDemoLocId]
+    );
+
     // Translations — Albanian + English
     await pool.query(
       `INSERT INTO product_translations (product_id, locale, name, description)
@@ -258,9 +291,76 @@ async function run() {
       );
     }
 
+    // ── TI-1 fixture: a SECOND menu category + products so the published demo
+    //    tenant has >=2 categories, each with available, priced products. ──────
+    let drinksCatId: string;
+    const drinksCheck = await pool.query(
+      `SELECT id FROM categories WHERE location_id = $1 AND name = 'Drinks'`, [realDemoLocId]
+    );
+    if (drinksCheck.rowCount && drinksCheck.rowCount > 0) {
+      drinksCatId = drinksCheck.rows[0].id;
+    } else {
+      drinksCatId = randomUUID();
+      await pool.query(
+        `INSERT INTO categories (id, location_id, name, sort_order) VALUES ($1, $2, 'Drinks', 1)`,
+        [drinksCatId, realDemoLocId]
+      );
+    }
+    for (const [pname, price] of [['Coca-Cola', 250], ['Water', 100]] as [string, number][]) {
+      const exists = await pool.query(
+        `SELECT 1 FROM products WHERE location_id = $1 AND name = $2`, [realDemoLocId, pname]
+      );
+      if (!exists.rowCount) {
+        await pool.query(
+          `INSERT INTO products (id, location_id, category_id, name, price, is_available)
+           VALUES ($1, $2, $3, $4, $5, true)`,
+          [randomUUID(), realDemoLocId, drinksCatId, pname, price]
+        );
+      }
+    }
+    await pool.query(
+      `INSERT INTO category_translations (category_id, locale, name) VALUES ($1, 'en', 'Drinks'), ($1, 'sq', 'Pije')
+       ON CONFLICT (category_id, locale) DO UPDATE SET name = EXCLUDED.name`,
+      [drinksCatId]
+    );
+
+    // ── TI-1 fixture: courier domain — a courier mapped to the demo location
+    //    (courier_locations) with an ON-SHIFT, available courier_shift, so the
+    //    dispatch/lifecycle E2E has a ready courier without manual API calls. ──
+    //    PII columns are encrypted bytea in prod; for a local fixture we store
+    //    an empty ciphertext + a deterministic email_hash (same shape as the
+    //    dev mock-auth path in server.ts). Idempotent via stable id.
+    const seedCourierId = '00000000-0000-4000-8000-0000000c0d1e';
+    const courierEmailHash = createHash('sha256').update('courier@demo.com').digest('hex');
+    await pool.query(
+      `INSERT INTO couriers (id, email_encrypted, email_hash, full_name_encrypted, password_hash, status)
+       VALUES ($1, $2, $3, $2, 'mock', 'active')
+       ON CONFLICT (id) DO UPDATE SET status = 'active'`,
+      [seedCourierId, Buffer.alloc(0), courierEmailHash]
+    );
+    await pool.query(
+      `INSERT INTO courier_locations (courier_id, location_id, role)
+       VALUES ($1, $2, 'courier')
+       ON CONFLICT (courier_id, location_id) DO NOTHING`,
+      [seedCourierId, realDemoLocId]
+    );
+    // on-shift = status 'available'. No unique constraint exists, so guard the insert.
+    const shiftCheck = await pool.query(
+      `SELECT 1 FROM courier_shifts WHERE courier_id = $1 AND location_id = $2 AND ended_at IS NULL`,
+      [seedCourierId, realDemoLocId]
+    );
+    if (!shiftCheck.rowCount) {
+      await pool.query(
+        `INSERT INTO courier_shifts (courier_id, location_id, status, started_at, last_heartbeat_at)
+         VALUES ($1, $2, 'available', now(), now())`,
+        [seedCourierId, realDemoLocId]
+      );
+    }
+
     await pool.query('COMMIT');
 
     console.log('✅ Seed completed successfully.');
+    console.log(`SEED_COURIER_ID: ${seedCourierId} (on-shift @ demo)`);
     console.log('UUIDs for verify-rls:');
     console.log(`OWNER_A_ID: ${ownerARealId}`);
     console.log(`OWNER_B_ID: ${ownerBRealId}`);

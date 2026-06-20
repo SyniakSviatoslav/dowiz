@@ -19,8 +19,8 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
   const reconnectAttempts = useRef(0);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
-  const maxReconnectAttempts = 5;
   const initialBackoff = 2000;
+  const maxBackoff = 15000;
 
   const onMessageRef = useRef(onMessage);
   const onReconnectRef = useRef(onReconnect);
@@ -90,19 +90,21 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
           return;
         }
 
-        setStatus('error');
-        if (reconnectAttempts.current < maxReconnectAttempts) {
-          const backoff = Math.min(initialBackoff * Math.pow(1.5, reconnectAttempts.current), 15000);
-          const jitter = Math.random() * 1000;
-          reconnectTimer.current = setTimeout(() => {
-            if (mountedRef.current) {
-              reconnectAttempts.current += 1;
-              connect();
-            }
-          }, backoff + jitter);
-        } else {
-          setStatus('disconnected');
-        }
+        // Reconnect FOREVER with capped backoff. Giving up permanently after N
+        // tries (the old behaviour) left owners/couriers on a silently-stale
+        // dashboard after any brief outage (deploy, machine restart, network
+        // blip) until they manually reloaded — order updates just stopped
+        // arriving. The backoff caps at maxBackoff, so this settles into a steady
+        // ~15s retry rather than hammering the server.
+        setStatus('reconnecting');
+        const backoff = Math.min(initialBackoff * Math.pow(1.5, reconnectAttempts.current), maxBackoff);
+        const jitter = Math.random() * 1000;
+        reconnectTimer.current = setTimeout(() => {
+          if (mountedRef.current) {
+            reconnectAttempts.current += 1;
+            connect();
+          }
+        }, backoff + jitter);
       };
     } catch (err) {
       console.warn('[useWebSocket] connect failed:', err);
@@ -118,8 +120,32 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
       setStatus('disabled');
     }
 
+    // Reconnect promptly when the network comes back or the tab is refocused,
+    // instead of waiting out the backoff. Reset the attempt counter so the next
+    // connect uses the shortest delay. connect() no-ops if a socket is already
+    // open/connecting, so this is safe to fire liberally.
+    const resume = () => {
+      if (!enabled || !mountedRef.current) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const ws = wsRef.current;
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        reconnectAttempts.current = 0;
+        connect();
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', resume);
+      window.addEventListener('focus', resume);
+      document.addEventListener('visibilitychange', resume);
+    }
+
     return () => {
       mountedRef.current = false;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', resume);
+        window.removeEventListener('focus', resume);
+        document.removeEventListener('visibilitychange', resume);
+      }
       if (reconnectTimer.current) {
         clearTimeout(reconnectTimer.current);
         reconnectTimer.current = null;

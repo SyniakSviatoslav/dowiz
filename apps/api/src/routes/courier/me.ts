@@ -38,7 +38,8 @@ export default (async function courierMeRoutes(fastify: any, opts: any) {
     const locationId = request.user!.activeLocationId;
 
     const res = await db.query(
-      `SELECT c.email_encrypted, c.phone_encrypted, c.full_name_encrypted, c.last_login_at, cl.role 
+      `SELECT c.email_encrypted, c.phone_encrypted, c.full_name_encrypted, c.last_login_at,
+              c.messenger_kind, c.messenger_handle, cl.role
        FROM couriers c
        JOIN courier_locations cl ON c.id = cl.courier_id
        WHERE c.id = $1 AND cl.location_id = $2`,
@@ -63,8 +64,30 @@ export default (async function courierMeRoutes(fastify: any, opts: any) {
       masked_email: emailPlain ? maskStr(emailPlain) : '(decryption failed)',
       masked_phone: phonePlain ? maskStr(phonePlain) : null,
       last_login_at: row.last_login_at,
+      messenger_kind: row.messenger_kind ?? null,
+      messenger_handle: row.messenger_handle ?? null,
       active_location: { id: locationId, role: row.role }
     });
+  });
+
+  // 1b. Update messenger contact (UX-2) — the channel customers use to text the
+  // courier during an active delivery. Optional; both-or-neither (a handle with
+  // no kind can't deep-link), and sending empty clears it.
+  fastify.patch('/me/messenger', {
+    schema: {
+      body: z.object({
+        messenger_kind: z.enum(['telegram', 'whatsapp', 'viber']).nullable().optional(),
+        messenger_handle: z.string().max(120).nullable().optional(),
+      }).strict(),
+    },
+  }, async (request: any, reply: any) => {
+    const courierId = request.user!.sub;
+    const b = request.body as any;
+    const both = b.messenger_kind && b.messenger_handle && String(b.messenger_handle).trim();
+    const kind = both ? b.messenger_kind : null;
+    const handle = both ? String(b.messenger_handle).trim() : null;
+    await db.query(`UPDATE couriers SET messenger_kind = $2, messenger_handle = $3 WHERE id = $1`, [courierId, kind, handle]);
+    return reply.send({ messenger_kind: kind, messenger_handle: handle });
   });
 
   // 2. Audit Log
@@ -158,28 +181,37 @@ export default (async function courierMeRoutes(fastify: any, opts: any) {
     const locRes = await db.query(`SELECT currency_code FROM locations WHERE id = $1`, [locationId]);
     const locationCurrency = locRes.rows[0]?.currency_code || 'ALL';
 
+    // UX-4 follow-up: surface tips alongside cash earnings (display only; payout
+    // math is unchanged). Join orders for tip_amount; columns qualified since
+    // orders also has status/location_id.
     const today = await db.query(`
-      SELECT COALESCE(SUM(cash_amount), 0) AS amount, COUNT(*)::int AS deliveries
-      FROM courier_assignments
-      WHERE courier_id = $1 AND status = 'delivered'
-        AND delivered_at >= CURRENT_DATE
-        AND location_id = $2
+      SELECT COALESCE(SUM(ca.cash_amount), 0) AS amount, COUNT(*)::int AS deliveries,
+             COALESCE(SUM(o.tip_amount), 0) AS tips
+      FROM courier_assignments ca
+      LEFT JOIN orders o ON o.id = ca.order_id
+      WHERE ca.courier_id = $1 AND ca.status = 'delivered'
+        AND ca.delivered_at >= CURRENT_DATE
+        AND ca.location_id = $2
     `, [courierId, locationId]);
 
     const week = await db.query(`
-      SELECT COALESCE(SUM(cash_amount), 0) AS amount, COUNT(*)::int AS deliveries
-      FROM courier_assignments
-      WHERE courier_id = $1 AND status = 'delivered'
-        AND delivered_at >= date_trunc('week', CURRENT_DATE)
-        AND location_id = $2
+      SELECT COALESCE(SUM(ca.cash_amount), 0) AS amount, COUNT(*)::int AS deliveries,
+             COALESCE(SUM(o.tip_amount), 0) AS tips
+      FROM courier_assignments ca
+      LEFT JOIN orders o ON o.id = ca.order_id
+      WHERE ca.courier_id = $1 AND ca.status = 'delivered'
+        AND ca.delivered_at >= date_trunc('week', CURRENT_DATE)
+        AND ca.location_id = $2
     `, [courierId, locationId]);
 
     const month = await db.query(`
-      SELECT COALESCE(SUM(cash_amount), 0) AS amount, COUNT(*)::int AS deliveries
-      FROM courier_assignments
-      WHERE courier_id = $1 AND status = 'delivered'
-        AND delivered_at >= date_trunc('month', CURRENT_DATE)
-        AND location_id = $2
+      SELECT COALESCE(SUM(ca.cash_amount), 0) AS amount, COUNT(*)::int AS deliveries,
+             COALESCE(SUM(o.tip_amount), 0) AS tips
+      FROM courier_assignments ca
+      LEFT JOIN orders o ON o.id = ca.order_id
+      WHERE ca.courier_id = $1 AND ca.status = 'delivered'
+        AND ca.delivered_at >= date_trunc('month', CURRENT_DATE)
+        AND ca.location_id = $2
     `, [courierId, locationId]);
 
     const payouts = await db.query(`
@@ -194,10 +226,13 @@ export default (async function courierMeRoutes(fastify: any, opts: any) {
       summary: {
         today: parseInt(today.rows[0].amount),
         today_deliveries: today.rows[0].deliveries,
+        today_tips: parseInt(today.rows[0].tips),
         week: parseInt(week.rows[0].amount),
         week_deliveries: week.rows[0].deliveries,
+        week_tips: parseInt(week.rows[0].tips),
         month: parseInt(month.rows[0].amount),
         month_deliveries: month.rows[0].deliveries,
+        month_tips: parseInt(month.rows[0].tips),
         currency: locationCurrency,
       },
       payouts: payouts.rows.map((p: any) => ({
