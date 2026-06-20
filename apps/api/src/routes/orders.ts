@@ -572,9 +572,10 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           delivery_instructions,
           metadata,
           preflight,
-          customer_messenger_kind, customer_messenger_handle
+          customer_messenger_kind, customer_messenger_handle,
+          delivery_photo_key
          )
-         VALUES ($1, $2, $20, 'PENDING', $3, $4, $5, $6, $7, $8, $9, $10, 'cash', $11, $12, $13, $14, $15, $16, $17, $18, $19, $21, $22)
+         VALUES ($1, $2, $20, 'PENDING', $3, $4, $5, $6, $7, $8, $9, $10, 'cash', $11, $12, $13, $14, $15, $16, $17, $18, $19, $21, $22, $23)
          RETURNING id, status, subtotal, total, created_at::text, timeout_at::text`,
         [
           locationId, resolvedCustomerId, deliveryAddressText, pin?.lat ?? null, pin?.lng ?? null,
@@ -586,6 +587,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           preflightMeta,
           input.type,
           (cust as any)?.messenger_kind || null, (cust as any)?.messenger_handle || null,
+          (input as any).delivery_photo_key || null,
         ]
       );
       const order = orderRes.rows[0];
