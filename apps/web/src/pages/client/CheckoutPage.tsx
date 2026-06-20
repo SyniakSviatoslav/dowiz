@@ -216,6 +216,11 @@ export function CheckoutPage() {
   const [cashAmount, setCashAmount] = useState<number>(0);
   const [tipAmount, setTipAmount] = useState<number>(0); // UX-4 optional courier tip
   const [orderError, setOrderError] = useState('');
+  // #4 — restaurant phone for the failure fallback, cached on mount so the "call the
+  // restaurant" CTA never depends on a network fetch made under the same load that
+  // caused the failure. Null = no CTA (fail-soft to the generic toast).
+  const [fallbackPhone, setFallbackPhone] = useState<string | null>(null);
+  const [showPhoneFallback, setShowPhoneFallback] = useState(false);
   const [instructionOption, setInstructionOption] = useState<string>('');
   const [instructionCustom, setInstructionCustom] = useState<string>('');
   const [entrance, setEntrance] = useState('');
@@ -255,6 +260,13 @@ export function CheckoutPage() {
       .catch((err) => {
         console.debug('[CheckoutPage] failed to load location info:', err);
       });
+    // Cache the restaurant phone NOW (on mount) for the order-failure fallback, so
+    // the CTA is available even when the order POST fails under DB/load pressure.
+    fetch(`/api/public/locations/${slug}/fallback-config`).then(r => r.json())
+      .then((cfg: any) => {
+        if (cfg && cfg.showPhoneOnError !== false && cfg.phone) setFallbackPhone(cfg.phone);
+      })
+      .catch(() => {/* fail-soft: no CTA, generic toast only */});
     try {
       const saved = localStorage.getItem(`dos_last_delivery_${slug}`);
       if (saved) {
@@ -359,6 +371,7 @@ export function CheckoutPage() {
   const submitOrder = async (verifiedToken?: string) => {
     if (!slug || !locationId) { setPlacing(false); return false; }
     setOrderError('');
+    setShowPhoneFallback(false);
     try {
       const idempotencyKey = crypto.randomUUID();
       const pinLat = (pinLocation as [number, number])?.[1] || (locationCenter as [number, number])?.[1] || 41.324;
@@ -436,7 +449,11 @@ export function CheckoutPage() {
       return true;
     } catch (err: any) {
       setPlacing(false);
-      if (isDevMode()) { clearCart(); navigate(`/s/${slug}/order/o_mock_123`); return false; }
+      // Dev convenience ONLY — compile-time gated so Vite dead-strips this entire
+      // branch from any production build (import.meta.env.DEV is statically false),
+      // making the o_mock_123 fake-success physically absent from the prod bundle.
+      // A real session's dos_dev flag can no longer spoof success on a real failure.
+      if (import.meta.env.DEV && isDevMode()) { clearCart(); navigate(`/s/${slug}/order/o_mock_123`); return false; }
       if (err?.status === 422 && err?.data?.code === 'MIN_ORDER_NOT_MET') {
         setOrderError(t('checkout.min_order_error', 'Minimum order is {{min}} {{currency}}. Your total is {{subtotal}}.', {
           min: err.data.details?.min_order_value,
@@ -445,6 +462,11 @@ export function CheckoutPage() {
         }));
         return false;
       }
+      // Non-422 (5xx / network / timeout) is not customer-fixable → offer the
+      // out-of-band path ("call the restaurant"). 422 business errors carry an
+      // actionable message and the customer can fix the cart, so no phone CTA.
+      // Cart is preserved either way (clearCart only runs on success).
+      if (err?.status !== 422) setShowPhoneFallback(true);
       setOrderError(t('checkout.order_failed', 'Failed to place order. Please try again.'));
       return false;
     }
@@ -862,9 +884,34 @@ export function CheckoutPage() {
           <div>
             <p className="font-semibold mb-1">Order cannot be placed</p>
             <p>{orderError}</p>
+            {showPhoneFallback && fallbackPhone && (
+              <a
+                href={`tel:${fallbackPhone}`}
+                data-testid="checkout-call-restaurant"
+                className="inline-flex items-center gap-2 mt-3 px-4 py-2 rounded-full font-semibold text-sm"
+                style={{ background: 'var(--brand-primary-strong)', color: '#fff', minHeight: 'var(--tap-min)' }}
+              >
+                <i className="ti ti-phone" />
+                {t('checkout.call_restaurant', 'Call the restaurant')}: {fallbackPhone}
+              </a>
+            )}
           </div>
         </div>
       )}
+
+      {/* #5 — privacy notice at the point of consent. Warm, plain sq/en/uk; states
+          what we collect, who sees it (this restaurant + its courier — truthful to
+          tenant isolation), and that identifying details are removed on request via
+          the restaurant (anonymize-not-delete; no self-service button, no hard
+          retention number the runtime can't yet positively prove). */}
+      <div data-testid="checkout-privacy-notice" className="px-4 py-3 rounded-xl border text-xs leading-relaxed" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-muted)' }}>
+        <p className="font-semibold mb-1" style={{ color: 'var(--brand-text)' }}>
+          <i className="ti ti-lock mr-1" />{t('checkout.privacy.title', 'Your data')}
+        </p>
+        <p>{t('checkout.privacy.what', 'To deliver your order we collect your name, phone, address and (if you add it) a door photo.')}</p>
+        <p className="mt-1">{t('checkout.privacy.who', 'Only this restaurant and its courier can see it — no other restaurant.')}</p>
+        <p className="mt-1">{t('checkout.privacy.removal', 'We keep it only as long as needed for your orders and remove the details that identify you on request — contact the restaurant.')}</p>
+      </div>
 
       <StickyActionBar>
         <motion.button
