@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot, PriceDisplay } from '@deliveryos/ui';
 import type { CourierTask, CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
+import { messengerLink } from '../../lib/messenger.js';
 import { z } from 'zod';
 
 const MessagesResponse = z.object({
@@ -312,6 +313,14 @@ export function DeliveryPage() {
           <a href={`tel:${task.customer.phone}`} className="flex-1 bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] py-3 rounded-full flex items-center justify-center font-bold gap-2">
             {t('courier.call_button', 'Call')}
           </a>
+          {/* UX-2: message the customer in their app, if they shared a messenger */}
+          {messengerLink((task.customer as any).messengerKind, (task.customer as any).messengerHandle) && (
+            <a href={messengerLink((task.customer as any).messengerKind, (task.customer as any).messengerHandle)!}
+              target="_blank" rel="noopener noreferrer" data-testid="message-customer-btn"
+              className="flex-1 bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] py-3 rounded-full flex items-center justify-center font-bold gap-2">
+              <i className="ti ti-message-circle" aria-hidden="true" /> {t('courier.message_button', 'Message')}
+            </a>
+          )}
         </div>
 
         {/* eslint-disable jsx-a11y/aria-role */}

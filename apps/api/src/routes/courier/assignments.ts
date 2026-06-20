@@ -39,6 +39,9 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
         instructions: row.delivery_instructions || null,
         lat: row.delivery_lat ? parseFloat(row.delivery_lat) : null,
         lng: row.delivery_lng ? parseFloat(row.delivery_lng) : null,
+        // UX-2: customer messenger, only while the task is active (parity with phone).
+        messengerKind: ['assigned', 'accepted', 'picked_up'].includes(row.status) ? (row.customer_messenger_kind || null) : null,
+        messengerHandle: ['assigned', 'accepted', 'picked_up'].includes(row.status) ? (row.customer_messenger_handle || null) : null,
       },
       cashPayWith: cashAmt,
     };
@@ -50,7 +53,8 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
            o.total, o.delivery_address, o.delivery_lat, o.delivery_lng, o.delivery_instructions,
            l.name as restaurant_name, l.address as restaurant_address,
            l.lat as restaurant_lat, l.lng as restaurant_lng,
-           c.phone as customer_phone
+           c.phone as customer_phone,
+           c.messenger_kind as customer_messenger_kind, c.messenger_handle as customer_messenger_handle
     FROM courier_assignments ca
     JOIN orders o ON o.id = ca.order_id
     JOIN locations l ON l.id = o.location_id

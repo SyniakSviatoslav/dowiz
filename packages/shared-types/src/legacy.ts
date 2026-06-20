@@ -44,6 +44,9 @@ export type OrderItemInput = z.infer<typeof OrderItemInput>;
     customer: z.object({
       phone: z.string().min(6).max(20).optional(),
       name: z.string().min(1).max(120).optional(),
+      // UX-2 messenger deep-link (optional secondary contact channel).
+      messenger_kind: z.enum(['telegram', 'whatsapp', 'viber']).optional(),
+      messenger_handle: z.string().min(1).max(120).optional(),
     }).strict().optional(),
     delivery: z.object({
       pin: z.object({
