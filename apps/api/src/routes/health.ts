@@ -15,7 +15,8 @@ type HealthCheckResult<T = undefined> = HealthCheckBase & { data?: T };
 async function withTimeout<T>(
   promise: Promise<T>,
   label: string,
-  treatErrorAsDegraded = false
+  treatErrorAsDegraded = false,
+  treatTimeoutAsDown = false,
 ): Promise<HealthCheckResult<T>> {
   const start = Date.now();
   try {
@@ -28,14 +29,20 @@ async function withTimeout<T>(
     return { status: 'ok', latencyMs: Date.now() - start, data: result };
   } catch (err: any) {
     const latencyMs = Date.now() - start;
-    if (err.message === 'timeout' || treatErrorAsDegraded) {
-      return {
-        status: 'degraded',
-        latencyMs,
-        detail: `${label} check timed out or failed: ${err.message}`,
-      };
+    const isTimeout = err.message === 'timeout';
+    // A hung/unreachable Postgres surfaces here as a timeout. For the CRITICAL pg
+    // check that must be 'down' (→ 503) so external uptime monitors page during an
+    // outage, NOT 'degraded'+200 (which kept monitors green while the storefront 500'd).
+    // Soft checks keep 'degraded' so a transient external blip never 503s the app.
+    // detail carries NO err.message — the public /health is unauthenticated, raw
+    // driver text (host/role/SQLSTATE) is a recon leak (and is dropped at serialization).
+    if (isTimeout && treatTimeoutAsDown) {
+      return { status: 'down', latencyMs, detail: `${label} check timed out` };
     }
-    return { status: 'down', latencyMs, detail: `${label}: ${err.message}` };
+    if (isTimeout || treatErrorAsDegraded) {
+      return { status: 'degraded', latencyMs, detail: `${label} check timed out or failed` };
+    }
+    return { status: 'down', latencyMs, detail: `${label} check failed` };
   }
 }
 
@@ -60,12 +67,14 @@ export default async function healthRoutes(
     const pgResult = await withTimeout<{ rows: Array<{ alive: number }> }>(
       opts.db.query('SELECT 1 AS alive'),
       'postgres',
+      false, // not a soft check
+      true,  // treat a pg timeout as DOWN, not degraded
     );
     if (pgResult.status === 'down') {
       return reply.status(503).send({
         status: 'unhealthy',
         timestamp: new Date().toISOString(),
-        checks: { postgres: pgResult },
+        checks: { postgres: { status: pgResult.status, latencyMs: pgResult.latencyMs } },
       });
     }
 
@@ -308,10 +317,21 @@ export default async function healthRoutes(
       httpStatus = 200;
     }
 
+    // Public payload is minimal by construction: only { status, latencyMs } per
+    // check. /health is unauthenticated, so we never serialize node-postgres result
+    // objects (data: rows incl. oid/dataTypeID/type-catalog) or raw driver detail —
+    // both are recon surface. Overall status still reflects every check internally.
+    const publicChecks = Object.fromEntries(
+      Object.entries(allChecks).map(([name, c]: [string, any]) => [
+        name,
+        c.latencyMs != null ? { status: c.status, latencyMs: c.latencyMs } : { status: c.status },
+      ]),
+    );
+
     return reply.status(httpStatus).send({
       status: overallStatus,
       timestamp: new Date().toISOString(),
-      checks: allChecks,
+      checks: publicChecks,
     });
   });
 }

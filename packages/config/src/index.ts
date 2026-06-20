@@ -22,6 +22,10 @@ const EnvSchema = z.object({
   // WhatsApp (Baileys) notification channel
   WHATSAPP_ENABLED: z.enum(['true', 'false']).default('false'),
   ***REDACTED***: z.string().optional(),
+  // Phone OTP verification — globally disabled until a real SMS gateway is wired
+  // (current OTP send is a console.log scaffold). Flip to 'true' to re-enable;
+  // per-location `require_phone_otp` only takes effect when this is 'true'.
+  OTP_ENABLED: z.enum(['true', 'false']).default('false'),
   // Backup Configuration
   BACKUP_ENCRYPTION_KEY: z.string().optional(), // 32 bytes base64 (required if BACKUP_ENABLED=true)
   R2_ACCESS_KEY_ID: z.string().optional(),

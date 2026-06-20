@@ -381,6 +381,15 @@ const retryPolicy = new RetryPolicy();
 
   // Nightly Reconciliation Worker — temporarily removed (esbuild bundle issue). Re-add in separate deploy.
 
+  // Order Timeout Sweep — standalone 1-min reconciliation + detection. Safety net
+  // for the per-order order.timeout handler (apps/worker): recovers overdue PENDING
+  // orders whose per-order job was lost, and counts overdue-but-undrained
+  // order.timeout jobs (the lost-consumer signal). Lives here (not on the removed
+  // ReconciliationWorker) so detection cannot lose its host; apps/api does not auto-stop.
+  const { OrderTimeoutSweepWorker } = await import('./workers/order-timeout-sweep.js');
+  const orderTimeoutSweepWorker = new OrderTimeoutSweepWorker(pool, queue.boss, messageBus);
+  await orderTimeoutSweepWorker.start();
+
   // Lifecycle Handlers (auto-resolve alerts on order transitions)
   const lifecycleHandlers = new LifecycleHandlers(pool, queue.boss, messageBus);
   await lifecycleHandlers.start();

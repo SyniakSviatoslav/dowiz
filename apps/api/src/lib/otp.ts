@@ -51,49 +51,7 @@ export function maskPhone(phone: string): string {
   return '+*** *** ' + cleaned.substring(cleaned.length - 4);
 }
 
-export async function checkOtpSendRateLimit(
-  pool: any,
-  locationId: string,
-  phone: string,
-  maxSends: number = OTP_SEND_RATE_LIMIT,
-): Promise<boolean> {
-  const res = await pool.query(
-    `SELECT COUNT(*)::int AS cnt FROM phone_otp
-     WHERE location_id = $1 AND phone = $2
-       AND created_at > now() - interval '15 minutes'`,
-    [locationId, phone],
-  );
-  return (res.rows[0]?.cnt ?? 0) < maxSends;
-}
-
-export async function checkOtpVerifyRateLimit(
-  pool: any,
-  locationId: string,
-  phone: string,
-  maxAttempts: number = OTP_VERIFY_RATE_LIMIT,
-): Promise<boolean> {
-  const res = await pool.query(
-    `SELECT COUNT(*)::int AS attempts,
-            MAX(CASE WHEN attempts >= $2 THEN created_at ELSE NULL END) AS lockout_start
-     FROM phone_otp
-     WHERE location_id = $1 AND phone = $3
-       AND created_at > now() - interval '15 minutes'`,
-    [locationId, OTP_VERIFY_RATE_LIMIT, phone],
-  );
-
-  const row = res.rows[0];
-  if (!row) return true;
-
-  const attempts = row.attempts ?? 0;
-
-  if (attempts >= OTP_VERIFY_RATE_LIMIT) {
-    // Check lockout expiry
-    if (row.lockout_start) {
-      const lockoutElapsed = Date.now() - new Date(row.lockout_start).getTime();
-      if (lockoutElapsed < OTP_LOCKOUT_HOURS * 3600000) return false;
-    }
-    return false;
-  }
-
-  return true;
-}
+// NOTE: per-attempt OTP rate-limiting is enforced inline in routes/customer/otp.ts
+// (Fastify config.rateLimit + DB attempts/lockout). The standalone helpers that
+// used to live here were unused and were removed. The constants above remain the
+// single source of truth for the limits.
