@@ -305,6 +305,14 @@ export function DeliveryPage() {
           </button>
         )}
 
+        {/* UX-4: tip — informative, the courier collects it in cash */}
+        {(task as any).tipAmount > 0 && (
+          <div data-testid="task-tip" className="bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-[var(--brand-radius-sm)] p-3 flex justify-between items-center text-sm">
+            <span className="text-[var(--brand-text-muted)]">{t('courier.tip', 'Tip (collect in cash)')}</span>
+            <span className="font-bold text-[var(--brand-primary)]"><PriceDisplay amount={(task as any).tipAmount} /></span>
+          </div>
+        )}
+
         {task.cashPayWith && (
           <div data-testid="task-cash-amount" className="bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-[var(--brand-radius-sm)] p-4 space-y-2">
             <div className="text-xs text-[var(--brand-text-muted)] uppercase font-bold tracking-wider">

@@ -485,6 +485,12 @@ export function OrderStatusPage() {
             <span>{t('client.total', 'Total')}</span>
             <span><PriceDisplay amount={order.total} /></span>
           </div>
+          {order.tipAmount > 0 && (
+            <div className="flex justify-between text-sm mt-2" style={{ color: 'var(--brand-text-muted)' }} data-testid="order-tip">
+              <span>{t('client.tip_for_courier', 'Tip for courier (cash)')}</span>
+              <span><PriceDisplay amount={order.tipAmount} /></span>
+            </div>
+          )}
         </div>
 
         {/* Rate your order — shown once DELIVERED; tap a star to submit */}
