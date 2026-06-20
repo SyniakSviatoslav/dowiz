@@ -15,11 +15,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:3000',
-      '/public': 'http://localhost:3000',
-      '/auth': 'http://localhost:3000',
+      // PROXY_TARGET lets E2E run the local FE against a remote backend (e.g. prod
+      // for real data) without a deploy: `VITE_PROXY_TARGET=https://dowiz.fly.dev`.
+      '/api': process.env.VITE_PROXY_TARGET || 'http://localhost:3000',
+      '/public': process.env.VITE_PROXY_TARGET || 'http://localhost:3000',
+      '/auth': process.env.VITE_PROXY_TARGET || 'http://localhost:3000',
       '^/s/': {
-        target: 'http://localhost:3000',
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:3000',
         bypass: (req) => req.url || '',
       },
     },

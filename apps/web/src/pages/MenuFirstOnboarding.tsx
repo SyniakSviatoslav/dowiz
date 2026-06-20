@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button, Input, FormField, useI18n } from '@deliveryos/ui';
 import { PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient, ApiError } from '../lib/index.js';
+import { SwanHero } from '../components/SwanHero.js';
 
 // Menu-first onboarding. The front door is "upload your menu" — we parse it with
 // the zero-dependency heuristic parser, pre-fill the storefront identity
@@ -182,11 +183,16 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
 
         {/* ── CHOOSE: upload your menu ── */}
         {phase === 'choose' && (
-          <div style={S.card} className="space-y-5">
-            <div>
-              <h2 className="text-xl font-bold" style={S.heading}>{t('start.title', 'Start with your menu')}</h2>
-              <p className="mt-1" style={S.muted}>{t('start.subtitle', 'Upload a PDF or photo of your menu. We’ll read it, set up your storefront, and bring your items to life — review everything before anything goes public.')}</p>
-            </div>
+          <div className="space-y-5">
+            {mode === 'anonymous'
+              ? <SwanHero />
+              : (
+                <div>
+                  <h2 className="text-xl font-bold" style={S.heading}>{t('start.title', 'Start with your menu')}</h2>
+                  <p className="mt-1" style={S.muted}>{t('start.subtitle', 'Upload a PDF or photo of your menu. We’ll read it, set up your storefront, and bring your items to life — review everything before anything goes public.')}</p>
+                </div>
+              )}
+            <div style={S.card} className="space-y-5">
             <button
               type="button"
               onClick={onPickFile}
@@ -208,6 +214,7 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
                   {t('start.have_account', 'I already have an account')}
                 </button>
               )}
+            </div>
             </div>
           </div>
         )}
