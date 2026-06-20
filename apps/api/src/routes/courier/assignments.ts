@@ -4,6 +4,7 @@ import { acceptCourierAssignment } from '../../lib/courierAssignmentService';
 import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { updateOrderStatus } from '../../lib/orderStatusService';
+import { getImageUrl } from '../../lib/image-url.js';
 
 const env = loadEnv();
 
@@ -26,6 +27,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       cashCollected: row.cash_collected ?? false,
       cashAmount: cashAmt,
       total: parseInt(row.total) || 0,
+      tipAmount: parseInt(row.tip_amount) || 0, // UX-4: informative; courier collects in cash
       eta: '~15 min',
       restaurant: {
         name: row.restaurant_name || '',
@@ -39,6 +41,11 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
         instructions: row.delivery_instructions || null,
         lat: row.delivery_lat ? parseFloat(row.delivery_lat) : null,
         lng: row.delivery_lng ? parseFloat(row.delivery_lng) : null,
+        // UX-2: customer messenger, only while the task is active (parity with phone).
+        messengerKind: ['assigned', 'accepted', 'picked_up'].includes(row.status) ? (row.customer_messenger_kind || null) : null,
+        messengerHandle: ['assigned', 'accepted', 'picked_up'].includes(row.status) ? (row.customer_messenger_handle || null) : null,
+        // UX-3: entry-anchor photo URL, only while the task is active.
+        entryPhotoUrl: ['assigned', 'accepted', 'picked_up'].includes(row.status) ? getImageUrl(row.delivery_photo_key) : null,
       },
       cashPayWith: cashAmt,
     };
@@ -50,7 +57,9 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
            o.total, o.delivery_address, o.delivery_lat, o.delivery_lng, o.delivery_instructions,
            l.name as restaurant_name, l.address as restaurant_address,
            l.lat as restaurant_lat, l.lng as restaurant_lng,
-           c.phone as customer_phone
+           c.phone as customer_phone,
+           c.messenger_kind as customer_messenger_kind, c.messenger_handle as customer_messenger_handle,
+           o.delivery_photo_key, o.tip_amount
     FROM courier_assignments ca
     JOIN orders o ON o.id = ca.order_id
     JOIN locations l ON l.id = o.location_id
@@ -309,16 +318,41 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       // Canonical path: update orders status + publish WS events (customer + owner)
       await updateOrderStatus(client, order_id, locationId, 'DELIVERED', { messageBus });
 
+      // Immutable delivery audit (one per order; idempotent).
+      await client.query(`
+        INSERT INTO delivery_trace (order_id, location_id, courier_id, total, delivered_at)
+        VALUES ($1, $2, $3, $4, now())
+        ON CONFLICT (order_id) DO NOTHING
+      `, [order_id, locationId, courierId, total]);
+
+      // Cash-collected → append a 'hold' audit row (NOT the settlement source of
+      // truth; settlement_items remains authoritative). Idempotent per (order_id,type).
+      if (cash_collected) {
+        await client.query(`
+          INSERT INTO courier_cash_ledger (courier_id, location_id, order_id, type, amount)
+          VALUES ($1, $2, $3, 'hold', $4)
+          ON CONFLICT (order_id, type) DO NOTHING
+        `, [courierId, locationId, order_id, cash_amount]);
+      }
+
       await client.query('COMMIT');
 
       // Integrate with Phase 1 lifecycle
-      await messageBus.publish(BUS_CHANNELS.ORDER_DELIVERED, { 
-        orderId: order_id, 
+      await messageBus.publish(BUS_CHANNELS.ORDER_DELIVERED, {
+        orderId: order_id,
         locationId,
         courierId,
         cashCollected: cash_collected,
         cashAmount: cash_collected ? cash_amount : null
       });
+
+      // NOTE: a post-delivery feedback reminder was intended here, but registering a
+      // new pg-boss queue is infeasible on this infra — pgboss.queue is owned by the
+      // operational role (which lacks CREATE on the pgboss schema, revoked by
+      // migration 009) while the migration role lacks REFERENCES on that table, so
+      // neither can create_queue. Enqueue to an unregistered queue silently no-ops
+      // (order.timeout has the same fate). Tracked as known-debt in the reliability
+      // gate; revisit via an existing registered queue or a cron sweep.
 
       return reply.send({ success: true });
     } catch (err) {

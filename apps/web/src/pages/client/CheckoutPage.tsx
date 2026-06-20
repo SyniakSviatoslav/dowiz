@@ -1,17 +1,42 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency } from '@deliveryos/ui';
+import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal } from '@deliveryos/ui';
 import { CURRENCIES } from '@deliveryos/shared-types';
 import type { LngLatLike } from '@deliveryos/ui';
-import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
+import { PHONE_E164_REGEX } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
+
+// Albania has no other realistic country here, so accept how people actually type
+// their number — local "069...", "0 69 ...", "00355...", bare "69..." — and coerce
+// to the E.164 (+355...) the backend requires, instead of silently rejecting it.
+function normalizeAlbanianPhone(raw: string): string {
+  const compact = (raw || '').replace(/[\s()\-.]/g, '');
+  if (!compact) return raw;
+  if (compact.startsWith('+')) return compact;
+  let digits = compact.replace(/\D/g, '');
+  if (digits.startsWith('00')) return '+' + digits.slice(2);
+  if (digits.startsWith('355')) return '+' + digits;
+  if (digits.startsWith('0')) digits = digits.slice(1); // drop the national trunk 0
+  return digits ? '+355' + digits : raw;
+}
 
 const OrderCreateResponse = z.object({
   id: z.string(),
   authToken: z.string().optional(),
 }).passthrough();
+
+// The /orders endpoint returns 200 with this body (NO order created) when the
+// location requires phone verification and it hasn't been satisfied yet.
+const PreflightResponse = z.object({
+  outcome: z.enum(['clean', 'soft_confirm', 'hard_block']),
+  requiresOtp: z.boolean().optional(),
+  reasons: z.array(z.object({ code: z.string() }).passthrough()).optional(),
+}).passthrough();
+
+const OtpSendResponse = z.object({ otp_token: z.string() }).passthrough();
+const OtpVerifyResponse = z.object({ verified_token: z.string() }).passthrough();
 import { useSharedCart } from '../../lib/CartProvider.js';
 
 const isDevMode = () => typeof window !== 'undefined' && sessionStorage.getItem('dos_dev') === '1';
@@ -165,11 +190,31 @@ export function CheckoutPage() {
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
+  // UX-2 optional messenger contact (Telegram/WhatsApp/Viber) so the courier can text.
+  const [messengerKind, setMessengerKind] = useState('');
+  const [messengerHandle, setMessengerHandle] = useState('');
+  // UX-3 optional entry-anchor photo (uploaded to R2 before the order exists).
+  const [entryPhotoKey, setEntryPhotoKey] = useState('');
+  const [entryPhotoPreview, setEntryPhotoPreview] = useState('');
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const entryFileRef = useRef<HTMLInputElement>(null);
+  const uploadEntryPhoto = async (file: File) => {
+    if (!file) return;
+    setPhotoUploading(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await apiClient<any>('/public/entry-photo', { method: 'POST', body: form, timeout: 60000 });
+      setEntryPhotoKey(res.key);
+      setEntryPhotoPreview(res.url || '');
+    } catch { /* optional — leave unset on failure */ } finally { setPhotoUploading(false); }
+  };
   const [pinLocation, setPinLocation] = useState<LngLatLike | null>(null);
   const [locationId, setLocationId] = useState<string | null>(null);
   const [locationCenter, setLocationCenter] = useState<LngLatLike>([19.456, 41.324]); // Durrës default
   const [notes, setNotes] = useState('');
   const [cashAmount, setCashAmount] = useState<number>(0);
+  const [tipAmount, setTipAmount] = useState<number>(0); // UX-4 optional courier tip
   const [orderError, setOrderError] = useState('');
   const [instructionOption, setInstructionOption] = useState<string>('');
   const [instructionCustom, setInstructionCustom] = useState<string>('');
@@ -181,12 +226,18 @@ export function CheckoutPage() {
   const [placing, setPlacing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [cityFact, setCityFact] = useState<string | null>(null);
+  const [currencyCode, setCurrencyCode] = useState<string>('ALL');
+  // Phone-verification (OTP) state — only engaged when the backend signals
+  // `requiresOtp` on a soft_confirm. Otherwise checkout behaves exactly as before.
+  const [otpOpen, setOtpOpen] = useState(false);
+  const [otpToken, setOtpToken] = useState<string | null>(null);
 
     useEffect(() => {
     if (!slug) return;
     fetch(`/public/locations/${slug}/info`).then(r => r.json())
       .then((info: any) => {
         setLocationId(info.id);
+        if (info.currency_code) setCurrencyCode(info.currency_code);
         if (info.lng && info.lat) setLocationCenter([info.lng, info.lat]);
         if (info.address) {
           const parts = info.address.split(',');
@@ -232,6 +283,10 @@ export function CheckoutPage() {
         if (d.instructionOption) setInstructionOption(d.instructionOption);
         if (d.instructionCustom) setInstructionCustom(d.instructionCustom);
         if (d.cashAmount) setCashAmount(d.cashAmount);
+        // UX-3/UX-2 follow-up: remember the entrance photo + messenger per device.
+        if (d.entryPhotoKey) { setEntryPhotoKey(d.entryPhotoKey); if (d.entryPhotoPreview) setEntryPhotoPreview(d.entryPhotoPreview); }
+        if (d.messengerKind) setMessengerKind(d.messengerKind);
+        if (d.messengerHandle) setMessengerHandle(d.messengerHandle);
       }
     } catch {}
   }, [slug]);
@@ -241,9 +296,10 @@ export function CheckoutPage() {
     try {
       localStorage.setItem(`dos_checkout_draft_${slug}`, JSON.stringify({
         phone, customerName, deliveryType, instructionOption, instructionCustom, cashAmount,
+        entryPhotoKey, entryPhotoPreview, messengerKind, messengerHandle,
       }));
     } catch {}
-  }, [slug, phone, customerName, deliveryType, instructionOption, instructionCustom, cashAmount]);
+  }, [slug, phone, customerName, deliveryType, instructionOption, instructionCustom, cashAmount, entryPhotoKey, entryPhotoPreview, messengerKind, messengerHandle]);
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const deliveryFee = deliveryType === 'delivery' ? 200 : 0;
@@ -267,10 +323,12 @@ export function CheckoutPage() {
     e.preventDefault();
     setOrderError('');
     if (items.length === 0 || !slug || !locationId) return;
-    if (!phone || !PHONE_E164_REGEX.test(phone)) {
+    const e164 = normalizeAlbanianPhone(phone);
+    if (!e164 || !PHONE_E164_REGEX.test(e164)) {
       setPhoneError(t('checkout.phone_invalid', 'Enter a valid phone number (+355...)'));
       return;
     }
+    if (e164 !== phone) setPhone(e164); // reflect the normalized value back in the field
     setPhoneError('');
     
     // Validate entrance and apartment for delivery orders
@@ -292,30 +350,48 @@ export function CheckoutPage() {
       return;
     }
     setPlacing(true);
+    await submitOrder();
+  };
+
+  // Submits the order. When `verifiedToken` is provided it is passed back to the
+  // backend (header + acknowledged code) so a require-OTP location lets it through.
+  // Returns true if the order was created (or OTP flow was started), false on hard error.
+  const submitOrder = async (verifiedToken?: string) => {
+    if (!slug || !locationId) { setPlacing(false); return false; }
+    setOrderError('');
     try {
       const idempotencyKey = crypto.randomUUID();
       const pinLat = (pinLocation as [number, number])?.[1] || (locationCenter as [number, number])?.[1] || 41.324;
       const pinLng = (pinLocation as [number, number])?.[0] || (locationCenter as [number, number])?.[0] || 19.456;
-      const orderRes = await apiClient<typeof OrderCreateResponse>('/orders', {
+      const raw = await apiClient<typeof PreflightResponse>('/orders', {
         method: 'POST',
-        schema: OrderCreateResponse,
+        headers: verifiedToken ? { 'x-otp-verified': verifiedToken } : undefined,
         body: {
           locationId: locationId,
-          type: 'delivery',
+          type: deliveryType === 'pickup' ? 'pickup' : 'delivery',
           items: orderItems,
           customer: {
-            phone: phone,
+            phone: normalizeAlbanianPhone(phone),
             name: customerName || undefined,
+            ...(messengerKind && messengerHandle.trim()
+              ? { messenger_kind: messengerKind, messenger_handle: messengerHandle.trim() }
+              : {}),
           },
-          delivery: {
-            pin: { lat: pinLat, lng: pinLng },
-            address_text: address || undefined,
-            notes: notes.trim() || undefined,
-          },
+          ...(entryPhotoKey ? { delivery_photo_key: entryPhotoKey } : {}),
+          ...(tipAmount > 0 ? { tip_amount: tipAmount } : {}),
+          // Pickup orders carry no delivery pin/address (no delivery fee).
+          ...(deliveryType === 'pickup' ? {} : {
+            delivery: {
+              pin: { lat: pinLat, lng: pinLng },
+              address_text: address || undefined,
+              notes: notes.trim() || undefined,
+            },
+          }),
           payment: { method: 'cash' },
           cash_pay_with: cashAmount > 0 ? cashAmount : undefined,
           idempotency_key: idempotencyKey,
-          acknowledged_codes: [],
+          // Acknowledge the OTP soft-reason once we've verified the phone.
+          acknowledged_codes: verifiedToken ? ['otp_required'] : [],
           prefs: {
             dropoff: {
               entrance: entrance.trim(),
@@ -329,6 +405,15 @@ export function CheckoutPage() {
             : undefined,
         },
       });
+
+      // Phone verification required but not yet satisfied → start the OTP flow.
+      const pre = PreflightResponse.safeParse(raw);
+      if (pre.success && pre.data.outcome === 'soft_confirm' && pre.data.requiresOtp) {
+        await beginOtpFlow();
+        return true;
+      }
+
+      const orderRes = OrderCreateResponse.parse(raw);
       try {
         localStorage.setItem(`dos_last_delivery_${slug}`, JSON.stringify({
           lat: pinLat,
@@ -344,22 +429,80 @@ export function CheckoutPage() {
       }
       requestPushPermission(slug!);
       clearCart();
+      setOtpOpen(false);
       setPlacing(false);
       setShowConfirmation(true);
       setTimeout(() => navigate(`/s/${slug}/order/${orderRes.id}`), 1500);
+      return true;
     } catch (err: any) {
       setPlacing(false);
-      if (isDevMode()) { clearCart(); navigate(`/s/${slug}/order/o_mock_123`); return; }
-      if (err?.status === 422 && err?.body?.code === 'MIN_ORDER_NOT_MET') {
+      if (isDevMode()) { clearCart(); navigate(`/s/${slug}/order/o_mock_123`); return false; }
+      if (err?.status === 422 && err?.data?.code === 'MIN_ORDER_NOT_MET') {
         setOrderError(t('checkout.min_order_error', 'Minimum order is {{min}} {{currency}}. Your total is {{subtotal}}.', {
-          min: err.body.details?.min_order_value,
-          currency: 'ALL',
-          subtotal: err.body.details?.subtotal,
+          min: err.data.details?.min_order_value,
+          currency: currencyCode,
+          subtotal: err.data.details?.subtotal,
         }));
-        return;
+        return false;
       }
       setOrderError(t('checkout.order_failed', 'Failed to place order. Please try again.'));
+      return false;
     }
+  };
+
+  // hex(JSON.stringify(items)) — the backend re-hashes this to bind the OTP to the cart.
+  const orderIntentHashHex = () => {
+    const intentItems = orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity }));
+    const json = JSON.stringify(intentItems);
+    let hex = '';
+    for (let i = 0; i < json.length; i++) hex += json.charCodeAt(i).toString(16).padStart(2, '0');
+    return hex;
+  };
+
+  // Send the first code and reveal the verification modal.
+  const beginOtpFlow = async () => {
+    try {
+      await sendOtp();
+      setOtpOpen(true);
+    } catch (err: any) {
+      setOrderError(err?.message || t('otp.send_failed', 'Couldn’t send the verification code. Try again.'));
+    } finally {
+      setPlacing(false);
+    }
+  };
+
+  const sendOtp = async () => {
+    const res = await apiClient<typeof OtpSendResponse>(`/customer/locations/${slug}/otp/send`, {
+      method: 'POST',
+      schema: OtpSendResponse,
+      body: {
+        phone: normalizeAlbanianPhone(phone),
+        order_intent: {
+          items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
+          total,
+          currency: currencyCode,
+        },
+      },
+    });
+    setOtpToken(res.otp_token);
+  };
+
+  const verifyOtp = async (code: string) => {
+    if (!otpToken) throw new Error(t('otp.send_failed', 'Couldn’t send the verification code. Try again.'));
+    const res = await apiClient<typeof OtpVerifyResponse>(`/customer/locations/${slug}/otp/verify`, {
+      method: 'POST',
+      schema: OtpVerifyResponse,
+      body: {
+        phone: normalizeAlbanianPhone(phone),
+        code,
+        otp_token: otpToken,
+        order_intent_hash: orderIntentHashHex(),
+      },
+    });
+    // Re-submit the order with the verified token; OTPModal closes on success.
+    setPlacing(true);
+    const ok = await submitOrder(res.verified_token);
+    if (!ok) throw new Error(t('otp.verify_then_failed', 'Verified, but the order could not be placed. Try again.'));
   };
 
   if (items.length === 0) {
@@ -405,10 +548,47 @@ export function CheckoutPage() {
               <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.phone', 'Phone')}</label>
               <div className="relative">
                 <i className="ti ti-phone absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} placeholder="+355 6X XXX XXXX" pattern={PHONE_E164_PATTERN} title="+355 followed by 7-14 digits" type="tel" inputMode="tel" autoComplete="tel" data-testid="checkout-phone" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} onBlur={() => setPhone(p => normalizeAlbanianPhone(p))} placeholder="+355 6X XXX XXXX" title="+355 followed by 7-14 digits" type="tel" inputMode="tel" autoComplete="tel" data-testid="checkout-phone" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
                 {phoneError && <p role="alert" className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{phoneError}</p>}
               </div>
             </div>
+            {/* UX-2: optional messenger so the courier can text instead of call */}
+            <div>
+              <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.messenger', 'Messenger (optional)')}</label>
+              <div className="flex gap-2">
+                <select value={messengerKind} onChange={e => setMessengerKind(e.target.value)} data-testid="checkout-messenger-kind"
+                  className="h-[48px] px-2 outline-none text-[14px] border rounded-[8px]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                  <option value="">{t('checkout.messenger_none', '—')}</option>
+                  <option value="telegram">Telegram</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="viber">Viber</option>
+                </select>
+                <input value={messengerHandle} onChange={e => setMessengerHandle(e.target.value)} disabled={!messengerKind}
+                  required={!!messengerKind}
+                  placeholder={messengerKind === 'telegram' ? '@username' : '+355 6X XXX XXXX'} data-testid="checkout-messenger-handle"
+                  className="flex-1 h-[48px] px-3 outline-none text-[14px] border rounded-[8px] disabled:opacity-50" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+              </div>
+            </div>
+            {/* UX-3: optional entrance photo (delivery only) — camera or gallery */}
+            {deliveryType !== 'pickup' && (
+              <div>
+                <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entry_photo', 'Entrance photo (optional)')}</label>
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => entryFileRef.current?.click()} disabled={photoUploading}
+                    className="inline-flex items-center gap-2 px-4 py-2 border rounded-[8px] cursor-pointer text-sm disabled:opacity-60"
+                    style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                    <i className="ti ti-camera" aria-hidden="true" />
+                    {photoUploading ? t('checkout.uploading', 'Uploading…') : (entryPhotoKey ? t('checkout.change_photo', 'Change photo') : t('checkout.add_photo', 'Add photo'))}
+                  </button>
+                  <input ref={entryFileRef} type="file" accept="image/*" className="hidden" data-testid="entry-photo-input" disabled={photoUploading}
+                    onChange={e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void uploadEntryPhoto(f); }} />
+                  {entryPhotoPreview && (
+                    <img src={entryPhotoPreview} alt={t('checkout.entry_photo', 'Entrance photo')} data-testid="entry-photo-preview" className="h-12 w-12 object-cover rounded-[8px] border" style={{ borderColor: 'var(--brand-border)' }} />
+                  )}
+                </div>
+                <p className="text-[12px] mt-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.entry_photo_hint', 'Helps the courier find your entrance.')}</p>
+              </div>
+            )}
           </div>
         </motion.div>
         <motion.div
@@ -421,7 +601,7 @@ export function CheckoutPage() {
           <div className="flex p-1 rounded-[10px] mb-6 gap-0.5" role="tablist" aria-label={t('checkout.delivery_type', 'Delivery type')} style={{ background: 'var(--brand-surface)' }}>
             <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'delivery'} onClick={() => setDeliveryType('delivery')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('delivery')}>{t('courier.deliver')}</motion.button>
             <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'pickup'} onClick={() => setDeliveryType('pickup')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('pickup')}>{t('courier.pickup')}</motion.button>
-            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'scheduled'} onClick={() => setDeliveryType('scheduled')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('scheduled')}>{t('order.scheduled')}</motion.button>
+            {/* Scheduled is scaffold (not yet implemented end-to-end) — hidden until supported. */}
           </div>
 
           {deliveryType === 'delivery' && (
@@ -570,6 +750,27 @@ export function CheckoutPage() {
                   />
                 </div>
               </div>
+              {/* UX-4: optional courier tip (single amount, replaces %-badges) */}
+              <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+                <label htmlFor="tip-amount" className="text-[12px] font-semibold mb-1.5 block" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_amount', 'Tip for courier (optional)')}</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-bold" style={{ color: 'var(--brand-text-muted)' }}>{currencySymbol}</span>
+                  <input
+                    id="tip-amount"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={1000000}
+                    value={tipAmount || ''}
+                    data-testid="checkout-tip"
+                    onChange={e => setTipAmount(Math.min(1000000, Math.max(0, parseInt(e.target.value) || 0)))}
+                    className="w-full h-[44px] pl-11 pr-3 outline-none text-[14px] font-bold border rounded-[8px]"
+                    style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
+                    placeholder="0"
+                  />
+                </div>
+                <p className="text-[12px] mt-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_hint', 'Goes entirely to your courier, in cash on delivery.')}</p>
+              </div>
               {cashAmount > 0 && (
                 <div className="flex justify-between text-[13px] mt-2 px-1">
                   {cashAmount >= total ? (
@@ -629,6 +830,12 @@ export function CheckoutPage() {
                   <PriceDisplay amount={deliveryFee} />
               </div>
             )}
+            {tipAmount > 0 && (
+              <div className="flex justify-between text-[14px]" data-testid="checkout-tip-line">
+                <span style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_for_courier', 'Tip for courier (cash)')}</span>
+                <PriceDisplay amount={tipAmount} />
+              </div>
+            )}
             {hasNutrition && (
               <div className="flex justify-between text-[12px]">
                 <span style={{ color: 'var(--brand-text-muted)' }}>≈ {t('menu.nutrition')}</span>
@@ -640,6 +847,12 @@ export function CheckoutPage() {
             <span className="text-[16px] font-bold" style={{ color: 'var(--brand-text)' }}>{t('cart.total')}</span>
                   <span data-testid="checkout-total"><PriceDisplay amount={total} size="lg" /></span>
           </div>
+          {tipAmount > 0 && (
+            <div className="flex justify-between items-center text-[13px] mt-2" style={{ color: 'var(--brand-text-muted)' }} data-testid="checkout-cash-due">
+              <span>{t('checkout.cash_to_courier', 'Cash to courier (incl. tip)')}</span>
+              <PriceDisplay amount={total + tipAmount} />
+            </div>
+          )}
         </motion.div>
       </form>
 
@@ -660,7 +873,7 @@ export function CheckoutPage() {
           data-testid="order-confirm-button"
           disabled={placing}
           whileTap={{ scale: placing ? 1 : 0.97 }}
-          className="w-full h-14 rounded-full bg-[var(--brand-primary)] text-white font-bold text-base shadow-xl transition-all active:scale-[0.97] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full h-14 rounded-full bg-[var(--brand-primary-strong)] text-white font-bold text-base shadow-xl transition-all active:scale-[0.97] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ minHeight: 'var(--tap-critical)' }}
         >
           {placing ? (
@@ -676,6 +889,15 @@ export function CheckoutPage() {
           )}
         </motion.button>
       </StickyActionBar>
+
+      <OTPModal
+        open={otpOpen}
+        onClose={() => { setOtpOpen(false); setPlacing(false); }}
+        phone={phone}
+        alreadySent
+        onResend={sendOtp}
+        onVerify={verifyOtp}
+      />
 
       {showConfirmation && (
         <motion.div

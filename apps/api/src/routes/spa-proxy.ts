@@ -35,6 +35,11 @@ const brandSchema = z.object({
   googleRating: z.number().min(0).max(5).optional().nullable(),
   googleReviewCount: z.number().int().nonnegative().optional().nullable(),
   googleMapsUrl: z.string().max(500).optional().nullable(),
+  // UX-1 storefront links. Place ID drives the post-delivery Google review link;
+  // socials render in the client footer. Validated (allowlisted domains / id charset).
+  googlePlaceId: z.string().max(128).regex(/^[A-Za-z0-9_-]+$/, 'Invalid Place ID').optional().nullable().or(z.literal('')),
+  socialInstagram: z.string().max(500).refine((v) => !v || /^https:\/\/(www\.)?(instagram\.com|instagr\.am)\//i.test(v), 'Must be an instagram.com link').optional().nullable(),
+  socialFacebook: z.string().max(500).refine((v) => !v || /^https:\/\/(www\.)?(facebook\.com|fb\.com|m\.facebook\.com)\//i.test(v), 'Must be a facebook.com link').optional().nullable(),
 }).strict();
 
 // pg returns NUMERIC columns as strings; coerce all numeric fields so the schema
@@ -87,6 +92,35 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     }
   }
 
+  // True when the request carries a valid owner JWT, regardless of whether that
+  // owner has created a location yet. Used to tell a brand-new owner (no location)
+  // apart from an unauthenticated/expired caller — see GET /api/owner/settings (O1).
+  async function isValidOwnerToken(request: any): Promise<boolean> {
+    const auth = request.headers.authorization;
+    if (!auth?.startsWith('Bearer ')) return false;
+    try {
+      const { payload } = await jwtVerify(auth.slice(7), getPublicKey(), { algorithms: ['RS256'] });
+      return (payload as any).role === 'owner';
+    } catch {
+      return false;
+    }
+  }
+
+  // The owner's user id from a valid owner token, regardless of whether they have
+  // a location yet. Used to provision a brand-new owner's first storefront.
+  async function getOwnerUserId(request: any): Promise<string | null> {
+    const auth = request.headers.authorization;
+    if (!auth?.startsWith('Bearer ')) return null;
+    try {
+      const { payload } = await jwtVerify(auth.slice(7), getPublicKey(), { algorithms: ['RS256'] });
+      const claims = payload as any;
+      if (claims.role !== 'owner') return null;
+      return claims.userId || claims.sub || null;
+    } catch {
+      return null;
+    }
+  }
+
   async function getOwnerContext(request: any): Promise<{ locId: string; userId: string } | null> {
     const auth = request.headers.authorization;
     if (!auth?.startsWith('Bearer ')) return null;
@@ -118,6 +152,13 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
    fastify.get('/images/*', async (request, reply) => {
      const raw = (request.params as any)['*'] as string;
      const key = raw.startsWith('/') ? raw.slice(1) : raw;
+    // SECURITY: object keys are flat (uuid/hash + extension) and never contain
+    // '..'. Fastify decodes '%2f' in the wildcard, so reject traversal here —
+    // before touching storage — or an encoded '..%2f..%2f' escapes the prefix
+    // and reads arbitrary bucket/filesystem objects.
+    if (!key || key.includes('..') || key.includes('\0') || key.includes('\\')) {
+      return reply.status(400).send({ error: 'Invalid image key' });
+    }
     try {
       const buf = await storage.get(key);
       if (!buf) return reply.status(404).send({ error: 'Image not found' });
@@ -181,11 +222,47 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     return reply.send({ imageUrl, imageKey: key });
   });
 
+  // POST /api/public/entry-photo — anonymous entry-anchor photo upload (UX-3).
+  // Called from checkout BEFORE an order exists; returns an R2 key that the
+  // order-create then stores on the order. Public + IP-rate-limited; image-only,
+  // EXIF stripped + re-oriented, processed to webp. The key is unguessable and
+  // only revealed to the assigned courier during the active order.
+  fastify.post('/api/public/entry-photo', {
+    config: { rateLimit: { max: 8, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const data = await request.file({ limits: { fileSize: 8 * 1024 * 1024 } });
+    if (!data) return reply.status(400).send({ error: 'No file uploaded' });
+    if (data.fieldname !== 'file') return reply.status(400).send({ error: 'Image must be sent as the "file" field' });
+    if ((data as any).file?.truncated) return reply.status(413).send({ error: 'File exceeds maximum size' });
+    if (!String(data.mimetype || '').startsWith('image/')) return reply.status(400).send({ error: 'Must be an image' });
+    const buffer = await data.toBuffer();
+    let processed: Buffer;
+    try {
+      const sharp = (await import('sharp')).default;
+      processed = await sharp(buffer).rotate().resize({ width: 1024, height: 1024, fit: 'inside' }).webp({ quality: 78 }).toBuffer();
+    } catch {
+      // Don't leak sharp/libvips internals to the client.
+      return reply.status(400).send({ error: 'Invalid image file' });
+    }
+    const crypto = await import('node:crypto');
+    const key = `entry-photos/${crypto.randomUUID()}.webp`;
+    try {
+      await storage.put(key, processed);
+    } catch (putErr: any) {
+      return reply.status(500).send({ error: 'Failed to store image', detail: putErr.message });
+    }
+    return reply.send({ key, url: getImageUrl(key, APP_BASE) });
+  });
+
   // GET /api/owner/analytics
   fastify.get('/api/owner/analytics', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
-    const { rows: todayOrders } = await db.query(
+    const ctx = await getOwnerContext(request);
+    if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+    const locId = ctx.locId;
+    // withTenant: RLS tenant scoping (set app.user_id) as defense-in-depth on top of
+    // the explicit WHERE location_id binding below.
+    return withTenant(db, ctx.userId, async (client) => {
+    const { rows: todayOrders } = await client.query(
       `SELECT total, created_at, confirmed_at, delivered_at, delivery_lat, delivery_lng
        FROM orders WHERE location_id = $1 AND created_at >= NOW() - INTERVAL '7 days'`,
       [locId]
@@ -202,7 +279,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     }
     const avgOrderValue = orderCount > 0 ? Math.round(totalRev / orderCount) : 0;
     const avgTime = deliveredCount > 0 ? Math.round(totalTime / deliveredCount) : 0;
-    const { rows: topProducts } = await db.query(
+    const { rows: topProducts } = await client.query(
       `SELECT oi.name_snapshot AS name, COUNT(DISTINCT oi.order_id)::int AS orders,
               SUM(oi.price_snapshot * oi.quantity)::int AS revenue, p.image_key AS "imageUrl"
        FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id
@@ -210,7 +287,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
        GROUP BY oi.name_snapshot, p.image_key ORDER BY revenue DESC LIMIT 20`,
       [locId]
     );
-    const { rows: chartRows } = await db.query(
+    const { rows: chartRows } = await client.query(
       `SELECT to_char(date_trunc('day', created_at), 'Dy') AS day, SUM(total)::int AS revenue
        FROM orders WHERE location_id = $1 AND created_at >= NOW() - INTERVAL '7 days'
        GROUP BY date_trunc('day', created_at) ORDER BY MIN(created_at)`,
@@ -221,7 +298,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       const match = chartRows.find((r: any) => r.day === day);
       return { day, revenue: match ? match.revenue : 0 };
     });
-    const { rows: heatmapRows } = await db.query(
+    const { rows: heatmapRows } = await client.query(
       `SELECT EXTRACT(DOW FROM o.created_at)::int AS dow,
               CASE WHEN EXTRACT(HOUR FROM o.created_at) BETWEEN 0 AND 3 THEN 0
                    WHEN EXTRACT(HOUR FROM o.created_at) BETWEEN 4 AND 7 THEN 1
@@ -252,6 +329,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       avgOrderValue: { value: avgOrderValue, trend: '+2%' },
       deliveryTime: { avg: avgTime, trend: '-2%' },
       chart, topProducts, geoLocations, heatmap,
+    });
     });
   });
 
@@ -389,7 +467,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // GET /api/public/theme/:slug
   fastify.get('/api/public/theme/:slug', async (request, reply) => {
     const slug = (request.params as any).slug;
-    const locRes = await db.query(`SELECT id, name FROM locations WHERE slug = $1`, [slug]);
+    const locRes = await db.query(`SELECT id, name, supported_locales FROM locations WHERE slug = $1`, [slug]);
     if (locRes.rows.length === 0) return reply.status(404).send({ error: 'Not found' });
     const locId = locRes.rows[0].id;
     const locName = locRes.rows[0].name;
@@ -401,6 +479,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     return reply.send({
       primaryColor: t.primary_color || null, bgColor: t.bg_color || null,
       textColor: t.text_color || null, logoUrl: t.logo_url || null, locationName: locName,
+      supportedLocales: Array.isArray(locRes.rows[0].supported_locales) ? locRes.rows[0].supported_locales : null,
     });
   });
 
@@ -411,7 +490,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const res = await withTenant(db, ctx.userId, async (client) =>
       client.query(
         `SELECT primary_color, bg_color, text_color, logo_url, frame_ancestors,
-                google_rating, google_review_count, google_maps_url
+                google_rating, google_review_count, google_maps_url,
+                google_place_id, social_instagram, social_facebook
          FROM location_themes WHERE location_id = $1`,
         [ctx.locId]
       )
@@ -428,6 +508,9 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       googleRating: t.google_rating != null ? Number(t.google_rating) : null,
       googleReviewCount: t.google_review_count != null ? Number(t.google_review_count) : null,
       googleMapsUrl: t.google_maps_url ?? null,
+      googlePlaceId: t.google_place_id ?? null,
+      socialInstagram: t.social_instagram ?? null,
+      socialFacebook: t.social_facebook ?? null,
     });
   });
 
@@ -439,8 +522,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const logoUrl = parsed.logoUrl ? validateImageKey(parsed.logoUrl) : null;
     const res = await withTenant(db, ctx.userId, async (client) => {
       await client.query(
-        `INSERT INTO location_themes (location_id, primary_color, bg_color, text_color, logo_url, google_rating, google_review_count, google_maps_url)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        `INSERT INTO location_themes (location_id, primary_color, bg_color, text_color, logo_url, google_rating, google_review_count, google_maps_url, google_place_id, social_instagram, social_facebook)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          ON CONFLICT (location_id) DO UPDATE SET
            primary_color = COALESCE($2, location_themes.primary_color),
            bg_color = COALESCE($3, location_themes.bg_color),
@@ -448,12 +531,16 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
            logo_url = COALESCE($5, location_themes.logo_url),
            google_rating = COALESCE($6, location_themes.google_rating),
            google_review_count = COALESCE($7, location_themes.google_review_count),
-           google_maps_url = COALESCE($8, location_themes.google_maps_url)`,
+           google_maps_url = COALESCE($8, location_themes.google_maps_url),
+           google_place_id = COALESCE($9, location_themes.google_place_id),
+           social_instagram = COALESCE($10, location_themes.social_instagram),
+           social_facebook = COALESCE($11, location_themes.social_facebook)`,
         [ctx.locId, parsed.primaryColor || null, parsed.bgColor || null, parsed.textColor || null, logoUrl,
-         parsed.googleRating ?? null, parsed.googleReviewCount ?? null, parsed.googleMapsUrl ?? null]
+         parsed.googleRating ?? null, parsed.googleReviewCount ?? null, parsed.googleMapsUrl ?? null,
+         parsed.googlePlaceId || null, parsed.socialInstagram || null, parsed.socialFacebook || null]
       );
       return client.query(
-        `SELECT primary_color, bg_color, text_color, logo_url, google_rating, google_review_count, google_maps_url
+        `SELECT primary_color, bg_color, text_color, logo_url, google_rating, google_review_count, google_maps_url, google_place_id, social_instagram, social_facebook
          FROM location_themes WHERE location_id = $1`,
         [ctx.locId]
       );
@@ -464,13 +551,23 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       googleRating: t.google_rating != null ? Number(t.google_rating) : null,
       googleReviewCount: t.google_review_count != null ? Number(t.google_review_count) : null,
       googleMapsUrl: t.google_maps_url ?? null,
+      googlePlaceId: t.google_place_id ?? null,
+      socialInstagram: t.social_instagram ?? null,
+      socialFacebook: t.social_facebook ?? null,
     });
   });
 
   // GET /api/owner/settings
   fastify.get('/api/owner/settings', async (request, reply) => {
     const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!locId) {
+      // A valid owner who hasn't created a location yet is a fresh signup that
+      // belongs in onboarding — NOT an expired session. Returning 401 here makes
+      // apiClient treat first-run as "session expired" and bounce to /login (O1).
+      // Hand back a benign empty profile so AdminHome routes to /admin/onboarding.
+      if (await isValidOwnerToken(request)) return reply.send({ id: null });
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
     const res = await db.query(
       `SELECT id, name, slug, phone, delivery_fee_flat, min_order_value, free_delivery_threshold, delivery_radius_km, currency_code, tax_rate, lat, lng, address, hours_json, delivery_paused
        FROM locations WHERE id = $1`,
@@ -538,26 +635,58 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // POST /api/owner/courier-invites
   fastify.post('/api/owner/courier-invites', async (request, reply) => {
     const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
     const { phone } = request.body as any;
     const code = crypto.randomUUID().substring(0, 8);
+    if (!locId) {
+      // Fresh owner mid-wizard (no location yet) — return a placeholder invite
+      // instead of 401, which the client would turn into a logout, ejecting the
+      // owner from onboarding. Real courier setup happens after the storefront exists.
+      if (!(await isValidOwnerToken(request))) return reply.status(401).send({ error: 'Unauthorized' });
+      return reply.send({ link: `https://app.dowiz.org/courier/join?code=${code}`, code, phone: phone || null, pending: true });
+    }
     const link = `https://${locId}.dowiz.org/courier/join?code=${code}`;
     return reply.send({ link, code, phone: phone || null });
   });
 
   // POST /api/owner/onboarding
   fastify.post('/api/owner/onboarding', async (request, reply) => {
-    const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
     const { name, phone, slug, lat, lng, delivery_radius_km, address, menu_items,
             courier_option, courier_phone, primary_color, logo_url, test_order_completed } = request.body as any;
 
-    await db.query(
-      `UPDATE locations SET name = COALESCE($1, name), phone = COALESCE($2, phone),
-       lat = COALESCE($3, lat), lng = COALESCE($4, lng),
-       delivery_radius_km = COALESCE($5, delivery_radius_km) WHERE id = $6`,
-      [name || null, phone || null, lat ?? null, lng ?? null, delivery_radius_km ?? null, locId]
-    );
+    let locId = await getLocationId(request);
+    if (!locId) {
+      // Brand-new owner (no location yet) — PROVISION their first storefront here.
+      // The wizard's "publish" is this call; previously it 401'd (getLocationId is
+      // null for a fresh owner), and the client turned that into a logout, so a new
+      // owner could never finish onboarding. Create org + location + membership,
+      // then continue with menu/theme below. The location starts as a DRAFT
+      // (published_at NULL) — going order-capable happens via the activation gate.
+      const userId = await getOwnerUserId(request);
+      if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
+      if (!name || !phone || !slug) return reply.status(400).send({ error: 'name, phone and slug are required' });
+      const taken = await db.query(`SELECT 1 FROM locations WHERE slug = $1`, [slug]);
+      if (taken.rowCount > 0) return reply.status(409).send({ error: 'Slug already taken', code: 'SLUG_TAKEN' });
+      const orgRes = await db.query(`SELECT id FROM organizations WHERE owner_id = $1 LIMIT 1`, [userId]);
+      let orgId = orgRes.rows[0]?.id;
+      if (!orgId) {
+        const o = await db.query(`INSERT INTO organizations (id, name, owner_id) VALUES ($1, $2, $3) RETURNING id`, [crypto.randomUUID(), `${name} Org`, userId]);
+        orgId = o.rows[0].id;
+      }
+      locId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO locations (id, org_id, slug, name, phone, status, widget_enabled, delivery_fee_flat, lat, lng, delivery_radius_km)
+         VALUES ($1, $2, $3, $4, $5, 'open', true, 0, $6, $7, $8)`,
+        [locId, orgId, slug, name, phone, lat ?? null, lng ?? null, delivery_radius_km ?? null],
+      );
+      await db.query(`INSERT INTO memberships (user_id, location_id, role) VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING`, [userId, locId]);
+    } else {
+      await db.query(
+        `UPDATE locations SET name = COALESCE($1, name), phone = COALESCE($2, phone),
+         lat = COALESCE($3, lat), lng = COALESCE($4, lng),
+         delivery_radius_km = COALESCE($5, delivery_radius_km) WHERE id = $6`,
+        [name || null, phone || null, lat ?? null, lng ?? null, delivery_radius_km ?? null, locId]
+      );
+    }
 
     if (Array.isArray(menu_items)) {
       for (const item of menu_items) {

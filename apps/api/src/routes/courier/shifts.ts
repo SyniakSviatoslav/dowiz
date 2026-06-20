@@ -316,7 +316,13 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
     config: {
       rateLimit: {
         max: 1,
-        timeWindow: 10000 // 1 ping per 10s
+        timeWindow: 10000, // 1 ping per 10s, PER COURIER
+        // Key by the courier's bearer token, not the default client IP. Multiple
+        // couriers behind one NAT/carrier-grade-NAT share an IP, and IP-keyed
+        // limiting made them throttle each other's GPS pings (only one courier's
+        // position would update). The token is per-courier and available at
+        // onRequest time (before auth runs), so each courier gets their own bucket.
+        keyGenerator: (req: any) => req.headers?.authorization || req.ip,
       }
     }
   }, async (request: any, reply: any) => {

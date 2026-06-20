@@ -36,7 +36,7 @@ test('H7: Integrity under concurrency', async (t) => {
         const client = await pool.connect();
         try {
           await client.query('BEGIN');
-          await client.query('SET LOCAL app.user_id = $1', [ownerId]);
+          await client.query("SELECT set_config('app.user_id', $1, true)", [ownerId]);
 
           // Check existing
           const existing = await client.query(
@@ -94,7 +94,7 @@ test('H7: Integrity under concurrency', async (t) => {
         const client = await pool.connect();
         try {
           await client.query('BEGIN');
-          await client.query('SET LOCAL app.user_id = $1', [ownerId]);
+          await client.query("SELECT set_config('app.user_id', $1, true)", [ownerId]);
           const res = await client.query(
             `UPDATE orders SET status = 'CONFIRMED', confirmed_at = now()
              WHERE id = $1 AND status = 'PENDING'

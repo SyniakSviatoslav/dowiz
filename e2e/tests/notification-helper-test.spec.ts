@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 // We'll test our helpers by using them in a simplified version of the existing test
 test.describe('Notification Helper Tests', () => {
-  test('should be able to link Telegram and get connection info', async ({}) => {
+  test('should be able to link Telegram and get connection info', async () => {
     // Import our helper here to avoid issues with top-level await in test file
     const { linkTelegram } = await import('../helpers/notifHelpers');
     
@@ -10,7 +10,7 @@ test.describe('Notification Helper Tests', () => {
     expect(linkTelegram).toBeDefined();
   });
   
-  test('should be able to get owner token', async ({}) => {
+  test('should be able to get owner token', async () => {
     // Test that we can get an owner token
     const BASE_URL = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
     const authRes = await fetch(`${BASE_URL}/api/dev/mock-auth`, { method: 'POST' });

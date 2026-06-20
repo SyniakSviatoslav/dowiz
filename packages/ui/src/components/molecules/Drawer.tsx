@@ -44,7 +44,14 @@ export function Drawer({
 
   return createPortal(
     <div className="fixed inset-0 z-modal-backdrop">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        role="button"
+        tabIndex={0}
+        aria-label="Close"
+        onClick={onClose}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}
+      />
       <div
         className={`absolute top-0 bottom-0 w-80 max-w-[85vw] bg-[var(--brand-surface)] shadow-elevation-4 flex flex-col ${sideClasses} ${className}`}
         role="dialog"

@@ -104,6 +104,13 @@ const EnvSchema = z.object({
   RENDER_GIT_COMMIT: z.string().optional(),
   TRANSLATION_ENDPOINT: z.string().optional(),
   TRANSLATION_PROVIDER: z.string().optional(),
+  // Geo-seams — RoutingProvider (per-leg road routing). Provider is chosen by env,
+  // never by code. All three are safe defaults so backend boot never depends on a
+  // new required var; the routing seam degrades to haversine when unconfigured.
+  // verify:env still fails fast on an INVALID provider value or a malformed URL.
+  ROUTING_PROVIDER: z.enum(['ors', 'self', 'haversine']).default('ors'),
+  ROUTING_BASE_URL: z.string().url().default('https://api.openrouteservice.org'),
+  ROUTING_API_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

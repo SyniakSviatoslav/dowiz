@@ -39,11 +39,14 @@ export type OrderItemInput = z.infer<typeof OrderItemInput>;
   // ─── Create Order Input ──────────────────────────────────────────────
   export const CreateOrderInput = z.object({
     locationId: z.string().uuid(),
-    type: z.literal('delivery'),
+    type: z.enum(['delivery', 'pickup']),
     items: z.array(OrderItemInput).min(1),
     customer: z.object({
       phone: z.string().min(6).max(20).optional(),
       name: z.string().min(1).max(120).optional(),
+      // UX-2 messenger deep-link (optional secondary contact channel).
+      messenger_kind: z.enum(['telegram', 'whatsapp', 'viber']).optional(),
+      messenger_handle: z.string().min(1).max(120).optional(),
     }).strict().optional(),
     delivery: z.object({
       pin: z.object({
@@ -51,18 +54,27 @@ export type OrderItemInput = z.infer<typeof OrderItemInput>;
         lng: z.number().min(-180).max(180),
       }).strict(),
       address_text: z.string().min(1).max(500).optional(),
-    }).strict(),
+    }).strict().optional(),
     payment: z.object({
       method: z.literal('cash'),
     }).strict(),
     cash_pay_with: z.number().int().positive().optional(),
     delivery_instructions: z.string().max(500).optional(),
+    // UX-3 entry-anchor photo: the R2 key returned by the anonymous upload endpoint.
+    delivery_photo_key: z.string().max(200).regex(/^entry-photos\/[A-Za-z0-9._-]+\.webp$/).optional(),
+    // UX-4: optional courier tip (integer minor units, >= 0).
+    tip_amount: z.number().int().min(0).max(10_000_000).optional(),
     prefs: OrderPreferences.optional(),
     idempotency_key: z.string().uuid(),
     // Preflight (E27)
     acknowledged_codes: z.array(z.string()).max(10).optional().default([]),
     otp_code: z.string().length(6).regex(/^\d{6}$/).optional(),
-  }).strict();
+  }).strict().superRefine((val, ctx) => {
+    // Delivery orders must carry a delivery pin; pickup orders must not.
+    if (val.type === 'delivery' && !val.delivery) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['delivery'], message: 'delivery is required for delivery orders' });
+    }
+  });
 
 export type CreateOrderInput = z.infer<typeof CreateOrderInput>;
 
@@ -103,7 +115,7 @@ export const OrderResponse = z.object({
   locationId: z.string().uuid(),
   customerId: z.string().uuid().nullable(),
   status: OrderStatusEnum,
-  type: z.literal('delivery'),
+  type: z.enum(['delivery', 'pickup']),
   deliveryAddress: z.string().nullable(),
   deliveryInstructions: z.string().nullable(),
   subtotal: z.number().int(),
@@ -120,6 +132,7 @@ export type OrderResponse = z.infer<typeof OrderResponse>;
 export const CustomerOrderStatusResponse = z.object({
   id: z.string().uuid(),
   status: OrderStatusEnum,
+  type: z.enum(['delivery', 'pickup']).optional(),
   deliveryAddress: z.string().nullable(),
   deliveryInstructions: z.string().nullable(),
   total: z.number().int(),
@@ -146,7 +159,8 @@ export const AuthToken = z.discriminatedUnion('role', [
     role: z.literal('customer'),
     orderId: z.string().uuid(),
     locationId: z.string().uuid(),
-    phone: z.string(),
+    // P0-PII: phone intentionally NOT in the customer claim (PII in a long-lived
+    // bearer token). Consumers resolve the phone server-side via orderId / sub.
     ...AuthBase,
   }).strict(),
 ]);
@@ -208,10 +222,21 @@ export interface ParseIssue {
   raw?: string;
 }
 
+// Restaurant-level metadata extracted from a menu document (PDF/photo). Business
+// contact info only — NOT customer PII. Surfaced for review and written to the
+// location on commit so onboarding can pre-fill address/phone from the menu.
+export interface RestaurantMeta {
+  name?: string;
+  address?: string;
+  phone?: string;
+  hoursText?: string;
+}
+
 export interface ParseResult {
   draft: CanonicalMenuDraft;
   issues: ParseIssue[];
   summary: { valid: number; errors: number; warnings: number; mode: ParseMode; low_confidence_count?: number };
+  restaurant?: RestaurantMeta;
 }
 
 export interface CsvParseConfig {

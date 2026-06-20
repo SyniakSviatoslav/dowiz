@@ -3,10 +3,16 @@ import { CreateOrderInput, StatusUpdateInput } from '@deliveryos/shared-types';
 import { assertTransition, type OrderStatus } from '@deliveryos/domain';
 import { issueCustomerToken, withTenant } from '@deliveryos/platform';
 import type { QueueProvider, MessageBus } from '@deliveryos/platform';
+import { loadEnv } from '@deliveryos/config';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel } from '../lib/registry.js';
 import { updateOrderStatus } from '../lib/orderStatusService';
+import { generateOpaqueToken } from '../lib/otp.js';
+import { evaluatePreflight } from '../lib/preflight.js';
+import { computeSignals } from '../lib/signals/compute.js';
 import type { Pool } from 'pg';
 import crypto from 'crypto';
+
+const env = loadEnv();
 import { applyTax, assertNonNegative, computeLineTotal } from '../lib/money.js';
 import { distanceKm } from '../lib/geo.js';
 
@@ -79,6 +85,10 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       return reply.status(400).send({ code: 400, error: issues || 'Validation error' });
     }
     const { locationId, items, customer: cust, delivery, idempotency_key, cash_pay_with: cashPayWith, delivery_instructions: rawInstructions } = input;
+    // Pickup orders carry no delivery pin/address and incur no delivery fee.
+    const isPickup = input.type === 'pickup';
+    const pin = isPickup ? null : delivery!.pin;
+    const deliveryAddressText = isPickup ? null : (delivery?.address_text ?? null);
 
     let client;
     try {
@@ -93,9 +103,10 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
       // 1. Location config (FOR UPDATE lock optionally, but standard read is fine if config updates are rare, wait we should lock locations? No need to lock config, just read it).
       const locRes = await client.query(
-         `SELECT lat, lng, confirm_timeout_min, busy_mode, phone,
+         `SELECT lat, lng, confirm_timeout_min, busy_mode, phone, slug, published_at,
                  currency_code, currency_minor_unit, tax_rate, price_includes_tax,
-                 min_order_value, free_delivery_threshold, delivery_fee_flat
+                 min_order_value, free_delivery_threshold, delivery_fee_flat,
+                 require_phone_otp
           FROM locations WHERE id = $1`,
         [locationId]
       );
@@ -106,6 +117,13 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       }
 
       const location = locRes.rows[0];
+
+      // Z7: a DRAFT storefront (never published) shows a preview but must NOT accept
+      // real orders. Existing live locations were backfilled with published_at.
+      if (location.published_at == null) {
+        await client.query('ROLLBACK');
+        return reply.status(409).send({ error: 'Storefront is not published yet', code: 'NOT_PUBLISHED' });
+      }
 
       // OTP verification (if column exists)
       let otpVerified = false;
@@ -158,15 +176,16 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         quantity: i.quantity,
         modifier_ids: [...(i.modifier_ids || [])].sort()
       }));
-      const lat_rounded_5 = Math.round(delivery.pin.lat * 100000) / 100000;
-      const lng_rounded_5 = Math.round(delivery.pin.lng * 100000) / 100000;
+      const lat_rounded_5 = pin ? Math.round(pin.lat * 100000) / 100000 : null;
+      const lng_rounded_5 = pin ? Math.round(pin.lng * 100000) / 100000 : null;
       const customerId = request.user?.role === 'customer' ? request.user.userId : 'anonymous';
 
       const canonicalBody = JSON.stringify({
         locationId,
+        type: input.type,
         items: canonicalItems,
-        pin: { lat: lat_rounded_5, lng: lng_rounded_5 },
-        address_text: delivery.address_text || null,
+        pin: pin ? { lat: lat_rounded_5, lng: lng_rounded_5 } : null,
+        address_text: deliveryAddressText,
         cash_pay_with: cashPayWith || null,
         currency_code: location.currency_code,
         menu_version: menuVersion,
@@ -174,19 +193,9 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       });
       const requestHash = crypto.createHash('sha256').update(canonicalBody).digest('hex');
 
-      // 4. Preflight (E27) — check menu availability + signals + OTP before idempotency
-      let evaluatePreflight, computeSignals;
-      try {
-        // @ts-expect-error — preflight module may not exist; try/catch handles fallback
-        const pfModule = await import('../lib/preflight.js');
-        evaluatePreflight = pfModule.evaluatePreflight;
-        const sigModule = await import('../lib/signals/compute.js');
-        computeSignals = sigModule.computeSignals;
-      } catch (err: any) {
-        console.debug('[orders] preflight/signals module import failed, using stubs:', err?.message);
-        evaluatePreflight = (ctx: any) => ({ outcome: 'clean', reasons: [], confirmedReasons: [] });
-        computeSignals = async () => [];
-      }
+      // 4. Preflight (E27) — check menu availability + signals + OTP before idempotency.
+      // Statically imported (fail-loud): a missing module must break the build, never
+      // silently degrade to "clean" — that previously disabled OTP + all risk signals.
 
       // 4a. Product/modifier availability for preflight
       let productIds = items.map(i => i.product_id);
@@ -216,10 +225,10 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         productId: item.product_id,
         quantity: item.quantity,
         modifierIds: item.modifier_ids || [],
-        productAvailable: prodAvail.has(item.product_id) ? prodAvail.get(item.product_id) : null,
+        productAvailable: prodAvail.get(item.product_id) ?? null,
         modifierAvailability: Object.fromEntries(
-          (item.modifier_ids || []).map(mid => [mid, modAvailMap.has(`${item.product_id}_${mid}`) ? modAvailMap.get(`${item.product_id}_${mid}`) : null])
-        ),
+          (item.modifier_ids || []).map(mid => [mid, modAvailMap.get(`${item.product_id}_${mid}`) ?? null])
+        ) as Record<string, boolean | null>,
       }));
 
       // 4b. Per-phone order throttle (FX-4) — hard block, not advisory
@@ -486,6 +495,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       }
 
       let deliveryFee = 0;
+      if (!isPickup) {
       if (location.free_delivery_threshold !== null && subtotal >= location.free_delivery_threshold) {
         deliveryFee = 0;
       } else {
@@ -496,7 +506,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         const tiers = distRes.rows;
 
         if (tiers.length > 0 && location.lat != null && location.lng != null) {
-          const distKm = distanceKm(delivery.pin.lat, delivery.pin.lng, location.lat, location.lng);
+          const distKm = distanceKm(pin!.lat, pin!.lng, location.lat, location.lng);
           let foundTier = false;
           for (const tier of tiers) {
             if (distKm <= Number(tier.max_distance_km)) {
@@ -516,6 +526,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           return reply.status(422).send({ error: 'Delivery not configured', code: 'DELIVERY_NOT_CONFIGURED' });
         }
       }
+      } // end if (!isPickup) — pickup orders pay no delivery fee
 
       // 9. Taxes and Total
       const taxTotal = applyTax(subtotal, Number(location.tax_rate), location.price_includes_tax, location.currency_minor_unit);
@@ -532,11 +543,14 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       let resolvedCustomerId = null;
       if (cust && cust.phone) {
         const custRes = await client.query(
-          `INSERT INTO customers (location_id, phone, name)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (location_id, phone) DO UPDATE SET name = COALESCE(EXCLUDED.name, customers.name)
+          `INSERT INTO customers (location_id, phone, name, messenger_kind, messenger_handle)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (location_id, phone) DO UPDATE SET
+             name = COALESCE(EXCLUDED.name, customers.name),
+             messenger_kind = COALESCE(EXCLUDED.messenger_kind, customers.messenger_kind),
+             messenger_handle = COALESCE(EXCLUDED.messenger_handle, customers.messenger_handle)
            RETURNING id`,
-          [locationId, cust.phone, cust.name || null]
+          [locationId, cust.phone, cust.name || null, (cust as any).messenger_kind || null, (cust as any).messenger_handle || null]
         );
         resolvedCustomerId = custRes.rows[0].id;
       } else if (request.user?.role === 'customer') {
@@ -557,18 +571,24 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           menu_version, client_menu_version, request_hash, timeout_at,
           delivery_instructions,
           metadata,
-          preflight
+          preflight,
+          customer_messenger_kind, customer_messenger_handle,
+          delivery_photo_key, tip_amount
          )
-         VALUES ($1, $2, 'delivery', 'PENDING', $3, $4, $5, $6, $7, $8, $9, $10, 'cash', $11, $12, $13, $14, $15, $16, $17, $18, $19)
+         VALUES ($1, $2, $20, 'PENDING', $3, $4, $5, $6, $7, $8, $9, $10, 'cash', $11, $12, $13, $14, $15, $16, $17, $18, $19, $21, $22, $23, $24)
          RETURNING id, status, subtotal, total, created_at::text, timeout_at::text`,
         [
-          locationId, resolvedCustomerId, delivery.address_text || null, delivery.pin.lat, delivery.pin.lng,
+          locationId, resolvedCustomerId, deliveryAddressText, pin?.lat ?? null, pin?.lng ?? null,
           subtotal, deliveryFee, taxTotal, discountTotal, total,
-          cashPayWith ?? null, location.currency_code, 
+          cashPayWith ?? null, location.currency_code,
           menuVersion, (input as any).client_menu_version || null, requestHash, timeoutAt,
           rawInstructions || null,
           JSON.stringify({ otp_verified: otpServerVerified, client_ip_hash: clientIpHash }),
           preflightMeta,
+          input.type,
+          (cust as any)?.messenger_kind || null, (cust as any)?.messenger_handle || null,
+          (input as any).delivery_photo_key || null,
+          (input as any).tip_amount || 0,
         ]
       );
       const order = orderRes.rows[0];
@@ -606,6 +626,22 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
          VALUES ($1, $2, $3, $4, 201)`,
         [idempotency_key, locationId, requestHash, order.id]
       );
+
+      // 13b. Customer track grant — single-use opaque code backing the ?t= tracking
+      // link. Only minted when there's a resolved customer (same condition as the
+      // customer JWT below); anonymous orders have no JWT to reissue at exchange.
+      // Raw code stays in this local var for the post-commit trackUrl; only its
+      // sha256 hash is persisted. 14-day TTL outlives the 7-day JWT comfortably.
+      let trackCode: string | undefined;
+      if (cust?.phone && resolvedCustomerId) {
+        const { token, hash } = generateOpaqueToken();
+        await client.query(
+          `INSERT INTO customer_track_grants (order_id, location_id, token_hash, expires_at)
+           VALUES ($1, $2, $3, now() + interval '14 days')`,
+          [order.id, locationId, hash]
+        );
+        trackCode = token;
+      }
 
       // 14. Transactional Enqueue
       await queue.enqueue(QUEUE_NAMES.ORDER_TIMEOUT, { orderId: order.id, locationId }, {
@@ -678,7 +714,6 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           authToken = await issueCustomerToken({
             orderId: order.id,
             locationId,
-            phone: cust.phone,
             customerId: resolvedCustomerId,
           });
         } catch (err) {
@@ -695,6 +730,9 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         deliveryInstructions: rawInstructions || null,
         createdAt: order.created_at,
         authToken,
+        trackUrl: trackCode
+          ? `${env.APP_BASE_URL}/s/${location.slug}/order/${order.id}?t=${trackCode}`
+          : undefined,
         preflight: {
           outcome: 'clean',
           reasons: preflight.reasons,
@@ -727,6 +765,11 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
     const user = request.user;
     let locationId: string | null = null;
 
+    // P2-ANONORDER: this route uses softVerifyAuth (anonymous-permitting), but an
+    // order is private. Require a recognized principal — a customer token (scoped
+    // to its own orderId/locationId) or an owner/courier (tenant-scoped below via
+    // withTenant). An unauthenticated/unknown caller gets 401; no bare
+    // WHERE id=$1 fallback that would let anyone enumerate orders by UUID.
     if (user?.role === 'customer') {
       locationId = user.locationId;
       if (user.orderId !== id) {
@@ -734,6 +777,9 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       }
     } else if (user?.role === 'owner' || user?.role === 'courier') {
       // Owner/courier — tenant isolation via withTenant
+    } else {
+      // Anonymous or unrecognized role — no access without a scoping credential.
+      return reply.status(401).send({ error: 'Authentication required' });
     }
 
     try {
@@ -812,7 +858,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
        await withTenant(db, user.userId, async (client) => {
          // 1. Read current status
          const cur = await client.query(
-           `SELECT id, status, location_id FROM orders WHERE id = $1`,
+           `SELECT id, status, location_id, type FROM orders WHERE id = $1`,
            [id]
          );
 
@@ -826,8 +872,9 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
             messageBus
           });
 
-          // 3. If transitioning to IN_DELIVERY, find and assign available courier synchronously
-          if (newStatus === 'IN_DELIVERY') {
+          // 3. If transitioning to IN_DELIVERY, find and assign available courier synchronously.
+          // Pickup orders are never dispatched to a courier (READY → PICKED_UP instead).
+          if (newStatus === 'IN_DELIVERY' && cur.rows[0].type === 'delivery') {
             const availRes = await client.query(
               `SELECT c.id AS courier_id, cs.id AS shift_id
                FROM couriers c

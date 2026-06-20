@@ -117,6 +117,11 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
         raw_text_hash: crypto.createHash('sha256').update(buffer).digest('hex')
       };
     }
+    // Persist extracted restaurant contact (name/address/phone/hours) in the draft
+    // so the commit can pre-fill the location after the owner reviews it.
+    if ((parseResult as any).restaurant) {
+      (parseResult.draft as any)._restaurant = (parseResult as any).restaurant;
+    }
 
     // Save to import_sessions
     let importSessionId: string;
@@ -150,7 +155,73 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
       expires_at: new Date(Date.now() + 30 * 60000).toISOString(),
       summary: parseResult.summary,
       issues: parseResult.issues,
-      draft_preview: draftPreview
+      draft_preview: draftPreview,
+      restaurant: (parseResult as any).restaurant || null,
+    });
+  });
+
+  // ─── POST /menu/import/anonymous ─────────────────────────────────────
+  // Menu-first onboarding front door: parse a menu BEFORE any account exists.
+  // The draft is stashed in Redis (30-min TTL) and returned with the extracted
+  // restaurant identity (name/phone/address) so the public /start page can
+  // pre-fill the create form. The owner then "claims" it by authenticating with
+  // Telegram and calling POST /owner/onboarding/start with this id, which seeds
+  // the new location's menu. Public + IP-rate-limited; nothing is written to the
+  // database here (no location/owner exists yet).
+  fastify.post('/menu/import/anonymous', {
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+  }, async (request: any, reply: any) => {
+    const redis = (fastify as any).redis;
+    if (!redis) return reply.status(503).send({ error: 'Anonymous import unavailable' });
+
+    const data = await request.file({ limits: { fileSize: 10 * 1024 * 1024 } });
+    if (!data) return reply.status(400).send({ error: 'Missing file' });
+    if (data.file.truncated) return reply.status(413).send({ error: 'File exceeds maximum size of 10MB' });
+
+    const mime = data.mimetype as string;
+    let kind: string;
+    if (mime === 'application/pdf') kind = 'pdf';
+    else if (mime.startsWith('image/')) kind = 'image';
+    else return reply.status(400).send({ error: 'Upload a PDF or image of your menu', code: 'UNSUPPORTED_TYPE' });
+
+    const buffer = await data.toBuffer();
+    const parser = parsers['ai-ocr'];
+    if (!parser) return reply.status(503).send({ error: 'Parser unavailable' });
+
+    // No location yet — parse against the onboarding defaults (ALL / minor unit 0,
+    // matching POST /onboarding/start). The owner reviews every item before claim.
+    const parseResult = await parser.parse({
+      kind: kind as any,
+      mime: mime as any,
+      bytes: buffer,
+      config: { expectedCurrency: 'ALL', currencyMinorUnit: 0 },
+    });
+
+    if ((parseResult as any).restaurant) {
+      (parseResult.draft as any)._restaurant = (parseResult as any).restaurant;
+    }
+    (parseResult.draft as any)._provenance = {
+      source: 'ai-ocr',
+      raw_text_hash: crypto.createHash('sha256').update(buffer).digest('hex'),
+    };
+
+    const anonymousImportId = crypto.randomUUID();
+    await redis.setex(
+      `import:anon:${anonymousImportId}`,
+      1800,
+      JSON.stringify({ draft: parseResult.draft, restaurant: (parseResult as any).restaurant || null, created_at: new Date().toISOString() })
+    );
+
+    return reply.status(200).send({
+      anonymous_import_id: anonymousImportId,
+      expires_at: new Date(Date.now() + 30 * 60000).toISOString(),
+      summary: parseResult.summary,
+      issues: parseResult.issues,
+      draft_preview: {
+        categories: parseResult.draft.categories,
+        products: parseResult.draft.products,
+      },
+      restaurant: (parseResult as any).restaurant || null,
     });
   });
 
@@ -400,6 +471,27 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
           `UPDATE import_sessions SET status = 'committed', commit_token = $1, committed_at = now() WHERE id = $2`,
           [finalCommitToken, import_session_id]
         );
+
+        // Committing a reviewed menu satisfies the human-review publish gate (Z2):
+        // stamp menu_confirmed_at if not already set.
+        await client.query(
+          `UPDATE locations SET menu_confirmed_at = COALESCE(menu_confirmed_at, now()) WHERE id = $1`,
+          [locationId]
+        );
+
+        // Pre-fill the location's contact from the menu document (fill-if-empty —
+        // never clobber owner-edited values). The owner reviewed the draft before
+        // committing, so this is human-approved. Phone also helps the publish gate.
+        const rmeta = (draft as any)._restaurant;
+        if (rmeta && (rmeta.address || rmeta.phone)) {
+          await client.query(
+            `UPDATE locations
+                SET address = CASE WHEN COALESCE(NULLIF(btrim(address), ''), '') = '' THEN COALESCE($2, address) ELSE address END,
+                    phone   = CASE WHEN COALESCE(NULLIF(btrim(phone), ''), '')   = '' THEN COALESCE($3, phone)   ELSE phone   END
+              WHERE id = $1`,
+            [locationId, rmeta.address || null, rmeta.phone || null],
+          );
+        }
 
         // Explicitly touch menu_version via the existing bump_menu_version() function or let triggers handle it
         // The trigger on categories/products handles it natively!

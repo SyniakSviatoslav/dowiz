@@ -8,10 +8,10 @@ No Personally Identifiable Information (PII) may ever be transmitted to any LLM 
 - **Redaction Patterns:** Emails, Phone numbers, Credit Cards, IBANs, and URLs are aggressively matched and replaced with `[REDACTED]`.
 - **Audit:** Any redaction triggers a `POTENTIALLY_UNSAFE_VALUE` ParseIssue, maintaining visibility for the restaurant owner.
 
-## 2. Self-Host First
-We prioritize self-hosted, CPU-friendly models in the development and default staging environments to ensure complete data residency.
-- **OCR:** `tesseract.js` running locally inside the Node.js process (WASM).
-- **LLM:** `ollama` (default: `llama3.1:8b-instruct`).
+## 2. Self-Host First (and Zero-Cost by Default)
+We prioritize self-hosted, CPU-friendly models in the development and default staging environments to ensure complete data residency. **No menu-parsing path depends on a paid API** — the system runs end-to-end with zero keys configured.
+- **OCR:** `tesseract.js` running locally inside the Node.js process (WASM). Optional `paddle` engine for higher accuracy (self-hosted subprocess) — see `docs/menu-ocr-engines.md`.
+- **LLM (menu structuring):** **the default is the in-process heuristic structurer** (pure code, no network, no key) — selected automatically when no LLM provider is configured. A real LLM is *optional* and only used when explicitly wired: `ollama` (self-host, e.g. `llama3.1:8b-instruct`) or a BYO-key provider (`GROQ_API_KEY` / `OPENAI_API_KEY`). There is **no Anthropic/Claude vision path** — an earlier Claude-vision parser was removed; the canonical seam is OCR-text → (heuristic | optional LLM).
 - **Translation:** `libretranslate`.
 - **Training Restrictions:** `OLLAMA_NOPULL=1` and `LT_NO_LEARN=true` are enforced to prevent models from learning on our data.
 

@@ -14,11 +14,26 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
 
   const rooms = new Map<string, Set<RoomMember>>();
   const userBySocket = new Map<WebSocket, AuthToken>();
+  // P1-WSDUP: each room registers exactly one messageBus handler. We MUST keep the
+  // exact handler reference so we can unsubscribe when the room is torn down —
+  // otherwise re-creating a room (member rejoins after the room was GC'd) stacks a
+  // second messageBus subscription on the same channel, and every event is then
+  // delivered N times (the "Calling N handlers" leak).
+  const roomHandlers = new Map<string, (msg: unknown) => void>();
+
+  function deleteRoom(room: string) {
+    rooms.delete(room);
+    const handler = roomHandlers.get(room);
+    if (handler) {
+      roomHandlers.delete(room);
+      messageBus.unsubscribe(room, handler);
+    }
+  }
 
   async function subscribeToRoom(room: string, member: RoomMember) {
     if (!rooms.has(room)) {
       rooms.set(room, new Set());
-      await messageBus.subscribe(room, (msg: unknown) => {
+      const handler = (msg: unknown) => {
         const members = rooms.get(room);
         if (!members) return;
         const payload = JSON.stringify({ room, data: msg });
@@ -27,7 +42,9 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
             m.ws.send(payload);
           }
         }
-      });
+      };
+      roomHandlers.set(room, handler);
+      await messageBus.subscribe(room, handler);
       console.log('[WS] Created room:', room);
     }
     rooms.get(room)!.add(member);
@@ -51,13 +68,48 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
   const roomCleanup = setInterval(() => {
     for (const [room, members] of rooms) {
       if (members.size === 0) {
-        rooms.delete(room);
+        deleteRoom(room);
         console.log('[WS] Cleaned up empty room:', room);
       }
     }
   }, 60000);
 
+  // Per-tenant authorization for owner subscriptions. An authenticated owner must
+  // only stream rooms for locations they are a member of — otherwise any owner
+  // could subscribe to another tenant's `location:*`/`order:*` channel and watch
+  // their live order feed. `fastify.db` is the operational Pg pool (decorated on
+  // the instance at startup).
+  async function ownerCanAccessRoom(userId: string, room: string): Promise<boolean> {
+    try {
+      if (room.startsWith('location:')) {
+        const locId = room.split(':')[1];
+        if (!locId) return false;
+        const r = await fastify.db.query(
+          `SELECT 1 FROM memberships WHERE user_id = $1 AND location_id = $2 AND role = 'owner' LIMIT 1`,
+          [userId, locId],
+        );
+        return (r.rowCount ?? 0) > 0;
+      }
+      if (room.startsWith('order:')) {
+        const orderId = room.split(':')[1];
+        if (!orderId) return false;
+        const r = await fastify.db.query(
+          `SELECT 1 FROM orders o
+             JOIN memberships m ON m.location_id = o.location_id
+            WHERE o.id = $1 AND m.user_id = $2 AND m.role = 'owner' LIMIT 1`,
+          [orderId, userId],
+        );
+        return (r.rowCount ?? 0) > 0;
+      }
+      return false;
+    } catch (err: any) {
+      console.error('[WS] owner room authz query failed:', err?.message);
+      return false;
+    }
+  }
+
   wss.on('connection', (ws, req) => {
+    (ws as any).isAlive = true; // seed before the first heartbeat tick
     ws.on('pong', () => { (ws as any).isAlive = true; });
 
     let isAuthenticated = false;
@@ -125,9 +177,19 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
               ws.send(JSON.stringify({ type: 'error', error: 'Invalid room' }));
               return;
             }
+            const ownerId = (user as any).userId ?? user!.sub;
+            if (!ownerId || !(await ownerCanAccessRoom(ownerId, room))) {
+              ws.send(JSON.stringify({ type: 'error', error: 'Forbidden room' }));
+              return;
+            }
           } else if (user!.role === 'courier') {
             if (!room.startsWith('courier:') && !room.startsWith('location:') && !room.startsWith('order:')) {
               ws.send(JSON.stringify({ type: 'error', error: 'Invalid room' }));
+              return;
+            }
+            // A courier may only watch their OWN task room (courier:<sub>).
+            if (room.startsWith('courier:') && room !== `courier:${user!.sub}`) {
+              ws.send(JSON.stringify({ type: 'error', error: 'Forbidden room' }));
               return;
             }
           }
@@ -148,7 +210,7 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
               }
             }
             if (members.size === 0) {
-              rooms.delete(msg.room);
+              deleteRoom(msg.room);
               console.log('[WS] Room deleted (empty):', msg.room);
             }
           }
@@ -200,12 +262,18 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
     ws.on('close', (code, reason) => {
       userBySocket.delete(ws);
       if (user) {
-        for (const [, members] of rooms) {
+        // P1-WSDUP: on disconnect, drop the member and tear the room down (incl.
+        // messageBus.unsubscribe) the moment it empties, rather than waiting for the
+        // 60s GC. A reconnect then re-creates exactly one subscription.
+        for (const [room, members] of rooms) {
           for (const m of members) {
             if (m.ws === ws) {
               members.delete(m);
               break;
             }
+          }
+          if (members.size === 0) {
+            deleteRoom(room);
           }
         }
         console.log('[WS] Client disconnected:', user.role, user.sub, 'code:', code, 'ip:', clientIp);

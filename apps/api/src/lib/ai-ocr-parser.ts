@@ -5,6 +5,10 @@ import { PiiRedactor } from './pii-redactor.js';
 import Tesseract from 'tesseract.js';
 import crypto from 'crypto';
 import { z } from 'zod';
+import { execFileSync } from 'child_process';
+import { writeFileSync, unlinkSync, existsSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 function coerceNum() {
   return z.preprocess((v) => {
@@ -24,6 +28,14 @@ function coerceBool() {
 }
 
 const llmSchema = z.object({
+  // Restaurant-level contact extracted from the menu header/footer (business
+  // contact info, NOT customer PII). Optional — older prompts won't return it.
+  restaurant: z.object({
+    name: coerceStr().optional().default(''),
+    address: coerceStr().optional().default(''),
+    phone: coerceStr().optional().default(''),
+    hoursText: coerceStr().optional().default(''),
+  }).optional(),
   categories: z.array(z.object({
     externalKey: coerceStr(),
     name: z.string()
@@ -62,17 +74,25 @@ const llmSchema = z.object({
 });
 
 // ── LLM Adapter ─────────────────────────────────────────────────────
-type LlmProvider = 'ollama' | 'groq' | 'openai' | 'mock';
+// 'heuristic' is the zero-dependency, no-API-key structurer (pure code) used
+// when no LLM provider is configured — so menu import works on a server with
+// nothing wired up (open-source, free). A real LLM, when configured, still wins.
+type LlmProvider = 'ollama' | 'groq' | 'openai' | 'mock' | 'heuristic';
 
 function detectProvider(model: string): LlmProvider {
   if (model === 'mock') return 'mock';
-  const env = (process.env.LLM_ADAPTER || '').toLowerCase();
+  const env = (process.env.LLM_ADAPTER || process.env.LLM_PROVIDER || '').toLowerCase();
+  if (env === 'heuristic' || env === 'none' || env === 'offline') return 'heuristic';
   if (env === 'groq') return 'groq';
   if (env === 'openai') return 'openai';
   if (env === 'ollama') return 'ollama';
   if (process.env.GROQ_API_KEY) return 'groq';
   if (process.env.OPENAI_API_KEY) return 'openai';
-  return 'ollama';
+  // An explicit ollama endpoint/model means "ollama configured" → honour it
+  // (and surface its failure). With nothing configured at all, fall back to the
+  // heuristic structurer instead of an ollama endpoint that will never answer.
+  if (process.env.LLM_ENDPOINT || process.env.LLM_PROVIDER) return 'ollama';
+  return 'heuristic';
 }
 
 async function callLlm(provider: LlmProvider, prompt: string, model: string, timeoutMs: number): Promise<string> {
@@ -170,6 +190,37 @@ export class AiOcrParser implements MenuParserProvider {
     this.memoryService = memoryService;
   }
 
+  /**
+   * On-demand PaddleOCR (PP-OCRv5/v6) via a Python subprocess. Engine swap is
+   * config only (I5), selected by config.ocr_engine or MENU_OCR_ENGINE. NOT a
+   * daemon (I4): one process per image, then it exits. Menu-image content only,
+   * no PII / product-runtime state (I1). Returns text + a 0..1 confidence.
+   */
+  private paddleOcr(bytes: Buffer, mime: string): { text: string; confidence: number; version: string } {
+    const py = process.env.PADDLE_OCR_PYTHON || 'python3';
+    const script = process.env.PADDLE_OCR_SCRIPT || join(process.cwd(), 'scripts', 'paddle-ocr.py');
+    if (!existsSync(script)) throw new Error(`paddle-ocr.py not found at ${script} (set PADDLE_OCR_SCRIPT)`);
+    const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
+    const tmp = join(tmpdir(), `dowiz-ocr-${crypto.randomBytes(6).toString('hex')}.${ext}`);
+    writeFileSync(tmp, bytes);
+    try {
+      const out = execFileSync(py, [script, tmp], {
+        timeout: 120_000,
+        maxBuffer: 16 * 1024 * 1024,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).toString();
+      const j = JSON.parse(out);
+      if (j.error) throw new Error(j.error);
+      return {
+        text: j.text || '',
+        confidence: typeof j.confidence === 'number' ? j.confidence : 0,
+        version: j.version || 'paddleocr',
+      };
+    } finally {
+      try { unlinkSync(tmp); } catch { /* best-effort temp cleanup */ }
+    }
+  }
+
   async parse(input: ParserInputType): Promise<ParseResult> {
     const issues: ParseIssue[] = [];
     const t0 = Date.now();
@@ -177,6 +228,7 @@ export class AiOcrParser implements MenuParserProvider {
     let rawText = '';
     let ocrConfidence = 1;
     let ocrMs = 0;
+    let ocrEngineUsed = 'tesseract.js';
 
     if (input.kind === 'pdf') {
       // Extract text directly from PDF, skip OCR
@@ -193,7 +245,25 @@ export class AiOcrParser implements MenuParserProvider {
         for (let i = 1; i <= doc.numPages; i++) {
           const page = await doc.getPage(i);
           const content = await page.getTextContent();
-          pages.push(content.items.map((item: any) => item.str).join(' '));
+          // Reconstruct visual lines: PDF text comes as positioned fragments, so
+          // join by row (y-coordinate) instead of flattening everything to one
+          // line — otherwise every menu item collapses into a single string.
+          const pageLines: string[] = [];
+          let line = '';
+          let lastY: number | null = null;
+          for (const item of content.items as any[]) {
+            if (typeof item.str !== 'string') continue;
+            const y = item.transform?.[5];
+            if (lastY !== null && typeof y === 'number' && Math.abs(y - lastY) > 2 && line) {
+              pageLines.push(line);
+              line = '';
+            }
+            line += (line && !line.endsWith(' ') && item.str ? ' ' : '') + item.str;
+            if (item.hasEOL && line) { pageLines.push(line); line = ''; }
+            if (typeof y === 'number') lastY = y;
+          }
+          if (line) pageLines.push(line);
+          pages.push(pageLines.join('\n'));
         }
         await doc.destroy();
         rawText = pages.join('\n\n');
@@ -208,15 +278,24 @@ export class AiOcrParser implements MenuParserProvider {
         return this.fallbackError(issues);
       }
     } else if (input.kind === 'image') {
-      // 1. OCR
+      // 1. OCR — engine selectable by config (I5): config.ocr_engine wins, then
+      // MENU_OCR_ENGINE, default 'tesseract'. 'paddle' shells out to PaddleOCR.
+      const engine = ((input.config as any)?.ocr_engine || process.env.MENU_OCR_ENGINE || 'tesseract').toLowerCase();
       try {
-        const result = await Tesseract.recognize(input.bytes, 'sqi+eng', {
-          logger: m => {}
-        });
-        rawText = result.data.text;
-        ocrConfidence = result.data.confidence / 100.0;
+        if (engine === 'paddle') {
+          const p = this.paddleOcr(input.bytes, input.mime);
+          rawText = p.text;
+          ocrConfidence = p.confidence;
+          ocrEngineUsed = `paddleocr ${p.version}`;
+        } else {
+          const result = await Tesseract.recognize(input.bytes, 'sqi+eng', {
+            logger: m => {}
+          });
+          rawText = result.data.text;
+          ocrConfidence = result.data.confidence / 100.0;
+        }
       } catch (e: any) {
-        issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `OCR Failed: ${e.message}`, severity: 'error' });
+        issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `OCR Failed (${engine}): ${e.message}`, severity: 'error' });
         return this.fallbackError(issues);
       }
       ocrMs = Date.now() - t0;
@@ -228,11 +307,11 @@ export class AiOcrParser implements MenuParserProvider {
       throw new Error(`AiOcrParser does not support kind: ${input.kind}`);
     }
 
-    // 2. PII Redaction
-    const { text: redactedText, redactions } = this.piiRedactor.redact(rawText);
-    for (const r of redactions) {
-      issues.push({ rowNumber: 1, code: 'POTENTIALLY_UNSAFE_VALUE', message: `PII redacted (${r.kind})`, severity: 'warning' });
-    }
+    // PII note (Z1): the menu document is fed to the model un-redacted so the
+    // venue's OWN contact (name/address/phone/hours) can be extracted for
+    // onboarding. A menu contains no customer PII. The redacted copy is kept only
+    // for the provenance hash below.
+    const { text: redactedText } = this.piiRedactor.redact(rawText);
 
     const t1 = Date.now();
 
@@ -242,6 +321,10 @@ export class AiOcrParser implements MenuParserProvider {
 
     if (provider === 'mock') {
       return this.mockResult(input.config, issues);
+    }
+
+    if (provider === 'heuristic') {
+      return this.heuristicResult(rawText, input.config, issues, ocrEngineUsed, ocrMs, redactedText);
     }
 
     const modelForProvider = provider === 'groq'
@@ -309,6 +392,7 @@ export class AiOcrParser implements MenuParserProvider {
       const prompt = `Extract the complete menu structure from the text below. Return ONLY valid JSON matching this schema:
 
 {
+  "restaurant": { "name": "Pizza Roma", "address": "Rruga Sami Frasheri 12, Tirana", "phone": "+355 69 123 4567", "hoursText": "Mon-Sun 10:00-23:00" },
   "categories": [{ "externalKey": "cat1", "name": "Appetizers" }],
   "products": [
     {
@@ -338,7 +422,8 @@ CRITICAL RULES:
 2. INGREDIENTS: If ingredients are listed in the menu text, add them to "attributesJson.bom" as an array of objects with "name" (string), "quantity" (string, optional), and "allergens" (string array of common allergens: dairy, eggs, nuts, soy, gluten, shellfish, fish).
 3. DESCRIPTION: Include the product description if present. Combine ingredient list into a description if no separate description exists.
 4. TYPES: "price" must be a NUMBER, "available" must be BOOLEAN, "externalKey"/"categoryKey" must be STRINGS.
-5. FORMAT: Output ONLY the JSON object. No markdown fences, no commentary.\n\n${redactedText}`;
+5. FORMAT: Output ONLY the JSON object. No markdown fences, no commentary.
+6. RESTAURANT: From the header/footer, extract the venue "name", full street "address", contact "phone", and opening-"hoursText" if present. Use "" for any field not found. Do NOT invent these. This is the venue's OWN business contact — never any customer's details.\n\n${rawText}`;
 
       llmResponse = await callLlm(provider, prompt, modelForProvider, 120000);
     } catch (e: any) {
@@ -386,13 +471,20 @@ CRITICAL RULES:
       source: 'ai-ocr',
       raw_text_hash: crypto.createHash('sha256').update(redactedText).digest('hex'),
       model_id: llmModel,
-      ocr_engine: 'tesseract.js',
+      ocr_engine: ocrEngineUsed,
       ocr_ms: ocrMs,
       llm_ms: llmMs
     };
 
     // Note: since provenance isn't in CanonicalMenuDraft interface directly,
     // it will be attached via the server route handling to the import_sessions.draft_json._provenance
+
+    // Restaurant metadata (business contact) for onboarding pre-fill — only when
+    // the model actually returned non-empty values.
+    const rm = (draft as any).restaurant;
+    const restaurant = rm && (rm.name || rm.address || rm.phone || rm.hoursText)
+      ? { name: rm.name || undefined, address: rm.address || undefined, phone: rm.phone || undefined, hoursText: rm.hoursText || undefined }
+      : undefined;
 
     return {
       draft: canonicalDraft,
@@ -403,8 +495,175 @@ CRITICAL RULES:
         warnings: issues.length,
         mode: 'merge',
         low_confidence_count: lowConfidenceCount
-      }
+      },
+      ...(restaurant ? { restaurant } : {}),
     };
+  }
+
+  /**
+   * Zero-dependency, no-API-key menu structurer. Turns the OCR/PDF text into a
+   * canonical draft using deterministic line heuristics (no LLM). Open-source &
+   * free — the fallback so import works on a server with no LLM provider. The
+   * owner reviews every draft before commit, so rough extraction is acceptable.
+   */
+  private heuristicResult(
+    rawText: string,
+    config: any,
+    preIssues: ParseIssue[],
+    ocrEngineUsed: string,
+    ocrMs: number,
+    redactedText: string,
+  ): ParseResult {
+    const t1 = Date.now();
+    const currency = config.expectedCurrency || 'ALL';
+    const minorUnit = typeof config.currencyMinorUnit === 'number' ? config.currencyMinorUnit : 0;
+    const issues = [...preIssues];
+
+    const lines = rawText
+      .split(/\r?\n/)
+      .flatMap((l) => l.split(/\s{3,}/)) // PDF text often joins rows with wide gaps
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    // ── Restaurant header (business contact, not customer PII) ──────────
+    const phoneMatch = rawText.match(/(\+?\d[\d\s().-]{6,}\d)/);
+    const phoneRaw = phoneMatch?.[1];
+    const phone = phoneRaw && phoneRaw.replace(/[^\d+]/g, '').length >= 7
+      ? phoneRaw.trim()
+      : undefined;
+    const addressLine = lines.find((l) =>
+      /\b(rrug[ae]n?|rr\.|bulevardi|bul\.|blvd|sheshi|lagj[ei]a|street|st\.|avenue|ave\.?|road|rd\.)\b/i.test(l)
+      && !this.priceOf(l, minorUnit),
+    );
+    const hoursLine = lines.find((l) =>
+      /\d{1,2}[:.]\d{2}/.test(l)
+      && /(mon|tue|wed|thu|fri|sat|sun|hën|mar|mër|enj|pre|sht|die|open|hap|-|–|every|çdo)/i.test(l)
+      && !this.priceOf(l, minorUnit),
+    );
+    // Only claim a venue name when there's a real header (address/phone present),
+    // and only from the top line — avoids mislabelling a category as the venue.
+    const hasHeader = !!(addressLine || phone);
+    const top = lines[0] || '';
+    const nameLine = hasHeader && top.length >= 2 && top.length <= 40
+      && !this.priceOf(top, minorUnit) && !/@|\d{4,}/.test(top)
+      ? top
+      : undefined;
+    const restaurant = (nameLine || addressLine || phone || hoursLine)
+      ? {
+          name: nameLine || undefined,
+          address: addressLine || undefined,
+          phone,
+          hoursText: hoursLine || undefined,
+        }
+      : undefined;
+
+    // ── Categories + products ───────────────────────────────────────────
+    const categories: any[] = [];
+    const products: any[] = [];
+    const catKeyByName = new Map<string, string>();
+    let currentCatKey: string | null = null;
+
+    const ensureCategory = (name: string): string => {
+      const key = catKeyByName.get(name.toLowerCase());
+      if (key) return key;
+      const newKey = `cat${categories.length + 1}`;
+      categories.push({ externalKey: newKey, name });
+      catKeyByName.set(name.toLowerCase(), newKey);
+      return newKey;
+    };
+
+    for (const line of lines) {
+      // Skip lines we already consumed as header metadata.
+      if (line === nameLine || line === addressLine || line === hoursLine || (phone && line.includes(phone))) continue;
+      if (/@/.test(line)) continue; // email / handle line
+
+      const price = this.priceOf(line, minorUnit);
+      if (price !== null) {
+        // Product line: name is everything before the price token, dot leaders stripped.
+        let name = line.slice(0, price.index).replace(/[.\s·•—–-]+$/u, '').trim();
+        if (!name) name = line.replace(price.raw, '').replace(/[.\s·•—–-]+$/u, '').trim();
+        if (!name) continue;
+        if (!currentCatKey) currentCatKey = ensureCategory('Menu');
+        products.push({
+          externalKey: `prod${products.length + 1}`,
+          categoryKey: currentCatKey,
+          name,
+          description: null,
+          price: price.minor,
+          currency,
+          available: true,
+        });
+      } else if (line.length <= 40 && /[a-zA-ZÀ-ſ]/.test(line)) {
+        // No price + short alpha line → treat as a category header.
+        currentCatKey = ensureCategory(line.replace(/[:\s]+$/, ''));
+      }
+    }
+
+    if (products.length === 0) {
+      issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: 'No menu items could be detected in the document.', severity: 'error' } as any);
+      return this.fallbackError(issues);
+    }
+
+    const canonicalDraft: CanonicalMenuDraft = {
+      categories,
+      products,
+      modifierGroups: [],
+      modifiers: [],
+      links: [],
+      translations: [],
+    };
+
+    return {
+      draft: canonicalDraft,
+      issues,
+      summary: {
+        valid: products.length,
+        errors: 0,
+        warnings: issues.length,
+        mode: 'merge',
+        low_confidence_count: 0,
+      },
+      ...(restaurant ? { restaurant } : {}),
+      // provenance fields surfaced for parity with the LLM path
+      _provenance: {
+        source: 'ai-ocr',
+        raw_text_hash: crypto.createHash('sha256').update(redactedText).digest('hex'),
+        model_id: 'heuristic',
+        ocr_engine: ocrEngineUsed,
+        ocr_ms: ocrMs,
+        llm_ms: Date.now() - t1,
+      },
+    } as any;
+  }
+
+  /**
+   * Extract a trailing price token from a menu line. Returns null when the line
+   * has no plausible price. `minor` is the integer price in the currency's minor
+   * units (e.g. "8.50" with minorUnit 2 → 850, "800 Lek" with minorUnit 0 → 800).
+   */
+  private priceOf(line: string, minorUnit: number): { minor: number; index: number; raw: string } | null {
+    // Currency-tagged or trailing number: "... 8.50 EUR", "... 800 Lek", "... €12", "... 1.200".
+    const re = /(?:€|£|\$|lek|all|eur|usd|gbp)?\s*([0-9][0-9.,\s]*[0-9]|[0-9])\s*(?:€|£|\$|lek|all|eur|usd|gbp)?\s*$/i;
+    const m = line.match(re);
+    if (!m || !m[1]) return null;
+    const raw = m[1];
+    let num = raw.replace(/\s/g, '');
+    // Normalise decimal separator: both '.' and ',' present → '.'=thousands? assume
+    // last separator is decimal. Single ',' → decimal. '.' as thousands if 3 trailing.
+    if (num.includes('.') && num.includes(',')) {
+      num = num.lastIndexOf(',') > num.lastIndexOf('.')
+        ? num.replace(/\./g, '').replace(',', '.')
+        : num.replace(/,/g, '');
+    } else if (num.includes(',')) {
+      num = /,\d{3}$/.test(num) ? num.replace(/,/g, '') : num.replace(',', '.');
+    } else if (/\.\d{3}$/.test(num)) {
+      num = num.replace(/\./g, ''); // "1.200" → 1200 (thousands)
+    }
+    const value = Number(num);
+    if (!isFinite(value) || value <= 0 || value > 1_000_000) return null;
+    const minor = Math.round(value * Math.pow(10, minorUnit));
+    if (minor <= 0) return null;
+    return { minor, index: m.index ?? line.lastIndexOf(raw), raw: m[0] };
   }
 
   private fallbackError(issues: ParseIssue[]): ParseResult {

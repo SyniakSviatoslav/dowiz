@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot, PriceDisplay } from '@deliveryos/ui';
 import type { CourierTask, CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
+import { messengerLink } from '../../lib/messenger.js';
 import { z } from 'zod';
 
 const MessagesResponse = z.object({
@@ -24,6 +25,7 @@ export function DeliveryPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [task, setTask] = useState<CourierTask | null>(null);
+  const [photoOpen, setPhotoOpen] = useState(false); // UX-3 entry-photo fullscreen
   const [loading, setLoading] = useState(true);
   const [courierPos, setCourierPos] = useState<LngLatLike>(TIRANA_CENTER);
   const [showCelebration, setShowCelebration] = useState(false);
@@ -104,7 +106,7 @@ export function DeliveryPage() {
     fetchMessages();
   }, [id, fetchMessages]);
 
-  const { status: wsStatus, sendMessage } = useWebSocket({
+  const { status: wsStatus } = useWebSocket({
     room: `order:${id}`,
     onMessage: (msg: any) => {
       if (msg.type === 'client_location' && msg.payload) {
@@ -125,20 +127,30 @@ export function DeliveryPage() {
     }
   });
 
+  // Push the courier's real GPS to the server via REST /shifts/ping. This both
+  // (a) drives every role's live map (the worker fans the position out to the
+  // owner :couriers room and the customer's order room) and (b) persists the
+  // breadcrumb into courier_positions so the delivery's route is saved. The old
+  // code sent a WS 'location_update' the server never handled, so positions were
+  // silently dropped — no live map, no saved route. Server caps pings at 1/10s,
+  // so throttle to ~12s; NO_ACTIVE_SHIFT / GPS_OUT_OF_RANGE are non-fatal here.
+  const lastPingRef = useRef(0);
   useEffect(() => {
-    if (position && wsStatus === 'connected') {
-      sendMessage({
-        type: 'location_update',
-        payload: {
-          lat: position.lat,
-          lng: position.lng,
-          heading: position.heading,
-          speed: position.speed,
-          timestamp: Date.now()
-        }
-      });
-    }
-  }, [position, wsStatus, sendMessage]);
+    if (!position) return;
+    const now = Date.now();
+    if (now - lastPingRef.current < 12000) return;
+    lastPingRef.current = now;
+    apiClient('/courier/shifts/ping', {
+      method: 'POST',
+      body: {
+        lat: position.lat,
+        lng: position.lng,
+        ...(Number.isFinite(position.accuracy) ? { accuracy_meters: Math.round(position.accuracy) } : {}),
+      },
+    }).catch((err: any) => {
+      console.debug('[DeliveryPage] shift ping skipped:', err?.status || err?.message);
+    });
+  }, [position]);
 
   const handlePickup = async () => {
     setPickupLoading(true);
@@ -276,6 +288,31 @@ export function DeliveryPage() {
           </div>
         )}
 
+        {/* UX-3: entry-anchor photo — show the entrance, tap to enlarge */}
+        {(task.customer as any).entryPhotoUrl && (
+          <button type="button" onClick={() => setPhotoOpen(true)} data-testid="entry-photo-thumb"
+            className="block w-full text-left rounded-[var(--brand-radius-sm)] overflow-hidden border" style={{ borderColor: 'var(--brand-border)' }}>
+            <img src={(task.customer as any).entryPhotoUrl} alt={t('courier.entry_photo', 'Entrance')} className="w-full h-28 object-cover" />
+            <div className="px-3 py-1.5 text-xs font-medium" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
+              <i className="ti ti-photo" aria-hidden="true" /> {t('courier.entry_photo_hint', 'Entrance — tap to enlarge')}
+            </div>
+          </button>
+        )}
+        {photoOpen && (task.customer as any).entryPhotoUrl && (
+          <button type="button" aria-label={t('common.close', 'Close')} onClick={() => setPhotoOpen(false)} data-testid="entry-photo-modal"
+            className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
+            <img src={(task.customer as any).entryPhotoUrl} alt={t('courier.entry_photo', 'Entrance')} className="max-h-full max-w-full object-contain rounded" />
+          </button>
+        )}
+
+        {/* UX-4: tip — informative, the courier collects it in cash */}
+        {(task as any).tipAmount > 0 && (
+          <div data-testid="task-tip" className="bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-[var(--brand-radius-sm)] p-3 flex justify-between items-center text-sm">
+            <span className="text-[var(--brand-text-muted)]">{t('courier.tip', 'Tip (collect in cash)')}</span>
+            <span className="font-bold text-[var(--brand-primary)]"><PriceDisplay amount={(task as any).tipAmount} /></span>
+          </div>
+        )}
+
         {task.cashPayWith && (
           <div data-testid="task-cash-amount" className="bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-[var(--brand-radius-sm)] p-4 space-y-2">
             <div className="text-xs text-[var(--brand-text-muted)] uppercase font-bold tracking-wider">
@@ -302,6 +339,14 @@ export function DeliveryPage() {
           <a href={`tel:${task.customer.phone}`} className="flex-1 bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] py-3 rounded-full flex items-center justify-center font-bold gap-2">
             {t('courier.call_button', 'Call')}
           </a>
+          {/* UX-2: message the customer in their app, if they shared a messenger */}
+          {messengerLink((task.customer as any).messengerKind, (task.customer as any).messengerHandle) && (
+            <a href={messengerLink((task.customer as any).messengerKind, (task.customer as any).messengerHandle)!}
+              target="_blank" rel="noopener noreferrer" data-testid="message-customer-btn"
+              className="flex-1 bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] py-3 rounded-full flex items-center justify-center font-bold gap-2">
+              <i className="ti ti-message-circle" aria-hidden="true" /> {t('courier.message_button', 'Message')}
+            </a>
+          )}
         </div>
 
         {/* eslint-disable jsx-a11y/aria-role */}

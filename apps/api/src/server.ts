@@ -5,6 +5,7 @@ import { loadEnv } from '@deliveryos/config';
 import { createOperationalPool } from '@deliveryos/db';
 import { RedisMessageBus, PgBossQueueProvider } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, ALL_QUEUES, CUSTOMER_PUSH_EVENTS, orderChannel, dashboardChannel } from './lib/registry.js';
+import { assertSchemaCurrent } from './lib/schema-guard.js';
 import Redis from 'ioredis';
 import pg from 'pg';
 import type { ZodTypeAny } from 'zod';
@@ -34,6 +35,7 @@ import courierMeRoutes from './routes/courier/me.js';
 import ownerCourierRoutes from './routes/owner/couriers.js';
 import ownerCourierInvitesRoutes from './routes/owner/courier-invites.js';
 import onboardingRoutes from './routes/owner/onboarding.js';
+import activationRoutes from './routes/owner/activation.js';
 import orderMessageRoutes from './routes/order-messages.js';
 import customerOrderRoutes from './routes/customer/orders.js';
 import ownerSettlementRoutes from './routes/owner/settlements.js';
@@ -50,7 +52,7 @@ import fastifyCors from '@fastify/cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getFastifyLoggerConfig, generateCorrelationId, correlationStore } from './lib/logger.js';
-import { initSentry } from './lib/sentry.js';
+import { initSentry, getSentry } from './lib/sentry.js';
 import { WorkerHeartbeat } from './lib/worker/heartbeat.js';
 import { LivenessChecker } from './workers/liveness-checker.js';
 import securityHeadersPlugin from './lib/security/headers.js';
@@ -85,6 +87,7 @@ import ratesRoutes from './routes/public/rates.js';
 import mockAuthRoutes from './routes/dev/mock-auth.js';
 import spaProxyRoutes from './routes/spa-proxy.js';
 import customerOtpRoutes from './routes/customer/otp.js';
+import customerTrackRoutes from './routes/customer/track.js';
 import customerPushRoutes from './routes/customer/push.js';
 import ownerPushRoutes from './routes/owner/push.js';
 import ownerOrderMetaRoutes from './routes/owner/order-meta.js';
@@ -115,6 +118,22 @@ async function main() {
     initSentry(env.SENTRY_DSN, env.GIT_SHA);
     console.log('[API] Sentry initialized');
   }
+
+  // Last-resort process guards. A single floating promise rejection or uncaught
+  // error must NOT take the whole web process down — that drops every live
+  // WebSocket (owner dashboard, courier, customer tracking) with it. Sentry only
+  // installs its own handlers when a DSN is set, so register ours unconditionally:
+  // log, forward to Sentry if present, and keep serving. Registering an
+  // 'uncaughtException' listener also suppresses Node's default crash-and-exit.
+  // Genuinely wedged states are still caught by Fly's liveness probe (/livez).
+  process.on('unhandledRejection', (reason: unknown) => {
+    console.error('[API] unhandledRejection (kept alive):', reason);
+    getSentry()?.captureException(reason);
+  });
+  process.on('uncaughtException', (err: Error) => {
+    console.error('[API] uncaughtException (kept alive):', err);
+    getSentry()?.captureException(err);
+  });
 
   const fastify = Fastify({
     logger: getFastifyLoggerConfig(),
@@ -170,7 +189,7 @@ async function main() {
   fastify.addHook('onRequest', async (request, reply) => {
     if (request.url.startsWith('/public/locations/') ||
         request.url.startsWith('/s/') ||
-        request.url.startsWith('/api/orders') && request.method === 'POST') {
+        (request.url.startsWith('/api/orders') && request.method === 'POST')) {
       reply.header('Access-Control-Allow-Origin', '*');
     }
   });
@@ -240,6 +259,9 @@ async function main() {
   // Operational pool may use transaction pooler which doesn't support LISTEN/NOTIFY
   const { createSessionPool } = await import('@deliveryos/db');
   const messageBusPool = createSessionPool();
+  // Fail fast if this build's schema head is missing from the DB (i.e. migrations
+  // did not run before boot). No-op in dev/unbundled. See lib/schema-guard.ts.
+  await assertSchemaCurrent(messageBusPool);
   const messageBus = new RedisMessageBus(messageBusPool);
   await messageBus.connect();
   console.log('[API] MessageBus connected with session pool for LISTEN/NOTIFY support');
@@ -295,7 +317,7 @@ async function main() {
 
   const parsers = {
       'csv': new CsvMenuParser(),
-      'ai-ocr': new AiOcrParser(memoryService)
+      'ai-ocr': new AiOcrParser(memoryService),
     };
   // Durable object storage for product images. Cloudflare R2 when configured
   // (survives redeploys, shared across machines); otherwise the local fs
@@ -441,6 +463,8 @@ const retryPolicy = new RetryPolicy();
       try {
         done(null, JSON.parse(body));
       } catch (e: any) {
+          // Malformed JSON is a client error (400), not a 500.
+          e.statusCode = 400;
           done(e);
       }
     }
@@ -452,7 +476,10 @@ const retryPolicy = new RetryPolicy();
 
   // Auth-guarded path prefixes return 401 (not 404) for unauthenticated requests
   const AUTH_PREFIXES = ['/api/owner/', '/api/courier/', '/api/customer/'];
-  const NO_AUTH_PATHS = ['/api/courier/auth/']; // public endpoints under auth prefix
+  const NO_AUTH_PATHS = [
+    '/api/courier/auth/',            // public endpoints under auth prefix
+    '/api/customer/track/exchange',  // pre-auth: trades opaque ?t= code for a customer JWT
+  ];
   fastify.addHook('onRequest', async (request, reply) => {
     if (request.method === 'OPTIONS') return;
     const url = request.url.split('?')[0];
@@ -465,6 +492,9 @@ const retryPolicy = new RetryPolicy();
       }
     }
     if (NO_AUTH_PATHS.some(p => url.startsWith(p))) return;
+    // Public pre-auth customer phone OTP: a diner verifies their phone at checkout
+    // before any customer token exists, so send/verify must be reachable unauthenticated.
+    if (/^\/api\/customer\/locations\/[^/]+\/otp\/(send|verify)$/.test(url)) return;
     if (AUTH_PREFIXES.some(p => url.startsWith(p))) {
       const token = request.headers.authorization;
       if (!token || !token.startsWith('Bearer ')) {
@@ -506,7 +536,11 @@ const retryPolicy = new RetryPolicy();
 
   // P1-7 / FX-7: Body limit — Fastify constructor sets 10MB default (above).
   // Individual routes can override via route config if needed.
-  fastify.register(authRoutes);
+  // authRoutes define /auth/* paths; mount under /api so they resolve at /api/auth/*
+  // — matching the frontend, apiClient, the inline local-login, and the OAuth
+  // redirect_uri (APP_BASE_URL/api/auth/google/callback). Without the prefix the
+  // Google button + callback 404'd.
+  fastify.register(authRoutes, { prefix: '/api' });
   const { default: localAuthRoutes } = await import('./routes/auth/local.js');
   // localAuthRoutes registered inline below for reliability
   fastify.register(courierRoutes);
@@ -545,7 +579,9 @@ const retryPolicy = new RetryPolicy();
   fastify.register(ownerGdprRoutes, { prefix: '/api/owner/locations', db: pool, messageBus, queue });
   fastify.register(ownerPromotionRoutes, { db: pool });
   fastify.register(onboardingRoutes, { prefix: '/api/owner', db: pool, messageBus, queue });
+  fastify.register(activationRoutes, { prefix: '/api/owner', db: pool });
   fastify.register(customerOtpRoutes, { prefix: '/api/customer', db: pool, messageBus });
+  fastify.register(customerTrackRoutes, { prefix: '/api/customer', db: pool });
   fastify.register(customerPushRoutes, { prefix: '/api/customer', db: pool, messageBus });
   fastify.register(courierSettlementRoutes, { prefix: '/api/courier', db: pool, messageBus });
   fastify.register(courierAssignmentsRoutes, { prefix: '/api/courier', db: pool, messageBus });
@@ -576,6 +612,20 @@ fastify.register(mockAuthRoutes, { db: pool });
       const locationId = locRes.rowCount > 0 ? locRes.rows[0].id : '1f609add-062a-4bb5-89bf-d695f963ede6';
       const accessToken = await signAuthToken({ role: 'courier', sub: courierId, activeLocationId: locationId } as any, '1d');
       return reply.send({ access_token: accessToken, userId: courierId, activeLocationId: locationId });
+    }
+
+    // Fresh-owner E2E mode: mint a brand-new owner with NO location membership so
+    // the admin flow lands on the onboarding wizard (/admin/onboarding) instead of
+    // the demo dashboard. Each call is a distinct throwaway user.
+    if (body.fresh === true) {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const fRes = await pool.query(
+        `INSERT INTO users (email, google_sub, display_name) VALUES ($1, $2, 'E2E Fresh Owner') RETURNING id`,
+        [`fresh-${suffix}@e2e.dowiz`, `mock-fresh-${suffix}`],
+      );
+      const fUserId = fRes.rows[0].id;
+      const fToken = await signAuthToken({ role: 'owner', userId: fUserId, sub: fUserId } as any, '1d');
+      return reply.send({ access_token: fToken, userId: fUserId, activeLocationId: undefined });
     }
 
     // Owner role: create/upsert dev user and return owner token

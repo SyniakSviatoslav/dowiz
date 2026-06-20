@@ -35,7 +35,14 @@ export function ResponsiveDialog({ open, onClose, title, children, className = '
   if (isMobile) {
     return createPortal(
       <div className="fixed inset-0 z-modal-backdrop flex items-end justify-center">
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+        <div
+          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+          role="button"
+          tabIndex={0}
+          aria-label="Close"
+          onClick={onClose}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}
+        />
         <div
           className={`relative z-modal w-full max-h-[85vh] bg-[var(--brand-bg)] rounded-t-2xl shadow-elevation-4 flex flex-col animate-slide-up ${className}`}
           role="dialog"
@@ -66,7 +73,14 @@ export function ResponsiveDialog({ open, onClose, title, children, className = '
 
   return createPortal(
     <div className="fixed inset-0 z-modal-backdrop flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        role="button"
+        tabIndex={0}
+        aria-label="Close"
+        onClick={onClose}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}
+      />
       <div className={`relative z-modal bg-[var(--brand-bg)] rounded-xl shadow-elevation-4 max-w-md w-full max-h-[85vh] overflow-y-auto ${className}`}>
         {title && (
           <div className="flex items-center justify-between px-5 pt-5 pb-3">

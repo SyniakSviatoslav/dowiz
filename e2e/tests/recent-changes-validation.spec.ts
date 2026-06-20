@@ -144,6 +144,24 @@ test.describe('Recent Changes Validation — Live https://dowiz.fly.dev', () => 
     expect(body.length).toBeGreaterThan(100);
   });
 
+  // ─── Customer order tracking without a session ───────────────────
+  // Regression: a no-session visit to /s/:slug/order/:id used to 401 and the
+  // global apiClient handler hard-redirected the visitor to the owner /login.
+  // The owner-session-expiry redirect is now scoped to /admin, so the customer
+  // tracking surface must stay put and show its own "reload the menu" message.
+  test('TRACK-1: no-session order tracking does not redirect to owner login', async ({ page, context }) => {
+    await context.clearCookies();
+    const orderId = '00000000-0000-4000-8000-000000000000';
+    await page.goto(`/s/test-slug/order/${orderId}`);
+    await page.waitForTimeout(4000);
+
+    // The fix: no bounce to the owner login / admin app.
+    expect(page.url(), `unexpectedly redirected to ${page.url()}`).not.toMatch(/\/login(\?|$)/);
+    expect(page.url()).not.toMatch(/\/admin(\/|\?|$)/);
+    // Still on the customer tracking surface.
+    expect(page.url()).toContain(`/order/${orderId}`);
+  });
+
   // ─── Health Check ────────────────────────────────────────────────
   test('HEALTH-1: app serves HTML on root path', async ({ page }) => {
     const res = await page.request.get('https://dowiz.fly.dev/');

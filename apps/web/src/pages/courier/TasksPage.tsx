@@ -53,7 +53,13 @@ export function TasksPage() {
     onMessage: (msg) => {
       const envelope = msg?.data || msg;
       if (envelope.type === 'task_assigned') {
-        setTasks(prev => [envelope.payload, ...prev]);
+        const incoming = envelope.payload;
+        setTasks(prev => {
+          // Guard against duplicate task_assigned events (reconnect / re-delivery)
+          // creating a second card for the same assignment.
+          if (prev.some(t => t.id === incoming?.id)) return prev;
+          return [incoming, ...prev];
+        });
         playPing();
       }
     },
@@ -73,9 +79,18 @@ export function TasksPage() {
     }
   };
 
-  const handleReject = (id: string) => {
+  const handleReject = async (id: string) => {
+    // Optimistically drop the card, then actually release the assignment on the
+    // server. The old code never called the API, so the assignment stayed
+    // 'assigned' — the courier was hidden the card but remained blocked from new
+    // dispatch (the dispatcher excludes couriers with an active assignment).
     setTasks(prev => prev.filter(t => t.id !== id));
-    // Usually would call API to release assignment
+    try {
+      await apiClient(`/courier/assignments/${id}/reject`, { method: 'POST' });
+    } catch (err) {
+      console.warn('[TasksPage] reject task failed:', err);
+      fetchTasks(); // restore the true server state if the release failed
+    }
   };
 
   return (
