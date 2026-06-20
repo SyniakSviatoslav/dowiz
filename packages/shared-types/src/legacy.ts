@@ -60,6 +60,8 @@ export type OrderItemInput = z.infer<typeof OrderItemInput>;
     }).strict(),
     cash_pay_with: z.number().int().positive().optional(),
     delivery_instructions: z.string().max(500).optional(),
+    // UX-3 entry-anchor photo: the R2 key returned by the anonymous upload endpoint.
+    delivery_photo_key: z.string().max(200).regex(/^entry-photos\/[A-Za-z0-9._-]+\.webp$/).optional(),
     prefs: OrderPreferences.optional(),
     idempotency_key: z.string().uuid(),
     // Preflight (E27)

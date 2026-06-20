@@ -25,6 +25,7 @@ export function DeliveryPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [task, setTask] = useState<CourierTask | null>(null);
+  const [photoOpen, setPhotoOpen] = useState(false); // UX-3 entry-photo fullscreen
   const [loading, setLoading] = useState(true);
   const [courierPos, setCourierPos] = useState<LngLatLike>(TIRANA_CENTER);
   const [showCelebration, setShowCelebration] = useState(false);
@@ -285,6 +286,23 @@ export function DeliveryPage() {
           <div className="bg-[var(--status-pending-light)] border border-[var(--status-pending-border)] text-[var(--status-pending)] p-3 rounded-[var(--brand-radius-sm)] text-sm font-medium">
             Note: {task.customer.instructions}
           </div>
+        )}
+
+        {/* UX-3: entry-anchor photo — show the entrance, tap to enlarge */}
+        {(task.customer as any).entryPhotoUrl && (
+          <button type="button" onClick={() => setPhotoOpen(true)} data-testid="entry-photo-thumb"
+            className="block w-full text-left rounded-[var(--brand-radius-sm)] overflow-hidden border" style={{ borderColor: 'var(--brand-border)' }}>
+            <img src={(task.customer as any).entryPhotoUrl} alt={t('courier.entry_photo', 'Entrance')} className="w-full h-28 object-cover" />
+            <div className="px-3 py-1.5 text-xs font-medium" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
+              <i className="ti ti-photo" aria-hidden="true" /> {t('courier.entry_photo_hint', 'Entrance — tap to enlarge')}
+            </div>
+          </button>
+        )}
+        {photoOpen && (task.customer as any).entryPhotoUrl && (
+          <button type="button" aria-label={t('common.close', 'Close')} onClick={() => setPhotoOpen(false)} data-testid="entry-photo-modal"
+            className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
+            <img src={(task.customer as any).entryPhotoUrl} alt={t('courier.entry_photo', 'Entrance')} className="max-h-full max-w-full object-contain rounded" />
+          </button>
         )}
 
         {task.cashPayWith && (
