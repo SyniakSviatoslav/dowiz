@@ -7,6 +7,7 @@ import './index.css';
 
 import { Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/admin/LoginPage.js';
+import { StartPage } from './pages/MenuFirstOnboarding.js';
 import { AuthCallback } from './pages/admin/AuthCallback.js';
 
 // Lazy-loaded surfaces
@@ -36,7 +37,8 @@ function AnimatedRoutes() {
       >
         <Suspense fallback={<LoadingFallback />}>
           <Routes location={location}>
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/" element={<Navigate to="/start" replace />} />
+            <Route path="/start" element={<StartPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/s/:slug/*" element={<ClientRoutes />} />
