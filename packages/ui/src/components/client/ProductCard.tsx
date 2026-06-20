@@ -211,18 +211,10 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
           </div>
         )}
 
-        {hasAllergens && (
-          <div className="flex gap-0.5 flex-wrap">
-            {allergens.map(a => {
-              const s = getAllergenStyle(a);
-              return (
-                <span key={a} className="px-1 py-0 rounded text-[8px] font-semibold uppercase leading-tight" style={{ background: s.bg, color: s.text }}>
-                  {t(`allergen.${a.toLowerCase()}`, a)}
-                </span>
-              );
-            })}
-          </div>
-        )}
+        {/* Allergen scent lives on the image corner badges (top-3 + overflow) and
+            the full labelled list is in the detail modal — rendering the loud
+            uppercase colour row again here was redundant noise that broke the
+            card's palette discipline, so it's intentionally omitted. */}
 
         <div className="flex items-center justify-between mt-auto pt-1">
           <div className="flex items-baseline gap-1">
