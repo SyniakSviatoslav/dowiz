@@ -49,7 +49,8 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
       const res = await server.db.query(
         `SELECT l.id, l.name, l.slug, l.currency_code, l.currency_minor_unit, l.default_locale,
                 l.lat, l.lng, l.delivery_paused, l.hours_json, l.address,
-                lt.google_rating, lt.google_review_count, lt.google_maps_url
+                lt.google_rating, lt.google_review_count, lt.google_maps_url,
+                lt.google_place_id, lt.social_instagram, lt.social_facebook
          FROM locations l
          LEFT JOIN location_themes lt ON lt.location_id = l.id
          WHERE l.slug = $1`,
@@ -92,6 +93,9 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
         googleRating: r.google_rating != null ? Number(r.google_rating) : null,
         googleReviewCount: r.google_review_count != null ? Number(r.google_review_count) : null,
         googleMapsUrl: r.google_maps_url ?? null,
+        googlePlaceId: r.google_place_id ?? null,
+        socialInstagram: r.social_instagram ?? null,
+        socialFacebook: r.social_facebook ?? null,
       });
     }
   );

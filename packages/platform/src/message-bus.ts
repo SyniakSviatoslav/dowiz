@@ -17,7 +17,10 @@ export class PgMessageBus implements MessageBus {
   private handlers = new Map<string, Array<(msg: any) => void>>();
   private isDegraded = false;
   private reconnectAttempts = 0;
-  private readonly MAX_RECONNECT_ATTEMPTS = 5;
+  private reconnecting = false;
+  private closed = false;
+  // Postgres caps NOTIFY payloads at 8000 bytes; stay under it with margin.
+  private readonly MAX_NOTIFY_BYTES = 7800;
 
   constructor(pool?: Pool) {
     // Use provided pool or create session pool
@@ -76,7 +79,9 @@ export class PgMessageBus implements MessageBus {
         await this.listenerClient.query(`LISTEN "${channel}"`);
         console.log('[PgMessageBus] LISTENing on:', channel);
       }
-      
+
+      // Full success — clear the backoff counter so the next outage starts fresh.
+      this.reconnectAttempts = 0;
       console.log('[PgMessageBus] Connection setup complete, not degraded:', !this.isDegraded);
     } catch (err) {
       console.error('[PgMessageBus] Failed to connect listener:', err);
@@ -84,38 +89,65 @@ export class PgMessageBus implements MessageBus {
     }
   }
 
-  private async attemptReconnect(): Promise<void> {
-    if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
-      console.error('[PgMessageBus] Max reconnection attempts reached, giving up');
-      return;
-    }
+  // Reconnect with capped exponential backoff, retried INDEFINITELY. The previous
+  // 5-attempt cap left a machine alive but realtime-dead after a few Pg blips:
+  // NOTIFYs still published from other machines, but this process never LISTENed
+  // again, so its WebSocket clients silently stopped receiving order updates. A
+  // single in-flight `reconnecting` flag prevents the 'error' and 'end' events
+  // from stacking overlapping reconnect timers.
+  private attemptReconnect(): void {
+    if (this.closed || this.reconnecting) return;
+    this.reconnecting = true;
     this.reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
-    console.log(`[PgMessageBus]Attempting reconnect ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
+    console.warn(`[PgMessageBus] reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
     setTimeout(async () => {
-      try {
-        await this.connect();
-        this.reconnectAttempts = 0;
-        console.log('[PgMessageBus] Reconnection successful');
-      } catch (err) {
-        console.error('[PgMessageBus] Reconnection failed:', err);
-      }
+      this.reconnecting = false;
+      if (this.closed) return;
+      await this.connect();
+      // connect() clears isDegraded on success; if still degraded, keep trying.
+      if (this.isDegraded) this.attemptReconnect();
     }, delay);
   }
 
   async publish(channel: string, msg: any): Promise<void> {
     try {
-      console.log('[PgMessageBus] Publishing to:', channel, 'msg:', JSON.stringify(msg));
-      const client = this.listenerClient || this.pool;
-      const payload = JSON.stringify(msg).replace(/'/g, "''");
+      // Always NOTIFY on the pool, never on `listenerClient`. That single client
+      // is dedicated to LISTEN; sending NOTIFYs on it serialised every publish
+      // onto one connection and raced with the reconnect logic that releases it.
+      const client = this.pool;
+      const json = this.serializeForNotify(channel, msg);
+      const payload = json.replace(/'/g, "''");
       await Promise.race([
         client.query(`NOTIFY "${channel}", '${payload}'`),
         new Promise<void>((_, reject) => setTimeout(() => reject(new Error('NOTIFY timeout')), 5000)),
       ]);
-      console.log('[PgMessageBus] ✓ Published to:', channel);
     } catch (err) {
-      console.error('[PgMessageBus] Publish error:', err);
+      console.error('[PgMessageBus] Publish error on', channel, ':', err);
     }
+  }
+
+  /**
+   * Serialise a message for NOTIFY, guarding the 8000-byte payload cap. An
+   * oversized payload makes Postgres reject the NOTIFY, which was silently
+   * swallowed below — the update simply never reached subscribers. When a payload
+   * is too large we keep the event `type` and any nested `data.id`/`data.order_id`
+   * and flag `_truncated` so the client can refetch instead of losing the event.
+   */
+  private serializeForNotify(channel: string, msg: any): string {
+    const json = JSON.stringify(msg);
+    if (Buffer.byteLength(json, 'utf8') <= this.MAX_NOTIFY_BYTES) return json;
+    const data = msg && typeof msg === 'object' ? msg.data : undefined;
+    const slim: Record<string, unknown> = { _truncated: true };
+    if (msg && typeof msg === 'object' && 'type' in msg) slim.type = msg.type;
+    if (data && typeof data === 'object') {
+      const id = data.id ?? data.order_id ?? data.orderId;
+      if (id !== undefined) slim.data = { id, _truncated: true };
+    }
+    console.warn(
+      `[PgMessageBus] payload for ${channel} exceeded NOTIFY limit (${Buffer.byteLength(json, 'utf8')}B); sent truncated event`,
+    );
+    return JSON.stringify(slim);
   }
 
   /**
@@ -191,8 +223,10 @@ export class PgMessageBus implements MessageBus {
   }
 
   async close(): Promise<void> {
+    this.closed = true; // stop the reconnect loop from resurrecting the listener
     if (this.listenerClient) {
       this.listenerClient.release();
+      this.listenerClient = null;
     }
     await this.pool.end();
   }

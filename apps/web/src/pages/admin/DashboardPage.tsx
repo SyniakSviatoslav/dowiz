@@ -22,6 +22,10 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [courierPositions, setCourierPositions] = useState<Record<string, LngLatLike>>({});
+  // Courier display metadata (masked name + shift status) keyed by real courier UUID,
+  // seeded from /couriers/live. Positions arrive UUID-only over WS, so this supplies
+  // the labels for the live map.
+  const [courierMeta, setCourierMeta] = useState<Record<string, { name: string; status: string }>>({});
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'highest'>('newest');
@@ -89,6 +93,27 @@ export function DashboardPage() {
     }).catch(() => {});
   }, []);
 
+  // Seed the live courier map with REAL couriers (last-known positions + masked
+  // names) once we know the location. Live deltas then arrive over the
+  // location:<id>:couriers WS room. Runs when tenantId resolves.
+  useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    apiClient<any>(`/owner/locations/${tenantId}/couriers/live`).then((res: any) => {
+      if (!alive || !Array.isArray(res?.couriers)) return;
+      const meta: Record<string, { name: string; status: string }> = {};
+      const pos: Record<string, LngLatLike> = {};
+      for (const c of res.couriers) {
+        meta[c.courierId] = { name: c.nameMasked || t('admin.courier_step', 'Courier'), status: c.status };
+        if (c.position) pos[c.courierId] = [c.position.lng, c.position.lat];
+      }
+      setCourierMeta(meta);
+      // Don't clobber any fresher live WS positions that may have arrived first.
+      setCourierPositions(prev => ({ ...pos, ...prev }));
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [tenantId, t]);
+
   const isFirstConnect = useRef(true);
   const { status: connectionStatus } = useWebSocket({
     room: `location:${tenantId}:dashboard`,
@@ -104,7 +129,8 @@ export function DashboardPage() {
       else if (envelope.type === 'order.status') {
         setOrders(prev => mergeDelta(prev, payload, false));
       }
-      else if (envelope.type === 'courier_position') { setCourierPositions(prev => ({ ...prev, [payload.courierId]: [payload.lng, payload.lat] })); }
+      // Courier positions arrive on the dedicated location:<id>:couriers room
+      // (courier.position_updated), handled by the second subscription below.
     },
     onReconnect: () => {
       if (isFirstConnect.current) { isFirstConnect.current = false; return; }
@@ -200,10 +226,23 @@ export function DashboardPage() {
     }
   };
 
-  const couriersOnMap: CourierOnMap[] = useMemo(() => [
-    { id: 'cu1', name: 'Ardit', initials: 'AK', lngLat: courierPositions['cu1'] || [19.820, 41.333], status: 'busy' },
-    { id: 'cu2', name: 'Blerim', initials: 'BH', lngLat: courierPositions['cu2'] || [19.810, 41.329], status: 'online' },
-  ], [courierPositions]);
+  // Build the live map from REAL couriers — one marker per courier UUID that has a
+  // known position (seeded from /couriers/live, updated live over WS). No more
+  // hardcoded cu1/cu2 fixtures (those literal ids never matched the UUID-keyed
+  // position map, so real couriers were invisible).
+  const couriersOnMap: CourierOnMap[] = useMemo(() =>
+    Object.entries(courierPositions).map(([id, lngLat]) => {
+      const name = courierMeta[id]?.name || t('admin.courier_step', 'Courier');
+      const initials = (name.replace(/[^a-zA-Z]/g, '').slice(0, 2) || '#').toUpperCase();
+      return {
+        id,
+        name,
+        initials,
+        lngLat,
+        status: courierMeta[id]?.status === 'on_delivery' ? 'busy' : 'online',
+      } as CourierOnMap;
+    }),
+  [courierPositions, courierMeta, t]);
 
   const filteredOrders = useMemo(() => {
     let result = orders;

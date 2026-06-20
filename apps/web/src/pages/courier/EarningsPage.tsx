@@ -9,6 +9,9 @@ const CourierEarningsResponse = z.object({
     today: z.number(),
     week: z.number(),
     month: z.number(),
+    today_tips: z.number().optional(),
+    week_tips: z.number().optional(),
+    month_tips: z.number().optional(),
     currency: z.string().optional(),
   }).optional(),
   payouts: z.array(z.object({
@@ -24,6 +27,9 @@ interface EarningSummary {
   today: number;
   week: number;
   month: number;
+  today_tips: number;
+  week_tips: number;
+  month_tips: number;
   currency: string;
 }
 
@@ -51,6 +57,9 @@ export function EarningsPage() {
           today: data.summary.today,
           week: data.summary.week,
           month: data.summary.month,
+          today_tips: data.summary.today_tips ?? 0,
+          week_tips: data.summary.week_tips ?? 0,
+          month_tips: data.summary.month_tips ?? 0,
           currency: data.summary.currency || 'ALL',
         });
         setPayouts(Array.isArray(data?.payouts) ? data.payouts : []);
@@ -69,9 +78,9 @@ export function EarningsPage() {
   }, []);
 
   const summaryCards = summary ? [
-    { label: t('courier.today', 'Today'), amount: summary.today, icon: <i className="ti ti-sun" aria-hidden="true"></i> },
-    { label: t('courier.this_week', 'This Week'), amount: summary.week, icon: <i className="ti ti-calendar" aria-hidden="true"></i> },
-    { label: t('courier.this_month', 'This Month'), amount: summary.month, icon: <i className="ti ti-moneybag" aria-hidden="true"></i> },
+    { label: t('courier.today', 'Today'), amount: summary.today, tips: summary.today_tips, icon: <i className="ti ti-sun" aria-hidden="true"></i> },
+    { label: t('courier.this_week', 'This Week'), amount: summary.week, tips: summary.week_tips, icon: <i className="ti ti-calendar" aria-hidden="true"></i> },
+    { label: t('courier.this_month', 'This Month'), amount: summary.month, tips: summary.month_tips, icon: <i className="ti ti-moneybag" aria-hidden="true"></i> },
   ] : [];
 
   return (
@@ -108,6 +117,11 @@ export function EarningsPage() {
                 <div className="text-2xl mb-1">{card.icon}</div>
                 <div className="text-xs text-[var(--brand-text-muted)] uppercase tracking-wider font-semibold mb-1">{card.label}</div>
                 <div className="text-lg font-bold text-[var(--brand-text)]"><PriceDisplay amount={card.amount} /></div>
+                {card.tips > 0 && (
+                  <div className="text-[11px] mt-0.5" style={{ color: 'var(--brand-text-muted)' }} data-testid="earnings-tips">
+                    {t('courier.incl_tips', 'incl. tips')} <PriceDisplay amount={card.tips} />
+                  </div>
+                )}
               </motion.div>
             ))}
           </motion.div>

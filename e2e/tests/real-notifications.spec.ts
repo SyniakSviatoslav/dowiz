@@ -37,7 +37,7 @@ test.describe('Real service event notifications → Telegram', () => {
     }
   });
 
-  test('should receive telegram notifications for order.created and order.delivered from real service events', async ({}) => {
+  test('should receive telegram notifications for order.created and order.delivered from real service events', async () => {
     // 0. Telegram connect / verify target active (reuse steps from telegram-full-flow)
     // Get owner token via mock-auth
     const authRes = await fetch(`${BASE}/api/dev/mock-auth`, { method: 'POST' });

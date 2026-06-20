@@ -110,7 +110,7 @@ test('AiOcrParser - corrupt PDF: returns parse error', async () => {
 //  3. PII Redaction
 // ═══════════════════════════════════════════════════════════════════
 
-test('AiOcrParser - PDF with PII: redacts phone, email before LLM stage', async () => {
+test('AiOcrParser - menu document is fed un-redacted so the venue contact survives', async () => {
   const prev = process.env.LLM_PROVIDER;
   process.env.LLM_PROVIDER = 'mock';
 
@@ -123,11 +123,12 @@ test('AiOcrParser - PDF with PII: redacts phone, email before LLM stage', async 
 
   process.env.LLM_PROVIDER = prev;
 
-  // The mock result bypasses redaction, but we should still see
-  // that PII-related warnings exist from pre-LLM redaction.
-  // Since mock skips LLM stage, the redaction issues should appear.
+  // Behaviour change (approved): a menu document carries only the business's OWN
+  // contact (no customer PII), and onboarding needs to extract the venue
+  // address/phone — so the document is no longer pre-redacted before the model.
+  // The parser must therefore NOT emit PII-redaction warnings for a menu.
   const piiIssues = res.issues.filter(i => i.code === 'POTENTIALLY_UNSAFE_VALUE');
-  assert.ok(piiIssues.length > 0, 'should flag PII redactions');
+  assert.equal(piiIssues.length, 0, 'menu contact is intentionally not redacted');
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -298,6 +299,64 @@ test('AiOcrParser - PDF extracted text has normal flow with no low-confidence wa
   const lowConfIssues = res.issues.filter(i => i.message.includes('Low confidence') || i.message.includes('low confidence'));
   assert.strictEqual(lowConfIssues.length, 0);
   assert.strictEqual(res.summary.low_confidence_count, 0);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  6b. Heuristic structurer (no LLM provider configured)
+// ═══════════════════════════════════════════════════════════════════
+
+// Clear every LLM env var so detectProvider() falls back to 'heuristic'
+// (the open-source, no-API-key path used when nothing is configured).
+function withNoLlmEnv<T>(fn: () => Promise<T>): Promise<T> {
+  const keys = ['LLM_PROVIDER', 'LLM_ADAPTER', 'LLM_ENDPOINT', 'GROQ_API_KEY', 'OPENAI_API_KEY'];
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  keys.forEach((k) => delete process.env[k]);
+  return fn().finally(() => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  });
+}
+
+// A correctly-formed menu PDF: header (name/address/phone/hours) + a category +
+// three priced items, each on its own visual row. Proves multi-item extraction
+// and venue-contact extraction through the no-LLM heuristic path end to end.
+const MENU_PDF_BASE64 = 'JVBERi0xLjQKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+ZW5kb2JqCjIgMCBvYmo8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PmVuZG9iagozIDAgb2JqPDwvVHlwZS9QYWdlL01lZGlhQm94WzAgMCA2MTIgNzkyXS9QYXJlbnQgMiAwIFIvUmVzb3VyY2VzPDwvRm9udDw8L0YxIDQgMCBSPj4+Pi9Db250ZW50cyA1IDAgUj4+ZW5kb2JqCjQgMCBvYmo8PC9UeXBlL0ZvbnQvU3VidHlwZS9UeXBlMS9CYXNlRm9udC9IZWx2ZXRpY2E+PmVuZG9iago1IDAgb2JqPDwvTGVuZ3RoIDQyOD4+CnN0cmVhbQpCVAovRjEgMTIgVGYKMSAwIDAgMSA1MCA3NjAgVG0KKFRyYXR0b3JpYSBSb21hKSBUagovRjEgMTIgVGYKMSAwIDAgMSA1MCA3NDIgVG0KKFJydWdhIFNhbWkgRnJhc2hlcmkgMTIsIFRpcmFuYSkgVGoKL0YxIDEyIFRmCjEgMCAwIDEgNTAgNzI0IFRtCihUZWwgKzM1NSA2OSAxMjMgNDU2NykgVGoKL0YxIDEyIFRmCjEgMCAwIDEgNTAgNzA2IFRtCihNb24tU3VuIDEwOjAwLTIzOjAwKSBUagovRjEgMTIgVGYKMSAwIDAgMSA1MCA2NzAgVG0KKFBpenphcykgVGoKL0YxIDEyIFRmCjEgMCAwIDEgNTAgNjUyIFRtCihNYXJnaGVyaXRhIDguNTAgRVVSKSBUagovRjEgMTIgVGYKMSAwIDAgMSA1MCA2MzQgVG0KKFBhc3RhIENhcmJvbmFyYSAxMi4wMCBFVVIpIFRqCi9GMSAxMiBUZgoxIDAgMCAxIDUwIDYxNiBUbQooVGlyYW1pc3UgNS4wMCBFVVIpIFRqCkVUCmVuZHN0cmVhbWVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1MiAwMDAwMCBuIAowMDAwMDAwMTAxIDAwMDAwIG4gCjAwMDAwMDAyMTEgMDAwMDAgbiAKMDAwMDAwMDI3MiAwMDAwMCBuIAp0cmFpbGVyPDwvU2l6ZSA2L1Jvb3QgMSAwIFI+PgpzdGFydHhyZWYKNzQ2CiUlRU9GCg==';
+
+test('AiOcrParser - heuristic: extracts each menu item + price with NO LLM provider', async () => {
+  const res = await withNoLlmEnv(() => new AiOcrParser().parse({
+    kind: 'pdf',
+    bytes: pdfBuffer(MENU_PDF_BASE64),
+    config: { expectedCurrency: 'EUR', currencyMinorUnit: 2 }
+  }));
+
+  assert.strictEqual(res.summary.errors, 0, 'heuristic must not error without an LLM');
+  assert.strictEqual(res.draft.products.length, 3, 'three distinct menu items');
+  const names = res.draft.products.map(p => p.name).sort();
+  assert.ok(names.some(n => /Margherita/i.test(n)), `expected Margherita, got ${names}`);
+  assert.ok(names.some(n => /Carbonara/i.test(n)), `expected Carbonara, got ${names}`);
+  assert.ok(names.some(n => /Tiramisu/i.test(n)), `expected Tiramisu, got ${names}`);
+  const margherita = res.draft.products.find(p => /Margherita/i.test(p.name))!;
+  assert.strictEqual(margherita.name, 'Margherita', 'price token stripped from name');
+  assert.strictEqual(margherita.price, 850, '8.50 EUR → 850 minor units');
+  assert.strictEqual(margherita.currency, 'EUR');
+  // items grouped under the detected category, not the header
+  assert.ok(res.draft.categories.some(c => /Pizzas/i.test(c.name)), 'Pizzas category detected');
+});
+
+test('AiOcrParser - heuristic: extracts the venue name/address/phone/hours from the header', async () => {
+  const res = await withNoLlmEnv(() => new AiOcrParser().parse({
+    kind: 'pdf',
+    bytes: pdfBuffer(MENU_PDF_BASE64),
+    config: { expectedCurrency: 'EUR', currencyMinorUnit: 2 }
+  }));
+
+  const r = (res as any).restaurant;
+  assert.ok(r, 'restaurant block present');
+  assert.strictEqual(r.name, 'Trattoria Roma');
+  assert.match(r.address || '', /Rruga Sami Frasheri 12, Tirana/);
+  assert.match(r.phone || '', /\+?355\s*69\s*123\s*4567/);
+  assert.match(r.hoursText || '', /10:00-23:00/);
 });
 
 // ═════════════════════════════════════════════════════════════════════

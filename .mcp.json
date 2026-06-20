@@ -26,6 +26,18 @@
         "VITE_BASE_URL": "https://dowiz.fly.dev"
       },
       "description": "playwright agents: planner/generator/healer drive tests against the running app"
+    },
+    "browser-use": {
+      "command": "uvx",
+      "args": [
+        "browser-use[cli]",
+        "--mcp"
+      ],
+      "env": {
+        "ANONYMIZED_TELEMETRY": "false",
+        "BROWSER_USE_TELEMETRY": "false"
+      },
+      "description": "browser-use: on-demand agentic browse/extract over MCP (uvx, not hosted; self-host lib not cloud). LLM-backed tools need OpenRouter BYOK env (OPENAI_API_KEY + OPENAI_BASE_URL=https://openrouter.ai/api/v1) — see TOOLING-REGISTRY.md."
     }
   }
 }

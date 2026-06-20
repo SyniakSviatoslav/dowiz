@@ -19,6 +19,8 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [tgWaiting, setTgWaiting] = useState(false);
+  const [tgLink, setTgLink] = useState('');
 
   const sessionExpired = typeof window !== 'undefined' && sessionStorage.getItem('dos_auth_expired') === '1';
   React.useEffect(() => {
@@ -26,6 +28,38 @@ export function LoginPage() {
   }, []);
 
   const isDev = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('dev') === 'true');
+
+  const handleTelegramLogin = async () => {
+    setError('');
+    setTgWaiting(true);
+    try {
+      const res = await apiClient<any>('/auth/telegram/start', { method: 'POST' });
+      setTgLink(res.deepLink);
+      window.open(res.deepLink, '_blank');
+      const token = res.token;
+      const deadline = Date.now() + 5 * 60 * 1000;
+      const poll = async () => {
+        if (Date.now() > deadline) { setTgWaiting(false); setError(t('admin.tg_timeout', 'Telegram login timed out. Please try again.')); return; }
+        try {
+          const p = await apiClient<any>(`/auth/telegram/poll?token=${token}`);
+          if (p.status === 'authenticated' && p.access_token) {
+            sessionStorage.setItem('dos_access_token', p.access_token);
+            localStorage.setItem('dos_access_token', p.access_token);
+            if (p.refresh_token) localStorage.setItem('dos_refresh_token', p.refresh_token);
+            navigate('/admin');
+            return;
+          }
+        } catch (e: any) {
+          if (e?.status === 410) { setTgWaiting(false); setError(t('admin.tg_expired', 'Telegram login link expired. Please try again.')); return; }
+        }
+        setTimeout(poll, 2000);
+      };
+      setTimeout(poll, 2000);
+    } catch {
+      setTgWaiting(false);
+      setError(t('admin.tg_failed', 'Could not start Telegram login.'));
+    }
+  };
 
   const handleLocalLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,6 +154,25 @@ export function LoginPage() {
               <i className="ti ti-brand-google" />
               <span className="text-sm font-medium">{t('admin.sign_in_google', 'Sign in with Google')}</span>
             </a>
+
+            <button
+              type="button"
+              onClick={handleTelegramLogin}
+              disabled={tgWaiting}
+              className="flex items-center justify-center gap-3 w-full px-4 py-2.5 rounded-lg transition-all duration-200 active:scale-[0.98] disabled:opacity-60"
+              style={{ background: 'var(--brand-telegram, #229ED9)', color: '#fff' }}
+            >
+              <i className="ti ti-brand-telegram" />
+              <span className="text-sm font-medium">
+                {tgWaiting ? t('admin.tg_waiting', 'Waiting for Telegram…') : t('admin.sign_in_telegram', 'Continue with Telegram')}
+              </span>
+            </button>
+            {tgWaiting && tgLink && (
+              <p className="text-xs text-center" style={{ color: 'var(--brand-text-muted)' }}>
+                {t('admin.tg_open_hint', "Didn't open?")}{' '}
+                <a href={tgLink} target="_blank" rel="noreferrer" style={{ color: 'var(--brand-primary)' }}>{t('admin.tg_open_link', 'Open Telegram')}</a>
+              </p>
+            )}
 
             {isDev && (
               <Button variant="secondary" className="w-full" onClick={handleDevLogin}>

@@ -4,6 +4,7 @@ import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 import { decryptPII } from '../lib/pii-cipher.js';
 import { calculateNaiveETASeconds } from '../lib/geo.js';
+import { getRoutingService, saveRoute, loadRoute, claimOnce, shouldReroute } from '../lib/routing.js';
 
 export class CourierEventsWorker {
   constructor(
@@ -85,6 +86,18 @@ export class CourierEventsWorker {
     }
   }
 
+  // Latest known position for a courier, independent of any order assignment —
+  // used to keep idle (on-shift but unassigned) couriers visible on the owner map.
+  private async fetchLatestPosition(courierId: string): Promise<{ lat: number; lng: number } | null> {
+    const res = await this.pool.query(
+      `SELECT lat, lng FROM courier_positions WHERE courier_id = $1 ORDER BY recorded_at DESC LIMIT 1`,
+      [courierId],
+    );
+    if (!res.rowCount) return null;
+    const { lat, lng } = res.rows[0];
+    return lat !== null && lng !== null ? { lat: Number(lat), lng: Number(lng) } : null;
+  }
+
   private mapAssignmentStatusToDisplay(status: string): string {
     switch (status) {
       case 'accepted': return 'heading_to_pickup';
@@ -94,15 +107,66 @@ export class CourierEventsWorker {
     }
   }
 
-  async handlePositionUpdated(msg: { courierId: string; locationId: string; shiftId: string }) {
-    const details = await this.fetchCourierDetailsAndOrder(msg.courierId);
-    if (!details) return; // Courier not active on any order
+  // Compute one road route (per-leg) and push it to the order channel exactly once
+  // across the N instances (claimOnce). Authoritative copy stored in Redis for
+  // reconnecting clients (served by the status endpoint). Routing is advisory: any
+  // failure degrades to haversine inside the provider, so this never throws.
+  private async publishRouteOnce(
+    orderId: string,
+    locationId: string,
+    from: { lat: number; lng: number },
+    to: { lat: number; lng: number },
+    claimKey: string,
+    claimTtlS: number,
+  ) {
+    try {
+      if (!(await claimOnce(claimKey, claimTtlS))) return; // another instance owns it
+      const route = await getRoutingService().getLegRoute(from, to);
+      await saveRoute(orderId, route);
 
-    // Dispatch to owner live map
-    await this.messageBus.publish(courierChannel(msg.locationId), {
-      type: 'courier.position_updated',
-      payload: { courierId: msg.courierId, position: details.position }
-    });
+      // Durable copy so the planned route survives the Redis TTL / a flush. Advisory:
+      // a failure here must never break the live route push below.
+      try {
+        await this.pool.query(
+          `INSERT INTO order_routes (order_id, location_id, polyline, distance_meters, duration_seconds, updated_at)
+           VALUES ($1, $2, $3, $4, $5, now())
+           ON CONFLICT (order_id) DO UPDATE
+             SET polyline = EXCLUDED.polyline, distance_meters = EXCLUDED.distance_meters,
+                 duration_seconds = EXCLUDED.duration_seconds, updated_at = now()`,
+          [orderId, locationId, JSON.stringify(route.polyline), route.distance_m, route.duration_s],
+        );
+      } catch (err) {
+        console.error('[CourierEvents] persist order_routes failed (advisory):', err);
+      }
+      await this.messageBus.publish(orderChannel(orderId), {
+        type: 'order.route',
+        payload: {
+          orderId,
+          polyline: route.polyline,
+          durationSeconds: route.duration_s,
+          distanceMeters: route.distance_m,
+        },
+      });
+    } catch (err) {
+      console.error('[CourierEvents] publishRouteOnce failed (advisory):', err);
+    }
+  }
+
+  async handlePositionUpdated(msg: { courierId: string; locationId: string; shiftId: string }) {
+    // Always surface the courier on the owner live map — even when idle (no active
+    // order). The dashboard tracks every on-shift courier, not only those mid-delivery.
+    const livePosition = await this.fetchLatestPosition(msg.courierId);
+    if (livePosition) {
+      await this.messageBus.publish(courierChannel(msg.locationId), {
+        type: 'courier.position_updated',
+        payload: { courierId: msg.courierId, position: livePosition },
+      });
+    }
+
+    // The customer-facing fan-out below only applies while the courier is actively
+    // on an order.
+    const details = await this.fetchCourierDetailsAndOrder(msg.courierId);
+    if (!details) return;
 
     // Dispatch to customer WS
     let etaSeconds = null;
@@ -110,6 +174,15 @@ export class CourierEventsWorker {
       etaSeconds = calculateNaiveETASeconds(
         haversineDistanceKm(details.position, details.destination)
       );
+
+      // Per-leg routing — NOT per-ping. Only (re)compute when there's no stored
+      // route yet, or the live position has strayed past the threshold.
+      const existing = await loadRoute(details.orderId);
+      if (!existing) {
+        await this.publishRouteOnce(details.orderId, msg.locationId, details.position, details.destination, `route:init:${details.orderId}`, 300);
+      } else if (shouldReroute(existing.polyline, details.position)) {
+        await this.publishRouteOnce(details.orderId, msg.locationId, details.position, details.destination, `route:re:${details.orderId}`, 30);
+      }
     }
 
     await this.messageBus.publish(orderChannel(details.orderId), {
@@ -134,6 +207,10 @@ export class CourierEventsWorker {
       etaSeconds = calculateNaiveETASeconds(
         haversineDistanceKm(details.position, details.destination)
       );
+      // The single per-delivery route() call: courier just picked up → heading to
+      // the customer. Pushed once to order:{id}; reconnecting clients read it back
+      // from the status endpoint.
+      await this.publishRouteOnce(msg.orderId, msg.locationId, details.position, details.destination, `route:init:${msg.orderId}`, 300);
     }
 
     // Owner live map assignment status update

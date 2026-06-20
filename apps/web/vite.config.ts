@@ -15,11 +15,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:3000',
-      '/public': 'http://localhost:3000',
-      '/auth': 'http://localhost:3000',
+      // PROXY_TARGET lets E2E run the local FE against a remote backend (e.g. prod
+      // for real data) without a deploy: `VITE_PROXY_TARGET=https://dowiz.fly.dev`.
+      '/api': process.env.VITE_PROXY_TARGET || 'http://localhost:3000',
+      '/public': process.env.VITE_PROXY_TARGET || 'http://localhost:3000',
+      '/auth': process.env.VITE_PROXY_TARGET || 'http://localhost:3000',
       '^/s/': {
-        target: 'http://localhost:3000',
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:3000',
         bypass: (req) => req.url || '',
       },
     },
@@ -29,9 +31,21 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'framer-motion'],
-          map: ['maplibre-gl'],
+        // Function form so maplibre's own transitive deps land in the same chunk
+        // as maplibre-gl, isolating the ~1MB map library from the main bundle.
+        // NOTE: react/react-dom/framer-motion stay grouped in a single `vendor`
+        // chunk on purpose — splitting React into its own chunk reorders the
+        // module graph and triggers load-order/circular-init issues, so we do
+        // NOT split them apart here.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('maplibre-gl') || id.includes('@maplibre') || id.includes('maplibre')) {
+            return 'map';
+          }
+          if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/framer-motion/')) {
+            return 'vendor';
+          }
+          return undefined;
         },
       },
     },

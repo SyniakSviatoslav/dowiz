@@ -58,7 +58,7 @@ const getCurrency = (m: MenuResponse | null): string => {
 
 export function MenuPage() {
   const { slug } = useParams<{ slug: string }>();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const getAttr = (p: Product, key: string): any => {
     if (!p.attributes || typeof p.attributes !== 'object') return undefined;
     return (p.attributes as Record<string, any>)[key];
@@ -197,7 +197,7 @@ export function MenuPage() {
     setLoading(true);
     setFetchError(false);
     try {
-      const res = await fetch(`/public/locations/${slug}/menu`);
+      const res = await fetch(`/public/locations/${slug}/menu?locale=${encodeURIComponent(locale)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const menuData: MenuResponse = await res.json();
       setMenu(menuData);
@@ -218,7 +218,7 @@ export function MenuPage() {
       }
       setLoading(false);
     }
-  }, [slug]);
+  }, [slug, locale]);
 
   useEffect(() => {
     loadMenu();
@@ -242,6 +242,10 @@ export function MenuPage() {
 
   interface LocationInfo { lat: number; lng: number; googleRating?: number | null; googleReviewCount?: number | null; isOpen?: boolean; }
   const [locationInfo, setLocationInfo] = useState<LocationInfo | null>(null);
+  // UX-1 storefront footer links — decoupled from geo so they show even without lat/lng.
+  const [storeLinks, setStoreLinks] = useState<{ mapsUrl?: string | null; instagram?: string | null; facebook?: string | null }>({});
+  // Hide the footer in embed/activation-preview contexts (target=_blank is unreliable in iframes).
+  const isEmbed = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('embed') === 'true' || new URLSearchParams(window.location.search).get('activation') === '1');
   const [deliveryETA, setDeliveryETA] = useState<number | null>(null);
   const [geoStatus, setGeoStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown');
 
@@ -250,7 +254,9 @@ export function MenuPage() {
     fetch(`/public/locations/${slug}/info`)
       .then(r => r.ok ? r.json() : null)
       .then((d: any) => {
-        if (d?.lat && d?.lng) setLocationInfo({ lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount, isOpen: d.isOpen });
+        if (!d) return;
+        if (d.lat && d.lng) setLocationInfo({ lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount, isOpen: d.isOpen });
+        setStoreLinks({ mapsUrl: d.googleMapsUrl ?? null, instagram: d.socialInstagram ?? null, facebook: d.socialFacebook ?? null });
       })
       .catch(() => {});
   }, [slug]);
@@ -308,6 +314,17 @@ export function MenuPage() {
   };
 
   const handleProductClick = (product: Product) => {
+    // Activation tool: when embedded with ?activation=1, tapping an item edits it in
+    // the parent tool instead of opening the order detail. Gated by the param + being
+    // inside an iframe → zero effect for real customers.
+    if (typeof window !== 'undefined' && window.parent !== window &&
+        new URLSearchParams(window.location.search).get('activation') === '1') {
+      window.parent.postMessage(
+        { type: 'dos_activation_edit_product', product: { id: product.id, name: product.name, price: product.price } },
+        '*',
+      );
+      return;
+    }
     setDetailProduct(product);
     setQuantity(1);
     setImageLoadError(false);
@@ -565,9 +582,9 @@ export function MenuPage() {
       )}
 
       {/* Menu Content — min-h prevents layout shifts when filtering/sorting changes product count */}
-      <main className="max-w-5xl mx-auto pt-4 min-h-screen">
+      <main className="max-w-6xl mx-auto pt-4 min-h-screen">
         {loading ? (
-          <div className="px-4 grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="px-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {[1,2,3,4,5,6].map(i => (
               <div key={i} className="rounded-xl overflow-hidden border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
                 <div className="w-full aspect-[4/3] skeleton-block rounded-none" />
@@ -590,7 +607,7 @@ export function MenuPage() {
               {t('client.empty_menu', fetchError ? 'Failed to load menu' : 'Menu unavailable')}
             </p>
             {fetchError && (
-              <motion.button onClick={() => { setRetryCount(c => c + 1); }} whileTap={{ scale: 0.97 }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all active:scale-95 min-h-11" style={{ background: 'var(--brand-primary)' }}>
+              <motion.button onClick={() => { setRetryCount(c => c + 1); }} whileTap={{ scale: 0.97 }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all active:scale-95 min-h-11" style={{ background: 'var(--brand-primary-strong)' }}>
                 <i className="ti ti-refresh mr-1.5" />{t('client.retry', 'Retry')}
               </motion.button>
             )}
@@ -633,7 +650,7 @@ export function MenuPage() {
                 {category.name}
               </h2>
               <motion.div
-                className="grid grid-cols-2 md:grid-cols-3 gap-3 px-4"
+                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 px-4"
                 variants={{ visible: { transition: { staggerChildren: 0.03 } } }}
                 initial="hidden"
                 whileInView="visible"
@@ -703,9 +720,38 @@ export function MenuPage() {
                   onError={() => setImageLoadError(true)}
                 />
               ) : (
-                <div className="flex flex-col items-center gap-2" style={{ color: 'var(--brand-text-muted)' }}>
-                  <i className="ti ti-tools-kitchen-2 text-5xl opacity-30" />
-                  <span className="text-sm font-medium opacity-60">{detailProduct.name}</span>
+                // Crafted on-brand no-photo fallback (mirrors ProductCard): warm
+                // brand-tinted gradient + faint dotted texture + a cutlery glyph in
+                // a soft medallion, with the dish name — never a dead grey box.
+                <div
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-3 select-none"
+                  style={{
+                    background:
+                      'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 16%, var(--brand-surface)) 0%, var(--brand-surface-raised) 55%, color-mix(in srgb, var(--brand-primary) 8%, var(--brand-surface)) 100%)',
+                  }}
+                >
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      backgroundImage:
+                        'radial-gradient(color-mix(in srgb, var(--brand-primary) 30%, transparent) 1px, transparent 1.4px)',
+                      backgroundSize: '16px 16px',
+                      opacity: 0.35,
+                    }}
+                  />
+                  <span
+                    className="relative flex items-center justify-center rounded-full"
+                    style={{
+                      width: 'clamp(3.5rem, 16%, 5rem)',
+                      aspectRatio: '1 / 1',
+                      background: 'color-mix(in srgb, var(--brand-surface) 78%, transparent)',
+                      border: '1px solid color-mix(in srgb, var(--brand-primary) 28%, transparent)',
+                      boxShadow: '0 2px 14px color-mix(in srgb, var(--brand-primary) 18%, transparent)',
+                    }}
+                  >
+                    <i className="ti ti-tools-kitchen-2 leading-none" style={{ fontSize: '1.75rem', color: 'var(--brand-primary)' }} />
+                  </span>
+                  <span className="relative text-sm font-semibold tracking-tight" style={{ color: 'var(--brand-text)' }}>{detailProduct.name}</span>
                 </div>
               )}
               <motion.button 
@@ -938,7 +984,7 @@ export function MenuPage() {
                   disabled={!canAdd()}
                   whileTap={{ scale: 0.95 }}
                   className="flex-1 h-[48px] rounded-xl text-white font-bold text-[15px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-center gap-2"
-                  style={{ background: detailProduct.available ? 'var(--brand-primary)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
+                  style={{ background: detailProduct.available ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
                   {detailProduct.available ? (
                     <>
@@ -954,6 +1000,30 @@ export function MenuPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* UX-1: storefront footer — Google Maps + socials. Graceful: an absent link
+          simply doesn't render; the whole footer hides when no link is set or in embed. */}
+      {!isEmbed && (storeLinks.mapsUrl || storeLinks.instagram || storeLinks.facebook) && (
+        <footer className="mt-10 px-4 py-8 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+          <div className="flex items-center justify-center gap-6">
+            {storeLinks.mapsUrl && (
+              <a href={storeLinks.mapsUrl} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')} className="text-2xl inline-flex items-center justify-center p-2.5" style={{ color: 'var(--brand-text-muted)' }}>
+                <i className="ti ti-map-pin" />
+              </a>
+            )}
+            {storeLinks.instagram && (
+              <a href={storeLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-2xl inline-flex items-center justify-center p-2.5" style={{ color: 'var(--brand-text-muted)' }}>
+                <i className="ti ti-brand-instagram" />
+              </a>
+            )}
+            {storeLinks.facebook && (
+              <a href={storeLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-2xl inline-flex items-center justify-center p-2.5" style={{ color: 'var(--brand-text-muted)' }}>
+                <i className="ti ti-brand-facebook" />
+              </a>
+            )}
+          </div>
+        </footer>
       )}
 
     </div>

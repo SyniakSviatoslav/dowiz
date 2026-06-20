@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay } from '@deliveryos/ui';
+import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay, useDeliveryEta } from '@deliveryos/ui';
 import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
+import { messengerLink } from '../../lib/messenger.js';
 import { z } from 'zod';
 import { calcETA } from '@deliveryos/shared-types';
 
@@ -48,11 +49,32 @@ export function OrderStatusPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [courierPos, setCourierPos] = useState<LngLatLike>([19.817, 41.331]);
+  const [hasCourierFix, setHasCourierFix] = useState(false);
   const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
+  // Real road route (G1/G2): polyline drawn on the map; duration paces local ETA.
+  const [routePolyline, setRoutePolyline] = useState<{ lat: number; lng: number }[] | null>(null);
+  const [routeDuration, setRouteDuration] = useState<number | null>(null);
   const [sharingLocation, setSharingLocation] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [ratingComment, setRatingComment] = useState('');
   const [ratingBusy, setRatingBusy] = useState(false);
+  // UX-1: Google review invite. Place ID drives the writereview deep link; shown to
+  // ALL delivered customers (no review-gating), no incentive, no pre-filled rating.
+  const [googlePlaceId, setGooglePlaceId] = useState<string | null>(null);
+  // Offline fallback: restaurant phone to call when live updates drop. Owner-gated
+  // by show_phone_on_offline; we only surface it when enabled and a number exists.
+  const [fallbackPhone, setFallbackPhone] = useState<string | null>(null);
+  useEffect(() => {
+    if (!slug) return;
+    fetch(`/public/locations/${slug}/info`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: any) => { if (d?.googlePlaceId) setGooglePlaceId(d.googlePlaceId); })
+      .catch(() => {});
+    fetch(`/api/public/locations/${slug}/fallback-config`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: any) => { if (d?.phone && d.showPhoneOnOffline !== false) setFallbackPhone(d.phone); })
+      .catch(() => {});
+  }, [slug]);
 
   const submitRating = useCallback(async (stars: number) => {
     if (ratingBusy) return;
@@ -100,22 +122,54 @@ export function OrderStatusPage() {
     }
   }, [id]);
 
-  const fetchOrder = async () => {
+  const fetchOrder = async (allowExchange = true) => {
     try {
       const data = await apiClient<any>(`/customer/orders/${id}/status`);
       setOrder(data);
       if (data.courierPosition) {
         setCourierPos([data.courierPosition.lng, data.courierPosition.lat]);
+        setHasCourierFix(true);
       }
       if (data.etaMinutes != null) {
         setEtaMinutes(data.etaMinutes);
       }
+      // Stored road route (served for reconnecting clients).
+      if (Array.isArray(data.route?.polyline) && data.route.polyline.length >= 2) {
+        setRoutePolyline(data.route.polyline);
+        setRouteDuration(data.route.durationSeconds ?? null);
+      }
     } catch (err: any) {
-      if (err?.status === 403) {
+      // 401 (no/expired token) or 403 (wrong role) → no valid customer session.
+      if (err?.status === 401 || err?.status === 403) {
+        // Tracking-link handoff: if the order URL carries a ?t= grant code, trade
+        // it for a real customer JWT once, then retry. This is how a visitor who
+        // opened the link on a fresh device (no stored token) gets a session.
+        const code = typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('t')
+          : null;
+        if (allowExchange && code) {
+          try {
+            const res = await apiClient<any>('/customer/track/exchange', {
+              method: 'POST',
+              body: { code },
+            });
+            if (res?.token) {
+              localStorage.setItem('dos_access_token', res.token);
+              // Strip ?t= so the secret never persists in history or leaks via Referer.
+              window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+              return await fetchOrder(false); // retry once with the fresh token
+            }
+          } catch {
+            // Exchange failed (expired/invalid grant) → fall through to the message.
+          }
+        }
+        // No valid session and no usable grant. Show a clear "reload the menu"
+        // message instead of bouncing to the owner login (the global apiClient
+        // redirect is scoped to /admin) or fabricating a fake order.
         setError(t('order.auth_expired', 'Session expired. Please reload the menu and try again.'));
         return;
       }
-      if (err?.status === 404 || err?.status === 401) {
+      if (err?.status === 404) {
         setOrder({
           id,
           status: 'PENDING',
@@ -157,10 +211,21 @@ export function OrderStatusPage() {
       if (!msg.data) return;
       const inner = msg.data;
 
+      // Real road route pushed once at picked_up (G1/G2). Draw it + pace ETA.
+      if (inner.type === 'order.route') {
+        const p = inner.payload;
+        if (Array.isArray(p?.polyline) && p.polyline.length >= 2) {
+          setRoutePolyline(p.polyline);
+          setRouteDuration(p.durationSeconds ?? null);
+        }
+        return;
+      }
+
       if (inner.type === 'order.courier_updated') {
         const p = inner.payload;
         if (p.position) {
           setCourierPos([p.position.lng, p.position.lat]);
+          setHasCourierFix(true);
         }
         if (p.etaSeconds != null) {
           setEtaMinutes(Math.ceil(p.etaSeconds / 60));
@@ -261,16 +326,34 @@ export function OrderStatusPage() {
     return [];
   }, [order?.courierName, courierPos]);
 
+  // Live courier position as {lat,lng} for the tweened marker + local ETA.
+  const courierLatLng = useMemo(
+    () => (hasCourierFix ? { lat: courierPos[1], lng: courierPos[0] } : null),
+    [hasCourierFix, courierPos],
+  );
+  const routeLine: LngLatLike[] | undefined = useMemo(
+    () => routePolyline?.map((p) => [p.lng, p.lat] as LngLatLike),
+    [routePolyline],
+  );
+  // Local, smoothed ETA along the real polyline — zero routing calls per ping.
+  const eta = useDeliveryEta(routePolyline, routeDuration, courierLatLng);
+
   const destPin: LngLatLike = order?.deliveryLat
     ? [order.deliveryLng || 19.817, order.deliveryLat || 41.331]
     : [19.817, 41.331];
 
   const isInDelivery = order?.status === 'IN_DELIVERY';
-  const displayEta = etaMinutes != null
-    ? `${etaMinutes} min`
-    : order?.createdAt
-      ? calcETA(order.createdAt, order.elapsedSeconds || 0)
-      : '';
+  const isPickup = order?.type === 'pickup';
+  // Prefer the smoothed route-based ETA; fall back to the WS naive ETA, then calcETA.
+  const displayEta = eta.arriving
+    ? t('order.arriving', 'Arriving')
+    : eta.etaSeconds != null
+      ? `${Math.max(1, Math.round(eta.etaSeconds / 60))} ${t('order.eta_min', 'min')}`
+      : etaMinutes != null
+        ? `${etaMinutes} min`
+        : order?.createdAt
+          ? calcETA(order.createdAt, order.elapsedSeconds || 0)
+          : '';
 
   if (loading) {
     return <div className="p-6 space-y-4"><SkeletonBase className="h-40 w-full" /></div>;
@@ -284,27 +367,45 @@ export function OrderStatusPage() {
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-[var(--brand-surface)] pb-10" role="region" aria-live="polite" aria-label={t('order.status_updates', 'Order status updates')}>
-      {/* WS Disconnect Banner */}
+      {/* WS Disconnect Banner — own the failure, give a human a way to reach the restaurant */}
       {isDisconnected && (
-        <div className="sticky top-0 z-50 px-4 py-2 text-center text-xs font-semibold flex items-center justify-center gap-2" style={{ background: 'var(--color-warning)', color: '#fff' }}>
-          <i className="ti ti-wifi-off" />
-          <span>{t('order.live_paused', 'Live updates paused. Refreshing automatically.')}</span>
+        <div className="sticky top-0 z-50 px-4 py-2 text-xs font-semibold flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5" style={{ background: 'var(--color-warning)', color: '#fff' }} data-testid="offline-banner">
+          <span className="inline-flex items-center gap-2">
+            <i className="ti ti-wifi-off" aria-hidden="true" />
+            {t('order.live_paused', 'Live updates paused. Refreshing automatically.')}
+          </span>
+          {fallbackPhone && (
+            <a
+              href={`tel:${fallbackPhone}`}
+              data-testid="offline-call-restaurant"
+              title={t('order.call_restaurant', 'Call the restaurant')}
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 px-3 py-1.5 transition-colors"
+              style={{ color: '#fff' }}
+            >
+              <i className="ti ti-phone" aria-hidden="true" />
+              <span>{t('order.call_restaurant', 'Call the restaurant')}</span>
+            </a>
+          )}
         </div>
       )}
 
-      {/* Live Courier Map */}
-      <div className="h-64 relative w-full" title={t('tooltip.courier_location', 'Courier current location')}>
-        <CourierLiveMap
-          className="h-full w-full"
-          couriers={couriers}
-          destinationPin={destPin}
-          center={courierPos}
-          zoom={14}
-        />
-        <div className="absolute top-4 left-4 bg-white/90 p-1.5 rounded-full shadow-md z-10" title={t('tooltip.ws_status', 'Connection status')}>
-          <WSStatusDot status={wsStatus === 'disabled' ? 'disconnected' : wsStatus} />
+      {/* Live Courier Map — delivery only (pickup has no courier) */}
+      {!isPickup && (
+        <div className="h-64 relative w-full" title={t('tooltip.courier_location', 'Courier current location')}>
+          <CourierLiveMap
+            className="h-full w-full"
+            couriers={courierLatLng ? [] : couriers}
+            liveCourier={courierLatLng}
+            routeLine={routeLine}
+            destinationPin={destPin}
+            center={courierPos}
+            zoom={14}
+          />
+          <div className="absolute top-4 left-4 bg-white/90 p-1.5 rounded-full shadow-md z-10" title={t('tooltip.ws_status', 'Connection status')}>
+            <WSStatusDot status={wsStatus === 'disabled' ? 'disconnected' : wsStatus} />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Screen-reader accessible courier status */}
       {order?.courierName && (
@@ -319,9 +420,15 @@ export function OrderStatusPage() {
         
         <div className="text-center">
           <h1 className="text-2xl font-bold text-[var(--brand-text)] mb-1" style={{ fontFamily: 'var(--brand-font-heading)' }}>
-            {displayEta}
+            {isPickup
+              ? (order.status === 'READY' ? t('order.ready_for_pickup', 'Ready for pickup')
+                 : order.status === 'PICKED_UP' ? t('order.picked_up', 'Picked up')
+                 : t('order.preparing', 'Preparing your order'))
+              : displayEta}
           </h1>
-          <p className="text-[var(--brand-text-muted)] text-sm">{t('client.estimated_arrival', 'Estimated arrival')}</p>
+          <p className="text-[var(--brand-text-muted)] text-sm">
+            {isPickup ? t('order.pickup_at_restaurant', 'Collect at the restaurant') : t('client.estimated_arrival', 'Estimated arrival')}
+          </p>
         </div>
 
         <div data-testid="order-status-badge" data-status={order?.status} aria-live="polite" aria-atomic="true">
@@ -369,6 +476,19 @@ export function OrderStatusPage() {
                 <span>{t('client.call_courier', 'Call courier')}</span>
               </a>
             )}
+            {/* UX-2: message courier in their app (only within the active order) */}
+            {order?.courierMessenger && messengerLink(order.courierMessenger.kind, order.courierMessenger.handle) && (
+              <a
+                href={messengerLink(order.courierMessenger.kind, order.courierMessenger.handle)!}
+                target="_blank" rel="noopener noreferrer"
+                title={t('client.message_courier', 'Message your courier')}
+                data-testid="message-courier-btn"
+                className="flex items-center justify-center gap-2 w-full py-3 mt-2 rounded-[var(--brand-radius)] bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] text-[var(--brand-text)] font-semibold text-sm"
+              >
+                <i className="ti ti-message-circle" aria-hidden="true" />
+                <span>{t('client.message_courier', 'Message courier')}</span>
+              </a>
+            )}
           </div>
         )}
 
@@ -386,6 +506,12 @@ export function OrderStatusPage() {
             <span>{t('client.total', 'Total')}</span>
             <span><PriceDisplay amount={order.total} /></span>
           </div>
+          {order.tipAmount > 0 && (
+            <div className="flex justify-between text-sm mt-2" style={{ color: 'var(--brand-text-muted)' }} data-testid="order-tip">
+              <span>{t('client.tip_for_courier', 'Tip for courier (cash)')}</span>
+              <span><PriceDisplay amount={order.tipAmount} /></span>
+            </div>
+          )}
         </div>
 
         {/* Rate your order — shown once DELIVERED; tap a star to submit */}
@@ -416,6 +542,16 @@ export function OrderStatusPage() {
                 <textarea value={ratingComment} onChange={e => setRatingComment(e.target.value)} maxLength={1000} rows={2}
                   placeholder={t('client.feedback_placeholder', 'Add a comment (optional)')}
                   className="w-full text-sm rounded-[var(--brand-radius)] p-2 bg-[var(--brand-surface)] border border-[var(--brand-border)]" />
+              </div>
+            )}
+            {/* Google review invite — shown to everyone (anti-gating), no incentive, no pre-fill. */}
+            {googlePlaceId && (
+              <div className="mt-4 pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+                <a href={`https://search.google.com/local/writereview?placeid=${encodeURIComponent(googlePlaceId)}`}
+                  target="_blank" rel="noopener noreferrer" data-testid="google-review-link"
+                  className="inline-flex items-center gap-2 text-sm font-medium" style={{ color: 'var(--brand-primary)' }}>
+                  <i className="ti ti-brand-google" aria-hidden="true" /> {t('client.leave_google_review', 'Leave a review on Google')}
+                </a>
               </div>
             )}
           </div>

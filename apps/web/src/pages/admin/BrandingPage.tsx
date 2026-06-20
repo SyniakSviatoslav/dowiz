@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Button, Input, ColorInput, FormField, useI18n, useToast } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
-import { ThemeResponse } from '@deliveryos/shared-types';
 
 export function BrandingPage() {
   const { t } = useI18n();
@@ -29,17 +28,25 @@ export function BrandingPage() {
   const [googleRating, setGoogleRating] = useState('');
   const [googleReviewCount, setGoogleReviewCount] = useState('');
   const [googleMapsUrl, setGoogleMapsUrl] = useState('');
+  const [googlePlaceId, setGooglePlaceId] = useState('');
+  const [socialInstagram, setSocialInstagram] = useState('');
+  const [socialFacebook, setSocialFacebook] = useState('');
 
   useEffect(() => {
-    apiClient<typeof ThemeResponse>('/owner/brand', { schema: ThemeResponse }).then(res => {
-      if (res.primaryColor) setConfig(prev => ({ ...prev, primary: res.primaryColor! }));
-      if (res.bgColor) setConfig(prev => ({ ...prev, bg: res.bgColor! }));
-      if (res.textColor) setConfig(prev => ({ ...prev, text: res.textColor! }));
-      if (res.logoUrl) setLogoUrl(res.logoUrl!);
+    // Untyped read: the strict ThemeResponse contract (shared-types) doesn't yet
+    // include the UX-1 storefront-link fields, so parse leniently here.
+    apiClient<any>('/owner/brand').then((res: any) => {
+      if (res.primaryColor) setConfig(prev => ({ ...prev, primary: res.primaryColor }));
+      if (res.bgColor) setConfig(prev => ({ ...prev, bg: res.bgColor }));
+      if (res.textColor) setConfig(prev => ({ ...prev, text: res.textColor }));
+      if (res.logoUrl) setLogoUrl(res.logoUrl);
       if (res.locationId) setLocationId(res.locationId);
       if (res.googleRating != null) setGoogleRating(String(res.googleRating));
       if (res.googleReviewCount != null) setGoogleReviewCount(String(res.googleReviewCount));
       if (res.googleMapsUrl) setGoogleMapsUrl(res.googleMapsUrl);
+      if (res.googlePlaceId) setGooglePlaceId(res.googlePlaceId);
+      if (res.socialInstagram) setSocialInstagram(res.socialInstagram);
+      if (res.socialFacebook) setSocialFacebook(res.socialFacebook);
     }).catch(() => {});
     apiClient<any>('/owner/settings').then((res: any) => {
       if (res.slug) {
@@ -94,6 +101,9 @@ export function BrandingPage() {
           googleRating: googleRating ? parseFloat(googleRating) : null,
           googleReviewCount: googleReviewCount ? parseInt(googleReviewCount, 10) : null,
           googleMapsUrl: googleMapsUrl || null,
+          googlePlaceId: googlePlaceId || null,
+          socialInstagram: socialInstagram || null,
+          socialFacebook: socialFacebook || null,
         }
       });
       showToast(t('common.saved', 'Branding saved'), 'success');
@@ -190,6 +200,20 @@ export function BrandingPage() {
             </div>
             <FormField label={t('admin.google_maps_url', 'Google Maps URL')}>
               <Input value={googleMapsUrl} onChange={e => setGoogleMapsUrl(e.target.value)} placeholder="https://maps.app.goo.gl/..." />
+            </FormField>
+            <FormField label={t('admin.google_place_id', 'Google Place ID')}>
+              <Input value={googlePlaceId} onChange={e => setGooglePlaceId(e.target.value)} placeholder="ChIJ..." />
+              <p className="text-xs text-[var(--brand-text-muted)] mt-1">{t('admin.google_place_id_hint', 'Lets customers leave a Google review after delivery. Find it on your Google Business listing.')}</p>
+            </FormField>
+          </div>
+          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-xl p-5 space-y-4">
+            <h3 className="font-semibold text-lg">{t('admin.social_links', 'Social links')}</h3>
+            <p className="text-xs text-[var(--brand-text-muted)]">{t('admin.social_links_hint', 'Shown as icons in your storefront footer. Leave blank to hide.')}</p>
+            <FormField label={t('admin.instagram', 'Instagram')}>
+              <Input value={socialInstagram} onChange={e => setSocialInstagram(e.target.value)} placeholder="https://instagram.com/yourplace" />
+            </FormField>
+            <FormField label={t('admin.facebook', 'Facebook')}>
+              <Input value={socialFacebook} onChange={e => setSocialFacebook(e.target.value)} placeholder="https://facebook.com/yourplace" />
             </FormField>
           </div>
           <div className="flex items-center gap-4">

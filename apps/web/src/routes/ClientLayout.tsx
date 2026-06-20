@@ -8,11 +8,14 @@ import { apiClient } from '../lib/index.js';
 import { z } from 'zod';
 
 const PublicThemeResponse = z.object({
-  locationName: z.string().optional(),
-  logoUrl: z.string().optional(),
-  primaryColor: z.string().optional(),
-  bgColor: z.string().optional(),
-  textColor: z.string().optional(),
+  // The API sends null (not undefined) for unset fields — accept null or the
+  // parse throws and the whole theme/branding/supported-locales fetch is lost.
+  locationName: z.string().nullable().optional(),
+  logoUrl: z.string().nullable().optional(),
+  primaryColor: z.string().nullable().optional(),
+  bgColor: z.string().nullable().optional(),
+  textColor: z.string().nullable().optional(),
+  supportedLocales: z.array(z.string()).nullable().optional(),
 }).passthrough();
 import { CartProvider, useSharedCart } from '../lib/CartProvider.js';
 
@@ -48,6 +51,7 @@ function ClientLayoutInner() {
 
   const [locationName, setLocationName] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
+  const [supportedLocales, setSupportedLocales] = useState<string[] | undefined>(undefined);
 
   useEffect(() => {
     if (!slug) return;
@@ -92,6 +96,7 @@ function ClientLayoutInner() {
       .then((res) => {
         setLocationName(res.locationName || '');
         setLogoUrl(res.logoUrl || '');
+        setSupportedLocales(res.supportedLocales || undefined);
         setTheme({
           primary: res.primaryColor || 'var(--brand-primary)',
           primaryHover: 'var(--brand-primary-hover)',
@@ -122,9 +127,11 @@ function ClientLayoutInner() {
             {logoUrl ? (
               <img src={logoUrl} alt="" className="h-8 w-8 rounded object-contain shrink-0" />
             ) : null}
-            <h1 className="text-base font-bold flex-1 truncate" style={{ fontFamily: 'var(--brand-font-heading)' }}>{locationName || t('client.menu', 'Menu')}</h1>
+            {/* Persistent brand chrome — not the page <h1>; each route owns its own h1
+               (menu hero, Checkout, Order) so the document has a single top heading. */}
+            <div className="text-base font-bold flex-1 truncate" style={{ fontFamily: 'var(--brand-font-heading)' }}>{locationName || t('client.menu', 'Menu')}</div>
             <CurrencySwitcher />
-            <LanguageSwitcher variant="full" />
+            <LanguageSwitcher variant="full" allowed={supportedLocales} />
           </header>
           <div className="app-shell-main">
             <Outlet />
