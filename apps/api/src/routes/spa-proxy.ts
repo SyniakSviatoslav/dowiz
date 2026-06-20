@@ -232,6 +232,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   }, async (request, reply) => {
     const data = await request.file({ limits: { fileSize: 8 * 1024 * 1024 } });
     if (!data) return reply.status(400).send({ error: 'No file uploaded' });
+    if (data.fieldname !== 'file') return reply.status(400).send({ error: 'Image must be sent as the "file" field' });
     if ((data as any).file?.truncated) return reply.status(413).send({ error: 'File exceeds maximum size' });
     if (!String(data.mimetype || '').startsWith('image/')) return reply.status(400).send({ error: 'Must be an image' });
     const buffer = await data.toBuffer();
