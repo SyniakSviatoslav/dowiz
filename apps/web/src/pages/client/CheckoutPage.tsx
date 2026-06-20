@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal } from '@deliveryos/ui';
@@ -197,6 +197,7 @@ export function CheckoutPage() {
   const [entryPhotoKey, setEntryPhotoKey] = useState('');
   const [entryPhotoPreview, setEntryPhotoPreview] = useState('');
   const [photoUploading, setPhotoUploading] = useState(false);
+  const entryFileRef = useRef<HTMLInputElement>(null);
   const uploadEntryPhoto = async (file: File) => {
     if (!file) return;
     setPhotoUploading(true);
@@ -572,12 +573,14 @@ export function CheckoutPage() {
               <div>
                 <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entry_photo', 'Entrance photo (optional)')}</label>
                 <div className="flex items-center gap-3">
-                  <label className="inline-flex items-center gap-2 px-4 py-2 border rounded-[8px] cursor-pointer text-sm" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                  <button type="button" onClick={() => entryFileRef.current?.click()} disabled={photoUploading}
+                    className="inline-flex items-center gap-2 px-4 py-2 border rounded-[8px] cursor-pointer text-sm disabled:opacity-60"
+                    style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
                     <i className="ti ti-camera" aria-hidden="true" />
                     {photoUploading ? t('checkout.uploading', 'Uploading…') : (entryPhotoKey ? t('checkout.change_photo', 'Change photo') : t('checkout.add_photo', 'Add photo'))}
-                    <input type="file" accept="image/*" className="hidden" data-testid="entry-photo-input" disabled={photoUploading}
-                      onChange={e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void uploadEntryPhoto(f); }} />
-                  </label>
+                  </button>
+                  <input ref={entryFileRef} type="file" accept="image/*" className="hidden" data-testid="entry-photo-input" disabled={photoUploading}
+                    onChange={e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void uploadEntryPhoto(f); }} />
                   {entryPhotoPreview && (
                     <img src={entryPhotoPreview} alt={t('checkout.entry_photo', 'Entrance photo')} data-testid="entry-photo-preview" className="h-12 w-12 object-cover rounded-[8px] border" style={{ borderColor: 'var(--brand-border)' }} />
                   )}
@@ -756,9 +759,10 @@ export function CheckoutPage() {
                     type="number"
                     inputMode="decimal"
                     min={0}
+                    max={1000000}
                     value={tipAmount || ''}
                     data-testid="checkout-tip"
-                    onChange={e => setTipAmount(Math.max(0, parseInt(e.target.value) || 0))}
+                    onChange={e => setTipAmount(Math.min(1000000, Math.max(0, parseInt(e.target.value) || 0)))}
                     className="w-full h-[44px] pl-11 pr-3 outline-none text-[14px] font-bold border rounded-[8px]"
                     style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
                     placeholder="0"
@@ -825,6 +829,12 @@ export function CheckoutPage() {
                   <PriceDisplay amount={deliveryFee} />
               </div>
             )}
+            {tipAmount > 0 && (
+              <div className="flex justify-between text-[14px]" data-testid="checkout-tip-line">
+                <span style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_for_courier', 'Tip for courier (cash)')}</span>
+                <PriceDisplay amount={tipAmount} />
+              </div>
+            )}
             {hasNutrition && (
               <div className="flex justify-between text-[12px]">
                 <span style={{ color: 'var(--brand-text-muted)' }}>≈ {t('menu.nutrition')}</span>
@@ -836,6 +846,12 @@ export function CheckoutPage() {
             <span className="text-[16px] font-bold" style={{ color: 'var(--brand-text)' }}>{t('cart.total')}</span>
                   <span data-testid="checkout-total"><PriceDisplay amount={total} size="lg" /></span>
           </div>
+          {tipAmount > 0 && (
+            <div className="flex justify-between items-center text-[13px] mt-2" style={{ color: 'var(--brand-text-muted)' }} data-testid="checkout-cash-due">
+              <span>{t('checkout.cash_to_courier', 'Cash to courier (incl. tip)')}</span>
+              <PriceDisplay amount={total + tipAmount} />
+            </div>
+          )}
         </motion.div>
       </form>
 

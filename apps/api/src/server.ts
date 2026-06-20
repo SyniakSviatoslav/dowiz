@@ -463,6 +463,8 @@ const retryPolicy = new RetryPolicy();
       try {
         done(null, JSON.parse(body));
       } catch (e: any) {
+          // Malformed JSON is a client error (400), not a 500.
+          e.statusCode = 400;
           done(e);
       }
     }
