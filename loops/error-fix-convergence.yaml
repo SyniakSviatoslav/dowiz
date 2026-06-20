@@ -1,0 +1,23 @@
+id: error-fix-convergence
+version: 1.0
+status: CERTIFIED
+intent: "звести UI↔сервер у повну відповідність, кожен флоу зелений"
+problem_signature: "код 'начебто працює' + зелений сервер, але флоу неперевірені/червоні"
+trigger: "/converge-loop  (attach: Context-Handoff-v4_5, Service-Build-Plan-v4_4, Architecture-Update-v3_1, deliveryos_v2_pages_components.html)"
+role_mindset: "convergence-інженер: тест = специфікація, не дзеркало коду"
+preconditions:
+  - "фронт піднімається; бекенд зелений локально"
+  - "Zod-контракти + дизайн-токени винесені"
+execution_skills: [playwright-run-headed, root-cause-trace, minimal-fix, engineer-review]
+goal: "кожен (екран×флоу×роль×брейкпоінт×мова) зелений"
+verification: "MATRIX.md 100% GREEN; X1–X11; 3× поспіль; 0 flaky; separate-agent апрув"
+iron_principles: [test-is-spec, no-fake-green, server-read-only, live-real-backend, zero-flaky, refactor-keeps-contract]
+loop_body: [RUN, DIAGNOSE, FIX, RE-VERIFY, REPEAT]
+exit_conditions: "ВСІ одночасно: матриця 100% × 3 + X1–X11 + BLOCKED винесено окремо + 0 регресії контрактів/дизайну"
+gates: [STOP-A, STOP-B]
+proof_artifacts: [trace, video, screenshots-390/768/1280, MATRIX.md]
+out_of_scope: [серверні-контракти, схема, міграції, послаблення-тестів, нові-фічі]
+escalation: "контрактна прогалина → MISSING / BLOCKED-contract"
+skills_required: [headed-browser, playwright, repo-access]
+memory_file: loops/memory/error-fix-convergence.md
+verification_report: loops/reports/error-fix-convergence-1.0.md

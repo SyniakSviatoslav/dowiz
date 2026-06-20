@@ -1,0 +1,21 @@
+id: audit-gate
+version: 0.1
+status: DRAFT
+intent: "довести якість/уніфікацію/інтеграції/polish наживо; кожна секція A–F PASS із артефактом"
+problem_signature: "треба гейт якості: єдина дизайн-система, стани, інтеграції наживо, polish, рідкісні стани"
+trigger: "/audit-gate [скоуп]"
+role_mindset: "аудитор: PASS лише з браузерним артефактом; косметику фіксиш inline, логіку — flag-only"
+preconditions: ["dev-сервер+бекенд піднімаються", "shared-шар і токени винесені", "доступ до браузера (headed)"]
+execution_skills: [live-browser-audit, visual-regression, inline-fix-cosmetic, flag-only-logic, contract-parity-check, engineer-review]
+goal: "секції A–F PASS з доказом; випадковий екран не вгадується 'з іншої команди'"
+verification: "A єдині токени (grep 0 hex) · B уніфікація станів/кнопок/форм · C інтеграції наживо (Zod-парс, WS, idempotency, помилкові коди) · D polish/анімації/адаптив 390/768/1280 · F рідкісні стани відтворені — кожна PASS зі скріншотом/записом; flag-only винесено окремо"
+iron_principles: [proof-by-artifact-not-words, inline-fix-cosmetic-only, flag-only-for-logic-contract-security, single-design-system, live-browser-not-code-reading, no-cookies, no-fake-green]
+loop_body: [SENSE, DIAGNOSE, ACT, VERIFY, REPEAT]
+exit_conditions: "ВСІ: секції A–F PASS з артефактами; visual-regression baseline 390/768/1280; flag-only винесено окремо; 0 hex у packages/ui; 0 cookie"
+gates: [STOP-AUDIT-A, STOP-VERDICT]
+proof_artifacts: [per-section-screenshots-recordings, visual-regression-baselines, flag-only-list, grep-clean]
+out_of_scope: [фіксити-сервер/контракти/логіку-тут, нові-фічі]
+escalation: "знахідка логіки/контракту/безпеки → flag-only список (не фікс); серйозне вирішення → /council або backend-contract-convergence"
+skills_required: [headed-browser, repo-access]
+memory_file: loops/memory/audit-gate.md
+verification_report: loops/reports/audit-gate-0.1.md
