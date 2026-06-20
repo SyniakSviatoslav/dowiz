@@ -61,11 +61,18 @@ export function OrderStatusPage() {
   // UX-1: Google review invite. Place ID drives the writereview deep link; shown to
   // ALL delivered customers (no review-gating), no incentive, no pre-filled rating.
   const [googlePlaceId, setGooglePlaceId] = useState<string | null>(null);
+  // Offline fallback: restaurant phone to call when live updates drop. Owner-gated
+  // by show_phone_on_offline; we only surface it when enabled and a number exists.
+  const [fallbackPhone, setFallbackPhone] = useState<string | null>(null);
   useEffect(() => {
     if (!slug) return;
     fetch(`/public/locations/${slug}/info`)
       .then(r => r.ok ? r.json() : null)
       .then((d: any) => { if (d?.googlePlaceId) setGooglePlaceId(d.googlePlaceId); })
+      .catch(() => {});
+    fetch(`/api/public/locations/${slug}/fallback-config`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: any) => { if (d?.phone && d.showPhoneOnOffline !== false) setFallbackPhone(d.phone); })
       .catch(() => {});
   }, [slug]);
 
@@ -360,11 +367,25 @@ export function OrderStatusPage() {
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-[var(--brand-surface)] pb-10" role="region" aria-live="polite" aria-label={t('order.status_updates', 'Order status updates')}>
-      {/* WS Disconnect Banner */}
+      {/* WS Disconnect Banner — own the failure, give a human a way to reach the restaurant */}
       {isDisconnected && (
-        <div className="sticky top-0 z-50 px-4 py-2 text-center text-xs font-semibold flex items-center justify-center gap-2" style={{ background: 'var(--color-warning)', color: '#fff' }}>
-          <i className="ti ti-wifi-off" />
-          <span>{t('order.live_paused', 'Live updates paused. Refreshing automatically.')}</span>
+        <div className="sticky top-0 z-50 px-4 py-2 text-xs font-semibold flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5" style={{ background: 'var(--color-warning)', color: '#fff' }} data-testid="offline-banner">
+          <span className="inline-flex items-center gap-2">
+            <i className="ti ti-wifi-off" aria-hidden="true" />
+            {t('order.live_paused', 'Live updates paused. Refreshing automatically.')}
+          </span>
+          {fallbackPhone && (
+            <a
+              href={`tel:${fallbackPhone}`}
+              data-testid="offline-call-restaurant"
+              title={t('order.call_restaurant', 'Call the restaurant')}
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 px-3 py-1.5 transition-colors"
+              style={{ color: '#fff' }}
+            >
+              <i className="ti ti-phone" aria-hidden="true" />
+              <span>{t('order.call_restaurant', 'Call the restaurant')}</span>
+            </a>
+          )}
         </div>
       )}
 
