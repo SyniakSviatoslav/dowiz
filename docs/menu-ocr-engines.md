@@ -50,6 +50,32 @@ Then point the API at it and turn the engine on:
 > `paddleocr` + `apps/api/scripts/paddle-ocr.py`. Since the default is
 > `tesseract`, the standard deploy is unaffected until you opt in.
 
+## Structuring: heuristic default, LLM optional
+
+OCR (or PDF text extraction) produces raw text; a **structuring step** turns that
+text into the canonical draft (categories, products, prices, restaurant
+metadata). This step has **no paid dependency** and works with zero keys.
+
+Provider resolution (`detectProvider` in `ai-ocr-parser.ts`), first match wins:
+
+1. `LLM_ADAPTER`/`LLM_PROVIDER` = `heuristic` | `none` | `offline` → **heuristic**
+2. `LLM_ADAPTER`/`LLM_PROVIDER` = `groq` | `openai` | `ollama` → that provider
+3. `GROQ_API_KEY` set → `groq`
+4. `OPENAI_API_KEY` set → `openai`
+5. `LLM_ENDPOINT` or `LLM_PROVIDER` set → `ollama`
+6. **nothing configured → heuristic** ← the real default
+
+| Mode | When | Cost | Notes |
+|------|------|------|-------|
+| `heuristic` | no LLM env configured (the default) | free, no network | pure regex/line heuristics; extracts categories, priced products, and restaurant name/address/phone/hours from the menu header |
+| `ollama` | self-hosted endpoint wired | free | text-only structuring; honours its failure rather than silently degrading |
+| `groq` / `openai` | BYO key | paid (your key) | optional accuracy upgrade; PII-redacted text only |
+
+> There is **no Anthropic/Claude vision path**. An earlier Claude-vision parser
+> was removed (commit `dd53044`); the current seam is OCR-text → structurer.
+> Whatever ran is recorded in result provenance (`model_id`, `ocr_engine`), and
+> the owner reviews every draft before commit (see `docs/ai-governance.md`).
+
 ## Source & proof
 
 - Subprocess script: `apps/api/scripts/paddle-ocr.py`
