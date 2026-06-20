@@ -160,6 +160,71 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
     });
   });
 
+  // ─── POST /menu/import/anonymous ─────────────────────────────────────
+  // Menu-first onboarding front door: parse a menu BEFORE any account exists.
+  // The draft is stashed in Redis (30-min TTL) and returned with the extracted
+  // restaurant identity (name/phone/address) so the public /start page can
+  // pre-fill the create form. The owner then "claims" it by authenticating with
+  // Telegram and calling POST /owner/onboarding/start with this id, which seeds
+  // the new location's menu. Public + IP-rate-limited; nothing is written to the
+  // database here (no location/owner exists yet).
+  fastify.post('/menu/import/anonymous', {
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+  }, async (request: any, reply: any) => {
+    const redis = (fastify as any).redis;
+    if (!redis) return reply.status(503).send({ error: 'Anonymous import unavailable' });
+
+    const data = await request.file({ limits: { fileSize: 10 * 1024 * 1024 } });
+    if (!data) return reply.status(400).send({ error: 'Missing file' });
+    if (data.file.truncated) return reply.status(413).send({ error: 'File exceeds maximum size of 10MB' });
+
+    const mime = data.mimetype as string;
+    let kind: string;
+    if (mime === 'application/pdf') kind = 'pdf';
+    else if (mime.startsWith('image/')) kind = 'image';
+    else return reply.status(400).send({ error: 'Upload a PDF or image of your menu', code: 'UNSUPPORTED_TYPE' });
+
+    const buffer = await data.toBuffer();
+    const parser = parsers['ai-ocr'];
+    if (!parser) return reply.status(503).send({ error: 'Parser unavailable' });
+
+    // No location yet — parse against the onboarding defaults (ALL / minor unit 0,
+    // matching POST /onboarding/start). The owner reviews every item before claim.
+    const parseResult = await parser.parse({
+      kind: kind as any,
+      mime: mime as any,
+      bytes: buffer,
+      config: { expectedCurrency: 'ALL', currencyMinorUnit: 0 },
+    });
+
+    if ((parseResult as any).restaurant) {
+      (parseResult.draft as any)._restaurant = (parseResult as any).restaurant;
+    }
+    (parseResult.draft as any)._provenance = {
+      source: 'ai-ocr',
+      raw_text_hash: crypto.createHash('sha256').update(buffer).digest('hex'),
+    };
+
+    const anonymousImportId = crypto.randomUUID();
+    await redis.setex(
+      `import:anon:${anonymousImportId}`,
+      1800,
+      JSON.stringify({ draft: parseResult.draft, restaurant: (parseResult as any).restaurant || null, created_at: new Date().toISOString() })
+    );
+
+    return reply.status(200).send({
+      anonymous_import_id: anonymousImportId,
+      expires_at: new Date(Date.now() + 30 * 60000).toISOString(),
+      summary: parseResult.summary,
+      issues: parseResult.issues,
+      draft_preview: {
+        categories: parseResult.draft.categories,
+        products: parseResult.draft.products,
+      },
+      restaurant: (parseResult as any).restaurant || null,
+    });
+  });
+
   // ─── POST /commit ────────────────────────────────────────────────────
   fastify.post('/menu/import/commit', {
     preHandler: [fastify.verifyAuth, fastify.requireRole(['owner'])],
