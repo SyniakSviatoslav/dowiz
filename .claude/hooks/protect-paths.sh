@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # protect-paths.sh — Block edits to protected zones (contracts, schema, infra, governance)
+# Scope: files INSIDE the repo only. Absolute paths outside the repo root (e.g. the
+# user's global ~/.claude memory) are not this hook's concern and pass through.
 set -euo pipefail
 
 INPUT=$(cat)
@@ -38,10 +40,20 @@ process.stdin.on('end', () => {
 }
 
 FILE=$(_extract_path)
+[ -z "$FILE" ] && exit 0
+
+# Only guard files inside the repo. Resolve a repo-relative path; an absolute path
+# that is not under the repo root (e.g. ~/.claude/projects/.../memory) is out of scope.
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "${CLAUDE_PROJECT_DIR:-$PWD}")"
+case "$FILE" in
+  "$ROOT"/*) REL="${FILE#"$ROOT"/}" ;;
+  /*) exit 0 ;;
+  *) REL="$FILE" ;;
+esac
 
 PROTECTED='(^|/)(migrations|\.github|\.claude)/|(^|/)(fly\.toml|Dockerfile|pnpm-lock\.yaml)$|/package\.json$|packages/shared-types/|packages/db/|/contracts/|\.contract\.|/\.env'
 
-if [ -n "$FILE" ] && echo "$FILE" | grep -qE "$PROTECTED"; then
-  echo "BLOCKED: '$FILE' is in a protected zone (contracts/schema/infra/governance). This is an IMPROVEMENT requiring manual approval." >&2
+if echo "$REL" | grep -qE "$PROTECTED"; then
+  echo "BLOCKED: '$REL' is in a protected zone (contracts/schema/infra/governance). This is an IMPROVEMENT requiring manual approval." >&2
   exit 2
 fi
