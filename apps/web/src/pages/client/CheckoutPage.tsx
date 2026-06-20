@@ -190,6 +190,9 @@ export function CheckoutPage() {
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
+  // UX-2 optional messenger contact (Telegram/WhatsApp/Viber) so the courier can text.
+  const [messengerKind, setMessengerKind] = useState('');
+  const [messengerHandle, setMessengerHandle] = useState('');
   const [pinLocation, setPinLocation] = useState<LngLatLike | null>(null);
   const [locationId, setLocationId] = useState<string | null>(null);
   const [locationCenter, setLocationCenter] = useState<LngLatLike>([19.456, 41.324]); // Durrës default
@@ -348,6 +351,9 @@ export function CheckoutPage() {
           customer: {
             phone: normalizeAlbanianPhone(phone),
             name: customerName || undefined,
+            ...(messengerKind && messengerHandle.trim()
+              ? { messenger_kind: messengerKind, messenger_handle: messengerHandle.trim() }
+              : {}),
           },
           // Pickup orders carry no delivery pin/address (no delivery fee).
           ...(deliveryType === 'pickup' ? {} : {
@@ -520,6 +526,22 @@ export function CheckoutPage() {
                 <i className="ti ti-phone absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
                 <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} onBlur={() => setPhone(p => normalizeAlbanianPhone(p))} placeholder="+355 6X XXX XXXX" title="+355 followed by 7-14 digits" type="tel" inputMode="tel" autoComplete="tel" data-testid="checkout-phone" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
                 {phoneError && <p role="alert" className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{phoneError}</p>}
+              </div>
+            </div>
+            {/* UX-2: optional messenger so the courier can text instead of call */}
+            <div>
+              <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.messenger', 'Messenger (optional)')}</label>
+              <div className="flex gap-2">
+                <select value={messengerKind} onChange={e => setMessengerKind(e.target.value)} data-testid="checkout-messenger-kind"
+                  className="h-[48px] px-2 outline-none text-[14px] border rounded-[8px]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                  <option value="">{t('checkout.messenger_none', '—')}</option>
+                  <option value="telegram">Telegram</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="viber">Viber</option>
+                </select>
+                <input value={messengerHandle} onChange={e => setMessengerHandle(e.target.value)} disabled={!messengerKind}
+                  placeholder={messengerKind === 'telegram' ? '@username' : '+355 6X XXX XXXX'} data-testid="checkout-messenger-handle"
+                  className="flex-1 h-[48px] px-3 outline-none text-[14px] border rounded-[8px] disabled:opacity-50" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
               </div>
             </div>
           </div>

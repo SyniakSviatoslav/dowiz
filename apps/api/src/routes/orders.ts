@@ -543,11 +543,14 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       let resolvedCustomerId = null;
       if (cust && cust.phone) {
         const custRes = await client.query(
-          `INSERT INTO customers (location_id, phone, name)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (location_id, phone) DO UPDATE SET name = COALESCE(EXCLUDED.name, customers.name)
+          `INSERT INTO customers (location_id, phone, name, messenger_kind, messenger_handle)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (location_id, phone) DO UPDATE SET
+             name = COALESCE(EXCLUDED.name, customers.name),
+             messenger_kind = COALESCE(EXCLUDED.messenger_kind, customers.messenger_kind),
+             messenger_handle = COALESCE(EXCLUDED.messenger_handle, customers.messenger_handle)
            RETURNING id`,
-          [locationId, cust.phone, cust.name || null]
+          [locationId, cust.phone, cust.name || null, (cust as any).messenger_kind || null, (cust as any).messenger_handle || null]
         );
         resolvedCustomerId = custRes.rows[0].id;
       } else if (request.user?.role === 'customer') {
@@ -568,9 +571,10 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           menu_version, client_menu_version, request_hash, timeout_at,
           delivery_instructions,
           metadata,
-          preflight
+          preflight,
+          customer_messenger_kind, customer_messenger_handle
          )
-         VALUES ($1, $2, $20, 'PENDING', $3, $4, $5, $6, $7, $8, $9, $10, 'cash', $11, $12, $13, $14, $15, $16, $17, $18, $19)
+         VALUES ($1, $2, $20, 'PENDING', $3, $4, $5, $6, $7, $8, $9, $10, 'cash', $11, $12, $13, $14, $15, $16, $17, $18, $19, $21, $22)
          RETURNING id, status, subtotal, total, created_at::text, timeout_at::text`,
         [
           locationId, resolvedCustomerId, deliveryAddressText, pin?.lat ?? null, pin?.lng ?? null,
@@ -581,6 +585,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           JSON.stringify({ otp_verified: otpServerVerified, client_ip_hash: clientIpHash }),
           preflightMeta,
           input.type,
+          (cust as any)?.messenger_kind || null, (cust as any)?.messenger_handle || null,
         ]
       );
       const order = orderRes.rows[0];

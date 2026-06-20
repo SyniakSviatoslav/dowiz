@@ -50,9 +50,10 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
       );
 
       let courierLat = null, courierLng = null, courierName = null, courierPhone = null;
+      let courierMsgKind: string | null = null, courierMsgHandle: string | null = null;
       if (row.courier_id) {
         const courierRes = await db.query(`
-          SELECT cp.lat, cp.lng, c.full_name_encrypted, c.phone_encrypted
+          SELECT cp.lat, cp.lng, c.full_name_encrypted, c.phone_encrypted, c.messenger_kind, c.messenger_handle
           FROM courier_positions cp
           JOIN couriers c ON c.id = cp.courier_id
           WHERE cp.courier_id = $1
@@ -66,8 +67,13 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
           courierName = enc ? String(enc).charAt(0) + '***' : null;
           const phoneEnc = courierRes.rows[0].phone_encrypted;
           courierPhone = phoneEnc ? '+*** *** ' + String(phoneEnc).substring(String(phoneEnc).length - 4) : null;
+          courierMsgKind = courierRes.rows[0].messenger_kind ?? null;
+          courierMsgHandle = courierRes.rows[0].messenger_handle ?? null;
         }
       }
+      // UX-2: expose the courier's messenger only within an active order (parity
+      // with phone; hidden once the order is terminal).
+      const courierActive = !['DELIVERED', 'REJECTED', 'CANCELLED'].includes(row.status);
 
       let etaMinutes = null;
       if (row.assignment_status === 'picked_up' && courierLat != null && courierLng != null && row.delivery_lat != null && row.delivery_lng != null) {
@@ -130,6 +136,9 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
         etaMinutes,
         courierName: row.courier_id ? courierName : null,
         courierPhoneMasked: row.courier_id ? courierPhone : null,
+        courierMessenger: row.courier_id && courierActive && courierMsgKind && courierMsgHandle
+          ? { kind: courierMsgKind, handle: courierMsgHandle }
+          : null,
         courierPosition: courierLat != null && courierLng != null ? { lat: Number(courierLat), lng: Number(courierLng) } : null,
         deliveryLat: row.delivery_lat != null ? Number(row.delivery_lat) : null,
         deliveryLng: row.delivery_lng != null ? Number(row.delivery_lng) : null,
