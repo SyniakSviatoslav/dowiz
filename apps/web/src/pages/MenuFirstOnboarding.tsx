@@ -220,12 +220,7 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
         )}
 
         {/* ── PARSING ── */}
-        {phase === 'parsing' && (
-          <div style={S.card} className="text-center py-12 space-y-3">
-            <i className="ti ti-loader-2 text-3xl animate-spin" style={{ color: 'var(--brand-primary)' }} />
-            <p style={S.muted}>{t('start.reading', 'Reading your menu…')}</p>
-          </div>
-        )}
+        {phase === 'parsing' && <ParsingState />}
 
         {/* ── REVIEW (after parse) or BLANK (manual) ── */}
         {(phase === 'review' || phase === 'blank' || phase === 'submitting') && (
@@ -296,6 +291,62 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
     </div>
   );
 }
+
+// Parsing state — "reading your menu" as a moment, not a dead spinner. An
+// on-brand document with a sweeping scan-line + cycling reassurance copy.
+// Reduced-motion → a still document and a single stable line. Default theme.
+function ParsingState() {
+  const { t } = useI18n();
+  return (
+    <div className="dz-parse" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)', borderRadius: 'var(--brand-radius)' }} data-testid="menu-parsing">
+      <style>{PARSE_CSS}</style>
+      <div className="dz-parse-stage" aria-hidden="true">
+        <div className="dz-parse-doc">
+          {['70%', '90%', '52%', '82%', '40%'].map((w, i) => (
+            <span key={i} className="dz-parse-row" style={{ width: w }} />
+          ))}
+          <div className="dz-parse-scan" />
+        </div>
+      </div>
+      <div className="dz-parse-copy" aria-hidden="true">
+        <span className="dz-parse-line">{t('start.reading', 'Reading your menu…')}</span>
+        <span className="dz-parse-line l2">{t('start.reading_dishes', 'Finding your dishes…')}</span>
+        <span className="dz-parse-line l3">{t('start.reading_store', 'Setting up your storefront…')}</span>
+      </div>
+      <span className="sr-only" role="status">{t('start.reading', 'Reading your menu…')}</span>
+    </div>
+  );
+}
+
+const PARSE_CSS = `
+.dz-parse{padding:34px 20px;display:flex;flex-direction:column;align-items:center;gap:20px}
+.dz-parse-stage{position:relative}
+.dz-parse-doc{position:relative;width:124px;height:148px;border-radius:12px;overflow:hidden;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--brand-primary) 8%, var(--brand-surface-raised)), var(--brand-surface-raised));
+  border:1px solid var(--brand-border);display:flex;flex-direction:column;gap:9px;padding:16px 14px;
+  box-shadow:0 12px 32px color-mix(in srgb, var(--brand-primary) 13%, transparent)}
+.dz-parse-row{height:7px;border-radius:4px;background:color-mix(in srgb, var(--brand-text) 16%, transparent)}
+.dz-parse-scan{position:absolute;left:0;right:0;height:34px;top:-34px;
+  background:linear-gradient(180deg, transparent, color-mix(in srgb, var(--brand-primary) 40%, transparent), transparent);
+  box-shadow:0 0 16px color-mix(in srgb, var(--brand-primary) 55%, transparent)}
+.dz-parse-copy{position:relative;height:22px;min-width:230px;text-align:center}
+.dz-parse-line{position:absolute;left:0;right:0;font-size:14px;font-weight:600;color:var(--brand-text);opacity:0}
+@media (prefers-reduced-motion: no-preference){
+  .dz-parse-scan{animation:dzScan 2.1s ease-in-out infinite}
+  .dz-parse-row{animation:dzRowPulse 2.1s ease-in-out infinite}
+  .dz-parse-line{animation:dzCycle 6s ease-in-out infinite}
+  .dz-parse-line.l2{animation-delay:2s}
+  .dz-parse-line.l3{animation-delay:4s}
+}
+@media (prefers-reduced-motion: reduce){
+  .dz-parse-copy{height:auto}
+  .dz-parse-line{opacity:1;position:static}
+  .dz-parse-line.l2,.dz-parse-line.l3{display:none}
+}
+@keyframes dzScan{0%{top:-34px}55%{top:148px}100%{top:148px}}
+@keyframes dzRowPulse{0%,100%{opacity:.5}50%{opacity:.95}}
+@keyframes dzCycle{0%{opacity:0;transform:translateY(6px)}8%{opacity:1;transform:none}28%{opacity:1;transform:none}36%{opacity:0;transform:translateY(-6px)}100%{opacity:0}}
+`;
 
 // Public front door (unauthenticated): anonymous parse → claim with Telegram.
 export function StartPage() {
