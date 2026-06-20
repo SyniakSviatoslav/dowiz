@@ -21,3 +21,6 @@ eval-layer/deepeval-result.json
 # graphify cache
 graphify-out/
 # claude installed skills.claude/skills/
+# agentic-system local runtime state (not committed)
+.claude/state/
+.claude/logs/
