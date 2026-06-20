@@ -1,0 +1,23 @@
+id: design-convergence
+version: 1.0
+status: CERTIFIED
+intent: "загартований план серйозної зміни через Тріадну Раду (Architect/Breaker/Counsel)"
+problem_signature: "серйозна зміна перед кодом: схема/контракти/гроші/RLS/state-machine/WS/інтеграції/ШІ/незворотне"
+trigger: "/council <опис серйозної зміни>"
+role_mindset: "три голоси: істина інженерії / змагальна істина / добро-краса-мудрість"
+preconditions:
+  - "зміна класифікована як 'serious'"
+  - "є system-architect, system-breaker, counsel суб-агенти"
+execution_skills: [system-architect, system-breaker, counsel]
+goal: "план, що тримає back-of-envelope, без невирішених CRITICAL/HIGH і ETHICAL-STOP"
+verification: "0 unresolved CRITICAL/HIGH (Breaker) + 0 unresolved ETHICAL-STOP (Counsel) + поради розглянуті + інваріанти цілі"
+iron_principles: [breaker-specific-demonstrable, breaker-no-fixes, counsel-advisory-human-final, ethical-stop-is-friction, architect-no-code]
+loop_body: [FRAME, PROPOSE, ATTACK-EXAMINE, RESOLVE, RE-ATTACK-RE-EXAMINE, REPEAT]
+exit_conditions: "усі: 0 CRITICAL/HIGH + 0 ETHICAL-STOP без рішення + back-of-envelope сходиться + артефакти готові"
+gates: [STOP-DESIGN-A, STOP-ETHICS, STOP-DESIGN-B]
+proof_artifacts: [proposal.md, breaker-findings.md, counsel-opinion.md, resolution.md, ethical-decisions.md, ADR]
+out_of_scope: [продакшн-код, фікси-від-ламача, контроль-від-Counsel]
+escalation: "ETHICAL-STOP → записане людське рішення; defer → MISSING"
+skills_required: [agent-architect, agent-breaker, agent-counsel, openrouter-cross-opinion]
+memory_file: loops/memory/design-convergence.md
+verification_report: loops/reports/design-convergence-1.0.md

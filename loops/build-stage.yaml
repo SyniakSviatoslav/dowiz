@@ -1,0 +1,21 @@
+id: build-stage
+version: 0.1
+status: DRAFT
+intent: "виконати один етап роадмапу рівно за скоупом до його ✅ GATE-чекпойнта"
+problem_signature: "треба реалізувати наступний етап (Stage N) до його чекпойнта"
+trigger: "/build-stage <N>"
+role_mindset: "білд-інженер: рівно скоуп етапу, нічого понад; чекпойнт = DoD етапу"
+preconditions: ["етап має build-prompt/спек (Phase-prompts)", "deps попередніх етапів зелені", "migrate:up/verify:db/verify:rls працюють"]
+execution_skills: [stage-spec-read, implement-to-spec, migration-author, db-verify, test-run, engineer-review]
+goal: "Stage N реалізовано рівно за скоупом; усі пункти його ✅ Чекпойнта зелені"
+verification: "кожен пункт ✅ Чекпойнта зелений; migrate:up чисто; verify:db/verify:rls зелені; крос-tenant=0 де нові таблиці; тести зелені; нуль drift поза скоупом"
+iron_principles: [scope-discipline, schema-rich-runtime-minimal, forward-only-migrations, rls-force, integer-money, checkpoint-is-DoD, no-feature-creep, no-fake-green]
+loop_body: [SENSE, DIAGNOSE, ACT, VERIFY, REPEAT]
+exit_conditions: "ВСІ: чекпойнт етапу повністю зелений; міграції чисті+RLS; тести зелені; крос-tenant=0; нуль скоуп-drift; deps задоволені"
+gates: [STOP-SCOPE, STOP-CHECKPOINT]
+proof_artifacts: [checkpoint-evidence, migrate-verify-output, test-run, scope-diff]
+out_of_scope: [вмикати-відкладене-post-MVP, тягнути-наступний-етап, рантайм-понад-скоуп]
+escalation: "НОВА серйозна архітектурна потреба в межах етапу → /council; контрактна прогалина → MISSING"
+skills_required: [repo-access, db-access, test-runner]
+memory_file: loops/memory/build-stage.md
+verification_report: loops/reports/build-stage-0.1.md

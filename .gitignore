@@ -30,3 +30,6 @@ graphify-out/
 # claude installed skills.claude/skills/
 # local-only secrets (never commit)
 .secrets.local
+# agentic-system local runtime state (not committed)
+.claude/state/
+.claude/logs/

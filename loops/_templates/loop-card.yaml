@@ -1,0 +1,22 @@
+# Шаблон картки петлі. Заповни ВСІ поля (не лишай плейсхолдерів) — інакше M1 FAIL.
+id: <kebab-id>
+version: 0.1
+status: DRAFT            # DRAFT → (M1–M11) → CERTIFIED
+intent: "<що петля досягає>"
+problem_signature: "<сигнатура проблеми, за якою Orchestrator її матчить>"
+trigger: "</command або custom orchestration skill>"
+role_mindset: "<персона виконавця>"
+preconditions: ["<STOP, якщо не виконано>"]
+execution_skills: [<лише battle-tested; M6>]
+goal: "<вимірювана ціль>"
+verification: "<машинний критерій: матриця/assertion/approve/скор; M3>"
+iron_principles: [no-fake-green, <…>]      # M5
+loop_body: [SENSE, DIAGNOSE, ACT, VERIFY, REPEAT]
+exit_conditions: "<конкретні, ALL-must-hold; M4>"
+gates: [<людські чекпойнти у точках 'хибний поворот = шкереберть'; M7>]
+proof_artifacts: [<докази кожного прогону>]
+out_of_scope: [<чого не чіпати; M8>]
+escalation: "<як підняти MISSING; M8>"
+skills_required: [<здатності/інструменти виконавця>]
+memory_file: loops/memory/<id>.md          # M10
+verification_report: loops/reports/<id>-<version>.md

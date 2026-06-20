@@ -1,0 +1,21 @@
+id: performance
+version: 0.1
+status: DRAFT
+intent: "звести метрику швидкодії в межі бюджету БЕЗ функціональної регресії"
+problem_signature: "латентність/час-відповіді/навантаження поза бюджетом; деградація швидкодії"
+trigger: "/perf <метрика/симптом>"
+role_mindset: "перф-інженер: виміряй до оптимізації; проти бюджету, не на відчуття"
+preconditions: ["визначений бюджет (load-time / p95 / час-запиту)", "відтворюваний спосіб виміру"]
+execution_skills: [profile-measure, bottleneck-bisect, targeted-optimization, regression-perf-test]
+goal: "виміряна метрика ≤ бюджет (відтворювано); нуль функціональної регресії"
+verification: "метрика ≤ бюджет (медіана N прогонів, не разово); функціональні флоу лишаються зелені; perf-бюджет-гейт/тест додано"
+iron_principles: [measure-before-optimize, budget-defined-first, no-correctness-regression, no-premature-optimization, no-fake-green]
+loop_body: [SENSE, DIAGNOSE, ACT, VERIFY, REPEAT]
+exit_conditions: "ВСІ: виміряно проти бюджету (відтворювано); у межах бюджету; функціональні флоу зелені; perf-бюджет/тест додано як охорону; 0 flaky"
+gates: [STOP-BASELINE, STOP-BUDGET]
+proof_artifacts: [baseline-measurement, bottleneck-evidence, after-measurement, perf-test-budget-gate]
+out_of_scope: [оптимізувати-без-виміру, зміна-поведінки/контрактів-заради-швидкості-без-Ради]
+escalation: "потрібна архітектурна зміна заради перф → серйозна зміна → /council"
+skills_required: [repo-access, profiler, test-runner]
+memory_file: loops/memory/performance.md
+verification_report: loops/reports/performance-0.1.md
