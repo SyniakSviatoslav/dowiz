@@ -564,6 +564,7 @@ export function CheckoutPage() {
                   <option value="viber">Viber</option>
                 </select>
                 <input value={messengerHandle} onChange={e => setMessengerHandle(e.target.value)} disabled={!messengerKind}
+                  required={!!messengerKind}
                   placeholder={messengerKind === 'telegram' ? '@username' : '+355 6X XXX XXXX'} data-testid="checkout-messenger-handle"
                   className="flex-1 h-[48px] px-3 outline-none text-[14px] border rounded-[8px] disabled:opacity-50" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
               </div>
