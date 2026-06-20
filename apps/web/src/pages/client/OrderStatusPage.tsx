@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay, useDeliveryEta } from '@deliveryos/ui';
 import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
+import { messengerLink } from '../../lib/messenger.js';
 import { z } from 'zod';
 import { calcETA } from '@deliveryos/shared-types';
 
@@ -452,6 +453,19 @@ export function OrderStatusPage() {
               >
                 <span>📞</span>
                 <span>{t('client.call_courier', 'Call courier')}</span>
+              </a>
+            )}
+            {/* UX-2: message courier in their app (only within the active order) */}
+            {order?.courierMessenger && messengerLink(order.courierMessenger.kind, order.courierMessenger.handle) && (
+              <a
+                href={messengerLink(order.courierMessenger.kind, order.courierMessenger.handle)!}
+                target="_blank" rel="noopener noreferrer"
+                title={t('client.message_courier', 'Message your courier')}
+                data-testid="message-courier-btn"
+                className="flex items-center justify-center gap-2 w-full py-3 mt-2 rounded-[var(--brand-radius)] bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] text-[var(--brand-text)] font-semibold text-sm"
+              >
+                <i className="ti ti-message-circle" aria-hidden="true" />
+                <span>{t('client.message_courier', 'Message courier')}</span>
               </a>
             )}
           </div>
