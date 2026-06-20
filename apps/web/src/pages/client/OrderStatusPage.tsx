@@ -57,6 +57,16 @@ export function OrderStatusPage() {
   const [messages, setMessages] = useState<any[]>([]);
   const [ratingComment, setRatingComment] = useState('');
   const [ratingBusy, setRatingBusy] = useState(false);
+  // UX-1: Google review invite. Place ID drives the writereview deep link; shown to
+  // ALL delivered customers (no review-gating), no incentive, no pre-filled rating.
+  const [googlePlaceId, setGooglePlaceId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!slug) return;
+    fetch(`/public/locations/${slug}/info`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: any) => { if (d?.googlePlaceId) setGooglePlaceId(d.googlePlaceId); })
+      .catch(() => {});
+  }, [slug]);
 
   const submitRating = useCallback(async (stars: number) => {
     if (ratingBusy) return;
@@ -491,6 +501,16 @@ export function OrderStatusPage() {
                 <textarea value={ratingComment} onChange={e => setRatingComment(e.target.value)} maxLength={1000} rows={2}
                   placeholder={t('client.feedback_placeholder', 'Add a comment (optional)')}
                   className="w-full text-sm rounded-[var(--brand-radius)] p-2 bg-[var(--brand-surface)] border border-[var(--brand-border)]" />
+              </div>
+            )}
+            {/* Google review invite — shown to everyone (anti-gating), no incentive, no pre-fill. */}
+            {googlePlaceId && (
+              <div className="mt-4 pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+                <a href={`https://search.google.com/local/writereview?placeid=${encodeURIComponent(googlePlaceId)}`}
+                  target="_blank" rel="noopener noreferrer" data-testid="google-review-link"
+                  className="inline-flex items-center gap-2 text-sm font-medium" style={{ color: 'var(--brand-primary)' }}>
+                  <i className="ti ti-brand-google" aria-hidden="true" /> {t('client.leave_google_review', 'Leave a review on Google')}
+                </a>
               </div>
             )}
           </div>

@@ -35,6 +35,11 @@ const brandSchema = z.object({
   googleRating: z.number().min(0).max(5).optional().nullable(),
   googleReviewCount: z.number().int().nonnegative().optional().nullable(),
   googleMapsUrl: z.string().max(500).optional().nullable(),
+  // UX-1 storefront links. Place ID drives the post-delivery Google review link;
+  // socials render in the client footer. Validated (allowlisted domains / id charset).
+  googlePlaceId: z.string().max(128).regex(/^[A-Za-z0-9_-]+$/, 'Invalid Place ID').optional().nullable().or(z.literal('')),
+  socialInstagram: z.string().max(500).refine((v) => !v || /^https:\/\/(www\.)?(instagram\.com|instagr\.am)\//i.test(v), 'Must be an instagram.com link').optional().nullable(),
+  socialFacebook: z.string().max(500).refine((v) => !v || /^https:\/\/(www\.)?(facebook\.com|fb\.com|m\.facebook\.com)\//i.test(v), 'Must be a facebook.com link').optional().nullable(),
 }).strict();
 
 // pg returns NUMERIC columns as strings; coerce all numeric fields so the schema
@@ -446,7 +451,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const res = await withTenant(db, ctx.userId, async (client) =>
       client.query(
         `SELECT primary_color, bg_color, text_color, logo_url, frame_ancestors,
-                google_rating, google_review_count, google_maps_url
+                google_rating, google_review_count, google_maps_url,
+                google_place_id, social_instagram, social_facebook
          FROM location_themes WHERE location_id = $1`,
         [ctx.locId]
       )
@@ -463,6 +469,9 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       googleRating: t.google_rating != null ? Number(t.google_rating) : null,
       googleReviewCount: t.google_review_count != null ? Number(t.google_review_count) : null,
       googleMapsUrl: t.google_maps_url ?? null,
+      googlePlaceId: t.google_place_id ?? null,
+      socialInstagram: t.social_instagram ?? null,
+      socialFacebook: t.social_facebook ?? null,
     });
   });
 
@@ -474,8 +483,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const logoUrl = parsed.logoUrl ? validateImageKey(parsed.logoUrl) : null;
     const res = await withTenant(db, ctx.userId, async (client) => {
       await client.query(
-        `INSERT INTO location_themes (location_id, primary_color, bg_color, text_color, logo_url, google_rating, google_review_count, google_maps_url)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        `INSERT INTO location_themes (location_id, primary_color, bg_color, text_color, logo_url, google_rating, google_review_count, google_maps_url, google_place_id, social_instagram, social_facebook)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          ON CONFLICT (location_id) DO UPDATE SET
            primary_color = COALESCE($2, location_themes.primary_color),
            bg_color = COALESCE($3, location_themes.bg_color),
@@ -483,12 +492,16 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
            logo_url = COALESCE($5, location_themes.logo_url),
            google_rating = COALESCE($6, location_themes.google_rating),
            google_review_count = COALESCE($7, location_themes.google_review_count),
-           google_maps_url = COALESCE($8, location_themes.google_maps_url)`,
+           google_maps_url = COALESCE($8, location_themes.google_maps_url),
+           google_place_id = COALESCE($9, location_themes.google_place_id),
+           social_instagram = COALESCE($10, location_themes.social_instagram),
+           social_facebook = COALESCE($11, location_themes.social_facebook)`,
         [ctx.locId, parsed.primaryColor || null, parsed.bgColor || null, parsed.textColor || null, logoUrl,
-         parsed.googleRating ?? null, parsed.googleReviewCount ?? null, parsed.googleMapsUrl ?? null]
+         parsed.googleRating ?? null, parsed.googleReviewCount ?? null, parsed.googleMapsUrl ?? null,
+         parsed.googlePlaceId || null, parsed.socialInstagram || null, parsed.socialFacebook || null]
       );
       return client.query(
-        `SELECT primary_color, bg_color, text_color, logo_url, google_rating, google_review_count, google_maps_url
+        `SELECT primary_color, bg_color, text_color, logo_url, google_rating, google_review_count, google_maps_url, google_place_id, social_instagram, social_facebook
          FROM location_themes WHERE location_id = $1`,
         [ctx.locId]
       );
@@ -499,6 +512,9 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       googleRating: t.google_rating != null ? Number(t.google_rating) : null,
       googleReviewCount: t.google_review_count != null ? Number(t.google_review_count) : null,
       googleMapsUrl: t.google_maps_url ?? null,
+      googlePlaceId: t.google_place_id ?? null,
+      socialInstagram: t.social_instagram ?? null,
+      socialFacebook: t.social_facebook ?? null,
     });
   });
 
