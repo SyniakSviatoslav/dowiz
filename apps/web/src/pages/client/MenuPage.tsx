@@ -1008,17 +1008,17 @@ export function MenuPage() {
         <footer className="mt-10 px-4 py-8 border-t" style={{ borderColor: 'var(--brand-border)' }}>
           <div className="flex items-center justify-center gap-6">
             {storeLinks.mapsUrl && (
-              <a href={storeLinks.mapsUrl} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')} className="text-2xl" style={{ color: 'var(--brand-text-muted)' }}>
+              <a href={storeLinks.mapsUrl} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')} className="text-2xl inline-flex items-center justify-center p-2.5" style={{ color: 'var(--brand-text-muted)' }}>
                 <i className="ti ti-map-pin" />
               </a>
             )}
             {storeLinks.instagram && (
-              <a href={storeLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-2xl" style={{ color: 'var(--brand-text-muted)' }}>
+              <a href={storeLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-2xl inline-flex items-center justify-center p-2.5" style={{ color: 'var(--brand-text-muted)' }}>
                 <i className="ti ti-brand-instagram" />
               </a>
             )}
             {storeLinks.facebook && (
-              <a href={storeLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-2xl" style={{ color: 'var(--brand-text-muted)' }}>
+              <a href={storeLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-2xl inline-flex items-center justify-center p-2.5" style={{ color: 'var(--brand-text-muted)' }}>
                 <i className="ti ti-brand-facebook" />
               </a>
             )}

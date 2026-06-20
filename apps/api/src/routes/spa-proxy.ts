@@ -152,6 +152,13 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
    fastify.get('/images/*', async (request, reply) => {
      const raw = (request.params as any)['*'] as string;
      const key = raw.startsWith('/') ? raw.slice(1) : raw;
+    // SECURITY: object keys are flat (uuid/hash + extension) and never contain
+    // '..'. Fastify decodes '%2f' in the wildcard, so reject traversal here —
+    // before touching storage — or an encoded '..%2f..%2f' escapes the prefix
+    // and reads arbitrary bucket/filesystem objects.
+    if (!key || key.includes('..') || key.includes('\0') || key.includes('\\')) {
+      return reply.status(400).send({ error: 'Invalid image key' });
+    }
     try {
       const buf = await storage.get(key);
       if (!buf) return reply.status(404).send({ error: 'Image not found' });
@@ -232,8 +239,9 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     try {
       const sharp = (await import('sharp')).default;
       processed = await sharp(buffer).rotate().resize({ width: 1024, height: 1024, fit: 'inside' }).webp({ quality: 78 }).toBuffer();
-    } catch (sharpErr: any) {
-      return reply.status(400).send({ error: 'Invalid image file', detail: sharpErr.message });
+    } catch {
+      // Don't leak sharp/libvips internals to the client.
+      return reply.status(400).send({ error: 'Invalid image file' });
     }
     const crypto = await import('node:crypto');
     const key = `entry-photos/${crypto.randomUUID()}.webp`;
