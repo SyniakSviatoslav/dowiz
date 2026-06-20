@@ -1,8 +1,34 @@
 # menu-ocr Specification
 
 ## Purpose
-TBD - created by archiving change document-paddle-ocr-engine. Update Purpose after archive.
+Define the menu-import parsing pipeline: how raw menu images/PDFs become a
+canonical, owner-reviewable draft. The pipeline is **selectable and zero-cost by
+default** — OCR engine (tesseract/paddle) and structuring backend (heuristic/LLM)
+are swappable by configuration, and the whole path runs with **no paid API and
+no keys configured**. A real LLM, when wired, is an optional accuracy upgrade.
+
 ## Requirements
+### Requirement: Menu structuring works with no LLM and no paid API
+
+The structuring step (raw OCR/PDF text → canonical draft) SHALL produce a usable
+draft when no LLM provider is configured, using an in-process heuristic
+structurer that makes no network calls and requires no API key. A configured LLM
+(self-hosted `ollama`, or BYO-key `groq`/`openai`) MAY be used as an optional
+upgrade. No menu-parsing path SHALL depend on a paid vision API.
+
+#### Scenario: Heuristic default when no LLM is configured
+- **WHEN** menu text is structured and none of `LLM_ADAPTER`, `LLM_PROVIDER`,
+  `LLM_ENDPOINT`, `GROQ_API_KEY`, or `OPENAI_API_KEY` is set
+- **THEN** the in-process heuristic structurer produces the draft with no network
+  call, and the provider used is recorded in result provenance
+
+#### Scenario: Optional LLM upgrade
+- **WHEN** an LLM provider is explicitly configured (e.g. `LLM_PROVIDER=ollama`
+  or `GROQ_API_KEY` is present)
+- **THEN** that provider performs structuring for the import
+- **AND** its identity is recorded in result provenance for audit
+
+
 ### Requirement: Selectable menu-import OCR engine with a safe default
 
 The menu-import OCR step behind `MenuParserProvider` SHALL support more than one
