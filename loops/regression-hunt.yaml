@@ -1,0 +1,21 @@
+id: regression-hunt
+version: 0.1
+status: DRAFT
+intent: "знайти комміт-винуватець (раніше працювало) → мінімальний фікс/ревет → регрес-тест"
+problem_signature: "раніше працювало, зламалось після зміни; є приблизний 'останній добрий' стан"
+trigger: "/regression-hunt <що зламалось>"
+role_mindset: "мисливець за регресією: бісекція до одного комміту, тоді мінімальна дія"
+preconditions: ["детермінований репро регресії", "git-історія доступна", "відомий приблизно good-стан"]
+execution_skills: [repro-harness, git-bisect, diff-analysis, minimal-fix-or-revert, regression-test-author]
+goal: "знайдений комміт-винуватець + мінімальний фікс/чистий ревет + тест, що ловить регресію"
+verification: "bisect зводить до 1 комміту; репро детермінований; фікс зелений; регрес-тест RED на винуватці / GREEN після; 0 flaky"
+iron_principles: [repro-before-bisect, bisect-to-single-commit, prefer-minimal-fix-or-clean-revert, add-regression-test, no-fake-green]
+loop_body: [SENSE, DIAGNOSE, ACT, VERIFY, REPEAT]
+exit_conditions: "ВСІ: винуватець ізольовано бісекцією; детермінований репро; фікс або обґрунтований ревет; регрес-тест доданий; зачеплений флоу зелений; 0 flaky"
+gates: [STOP-CULPRIT, STOP-FIX]
+proof_artifacts: [bisect-log, culprit-diff, repro, regression-test, green-run]
+out_of_scope: [рефактор-заодно, ревет-що-ламає-причину-зміни]
+escalation: "винуватець — навмисна зміна з причиною → не сліпий ревет; вирішення → /council якщо серйозне"
+skills_required: [repo-access, git, test-runner]
+memory_file: loops/memory/regression-hunt.md
+verification_report: loops/reports/regression-hunt-0.1.md
