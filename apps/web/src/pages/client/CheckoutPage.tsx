@@ -282,6 +282,10 @@ export function CheckoutPage() {
         if (d.instructionOption) setInstructionOption(d.instructionOption);
         if (d.instructionCustom) setInstructionCustom(d.instructionCustom);
         if (d.cashAmount) setCashAmount(d.cashAmount);
+        // UX-3/UX-2 follow-up: remember the entrance photo + messenger per device.
+        if (d.entryPhotoKey) { setEntryPhotoKey(d.entryPhotoKey); if (d.entryPhotoPreview) setEntryPhotoPreview(d.entryPhotoPreview); }
+        if (d.messengerKind) setMessengerKind(d.messengerKind);
+        if (d.messengerHandle) setMessengerHandle(d.messengerHandle);
       }
     } catch {}
   }, [slug]);
@@ -291,9 +295,10 @@ export function CheckoutPage() {
     try {
       localStorage.setItem(`dos_checkout_draft_${slug}`, JSON.stringify({
         phone, customerName, deliveryType, instructionOption, instructionCustom, cashAmount,
+        entryPhotoKey, entryPhotoPreview, messengerKind, messengerHandle,
       }));
     } catch {}
-  }, [slug, phone, customerName, deliveryType, instructionOption, instructionCustom, cashAmount]);
+  }, [slug, phone, customerName, deliveryType, instructionOption, instructionCustom, cashAmount, entryPhotoKey, entryPhotoPreview, messengerKind, messengerHandle]);
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const deliveryFee = deliveryType === 'delivery' ? 200 : 0;
