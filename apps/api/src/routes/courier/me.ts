@@ -181,28 +181,37 @@ export default (async function courierMeRoutes(fastify: any, opts: any) {
     const locRes = await db.query(`SELECT currency_code FROM locations WHERE id = $1`, [locationId]);
     const locationCurrency = locRes.rows[0]?.currency_code || 'ALL';
 
+    // UX-4 follow-up: surface tips alongside cash earnings (display only; payout
+    // math is unchanged). Join orders for tip_amount; columns qualified since
+    // orders also has status/location_id.
     const today = await db.query(`
-      SELECT COALESCE(SUM(cash_amount), 0) AS amount, COUNT(*)::int AS deliveries
-      FROM courier_assignments
-      WHERE courier_id = $1 AND status = 'delivered'
-        AND delivered_at >= CURRENT_DATE
-        AND location_id = $2
+      SELECT COALESCE(SUM(ca.cash_amount), 0) AS amount, COUNT(*)::int AS deliveries,
+             COALESCE(SUM(o.tip_amount), 0) AS tips
+      FROM courier_assignments ca
+      LEFT JOIN orders o ON o.id = ca.order_id
+      WHERE ca.courier_id = $1 AND ca.status = 'delivered'
+        AND ca.delivered_at >= CURRENT_DATE
+        AND ca.location_id = $2
     `, [courierId, locationId]);
 
     const week = await db.query(`
-      SELECT COALESCE(SUM(cash_amount), 0) AS amount, COUNT(*)::int AS deliveries
-      FROM courier_assignments
-      WHERE courier_id = $1 AND status = 'delivered'
-        AND delivered_at >= date_trunc('week', CURRENT_DATE)
-        AND location_id = $2
+      SELECT COALESCE(SUM(ca.cash_amount), 0) AS amount, COUNT(*)::int AS deliveries,
+             COALESCE(SUM(o.tip_amount), 0) AS tips
+      FROM courier_assignments ca
+      LEFT JOIN orders o ON o.id = ca.order_id
+      WHERE ca.courier_id = $1 AND ca.status = 'delivered'
+        AND ca.delivered_at >= date_trunc('week', CURRENT_DATE)
+        AND ca.location_id = $2
     `, [courierId, locationId]);
 
     const month = await db.query(`
-      SELECT COALESCE(SUM(cash_amount), 0) AS amount, COUNT(*)::int AS deliveries
-      FROM courier_assignments
-      WHERE courier_id = $1 AND status = 'delivered'
-        AND delivered_at >= date_trunc('month', CURRENT_DATE)
-        AND location_id = $2
+      SELECT COALESCE(SUM(ca.cash_amount), 0) AS amount, COUNT(*)::int AS deliveries,
+             COALESCE(SUM(o.tip_amount), 0) AS tips
+      FROM courier_assignments ca
+      LEFT JOIN orders o ON o.id = ca.order_id
+      WHERE ca.courier_id = $1 AND ca.status = 'delivered'
+        AND ca.delivered_at >= date_trunc('month', CURRENT_DATE)
+        AND ca.location_id = $2
     `, [courierId, locationId]);
 
     const payouts = await db.query(`
@@ -217,10 +226,13 @@ export default (async function courierMeRoutes(fastify: any, opts: any) {
       summary: {
         today: parseInt(today.rows[0].amount),
         today_deliveries: today.rows[0].deliveries,
+        today_tips: parseInt(today.rows[0].tips),
         week: parseInt(week.rows[0].amount),
         week_deliveries: week.rows[0].deliveries,
+        week_tips: parseInt(week.rows[0].tips),
         month: parseInt(month.rows[0].amount),
         month_deliveries: month.rows[0].deliveries,
+        month_tips: parseInt(month.rows[0].tips),
         currency: locationCurrency,
       },
       payouts: payouts.rows.map((p: any) => ({
