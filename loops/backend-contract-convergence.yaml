@@ -1,0 +1,21 @@
+id: backend-contract-convergence
+version: 0.1
+status: DRAFT            # → /build-verify-loop verify
+intent: "звести сервер у повну відповідність специфікації/контракту; інваріанти дотримані"
+problem_signature: "розбіжність сервер↔контракт/специфікація; хендлер/Zod/міграція не відповідає інваріантам"
+trigger: "/converge-server [скоуп]"
+role_mindset: "контракт-інженер серверу: контракт = специфікація, сервер підлаштовується під неї"
+preconditions: ["бекенд піднімається локально", "контракт-шар (Zod) + ADR доступні", "verify:db/verify:rls/migrate:up працюють"]
+execution_skills: [contract-diff, server-test-run, db-verify, minimal-server-fix, engineer-review]
+goal: "кожен серверний контракт = специфікації; RLS FORCE/integer-гроші/idempotency/RS256 дотримані; серверні тести зелені"
+verification: "серверні тести зелені; verify:db/verify:rls/migrate:up зелені; крос-tenant SELECT=0; idempotency+state-machine guarded; diff контрактів свідомий"
+iron_principles: [contract-is-spec, forward-only-migrations, rls-force-every-tenant-table, integer-money, idempotency-in-pg, jwt-rs256, no-fake-green]
+loop_body: [SENSE, DIAGNOSE, ACT, VERIFY, REPEAT]
+exit_conditions: "ВСІ: контракт-парність доведена; verify:db/rls зелені; migrate:up чисто; крос-tenant=0; idempotency+state-machine тести зелені; 0 flaky"
+gates: [STOP-CONTRACT-MAP, STOP-MIGRATION]
+proof_artifacts: [contract-parity-table, verify-db-rls-output, migration-diff, server-test-run]
+out_of_scope: [міняти-UI-щоб-замаскувати-серверну-прогалину, редагувати-існуючі-міграції]
+escalation: "потрібна зміна контракту, що ламає клієнтів → серйозна зміна → /council перед кодом"
+skills_required: [repo-access, db-access, test-runner]
+memory_file: loops/memory/backend-contract-convergence.md
+verification_report: loops/reports/backend-contract-convergence-0.1.md
