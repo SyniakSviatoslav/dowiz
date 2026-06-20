@@ -1,0 +1,21 @@
+id: refactor-convergence
+version: 0.1
+status: DRAFT
+intent: "звести дублі/розсинхрон до єдиного джерела БЕЗ зміни поведінки; усі флоу лишаються зелені"
+problem_signature: "дубльована логіка/компонент/прямий fetch повз shared; розсинхрон стану; ціль = єдине джерело"
+trigger: "/refactor-converge [скоуп]"
+role_mindset: "рефактор-інженер: структура змінюється, поведінка — ні"
+preconditions: ["флоу мають тести (або харнес)", "shared-шар (apiClient/useWebSocket/ThemeProvider) існує", "дизайн-токени винесені"]
+execution_skills: [duplication-scan, consolidate-to-single-source, full-flow-run, engineer-review]
+goal: "дублі зведені до єдиного джерела (shared component/hook/apiClient/useWebSocket); нуль прямих fetch/WS повз shared; нуль хардкоду токенів; усі флоу зелені"
+verification: "grep-чистота (0 hex у packages/ui; 0 прямих fetch/new WebSocket повз shared; 0 локальних перерахунків ціни); ПОВНИЙ прогін флоу зелений (не лише зачеплені); 0 регресії поведінки"
+iron_principles: [behavior-preserving, full-run-after-refactor, single-source-of-truth, no-new-features-during-refactor, no-fake-green]
+loop_body: [SENSE, DIAGNOSE, ACT, VERIFY, REPEAT]
+exit_conditions: "ВСІ: дублі усунено до єдиного джерела; grep-чисто; повний набір флоу зелений; нуль зміни поведінки (ті самі виходи); 0 flaky"
+gates: [STOP-MAP, STOP-FULLRUN]
+proof_artifacts: [duplication-map, grep-clean-output, full-green-run, before-after-equivalence]
+out_of_scope: [нові-фічі, поведінкові-зміни, зміна-контрактів, покращувати-заодно]
+escalation: "рефактор оголює потребу зміни контракту/поведінки → окремо через /council"
+skills_required: [repo-access, test-runner]
+memory_file: loops/memory/refactor-convergence.md
+verification_report: loops/reports/refactor-convergence-0.1.md

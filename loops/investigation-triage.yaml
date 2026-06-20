@@ -1,0 +1,21 @@
+id: investigation-triage
+version: 0.1
+status: DRAFT
+intent: "знайти корінь невідомого баґу: стабільний репро → корінь → фікс → регрес-тест"
+problem_signature: "симптом є, корінь невідомий; відтворення нестабільне/неясне"
+trigger: "/investigate <симптом>"
+role_mindset: "діагност: спершу відтворити, тоді лікувати причину, не симптом"
+preconditions: ["є опис симптому/звіт", "доступ до логів/трейсів/репо"]
+execution_skills: [repro-harness, hypothesis-bisect, log-trace-analysis, minimal-fix, regression-test-author, engineer-review]
+goal: "детермінований репро + доведений корінь + мінімальний фікс + регрес-тест, що ловить його"
+verification: "репро 100% до фіксу; після фіксу зелено; новий регрес-тест RED на старому коді / GREEN на новому; 0 flaky"
+iron_principles: [repro-before-fix, root-not-symptom, add-regression-test, server-read-only-unless-root-is-server, no-fake-green]
+loop_body: [SENSE, DIAGNOSE, ACT, VERIFY, REPEAT]
+exit_conditions: "ВСІ: детермінований репро зафіксовано; корінь доведено доказом (не здогад); фікс мінімальний; регрес-тест RED→GREEN; 0 flaky; 0 scope-creep"
+gates: [STOP-REPRO, STOP-ROOT]
+proof_artifacts: [failing-repro-trace, hypothesis-bisect-log, root-evidence, regression-test, green-run]
+out_of_scope: [лагодити-суміжне-заодно, міняти-контракти-без-ескалації, закривати-без-регрес-тесту]
+escalation: "корінь у сервері/контракті → MISSING + окремий діалог (а серйозний фікс → /council)"
+skills_required: [repo-access, logs-access, test-runner]
+memory_file: loops/memory/investigation-triage.md
+verification_report: loops/reports/investigation-triage-0.1.md
