@@ -193,6 +193,21 @@ export function CheckoutPage() {
   // UX-2 optional messenger contact (Telegram/WhatsApp/Viber) so the courier can text.
   const [messengerKind, setMessengerKind] = useState('');
   const [messengerHandle, setMessengerHandle] = useState('');
+  // UX-3 optional entry-anchor photo (uploaded to R2 before the order exists).
+  const [entryPhotoKey, setEntryPhotoKey] = useState('');
+  const [entryPhotoPreview, setEntryPhotoPreview] = useState('');
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const uploadEntryPhoto = async (file: File) => {
+    if (!file) return;
+    setPhotoUploading(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await apiClient<any>('/public/entry-photo', { method: 'POST', body: form, timeout: 60000 });
+      setEntryPhotoKey(res.key);
+      setEntryPhotoPreview(res.url || '');
+    } catch { /* optional — leave unset on failure */ } finally { setPhotoUploading(false); }
+  };
   const [pinLocation, setPinLocation] = useState<LngLatLike | null>(null);
   const [locationId, setLocationId] = useState<string | null>(null);
   const [locationCenter, setLocationCenter] = useState<LngLatLike>([19.456, 41.324]); // Durrës default
@@ -355,6 +370,7 @@ export function CheckoutPage() {
               ? { messenger_kind: messengerKind, messenger_handle: messengerHandle.trim() }
               : {}),
           },
+          ...(entryPhotoKey ? { delivery_photo_key: entryPhotoKey } : {}),
           // Pickup orders carry no delivery pin/address (no delivery fee).
           ...(deliveryType === 'pickup' ? {} : {
             delivery: {
@@ -544,6 +560,24 @@ export function CheckoutPage() {
                   className="flex-1 h-[48px] px-3 outline-none text-[14px] border rounded-[8px] disabled:opacity-50" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
               </div>
             </div>
+            {/* UX-3: optional entrance photo (delivery only) — camera or gallery */}
+            {deliveryType !== 'pickup' && (
+              <div>
+                <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entry_photo', 'Entrance photo (optional)')}</label>
+                <div className="flex items-center gap-3">
+                  <label className="inline-flex items-center gap-2 px-4 py-2 border rounded-[8px] cursor-pointer text-sm" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                    <i className="ti ti-camera" aria-hidden="true" />
+                    {photoUploading ? t('checkout.uploading', 'Uploading…') : (entryPhotoKey ? t('checkout.change_photo', 'Change photo') : t('checkout.add_photo', 'Add photo'))}
+                    <input type="file" accept="image/*" className="hidden" data-testid="entry-photo-input" disabled={photoUploading}
+                      onChange={e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void uploadEntryPhoto(f); }} />
+                  </label>
+                  {entryPhotoPreview && (
+                    <img src={entryPhotoPreview} alt={t('checkout.entry_photo', 'Entrance photo')} data-testid="entry-photo-preview" className="h-12 w-12 object-cover rounded-[8px] border" style={{ borderColor: 'var(--brand-border)' }} />
+                  )}
+                </div>
+                <p className="text-[12px] mt-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.entry_photo_hint', 'Helps the courier find your entrance.')}</p>
+              </div>
+            )}
           </div>
         </motion.div>
         <motion.div

@@ -215,6 +215,36 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     return reply.send({ imageUrl, imageKey: key });
   });
 
+  // POST /api/public/entry-photo — anonymous entry-anchor photo upload (UX-3).
+  // Called from checkout BEFORE an order exists; returns an R2 key that the
+  // order-create then stores on the order. Public + IP-rate-limited; image-only,
+  // EXIF stripped + re-oriented, processed to webp. The key is unguessable and
+  // only revealed to the assigned courier during the active order.
+  fastify.post('/api/public/entry-photo', {
+    config: { rateLimit: { max: 8, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const data = await request.file({ limits: { fileSize: 8 * 1024 * 1024 } });
+    if (!data) return reply.status(400).send({ error: 'No file uploaded' });
+    if ((data as any).file?.truncated) return reply.status(413).send({ error: 'File exceeds maximum size' });
+    if (!String(data.mimetype || '').startsWith('image/')) return reply.status(400).send({ error: 'Must be an image' });
+    const buffer = await data.toBuffer();
+    let processed: Buffer;
+    try {
+      const sharp = (await import('sharp')).default;
+      processed = await sharp(buffer).rotate().resize({ width: 1024, height: 1024, fit: 'inside' }).webp({ quality: 78 }).toBuffer();
+    } catch (sharpErr: any) {
+      return reply.status(400).send({ error: 'Invalid image file', detail: sharpErr.message });
+    }
+    const crypto = await import('node:crypto');
+    const key = `entry-photos/${crypto.randomUUID()}.webp`;
+    try {
+      await storage.put(key, processed);
+    } catch (putErr: any) {
+      return reply.status(500).send({ error: 'Failed to store image', detail: putErr.message });
+    }
+    return reply.send({ key, url: getImageUrl(key, APP_BASE) });
+  });
+
   // GET /api/owner/analytics
   fastify.get('/api/owner/analytics', async (request, reply) => {
     const ctx = await getOwnerContext(request);
