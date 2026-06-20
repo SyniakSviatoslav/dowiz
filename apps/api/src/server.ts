@@ -5,6 +5,7 @@ import { loadEnv } from '@deliveryos/config';
 import { createOperationalPool } from '@deliveryos/db';
 import { RedisMessageBus, PgBossQueueProvider } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, ALL_QUEUES, CUSTOMER_PUSH_EVENTS, orderChannel, dashboardChannel } from './lib/registry.js';
+import { assertSchemaCurrent } from './lib/schema-guard.js';
 import Redis from 'ioredis';
 import pg from 'pg';
 import type { ZodTypeAny } from 'zod';
@@ -258,6 +259,9 @@ async function main() {
   // Operational pool may use transaction pooler which doesn't support LISTEN/NOTIFY
   const { createSessionPool } = await import('@deliveryos/db');
   const messageBusPool = createSessionPool();
+  // Fail fast if this build's schema head is missing from the DB (i.e. migrations
+  // did not run before boot). No-op in dev/unbundled. See lib/schema-guard.ts.
+  await assertSchemaCurrent(messageBusPool);
   const messageBus = new RedisMessageBus(messageBusPool);
   await messageBus.connect();
   console.log('[API] MessageBus connected with session pool for LISTEN/NOTIFY support');
