@@ -27,6 +27,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       cashCollected: row.cash_collected ?? false,
       cashAmount: cashAmt,
       total: parseInt(row.total) || 0,
+      tipAmount: parseInt(row.tip_amount) || 0, // UX-4: informative; courier collects in cash
       eta: '~15 min',
       restaurant: {
         name: row.restaurant_name || '',
@@ -58,7 +59,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
            l.lat as restaurant_lat, l.lng as restaurant_lng,
            c.phone as customer_phone,
            c.messenger_kind as customer_messenger_kind, c.messenger_handle as customer_messenger_handle,
-           o.delivery_photo_key
+           o.delivery_photo_key, o.tip_amount
     FROM courier_assignments ca
     JOIN orders o ON o.id = ca.order_id
     JOIN locations l ON l.id = o.location_id

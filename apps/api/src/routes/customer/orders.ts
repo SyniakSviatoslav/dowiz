@@ -29,7 +29,7 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
     try {
       const orderRes = await db.query(`
          SELECT o.id, o.status, o.type, o.delivery_address, o.delivery_instructions,
-                o.total, o.created_at::text as created_at,
+                o.total, o.tip_amount, o.created_at::text as created_at,
                 o.delivery_lat, o.delivery_lng,
                ca.courier_id, ca.status as assignment_status
         FROM orders o
@@ -125,6 +125,7 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
         deliveryAddress: row.delivery_address,
         deliveryInstructions: row.delivery_instructions,
         total: row.total,
+        tipAmount: row.tip_amount || 0,
         items: itemsRes.rows.map((r: any) => ({
           id: r.id,
           productId: r.product_id,

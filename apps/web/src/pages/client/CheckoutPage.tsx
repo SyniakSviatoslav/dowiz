@@ -213,6 +213,7 @@ export function CheckoutPage() {
   const [locationCenter, setLocationCenter] = useState<LngLatLike>([19.456, 41.324]); // Durrës default
   const [notes, setNotes] = useState('');
   const [cashAmount, setCashAmount] = useState<number>(0);
+  const [tipAmount, setTipAmount] = useState<number>(0); // UX-4 optional courier tip
   const [orderError, setOrderError] = useState('');
   const [instructionOption, setInstructionOption] = useState<string>('');
   const [instructionCustom, setInstructionCustom] = useState<string>('');
@@ -371,6 +372,7 @@ export function CheckoutPage() {
               : {}),
           },
           ...(entryPhotoKey ? { delivery_photo_key: entryPhotoKey } : {}),
+          ...(tipAmount > 0 ? { tip_amount: tipAmount } : {}),
           // Pickup orders carry no delivery pin/address (no delivery fee).
           ...(deliveryType === 'pickup' ? {} : {
             delivery: {
@@ -738,6 +740,26 @@ export function CheckoutPage() {
                     placeholder={String(total)}
                   />
                 </div>
+              </div>
+              {/* UX-4: optional courier tip (single amount, replaces %-badges) */}
+              <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+                <label htmlFor="tip-amount" className="text-[12px] font-semibold mb-1.5 block" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_amount', 'Tip for courier (optional)')}</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-bold" style={{ color: 'var(--brand-text-muted)' }}>{currencySymbol}</span>
+                  <input
+                    id="tip-amount"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    value={tipAmount || ''}
+                    data-testid="checkout-tip"
+                    onChange={e => setTipAmount(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-full h-[44px] pl-11 pr-3 outline-none text-[14px] font-bold border rounded-[8px]"
+                    style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
+                    placeholder="0"
+                  />
+                </div>
+                <p className="text-[12px] mt-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_hint', 'Goes entirely to your courier, in cash on delivery.')}</p>
               </div>
               {cashAmount > 0 && (
                 <div className="flex justify-between text-[13px] mt-2 px-1">
