@@ -242,6 +242,10 @@ export function MenuPage() {
 
   interface LocationInfo { lat: number; lng: number; googleRating?: number | null; googleReviewCount?: number | null; isOpen?: boolean; }
   const [locationInfo, setLocationInfo] = useState<LocationInfo | null>(null);
+  // UX-1 storefront footer links — decoupled from geo so they show even without lat/lng.
+  const [storeLinks, setStoreLinks] = useState<{ mapsUrl?: string | null; instagram?: string | null; facebook?: string | null }>({});
+  // Hide the footer in embed/activation-preview contexts (target=_blank is unreliable in iframes).
+  const isEmbed = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('embed') === 'true' || new URLSearchParams(window.location.search).get('activation') === '1');
   const [deliveryETA, setDeliveryETA] = useState<number | null>(null);
   const [geoStatus, setGeoStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown');
 
@@ -250,7 +254,9 @@ export function MenuPage() {
     fetch(`/public/locations/${slug}/info`)
       .then(r => r.ok ? r.json() : null)
       .then((d: any) => {
-        if (d?.lat && d?.lng) setLocationInfo({ lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount, isOpen: d.isOpen });
+        if (!d) return;
+        if (d.lat && d.lng) setLocationInfo({ lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount, isOpen: d.isOpen });
+        setStoreLinks({ mapsUrl: d.googleMapsUrl ?? null, instagram: d.socialInstagram ?? null, facebook: d.socialFacebook ?? null });
       })
       .catch(() => {});
   }, [slug]);
@@ -994,6 +1000,30 @@ export function MenuPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* UX-1: storefront footer — Google Maps + socials. Graceful: an absent link
+          simply doesn't render; the whole footer hides when no link is set or in embed. */}
+      {!isEmbed && (storeLinks.mapsUrl || storeLinks.instagram || storeLinks.facebook) && (
+        <footer className="mt-10 px-4 py-8 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+          <div className="flex items-center justify-center gap-6">
+            {storeLinks.mapsUrl && (
+              <a href={storeLinks.mapsUrl} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')} className="text-2xl" style={{ color: 'var(--brand-text-muted)' }}>
+                <i className="ti ti-map-pin" />
+              </a>
+            )}
+            {storeLinks.instagram && (
+              <a href={storeLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-2xl" style={{ color: 'var(--brand-text-muted)' }}>
+                <i className="ti ti-brand-instagram" />
+              </a>
+            )}
+            {storeLinks.facebook && (
+              <a href={storeLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-2xl" style={{ color: 'var(--brand-text-muted)' }}>
+                <i className="ti ti-brand-facebook" />
+              </a>
+            )}
+          </div>
+        </footer>
       )}
 
     </div>
