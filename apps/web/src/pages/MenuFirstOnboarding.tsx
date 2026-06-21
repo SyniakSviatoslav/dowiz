@@ -4,6 +4,7 @@ import { Button, Input, FormField, useI18n } from '@deliveryos/ui';
 import { PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient, ApiError } from '../lib/index.js';
 import { SwanHero } from '../components/SwanHero.js';
+import { AccessRequestGate } from '../components/AccessRequestForm.js';
 
 // Menu-first onboarding. The front door is "upload your menu" — we parse it with
 // the zero-dependency heuristic parser, pre-fill the storefront identity
@@ -184,6 +185,9 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
         {/* ── CHOOSE: upload your menu ── */}
         {phase === 'choose' && (
           <div className="space-y-5">
+            {/* Soft access gate (ADR-soft-access-gate). Renders only when the build flag
+                is on (default off) — public "register interest" capture on the landing. */}
+            {mode === 'anonymous' && <AccessRequestGate />}
             {mode === 'anonymous'
               ? <SwanHero />
               : (

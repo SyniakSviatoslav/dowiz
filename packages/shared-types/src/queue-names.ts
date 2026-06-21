@@ -24,4 +24,8 @@ export const QUEUE_NAMES = {
   BACKUP_VERIFY_R2: 'backup.verify.r2',
   RECONCILIATION_NIGHTLY: 'reconciliation.nightly',
   RATES_REFRESH: 'rates.refresh',
+  // Soft access gate (ADR-soft-access-gate). Dotted convention, matching every name above.
+  ACCESS_REQUEST_NOTIFY: 'access-request.notify',
+  ACCESS_REQUEST_RECONCILE: 'access-request.reconcile',
+  ACCESS_REQUEST_RETENTION_SWEEP: 'access-request.retention-sweep',
 } as const;

@@ -115,6 +115,29 @@ const EnvSchema = z.object({
   ROUTING_PROVIDER: z.enum(['ors', 'self', 'haversine']).default('ors'),
   ROUTING_BASE_URL: z.string().url().default('https://api.openrouteservice.org'),
   ROUTING_API_KEY: z.string().optional(),
+
+  // ── Soft access gate (ADR-soft-access-gate) ──
+  // STOP-1 enforcer: gates BACKEND route registration (POST /api/access-requests 404s
+  // while off) AND frontend CTA render. Default false → feature is dark until the
+  // owner-onboarding-invite-gating prerequisite ships and this is flipped (R3-4).
+  ACCESS_GATE_PUBLIC_ENABLED: z.enum(['true', 'false']).default('false'),
+  // Companion flag for the CI banned-strings test: scarcity copy is only permitted once
+  // invite-gating has shipped and this is set (R2-10).
+  ACCESS_GATE_INVITE_GATING_SHIPPED: z.enum(['true', 'false']).default('false'),
+  // Operator notification for new access requests (best-effort, via Resend).
+  RESEND_API_KEY: z.string().optional(),
+  WAITLIST_NOTIFY_EMAIL: z.string().optional(),
+  // Privacy notice version stamped on every consented row; the CI content-hash test
+  // (R2-6) fails the build if the /privacy prose changes without bumping this.
+  PRIVACY_NOTICE_VERSION: z.string().default('2026-06-20'),
+  // 12-month retention auto-erase (STOP-2). Window must equal the number stated in /privacy.
+  ACCESS_REQUEST_RETENTION: z.string().default('12 months'),
+  ACCESS_REQUEST_RETENTION_CRON: z.string().default('0 3 * * *'),
+  // Notify-gap reconciliation sweep cadence (B3 / R2-4).
+  ACCESS_REQUEST_RECONCILE_CRON: z.string().default('*/15 * * * *'),
+  // Bounded reconcile re-feed guard (R2-9): rows past this many cumulative notify
+  // attempts stop being re-enqueued and surface in the aggregated alert.
+  ACCESS_REQUEST_NOTIFY_MAX_ATTEMPTS: z.coerce.number().int().positive().default(10),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
