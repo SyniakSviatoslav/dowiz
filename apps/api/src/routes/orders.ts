@@ -718,21 +718,22 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           timestamp: new Date().toISOString(),
         });
         const shortId = '#' + order.id.substring(0, 4).toUpperCase();
-        const itemsSummary = orderItemRows.map((i: any) => `${i.quantity}\u00d7${i.nameSnapshot}`).join(', ');
+        // P0-3 claim-check: the bus carries ZERO customer PII. Item names
+        // (dietary/medical-adjacent), customer name and phone are NOT published \u2014
+        // the dashboard pulls them from the authenticated, RLS-scoped /owner/orders
+        // endpoint. Only non-PII status fields ride the bus (Upstash out of the PII
+        // perimeter). location_id is included so subscribers can scope.
         await messageBus.publish(dashboardChannel(locationId), {
           type: 'order.created',
           data: {
             orderId: order.id,
+            locationId,
             status: 'PENDING',
             total,
             currency: location.currency_code,
             createdAt: order.created_at,
             shortId,
             itemCount: items.length,
-            itemsSummary,
-            courierName: null,
-            customerNameMasked: cust?.name ? cust.name.replace(/(?<=.).(?=.*@)/g, '*') : '***',
-            customerPhoneMasked: cust?.phone ? cust.phone.slice(0, -4).replace(/\d/g, '*') + cust.phone.slice(-4) : '***',
           },
         });
       } catch (err) {
