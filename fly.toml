@@ -12,7 +12,7 @@ primary_region = "fra"
 # old code keeps serving) instead of crash-looping new code against an old schema.
 # Requires the DATABASE_URL_MIGRATIONS secret on the app.
 [deploy]
-  release_command = "node dist/migrate/index.cjs"
+  release_command = "dist/migrate/index.cjs"
 
 [processes]
   web    = "dist/api/server.cjs"

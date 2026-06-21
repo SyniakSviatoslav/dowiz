@@ -60,7 +60,7 @@ async function build() {
   console.log(`✅ Apps built and bundled to dist/api and dist/worker (schema head: ${migrationHead})`);
 
   // Bundled migrator (dist/migrate): the runner + each migration compiled to a
-  // standalone .mjs. fly.toml's release_command runs `node dist/migrate/index.cjs`
+  // standalone .mjs. fly.toml release_command runs the bundled migrator (entrypoint is node)
   // on every deploy. The runtime image needs no node_modules for this — node-pg-migrate
   // is bundled into the runner, and the one migration that uses pg-boss at runtime
   // is bundled self-contained. IMPORTANT: sourcemap MUST stay off for the migration
