@@ -42,8 +42,12 @@ API_PORT="${API_PORT:-3055}"
 SUPERUSER_URL="${SUPERUSER_URL:-postgresql://${MIGRATOR_ROLE}:${MIGRATOR_PW}@${PGHOST}:${PGPORT}/postgres}"
 SUPERUSER_DB_URL="${SUPERUSER_URL%/*}/${DBNAME}"
 
-MIGRATOR_URL="postgresql://${MIGRATOR_ROLE}:${MIGRATOR_PW}@${PGHOST}:${PGPORT}/${DBNAME}"
-APP_URL="postgresql://${APP_ROLE}:${APP_PW}@${PGHOST}:${PGPORT}/${DBNAME}"
+# sslmode=disable: the CI/local Postgres is plain TCP (no TLS). The shared db
+# pool (packages/db) forces ssl:{rejectUnauthorized:false} UNLESS the URL carries
+# sslmode=disable — without it, seed/api-boot throw "server does not support SSL
+# connections" against bare Postgres. The prod-guard above still blocks supabase.com.
+MIGRATOR_URL="postgresql://${MIGRATOR_ROLE}:${MIGRATOR_PW}@${PGHOST}:${PGPORT}/${DBNAME}?sslmode=disable"
+APP_URL="postgresql://${APP_ROLE}:${APP_PW}@${PGHOST}:${PGPORT}/${DBNAME}?sslmode=disable"
 
 # ── Prod guard ──────────────────────────────────────────────────────────────
 case "$PGHOST$SUPERUSER_URL$MIGRATOR_URL$APP_URL" in
