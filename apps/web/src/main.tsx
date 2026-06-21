@@ -9,6 +9,7 @@ import { Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/admin/LoginPage.js';
 import { StartPage } from './pages/MenuFirstOnboarding.js';
 import { AuthCallback } from './pages/admin/AuthCallback.js';
+import { PrivacyPage } from './pages/PrivacyPage.js';
 
 // Lazy-loaded surfaces
 const ClientRoutes = lazy(() => import('./routes/ClientRoutes.js').then(m => ({ default: m.ClientRoutes })));
@@ -40,6 +41,7 @@ function AnimatedRoutes() {
             <Route path="/" element={<Navigate to="/start" replace />} />
             <Route path="/start" element={<StartPage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/s/:slug/*" element={<ClientRoutes />} />
             <Route path="/branding-preview/:slug/*" element={<ClientRoutes />} />

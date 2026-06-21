@@ -80,6 +80,11 @@ const APP_QUEUES: readonly string[] = [
   'backup.verify.r2',
   'reconciliation.nightly',
   'rates.refresh',
+  // Soft access gate (ADR-soft-access-gate) — fresh-provision parity with queue-names.ts.
+  // 1790000000042 is the load-bearing pre-create for already-provisioned envs.
+  'access-request.notify',
+  'access-request.reconcile',
+  'access-request.retention-sweep',
 ];
 
 export async function up(pgm: MigrationBuilder): Promise<void> {
