@@ -244,6 +244,7 @@ export function MenuPage() {
   const [locationInfo, setLocationInfo] = useState<LocationInfo | null>(null);
   // UX-1 storefront footer links — decoupled from geo so they show even without lat/lng.
   const [storeLinks, setStoreLinks] = useState<{ mapsUrl?: string | null; instagram?: string | null; facebook?: string | null }>({});
+  const [storeAddress, setStoreAddress] = useState<string | null>(null);
   // Hide the footer in embed/activation-preview contexts (target=_blank is unreliable in iframes).
   const isEmbed = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('embed') === 'true' || new URLSearchParams(window.location.search).get('activation') === '1');
   const [deliveryETA, setDeliveryETA] = useState<number | null>(null);
@@ -257,6 +258,7 @@ export function MenuPage() {
         if (!d) return;
         if (d.lat && d.lng) setLocationInfo({ lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount, isOpen: d.isOpen });
         setStoreLinks({ mapsUrl: d.googleMapsUrl ?? null, instagram: d.socialInstagram ?? null, facebook: d.socialFacebook ?? null });
+        setStoreAddress(d.address ?? null);
       })
       .catch(() => {});
   }, [slug]);
@@ -345,6 +347,22 @@ export function MenuPage() {
     setModifierGroupSelection({});
     setQuantity(1);
   };
+
+  // Lock background scroll while the product modal is open. The real scroll
+  // container is .app-shell-main (the SPA shell), not <body>, so lock both —
+  // otherwise the page behind the bottom-sheet keeps scrolling on touch.
+  useEffect(() => {
+    if (!detailProduct) return;
+    const main = document.querySelector('.app-shell-main') as HTMLElement | null;
+    const prevMain = main?.style.overflow ?? '';
+    const prevBody = document.body.style.overflow;
+    if (main) main.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    return () => {
+      if (main) main.style.overflow = prevMain;
+      document.body.style.overflow = prevBody;
+    };
+  }, [detailProduct]);
 
   const toggleModifier = (groupId: string, modifierId: string, group: ModifierGroup) => {
     setModifierGroupSelection(prev => {
@@ -519,27 +537,28 @@ export function MenuPage() {
 
         {/* Search + Sort + Allergen — single compact scrollable row */}
         {!loading && categories.length > 0 && (
-          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-3 py-1.5 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-3 py-2 border-b" style={{ borderColor: 'var(--brand-border)' }}>
             {/* Compact search pill */}
-            <div className="relative shrink-0" style={{ width: searchQuery ? 130 : 90, transition: 'width 0.2s', minWidth: 90 }}>
-              <i className="ti ti-search absolute left-2 top-1/2 -translate-y-1/2 text-[10px]" style={{ color: 'var(--brand-text-muted)' }} />
+            <div className="relative shrink-0" style={{ width: searchQuery ? 140 : 100, transition: 'width 0.2s', minWidth: 100 }}>
+              <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px]" style={{ color: 'var(--brand-text-muted)' }} />
               <input
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder={t('common.search', 'Search')}
-                className="w-full pl-6 pr-5 h-7 rounded-full text-[11px] outline-none"
+                className="w-full pl-7 pr-7 h-9 rounded-full text-[12px] outline-none"
                 style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center">
-                  <i className="ti ti-x text-[9px]" style={{ color: 'var(--brand-text-muted)' }} />
+                <button onClick={() => setSearchQuery('')} aria-label={t('common.clear', 'Clear')} className="absolute right-0.5 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center">
+                  <i className="ti ti-x text-[11px]" style={{ color: 'var(--brand-text-muted)' }} />
                 </button>
               )}
             </div>
             <div className="w-px h-4 shrink-0" style={{ background: 'var(--brand-border)' }} />
             {(['default', 'price-asc', 'price-desc', 'name'] as const).map(mode => (
               <motion.button key={mode} onClick={() => setSortBy(mode)} whileTap={{ scale: 0.95 }}
-                className="px-2 h-7 rounded-full text-[10px] font-medium transition-all whitespace-nowrap shrink-0 flex items-center"
+                aria-label={t(`sort.${mode}`, mode)}
+                className="px-3 h-9 min-w-9 rounded-full text-[11px] font-medium transition-all whitespace-nowrap shrink-0 flex items-center justify-center"
                 style={{
                   background: sortBy === mode ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
                   color: sortBy === mode ? '#fff' : 'var(--brand-text-muted)',
@@ -553,7 +572,7 @@ export function MenuPage() {
               const s = getAllergenStyle(a);
               return (
                 <motion.button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)} whileTap={{ scale: 0.95 }}
-                  className="px-2 h-7 rounded-full text-[9px] font-semibold uppercase whitespace-nowrap shrink-0 transition-all"
+                  className="px-3 h-9 rounded-full text-[10px] font-semibold uppercase whitespace-nowrap shrink-0 transition-all flex items-center"
                   style={{
                     background: filterAllergen === a ? s.text : s.bg,
                     color: filterAllergen === a ? '#fff' : s.text,
@@ -702,9 +721,10 @@ export function MenuPage() {
         )}
        </main>
 
-      {/* Product Detail Modal */}
+      {/* Product Detail Modal — z-modal sits above the sticky cart bar (z-sticky)
+          so the two never stack; body scroll is locked while it's open. */}
       {detailProduct && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center transition-opacity duration-300" style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)', backdropFilter: 'blur(4px)' }} role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-modal flex items-end md:items-center justify-center transition-opacity duration-300" style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)', backdropFilter: 'blur(4px)' }} role="dialog" aria-modal="true">
           <button type="button" className="absolute inset-0 cursor-default" aria-label={t('common.close', 'Close')} onClick={closeDetail} />
           <div
             className="relative w-full md:max-w-lg max-h-[85vh] overflow-auto rounded-t-2xl md:rounded-2xl shadow-2xl animate-slide-up"
@@ -1002,27 +1022,36 @@ export function MenuPage() {
         </div>
       )}
 
-      {/* UX-1: storefront footer — Google Maps + socials. Graceful: an absent link
-          simply doesn't render; the whole footer hides when no link is set or in embed. */}
-      {!isEmbed && (storeLinks.mapsUrl || storeLinks.instagram || storeLinks.facebook) && (
-        <footer className="mt-10 px-4 py-8 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-          <div className="flex items-center justify-center gap-6">
-            {storeLinks.mapsUrl && (
-              <a href={storeLinks.mapsUrl} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')} className="text-2xl inline-flex items-center justify-center p-2.5" style={{ color: 'var(--brand-text-muted)' }}>
-                <i className="ti ti-map-pin" />
-              </a>
-            )}
-            {storeLinks.instagram && (
-              <a href={storeLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-2xl inline-flex items-center justify-center p-2.5" style={{ color: 'var(--brand-text-muted)' }}>
-                <i className="ti ti-brand-instagram" />
-              </a>
-            )}
-            {storeLinks.facebook && (
-              <a href={storeLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-2xl inline-flex items-center justify-center p-2.5" style={{ color: 'var(--brand-text-muted)' }}>
-                <i className="ti ti-brand-facebook" />
-              </a>
-            )}
+      {/* Storefront footer — always closes the page (outside embed/activation
+          preview). Restaurant identity + address, with Google Maps + socials when
+          set. Each absent link simply doesn't render. */}
+      {!isEmbed && (
+        <footer className="mt-12 px-4 pt-8 pb-10 border-t flex flex-col items-center gap-3 text-center" style={{ borderColor: 'var(--brand-border)' }}>
+          <div className="text-base font-bold" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
+            {menu?.location_name || t('client.menu', 'Menu')}
           </div>
+          {storeAddress && (
+            <div className="text-xs max-w-xs" style={{ color: 'var(--brand-text-muted)' }}>{storeAddress}</div>
+          )}
+          {(storeLinks.mapsUrl || storeLinks.instagram || storeLinks.facebook) && (
+            <div className="flex items-center justify-center gap-4 mt-1">
+              {storeLinks.mapsUrl && (
+                <a href={storeLinks.mapsUrl} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')} className="text-xl inline-flex items-center justify-center w-11 h-11 rounded-full" style={{ color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' }}>
+                  <i className="ti ti-map-pin" />
+                </a>
+              )}
+              {storeLinks.instagram && (
+                <a href={storeLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-xl inline-flex items-center justify-center w-11 h-11 rounded-full" style={{ color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' }}>
+                  <i className="ti ti-brand-instagram" />
+                </a>
+              )}
+              {storeLinks.facebook && (
+                <a href={storeLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-xl inline-flex items-center justify-center w-11 h-11 rounded-full" style={{ color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' }}>
+                  <i className="ti ti-brand-facebook" />
+                </a>
+              )}
+            </div>
+          )}
         </footer>
       )}
 
