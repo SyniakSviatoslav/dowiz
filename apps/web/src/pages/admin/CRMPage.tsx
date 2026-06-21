@@ -149,8 +149,8 @@ export function CRMPage() {
       {filtered.length === 0 ? (
         <EmptyState title={t('admin.no_customers', 'No customers')} description={search ? t('admin.no_match', 'No match.') : t('admin.no_customers_hint', 'Customers appear after their first order.')} />
       ) : (
-        <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--brand-border)' }}>
-          <table className="w-full text-sm">
+        <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--brand-border)' }}>
+          <table className="w-full min-w-[480px] text-sm">
             <thead>
               <tr style={{ background: 'var(--brand-surface)' }}>
                 <th className="text-left p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.customer', 'Customer')}</th>

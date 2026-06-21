@@ -61,8 +61,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={{ showToast }}>
       {children}
       {typeof document !== 'undefined' &&
+        // Top-center, offset below the 56px brand header + notch, so toasts
+        // never overlap the header controls (lang/currency switchers).
         createPortal(
-          <div className="fixed top-4 right-4 z-toast flex flex-col gap-2 pointer-events-none">
+          <div
+            className="fixed left-1/2 -translate-x-1/2 z-toast flex flex-col items-center gap-2 pointer-events-none w-full max-w-sm px-4"
+            style={{ top: 'calc(env(safe-area-inset-top, 0px) + 4rem)' }}
+          >
             {toasts.map((t) => (
               <div key={t.id} className="pointer-events-auto">
                 <ToastItem toast={t} onDone={removeToast} />

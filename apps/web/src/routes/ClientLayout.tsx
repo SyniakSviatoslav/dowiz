@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher, PriceDisplay, useCurrency } from '@deliveryos/ui';
+import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher, PriceDisplay, useCurrency, derivePalette } from '@deliveryos/ui';
 import { formatMoney } from '@deliveryos/shared-types';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../lib/index.js';
@@ -56,10 +56,16 @@ function ClientLayoutInner() {
   useEffect(() => {
     if (!slug) return;
 
-    // Listen for postMessage from branding preview parent (logo URL)
+    // Listen for postMessage from the branding-preview parent. Logo + live theme
+    // updates arrive this way so the preview reflects edits WITHOUT reloading the
+    // whole storefront (no flicker / scroll reset). Theme is derived into a full
+    // coherent palette, identical to what real customers get.
     const handleMessage = (e: MessageEvent) => {
       if (e.data?.type === 'branding_preview_logo' && e.data.logoUrl) {
         setLogoUrl(e.data.logoUrl);
+      }
+      if (e.data?.type === 'branding_preview_theme') {
+        setTheme(derivePalette({ primary: e.data.primary, bg: e.data.bg, text: e.data.text }));
       }
     };
     window.addEventListener('message', handleMessage);
@@ -74,21 +80,12 @@ function ClientLayoutInner() {
     const draftBg = params.get('draft_bg');
     const draftText = params.get('draft_text');
 
-    // If draft params are present, use them directly (branding preview)
+    // If draft params are present, use them directly (branding preview). Derive a
+    // FULL coherent palette so the preview matches what customers will actually see
+    // (surfaces/borders/muted text follow the chosen bg, not the default dark preset).
     if (draftPrimary || draftBg || draftText) {
       setLocationName(slug);
-      setTheme({
-        primary: draftPrimary || 'var(--brand-primary)',
-        primaryHover: 'var(--brand-primary-hover)',
-        primaryLight: 'var(--brand-primary-light)',
-        accent: 'var(--brand-accent)',
-        bg: draftBg || 'var(--brand-bg)',
-        surface: 'var(--brand-surface)',
-        surfaceRaised: 'var(--brand-surface-raised)',
-        text: draftText || 'var(--brand-text)',
-        textMuted: 'var(--brand-text-muted)',
-        border: 'var(--brand-border)',
-      });
+      setTheme(derivePalette({ primary: draftPrimary, bg: draftBg, text: draftText }));
       return;
     }
 
@@ -97,18 +94,10 @@ function ClientLayoutInner() {
         setLocationName(res.locationName || '');
         setLogoUrl(res.logoUrl || '');
         setSupportedLocales(res.supportedLocales || undefined);
-        setTheme({
-          primary: res.primaryColor || 'var(--brand-primary)',
-          primaryHover: 'var(--brand-primary-hover)',
-          primaryLight: 'var(--brand-primary-light)',
-          accent: 'var(--brand-accent)',
-          bg: res.bgColor || 'var(--brand-bg)',
-          surface: 'var(--brand-surface)',
-          surfaceRaised: 'var(--brand-surface-raised)',
-          text: res.textColor || 'var(--brand-text)',
-          textMuted: 'var(--brand-text-muted)',
-          border: 'var(--brand-border)',
-        });
+        // Derive every remaining token from the tenant's primary/bg/text so a light
+        // theme never inherits dark default surfaces (the dark-text-on-dark bug).
+        const hasTheme = res.primaryColor || res.bgColor || res.textColor;
+        setTheme(hasTheme ? derivePalette({ primary: res.primaryColor, bg: res.bgColor, text: res.textColor }) : null);
       })
       .catch(() => setTheme(null));
 

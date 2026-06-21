@@ -33,3 +33,4 @@ graphify-out/
 # agentic-system local runtime state (not committed)
 .claude/state/
 .claude/logs/
+.audit/

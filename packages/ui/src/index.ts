@@ -1,4 +1,5 @@
 export * from './theme/ThemeProvider.js';
+export * from './theme/palette.js';
 export * from './components/Base.js';
 export { ErrorBoundary, withErrorBoundary } from './components/ErrorBoundary.js';
 export * from './components/Overlays.js';
