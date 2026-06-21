@@ -4,6 +4,7 @@ import type Boss from 'pg-boss';
 import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 import { loadEnv } from '@deliveryos/config';
+import { COURIER_POSITION_RETENTION_INTERVAL } from '../lib/courier-gps.js';
 
 const env = loadEnv();
 
@@ -29,7 +30,8 @@ export class CourierCronWorker {
   async handleGpsPurge() {
     const client = await this.pool.connect();
     try {
-      await client.query(`DELETE FROM courier_positions WHERE recorded_at < now() - interval '24 hours'`);
+      // P0-1: retention window is a named constant (COURIER_POSITION_RETENTION_INTERVAL).
+      await client.query(`DELETE FROM courier_positions WHERE recorded_at < now() - $1::interval`, [COURIER_POSITION_RETENTION_INTERVAL]);
     } catch (err) {
       console.error('Failed to purge GPS:', err);
       throw err;

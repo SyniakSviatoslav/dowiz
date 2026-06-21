@@ -19,9 +19,7 @@ const EnvSchema = z.object({
   ***REDACTED***: z.string().optional(),
   ***REDACTED***: z.string().optional(),
   TELEGRAM_BOT_USERNAME: z.string().optional(),
-  // WhatsApp (Baileys) notification channel
-  WHATSAPP_ENABLED: z.enum(['true', 'false']).default('false'),
-  ***REDACTED***: z.string().optional(),
+  // WhatsApp/Baileys channel removed (P0-2, ADR-p0-privacy-hardening).
   // Phone OTP verification — globally disabled until a real SMS gateway is wired
   // (current OTP send is a console.log scaffold). Flip to 'true' to re-enable;
   // per-location `require_phone_otp` only takes effect when this is 'true'.

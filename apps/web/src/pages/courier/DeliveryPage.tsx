@@ -7,6 +7,10 @@ import { apiClient, useWebSocket } from '../../lib/index.js';
 import { messengerLink } from '../../lib/messenger.js';
 import { z } from 'zod';
 
+// P0-1: courier GPS heartbeat interval. Mirrors the server ping rate-limit (1/10s);
+// 12s leaves headroom. Time-based so a stationary courier keeps re-posting.
+const COURIER_GPS_POST_INTERVAL_MS = 12_000;
+
 const MessagesResponse = z.object({
   messages: z.array(z.any()),
 }).passthrough();
@@ -127,30 +131,35 @@ export function DeliveryPage() {
     }
   });
 
-  // Push the courier's real GPS to the server via REST /shifts/ping. This both
-  // (a) drives every role's live map (the worker fans the position out to the
-  // owner :couriers room and the customer's order room) and (b) persists the
-  // breadcrumb into courier_positions so the delivery's route is saved. The old
-  // code sent a WS 'location_update' the server never handled, so positions were
-  // silently dropped — no live map, no saved route. Server caps pings at 1/10s,
-  // so throttle to ~12s; NO_ACTIVE_SHIFT / GPS_OUT_OF_RANGE are non-fatal here.
-  const lastPingRef = useRef(0);
+  // Push the courier's real GPS to the server via REST /shifts/ping. This drives the
+  // live map and persists the delivery breadcrumb. P0-1: a TIME-BASED heartbeat (every
+  // COURIER_GPS_POST_INTERVAL_MS), NOT position-driven — a stationary courier (e.g.
+  // waiting at pickup, exactly when the assignment is still pre-accept) must keep
+  // re-posting so a server withhold/403 is retried and tracking resumes within one
+  // interval of the courier accepting. The SERVER is the hard gate: it stores a row
+  // only on an active delivery and returns { gps_stored:false } otherwise. This page is
+  // only mounted during a delivery, so the timer is naturally delivery-scoped.
+  const positionRef = useRef(position);
+  positionRef.current = position;
   useEffect(() => {
-    if (!position) return;
-    const now = Date.now();
-    if (now - lastPingRef.current < 12000) return;
-    lastPingRef.current = now;
-    apiClient('/courier/shifts/ping', {
-      method: 'POST',
-      body: {
-        lat: position.lat,
-        lng: position.lng,
-        ...(Number.isFinite(position.accuracy) ? { accuracy_meters: Math.round(position.accuracy) } : {}),
-      },
-    }).catch((err: any) => {
-      console.debug('[DeliveryPage] shift ping skipped:', err?.status || err?.message);
-    });
-  }, [position]);
+    const post = () => {
+      const p = positionRef.current;
+      if (!p) return;
+      apiClient('/courier/shifts/ping', {
+        method: 'POST',
+        body: {
+          lat: p.lat,
+          lng: p.lng,
+          ...(Number.isFinite(p.accuracy) ? { accuracy_meters: Math.round(p.accuracy) } : {}),
+        },
+      }).catch((err: any) => {
+        console.debug('[DeliveryPage] shift ping skipped:', err?.status || err?.message);
+      });
+    };
+    post();
+    const timer = setInterval(post, COURIER_GPS_POST_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, []);
 
   const handlePickup = async () => {
     setPickupLoading(true);

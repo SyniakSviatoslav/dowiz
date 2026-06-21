@@ -4,6 +4,7 @@ import { loadEnv } from '@deliveryos/config';
 import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { openShift } from '../../lib/shiftService.js';
+import { ACTIVE_DELIVERY_ASSIGNMENT_STATUSES } from '../../lib/courier-gps.js';
 
 const env = loadEnv();
 
@@ -78,14 +79,10 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
        // Use the service to open the shift
        const { shiftId, status, startedAt } = await openShift(client, courierId, locationId, { messageBus });
 
-       if (lat !== undefined && lng !== undefined) {
-        const rLat = roundCoordinate(lat);
-        const rLng = roundCoordinate(lng);
-        await client.query(`
-          INSERT INTO courier_positions (courier_id, location_id, shift_id, lat, lng, source)
-          VALUES ($1, $2, $3, $4, $5, 'gps')
-        `, [courierId, locationId, shiftId, rLat, rLng]);
-      }
+       // P0-1: no position write at shift-open. A courier going on shift is idle, not
+       // on a delivery — storing their location here is exactly the off-delivery
+       // tracking we are removing (HD-1 privacy-max). GPS rows are written only by the
+       // ping handler while on an active delivery.
 
       await client.query(`
         INSERT INTO courier_audit_log (courier_id, location_id, action, actor_kind, actor_id)
@@ -277,15 +274,9 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
           `, [shiftId]);
         }
 
-        // Record initial position
-        const rLat = roundCoordinate(lat);
-        const rLng = roundCoordinate(lng);
-
-        await client.query(`
-          INSERT INTO courier_positions (courier_id, location_id, shift_id, lat, lng, source)
-          VALUES ($1, $2, $3, $4, $5, 'gps')
-        `, [courierId, locationId, newShiftId, rLat, rLng]);
-
+        // P0-1: no position write on transition-to-available — the courier is idle,
+        // not on a delivery (HD-1 privacy-max). The owner map shows couriers only
+        // while on an active delivery; an idle courier produces no position row.
         await client.query(`
           INSERT INTO courier_audit_log (courier_id, location_id, action, actor_kind, actor_id)
           VALUES ($1, $2, 'shift.transition_available', 'courier', $1)
@@ -293,10 +284,10 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
 
         await client.query('COMMIT');
 
-        // Broadcast to owner WS
+        // Broadcast to owner WS (status only — no idle position, P0-1).
         await messageBus.publish(courierChannel(locationId), {
           type: 'courier.shift_updated',
-          payload: { courierId, status: 'available', position: { lat: rLat, lng: rLng } }
+          payload: { courierId, status: 'available' }
         });
 
         return reply.send({ success: true, status: 'available', shiftId: newShiftId });
@@ -367,30 +358,47 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
       }
 
       const shiftId = shiftRes.rows[0].id;
-      const rLat = roundCoordinate(lat);
-      const rLng = roundCoordinate(lng);
 
-      // Insert position
-      await client.query(`
-        INSERT INTO courier_positions (courier_id, location_id, shift_id, lat, lng, accuracy_meters, source)
-        VALUES ($1, $2, $3, $4, $5, $6, 'gps')
-      `, [courierId, locationId, shiftId, rLat, rLng, accuracy_meters || null]);
+      // P0-1 HARD GATE: store a GPS position ONLY while on an active delivery
+      // (assignment accepted/picked_up — the courier's consent boundary). Tenant
+      // is already scoped via set_config above, so this read is RLS-safe.
+      const activeRes = await client.query(
+        `SELECT 1 FROM courier_assignments
+          WHERE courier_id = $1 AND status = ANY($2::text[]) LIMIT 1`,
+        [courierId, ACTIVE_DELIVERY_ASSIGNMENT_STATUSES as unknown as string[]]
+      );
+      const onActiveDelivery = activeRes.rowCount > 0;
 
-      // Update heartbeat
+      if (onActiveDelivery) {
+        const rLat = roundCoordinate(lat);
+        const rLng = roundCoordinate(lng);
+        await client.query(`
+          INSERT INTO courier_positions (courier_id, location_id, shift_id, lat, lng, accuracy_meters, source)
+          VALUES ($1, $2, $3, $4, $5, $6, 'gps')
+        `, [courierId, locationId, shiftId, rLat, rLng, accuracy_meters || null]);
+      }
+
+      // Heartbeat ALWAYS updates while on shift — keeps the shift live (liveness) even
+      // when GPS is withheld, so an idle on-shift courier is not marked stale.
       await client.query(`
         UPDATE courier_shifts SET last_heartbeat_at = now() WHERE id = $1
       `, [shiftId]);
 
       await client.query('COMMIT');
 
-      // Publish event (claim-check style)
-      await messageBus.publish(BUS_CHANNELS.COURIER_POSITION_UPDATED, {
-        courierId,
-        locationId,
-        shiftId
-      });
+      // Publish (claim-check style) ONLY when a position was actually stored — an idle
+      // courier emits no position event, so the owner map shows only active deliveries.
+      if (onActiveDelivery) {
+        await messageBus.publish(BUS_CHANNELS.COURIER_POSITION_UPDATED, {
+          courierId,
+          locationId,
+          shiftId
+        });
+      }
 
-      return reply.send({ success: true });
+      // gps_stored tells the courier app the server withheld the position (off-delivery),
+      // so it can stop *collecting* GPS — but the heartbeat keeps flowing on its timer.
+      return reply.send({ success: true, gps_stored: onActiveDelivery, reason: onActiveDelivery ? undefined : 'NOT_ON_ACTIVE_DELIVERY' });
     } catch (err) {
       try { await client.query('ROLLBACK'); } catch (_) {}
       throw err;
