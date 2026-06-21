@@ -31,6 +31,12 @@ export function BrandingPage() {
   const [googlePlaceId, setGooglePlaceId] = useState('');
   const [socialInstagram, setSocialInstagram] = useState('');
   const [socialFacebook, setSocialFacebook] = useState('');
+  const [website, setWebsite] = useState('');
+  const [generating, setGenerating] = useState(false);
+
+  // A 'var(--…)' colour means "unset" — strip it so we never store/preview the
+  // literal token string in place of a real hex value.
+  const concrete = (v: string) => (v && !v.startsWith('var(') ? v : undefined);
 
   useEffect(() => {
     // Untyped read: the strict ThemeResponse contract (shared-types) doesn't yet
@@ -95,8 +101,11 @@ export function BrandingPage() {
       await apiClient('/owner/brand', {
         method: 'PUT',
         body: {
-          primaryColor: config.primary,
-          bgColor: config.bg,
+          // Persist only concrete colours — a 'var(--…)' value means "unset" and
+          // must not be written as a literal (it would poison the stored theme).
+          primaryColor: concrete(config.primary) || null,
+          bgColor: concrete(config.bg) || null,
+          textColor: concrete(config.text) || null,
           logoUrl: logoUrl || null,
           googleRating: googleRating ? parseFloat(googleRating) : null,
           googleReviewCount: googleReviewCount ? parseInt(googleReviewCount, 10) : null,
@@ -113,11 +122,40 @@ export function BrandingPage() {
     } finally { setLoading(false); }
   };
 
+  // Auto-generate brand seed colours from an existing website and/or the logo.
+  // Returns suggestions; they flow into the live preview for review before Save.
+  const handleGenerate = async () => {
+    if (!website.trim() && !logoDataUrl && !logoUrl) {
+      showToast(t('admin.brand_need_source', 'Add a website URL or upload a logo first'), 'error');
+      return;
+    }
+    setGenerating(true);
+    try {
+      const res = await apiClient<any>('/owner/brand/generate', {
+        method: 'POST',
+        body: { website: website.trim() || undefined, logoDataUrl: logoDataUrl || undefined },
+      });
+      let applied = false;
+      setConfig(prev => {
+        const next = { ...prev };
+        if (res.primaryColor) { next.primary = res.primaryColor; applied = true; }
+        if (res.bgColor) { next.bg = res.bgColor; applied = true; }
+        if (res.textColor) { next.text = res.textColor; applied = true; }
+        return next;
+      });
+      if (res.logoUrl) setLogoUrl(res.logoUrl);
+      showToast(
+        applied ? t('admin.brand_generated', 'Brand colours detected — review and Save') : t('admin.brand_no_signal', 'No brand colours found'),
+        applied ? 'success' : 'error',
+      );
+    } catch {
+      showToast(t('admin.brand_generate_failed', 'Could not detect colours from that website/logo'), 'error');
+    } finally { setGenerating(false); }
+  };
+
   const logoPreview = logoDataUrl || logoUrl;
 
-  // Concrete (non-token) colour payload for the live preview. A 'var(--…)' value
-  // means "unset" — omit it so the storefront keeps its derived default.
-  const concrete = (v: string) => (v && !v.startsWith('var(') ? v : undefined);
+  // Push the concrete (non-token) colour payload to the live preview.
   const postTheme = useCallback((win: Window | null | undefined) => {
     if (!win) return;
     const primary = concrete(config.primary), bg = concrete(config.bg), text = concrete(config.text);
@@ -164,6 +202,27 @@ export function BrandingPage() {
           {t('admin.branding', 'Branding Settings')}
         </h2>
         <form onSubmit={handleSave} className="space-y-6">
+          {/* Auto-brand: derive a coherent storefront theme from the venue's
+              existing website and/or logo — a starting point the owner can tweak. */}
+          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-xl p-5 space-y-3">
+            <div>
+              <h3 className="font-semibold text-lg">{t('admin.auto_brand', 'Auto-generate from your brand')}</h3>
+              <p className="text-xs text-[var(--brand-text-muted)] mt-1">{t('admin.auto_brand_hint', 'Paste your existing website and/or upload your logo — we’ll detect your colours and build a matching storefront. You can fine-tune below.')}</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                type="url"
+                inputMode="url"
+                placeholder={t('admin.website_placeholder', 'https://your-restaurant.com')}
+                value={website}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWebsite(e.target.value)}
+                className="flex-1"
+              />
+              <Button type="button" onClick={handleGenerate} isLoading={generating} disabled={generating}>
+                <i className="ti ti-wand mr-1.5" />{t('admin.generate', 'Generate')}
+              </Button>
+            </div>
+          </div>
           <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-xl p-5 space-y-4">
             <h3 className="font-semibold text-lg">{t('admin.colors', 'Colors')}</h3>
             <ColorInput label={t('admin.primary_color', 'Primary Color')} value={config.primary} onChange={(c: string) => setConfig({ ...config, primary: c })} />
