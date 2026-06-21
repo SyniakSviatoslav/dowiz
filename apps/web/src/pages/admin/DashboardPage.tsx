@@ -115,6 +115,16 @@ export function DashboardPage() {
   }, [tenantId, t]);
 
   const isFirstConnect = useRef(true);
+  // P0-3: the realtime bus carries NO customer name / phone / item names (claim-check).
+  // mergeDelta gives an instant non-PII card (status/total/itemCount); a debounced,
+  // authenticated /owner/orders refetch then fills in name + items (RLS-scoped) so the
+  // card and the live search stay complete without any PII on the bus (R11).
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleAuthedRefresh = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => { fetchOrders(); }, 800);
+  }, []);
+
   const { status: connectionStatus } = useWebSocket({
     room: `location:${tenantId}:dashboard`,
     enabled: true,
@@ -123,6 +133,7 @@ export function DashboardPage() {
       const payload = envelope.data || envelope;
       if (envelope.type === 'order.created') {
         setOrders(prev => mergeDelta(prev, payload, true));
+        scheduleAuthedRefresh(); // pull name/items from the authenticated endpoint
         if (alertSoundEnabled) playPing();
         haptic('tap');
       }
