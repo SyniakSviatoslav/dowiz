@@ -635,7 +635,7 @@ export function MenuPage() {
               {t('client.empty_menu', fetchError ? 'Failed to load menu' : 'Menu unavailable')}
             </p>
             {fetchError && (
-              <motion.button onClick={() => { setRetryCount(c => c + 1); }} whileTap={{ scale: 0.97 }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all active:scale-95 min-h-11" style={{ background: 'var(--brand-primary-strong)' }}>
+              <motion.button onClick={() => { setRetryCount(c => c + 1); }} whileTap={{ scale: 0.97 }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] transition-all active:scale-95 min-h-11" style={{ background: 'var(--brand-primary-strong)' }}>
                 <i className="ti ti-refresh mr-1.5" />{t('client.retry', 'Retry')}
               </motion.button>
             )}
