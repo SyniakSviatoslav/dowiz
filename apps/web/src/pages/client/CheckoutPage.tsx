@@ -920,7 +920,7 @@ export function CheckoutPage() {
           data-testid="order-confirm-button"
           disabled={placing}
           whileTap={{ scale: placing ? 1 : 0.97 }}
-          className="w-full h-14 rounded-full bg-[var(--brand-primary-strong)] text-white font-bold text-base shadow-xl transition-all active:scale-[0.97] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full h-14 rounded-full bg-[var(--brand-primary-strong)] text-[var(--brand-bg)] font-bold text-base shadow-xl transition-all active:scale-[0.97] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ minHeight: 'var(--tap-critical)' }}
         >
           {placing ? (
