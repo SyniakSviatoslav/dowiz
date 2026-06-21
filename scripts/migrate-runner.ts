@@ -21,11 +21,17 @@ import { runner } from 'node-pg-migrate';
 import { join } from 'node:path';
 
 async function main(): Promise<void> {
-  const databaseUrl = process.env.DATABASE_URL_MIGRATIONS;
-  if (!databaseUrl) {
+  const raw = process.env.DATABASE_URL_MIGRATIONS;
+  if (!raw) {
     console.error('[migrate] DATABASE_URL_MIGRATIONS is not set — cannot run migrations');
     process.exit(1);
   }
+
+  // Supabase poolers REQUIRE TLS but the connection URLs carry no `sslmode`, and
+  // node-pg-migrate's runner does not add one — so append a permissive sslmode when
+  // absent (the cert is Supabase's; we verify the host via the pooler, not the chain).
+  // Mirrors the documented manual procedure. Local/non-TLS URLs already set sslmode=disable.
+  const databaseUrl = /sslmode=/.test(raw) ? raw : `${raw}${raw.includes('?') ? '&' : '?'}sslmode=no-verify`;
 
   const dir = join(__dirname, 'migrations');
   console.log(`[migrate] applying pending migrations from ${dir}`);
@@ -37,7 +43,12 @@ async function main(): Promise<void> {
     count: Infinity,
     migrationsTable: 'pgmigrations',
     singleTransaction: true, // mirrors CLI default: all-or-nothing
-    checkOrder: true,
+    // checkOrder MUST be false on prod: it intentionally never recorded two platform
+    // migrations (Supabase-managed roles; pg-boss bootstrapped out-of-band), so the
+    // order check would error "X precedes already-run Y" and abort every deploy. Pending
+    // migrations still apply in (timestamp-sorted) filename order regardless. See the
+    // prod schema-drift outage notes.
+    checkOrder: false,
     verbose: true,
   });
 
