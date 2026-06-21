@@ -4,6 +4,7 @@ import { loadEnv } from '@deliveryos/config';
 import crypto from 'crypto';
 import { withTenant } from '@deliveryos/platform';
 import { getImageUrl } from '../lib/image-url.js';
+import { extractFromWebsite, extractLogoColor, normalizeHex } from '../lib/brand-extractor.js';
 import { maskStr } from '../lib/pii-mask.js';
 import { decryptPII } from '../lib/pii-cipher.js';
 import { z } from 'zod';
@@ -554,6 +555,56 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       googlePlaceId: t.google_place_id ?? null,
       socialInstagram: t.social_instagram ?? null,
       socialFacebook: t.social_facebook ?? null,
+    });
+  });
+
+  // POST /api/owner/brand/generate — derive seed colours from an existing
+  // website and/or the brand logo. Returns SUGGESTIONS only (not persisted); the
+  // owner reviews them in the live preview and saves via PUT /api/owner/brand.
+  // The client expands these three seeds into a full coherent palette.
+  fastify.post('/api/owner/brand/generate', async (request, reply) => {
+    const ctx = await getOwnerContext(request);
+    if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+    const body = (request.body || {}) as { website?: string; logoDataUrl?: string };
+
+    let primary: string | undefined, bg: string | undefined, text: string | undefined;
+    let logoUrl: string | undefined, name: string | undefined;
+    const sources: string[] = [];
+
+    if (typeof body.website === 'string' && body.website.trim()) {
+      try {
+        const sig = await extractFromWebsite(body.website.trim());
+        primary = sig.primary; bg = sig.bg; text = sig.text; logoUrl = sig.logoUrl; name = sig.name;
+        sources.push(...sig.sources);
+      } catch (e: any) {
+        (request as any).log?.warn?.({ err: e?.message }, '[brand/generate] website extract failed');
+      }
+    }
+
+    // A logo accent fills a missing primary. Sent as a data URL so the server
+    // never fetches an arbitrary image (no SSRF surface); capped at ~3MB.
+    if (!primary && typeof body.logoDataUrl === 'string' && body.logoDataUrl.startsWith('data:image/')) {
+      try {
+        const b64 = body.logoDataUrl.slice(body.logoDataUrl.indexOf(',') + 1);
+        if (b64.length < 4_000_000) {
+          const color = await extractLogoColor(Buffer.from(b64, 'base64'));
+          if (color) { primary = color; sources.push('logo'); }
+        }
+      } catch (e: any) {
+        (request as any).log?.warn?.({ err: e?.message }, '[brand/generate] logo extract failed');
+      }
+    }
+
+    if (!primary && !bg && !text) {
+      return reply.status(422).send({ error: 'no_signal', message: 'Could not detect brand colours from the website or logo.' });
+    }
+    return reply.send({
+      primaryColor: normalizeHex(primary) || null,
+      bgColor: normalizeHex(bg) || null,
+      textColor: normalizeHex(text) || null,
+      logoUrl: logoUrl || null,
+      name: name || null,
+      sources,
     });
   });
 
