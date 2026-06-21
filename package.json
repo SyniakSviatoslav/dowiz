@@ -22,7 +22,7 @@
     "verify:all": "tsx scripts/verify-all.ts",
     "backup:restore": "tsx --env-file=.env scripts/backup-restore.ts",
     "migrate:create": "node-pg-migrate create -j ts -m packages/db/migrations",
-    "migrate:up": "node-pg-migrate up -d DATABASE_URL_MIGRATIONS -j ts -m packages/db/migrations --envPath .env --tsx --tsconfig tsconfig.migrations.json",
+    "migrate:up": "node-pg-migrate up --no-check-order -d DATABASE_URL_MIGRATIONS -j ts -m packages/db/migrations --envPath .env --tsx --tsconfig tsconfig.migrations.json",
     "migrate:down": "node-pg-migrate down -d DATABASE_URL_MIGRATIONS -j ts -m packages/db/migrations --envPath .env --tsx --tsconfig tsconfig.migrations.json",
     "bundle": "tsx scripts/build-apps.ts",
     "dev:api:1": "cross-env PORT=3000 pnpm --filter @deliveryos/api run dev",
