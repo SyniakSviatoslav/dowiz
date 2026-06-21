@@ -19,7 +19,7 @@ const variantStyles: Record<ToastVariant, string> = {
   success: 'bg-semantic-success text-white',
   error: 'bg-semantic-danger text-white',
   warning: 'bg-semantic-warning text-white',
-  info: 'bg-brand-primary text-white',
+  info: 'bg-brand-primary text-[var(--brand-bg)]',
 };
 
 function ToastItem({ toast, onDone }: { toast: Toast; onDone: (id: string) => void }) {

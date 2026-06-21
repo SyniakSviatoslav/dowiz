@@ -101,7 +101,7 @@ function AdminLayout() {
           title={collapsed ? t(item.key) : undefined}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--brand-radius-sm)] text-sm transition-all duration-200 ${
             isActive(item.href)
-              ? 'bg-[var(--brand-primary)] text-white font-medium shadow-sm'
+              ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] font-semibold shadow-sm'
               : 'text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)] hover:text-[var(--brand-text)]'
           }`}
         >

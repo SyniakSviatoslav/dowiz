@@ -61,7 +61,7 @@ export function TaskCard({ task, onAccept, onReject, isLoading }: TaskCardProps)
           onClick={() => onAccept(task.id)}
           data-testid="task-accept"
           disabled={isLoading}
-          className="flex-1 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white py-3 rounded-[var(--brand-radius-btn)] font-semibold transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-[var(--brand-bg)] py-3 rounded-[var(--brand-radius-btn)] font-semibold transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           whileTap={{ scale: 0.97 }}
         >
           {isLoading ? (

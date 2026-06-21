@@ -374,7 +374,7 @@ export function DeliveryPage() {
             onClick={handlePickup}
             disabled={pickupLoading}
             whileTap={{ scale: 0.97 }}
-            className="w-full h-14 bg-[var(--brand-primary)] text-white font-bold text-base rounded-full shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full h-14 bg-[var(--brand-primary)] text-[var(--brand-bg)] font-bold text-base rounded-full shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {pickupLoading ? (
               <span className="inline-flex items-center gap-2">

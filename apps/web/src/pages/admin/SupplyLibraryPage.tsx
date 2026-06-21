@@ -351,7 +351,7 @@ export function SupplyLibraryPage() {
         <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory flex-1" style={{ background: 'var(--brand-bg)' }}>
           {KINDS.map(k => (
             <button key={k.key} onClick={() => setKindFilter(k.key)}
-              className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${kindFilter === k.key ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}>
+              className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${kindFilter === k.key ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}>
               <i className={kindIcons[k.key]} style={{ fontSize: '0.8rem' }} />{k.label}
             </button>
           ))}
