@@ -109,7 +109,7 @@ export function MapWithPin({
             className={`px-6 py-2.5 rounded-full font-medium text-sm shadow-lg transition-all ${
               confirmed
                 ? 'bg-[var(--color-success)] text-[var(--color-on-success)]'
-                : 'bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-primary-hover)]'
+                : 'bg-[var(--brand-primary)] text-[var(--brand-bg)] hover:bg-[var(--brand-primary-hover)]'
             }`}
           >
             {confirmed ? <><i className="ti ti-check" /> Location confirmed</> : confirmLabel}

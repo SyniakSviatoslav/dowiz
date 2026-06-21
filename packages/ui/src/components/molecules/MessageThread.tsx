@@ -137,7 +137,7 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
               <div
                 className={`max-w-[75%] px-3 py-2 rounded-lg text-sm ${
                   isMine
-                    ? 'bg-[var(--brand-primary)] text-white rounded-br-sm'
+                    ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] rounded-br-sm'
                     : 'bg-[var(--brand-surface)] text-[var(--brand-text)] border border-[var(--brand-border)] rounded-bl-sm'
                 }`}
               >
@@ -182,7 +182,7 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
                       onClick={() => setParamValue(opt)}
                       className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
                         paramValue === opt
-                          ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
+                          ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] border-[var(--brand-primary)]'
                           : 'border-[var(--brand-border)] text-[var(--brand-text-muted)] hover:border-[var(--brand-primary)]'
                       }`}
                     >
@@ -199,7 +199,7 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
                 <button
                   onClick={handleSend}
                   disabled={selectedPreset.paramType ? !paramValue : false}
-                  className="flex-1 px-3 py-2 text-sm rounded-lg bg-[var(--brand-primary)] text-white font-medium disabled:opacity-50"
+                  className="flex-1 px-3 py-2 text-sm rounded-lg bg-[var(--brand-primary)] text-[var(--brand-bg)] font-medium disabled:opacity-50"
                 >
                   {t('message.send', 'Send')}
                 </button>
