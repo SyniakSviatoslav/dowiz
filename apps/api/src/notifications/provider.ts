@@ -1,6 +1,6 @@
 export interface NotificationTarget {
   id: string; // the target id from owner_notification_targets
-  channel: 'telegram' | 'push' | 'whatsapp';
+  channel: 'telegram' | 'push';
   address: string;
   locationId: string;
   locale?: string;

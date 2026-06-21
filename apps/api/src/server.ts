@@ -74,7 +74,6 @@ import { R2StorageProvider } from './lib/r2-storage.js';
 import { LibreTranslateProvider } from './lib/libretranslate-provider.js';
 import { TelegramAdapter } from './notifications/adapters/telegram.js';
 import { WebPushAdapter } from './notifications/adapters/webpush.js';
-import { WhatsAppAdapter } from './notifications/channels/whatsapp.js';
 import { NotificationDispatcher } from './notifications/provider.js';
 import { RetryPolicy } from './notifications/retry.js';
 import { NotificationWorker } from './notifications/workers/index.js';
@@ -334,11 +333,8 @@ async function main() {
   const telegramAdapter = new TelegramAdapter(env.TELEGRAM_BOT_TOKEN || '');
   const notifyDispatcher = new NotificationDispatcher();
   notifyDispatcher.register('telegram', telegramAdapter);
-
-  if (process.env.WHATSAPP_ENABLED === 'true') {
-    notifyDispatcher.register('whatsapp', new WhatsAppAdapter());
-    console.log('[API] WhatsApp notification channel registered');
-  }
+  // P0-2 (ADR-p0-privacy-hardening): WhatsApp/Baileys channel removed — it streamed
+  // customer PII to Meta via an unofficial client. Telegram + push + email remain.
 
   if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
     const subject = env.VAPID_SUBJECT ? (env.VAPID_SUBJECT.startsWith('mailto:') ? env.VAPID_SUBJECT : `mailto:${env.VAPID_SUBJECT}`) : 'mailto:admin@deliveryos.local';

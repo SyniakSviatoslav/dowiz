@@ -37,38 +37,8 @@ function toVars(data: NotificationData): MessageVars {
   };
 }
 
-/**
- * Render a notification for WhatsApp. WhatsApp messages are plain text (with its
- * own *bold* / _italic_ markup), so we reuse the same localized message bodies as
- * Telegram but strip HTML tags and append a deep link as plain text instead of an
- * inline keyboard. Action buttons (Confirm/Reject) are not available on WhatsApp
- * via Baileys, so the owner acts in-app via the link.
- */
-export function renderWhatsAppMessage(event: NotificationEvent, data: NotificationData, locale: Locale = 'sq'): string {
-  const vars = toVars(data);
-  const raw = getMessage(locale, event.type, vars);
-
-  // Strip Telegram HTML markup → plain text. Convert <b>/<strong> to WhatsApp *bold*.
-  const text = raw
-    .replace(/<\/?(b|strong)>/gi, '*')
-    .replace(/<\/?(i|em)>/gi, '_')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .trim();
-
-  const baseUrl = 'https://app.dowiz.org';
-  let link: string | undefined;
-  if (data.orderId && data.locationId) {
-    link = `${baseUrl}/admin/locations/${data.locationId}/orders/${data.orderId}`;
-  } else if (data.locationId && (event.type === 'shift.started' || event.type === 'shift.closed' || event.type === 'shift.close_reminder')) {
-    link = `${baseUrl}/admin/locations/${data.locationId}/shifts`;
-  }
-
-  return link ? `${text}\n\n🔗 ${link}` : text;
-}
+// P0-2 (ADR-p0-privacy-hardening): renderWhatsAppMessage removed with the WhatsApp/
+// Baileys channel. Telegram (below) + push + email remain.
 
 export function renderTelegramMessage(event: NotificationEvent, data: NotificationData, locale: Locale = 'sq'): { text: string, reply_markup?: any } {
   const vars = toVars(data);
