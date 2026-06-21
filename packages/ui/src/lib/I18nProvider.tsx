@@ -72,7 +72,7 @@ export function LanguageSwitcher({ variant = 'compact', allowed }: { variant?: '
             key={l.code}
             onClick={() => changeLocale(l.code)}
             className={`px-3 min-h-11 inline-flex items-center text-xs font-medium transition-all duration-200 ${
-              locale === l.code ? 'text-white' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'
+              locale === l.code ? 'text-[var(--brand-bg)] font-semibold' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'
             }`}
             style={locale === l.code ? { background: 'var(--brand-primary)' } : {}}
           >
