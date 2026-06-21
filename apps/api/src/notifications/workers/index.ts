@@ -311,20 +311,20 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
       try {
         console.log(`[TelegramSend] Processing job: event=${event}, entity_id=${entity_id || 'none'}, location_id=${location_id}`);
         
-        // 1. Find all active chat-style targets (telegram + whatsapp) for the
-        //    location. Both channels share this handler: the dispatcher routes by
-        //    target.channel, and buildTelegramData() is channel-agnostic.
+        // 1. Find all active Telegram targets for the location (P0-2: WhatsApp
+        //    channel retired). buildTelegramData() builds the body; the dispatcher
+        //    routes by target.channel.
         const targetsRes = await client.query(
           `SELECT id, channel, address, user_id, prefs, locale
            FROM owner_notification_targets
-           WHERE location_id = $1 AND channel IN ('telegram', 'whatsapp') AND status = 'active'`,
+           WHERE location_id = $1 AND channel = 'telegram' AND status = 'active'`,
           [location_id]
         );
 
         console.log(`[TelegramSend] Found ${targetsRes.rows.length} active targets`);
 
         if (targetsRes.rows.length === 0) {
-          console.warn(`[TelegramSend] No active Telegram/WhatsApp targets for location ${location_id} — notification not delivered`);
+          console.warn(`[TelegramSend] No active Telegram targets for location ${location_id} — notification not delivered`);
           await writeAudit(client, { event, locationId: location_id, channel: 'telegram', status: 'no_target' });
           return;
         }
