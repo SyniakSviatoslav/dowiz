@@ -159,22 +159,26 @@ jobs:
         run: npx playwright test e2e/tests/deploy-validation.spec.ts --project=desktop --reporter=list
         env:
           VITE_BASE_URL: "https://dowiz.fly.dev"
+          DEV_AUTH_SECRET: ${{ secrets.DEV_AUTH_SECRET }}
         timeout-minutes: 5
 
       - name: Post-deploy E2E regression (core lifecycles)
         run: npx playwright test e2e/tests/flow-core-lifecycles.spec.ts --project=desktop --reporter=list
         env:
           VITE_BASE_URL: "https://dowiz.fly.dev"
+          DEV_AUTH_SECRET: ${{ secrets.DEV_AUTH_SECRET }}
         timeout-minutes: 5
 
       - name: Post-deploy E2E Telegram webhook
         run: npx playwright test e2e/tests/telegram-webhook.spec.ts --project=desktop --reporter=list
         env:
           VITE_BASE_URL: "https://dowiz.fly.dev"
+          DEV_AUTH_SECRET: ${{ secrets.DEV_AUTH_SECRET }}
         timeout-minutes: 3
 
       - name: Post-deploy E2E Telegram full-flow
         run: npx playwright test e2e/tests/telegram-full-flow.spec.ts --project=desktop --reporter=list
         env:
           VITE_BASE_URL: "https://dowiz.fly.dev"
+          DEV_AUTH_SECRET: ${{ secrets.DEV_AUTH_SECRET }}
         timeout-minutes: 10
