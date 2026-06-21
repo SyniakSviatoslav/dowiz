@@ -177,7 +177,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
           <h3 className="font-semibold text-[14px] leading-tight line-clamp-2 flex-1 min-h-[2.5em]" style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
           <motion.button
             data-testid="menu-item-add"
-            className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-white rounded-full mt-0.5 ${
+            className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--brand-bg)] rounded-full mt-0.5 ${
               product.isAvailable ? 'cursor-pointer' : 'opacity-30 cursor-not-allowed'
             }`}
             style={{ background: 'var(--brand-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
