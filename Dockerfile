@@ -14,6 +14,11 @@ COPY scripts ./scripts
 
 # Install dependencies and bundle apps
 RUN pnpm install --frozen-lockfile
+# Soft access gate (ADR-soft-access-gate): the frontend CTA render flag is baked at
+# vite build time. Defaults false so prod stays DARK (STOP-1); staging passes
+# --build-arg VITE_ACCESS_GATE_PUBLIC_ENABLED=true to verify the CTA before launch.
+ARG VITE_ACCESS_GATE_PUBLIC_ENABLED=false
+ENV VITE_ACCESS_GATE_PUBLIC_ENABLED=$VITE_ACCESS_GATE_PUBLIC_ENABLED
 RUN pnpm -r build
 RUN pnpm dlx tsx scripts/build-apps.ts
 
