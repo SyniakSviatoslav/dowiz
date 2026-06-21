@@ -115,44 +115,47 @@ export function BrandingPage() {
 
   const logoPreview = logoDataUrl || logoUrl;
 
-  // Listen for iframe ready ping, respond with current logo
+  // Concrete (non-token) colour payload for the live preview. A 'var(--…)' value
+  // means "unset" — omit it so the storefront keeps its derived default.
+  const concrete = (v: string) => (v && !v.startsWith('var(') ? v : undefined);
+  const postTheme = useCallback((win: Window | null | undefined) => {
+    if (!win) return;
+    const primary = concrete(config.primary), bg = concrete(config.bg), text = concrete(config.text);
+    if (!primary && !bg && !text) return; // nothing set yet → leave stored theme
+    win.postMessage({ type: 'branding_preview_theme', primary, bg, text }, '*');
+  }, [config.primary, config.bg, config.text]);
+
+  // Listen for iframe ready ping, respond with current logo + theme.
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === 'branding_preview_ready' && previewRef.current?.contentWindow) {
         const url = logoDataUrl || logoUrl;
         if (url) {
-          previewRef.current.contentWindow.postMessage(
-            { type: 'branding_preview_logo', logoUrl: url },
-            '*'
-          );
+          previewRef.current.contentWindow.postMessage({ type: 'branding_preview_logo', logoUrl: url }, '*');
         }
+        postTheme(previewRef.current.contentWindow);
       }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [logoDataUrl, logoUrl]);
+  }, [logoDataUrl, logoUrl, postTheme]);
 
-  // Send logo to iframe via postMessage whenever it changes (iframe doesn't reload)
+  // Push logo + theme to the iframe whenever they change — no reload, no flicker.
   useEffect(() => {
     if (logoPreview && previewRef.current?.contentWindow) {
-      previewRef.current.contentWindow.postMessage(
-        { type: 'branding_preview_logo', logoUrl: logoPreview },
-        '*'
-      );
+      previewRef.current.contentWindow.postMessage({ type: 'branding_preview_logo', logoUrl: logoPreview }, '*');
     }
   }, [logoPreview]);
+  useEffect(() => {
+    postTheme(previewRef.current?.contentWindow);
+  }, [postTheme]);
 
+  // URL depends only on slug, so colour edits update via postMessage instead of
+  // reloading the whole storefront (which reset scroll + flashed the slug name).
   const iframeUrl = useMemo(() => {
     if (!slug) return '';
-    const params = new URLSearchParams();
-    params.set('embed', 'true');
-    params.set('draft', 'true');
-    if (config.primary && !config.primary.startsWith('var(')) params.set('draft_primary', config.primary);
-    if (config.bg && !config.bg.startsWith('var(')) params.set('draft_bg', config.bg);
-    if (config.text && !config.text.startsWith('var(')) params.set('draft_text', config.text);
-    // Logo excluded from URL — base64 data URLs cause 431 (header too large)
-    return `/branding-preview/${slug}?${params.toString()}`;
-  }, [slug, config.primary, config.bg, config.text, logoPreview]);
+    return `/branding-preview/${slug}?embed=true&draft=true`;
+  }, [slug]);
 
   return (
     <div className="p-4 max-w-6xl mx-auto flex flex-col lg:flex-row gap-8">
