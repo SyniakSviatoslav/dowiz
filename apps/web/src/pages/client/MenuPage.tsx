@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ProductCard, useI18n, useToast, PriceDisplay, getAllergenStyle } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 
@@ -405,6 +405,12 @@ export function MenuPage() {
 
   const { showToast } = useToast();
 
+  // Light haptic tick on add-to-cart (where supported) — part of the tactile
+  // ordering loop. Silent no-op on unsupported devices; never blocks the add.
+  const tactileAdd = useCallback(() => {
+    try { (navigator as any).vibrate?.(12); } catch { /* unsupported */ }
+  }, []);
+
   const handleAddDetail = () => {
     if (!detailProduct || !detailProduct.available) return;
     addItem({
@@ -416,6 +422,7 @@ export function MenuPage() {
       options: modifierGroupSelection,
     });
     bounceCart();
+    tactileAdd();
     showToast(t('cart.added_to_cart', 'Added to cart'), 'success');
     closeDetail();
   };
@@ -708,6 +715,7 @@ export function MenuPage() {
                       if (!product.modifier_groups?.length) {
                         addItem({ id: `cart_${product.id}`, productId: product.id, name: product.name, quantity: 1, price: product.price, options: {} });
                         bounceCart();
+                        tactileAdd();
                         showToast(t('cart.added_to_cart', 'Added to cart'), 'success');
                       } else {
                         handleProductClick(product);
@@ -725,19 +733,29 @@ export function MenuPage() {
 
       {/* Product Detail Modal — z-modal sits above the sticky cart bar (z-sticky)
           so the two never stack; body scroll is locked while it's open. */}
+      <AnimatePresence>
       {detailProduct && (
-        <div className="fixed inset-0 z-modal flex items-end md:items-center justify-center transition-opacity duration-300" style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)', backdropFilter: 'blur(4px)' }} role="dialog" aria-modal="true">
+        <motion.div
+          key="product-modal"
+          className="fixed inset-0 z-modal flex items-end md:items-center justify-center"
+          style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)', backdropFilter: 'blur(4px)' }}
+          role="dialog" aria-modal="true"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+        >
           <button type="button" className="absolute inset-0 cursor-default" aria-label={t('common.close', 'Close')} onClick={closeDetail} />
-          <div
-            className="relative w-full md:max-w-lg max-h-[85vh] overflow-auto rounded-t-2xl md:rounded-2xl shadow-2xl animate-slide-up"
+          <motion.div
+            className="relative w-full md:max-w-lg max-h-[85vh] overflow-auto rounded-t-2xl md:rounded-2xl shadow-2xl"
             style={{ background: 'var(--brand-bg)' }}
+            initial={{ y: 28, scale: 0.97, opacity: 0.5 }} animate={{ y: 0, scale: 1, opacity: 1 }} exit={{ y: 18, scale: 0.97, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 340, damping: 32 }}
           >
             {/* Image */}
             <div className="relative w-full aspect-[16/9] md:aspect-[2/1] flex items-center justify-center overflow-hidden" style={{ background: 'var(--brand-surface-raised)' }}>
               {getImageUrl(detailProduct) && !imageLoadError ? (
-                <img 
-                  src={getImageUrl(detailProduct)!} 
-                  alt={detailProduct.name} 
+                <motion.img
+                  layoutId={`product-photo-${detailProduct.id}`}
+                  src={getImageUrl(detailProduct)!}
+                  alt={detailProduct.name}
                   className="w-full h-full object-cover"
                   onError={() => setImageLoadError(true)}
                 />
@@ -798,8 +816,13 @@ export function MenuPage() {
               )}
             </div>
 
-            {/* Content */}
-            <div className="p-5 space-y-5">
+            {/* Content — gentle rise after the hero photo morphs into place */}
+            <motion.div
+              className="p-5 space-y-5"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1, duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+            >
               {/* Name, Description, Price */}
               <div>
                 <div className="flex items-start justify-between gap-3">
@@ -819,9 +842,13 @@ export function MenuPage() {
                       </span>
                     )}
                   </div>
-                  <div className="text-xl font-black whitespace-nowrap shrink-0" style={{ color: 'var(--brand-primary)' }}>
+                  <motion.div
+                    className="text-xl font-black whitespace-nowrap shrink-0" style={{ color: 'var(--brand-primary)' }}
+                    initial={{ scale: 0.82, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.24, type: 'spring', stiffness: 520, damping: 18 }}
+                  >
                     <PriceDisplay amount={detailProduct.price + calcModifierDelta()} />
-                  </div>
+                  </motion.div>
                 </div>
                 {detailProduct.description && (
                   <p className="text-sm mt-2 leading-relaxed" style={{ color: 'var(--brand-text-muted)' }}>{detailProduct.description}</p>
@@ -1018,10 +1045,11 @@ export function MenuPage() {
                   )}
                 </motion.button>
               </div>
-            </div>
-          </div>
-        </div>
+            </motion.div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Storefront footer — always closes the page (outside embed/activation
           preview). Restaurant identity + address, with Google Maps + socials when

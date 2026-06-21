@@ -68,6 +68,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
       >
         {product.image && !imgError ? (
           <motion.img
+            layoutId={`product-photo-${product.id}`}
             src={product.image}
             alt={product.name}
             className="w-full h-full object-cover"
