@@ -540,6 +540,13 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
   private async buildTelegramData(event: NotificationEventType, entity_id: string, location_id: string, client: any, locale?: string): Promise<any> {
     const data: any = { location_id, locale };
 
+    // P0-4: per-location body detail (default 'area' — see render.toVars). Controls
+    // whether the Telegram body carries phone / full address / coarse area / nothing.
+    try {
+      const lvl = await client.query(`SELECT telegram_alert_detail FROM locations WHERE id = $1`, [location_id]);
+      data.alertDetail = lvl.rows[0]?.telegram_alert_detail || 'area';
+    } catch { data.alertDetail = 'area'; }
+
     switch (event) {
       case 'order.created':
       case 'order.confirmed':

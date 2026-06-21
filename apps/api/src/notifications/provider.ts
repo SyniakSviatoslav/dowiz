@@ -60,6 +60,8 @@ export interface NotificationData {
   rating?: number;
   message?: string; // for 'test'
   locale?: string;
+  // P0-4: per-location Telegram body detail. Render defaults to 'area' when unset.
+  alertDetail?: 'full' | 'area' | 'minimal';
 }
 
 export interface NotifyResult {
