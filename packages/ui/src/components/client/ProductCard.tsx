@@ -125,7 +125,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
               );
             })}
             {allergens.length > 3 && (
-              <span className="text-[7px] font-semibold px-1 py-0.5 rounded-sm" style={{ background: '#fee2e2', color: '#991b1b' }}>
+              <span className="text-[7px] font-semibold px-1 py-0.5 rounded-sm" style={{ background: 'color-mix(in srgb, var(--brand-surface) 84%, #000)', color: 'var(--brand-text)' }}>
                 +{allergens.length - 3}
               </span>
             )}
@@ -151,7 +151,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
           <div className="absolute top-1.5 right-1.5 z-10">
             <motion.span
               className="text-[8px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
-              style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)', color: '#fff', boxShadow: '0 2px 6px rgba(245,158,11,0.45)' }}
+              style={{ background: 'var(--brand-primary)', color: 'color-mix(in srgb, var(--brand-bg) 88%, #000)', boxShadow: '0 2px 8px color-mix(in srgb, var(--brand-primary) 45%, transparent)' }}
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: 'spring', stiffness: 300, damping: 20 }}
@@ -173,7 +173,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
       </div>
       <div className="p-2.5 flex flex-col flex-1 gap-1 min-h-0">
         <div className="flex items-start justify-between gap-1.5">
-          <h3 className="font-semibold text-[13px] leading-tight line-clamp-2 flex-1" style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
+          <h3 className="font-semibold text-[14px] leading-tight line-clamp-2 flex-1 min-h-[2.5em]" style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
           <motion.button
             data-testid="menu-item-add"
             className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-white rounded-full mt-0.5 ${
@@ -218,7 +218,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
 
         <div className="flex items-center justify-between mt-auto pt-1">
           <div className="flex items-baseline gap-1">
-            <PriceDisplay amount={product.price} size="sm" />
+            <PriceDisplay amount={product.price} size="md" style={{ color: 'var(--brand-primary)', fontWeight: 800 }} />
             {hasNutrition && (
               <span className="text-[8px]" style={{ color: 'var(--brand-text-muted)' }}>
                 {product.kcal}kcal

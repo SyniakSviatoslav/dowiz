@@ -50,15 +50,19 @@ function CourierLayout() {
 
   return (
     <div className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)]">
-      <div className="flex items-center justify-between px-4 h-14 bg-[var(--brand-surface)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] shrink-0">
-        <span className="text-sm font-semibold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Courier</span>
-        <div className="flex items-center gap-1">
-          <CurrencySwitcher />
-          <LanguageSwitcher variant="full" />
+      <div className="flex items-center px-4 h-14 bg-[var(--brand-surface)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] shrink-0">
+        <div className="w-full max-w-md mx-auto flex items-center justify-between">
+          <span className="text-sm font-semibold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Courier</span>
+          <div className="flex items-center gap-1">
+            <CurrencySwitcher />
+            <LanguageSwitcher variant="full" />
+          </div>
         </div>
       </div>
       <main className="app-shell-main">
-        <Outlet />
+        <div className="w-full max-w-md mx-auto">
+          <Outlet />
+        </div>
       </main>
       <BottomTabBar
         tabs={TABS}
