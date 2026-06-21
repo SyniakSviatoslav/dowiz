@@ -519,8 +519,8 @@ export function MenuPage() {
                     aria-selected={activeTab === cat.id}
                     className="h-[44px] flex items-center gap-1 px-3 whitespace-nowrap text-[12px] font-medium transition-all border-b-2 shrink-0"
                     style={{
-                      color: activeTab === cat.id ? (isChefCat ? '#f59e0b' : 'var(--brand-text)') : 'var(--brand-text-muted)',
-                      borderColor: activeTab === cat.id ? (isChefCat ? '#f59e0b' : 'var(--brand-primary)') : 'transparent',
+                      color: activeTab === cat.id ? (isChefCat ? 'var(--brand-primary)' : 'var(--brand-text)') : 'var(--brand-text-muted)',
+                      borderColor: activeTab === cat.id ? (isChefCat ? 'var(--brand-primary)' : 'var(--brand-primary)') : 'transparent',
                     }}
                   >
                     {isChefCat && <span style={{ fontSize: '0.7rem' }}>✦</span>}
@@ -561,7 +561,8 @@ export function MenuPage() {
                 className="px-3 h-9 min-w-9 rounded-full text-[11px] font-medium transition-all whitespace-nowrap shrink-0 flex items-center justify-center"
                 style={{
                   background: sortBy === mode ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
-                  color: sortBy === mode ? '#fff' : 'var(--brand-text-muted)',
+                  color: sortBy === mode ? 'color-mix(in srgb, var(--brand-bg) 86%, #000)' : 'var(--brand-text-muted)',
+                  fontWeight: sortBy === mode ? 700 : 500,
                 }}
               >
                 {mode === 'default' ? <i className="ti ti-layout-list" style={{ fontSize: '0.65rem' }} /> : mode === 'price-asc' ? '↑ $' : mode === 'price-desc' ? '↓ $' : 'A–Z'}
@@ -572,11 +573,12 @@ export function MenuPage() {
               const s = getAllergenStyle(a);
               return (
                 <motion.button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)} whileTap={{ scale: 0.95 }}
-                  className="px-3 h-9 rounded-full text-[10px] font-semibold uppercase whitespace-nowrap shrink-0 transition-all flex items-center"
+                  className="px-3 h-9 rounded-full text-[10px] font-semibold uppercase whitespace-nowrap shrink-0 transition-all flex items-center border"
                   style={{
-                    background: filterAllergen === a ? s.text : s.bg,
-                    color: filterAllergen === a ? '#fff' : s.text,
-                    opacity: filterAllergen && filterAllergen !== a ? 0.35 : 1,
+                    background: filterAllergen === a ? 'var(--brand-primary)' : s.bg,
+                    color: filterAllergen === a ? 'color-mix(in srgb, var(--brand-bg) 86%, #000)' : s.text,
+                    borderColor: filterAllergen === a ? 'var(--brand-primary)' : 'var(--brand-border)',
+                    opacity: filterAllergen && filterAllergen !== a ? 0.4 : 1,
                   }}
                 >
                   {t(`allergen.${a.toLowerCase()}`, a)}
@@ -665,7 +667,7 @@ export function MenuPage() {
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             >
               <h2 className="text-lg font-bold px-4 mb-3 flex items-center gap-2" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
-                {isChefCat && <span style={{ color: '#f59e0b', fontSize: '1rem' }}>✦</span>}
+                {isChefCat && <span style={{ color: 'var(--brand-primary)', fontSize: '1rem' }}>✦</span>}
                 {category.name}
               </h2>
               <motion.div
@@ -1003,17 +1005,16 @@ export function MenuPage() {
                   onClick={handleAddDetail}
                   disabled={!canAdd()}
                   whileTap={{ scale: 0.95 }}
-                  className="flex-1 h-[48px] rounded-xl text-white font-bold text-[15px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-center gap-2"
+                  className="flex-1 h-[48px] rounded-xl text-white font-bold text-[14px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-between gap-2 px-5 whitespace-nowrap"
                   style={{ background: detailProduct.available ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
                   {detailProduct.available ? (
                     <>
                       <span>{t('client.add_to_cart', 'Add to Cart')}</span>
-                      <span className="opacity-50 font-normal">·</span>
-                      <PriceDisplay amount={(detailProduct.price + calcModifierDelta()) * quantity} />
+                      <span className="font-extrabold"><PriceDisplay amount={(detailProduct.price + calcModifierDelta()) * quantity} /></span>
                     </>
                   ) : (
-                    t('client.unavailable', 'Unavailable')
+                    <span className="w-full text-center">{t('client.unavailable', 'Unavailable')}</span>
                   )}
                 </motion.button>
               </div>
