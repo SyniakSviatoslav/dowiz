@@ -7,11 +7,29 @@ function fmtPrice(v: number | undefined, currency: string | undefined): string {
   return formatMoney(v, (currency || 'ALL') as any);
 }
 
+// P0-4: coarsen a free-text address to district/street WITHOUT a house number. Albanian
+// addresses are unstructured, so this is conservative & FAIL-CLOSED: cut at the first
+// digit (house/building numbers), strip trailing separators; if what's left is too short
+// to be a meaningful street (or nothing), return undefined → the body shows no address
+// (degrades to 'minimal'), never a partial leak. Honest "area" per HD-2.
+export function coarsenAddress(addr: string | undefined): string | undefined {
+  if (!addr) return undefined;
+  const cut = (addr.split(/\d/, 1)[0] ?? '').replace(/[\s,.;:\-/]+$/, '').trim();
+  return cut.length >= 3 ? cut : undefined;
+}
+
 function toVars(data: NotificationData): MessageVars {
   const orderTypeLabel =
     data.orderType === 'pickup' ? 'Pickup'
     : data.orderType === 'delivery' ? 'Delivery'
     : undefined;
+  // P0-4 detail level (default 'area' — privacy-preserving even if a path forgets to set it).
+  const level = data.alertDetail ?? 'area';
+  const customerPhone = level === 'full' ? data.customerPhone : undefined;
+  const deliveryAddress =
+    level === 'full' ? data.deliveryAddress
+    : level === 'area' ? coarsenAddress(data.deliveryAddress)
+    : undefined; // 'minimal'
   return {
     shortOrderId: data.shortOrderId,
     totalFmt: fmtPrice(data.total, data.currency),
@@ -22,8 +40,8 @@ function toVars(data: NotificationData): MessageVars {
     cashPayWithFmt: fmtPrice(data.cashPayWith, data.currency),
     currency: data.currency,
     customerName: data.customerName,
-    customerPhone: data.customerPhone,
-    deliveryAddress: data.deliveryAddress,
+    customerPhone,
+    deliveryAddress,
     deliveryInstructions: data.deliveryInstructions,
     orderTypeLabel,
     items: data.items?.map(i => ({ name: i.name, price: i.price, quantity: i.quantity })),
