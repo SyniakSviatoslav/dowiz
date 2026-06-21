@@ -4,6 +4,16 @@ primary_region = "fra"
 [build]
   dockerfile = "Dockerfile"
 
+# Run pending DB migrations in a one-off machine BEFORE new code receives traffic, on
+# EVERY deploy (CI push-to-main or manual flyctl deploy). The bundled migrator
+# (dist/migrate, built by scripts/build-apps.ts) applies 001..head; node-pg-migrate
+# skips already-applied ones. This closes the schema-drift gap that caused a prod
+# outage (image shipped ahead of the DB). If it fails, Fly aborts the rollout (fail-safe:
+# old code keeps serving) instead of crash-looping new code against an old schema.
+# Requires the ***REDACTED*** secret on the app.
+[deploy]
+  release_command = "node dist/migrate/index.cjs"
+
 [processes]
   web    = "dist/api/server.cjs"
   worker = "dist/worker/index.cjs"
