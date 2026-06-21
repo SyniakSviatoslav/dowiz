@@ -4,11 +4,12 @@ import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, orderChannel, dashboardChannel } from './registry.js';
 
 async function fetchOrderDelta(client: PoolClient, orderId: string) {
+  // P0-3 claim-check: NO item names (dietary/medical-adjacent PII) on the bus \u2014 only
+  // itemCount + non-PII status fields. The dashboard reads item names from the
+  // authenticated /owner/orders endpoint, not from the realtime payload.
   const res = await client.query(`
-    SELECT o.id, o.status, o.total, o.created_at, loc.currency_code,
-      (SELECT count(*) FROM order_items oi WHERE oi.order_id = o.id)::int as item_count,
-      (SELECT string_agg(oi.quantity::text || '\u00d7' || oi.name_snapshot, ', ')
-       FROM order_items oi WHERE oi.order_id = o.id) as items_summary
+    SELECT o.id, o.status, o.total, o.created_at, o.location_id, loc.currency_code,
+      (SELECT count(*) FROM order_items oi WHERE oi.order_id = o.id)::int as item_count
     FROM orders o
     LEFT JOIN locations loc ON loc.id = o.location_id
     WHERE o.id = $1
@@ -17,14 +18,13 @@ async function fetchOrderDelta(client: PoolClient, orderId: string) {
   if (!row) return null;
   return {
     orderId: row.id,
+    locationId: row.location_id,
     status: row.status,
     total: row.total,
     currency: row.currency_code || 'ALL',
     createdAt: row.created_at,
     shortId: '#' + row.id.substring(0, 4).toUpperCase(),
     itemCount: row.item_count || 0,
-    itemsSummary: row.items_summary || '',
-    courierName: null,
   };
 }
 
