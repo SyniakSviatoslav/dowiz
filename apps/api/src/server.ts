@@ -348,6 +348,16 @@ const retryPolicy = new RetryPolicy();
    // Register pg-boss workers
    // NOTE: queue.work() wraps pg-boss v10 array-of-jobs callback, extracting job.data per job
    // Direct queue.boss.work() would receive [job] not job
+   //
+   // BOOT RESILIENCE (incident 2026-06-21): a pg-boss createQueue permission error
+   // wedged boot BEFORE fastify.listen, taking the whole storefront down. Bound the
+   // ENTIRE worker/queue startup in a budget: if it hangs past WORKER_BOOT_BUDGET_MS
+   // or throws, log and proceed to listen anyway — the menu must serve even with
+   // degraded background workers. Workers keep starting in the background.
+   let heartbeats: any[] = [];
+   const WORKER_BOOT_BUDGET_MS = 25_000;
+   await Promise.race([
+    (async () => {
    await queue.work(QUEUE_NAMES.NOTIFY_DISPATCH, async (data: any) => notifyWorker.handleDispatch({ data }));
    await queue.work(QUEUE_NAMES.NOTIFY_CUSTOMER_STATUS, async (data: any) => notifyWorker.handleCustomerStatus({ data }));
    await queue.work(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, async (data: any) => notifyWorker.handleTelegramSend({ data }));
@@ -407,7 +417,7 @@ const retryPolicy = new RetryPolicy();
     { workerId: 'dwell-monitor', jobName: QUEUE_NAMES.DWELL_MONITOR },
     { workerId: 'anonymizer-retention', jobName: QUEUE_NAMES.ANONYMIZER_RETENTION },
   ];
-  const heartbeats = heartbeatConfigs.map(cfg => {
+  heartbeats = heartbeatConfigs.map(cfg => {
     const hb = new WorkerHeartbeat(pool, cfg);
     hb.start();
     return hb;
@@ -458,6 +468,9 @@ const retryPolicy = new RetryPolicy();
     }
   });
   await queue.boss.schedule(QUEUE_NAMES.FREE_TIER_WATCH, '0 * * * *');
+    })().catch((err: any) => console.error('[API] worker startup error (continuing to listen):', err?.message || err)),
+    new Promise<void>((res) => setTimeout(() => { console.warn(`[API] worker startup exceeded ${WORKER_BOOT_BUDGET_MS}ms — listening anyway; workers continue in background`); res(); }, WORKER_BOOT_BUDGET_MS)),
+  ]);
 
   const redis = new Redis(env.REDIS_URL);
   fastify.decorate('redis', redis);
