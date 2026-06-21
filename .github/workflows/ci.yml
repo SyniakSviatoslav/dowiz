@@ -40,6 +40,9 @@ jobs:
       - name: Verify no secrets in repo
         run: pnpm verify:secrets
 
+      - name: Compliance gate (privacy-invariants)
+        run: pnpm compliance:gate
+
   # From-scratch provisioning smoke: a BRAND-NEW Postgres must migrate -> seed ->
   # boot the API -> serve /health 200 -> serve a published menu. Closes the gap
   # that verify:migrations (ordering/idempotency only) left, which let the
