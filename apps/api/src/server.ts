@@ -25,6 +25,9 @@ import clientFlowRoutes from './routes/public/client-flow.js';
 import pwaRoutes from './routes/public/pwa.js';
 import vapidRoutes from './routes/public/vapid.js';
 import telemetryRoutes from './routes/public/telemetry.js';
+import accessRequestRoutes from './routes/public/access-requests.js';
+import { AccessRequestNotifyWorker } from './workers/access-request-notify.js';
+import { AccessRequestRetentionWorker, assertAccessRequestSchedules } from './workers/access-request-retention.js';
 import ownerThemeRoutes from './routes/owner/themes.js';
 import publicThemeRoutes from './routes/public/theme.js';
 import ownerNotificationRoutes from './routes/owner/notifications.js';
@@ -427,6 +430,15 @@ const retryPolicy = new RetryPolicy();
   const ratesRefreshWorker = new RatesRefreshWorker(pool, queue.boss);
   await ratesRefreshWorker.start();
 
+  // Soft access gate (ADR-soft-access-gate) — notify + retention/reconcile crons. These
+  // run unconditionally (data hygiene): retention auto-erase + notify-gap recovery must
+  // work the moment the public route is enabled. The public POST route itself is gated
+  // separately by ACCESS_GATE_PUBLIC_ENABLED (below).
+  const accessRequestNotifyWorker = new AccessRequestNotifyWorker(pool, queue.boss, messageBus);
+  await accessRequestNotifyWorker.start();
+  const accessRequestRetentionWorker = new AccessRequestRetentionWorker(pool, queue.boss, messageBus);
+  await accessRequestRetentionWorker.start();
+
   // Telegram Poller disabled — webhook handles all updates (messages + callbacks)
   // Poller conflicts with webhook (getUpdates HTTP 409). Keep poller import for type,
   // but don't start. Webhook at /webhook/telegram/:secret handles /start, /stop, /open, /close.
@@ -566,6 +578,13 @@ const retryPolicy = new RetryPolicy();
   fastify.register(pwaRoutes, { db: pool });
   fastify.register(vapidRoutes);
   fastify.register(telemetryRoutes, { db: pool });
+  // R3-4 (STOP-1 reachable-surface gate): the access-request capture route is mounted
+  // ONLY when the flag is on. While off, POST /api/access-requests 404s via
+  // setNotFoundHandler — it is NOT publicly POST-able before invite-gating ships. The
+  // migrations (table + 3 queues) still ship; only the route is gated.
+  if (env.ACCESS_GATE_PUBLIC_ENABLED === 'true') {
+    fastify.register(accessRequestRoutes, { db: pool, queue });
+  }
   fastify.register(ownerThemeRoutes, { db: pool, storage });
   fastify.register(publicThemeRoutes, { db: pool });
   fastify.register(ownerNotificationRoutes, { db: pool, queue });
@@ -867,7 +886,7 @@ fastify.register(mockAuthRoutes, { db: pool });
   fastify.register(notificationAuditRoutes, { prefix: '/api/admin', db: pool });
 
   // SPA Fallback: Serve index.html for unknown GET requests matching SPA route patterns
-  const SPA_ROUTES = ['/admin', '/courier', '/dashboard', '/s/', '/login', '/branding-preview'];
+  const SPA_ROUTES = ['/admin', '/courier', '/dashboard', '/s/', '/login', '/branding-preview', '/privacy'];
   fastify.setNotFoundHandler((request, reply) => {
     if (
       request.method === 'GET' &&
@@ -904,6 +923,9 @@ fastify.register(mockAuthRoutes, { db: pool });
     const port = env.PORT || 8080;
     await fastify.listen({ port, host: '0.0.0.0' });
     console.log(`[API] Server listening on port ${port}`);
+    // R3-1 fail-fast: verify both access-request cron schedules landed; a miss is a
+    // VISIBLE deploy failure in prod (process.exit 1), not a silent HTTP-dead zombie.
+    await assertAccessRequestSchedules(pool);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
