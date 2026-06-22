@@ -151,4 +151,38 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
     );
     return reply.send({ targetId: res.rows[0].id, address });
   });
+
+  // Test helper: report + repair the local-login fixture so test@dowiz.com owns the demo
+  // location (the seed's membership link can be missing on a DB that was provisioned before
+  // the demo location existed). Idempotent.
+  fastify.post('/dev/repair-test-owner', async (request: any, reply: any) => {
+    const body = (request.body as Record<string, unknown>) || {};
+    const email = (body.email as string) || 'test@dowiz.com';
+    const slug = (body.slug as string) || 'demo';
+    const db = (fastify as any).db;
+
+    const u = await db.query(`SELECT id FROM users WHERE email = $1`, [email]);
+    if (u.rowCount === 0) return reply.status(404).send({ error: `user ${email} not found` });
+    const userId = u.rows[0].id;
+    const loc = await db.query(`SELECT id, name FROM locations WHERE slug = $1 AND status = 'active' LIMIT 1`, [slug]);
+    if (loc.rowCount === 0) return reply.status(404).send({ error: `active location '${slug}' not found` });
+    const locationId = loc.rows[0].id;
+
+    const before = await db.query(
+      `SELECT location_id, role, status FROM memberships WHERE user_id = $1`, [userId]);
+    const ownedOrgs = await db.query(`SELECT id FROM organizations WHERE owner_id = $1`, [userId]);
+
+    await db.query(
+      `INSERT INTO memberships (user_id, location_id, role, status)
+       VALUES ($1, $2, 'owner', 'active')
+       ON CONFLICT (user_id, location_id, role) DO UPDATE SET status = 'active'`,
+      [userId, locationId]);
+
+    const after = await db.query(
+      `SELECT location_id, role, status FROM memberships WHERE user_id = $1`, [userId]);
+    return reply.send({
+      email, userId, slug, locationId, locationName: loc.rows[0].name,
+      ownedOrgs: ownedOrgs.rowCount, membershipsBefore: before.rows, membershipsAfter: after.rows,
+    });
+  });
 }
