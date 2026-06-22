@@ -77,7 +77,7 @@ const llmSchema = z.object({
 // 'heuristic' is the zero-dependency, no-API-key structurer (pure code) used
 // when no LLM provider is configured — so menu import works on a server with
 // nothing wired up (open-source, free). A real LLM, when configured, still wins.
-type LlmProvider = 'ollama' | 'groq' | 'openai' | 'mock' | 'heuristic';
+type LlmProvider = 'ollama' | 'groq' | 'openai' | 'openrouter' | 'mock' | 'heuristic';
 
 function detectProvider(model: string): LlmProvider {
   if (model === 'mock') return 'mock';
@@ -85,9 +85,14 @@ function detectProvider(model: string): LlmProvider {
   if (env === 'heuristic' || env === 'none' || env === 'offline') return 'heuristic';
   if (env === 'groq') return 'groq';
   if (env === 'openai') return 'openai';
+  if (env === 'openrouter') return 'openrouter';
   if (env === 'ollama') return 'ollama';
   if (process.env.GROQ_API_KEY) return 'groq';
   if (process.env.OPENAI_API_KEY) return 'openai';
+  // OpenRouter is the configured provider in prod (OPENROUTER_API_KEY). It is OpenAI-wire
+  // compatible, so it reuses the chat/completions shape. Without this branch the key was
+  // ignored and import silently degraded to the heuristic structurer.
+  if (process.env.OPENROUTER_API_KEY) return 'openrouter';
   // An explicit ollama endpoint/model means "ollama configured" → honour it
   // (and surface its failure). With nothing configured at all, fall back to the
   // heuristic structurer instead of an ollama endpoint that will never answer.
@@ -156,6 +161,39 @@ async function callLlm(provider: LlmProvider, prompt: string, model: string, tim
       const data = await res.json() as any;
       const content = data?.choices?.[0]?.message?.content;
       if (!content) throw new Error('OpenAI returned empty content');
+      return content;
+
+    } else if (provider === 'openrouter') {
+      // OpenRouter — OpenAI-wire compatible aggregator. Same chat/completions shape.
+      const apiKey = process.env.OPENROUTER_API_KEY || '';
+      const endpoint = process.env.OPENROUTER_ENDPOINT || 'https://openrouter.ai/api/v1/chat/completions';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          // OpenRouter attribution headers (optional but recommended).
+          'HTTP-Referer': process.env.APP_BASE_URL || 'https://dowiz.fly.dev',
+          'X-Title': 'dowiz menu import',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'You are a menu data extraction assistant. Return ONLY valid JSON matching the requested schema. No markdown, no commentary.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.1,
+          response_format: { type: 'json_object' },
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`OpenRouter ${res.status}: ${errBody.slice(0, 200)}`);
+      }
+      const data = await res.json() as any;
+      const content = data?.choices?.[0]?.message?.content;
+      if (!content) throw new Error('OpenRouter returned empty content');
       return content;
 
     } else {
@@ -274,7 +312,15 @@ export class AiOcrParser implements MenuParserProvider {
       ocrMs = Date.now() - t0;
 
       if (!rawText.trim()) {
-        issues.push({ rowNumber: 1, code: 'OCR_LOW_QUALITY' as any, message: 'PDF contained no extractable text.', severity: 'error' });
+        // Image-only / scanned PDF (no text layer). We deliberately don't rasterise+OCR PDFs
+        // server-side (would need a heavy native canvas dep + unbounded per-page render). The
+        // image upload path DOES OCR, so route the user there instead of a dead end.
+        issues.push({
+          rowNumber: 1,
+          code: 'OCR_LOW_QUALITY' as any,
+          message: 'This looks like a scanned (image-only) PDF with no text layer. Upload the menu as a photo or image (JPG/PNG) instead — images are read with OCR.',
+          severity: 'error',
+        });
         return this.fallbackError(issues);
       }
     } else if (input.kind === 'image') {
@@ -331,7 +377,9 @@ export class AiOcrParser implements MenuParserProvider {
       ? (process.env.GROQ_MODEL || 'llama-3.1-8b-instant')
       : provider === 'openai'
         ? (process.env.OPENAI_MODEL || 'gpt-4o-mini')
-        : llmModel;
+        : provider === 'openrouter'
+          ? (process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini')
+          : llmModel;
 
     // Retrieve relevant memories to enhance the OCR prompt
     let memoryExamples = '';

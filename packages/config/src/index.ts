@@ -47,6 +47,12 @@ const EnvSchema = z.object({
   // is byte-identical to today and product_media / primary_media_id are unread. The lazy
   // media endpoint + renderers (Phase 2) gate on this AND locations.plan='business'.
   MEDIA_RICH_ENABLED: z.enum(['true', 'false']).default('false'),
+  // Menu-import LLM (ai-ocr-parser). OpenRouter is OpenAI-wire compatible; when its key is
+  // set it serves PDF/image menu extraction. Without any provider the parser falls back to a
+  // zero-dependency heuristic structurer. All optional — read via process.env in the parser.
+  OPENROUTER_API_KEY: z.string().optional(),
+  OPENROUTER_MODEL: z.string().optional(), // default 'openai/gpt-4o-mini'
+  OPENROUTER_ENDPOINT: z.string().optional(),
   // Backup Configuration
   BACKUP_ENCRYPTION_KEY: z.string().optional(), // 32 bytes base64 (required if BACKUP_ENABLED=true)
   R2_ACCESS_KEY_ID: z.string().optional(),
