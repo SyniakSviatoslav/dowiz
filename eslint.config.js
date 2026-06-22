@@ -35,6 +35,8 @@ export default tseslint.config(
       'local/no-mock-in-prod': 'warn',
       'local/no-permissive-status-assertion': 'warn',
       'local/no-hardcoded-string': 'warn',
+      'local/no-insecure-random': 'warn',
+      'local/no-direct-websocket': 'warn',
 
       // --- Karpathy P2: Simplicity rules (warn-only, no CI block) ---
       'max-depth': ['warn', 4],
