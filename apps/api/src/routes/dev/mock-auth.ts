@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { signAuthToken } from '@deliveryos/platform';
+import { signDevToken } from '@deliveryos/platform';
 import crypto from 'node:crypto';
 import { dashboardChannel } from '../../lib/registry.js';
 
@@ -13,7 +13,7 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
       const locationId = (body.locationId as string) || '1f609add-062a-4bb5-89bf-d695f963ede6';
       const courierId = crypto.randomUUID();
 
-      const accessToken = await signAuthToken({
+      const accessToken = await signDevToken({
         role: 'courier',
         sub: courierId,
         activeLocationId: locationId,
@@ -69,7 +69,7 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
     const tokenPayload: Record<string, unknown> = { role: 'owner', userId };
     if (activeLocationId) tokenPayload.activeLocationId = activeLocationId;
 
-    const accessToken = await signAuthToken(tokenPayload as any, '1d');
+    const accessToken = await signDevToken(tokenPayload as any, '1d');
     return reply.send({ access_token: accessToken, userId, activeLocationId });
   });
 

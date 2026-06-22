@@ -3,12 +3,9 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { signAuthToken } from '@deliveryos/platform';
-import { loadEnv } from '@deliveryos/config';
-import { devLoginAllowed } from '../../plugins/dev-guard.js';
 
 export default (async function localAuthRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
-  const env = loadEnv();
 
   fastify.post('/auth/local/login', {
     schema: {
@@ -38,13 +35,10 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
 
       let valid = false;
 
-      // Dev bypass: only when DEV_AUTH_SECRET is configured (non-prod / e2e).
-      // In production the secret is unset, so these hardcoded creds never work.
-      if (devLoginAllowed(env.DEV_AUTH_SECRET) &&
-          ((email === 'test@dowiz.com' && password === 'test123456') ||
-           (email === 'empty@dowiz.com' && password === 'empty123456'))) {
-        valid = true;
-      } else if (user.password_hash) {
+      // Real password login only (ADR-0003). The dev-credential bypass that lived here
+      // was removed — the single flag-gated dev-login path is the inline handler in
+      // server.ts; no credential literal lives in this file anymore.
+      if (user.password_hash) {
         try {
           const argon2 = await import('argon2');
           valid = await argon2.default.verify(user.password_hash, password) ||
@@ -102,7 +96,6 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
        }
 
        const familyId = crypto.randomUUID();
-      const { signAuthToken } = await import('@deliveryos/platform');
       const tokenPayload: Record<string, unknown> = { role, userId: user.id, sub: user.id };
       if (activeLocationId) tokenPayload.activeLocationId = activeLocationId;
       const accessToken = await signAuthToken(tokenPayload as any, '15m');

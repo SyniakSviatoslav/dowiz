@@ -16,6 +16,24 @@ const EnvSchema = z.object({
   // Shared secret gating the /dev and /api/dev test-only endpoints (mock-auth, etc).
   // When unset/empty, those endpoints are fully disabled (404) — the safe prod default.
   DEV_AUTH_SECRET: z.string().optional(),
+  // ── Dev-login hardening (ADR-0003) ──
+  // Master runtime gate for ALL dev/test auth bypasses (the /auth/local dev branch AND
+  // the /dev/* mock-auth minters). The secret alone is NOT enough — both this flag AND
+  // DEV_AUTH_SECRET must be set for any bypass to activate. Default false → prod fails
+  // closed even if DEV_AUTH_SECRET leaks again (the root cause of the live incident).
+  // loadEnv() below FATAL-throws if this (or the secret / dev kid) is set on a prod box.
+  ALLOW_DEV_LOGIN: z.enum(['true', 'false']).default('false'),
+  // The dev-login account credentials, sourced from env so no credential literal ships
+  // in code (ADR-0003 #7). Inert unless ALLOW_DEV_LOGIN+DEV_AUTH_SECRET are also set.
+  // Set on staging/CI/local only (e.g. test@dowiz.com / test123456); absent on prod.
+  DEV_LOGIN_EMAIL: z.string().optional(),
+  DEV_LOGIN_PASSWORD: z.string().optional(),
+  // Dev-token kid segregation: dev/mock tokens are signed under JWT_DEV_KID with the dev
+  // keypair so a prod verifier (which has neither the dev keypair nor accepts the dev kid)
+  // cryptographically rejects them. Present on staging/CI/local only — NEVER on prod.
+  JWT_DEV_KID: z.string().optional(),
+  JWT_DEV_PRIVATE_KEY: z.string().optional(),
+  JWT_DEV_PUBLIC_KEY: z.string().optional(),
   ***REDACTED***: z.string().optional(),
   ***REDACTED***: z.string().optional(),
   TELEGRAM_BOT_USERNAME: z.string().optional(),
@@ -148,5 +166,30 @@ export function loadEnv(): Env {
       .join('\n');
     throw new Error(`Invalid environment variables:\n${issues}`);
   }
-  return result.data;
+  const env = result.data;
+  assertDevAuthDisabledInProd(env);
+  return env;
+}
+
+/**
+ * Boot-guard D (ADR-0003) — fail-fast so a production box can NEVER carry a dev-auth
+ * surface. A dev bypass on prod was a live CRITICAL; this turns the next misconfig into
+ * an aborted boot instead of a silent backdoor. Fires only on the DANGEROUS direction
+ * (NODE_ENV=production with any dev-auth knob set); the inverse (prod NODE_ENV not
+ * 'production') is caught pre-traffic by the release_command guard, not here.
+ */
+export function assertDevAuthDisabledInProd(env: Env): void {
+  if (env.NODE_ENV !== 'production') return;
+  const offenders: string[] = [];
+  if (env.ALLOW_DEV_LOGIN === 'true') offenders.push('ALLOW_DEV_LOGIN');
+  if (env.DEV_AUTH_SECRET) offenders.push('DEV_AUTH_SECRET');
+  if (env.JWT_DEV_KID) offenders.push('JWT_DEV_KID');
+  if (env.JWT_DEV_PRIVATE_KEY) offenders.push('JWT_DEV_PRIVATE_KEY');
+  if (env.JWT_DEV_PUBLIC_KEY) offenders.push('JWT_DEV_PUBLIC_KEY');
+  if (offenders.length > 0) {
+    throw new Error(
+      `FATAL: dev-auth surface present on a production box (NODE_ENV=production): ` +
+        `${offenders.join(', ')} must be unset in production. Refusing to boot.`,
+    );
+  }
 }
