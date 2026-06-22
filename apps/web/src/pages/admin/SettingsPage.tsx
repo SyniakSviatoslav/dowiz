@@ -234,7 +234,7 @@ export function SettingsPage() {
       const res = await apiClient<typeof TelegramConnectResponse>(`/owner/locations/${locationId}/notifications/telegram/connect-init`, { method: 'POST', schema: TelegramConnectResponse });
       setTgDeepLink(res.deepLink ?? null);
     } catch (err: any) {
-      setTgMessage({ type: 'error', text: err.message || 'Failed to initiate connection' });
+      setTgMessage({ type: 'error', text: err.message || t('admin.tg_connection_error', 'Failed to initiate connection') });
     } finally {
       setTgLoading(false);
     }
@@ -248,7 +248,7 @@ export function SettingsPage() {
       await apiClient(`/owner/locations/${locationId}/notifications/test`, { method: 'POST' });
       setTgMessage({ type: 'success', text: 'Test notification sent! Check your Telegram.' });
     } catch (err: any) {
-      setTgMessage({ type: 'error', text: err.message || 'Failed to send test' });
+      setTgMessage({ type: 'error', text: err.message || t('admin.tg_test_error', 'Failed to send test') });
     } finally {
       setTgTesting(false);
     }
@@ -307,7 +307,7 @@ export function SettingsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (settings.phone && !PHONE_E164_REGEX.test(settings.phone)) {
-      setError('Phone must be in international format (+355...)');
+      setError(t('admin.phone_format_error', 'Phone must be in international format (+355...)'));
       return;
     }
     setSaving(true);

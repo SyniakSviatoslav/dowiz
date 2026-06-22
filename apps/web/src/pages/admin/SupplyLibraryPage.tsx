@@ -330,7 +330,7 @@ export function SupplyLibraryPage() {
             />
           ) : sortOpen && (
             <>
-              <div className="fixed inset-0 z-40" role="button" tabIndex={-1} aria-label="Close sort picker" onClick={() => setSortOpen(false)} onKeyDown={e => e.key === 'Escape' && setSortOpen(false)} />
+              <div className="fixed inset-0 z-40" role="button" tabIndex={-1} aria-label={t('common.close_sort', 'Close sort picker')} onClick={() => setSortOpen(false)} onKeyDown={e => e.key === 'Escape' && setSortOpen(false)} />
               <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[140px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
                 {[
                   { value: 'name', label: t('admin.name_az', 'Name A-Z'), icon: 'ti ti-sort-az' },
@@ -366,7 +366,7 @@ export function SupplyLibraryPage() {
         <div className="space-y-1">
           {editing && (
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center fade-in" role="dialog" aria-modal="true">
-              <button type="button" className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-default" aria-label="Close" onClick={() => setEditing(null)} />
+              <button type="button" className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-default" aria-label={t('common.close', 'Close')} onClick={() => setEditing(null)} />
               <div className="relative w-full max-w-lg mx-4 mb-0 sm:mb-auto rounded-t-2xl sm:rounded-2xl">
                 <SupplyForm initial={editing} onSave={handleSave} onCancel={() => setEditing(null)} />
               </div>
