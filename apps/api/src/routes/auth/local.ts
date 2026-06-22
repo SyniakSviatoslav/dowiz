@@ -63,26 +63,37 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
          return reply.status(401).send({ error: 'Invalid email or password' });
        }
 
-       // Determine user role based on ownership and memberships
+       // Determine user role AND active location. A membership directly carries the
+       // location, so prefer it (owner memberships first); fall back to an org the user
+       // owns. Without activeLocationId the owner UI can't scope and shows an empty/
+       // onboarding state — which is exactly why test@dowiz.com saw no data.
        let role = 'customer'; // default to customer
+       let activeLocationId: string | undefined;
        try {
-         // Check if user owns any organizations
-         const orgRes = await client.query(
-           `SELECT id FROM organizations WHERE owner_id = $1`,
+         const memRes = await client.query(
+           `SELECT location_id, role FROM memberships
+            WHERE user_id = $1 AND status = 'active'
+            ORDER BY (role = 'owner') DESC LIMIT 1`,
            [user.id]
          );
-         if (orgRes.rowCount > 0) {
-           role = 'owner';
+         if (memRes.rowCount > 0) {
+           role = memRes.rows[0].role;
+           activeLocationId = memRes.rows[0].location_id;
          } else {
-           // Check if user has any active memberships
-           const memRes = await client.query(
-             `SELECT role FROM memberships WHERE user_id = $1 AND status = 'active' LIMIT 1`,
+           // No membership — but the user may own an organization with a location.
+           const orgRes = await client.query(
+             `SELECT id FROM organizations WHERE owner_id = $1`,
              [user.id]
            );
-           if (memRes.rowCount > 0) {
-             role = memRes.rows[0].role;
+           if (orgRes.rowCount > 0) {
+             role = 'owner';
+             const locRes = await client.query(
+               `SELECT id FROM locations WHERE org_id = $1 AND status = 'active' ORDER BY created_at LIMIT 1`,
+               [orgRes.rows[0].id]
+             );
+             if (locRes.rowCount > 0) activeLocationId = locRes.rows[0].id;
            }
-           // If no memberships, keep default 'customer' role
+           // If neither, keep default 'customer' role
          }
        } catch (err) {
          request.log.error(err);
@@ -92,7 +103,9 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
 
        const familyId = crypto.randomUUID();
       const { signAuthToken } = await import('@deliveryos/platform');
-      const accessToken = await signAuthToken({ role, userId: user.id, sub: user.id } as any, '15m');
+      const tokenPayload: Record<string, unknown> = { role, userId: user.id, sub: user.id };
+      if (activeLocationId) tokenPayload.activeLocationId = activeLocationId;
+      const accessToken = await signAuthToken(tokenPayload as any, '15m');
       const refreshToken = crypto.randomBytes(32).toString('hex');
       const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
