@@ -7,18 +7,23 @@ export async function acceptCourierAssignment(
   client: PoolClient,
   assignmentId: string,
   locationId: string,
+  courierId: string,
   opts: { messageBus: MessageBus }
 ): Promise<{ orderId: string }> {
   const env = loadEnv();
   const acceptWindowMs = parseInt((env as any).COURIER_ACCEPT_WINDOW_MS || '30000', 10);
 
-  // 1. Read the assignment with lock to prevent race conditions
+  // 1. Read the assignment with lock to prevent race conditions. MUST scope by
+  // courier_id (cross-courier IDOR fix — ADR courier-assignment-idor): RLS isolates
+  // only by location, so without this predicate any courier in the same location
+  // could accept (hijack) another courier's assignment. Mirrors reject/picked-up/
+  // delivered/cancel, which all inline `AND courier_id = $2`.
   const assignmentRes = await client.query(
     `SELECT order_id, assigned_at, status, courier_id
      FROM courier_assignments
-     WHERE id = $1
+     WHERE id = $1 AND courier_id = $2
      FOR UPDATE`,
-    [assignmentId]
+    [assignmentId, courierId]
   );
 
   if (assignmentRes.rowCount === 0) {
@@ -38,12 +43,12 @@ export async function acceptCourierAssignment(
     throw { statusCode: 410, error: 'Acceptance window expired' };
   }
 
-  // 4. Update the assignment to accepted
+  // 4. Update the assignment to accepted (scoped by courier_id — defense in depth)
   await client.query(
     `UPDATE courier_assignments
      SET status = 'accepted', accepted_at = now()
-     WHERE id = $1`,
-    [assignmentId]
+     WHERE id = $1 AND courier_id = $2`,
+    [assignmentId, courierId]
   );
 
   // 5. Broadcast via MessageBus
