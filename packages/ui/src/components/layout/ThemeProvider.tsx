@@ -1,4 +1,5 @@
 import { safeStorage } from '../../utils/safeStorage.js';
+import { applySunlight, isSunlightOn } from '../../utils/sunlight.js';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { applyBrandTheme, getPresetConfig, PRESETS, type BrandConfig, type BrandPreset } from '../../theme/index.js';
 
@@ -44,6 +45,9 @@ export function ThemeProvider({
       applyBrandTheme(config);
     }
   }, [config, ssrConfig]);
+
+  // Apply Sunlight Mode (high-contrast outdoor theme) from the persisted/OS-derived pref.
+  useEffect(() => { applySunlight(isSunlightOn()); }, []);
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');

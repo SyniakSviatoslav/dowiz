@@ -341,6 +341,7 @@ export async function renderMenuPage(
           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
           <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
+          <script dangerouslySetInnerHTML=${{ __html: "try{var s=localStorage.getItem('dowiz-sunlight');if(s==='on'||(s!=='off'&&window.matchMedia&&matchMedia('(prefers-contrast: more)').matches))document.documentElement.setAttribute('data-sunlight','on');}catch(e){}" }}></script>
           <link rel="stylesheet" href="/public/locations/${loc.id}/theme.css" />
           <script type="application/ld+json" dangerouslySetInnerHTML=${{ __html: jsonld }}></script>
           <style>

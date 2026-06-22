@@ -307,3 +307,53 @@
     --motion-slow: 0ms;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   SUNLIGHT MODE — high-contrast outdoor theme (research: AAA ~7:1, flat).
+   Toggled via html[data-sunlight="on"]. Uses !important to win over the
+   tenant palette (applyBrandTheme sets inline vars WITHOUT !important).
+   Forces a light surface (light mode beats dark in direct sun), pushes text
+   to AAA, flattens blur/gradients/soft shadows, and bolds type.
+   ════════════════════════════════════════════════════════════════════════ */
+html[data-sunlight="on"] {
+  --brand-bg: #ffffff !important;
+  --brand-surface: #ffffff !important;
+  --brand-surface-raised: #eef0f1 !important;
+  --brand-text: #0a0a0a !important;        /* ~19:1 on white */
+  --brand-text-muted: #383838 !important;  /* ~10.9:1 — AAA */
+  --brand-border: #141414 !important;      /* hard, visible borders */
+  --brand-accent: #0a0a0a !important;
+  --brand-primary: #8a5a00 !important;     /* darkened gold: dark text stays legible, hue kept */
+  --brand-primary-hover: #6f4800 !important;
+  --brand-primary-strong: #5a3b00 !important;
+  --brand-primary-light: #fff2da !important;
+
+  /* status text → AAA-dark; bg → opaque pale; border → the dark text color */
+  --status-pending: #8a4b00 !important;        --status-pending-bg: #fdebd2 !important;        --status-pending-border: #8a4b00 !important;        --status-pending-light: #fff4e6 !important;
+  --status-confirmed: #1e40af !important;      --status-confirmed-bg: #dbe3fb !important;      --status-confirmed-border: #1e40af !important;      --status-confirmed-light: #eef2fe !important;
+  --status-preparing: #8a4b00 !important;      --status-preparing-bg: #fdebd2 !important;      --status-preparing-border: #8a4b00 !important;      --status-preparing-light: #fff4e6 !important;
+  --status-ready: #0f5d57 !important;          --status-ready-bg: #d3ecea !important;          --status-ready-border: #0f5d57 !important;          --status-ready-light: #e8f6f4 !important;
+  --status-in-delivery: #1e40af !important;    --status-in-delivery-bg: #dbe3fb !important;    --status-in-delivery-border: #1e40af !important;    --status-in-delivery-light: #eef2fe !important;
+  --status-delivered: #166534 !important;      --status-delivered-bg: #d6ecdd !important;      --status-delivered-border: #166534 !important;      --status-delivered-light: #ecf7ef !important;
+  --status-rejected: #991b1b !important;       --status-rejected-bg: #f6dada !important;       --status-rejected-border: #991b1b !important;       --status-rejected-light: #fcecec !important;
+  --status-cancelled: #991b1b !important;      --status-cancelled-bg: #f6dada !important;      --status-cancelled-border: #991b1b !important;      --status-cancelled-light: #fcecec !important;
+  --status-scheduled: #6b21a8 !important;      --status-scheduled-bg: #ecdcf6 !important;      --status-scheduled-border: #6b21a8 !important;      --status-scheduled-light: #f5ecfb !important;
+  --status-picked-up: #0f5d57 !important;      --status-picked-up-bg: #d3ecea !important;      --status-picked-up-border: #0f5d57 !important;      --status-picked-up-light: #e8f6f4 !important;
+
+  /* flatten elevation → crisp 1px outline instead of soft glow */
+  --elevation-1: 0 0 0 1px #141414 !important;
+  --elevation-2: 0 0 0 1px #141414 !important;
+  --elevation-3: 0 0 0 2px #141414 !important;
+  --elevation-4: 0 0 0 2px #141414 !important;
+  --blur-surface: 0px !important;
+}
+
+/* Flatten reflective / low-contrast effects under sun */
+html[data-sunlight="on"] [class*="backdrop-blur"] { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+html[data-sunlight="on"] [class*="bg-gradient"] { background-image: none !important; background-color: var(--brand-surface) !important; }
+html[data-sunlight="on"] * { text-shadow: none !important; }
+html[data-sunlight="on"] [class*="shadow"] { box-shadow: 0 0 0 1px var(--brand-border) !important; }
+
+/* Heavier type for glare legibility */
+html[data-sunlight="on"] body { font-weight: 500; }
+html[data-sunlight="on"] :is(h1, h2, h3, button, a, label, th) { font-weight: 700 !important; }
