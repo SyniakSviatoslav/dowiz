@@ -161,6 +161,25 @@ export function SettingsPage() {
     fetchFallbackConfig();
   }, [locationId]);
 
+  // Notification language follows the admin dashboard language (admin.language_desc):
+  // whenever the dashboard locale changes — or targets load with a stale locale — push
+  // it to the owner's active notification targets so notifications arrive in the same
+  // language as the panel. Guarded by the staleness check, so it settles (no loop).
+  useEffect(() => {
+    if (!locationId || tgTargets.length === 0) return;
+    const stale = tgTargets.filter((tg: any) => tg.status === 'active' && tg.locale !== locale);
+    if (stale.length === 0) return;
+    (async () => {
+      await Promise.all(stale.map((tg: any) =>
+        apiClient(`/owner/locations/${locationId}/notifications/targets/${tg.id}`, {
+          method: 'PUT',
+          body: { locale },
+        }).catch((err) => console.warn('[SettingsPage] locale sync failed:', err)),
+      ));
+      fetchTgTargets();
+    })();
+  }, [locale, tgTargets, locationId]);
+
   const fetchFallbackConfig = async () => {
     if (!locationId) return;
     try {
