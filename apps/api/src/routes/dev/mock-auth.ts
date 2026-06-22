@@ -164,9 +164,18 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
     const u = await db.query(`SELECT id FROM users WHERE email = $1`, [email]);
     if (u.rowCount === 0) return reply.status(404).send({ error: `user ${email} not found` });
     const userId = u.rows[0].id;
-    const loc = await db.query(`SELECT id, name FROM locations WHERE slug = $1 AND status = 'active' LIMIT 1`, [slug]);
-    if (loc.rowCount === 0) return reply.status(404).send({ error: `active location '${slug}' not found` });
-    const locationId = loc.rows[0].id;
+    // Resolve by explicit locationId if given, else by slug (NO status filter — the demo
+    // location's status is not 'active' yet it is the live storefront).
+    let locationId = (body.locationId as string) || null;
+    let locName: string | null = null;
+    if (locationId) {
+      const l = await db.query(`SELECT name FROM locations WHERE id = $1`, [locationId]);
+      locName = l.rowCount > 0 ? l.rows[0].name : null;
+    } else {
+      const loc = await db.query(`SELECT id, name FROM locations WHERE slug = $1 LIMIT 1`, [slug]);
+      if (loc.rowCount === 0) return reply.status(404).send({ error: `location '${slug}' not found` });
+      locationId = loc.rows[0].id; locName = loc.rows[0].name;
+    }
 
     const before = await db.query(
       `SELECT location_id, role, status FROM memberships WHERE user_id = $1`, [userId]);
@@ -181,7 +190,7 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
     const after = await db.query(
       `SELECT location_id, role, status FROM memberships WHERE user_id = $1`, [userId]);
     return reply.send({
-      email, userId, slug, locationId, locationName: loc.rows[0].name,
+      email, userId, slug, locationId, locationName: locName,
       ownedOrgs: ownedOrgs.rowCount, membershipsBefore: before.rows, membershipsAfter: after.rows,
     });
   });
