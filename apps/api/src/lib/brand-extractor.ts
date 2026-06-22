@@ -169,11 +169,29 @@ export async function assertPublicUrl(url: string): Promise<URL> {
   return u;
 }
 
+const MAX_REDIRECT_HOPS = 3;
+
 async function fetchText(url: string, timeoutMs = 6000, maxBytes = 1_500_000): Promise<string> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { signal: ctrl.signal, redirect: 'follow', headers: { 'User-Agent': 'dowiz-brand-extractor/1.0' } });
+    // SSRF: validate EVERY hop, not just the initial URL. `redirect: 'follow'` would
+    // let an attacker-controlled public host 302 to http://169.254.169.254/ (cloud
+    // metadata), ::1, or a *.internal address — fetch would follow with no re-check.
+    // Instead resolve redirects manually and re-run assertPublicUrl on each Location.
+    // (Residual: a DNS-rebind between assertPublicUrl's lookup and fetch's own resolve
+    // is narrowed by per-hop re-validation but not fully closed — full closure needs a
+    // pinned-IP dispatcher (undici Agent); tracked as a follow-up, no new dep here.)
+    let currentUrl = url;
+    let res: Response;
+    for (let hop = 0; ; hop++) {
+      await assertPublicUrl(currentUrl);
+      res = await fetch(currentUrl, { signal: ctrl.signal, redirect: 'manual', headers: { 'User-Agent': 'dowiz-brand-extractor/1.0' } });
+      const location = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+      if (!location) break;
+      if (hop >= MAX_REDIRECT_HOPS) throw new Error('Too many redirects');
+      currentUrl = new URL(location, currentUrl).toString(); // resolve relative Location
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const reader = res.body?.getReader();
     if (!reader) return (await res.text()).slice(0, maxBytes);
