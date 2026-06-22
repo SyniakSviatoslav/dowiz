@@ -1,5 +1,7 @@
 export interface CourierTask {
   id: string;
+  /** Order id — the API returns it as `orderId` (camelCase); `order_id` kept for back-compat. */
+  orderId?: string;
   order_id?: string;
   status: string;
   restaurant: { name: string; address: string; lat?: number; lng?: number; };
