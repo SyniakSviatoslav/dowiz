@@ -41,3 +41,6 @@ graphify-out/
 
 # harness tune-up local backups (large, never commit)
 .harness-backups/
+
+# Doubt model: loop-detector counters (ephemeral, per-session)
+.claude/.loop-state/

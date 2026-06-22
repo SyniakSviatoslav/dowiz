@@ -292,5 +292,116 @@ export default {
         };
       },
     },
+    // Ratchet (Regression Ledger): Math.random() for a security-sensitive value
+    // (token / otp / secret / nonce / session id / password / salt / csrf / api key /
+    // verification / recovery code) is predictable. Recurrent: dev-login backdoor +
+    // auth-token class (ADR-0003). Require crypto.randomUUID() / crypto.randomBytes() /
+    // crypto.randomInt() / crypto.getRandomValues(). Narrowed to security identifiers so
+    // legitimate Math.random() jitter / animation / toast-id stays green.
+    'no-insecure-random': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'disallow Math.random() for security-sensitive values — use crypto.*' },
+      },
+      create(context) {
+        const securityName = /(token|otp|secret|nonce|session|passw(or)?d|salt|csrf|verif|api[_-]?key|apikey|recovery|reset[_-]?code|magic)/i;
+
+        function isMathRandom(node) {
+          return node
+            && node.type === 'CallExpression'
+            && node.callee.type === 'MemberExpression'
+            && node.callee.object.type === 'Identifier'
+            && node.callee.object.name === 'Math'
+            && node.callee.property.type === 'Identifier'
+            && node.callee.property.name === 'random';
+        }
+
+        // True if a Math.random() call appears anywhere within an expression subtree
+        // (covers `Math.random().toString(36)`, `prefix + Math.random()*1e9`, etc.).
+        function containsMathRandom(node) {
+          if (!node || typeof node !== 'object') return false;
+          if (isMathRandom(node)) return true;
+          if (node.type === 'CallExpression') {
+            if (containsMathRandom(node.callee)) return true;
+            for (const a of node.arguments) if (containsMathRandom(a)) return true;
+            return false;
+          }
+          if (node.type === 'MemberExpression') {
+            return containsMathRandom(node.object) || containsMathRandom(node.property);
+          }
+          if (node.type === 'BinaryExpression' || node.type === 'LogicalExpression') {
+            return containsMathRandom(node.left) || containsMathRandom(node.right);
+          }
+          if (node.type === 'TemplateLiteral') {
+            return node.expressions.some(containsMathRandom);
+          }
+          if (node.type === 'UnaryExpression') return containsMathRandom(node.argument);
+          if (node.type === 'ConditionalExpression') {
+            return containsMathRandom(node.consequent) || containsMathRandom(node.alternate);
+          }
+          return false;
+        }
+
+        return {
+          VariableDeclarator(node) {
+            if (node.id.type !== 'Identifier' || !securityName.test(node.id.name)) return;
+            if (containsMathRandom(node.init)) {
+              context.report({
+                node,
+                message: `Math.random() used for security-sensitive value "${node.id.name}" — use crypto.randomUUID() / crypto.randomBytes() / crypto.randomInt() / crypto.getRandomValues()`,
+              });
+            }
+          },
+          AssignmentExpression(node) {
+            const left = node.left;
+            const name = left.type === 'Identifier'
+              ? left.name
+              : (left.type === 'MemberExpression' && left.property.type === 'Identifier' ? left.property.name : null);
+            if (!name || !securityName.test(name)) return;
+            if (containsMathRandom(node.right)) {
+              context.report({
+                node,
+                message: `Math.random() used for security-sensitive value "${name}" — use crypto.randomUUID() / crypto.randomBytes() / crypto.randomInt() / crypto.getRandomValues()`,
+              });
+            }
+          },
+        };
+      },
+    },
+    // Ratchet (Regression Ledger): in the frontend, every WebSocket must go through the
+    // shared client (apps/web useWebSocket.ts / packages/ui websocket.ts) which owns
+    // reconnect-jitter + ordered-frame handling. Recurrent: out-of-order WS frames +
+    // reconnect bugs. A second `new WebSocket(...)` in a component re-introduces them.
+    // Scoped to apps/web + packages/ui/src and excludes the two shared-client files.
+    'no-direct-websocket': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'disallow new WebSocket() in frontend components — use the shared WS client' },
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, '/');
+        const inFrontend = /\/apps\/web\//.test(filename)
+          || /\/packages\/ui\/src\//.test(filename)
+          || /\/__fixtures__\//.test(filename); // fixtures exercise the rule for the red→green proof
+        if (!inFrontend) return {};
+        // The shared clients are the one allowed place to construct a raw WebSocket.
+        const isSharedClient = /\/apps\/web\/src\/lib\/useWebSocket\.tsx?$/.test(filename)
+          || /\/packages\/ui\/src\/lib\/websocket\.tsx?$/.test(filename);
+        if (isSharedClient) return {};
+        const isTestFile = /\.(spec|test)\.(ts|js|tsx|jsx)$/.test(filename);
+        if (isTestFile) return {};
+
+        return {
+          NewExpression(node) {
+            if (node.callee.type === 'Identifier' && node.callee.name === 'WebSocket') {
+              context.report({
+                node,
+                message: 'direct `new WebSocket()` in a frontend component — use the shared WS client (useWebSocket / packages/ui websocket) so reconnect + frame-ordering stay centralized',
+              });
+            }
+          },
+        };
+      },
+    },
   },
 };
