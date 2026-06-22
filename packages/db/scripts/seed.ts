@@ -1,5 +1,6 @@
 import { createSessionPool } from '../src/index.js';
 import { randomUUID, createHash } from 'crypto';
+import argon2 from 'argon2';
 
 async function run() {
   const pool = createSessionPool();
@@ -41,10 +42,14 @@ async function run() {
 
     // Test user for local login (password: test123456)
     const testUserId = randomUUID();
+    // Real argon2 password so /api/auth/local/login works for the demo owner without the
+    // flag-gated dev bypass (which is closed on prod). Known weak password is acceptable for
+    // a shared demo/test fixture only.
+    const testPwHash = await argon2.hash('test123456');
     const testUserRes = await pool.query(
-      `INSERT INTO users (id, email, display_name) VALUES ($1, $2, $3)
-       ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name RETURNING id`,
-      [testUserId, 'test@dowiz.com', 'Test Owner']
+      `INSERT INTO users (id, email, display_name, password_hash) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name, password_hash = EXCLUDED.password_hash RETURNING id`,
+      [testUserId, 'test@dowiz.com', 'Test Owner', testPwHash]
     );
     const testUserRealId = testUserRes.rows[0].id;
 

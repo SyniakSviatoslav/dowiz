@@ -14,8 +14,15 @@ const env = loadEnv();
  * previously the role was inferred from a nullable `google_sub` column, which
  * could flip a dual-identity user's role.
  */
-export function refreshedOwnerClaims(userId: string): { role: 'owner'; userId: string } {
-  return { role: 'owner', userId };
+export function refreshedOwnerClaims(
+  userId: string,
+  activeLocationId?: string | null,
+): { role: 'owner'; userId: string; activeLocationId?: string } {
+  const claims: { role: 'owner'; userId: string; activeLocationId?: string } = { role: 'owner', userId };
+  // activeLocationId MUST survive a refresh — otherwise the refreshed token can't scope the
+  // owner UI and the dashboard/menu/orders read empty after the access token rotates.
+  if (activeLocationId) claims.activeLocationId = activeLocationId;
+  return claims;
 }
 
 export default async function authRoutes(fastify: FastifyInstance) {
@@ -254,15 +261,34 @@ export default async function authRoutes(fastify: FastifyInstance) {
       [tokenRecord.id]
     );
     if (claim.rowCount === 0) {
-      // Reuse / lost race. Compromised family — revoke all.
+      // rowCount 0 = the token was already used. Distinguish a BENIGN concurrent refresh (a
+      // sibling request rotated this family moments ago — two tabs, React StrictMode, parallel
+      // 401-retries) from a GENUINE replay of an old token (theft). If any token in this family
+      // was created in the last 10s, a rotation just happened → concurrent loser: return a soft
+      // 409 so the client retries with the freshly-stored token, and do NOT revoke the family
+      // (revoking would log every one of the user's sessions out — the "expires too soon" bug).
+      const recent = await (fastify as any).db.query(
+        `SELECT 1 FROM auth_refresh_tokens WHERE family_id = $1 AND created_at > now() - interval '5 seconds' LIMIT 1`,
+        [tokenRecord.family_id]
+      );
+      if ((recent.rowCount ?? 0) > 0) {
+        return reply.status(409).send({ error: 'concurrent_refresh' });
+      }
+      // No recent rotation → genuine reuse of a stale token. Compromised family — revoke all.
       await (fastify as any).db.query(`DELETE FROM auth_refresh_tokens WHERE family_id = $1`, [tokenRecord.family_id]);
       return reply.status(401).send({ error: 'Token reuse detected. Family revoked.' });
     }
 
-    // This endpoint only ever issues owner tokens (couriers refresh via
-    // courier_sessions). Mint the role explicitly rather than inferring it from
-    // a nullable google_sub column, which let a dual-identity user's role flip.
-    const newAccessToken = await signAuthToken(refreshedOwnerClaims(tokenRecord.user_id) as any, '7d');
+    // This endpoint only ever issues owner tokens (couriers refresh via courier_sessions).
+    // Mint the role explicitly; carry activeLocationId through the rotation so the owner UI
+    // stays scoped after refresh (a nullable google_sub-inferred role previously flipped).
+    const locRes = await (fastify as any).db.query(
+      `SELECT location_id FROM memberships WHERE user_id = $1 AND status = 'active'
+       ORDER BY (role = 'owner') DESC LIMIT 1`,
+      [tokenRecord.user_id]
+    );
+    const activeLocationId = locRes.rows[0]?.location_id ?? null;
+    const newAccessToken = await signAuthToken(refreshedOwnerClaims(tokenRecord.user_id, activeLocationId) as any, '1h');
     const newRefreshToken = crypto.randomBytes(32).toString('hex');
     const newRefreshTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
 

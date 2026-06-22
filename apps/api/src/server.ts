@@ -63,7 +63,7 @@ import securityHeadersPlugin from './lib/security/headers.js';
 // Safe __dirname fallback for dual ESM/CJS bundling
 const dirName = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath((import.meta as any).url));
 import authPlugin from './plugins/auth.js';
-import { isDevPath, isDevRequestAuthorized, devLoginAllowed } from './plugins/dev-guard.js';
+import { isDevPath, isDevRequestAuthorized } from './plugins/dev-guard.js';
 import multipart from '@fastify/multipart';
 import { setupWebSocket } from './websocket.js';
 import { setupShutdown } from './shutdown.js';
@@ -110,14 +110,6 @@ declare module 'fastify' {
     wss: any;
     memory: import('./lib/memory.js').MemoryService;
   }
-}
-
-/** Constant-time string compare; false on any length mismatch (never throws). */
-function timingSafeStrEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) return false;
-  return crypto.timingSafeEqual(bufA, bufB);
 }
 
 async function main() {
@@ -580,8 +572,12 @@ const retryPolicy = new RetryPolicy();
   // redirect_uri (APP_BASE_URL/api/auth/google/callback). Without the prefix the
   // Google button + callback 404'd.
   fastify.register(authRoutes, { prefix: '/api' });
+  // Real email+password login (argon2) + flag-gated dev bypass, both in routes/auth/local.ts.
+  // Registered here (prefix /api → /api/auth/local/login). Previously this plugin was imported
+  // but never registered; an inline dev-only handler shadowed the route, so DB-password login
+  // was dead code (test@dowiz.com could only 401 on prod). The inline handler is now removed.
   const { default: localAuthRoutes } = await import('./routes/auth/local.js');
-  // localAuthRoutes registered inline below for reliability
+  fastify.register(localAuthRoutes, { prefix: '/api', db: pool });
   fastify.register(courierRoutes);
   fastify.register(orderRoutes, { prefix: '/api', db: pool, messageBus, queue });
   fastify.register(categoryRoutes);
@@ -876,48 +872,8 @@ fastify.register(mockAuthRoutes, { db: pool });
       return reply.status(500).send({ error: 'Seed failed: ' + (e?.message || '') });
     }
   });
-  // Dev-only password login (ADR-0003). Fails closed in production: the bypass activates
-  // ONLY when devLoginAllowed(env) — i.e. ALLOW_DEV_LOGIN='true' AND DEV_AUTH_SECRET set
-  // (never true on prod; boot-guard D rejects either knob on a prod box). The account
-  // credentials come from env (DEV_LOGIN_EMAIL/DEV_LOGIN_PASSWORD), so no credential
-  // literal ships in code. Tokens are signed under the dev kid so a prod verifier rejects
-  // them. No per-route rate limit: in prod the branch is dead (immediate 401, nothing to
-  // brute-force); in non-prod the global 100/min IP limiter suffices for shared test creds.
-  fastify.post('/api/auth/local/login', {
-    schema: {
-      body: z.object({
-        email: z.string().email().max(200),
-        password: z.string().min(1).max(200),
-      }).strict(),
-    },
-  }, async (request, reply) => {
-    const { email, password } = request.body as { email: string; password: string };
-    const devEmail = env.DEV_LOGIN_EMAIL;
-    const devPassword = env.DEV_LOGIN_PASSWORD;
-    const credsMatch =
-      devLoginAllowed(env) &&
-      !!devEmail && !!devPassword &&
-      timingSafeStrEqual(email.toLowerCase(), devEmail.toLowerCase()) &&
-      timingSafeStrEqual(password, devPassword);
-    if (credsMatch) {
-      const res = await pool.query(`SELECT id FROM users WHERE email = $1`, [email.toLowerCase()]);
-      if (res.rowCount === 0) return reply.status(401).send({ error: 'Invalid credentials' });
-      const userId = res.rows[0].id;
-      // Prefer an owner membership so the token is scoped to the right storefront.
-      const memRes = await pool.query(
-        `SELECT location_id FROM memberships WHERE user_id = $1 AND status = 'active'
-         ORDER BY (role = 'owner') DESC LIMIT 1`, [userId]);
-      const activeLocationId = memRes.rows[0]?.location_id || null;
-      const { signDevToken } = await import('@deliveryos/platform');
-      // activeLocationId MUST be in the signed token, not just the response body — otherwise
-      // location-scoped endpoints (menu, orders) read no location and return empty.
-      const tokenPayload: Record<string, unknown> = { role: 'owner', userId, sub: userId };
-      if (activeLocationId) tokenPayload.activeLocationId = activeLocationId;
-      const token = await signDevToken(tokenPayload as any, '1d');
-      return reply.send({ access_token: token, userId, activeLocationId });
-    }
-    return reply.status(401).send({ error: 'Invalid credentials' });
-  });
+  // (Local email+password login — real argon2 + flag-gated dev bypass — is served by the
+  //  registered routes/auth/local.ts plugin above, not an inline handler.)
 
   // SPA proxy — maps React SPA URL patterns to real backend routes
   fastify.register(spaProxyRoutes, { db: pool, storage });
