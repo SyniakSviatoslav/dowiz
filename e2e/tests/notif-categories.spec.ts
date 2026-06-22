@@ -34,10 +34,26 @@ test.describe('UI: Notification category preference-centre', () => {
     const seed = await request.post(`${BASE}/dev/seed-telegram-target`, { data: { locationId, userId } });
     expect(seed.status(), 'seed-telegram-target').toBe(200);
     targetId = (await seed.json()).targetId;
+
+    // Idempotent start: reset the primary target's prefs to defaults (operational ON,
+    // quality OFF) so the test isn't affected by state a prior run left behind.
+    const list = await request.get(`${BASE}/api/owner/locations/${locationId}/notifications/targets`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const primary = ((await list.json()).targets as any[]).find((x) => x.channel === 'telegram' && x.status === 'active');
+    if (primary) {
+      await request.put(`${BASE}/api/owner/locations/${locationId}/notifications/targets/${primary.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        data: { prefs: { operational: true, quality: false } },
+      });
+    }
   });
 
   test('renders the three categories and persists an operational toggle', async ({ page, request }) => {
-    await page.addInitScript((tk: string) => localStorage.setItem('dos_access_token', tk), token);
+    await page.addInitScript((tk: string) => {
+      localStorage.setItem('dos_access_token', tk);
+      localStorage.setItem('dos_locale', 'en'); // assert against English copy deterministically
+    }, token);
     await page.goto(`${BASE}/admin/settings`, { waitUntil: 'networkidle' });
 
     const card = page.getByTestId('notif-categories');
@@ -55,14 +71,17 @@ test.describe('UI: Notification category preference-centre', () => {
     const qToggle = page.getByTestId('notif-cat-quality').getByRole('switch');
     await expect(qToggle).toHaveAttribute('aria-checked', 'false');
 
-    // toggle operational OFF → verify the write reached the API (prefs.operational === false)
+    // toggle operational OFF → verify the write reached the API. The preference-centre
+    // controls the FIRST active telegram target, which may not be the one this test seeded
+    // (staging can hold several from prior runs), so assert on that same primary target.
     await opToggle.click();
     await expect.poll(async () => {
       const res = await request.get(`${BASE}/api/owner/locations/${locationId}/notifications/targets`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const targets = (await res.json()).targets as any[];
-      return targets.find((x) => x.id === targetId)?.prefs?.operational;
+      const primary = targets.find((x) => x.channel === 'telegram' && x.status === 'active');
+      return primary?.prefs?.operational;
     }, { timeout: 10000 }).toBe(false);
 
     await expect(opToggle).toHaveAttribute('aria-checked', 'false');
