@@ -1,23 +1,13 @@
 import type { FastifyInstance } from 'fastify';
-import { jwtVerify } from 'jose';
-import { loadEnv } from '@deliveryos/config';
 import crypto from 'crypto';
-import { withTenant } from '@deliveryos/platform';
+import { withTenant, verifyAuthToken } from '@deliveryos/platform';
 import { getImageUrl } from '../lib/image-url.js';
 import { extractFromWebsite, extractLogoColor, normalizeHex } from '../lib/brand-extractor.js';
 import { maskStr } from '../lib/pii-mask.js';
 import { decryptPII } from '../lib/pii-cipher.js';
 import { z } from 'zod';
 
-const env = loadEnv();
-
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
-
-function getPublicKey(): crypto.KeyObject {
-  const raw = env.JWT_PUBLIC_KEY;
-  if (!raw) throw new Error('JWT_PUBLIC_KEY missing');
-  return crypto.createPublicKey(raw.replace(/\\n/g, '\n'));
-}
 
 function validateImageKey(val: unknown): string | null | undefined {
   if (val === undefined || val === null) return val;
@@ -72,7 +62,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     if (!auth?.startsWith('Bearer ')) return null;
     try {
       const token = auth.slice(7);
-      const { payload } = await jwtVerify(token, getPublicKey(), { algorithms: ['RS256'] });
+      const payload = await verifyAuthToken(token);
       const claims = payload as any;
       if (claims.role !== 'owner') return null;
       // Prefer activeLocationId from JWT (new auth system)
@@ -100,7 +90,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const auth = request.headers.authorization;
     if (!auth?.startsWith('Bearer ')) return false;
     try {
-      const { payload } = await jwtVerify(auth.slice(7), getPublicKey(), { algorithms: ['RS256'] });
+      const payload = await verifyAuthToken(auth.slice(7));
       return (payload as any).role === 'owner';
     } catch {
       return false;
@@ -113,7 +103,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const auth = request.headers.authorization;
     if (!auth?.startsWith('Bearer ')) return null;
     try {
-      const { payload } = await jwtVerify(auth.slice(7), getPublicKey(), { algorithms: ['RS256'] });
+      const payload = await verifyAuthToken(auth.slice(7));
       const claims = payload as any;
       if (claims.role !== 'owner') return null;
       return claims.userId || claims.sub || null;
@@ -127,7 +117,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     if (!auth?.startsWith('Bearer ')) return null;
     try {
       const token = auth.slice(7);
-      const { payload } = await jwtVerify(token, getPublicKey(), { algorithms: ['RS256'] });
+      const payload = await verifyAuthToken(token);
       const claims = payload as any;
       if (claims.role !== 'owner') return null;
       const uid = claims.userId || claims.sub;
