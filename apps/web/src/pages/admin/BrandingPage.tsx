@@ -1,3 +1,4 @@
+import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Button, Input, ColorInput, FormField, useI18n, useToast } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
@@ -80,7 +81,7 @@ export function BrandingPage() {
       form.append('logo', file);
       const res = await fetch(`/api/owner/locations/${locationId}/theme/logo`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('dos_access_token') || ''}` },
+        headers: { Authorization: `Bearer ${safeStorage.get('dos_access_token') || ''}` },
         body: form,
       });
       if (res.ok) {

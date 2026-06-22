@@ -1,9 +1,10 @@
+import { safeStorage } from '../utils/safeStorage.js';
 export type Locale = 'sq' | 'en' | 'uk';
 
 const STORAGE_KEY = 'dos_locale';
 
 let currentLocale: Locale = (typeof window !== 'undefined'
-  ? (localStorage.getItem(STORAGE_KEY) as Locale) || 'sq'
+  ? (safeStorage.get(STORAGE_KEY) as Locale) || 'sq'
   : 'sq') as Locale;
 
 const messages: Record<Locale, Record<string, string>> = {
@@ -3252,7 +3253,7 @@ export function translate(locale: Locale, key: string, fallback?: string, option
 export function setLocale(locale: Locale): void {
   currentLocale = locale;
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, locale);
+    safeStorage.set(STORAGE_KEY, locale);
   }
   document.documentElement.lang = locale;
   listeners.forEach(fn => fn());

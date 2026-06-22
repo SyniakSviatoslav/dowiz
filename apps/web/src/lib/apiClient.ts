@@ -1,3 +1,4 @@
+import { safeStorage } from './safeStorage.js';
 import { z } from 'zod';
 
 const API_BASE = import.meta.env?.VITE_API_BASE_URL || '/api';
@@ -40,7 +41,7 @@ export const apiClient = async <T extends z.ZodType>(
 
   // TODO: integrate real useAuth hook later
   // Temporary auth token retrieval from localStorage (mock)
-  const token = typeof window !== 'undefined' ? localStorage.getItem('dos_access_token') : null;
+  const token = typeof window !== 'undefined' ? safeStorage.get('dos_access_token') : null;
 
   const isFormData = body instanceof FormData;
 
@@ -87,7 +88,7 @@ export const apiClient = async <T extends z.ZodType>(
           // visitor to the owner login — the page handles its own missing/expired
           // session (e.g. OrderStatusPage shows a "reload the menu" message).
           if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
-            localStorage.removeItem('dos_access_token');
+            safeStorage.remove('dos_access_token');
             sessionStorage.setItem('dos_auth_expired', '1');
             window.location.href = '/admin';
           }

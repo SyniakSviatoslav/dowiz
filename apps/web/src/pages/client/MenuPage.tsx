@@ -1,3 +1,4 @@
+import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -106,28 +107,28 @@ export function MenuPage() {
   const menuPrefsKey = `dos_menu_prefs_${slug}`;
   const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc' | 'name'>(() => {
     try {
-      const s = localStorage.getItem(`dos_menu_prefs_${slug}`);
+      const s = safeStorage.get(`dos_menu_prefs_${slug}`);
       const p = s ? JSON.parse(s) : null;
       return (['default', 'price-asc', 'price-desc', 'name'] as const).includes(p?.sortBy) ? p.sortBy : 'default';
     } catch { return 'default'; }
   });
   const [filterAllergen, setFilterAllergen] = useState<string | null>(() => {
     try {
-      const s = localStorage.getItem(`dos_menu_prefs_${slug}`);
+      const s = safeStorage.get(`dos_menu_prefs_${slug}`);
       const p = s ? JSON.parse(s) : null;
       return typeof p?.filterAllergen === 'string' ? p.filterAllergen : null;
     } catch { return null; }
   });
   const [searchQuery, setSearchQuery] = useState<string>(() => {
     try {
-      const s = localStorage.getItem(`dos_menu_prefs_${slug}`);
+      const s = safeStorage.get(`dos_menu_prefs_${slug}`);
       const p = s ? JSON.parse(s) : null;
       return typeof p?.searchQuery === 'string' ? p.searchQuery : '';
     } catch { return ''; }
   });
 
   useEffect(() => {
-    try { localStorage.setItem(menuPrefsKey, JSON.stringify({ sortBy, filterAllergen, searchQuery })); } catch {}
+    try { safeStorage.set(menuPrefsKey, JSON.stringify({ sortBy, filterAllergen, searchQuery })); } catch {}
   }, [menuPrefsKey, sortBy, filterAllergen, searchQuery]);
 
   const categories = data;

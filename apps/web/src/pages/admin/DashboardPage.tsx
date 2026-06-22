@@ -1,3 +1,4 @@
+import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay } from '@deliveryos/ui';
@@ -30,7 +31,7 @@ export function DashboardPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'highest'>('newest');
   const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
-  const [showHint, setShowHint] = useState(() => localStorage.getItem('dos_dash_hint_dismissed') !== '1');
+  const [showHint, setShowHint] = useState(() => safeStorage.get('dos_dash_hint_dismissed') !== '1');
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const [clientSlug, setClientSlug] = useState('');
@@ -310,7 +311,7 @@ export function DashboardPage() {
           title={t('admin.welcome_dashboard', 'Welcome to your Dashboard')}
           description={t('admin.dashboard_hint', 'Here you can manage incoming orders, track couriers, and monitor your store readiness. Use the sidebar to navigate between sections.')}
           icon="ti ti-info-circle"
-          onDismiss={() => { setShowHint(false); localStorage.setItem('dos_dash_hint_dismissed', '1'); }}
+          onDismiss={() => { setShowHint(false); safeStorage.set('dos_dash_hint_dismissed', '1'); }}
         />
       )}
 

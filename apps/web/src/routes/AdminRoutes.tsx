@@ -1,3 +1,4 @@
+import { safeStorage } from '../lib/safeStorage.js';
 import React, { useState, useEffect, Suspense } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { apiClient } from '../lib/index.js';
@@ -59,7 +60,7 @@ function AdminLayout() {
 
   // Auth guard: unauthenticated users must not reach the owner dashboard shell.
   // Dev mode (?dev=true) uses mocked APIs with no real token, so it is exempt.
-  const isAuthed = typeof window !== 'undefined' && !!localStorage.getItem('dos_access_token');
+  const isAuthed = typeof window !== 'undefined' && !!safeStorage.get('dos_access_token');
   useEffect(() => {
     if (!isAuthed && !isDev) navigate('/login', { replace: true });
   }, [isAuthed, isDev, navigate]);
@@ -140,7 +141,7 @@ function AdminLayout() {
           {!collapsed && <div className="px-1 space-y-1"><CurrencySwitcher /><LanguageSwitcher variant="full" /></div>}
           <button
             onClick={() => {
-              localStorage.removeItem('dos_access_token');
+              safeStorage.remove('dos_access_token');
               navigate('/login');
             }}
             className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)] hover:text-[var(--brand-text)] transition-colors ${collapsed ? 'justify-center' : ''}`}

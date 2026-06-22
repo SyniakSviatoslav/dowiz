@@ -1,3 +1,4 @@
+import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay, useDeliveryEta } from '@deliveryos/ui';
@@ -154,7 +155,7 @@ export function OrderStatusPage() {
               body: { code },
             });
             if (res?.token) {
-              localStorage.setItem('dos_access_token', res.token);
+              safeStorage.set('dos_access_token', res.token);
               // Strip ?t= so the secret never persists in history or leaks via Referer.
               window.history.replaceState({}, '', window.location.pathname + window.location.hash);
               return await fetchOrder(false); // retry once with the fresh token
