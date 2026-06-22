@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LanguageSwitcher, BottomTabBar, CurrencySwitcher, useI18n } from '@deliveryos/ui';
+import { LanguageSwitcher, BottomTabBar, CurrencySwitcher, SunlightToggle, useI18n } from '@deliveryos/ui';
 import type { TabItem } from '@deliveryos/ui';
 import { TasksPage } from '../pages/courier/TasksPage.js';
 import { DeliveryPage } from '../pages/courier/DeliveryPage.js';
@@ -54,6 +54,7 @@ function CourierLayout() {
         <div className="w-full max-w-md mx-auto flex items-center justify-between">
           <span className="text-sm font-semibold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Courier</span>
           <div className="flex items-center gap-1">
+            <SunlightToggle />
             <CurrencySwitcher />
             <LanguageSwitcher variant="full" />
           </div>
