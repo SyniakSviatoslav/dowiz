@@ -88,10 +88,11 @@ export function MediaGallery({ media, posterFallbackUrl }: MediaGalleryProps) {
       aria-roledescription="carousel"
       aria-label="Product media"
       ref={trackRef}
-      style={{ position: 'relative' }}
+      style={{ position: 'relative', width: '100%', height: '100%' }}
     >
-      {/* Stable hero box — every slide is absolutely positioned inside it (CLS = 0). */}
-      <div className="dz-media-stage" style={{ position: 'relative', aspectRatio, overflow: 'hidden' }}>
+      {/* Stable hero box — fills a fixed-aspect parent (the modal hero) when present; falls
+          back to its own aspect-ratio standalone (CLS = 0). Slides absolutely positioned. */}
+      <div className="dz-media-stage" style={{ position: 'relative', width: '100%', height: '100%', aspectRatio, overflow: 'hidden' }}>
         {media.map((item, i) => (
           <div
             key={item.id}
