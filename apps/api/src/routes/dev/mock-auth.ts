@@ -132,4 +132,23 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
       client.release();
     }
   });
+
+  // Test helper: seed an active telegram notification target for a location so the
+  // category preference-centre (and /settings) has something to render against.
+  fastify.post('/dev/seed-telegram-target', async (request: any, reply: any) => {
+    const body = (request.body as Record<string, unknown>) || {};
+    const locationId = body.locationId as string;
+    const userId = (body.userId as string) || null;
+    const address = (body.address as string) || `test-chat-${crypto.randomUUID().slice(0, 8)}`;
+    if (!locationId) return reply.status(400).send({ error: 'locationId required' });
+
+    const res = await (fastify as any).db.query(
+      `INSERT INTO owner_notification_targets (location_id, channel, address, status, user_id)
+       VALUES ($1, 'telegram', $2, 'active', $3)
+       ON CONFLICT (location_id, channel, address) DO UPDATE SET status = 'active'
+       RETURNING id`,
+      [locationId, address, userId]
+    );
+    return reply.send({ targetId: res.rows[0].id, address });
+  });
 }

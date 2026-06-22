@@ -10,6 +10,8 @@ export type AuditStatus =
   | 'order_not_found'
   | 'circuit_open'
   | 'rate_limited'
+  | 'held'
+  | 'quiet_tz_fallback'
   | 'sending'
   | 'delivered'
   | 'failed';
