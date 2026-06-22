@@ -62,3 +62,44 @@ test.describe('Mobile polish — client storefront (/s/demo)', () => {
     }
   });
 });
+
+test.describe('Mobile polish — checkout / cart', () => {
+  test('add to cart → cart drawer → checkout render on mobile', async ({ page }) => {
+    await page.goto(`${BASE}/s/demo`, { waitUntil: 'networkidle' });
+    await page.evaluate(() => (document as any).fonts?.ready);
+    await page.waitForTimeout(1200);
+
+    const add = page.getByTestId('menu-item-add').first();
+    await expect(add).toBeVisible({ timeout: 15000 });
+    await add.click();
+
+    const cartOpen = page.getByTestId('cart-open');
+    await expect(cartOpen).toBeVisible({ timeout: 8000 });
+    await cartOpen.click();
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: `${SHOTS}/client-cart.png`, fullPage: true });
+
+    await page.getByTestId('cart-checkout').click();
+    await page.evaluate(() => (document as any).fonts?.ready);
+    await page.waitForTimeout(1200);
+    await expect(page.getByTestId('checkout-phone')).toBeVisible({ timeout: 15000 });
+    await page.screenshot({ path: `${SHOTS}/client-checkout.png`, fullPage: true });
+  });
+});
+
+test.describe('Mobile polish — courier app', () => {
+  test('tasks, earnings, shift render on mobile', async ({ page, request }) => {
+    const res = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'courier' } });
+    expect(res.ok(), `courier mock-auth failed ${res.status()}`).toBeTruthy();
+    const token = (await res.json()).access_token;
+    await page.addInitScript((t: string) => localStorage.setItem('dos_access_token', t), token);
+
+    for (const [route, name] of [['/courier', 'tasks'], ['/courier/earnings', 'earnings'], ['/courier/shift', 'shift']] as const) {
+      await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
+      await page.evaluate(() => (document as any).fonts?.ready);
+      await page.waitForTimeout(1000);
+      await page.screenshot({ path: `${SHOTS}/courier-${name}.png`, fullPage: true });
+    }
+    await expect(page.locator('body')).toBeVisible();
+  });
+});
