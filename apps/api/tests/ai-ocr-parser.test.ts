@@ -167,6 +167,44 @@ test('AiOcrParser - live LLM returns valid JSON menu schema', async () => {
   assert.strictEqual(res.summary.errors, 0);
 });
 
+// Regression proof: ***REDACTED*** alone must select the OpenRouter provider and route
+// through its OpenAI-compatible chat/completions endpoint — previously the key was ignored
+// and import silently degraded to the heuristic structurer.
+test('AiOcrParser - OpenRouter provider: selected via ***REDACTED***, returns draft', async () => {
+  const { port, server } = await startMockLLm((_body) => ({
+    // OpenAI-wire shape (OpenRouter mirrors it): choices[0].message.content = JSON menu.
+    choices: [{ message: { content: JSON.stringify({
+      categories: [{ externalKey: 'cat1', name: 'Pizzas' }],
+      products: [{ externalKey: 'p1', categoryKey: 'cat1', name: 'Margherita', price: 850, currency: 'EUR', available: true }],
+      modifierGroups: [],
+      modifiers: [],
+      links: []
+    }) } }]
+  }));
+
+  const keys = ['LLM_PROVIDER', 'LLM_ADAPTER', 'LLM_ENDPOINT', 'GROQ_API_KEY', 'OPENAI_API_KEY', '***REDACTED***', 'OPENROUTER_ENDPOINT', 'OPENROUTER_MODEL'];
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  keys.forEach((k) => delete process.env[k]);
+  process.env.***REDACTED*** = 'test-or-key';
+  process.env.OPENROUTER_ENDPOINT = `http://localhost:${port}/v1/chat/completions`;
+
+  try {
+    const res = await new AiOcrParser().parse({
+      kind: 'pdf',
+      bytes: pdfBuffer(PDF_WITH_TEXT_BASE64),
+      config: { expectedCurrency: 'EUR', currencyMinorUnit: 2 }
+    });
+    assert.strictEqual(res.summary.errors, 0, 'OpenRouter path must not error');
+    assert.strictEqual(res.draft.products.length, 1, 'one product from the OpenRouter LLM response');
+    assert.strictEqual(res.draft.products[0]!.name, 'Margherita', 'product came from OpenRouter, not heuristic');
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+    server.close();
+  }
+});
+
 test('AiOcrParser - live LLM returns non-JSON: returns parse error', async () => {
   const { port, server } = await startMockLLm((_body) => ({
     response: 'this is not json at all'
