@@ -11,8 +11,30 @@ export const PublicProduct = z.object({
   allergens: z.array(z.string()),
   calories: z.number().int().nullable(),
   sortOrder: z.number().int(),
+  primary_media_id: z.string().nullable().optional(),
 }).strict();
 export type PublicProduct = z.infer<typeof PublicProduct>;
+
+/**
+ * Cinematic product media (Phase 2, dark behind MEDIA_RICH_ENABLED).
+ * Resolved view served by the lazy media endpoint — `url`/`posterUrl` are
+ * already absolute (server resolves storage_key → /media/ or http(s) passthrough).
+ * See docs/design/cinematic-product-media/phase2-contract.md.
+ */
+export type ProductMediaKind = 'image' | 'video' | 'spin' | 'model';
+export interface ProductMedia {
+  id: string;
+  kind: ProductMediaKind;
+  url: string;                 // resolved absolute URL to the asset (server resolves storage_key → /media/ or passthrough)
+  posterUrl?: string | null;   // video/spin poster (raster only)
+  mimeType: string;
+  width?: number | null;
+  height?: number | null;
+  durationMs?: number | null;
+  alt?: string | null;
+  sortOrder: number;
+  meta?: { frameCount?: number; frameUrls?: string[] } | null; // spin: ordered frame URLs
+}
 
 export const PublicCategory = z.object({
   id: z.string().uuid(),
