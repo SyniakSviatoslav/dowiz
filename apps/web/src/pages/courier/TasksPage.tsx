@@ -1,3 +1,4 @@
+import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,7 +21,7 @@ export function TasksPage() {
   // Extract courier ID from JWT stored in localStorage
   const getCourierId = (): string => {
     try {
-      const token = localStorage.getItem('dos_access_token');
+      const token = safeStorage.get('dos_access_token');
       if (!token) return 'c1';
       const payloadBase64 = token.split('.')[1] || '';
       if (!payloadBase64) return 'c1';

@@ -1,3 +1,4 @@
+import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState } from 'react';
 import { Button, Input, useI18n, LanguageSwitcher } from '@deliveryos/ui';
 import { apiClient } from '../../lib/apiClient.js';
@@ -44,8 +45,8 @@ export function LoginPage() {
           const p = await apiClient<any>(`/auth/telegram/poll?token=${token}`);
           if (p.status === 'authenticated' && p.access_token) {
             sessionStorage.setItem('dos_access_token', p.access_token);
-            localStorage.setItem('dos_access_token', p.access_token);
-            if (p.refresh_token) localStorage.setItem('dos_refresh_token', p.refresh_token);
+            safeStorage.set('dos_access_token', p.access_token);
+            if (p.refresh_token) safeStorage.set('dos_refresh_token', p.refresh_token);
             navigate('/admin');
             return;
           }
@@ -73,7 +74,7 @@ export function LoginPage() {
         schema: AuthLoginResponse,
       });
       sessionStorage.setItem('dos_access_token', res.access_token);
-      localStorage.setItem('dos_access_token', res.access_token);
+      safeStorage.set('dos_access_token', res.access_token);
       navigate('/admin');
     } catch (err: any) {
       setError(err.status === 401
@@ -88,7 +89,7 @@ export function LoginPage() {
     try {
       const res = await apiClient<typeof DevMockAuthResponse>('/dev/mock-auth', { method: 'POST', schema: DevMockAuthResponse });
       sessionStorage.setItem('dos_access_token', res.access_token);
-      localStorage.setItem('dos_access_token', res.access_token);
+      safeStorage.set('dos_access_token', res.access_token);
       navigate('/admin');
     } catch (err: any) {
       setError(t('admin.error_login_failed', 'Login failed.'));

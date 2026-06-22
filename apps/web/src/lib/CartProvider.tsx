@@ -1,3 +1,4 @@
+import { safeStorage } from './safeStorage.js';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { CartItem } from '@deliveryos/ui';
 
@@ -38,12 +39,12 @@ export function CartProvider({ children, locationId }: { children: React.ReactNo
   const cartKey = `dos_cart_${locationId}`;
   const [items, setItems] = useState<CartItem[]>(() => {
     if (typeof window === 'undefined') return [];
-    const stored = localStorage.getItem(cartKey);
+    const stored = safeStorage.get(cartKey);
     return stored ? parseStoredCart(stored) : [];
   });
 
   useEffect(() => {
-    localStorage.setItem(cartKey, JSON.stringify({ version: CART_SCHEMA_VERSION, items }));
+    safeStorage.set(cartKey, JSON.stringify({ version: CART_SCHEMA_VERSION, items }));
   }, [items, cartKey]);
 
   useEffect(() => {

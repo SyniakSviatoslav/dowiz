@@ -1,3 +1,4 @@
+import { safeStorage } from '../../lib/safeStorage.js';
 import { useState, useEffect, useMemo } from 'react';
 import { Button, EmptyState, SkeletonBase, HintCard, useI18n, useConfirm, MobilePicker, useIsMobile } from '@deliveryos/ui';
 import { EU_ALLERGENS } from '@deliveryos/shared-types';
@@ -46,7 +47,7 @@ function defaultSupplies(): SupplyItem[] {
 // Shared utility to load/save from localStorage — used by both SupplyLibrary and RecipeEditor
 export function loadSupplies(): SupplyItem[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = safeStorage.get(STORAGE_KEY);
     if (!raw) return saveSupplies(defaultSupplies());
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -58,7 +59,7 @@ export function loadSupplies(): SupplyItem[] {
 }
 
 export function saveSupplies(supplies: SupplyItem[]): SupplyItem[] {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(supplies)); } catch (err) {
+  try { safeStorage.set(STORAGE_KEY, JSON.stringify(supplies)); } catch (err) {
     console.debug('[SupplyLibrary] localStorage write failed:', err);
   }
   return supplies;
