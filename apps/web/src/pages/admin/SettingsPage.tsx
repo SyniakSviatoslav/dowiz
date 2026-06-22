@@ -5,6 +5,10 @@ import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 
+// VITE_TG_CATEGORY_GATING (default off): mirrors the server TG_CATEGORY_GATING flag so
+// the category preference-centre stays dark until the dispatcher gates by category.
+const CATEGORY_GATING_ENABLED = import.meta.env.VITE_TG_CATEGORY_GATING === 'true';
+
 const OwnerSettingsResponse = z.object({
   id: z.string().optional(),
   name: z.string().optional(),
@@ -241,6 +245,17 @@ export function SettingsPage() {
       });
       await fetchTgTargets();
     } catch (err) { console.warn('[SettingsPage] toggle tg target failed:', err); }
+  };
+
+  const handleCategoryToggle = async (targetId: string, category: 'operational' | 'quality', newValue: boolean) => {
+    if (!locationId) return;
+    try {
+      await apiClient(`/owner/locations/${locationId}/notifications/targets/${targetId}`, {
+        method: 'PUT',
+        body: { prefs: { [category]: newValue } },
+      });
+      await fetchTgTargets();
+    } catch (err) { console.warn('[SettingsPage] category toggle failed:', err); }
   };
 
   const handleChange = (field: keyof LocationSettings, value: any) => {
@@ -506,6 +521,48 @@ export function SettingsPage() {
                 ))}
               </div>
             )}
+
+            {/* Notification category preference-centre (dark until VITE_TG_CATEGORY_GATING) */}
+            {CATEGORY_GATING_ENABLED && (() => {
+              const primary = tgTargets.find((tg: any) => tg.channel === 'telegram' && tg.status === 'active');
+              if (!primary) return null;
+              const opOn = primary.prefs?.operational !== false; // default ON
+              const qOn = primary.prefs?.quality === true;        // default OFF
+              return (
+                <div data-testid="notif-categories" className="mt-4 space-y-2">
+                  <div className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>
+                    {t('admin.notif_categories', 'Notification categories')}
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+                    <div>
+                      <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>🔴 {t('admin.notif_transactional', 'Transactional')}</div>
+                      <div className="text-[11px]" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.notif_transactional_desc', 'New orders, failures — cannot be turned off')}</div>
+                    </div>
+                    <span data-testid="notif-cat-transactional" className="text-[11px] font-medium px-2 py-1 rounded" style={{ color: 'var(--color-success)', background: 'var(--color-success-light)' }}>
+                      {t('admin.notif_always_on', 'Always on')}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+                    <div>
+                      <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>🟠 {t('admin.notif_operational', 'Operational')}</div>
+                      <div className="text-[11px]" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.notif_operational_desc', 'Shift changes, storefront open/close')}</div>
+                    </div>
+                    <span data-testid="notif-cat-operational">
+                      <Toggle checked={opOn} onChange={(v) => handleCategoryToggle(primary.id, 'operational', v)} aria-label={t('admin.notif_operational', 'Operational')} />
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+                    <div>
+                      <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>🟡 {t('admin.notif_quality', 'Quality & analytics')}</div>
+                      <div className="text-[11px]" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.notif_quality_desc', 'Low ratings, digests')}</div>
+                    </div>
+                    <span data-testid="notif-cat-quality">
+                      <Toggle checked={qOn} onChange={(v) => handleCategoryToggle(primary.id, 'quality', v)} aria-label={t('admin.notif_quality', 'Quality & analytics')} />
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Deep link flow + QR */}
             {tgDeepLink && (

@@ -9,6 +9,18 @@ import { renderTelegramMessage } from '../notifications/render.js';
 import { updateOrderStatus } from '../lib/orderStatusService';
 import { acceptCourierAssignment } from '../lib/courierAssignmentService';
 import { openShift } from '../lib/shiftService';
+import { setStorefrontPaused, createCloseNonce, getLocationStorefront } from '../lib/storefrontService';
+import { setCategoryPref, isToggleableCategory } from '../lib/notificationPrefsService';
+
+// TG_CATEGORY_GATING (default off): owner can toggle notification categories
+// (operational/quality) from Telegram via /settings → pref.toggle:<loc>:<category>.
+const TG_CATEGORY_GATING = process.env.TG_CATEGORY_GATING === 'true';
+
+// TG_STOREFRONT_ACTION (default off): owner can open/close the storefront
+// (locations.delivery_paused) from Telegram. Dark until launched. The order of the
+// callbacks is store.open:<locationId>, store.close:<locationId> (-> confirm button),
+// store.confirm:<locationId>:<nonce>. Authority is (chatId<->target@location)<->membership.
+const TG_STOREFRONT_ACTION = process.env.TG_STOREFRONT_ACTION === 'true';
 
 export default (async function telegramWebhookRoutes(fastify, opts) {
   const { db, queue, telegramBotSecret, messageBus } = opts as {
@@ -122,6 +134,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
 
       let locationId: string | undefined;
       let targetUserId: string | undefined;
+      let resolvedTargetId: string | undefined; // notification target id (store./pref. actions)
 
       // For order.* actions: resolve location_id from the order first,
       // then look up the notification target scoped by (chatId, locationId).
@@ -155,6 +168,37 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
           return;
         }
         targetUserId = targetRes.rows[0].user_id;
+      } else if (action.startsWith('store.') || action.startsWith('pref.')) {
+        // Storefront + preference actions carry the locationId as the first segment
+        // (store.open:<loc>, store.close:<loc>, store.confirm:<loc>:<nonce>,
+        //  pref.toggle:<loc>:<category>). Resolve authority strictly by (chatId, locationId)
+        // — never rows[0] (BR-3) — and require a real user_id (no legacy-NULL bypass).
+        const flagOk = action.startsWith('store.') ? TG_STOREFRONT_ACTION : TG_CATEGORY_GATING;
+        if (!flagOk) {
+          await answerCallbackQuery(callbackQuery.id, { text: 'Action not supported' });
+          return;
+        }
+        if (!entityId) {
+          await answerCallbackQuery(callbackQuery.id, { text: 'Invalid request' });
+          return;
+        }
+        locationId = entityId;
+        const targetRes = await client.query(
+          `SELECT ont.id, ont.user_id
+           FROM owner_notification_targets ont
+           WHERE ont.address = $1 AND ont.channel = 'telegram' AND ont.status = 'active' AND ont.location_id = $2`,
+          [chatId, locationId]
+        );
+        if (targetRes.rows.length === 0) {
+          await answerCallbackQuery(callbackQuery.id, { text: 'Account not linked to this location' });
+          return;
+        }
+        resolvedTargetId = targetRes.rows[0].id;
+        targetUserId = targetRes.rows[0].user_id;
+        if (!targetUserId) {
+          await answerCallbackQuery(callbackQuery.id, { text: 'Reconnect Telegram to use this action' });
+          return;
+        }
       } else {
         // Non-order actions: look up by chatId without location scope
         const targetRes = await client.query(
@@ -281,6 +325,69 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
             console.error('[TelegramWebhook] Failed to send reason message:', e);
           }
           shouldEditMessage = false;
+          break;
+        }
+
+        case 'store.open': {
+          const r = await setStorefrontPaused(client, locationId, targetUserId!, false);
+          if (r.result === 'denied') resultText = '⚠️ Не вдалося. Спробуйте у застосунку.';
+          else if (r.result === 'noop') resultText = '🟢 Приймання вже відкрите';
+          else resultText = '🟢 Приймання відкрито';
+          break;
+        }
+
+        case 'store.close': {
+          // First tap → ask to confirm with a one-shot nonce (asymmetric friction:
+          // close confirms, open does not — Counsel R3). Echo the location name (BR-15).
+          const state = await getLocationStorefront(client, locationId);
+          if (!state) { resultText = '⚠️ Заклад не знайдено'; break; }
+          if (state.paused) { resultText = '🔴 Приймання вже закрите'; break; }
+          const nonce = await createCloseNonce(client, locationId, targetUserId!, chatId);
+          try {
+            await callTelegramApi('sendMessage', {
+              chat_id: chatId,
+              text: `⚠️ Закрити приймання для «${state.name}»? Клієнти бачитимуть «зачинено».`,
+              reply_markup: { inline_keyboard: [[
+                { text: '🔴 Так, закрити', callback_data: `store.confirm:${locationId}:${nonce}` }
+              ]] }
+            });
+          } catch (e) {
+            console.error('[TelegramWebhook] Failed to send close-confirm:', e);
+          }
+          shouldEditMessage = false;
+          break;
+        }
+
+        case 'store.confirm': {
+          const nonce = parts[2];
+          if (!nonce) { resultText = '⚠️ Недійсний запит'; break; }
+          const r = await setStorefrontPaused(client, locationId, targetUserId!, true, { consumeNonce: nonce });
+          if (r.result === 'nonce_invalid') resultText = '⚠️ Підтвердження протерміновано. Спробуйте ще раз або у застосунку.';
+          else if (r.result === 'denied') resultText = '⚠️ Не вдалося. Спробуйте у застосунку.';
+          else if (r.result === 'noop') resultText = '🔴 Приймання вже закрите';
+          else resultText = '🔴 Приймання закрито';
+          break;
+        }
+
+        case 'pref.set': {
+          // pref.set:<loc>:<category>:<1|0> — atomic category toggle + consent audit.
+          const category = parts[2];
+          const valueStr = parts[3];
+          if (!category || !isToggleableCategory(category) || (valueStr !== '0' && valueStr !== '1')) {
+            resultText = '⚠️ Недійсний запит';
+            break;
+          }
+          const r = await setCategoryPref(client, {
+            targetId: resolvedTargetId!,
+            locationId,
+            userId: targetUserId!,
+            category,
+            value: valueStr === '1',
+            changedVia: 'telegram',
+          });
+          if (!r.ok) { resultText = '⚠️ Не вдалося оновити'; break; }
+          const label = category === 'operational' ? 'Операційні' : 'Якість/аналітика';
+          resultText = `${r.newValue ? '🔔' : '🔕'} ${label}: ${r.newValue ? 'увімкнено' : 'вимкнено'}`;
           break;
         }
 
@@ -510,6 +617,66 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
       else if (text === '/close') {
         // Send deep-link to PWA for shift closing
         await sendMessage(chatId, '🔒 Зачекайте, перенаправляємо до закриття зміни...\n🔗 https://app.dowiz.org/courier/shifts/close');
+      }
+      // Handle /store command — show storefront state + open/close toggle (dark until flag on)
+      else if (text === '/store') {
+        if (!TG_STOREFRONT_ACTION) return;
+        const storeTargets = await client.query(
+          `SELECT ont.location_id, l.name, l.delivery_paused
+           FROM owner_notification_targets ont
+           JOIN locations l ON l.id = ont.location_id
+           WHERE ont.address = $1 AND ont.channel = 'telegram' AND ont.status = 'active'`,
+          [chatId]
+        );
+        if (storeTargets.rows.length === 0) {
+          await sendMessage(chatId, '⚠️ Telegram не підключений до жодного закладу. Використайте /start <token>.');
+          return;
+        }
+        for (const t of storeTargets.rows) {
+          const paused = t.delivery_paused ?? false;
+          const stateLine = paused ? '🔴 Приймання ЗАКРИТО' : '🟢 Приймання ВІДКРИТО';
+          const btn = paused
+            ? { text: '🟢 Відкрити приймання', callback_data: `store.open:${t.location_id}` }
+            : { text: '🔴 Закрити приймання', callback_data: `store.close:${t.location_id}` };
+          await callTelegramApi('sendMessage', {
+            chat_id: chatId,
+            text: `«${t.name}»\n${stateLine}`,
+            reply_markup: { inline_keyboard: [[btn]] },
+          });
+        }
+      }
+      // Handle /settings — notification category toggles (dark until flag on)
+      else if (text === '/settings') {
+        if (!TG_CATEGORY_GATING) return;
+        const rows = await client.query(
+          `SELECT ont.location_id, ont.prefs, l.name
+           FROM owner_notification_targets ont
+           JOIN locations l ON l.id = ont.location_id
+           WHERE ont.address = $1 AND ont.channel = 'telegram' AND ont.status = 'active'`,
+          [chatId]
+        );
+        if (rows.rows.length === 0) {
+          await sendMessage(chatId, '⚠️ Telegram не підключений до жодного закладу. Використайте /start <token>.');
+          return;
+        }
+        for (const t of rows.rows) {
+          const prefs = t.prefs || {};
+          const opOn = prefs.operational !== false; // default ON
+          const qOn = prefs.quality === true;        // default OFF
+          const body =
+            `«${t.name}» — сповіщення\n` +
+            `🔴 Транзакційні: завжди увімкнено\n` +
+            `${opOn ? '🔔' : '🔕'} Операційні: ${opOn ? 'увімкнено' : 'вимкнено'}\n` +
+            `${qOn ? '🔔' : '🔕'} Якість/аналітика: ${qOn ? 'увімкнено' : 'вимкнено'}`;
+          await callTelegramApi('sendMessage', {
+            chat_id: chatId,
+            text: body,
+            reply_markup: { inline_keyboard: [
+              [{ text: opOn ? '🔕 Вимкнути операційні' : '🔔 Увімкнути операційні', callback_data: `pref.set:${t.location_id}:operational:${opOn ? '0' : '1'}` }],
+              [{ text: qOn ? '🔕 Вимкнути якість' : '🔔 Увімкнути якість', callback_data: `pref.set:${t.location_id}:quality:${qOn ? '0' : '1'}` }],
+            ] },
+          });
+        }
       }
       // Ignore other messages
       else {

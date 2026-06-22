@@ -2,7 +2,8 @@ import type { Job } from 'pg-boss';
 import type { NotificationDispatcher, NotificationEvent as NotifEvent, NotificationEventType, NotificationTarget } from '../provider.js';
 import { formatMoney } from '@deliveryos/shared-types';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
-import { isEventAllowedDuringQuietHours } from '../event-registry.js';
+import { isEventAllowedDuringQuietHours, isSuppressedByCategory, getEventCategory } from '../event-registry.js';
+import { evaluateQuietHours } from '../quiet-hours.js';
 import { writeAudit } from '../audit.js';
 import { RetryPolicy } from '../retry.js';
 import { WebPushAdapter } from '../adapters/webpush.js';
@@ -17,6 +18,7 @@ export interface NotifyDispatchJob {
   locationId: string;
   attempt: number;
   testMessage?: string;
+  held?: boolean; // true once this job has already been deferred past a quiet window (max 1 re-hold)
 }
 
 export interface CustomerStatusJob {
@@ -34,6 +36,12 @@ export interface TelegramSendJob {
 }
 
 const CUSTOMER_STATUS_EVENTS = ['CONFIRMED', 'IN_DELIVERY', 'DELIVERED'] as const;
+
+// TG_CATEGORY_GATING (default off): when on, prefs gating is by CATEGORY
+// (operational/quality, transactional always sent) instead of the legacy per-event
+// prefs[event] flag. Default-off keeps current behaviour until the category prefs
+// (migration 1790000000052) + preference-centre UI are live. See event-registry.ts.
+const TG_CATEGORY_GATING = process.env.TG_CATEGORY_GATING === 'true';
 
 export class NotificationWorker {
   private db: any;
@@ -188,10 +196,12 @@ export class NotificationWorker {
 
     try {
       // 1. Re-fetch target and verify tenant isolation + status
+      //    (join locations for the timezone that quiet-hours is evaluated in)
       const targetRes = await client.query(
-        `SELECT id, channel, address, status, prefs 
-         FROM owner_notification_targets 
-         WHERE id = $1 AND location_id = $2`,
+        `SELECT ont.id, ont.channel, ont.address, ont.status, ont.prefs, ont.quiet_hours, l.timezone
+         FROM owner_notification_targets ont
+         JOIN locations l ON l.id = ont.location_id
+         WHERE ont.id = $1 AND ont.location_id = $2`,
         [targetId, locationId],
       );
       
@@ -206,21 +216,51 @@ export class NotificationWorker {
         return;
       }
       
-      // 2. Check prefs
+      // 2. Check prefs — category gating (flag on) or legacy per-event (flag off)
       if (eventType !== 'test') {
         const prefs = targetRow.prefs || {};
-        if (prefs[eventType] === false) {
+        const suppressed = TG_CATEGORY_GATING
+          ? isSuppressedByCategory(eventType, prefs)
+          : prefs[eventType] === false;
+        if (suppressed) {
           await writeAudit(client, { event: eventType, targetId, locationId, channel: targetRow.channel, status: 'prefs_disabled' });
           return;
         }
       }
       
-      // 3. Quiet hours logic (simplified for P16, assume UTC 22:00-08:00)
-      const hour = new Date().getUTCHours();
-      const isQuietHours = hour >= 22 || hour < 8;
-      if (isQuietHours && !isEventAllowedDuringQuietHours(eventType)) {
-        await writeAudit(client, { event: eventType, targetId, locationId, channel: targetRow.channel, status: 'quiet_hours' });
-        return;
+      // 3. Quiet hours
+      if (eventType !== 'test') {
+        if (TG_CATEGORY_GATING) {
+          // Timezone-aware window per target; transactional events always punch through.
+          // Non-transactional events are HELD (re-enqueued past the window) once, then
+          // delivered — never silently dropped (нуль тихих дропів).
+          const decision = evaluateQuietHours(new Date(), targetRow.timezone, targetRow.quiet_hours);
+          const transactional = getEventCategory(eventType) === 'transactional';
+          if (decision.quiet && decision.tzFallback) {
+            // Audit that the window was evaluated against the default TZ (location.timezone NULL/invalid).
+            await writeAudit(client, { event: eventType, targetId, locationId, channel: targetRow.channel, status: 'quiet_tz_fallback' });
+          }
+          if (decision.quiet && !transactional) {
+            if (!job.data.held) {
+              await this.boss.send(
+                QUEUE_NAMES.NOTIFY_DISPATCH,
+                { ...job.data, held: true },
+                { startAfter: decision.secondsUntilEnd },
+              );
+              await writeAudit(client, { event: eventType, targetId, locationId, channel: targetRow.channel, status: 'held' });
+              return;
+            }
+            // Already held once — fall through and deliver rather than hold again (BR-6).
+          }
+        } else {
+          // Legacy: hardcoded UTC 22:00–08:00, drop non-'always' events.
+          const hour = new Date().getUTCHours();
+          const isQuietHours = hour >= 22 || hour < 8;
+          if (isQuietHours && !isEventAllowedDuringQuietHours(eventType)) {
+            await writeAudit(client, { event: eventType, targetId, locationId, channel: targetRow.channel, status: 'quiet_hours' });
+            return;
+          }
+        }
       }
       
       // 4. Re-fetch order strictly under location_id (Tenant Isolation + 0 PII payload check)
@@ -333,8 +373,11 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
           const channel = target.channel as string;
           try {
             const prefs = target.prefs || {};
-            if (prefs[event] === false) {
-              console.log(`[TelegramSend] Skipping target ${target.id}: prefs[${event}] = false`);
+            const suppressed = TG_CATEGORY_GATING
+              ? isSuppressedByCategory(event, prefs)
+              : prefs[event] === false;
+            if (suppressed) {
+              console.log(`[TelegramSend] Skipping target ${target.id}: ${TG_CATEGORY_GATING ? `category ${event}` : `prefs[${event}]`} disabled`);
               await writeAudit(client, { event, targetId: target.id, locationId: location_id, channel, status: 'prefs_disabled' });
               continue;
             }
