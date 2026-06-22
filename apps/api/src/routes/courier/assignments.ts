@@ -134,8 +134,9 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
        await client.query('BEGIN');
        await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
-       // Use the service to accept the assignment
-       const { orderId: orderIdForStatus } = await acceptCourierAssignment(client, id, locationId, { messageBus });
+       // Use the service to accept the assignment (scoped to the calling courier —
+       // cross-courier IDOR fix; the service rejects another courier's assignment 404)
+       const { orderId: orderIdForStatus } = await acceptCourierAssignment(client, id, locationId, courierId, { messageBus });
 
        // Advance order to CONFIRMED (idempotent — ignore if already at or past this state)
        try {
