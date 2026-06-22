@@ -242,14 +242,22 @@ export default async function authRoutes(fastify: FastifyInstance) {
       return reply.status(401).send({ error: 'Refresh token expired' });
     }
 
-    if (tokenRecord.used) {
-      // Reuse detected! Compromised family. Revoke all.
+    // Atomically claim the token: the guarded UPDATE flips used=false→true and only ONE
+    // concurrent request can win it (rowCount 1). A zero rowCount means the token was
+    // already used — a replay OR a second request that lost the race — so treat it as
+    // reuse and revoke the whole family (breach signal). This replaces the previous
+    // SELECT-then-UPDATE, where two concurrent requests both read used=false, both passed
+    // the JS check, and both minted a fresh token family (single-use rotation defeated,
+    // reuse-detection bypassed).
+    const claim = await (fastify as any).db.query(
+      `UPDATE auth_refresh_tokens SET used = true WHERE id = $1 AND used = false RETURNING id`,
+      [tokenRecord.id]
+    );
+    if (claim.rowCount === 0) {
+      // Reuse / lost race. Compromised family — revoke all.
       await (fastify as any).db.query(`DELETE FROM auth_refresh_tokens WHERE family_id = $1`, [tokenRecord.family_id]);
       return reply.status(401).send({ error: 'Token reuse detected. Family revoked.' });
     }
-
-    // Mark as used
-    await (fastify as any).db.query(`UPDATE auth_refresh_tokens SET used = true WHERE id = $1`, [tokenRecord.id]);
 
     // This endpoint only ever issues owner tokens (couriers refresh via
     // courier_sessions). Mint the role explicitly rather than inferring it from
