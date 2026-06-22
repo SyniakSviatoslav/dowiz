@@ -1,3 +1,4 @@
+import { safeStorage } from '../lib/safeStorage.js';
 import React, { useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, FormField, useI18n } from '@deliveryos/ui';
@@ -136,8 +137,8 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
           const p = await apiClient<any>(`/auth/telegram/poll?token=${token}`);
           if (p.status === 'authenticated' && p.access_token) {
             sessionStorage.setItem('dos_access_token', p.access_token);
-            localStorage.setItem('dos_access_token', p.access_token);
-            if (p.refresh_token) localStorage.setItem('dos_refresh_token', p.refresh_token);
+            safeStorage.set('dos_access_token', p.access_token);
+            if (p.refresh_token) safeStorage.set('dos_refresh_token', p.refresh_token);
             setTgWaiting(false);
             void submitOnboarding();
             return;

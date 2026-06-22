@@ -1,3 +1,4 @@
+import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, FormField, LanguageSwitcher, useI18n } from '@deliveryos/ui';
@@ -24,7 +25,7 @@ export function LoginPage() {
         schema: CourierLoginResponse,
       });
       if (data?.jwt) {
-        localStorage.setItem('dos_access_token', data.jwt);
+        safeStorage.set('dos_access_token', data.jwt);
         navigate('/courier');
       } else {
         setError(t('common.invalid_response', 'Invalid response from server'));

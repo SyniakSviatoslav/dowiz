@@ -1,3 +1,4 @@
+import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -268,7 +269,7 @@ export function CheckoutPage() {
       })
       .catch(() => {/* fail-soft: no CTA, generic toast only */});
     try {
-      const saved = localStorage.getItem(`dos_last_delivery_${slug}`);
+      const saved = safeStorage.get(`dos_last_delivery_${slug}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.lat && parsed.lng) {
@@ -286,7 +287,7 @@ export function CheckoutPage() {
       }
     } catch (err) { console.debug('[CheckoutPage] corrupt localStorage:', err); }
     try {
-      const draft = localStorage.getItem(`dos_checkout_draft_${slug}`);
+      const draft = safeStorage.get(`dos_checkout_draft_${slug}`);
       if (draft) {
         const d = JSON.parse(draft);
         if (d.phone) setPhone(d.phone);
@@ -306,7 +307,7 @@ export function CheckoutPage() {
   useEffect(() => {
     if (!slug) return;
     try {
-      localStorage.setItem(`dos_checkout_draft_${slug}`, JSON.stringify({
+      safeStorage.set(`dos_checkout_draft_${slug}`, JSON.stringify({
         phone, customerName, deliveryType, instructionOption, instructionCustom, cashAmount,
         entryPhotoKey, entryPhotoPreview, messengerKind, messengerHandle,
       }));
@@ -428,7 +429,7 @@ export function CheckoutPage() {
 
       const orderRes = OrderCreateResponse.parse(raw);
       try {
-        localStorage.setItem(`dos_last_delivery_${slug}`, JSON.stringify({
+        safeStorage.set(`dos_last_delivery_${slug}`, JSON.stringify({
           lat: pinLat,
           lng: pinLng,
           address,
@@ -436,9 +437,9 @@ export function CheckoutPage() {
           apartment,
         }));
       } catch (err) { console.debug('[CheckoutPage] localStorage write failed:', err); }
-      try { localStorage.removeItem(`dos_checkout_draft_${slug}`); } catch {}
+      try { safeStorage.remove(`dos_checkout_draft_${slug}`); } catch {}
       if (orderRes.authToken) {
-        localStorage.setItem('dos_access_token', orderRes.authToken);
+        safeStorage.set('dos_access_token', orderRes.authToken);
       }
       requestPushPermission(slug!);
       clearCart();
