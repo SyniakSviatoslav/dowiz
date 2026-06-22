@@ -75,6 +75,7 @@ export function LoginPage() {
       });
       sessionStorage.setItem('dos_access_token', res.access_token);
       safeStorage.set('dos_access_token', res.access_token);
+      if ((res as any).refresh_token) safeStorage.set('dos_refresh_token', (res as any).refresh_token);
       navigate('/admin');
     } catch (err: any) {
       setError(err.status === 401
