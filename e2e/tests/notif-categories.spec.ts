@@ -30,7 +30,8 @@ test.describe('UI: Notification category preference-centre', () => {
     userId = a.userId;
     expect(locationId, 'mock-auth must return an active location').toBeTruthy();
 
-    const seed = await request.post(`${BASE}/api/dev/seed-telegram-target`, { data: { locationId, userId } });
+    // seed-telegram-target lives on the mockAuthRoutes plugin, mounted at /dev (not /api/dev)
+    const seed = await request.post(`${BASE}/dev/seed-telegram-target`, { data: { locationId, userId } });
     expect(seed.status(), 'seed-telegram-target').toBe(200);
     targetId = (await seed.json()).targetId;
   });
