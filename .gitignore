@@ -38,3 +38,6 @@ graphify-out/
 # NEVER commit (ADR-0003 #7): these are real bearer tokens valid until expiry.
 .auth/
 **/.auth/
+
+# harness tune-up local backups (large, never commit)
+.harness-backups/
