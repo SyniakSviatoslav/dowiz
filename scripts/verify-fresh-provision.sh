@@ -66,7 +66,13 @@ psql "$SUPERUSER_DB_URL" -v ON_ERROR_STOP=1 -c \
   "GRANT ALL ON SCHEMA public TO ${APP_ROLE};
    ALTER DEFAULT PRIVILEGES FOR ROLE ${MIGRATOR_ROLE} IN SCHEMA public GRANT ALL ON TABLES TO ${APP_ROLE};
    ALTER DEFAULT PRIVILEGES FOR ROLE ${MIGRATOR_ROLE} IN SCHEMA public GRANT ALL ON SEQUENCES TO ${APP_ROLE};
-   ALTER DEFAULT PRIVILEGES FOR ROLE ${MIGRATOR_ROLE} IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO ${APP_ROLE};" \
+   ALTER DEFAULT PRIVILEGES FOR ROLE ${MIGRATOR_ROLE} IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO ${APP_ROLE};
+   -- pg-boss v10 creates its queue partition tables at RUNTIME under schema 'pgboss', so the
+   -- app role must own (or have CREATE on) that schema. On Supabase the schema pre-exists and
+   -- migration 047 grants CREATE to deliveryos_api_user; a bare PG has neither, so pg-boss
+   -- bootstrap fails (missing pgboss.schedule rows). Mirror prod's end state: pre-create the
+   -- schema owned by the runtime role so boss.start()/createQueue can DDL there.
+   CREATE SCHEMA IF NOT EXISTS pgboss AUTHORIZATION ${APP_ROLE};" \
   >/dev/null || fail "grant defaults"
 
 # Export the DB/Redis/port env. These are EXPORTED so they take precedence over
