@@ -818,7 +818,7 @@ export function CheckoutPage() {
             <div className="flex items-start gap-3">
               <span className="text-xl shrink-0 mt-0.5">🌍</span>
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--brand-text-muted)' }}>Did you know?</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.did_you_know', 'Did you know?')}</p>
                 <p className="text-[13px] leading-relaxed" style={{ color: 'var(--brand-text)' }}>{cityFact}</p>
               </div>
             </div>
@@ -882,7 +882,7 @@ export function CheckoutPage() {
         <div role="alert" className="p-4 rounded-xl border text-sm flex items-start gap-3" style={{ background: 'var(--color-danger-light)', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>
           <i className="ti ti-alert-triangle text-lg shrink-0 mt-0.5" />
           <div>
-            <p className="font-semibold mb-1">Order cannot be placed</p>
+            <p className="font-semibold mb-1">{t('checkout.cannot_place', 'Order cannot be placed')}</p>
             <p>{orderError}</p>
             {showPhoneFallback && fallbackPhone && (
               <a
