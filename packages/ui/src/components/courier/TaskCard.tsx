@@ -13,7 +13,7 @@ interface TaskCardProps {
 export function TaskCard({ task, onAccept, onReject, isLoading }: TaskCardProps) {
   const { t } = useI18n();
   return (
-    <div data-testid={`task-card-${task.order_id || task.id}`} data-status={task.status} className={`bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4 shadow-sm transition-all duration-200 ${isLoading ? 'opacity-50 pointer-events-none' : 'hover:shadow-md hover:-translate-y-0.5'}`}>
+    <div data-testid={`task-card-${task.orderId || task.order_id || task.id}`} data-status={task.status} className={`bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4 shadow-sm transition-all duration-200 ${isLoading ? 'opacity-50 pointer-events-none' : 'hover:shadow-md hover:-translate-y-0.5'}`}>
       
       {/* Header */}
       <div className="flex justify-between items-start">
