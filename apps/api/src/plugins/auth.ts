@@ -62,8 +62,8 @@ export const verifyAuth = async (request: FastifyRequest, reply: FastifyReply) =
   if (user && user.role === 'courier') {
     if (!user.jti) {
       // Real courier logins always carry a session jti; a courier token without
-      // one can only originate from the DEV_AUTH_SECRET-gated mock endpoint.
-      if (!devLoginAllowed(env.DEV_AUTH_SECRET)) {
+      // one can only originate from the dev-login-gated mock endpoint (ADR-0003).
+      if (!devLoginAllowed(env)) {
         return reply.status(401).send({ error: 'Token expired or invalid' });
       }
       return;

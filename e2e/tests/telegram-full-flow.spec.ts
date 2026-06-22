@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 const BOT_SECRET = 'Ihatenuclearwar';
 const WEBHOOK_URL = `${BASE}/webhook/telegram/${BOT_SECRET}`;
 const BOT_TOKEN = '8996764379:AAHkuc5mgYQdkWG5rLZEjHc8a8k5MQsHDIk';

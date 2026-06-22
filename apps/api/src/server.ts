@@ -8,7 +8,7 @@ import { BUS_CHANNELS, QUEUE_NAMES, ALL_QUEUES, CUSTOMER_PUSH_EVENTS, orderChann
 import { assertSchemaCurrent } from './lib/schema-guard.js';
 import Redis from 'ioredis';
 import pg from 'pg';
-import type { ZodTypeAny } from 'zod';
+import { z, type ZodTypeAny } from 'zod';
 import healthRoutes from './routes/health.js';
 import authRoutes from './routes/auth.js';
 import courierRoutes from './routes/couriers.js';
@@ -110,6 +110,14 @@ declare module 'fastify' {
     wss: any;
     memory: import('./lib/memory.js').MemoryService;
   }
+}
+
+/** Constant-time string compare; false on any length mismatch (never throws). */
+function timingSafeStrEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
 }
 
 async function main() {
@@ -514,10 +522,11 @@ const retryPolicy = new RetryPolicy();
     if (request.method === 'OPTIONS') return;
     const url = request.url.split('?')[0];
     // Test-only /dev + /api/dev endpoints (mock-auth, create-assignment, seed-data)
-    // require the shared DEV_AUTH_SECRET. Fails closed: with no secret configured
-    // (production), they 404 as if they do not exist — never leak their presence.
+    // require BOTH the ALLOW_DEV_LOGIN flag AND the shared DEV_AUTH_SECRET (ADR-0003).
+    // Fails closed: in production (flag off), they 404 as if they do not exist — never
+    // leak their presence, and never honor the secret alone if it leaks.
     if (isDevPath(url)) {
-      if (!isDevRequestAuthorized(url, request.headers['x-dev-auth-secret'], env.DEV_AUTH_SECRET)) {
+      if (!isDevRequestAuthorized(url, request.headers['x-dev-auth-secret'], env)) {
         return reply.status(404).send({ error: 'Not found' });
       }
     }
@@ -640,14 +649,16 @@ fastify.register(mockAuthRoutes, { db: pool });
 
   fastify.post('/api/dev/mock-auth', async (request, reply) => {
     const body = (request.body || {}) as Record<string, unknown>;
-    const { signAuthToken } = await import('@deliveryos/platform');
+    // Dev-kid signing (ADR-0003): mock tokens are signed under the dev keypair so a prod
+    // verifier rejects them. This path is already flag-gated by isDevRequestAuthorized.
+    const { signDevToken } = await import('@deliveryos/platform');
 
     // Courier role: simple JWT with real location UUID
     if (body.role === 'courier') {
       const courierId = crypto.randomUUID();
       const locRes = await pool.query(`SELECT id FROM locations WHERE slug = 'demo' LIMIT 1`);
       const locationId = locRes.rowCount > 0 ? locRes.rows[0].id : '1f609add-062a-4bb5-89bf-d695f963ede6';
-      const accessToken = await signAuthToken({ role: 'courier', sub: courierId, activeLocationId: locationId } as any, '1d');
+      const accessToken = await signDevToken({ role: 'courier', sub: courierId, activeLocationId: locationId } as any, '1d');
       return reply.send({ access_token: accessToken, userId: courierId, activeLocationId: locationId });
     }
 
@@ -661,7 +672,7 @@ fastify.register(mockAuthRoutes, { db: pool });
         [`fresh-${suffix}@e2e.dowiz`, `mock-fresh-${suffix}`],
       );
       const fUserId = fRes.rows[0].id;
-      const fToken = await signAuthToken({ role: 'owner', userId: fUserId, sub: fUserId } as any, '1d');
+      const fToken = await signDevToken({ role: 'owner', userId: fUserId, sub: fUserId } as any, '1d');
       return reply.send({ access_token: fToken, userId: fUserId, activeLocationId: undefined });
     }
 
@@ -708,8 +719,8 @@ fastify.register(mockAuthRoutes, { db: pool });
       }
     }
 
-    const accessToken = await signAuthToken({ role: 'owner', userId, sub: userId } as any, '1d');
-    
+    const accessToken = await signDevToken({ role: 'owner', userId, sub: userId } as any, '1d');
+
     return reply.send({ access_token: accessToken, userId, activeLocationId });
   });
   fastify.post('/api/dev/create-assignment', async (request, reply) => {
@@ -865,27 +876,44 @@ fastify.register(mockAuthRoutes, { db: pool });
       return reply.status(500).send({ error: 'Seed failed: ' + (e?.message || '') });
     }
   });
-  fastify.post('/api/auth/local/login', async (request, reply) => {
-    const { email, password } = request.body as any || {};
-    if (!email || !password) return reply.status(400).send({ error: 'Missing email or password' });
-    // Dev-only password login. Active ONLY when DEV_AUTH_SECRET is configured
-    // (local / e2e). In production the secret is unset and the seeded test
-    // account has no usable password_hash, so this always rejects.
-    if (devLoginAllowed(env.DEV_AUTH_SECRET) && email === 'test@dowiz.com' && password === 'test123456') {
+  // Dev-only password login (ADR-0003). Fails closed in production: the bypass activates
+  // ONLY when devLoginAllowed(env) — i.e. ALLOW_DEV_LOGIN='true' AND DEV_AUTH_SECRET set
+  // (never true on prod; boot-guard D rejects either knob on a prod box). The account
+  // credentials come from env (DEV_LOGIN_EMAIL/DEV_LOGIN_PASSWORD), so no credential
+  // literal ships in code. Tokens are signed under the dev kid so a prod verifier rejects
+  // them. No per-route rate limit: in prod the branch is dead (immediate 401, nothing to
+  // brute-force); in non-prod the global 100/min IP limiter suffices for shared test creds.
+  fastify.post('/api/auth/local/login', {
+    schema: {
+      body: z.object({
+        email: z.string().email().max(200),
+        password: z.string().min(1).max(200),
+      }).strict(),
+    },
+  }, async (request, reply) => {
+    const { email, password } = request.body as { email: string; password: string };
+    const devEmail = env.DEV_LOGIN_EMAIL;
+    const devPassword = env.DEV_LOGIN_PASSWORD;
+    const credsMatch =
+      devLoginAllowed(env) &&
+      !!devEmail && !!devPassword &&
+      timingSafeStrEqual(email.toLowerCase(), devEmail.toLowerCase()) &&
+      timingSafeStrEqual(password, devPassword);
+    if (credsMatch) {
       const res = await pool.query(`SELECT id FROM users WHERE email = $1`, [email.toLowerCase()]);
-      if (res.rowCount === 0) return reply.status(401).send({ error: 'User not found' });
+      if (res.rowCount === 0) return reply.status(401).send({ error: 'Invalid credentials' });
       const userId = res.rows[0].id;
       // Prefer an owner membership so the token is scoped to the right storefront.
       const memRes = await pool.query(
         `SELECT location_id FROM memberships WHERE user_id = $1 AND status = 'active'
          ORDER BY (role = 'owner') DESC LIMIT 1`, [userId]);
       const activeLocationId = memRes.rows[0]?.location_id || null;
-      const { signAuthToken } = await import('@deliveryos/platform');
+      const { signDevToken } = await import('@deliveryos/platform');
       // activeLocationId MUST be in the signed token, not just the response body — otherwise
       // location-scoped endpoints (menu, orders) read no location and return empty.
       const tokenPayload: Record<string, unknown> = { role: 'owner', userId, sub: userId };
       if (activeLocationId) tokenPayload.activeLocationId = activeLocationId;
-      const token = await signAuthToken(tokenPayload as any, '1d');
+      const token = await signDevToken(tokenPayload as any, '1d');
       return reply.send({ access_token: token, userId, activeLocationId });
     }
     return reply.status(401).send({ error: 'Invalid credentials' });

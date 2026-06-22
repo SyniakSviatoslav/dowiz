@@ -12,12 +12,23 @@ export function isDevPath(url: string): boolean {
 }
 
 /**
- * Whether the dev-only password bypass (seeded test accounts) is permitted.
- * True only when DEV_AUTH_SECRET is configured, so production — which sets no
- * secret — never honors the hardcoded dev credentials.
+ * The env knobs that gate every dev/test auth bypass. A structural subset of the
+ * full Env so this module stays decoupled from @deliveryos/config.
  */
-export function devLoginAllowed(configuredSecret: string | undefined): boolean {
-  return !!configuredSecret;
+export interface DevAuthEnv {
+  ALLOW_DEV_LOGIN: 'true' | 'false' | string;
+  DEV_AUTH_SECRET?: string;
+}
+
+/**
+ * Whether dev/test auth bypasses (seeded accounts, mock-auth) are permitted.
+ * Requires BOTH the explicit ALLOW_DEV_LOGIN flag AND a configured DEV_AUTH_SECRET
+ * (ADR-0003). The secret alone is no longer sufficient — so production, which sets
+ * neither (and whose boot-guard D rejects either), can never honor a dev bypass even
+ * if the secret leaks again. This is the single source of truth for all six mint sites.
+ */
+export function devLoginAllowed(env: DevAuthEnv): boolean {
+  return env.ALLOW_DEV_LOGIN === 'true' && !!env.DEV_AUTH_SECRET;
 }
 
 /** Constant-time comparison; false on any type/length mismatch (never throws). */
@@ -33,17 +44,19 @@ function secretMatches(provided: unknown, expected: string): boolean {
  * Authorize a request to a /dev or /api/dev endpoint.
  *
  * - Non-dev paths are always authorized (pass-through — this guard is a no-op for them).
- * - Fails CLOSED: if DEV_AUTH_SECRET is unset/empty, every dev request is rejected,
- *   so production (which sets no secret) has the dev endpoints fully disabled.
- * - Otherwise the caller must present the matching secret via the
+ * - Fails CLOSED unless the dev bypass is fully enabled (ALLOW_DEV_LOGIN flag AND a
+ *   configured DEV_AUTH_SECRET — ADR-0003). The same flag that gates devLoginAllowed
+ *   gates the /dev/* family here, so the mock-auth minters (which ride this guard, not
+ *   devLoginAllowed) are closed on prod too — closing the gap that left them exploitable.
+ * - When enabled, the caller must additionally present the matching secret via the
  *   `x-dev-auth-secret` header.
  */
 export function isDevRequestAuthorized(
   url: string,
   providedSecret: unknown,
-  configuredSecret: string | undefined,
+  env: DevAuthEnv,
 ): boolean {
   if (!isDevPath(url)) return true;
-  if (!configuredSecret) return false;
-  return secretMatches(providedSecret, configuredSecret);
+  if (!devLoginAllowed(env)) return false;
+  return secretMatches(providedSecret, env.DEV_AUTH_SECRET as string);
 }
