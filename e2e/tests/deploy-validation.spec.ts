@@ -9,10 +9,14 @@ test.describe.configure({ mode: 'serial' });
 
 test.describe('Deploy Validation — Live Session Proofs', () => {
 
-  // ── 0. Auth: get owner token via mock-auth ─────────────────────────
-  test('0.1 — mock-auth returns valid owner token', async ({ request }) => {
-    const res = await request.post(`${BASE}/api/dev/mock-auth`, {
-      data: {},
+  // ── 0. Auth: get owner token via REAL login ────────────────────────
+  // The dev-login backdoor (/api/dev/mock-auth) is closed on prod (ADR-0003), so the deploy
+  // validation authenticates the demo owner through the real argon2 path (test@dowiz.com has a
+  // seeded password_hash). This also exercises the registered-login + refresh fixes on the
+  // deployed build.
+  test('0.1 — local login returns a valid owner token', async ({ request }) => {
+    const res = await request.post(`${BASE}/api/auth/local/login`, {
+      data: { email: 'test@dowiz.com', password: 'test123456' },
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
