@@ -2,7 +2,7 @@ import { safeStorage } from '../lib/safeStorage.js';
 import React, { useState, useEffect, Suspense } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { apiClient } from '../lib/index.js';
-import { ToastProvider, LanguageSwitcher, useI18n, BottomTabBar, ResponsiveDialog, CurrencySwitcher } from '@deliveryos/ui';
+import { ToastProvider, LanguageSwitcher, useI18n, BottomTabBar, ResponsiveDialog, CurrencySwitcher, SunlightToggle } from '@deliveryos/ui';
 import type { TabItem } from '@deliveryos/ui';
 import { DashboardPage } from '../pages/admin/DashboardPage.js';
 import { MenuManagerPage } from '../pages/admin/MenuManagerPage.js';
@@ -159,6 +159,7 @@ function AdminLayout() {
           <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Dowiz</h2>
         </div>
         <div className="flex items-center gap-1">
+          <SunlightToggle />
           <CurrencySwitcher />
           <LanguageSwitcher variant="full" />
         </div>
