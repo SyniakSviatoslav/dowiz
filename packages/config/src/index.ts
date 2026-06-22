@@ -42,6 +42,11 @@ const EnvSchema = z.object({
   // (current OTP send is a console.log scaffold). Flip to 'true' to re-enable;
   // per-location `require_phone_otp` only takes effect when this is 'true'.
   OTP_ENABLED: z.enum(['true', 'false']).default('false'),
+  // Rich product media (ADR-0002 cinematic-product-media seam) — global kill-switch,
+  // default OFF. Phase 1 ships only the inert schema; while this is 'false' the storefront
+  // is byte-identical to today and product_media / primary_media_id are unread. The lazy
+  // media endpoint + renderers (Phase 2) gate on this AND locations.plan='business'.
+  MEDIA_RICH_ENABLED: z.enum(['true', 'false']).default('false'),
   // Backup Configuration
   BACKUP_ENCRYPTION_KEY: z.string().optional(), // 32 bytes base64 (required if BACKUP_ENABLED=true)
   R2_ACCESS_KEY_ID: z.string().optional(),
