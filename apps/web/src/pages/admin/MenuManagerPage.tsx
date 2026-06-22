@@ -335,11 +335,13 @@ export function MenuManagerPage() {
     return result;
   };
 
-  // Stock summary
+  // Availability summary — count what customers can actually order: products toggled
+  // available and not explicitly out of stock (stockCount is null when inventory isn't
+  // tracked, which is the common case — those are orderable).
   const totalDishes = useMemo(() => {
     let count = 0;
     categories.forEach(c => {
-      if (c.products) count += c.products.filter(p => p.stockCount != null && p.stockCount > 0).length;
+      if (c.products) count += c.products.filter(p => p.available && (p.stockCount == null || p.stockCount > 0)).length;
     });
     return count;
   }, [categories]);
@@ -352,7 +354,7 @@ export function MenuManagerPage() {
         <div>
           <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.menu_manager', 'Menu Manager')}</h2>
           <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>
-            {categories.length} {t('admin.categories', 'categories')} &middot; {totalDishes} {t('admin.dishes_in_stock', 'dishes in stock')}
+            {categories.length} {t('admin.categories', 'categories')} &middot; {totalDishes} {t('admin.dishes_available', 'available')}
           </p>
         </div>
         <Button onClick={() => setShowImport(true)} variant="ghost" size="sm">
@@ -545,8 +547,8 @@ export function MenuManagerPage() {
                       style={{ background: 'var(--brand-primary-light)' }}>
                       {product.imageUrl
                         ? <img src={product.imageUrl} alt="" className="w-full h-full object-cover" loading="lazy"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<i class=\\"ti ti-photo\\"></i>'; }} />
-                        : <i className="ti ti-photo" style={{ color: 'var(--brand-primary)' }} />
+                            onError={(e) => { const img = e.currentTarget; img.style.display = 'none'; const p = img.parentElement; if (p && !p.querySelector('i.ti-photo')) { const ic = document.createElement('i'); ic.className = 'ti ti-photo'; ic.style.cssText = 'color: var(--brand-primary); font-size: 1.5rem'; p.appendChild(ic); } }} />
+                        : <i className="ti ti-photo" style={{ color: 'var(--brand-primary)', fontSize: '1.5rem' }} />
                       }
                     </div>
                     <div className="flex-1 min-w-0">
