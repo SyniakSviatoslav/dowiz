@@ -114,7 +114,9 @@ function ClientLayoutInner() {
         <div className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] font-sans" style={{ ['--brand-font-heading' as any]: "'Playfair Display', 'Cormorant Garamond', Georgia, serif" }}>
           <header className="sticky top-0 z-sticky h-14 bg-[var(--brand-bg)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] flex items-center px-4 gap-3 shrink-0">
             {logoUrl ? (
-              <img src={logoUrl} alt="" className="h-8 w-8 rounded object-contain shrink-0" />
+              // Hide on load failure instead of showing a broken-image icon (e.g. a stale
+              // logoUrl pointing at a deleted object).
+              <img src={logoUrl} alt="" onError={() => setLogoUrl('')} className="h-8 w-8 rounded object-contain shrink-0" />
             ) : null}
             {/* Persistent brand chrome — not the page <h1>; each route owns its own h1
                (menu hero, Checkout, Order) so the document has a single top heading. */}
