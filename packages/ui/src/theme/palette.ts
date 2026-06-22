@@ -118,8 +118,9 @@ export function derivePalette(input: PaletteInput): ThemeConfig {
   // Border: a low-contrast divider that works on bg AND surface.
   const border = mix(bg, fg, light ? 0.12 : 0.18);
 
-  // Muted text: faded toward bg but kept ≥ 3:1 on the surface (where it's used).
-  const textMuted = ensureContrast(mix(text, bg, 0.42), surface, 3);
+  // Muted text: faded toward bg but kept ≥ 4.5:1 on the surface (WCAG AA for normal text;
+  // raised from 3:1 — a deliberate accessibility-over-subtlety call across all tenant brands).
+  const textMuted = ensureContrast(mix(text, bg, 0.42), surface, 4.5);
 
   // Primary hover: lighten on dark, darken on light for a perceptible delta.
   const primaryHover = mix(primary, light ? BLACK : WHITE, 0.18);
