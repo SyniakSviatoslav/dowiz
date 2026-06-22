@@ -875,10 +875,18 @@ fastify.register(mockAuthRoutes, { db: pool });
       const res = await pool.query(`SELECT id FROM users WHERE email = $1`, [email.toLowerCase()]);
       if (res.rowCount === 0) return reply.status(401).send({ error: 'User not found' });
       const userId = res.rows[0].id;
-      const memRes = await pool.query(`SELECT location_id FROM memberships WHERE user_id = $1 LIMIT 1`, [userId]);
+      // Prefer an owner membership so the token is scoped to the right storefront.
+      const memRes = await pool.query(
+        `SELECT location_id FROM memberships WHERE user_id = $1 AND status = 'active'
+         ORDER BY (role = 'owner') DESC LIMIT 1`, [userId]);
+      const activeLocationId = memRes.rows[0]?.location_id || null;
       const { signAuthToken } = await import('@deliveryos/platform');
-      const token = await signAuthToken({ role: 'owner', userId, sub: userId } as any, '1d');
-      return reply.send({ access_token: token, userId, activeLocationId: memRes.rows[0]?.location_id || null });
+      // activeLocationId MUST be in the signed token, not just the response body — otherwise
+      // location-scoped endpoints (menu, orders) read no location and return empty.
+      const tokenPayload: Record<string, unknown> = { role: 'owner', userId, sub: userId };
+      if (activeLocationId) tokenPayload.activeLocationId = activeLocationId;
+      const token = await signAuthToken(tokenPayload as any, '1d');
+      return reply.send({ access_token: token, userId, activeLocationId });
     }
     return reply.status(401).send({ error: 'Invalid credentials' });
   });
