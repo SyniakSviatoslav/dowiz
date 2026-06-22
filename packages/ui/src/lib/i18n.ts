@@ -8,6 +8,8 @@ let currentLocale: Locale = (typeof window !== 'undefined'
 
 const messages: Record<Locale, Record<string, string>> = {
   sq: {
+    'client.empty_menu_error_hint': 'Nuk arritëm ta ngarkojmë menunë. Provoni sërish pas pak.',
+    'client.empty_menu_unavailable_hint': 'Ky restorant ende nuk e ka publikuar menunë.',
     'admin.dishes_available': 'të disponueshme',
     'admin.no_couriers_online': 'Asnjë postier online',
     'map.loading': 'Po ngarkohet harta…',
@@ -1080,6 +1082,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'privacy.back': 'Kthehu',
   },
   en: {
+    'client.empty_menu_error_hint': 'We couldn\'t load the menu. Please try again in a moment.',
+    'client.empty_menu_unavailable_hint': 'This restaurant hasn\'t published its menu yet.',
     'admin.dishes_available': 'available',
     'admin.no_couriers_online': 'No couriers online',
     'map.loading': 'Loading map…',
@@ -2152,6 +2156,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'privacy.back': 'Back',
   },
   uk: {
+    'client.empty_menu_error_hint': 'Не вдалося завантажити меню. Спробуйте ще раз за мить.',
+    'client.empty_menu_unavailable_hint': 'Цей ресторан ще не опублікував меню.',
     'admin.dishes_available': 'доступні',
     'admin.no_couriers_online': 'Немає кур’єрів онлайн',
     'map.loading': 'Завантаження карти…',

@@ -630,9 +630,14 @@ export function MenuPage() {
           </div>
         ) : !categories.length ? (
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-            <i className="ti ti-tools-kitchen-2 text-5xl opacity-20 mb-3" style={{ color: 'var(--brand-text-muted)' }} />
-            <p className="text-sm font-medium" style={{ color: 'var(--brand-text-muted)' }}>
+            <i className="ti ti-tools-kitchen-2 text-5xl opacity-40 mb-3" style={{ color: 'var(--brand-primary)' }} />
+            <p className="text-base font-semibold" style={{ color: 'var(--brand-text)' }}>
               {t('client.empty_menu', fetchError ? 'Failed to load menu' : 'Menu unavailable')}
+            </p>
+            <p className="text-sm mt-1 max-w-xs" style={{ color: 'var(--brand-text-muted)' }}>
+              {fetchError
+                ? t('client.empty_menu_error_hint', "We couldn't load the menu. Please try again in a moment.")
+                : t('client.empty_menu_unavailable_hint', "This restaurant hasn't published its menu yet.")}
             </p>
             {fetchError && (
               <motion.button onClick={() => { setRetryCount(c => c + 1); }} whileTap={{ scale: 0.97 }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] transition-all active:scale-95 min-h-11" style={{ background: 'var(--brand-primary-strong)' }}>
