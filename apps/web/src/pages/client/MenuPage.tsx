@@ -1,5 +1,13 @@
 import { safeStorage } from '../../lib/safeStorage.js';
-import React, { useEffect, useState, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo, useLayoutEffect, lazy, Suspense } from 'react';
+import type { ProductMedia } from '../../components/media/types';
+
+// Rich product media (ADR-0002) — code-split lazy chunks. They load ONLY when the lazy media
+// endpoint returns a non-empty set for the open product (server-gated on MEDIA_RICH_ENABLED +
+// business tier), so a storefront with no rich media downloads ~0 KB of these.
+const MediaGallery = lazy(() => import('../../components/media/MediaGallery').then(m => ({ default: m.MediaGallery })));
+const MediaRenderer = lazy(() => import('../../components/media').then(m => ({ default: m.MediaRenderer })));
+const RevealOverlay = lazy(() => import('../../components/media/RevealOverlay').then(m => ({ default: m.RevealOverlay })));
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ProductCard, useI18n, useToast, PriceDisplay, getAllergenStyle } from '@deliveryos/ui';
@@ -31,6 +39,7 @@ interface Product {
   available: boolean;
   image_key?: string | null;
   imageUrl?: string | null;
+  primary_media_id?: string | null;
   modifier_groups?: ModifierGroup[];
   attributes?: any;
 }
@@ -104,6 +113,10 @@ export function MenuPage() {
   const [modifierGroupSelection, setModifierGroupSelection] = useState<Record<string, string[]>>({});
   const [quantity, setQuantity] = useState(1);
   const [imageLoadError, setImageLoadError] = useState(false);
+  // Rich media for the open product, lazily fetched on modal open. Empty = fall back to the
+  // single image / gradient (today's behaviour). Server returns [] when the feature is gated off.
+  const [detailMedia, setDetailMedia] = useState<ProductMedia[]>([]);
+  const [revealDone, setRevealDone] = useState(false);
   const menuPrefsKey = `dos_menu_prefs_${slug}`;
   const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc' | 'name'>(() => {
     try {
@@ -348,6 +361,26 @@ export function MenuPage() {
     setModifierGroupSelection({});
     setQuantity(1);
   };
+
+  // Lazy-fetch the rich media set when a product modal opens. Gated server-side (returns []
+  // when MEDIA_RICH_ENABLED is off or the location isn't business tier) and skipped entirely
+  // unless the product carries a primary_media_id — so the dark/default path makes no request
+  // and the storefront is byte-identical to today.
+  useEffect(() => {
+    setDetailMedia([]);
+    setRevealDone(false);
+    const pid = detailProduct?.id;
+    if (!pid || !detailProduct?.primary_media_id || !slug) return;
+    let cancelled = false;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000); // never block the modal on media
+    fetch(`/public/locations/${slug}/products/${pid}/media`, { signal: ctrl.signal })
+      .then(r => (r.ok ? r.json() : { media: [] }))
+      .then(d => { if (!cancelled) setDetailMedia(Array.isArray(d?.media) ? d.media : []); })
+      .catch(() => { /* media is best-effort; fall back to the primary image */ })
+      .finally(() => clearTimeout(timer));
+    return () => { cancelled = true; ctrl.abort(); clearTimeout(timer); };
+  }, [detailProduct?.id, detailProduct?.primary_media_id, slug]);
 
   // Lock background scroll while the product modal is open. The real scroll
   // container is .app-shell-main (the SPA shell), not <body>, so lock both —
@@ -757,7 +790,20 @@ export function MenuPage() {
           >
             {/* Image */}
             <div className="relative w-full aspect-[16/9] md:aspect-[2/1] flex items-center justify-center overflow-hidden" style={{ background: 'var(--brand-surface-raised)' }}>
-              {getImageUrl(detailProduct) && !imageLoadError ? (
+              {detailMedia.length > 0 ? (
+                // Rich media (ADR-0002): gallery for >1, single renderer for 1. Suspense shows
+                // the primary image while the code-split chunk loads → no flash. A renderer
+                // failure degrades to its poster (handled inside MediaRenderer), never throws.
+                <Suspense fallback={getImageUrl(detailProduct) ? (
+                  <img src={getImageUrl(detailProduct)!} alt={detailProduct.name} className="w-full h-full object-cover" />
+                ) : null}>
+                  {detailMedia.length > 1 ? (
+                    <MediaGallery media={detailMedia} posterFallbackUrl={getImageUrl(detailProduct) || undefined} />
+                  ) : (
+                    <MediaRenderer media={detailMedia[0]!} active posterFallbackUrl={getImageUrl(detailProduct) || undefined} />
+                  )}
+                </Suspense>
+              ) : getImageUrl(detailProduct) && !imageLoadError ? (
                 <motion.img
                   layoutId={`product-photo-${detailProduct.id}`}
                   src={getImageUrl(detailProduct)!}
@@ -800,7 +846,15 @@ export function MenuPage() {
                   <span className="relative text-sm font-semibold tracking-tight" style={{ color: 'var(--brand-text)' }}>{detailProduct.name}</span>
                 </div>
               )}
-              <motion.button 
+              {/* Cinematic reveal — decorative Canvas-2D dissolve over the hero on open. Only
+                  with rich media; pointer-events:none so it never blocks Add-to-Cart; honours
+                  reduced-motion (instant). Code-split chunk, loaded only when media is present. */}
+              {detailMedia.length > 0 && !revealDone && (
+                <Suspense fallback={null}>
+                  <RevealOverlay active={!!detailProduct} onDone={() => setRevealDone(true)} />
+                </Suspense>
+              )}
+              <motion.button
                 whileTap={{ scale: 0.95 }}
                 className="absolute top-4 right-4 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center backdrop-blur-md active:scale-[0.95] transition-transform"
                 style={{ background: 'color-mix(in srgb, var(--brand-bg) 50%, transparent)', color: 'var(--color-on-primary)' }}

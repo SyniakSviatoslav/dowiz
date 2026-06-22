@@ -877,6 +877,11 @@ fastify.register(mockAuthRoutes, { db: pool });
 
   // SPA proxy — maps React SPA URL patterns to real backend routes
   fastify.register(spaProxyRoutes, { db: pool, storage });
+  // Owner rich-media CRUD (cinematic product-media seam, ADR-0002). Dark behind
+  // MEDIA_RICH_ENABLED at the storefront; the owner endpoints are always wired so
+  // an owner can stage media before launch. Operational pool (RLS) via withTenant.
+  const { default: ownerProductMediaRoutes } = await import('./routes/owner/product-media.js');
+  fastify.register(ownerProductMediaRoutes, { prefix: '/api/owner', db: pool, storage });
   // P32 — Backup admin routes
   const { default: backupAdminRoutes } = await import('./routes/admin/backups.js');
   fastify.register(backupAdminRoutes, { prefix: '/api/admin', db: pool, queue });
