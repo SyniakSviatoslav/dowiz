@@ -2,7 +2,7 @@ import { StrictMode, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { MotionConfig, AnimatePresence, motion } from 'framer-motion';
-import { ThemeProvider, TourProvider, I18nProvider, CurrencyProvider, ErrorBoundary } from '@deliveryos/ui';
+import { ThemeProvider, TourProvider, I18nProvider, CurrencyProvider, ErrorBoundary, t } from '@deliveryos/ui';
 import './index.css';
 
 import { Navigate } from 'react-router-dom';
@@ -82,8 +82,8 @@ function NotFound() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4">
       <h1 className="text-6xl font-bold">404</h1>
-      <p>Faqja nuk u gjet / Page not found</p>
-      <a href="/" className="text-[var(--color-info)] hover:underline">Return home</a>
+      <p>{t('error.page_not_found', 'Page not found')}</p>
+      <a href="/" className="text-[var(--color-info)] hover:underline">{t('error.return_home', 'Return home')}</a>
     </div>
   );
 }

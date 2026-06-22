@@ -995,7 +995,7 @@ export function MenuPage() {
               {/* Modifier Summary */}
               {Object.values(modifierGroupSelection).some(s => s.length > 0) && (
                 <div className="text-[11px] leading-relaxed px-1" style={{ color: 'var(--brand-text-muted)' }}>
-                  <span className="font-medium" style={{ color: 'var(--brand-text)' }}>Selected:</span>{' '}
+                  <span className="font-medium" style={{ color: 'var(--brand-text)' }}>{t('menu.selected', 'Selected:')}</span>{' '}
                   {Object.entries(modifierGroupSelection).map(([gid, selectedIds]) => {
                     const group = (detailProduct.modifier_groups || []).find(g => g.id === gid);
                     if (!group || selectedIds.length === 0) return null;

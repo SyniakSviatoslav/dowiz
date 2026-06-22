@@ -268,7 +268,7 @@ export function MenuManagerPage() {
       setImportPreview(res);
       setImportStep('preview');
     } catch (err: any) {
-      setImportError(err.message || 'Failed to analyze menu. Make sure the file is a PDF or image.');
+      setImportError(err.message || t('admin.menu_import_error', 'Failed to analyze menu. Make sure the file is a PDF or image.'));
     } finally {
       setImportLoading(false);
     }
