@@ -1,5 +1,6 @@
 import { MapLibreBase, type LngLatLike } from './MapLibreBase.js';
 import { useCourierMarker } from '../../hooks/use-courier-marker.js';
+import { useI18n } from '../../lib/I18nProvider.js';
 
 function getCSSVar(name: string, fallback = ''): string {
   if (typeof document === 'undefined') return fallback;
@@ -38,6 +39,7 @@ export function CourierLiveMap({
   center = [19.817, 41.331],
   zoom = 13,
 }: CourierLiveMapProps) {
+  const { t } = useI18n();
   const smoothed = useCourierMarker(
     liveCourier ? { lat: liveCourier.lat, lng: liveCourier.lng, recordedAt: liveCourier.recordedAt } : null,
     { pingIntervalMs: 3000 },
@@ -87,7 +89,7 @@ export function CourierLiveMap({
     >
       {couriers.length === 0 && !destinationPin && (
         <div className="absolute inset-0 flex items-center justify-center bg-[var(--brand-surface)]/50 z-10 pointer-events-none">
-          <span className="text-sm text-[var(--brand-text-muted)]">No couriers online</span>
+          <span className="text-sm text-[var(--brand-text-muted)]">{t('admin.no_couriers_online', 'No couriers online')}</span>
         </div>
       )}
     </MapLibreBase>

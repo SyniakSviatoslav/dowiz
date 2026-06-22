@@ -8,6 +8,7 @@ let currentLocale: Locale = (typeof window !== 'undefined'
 
 const messages: Record<Locale, Record<string, string>> = {
   sq: {
+    'admin.no_couriers_online': 'Asnjë postier online',
     'map.loading': 'Po ngarkohet harta…',
     'admin.tg_timeout': 'Hyrja me Telegram skadoi. Ju lutemi provoni përsëri.',
     'admin.tg_expired': 'Lidhja për hyrjen me Telegram skadoi. Ju lutemi provoni përsëri.',
@@ -1078,6 +1079,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'privacy.back': 'Kthehu',
   },
   en: {
+    'admin.no_couriers_online': 'No couriers online',
     'map.loading': 'Loading map…',
     'admin.tg_timeout': 'Telegram login timed out. Please try again.',
     'admin.tg_expired': 'Telegram login link expired. Please try again.',
@@ -2148,6 +2150,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'privacy.back': 'Back',
   },
   uk: {
+    'admin.no_couriers_online': 'Немає кур’єрів онлайн',
     'map.loading': 'Завантаження карти…',
     'admin.tg_timeout': 'Час входу через Telegram вичерпано. Спробуйте ще раз.',
     'admin.tg_expired': 'Термін дії посилання для входу через Telegram минув. Спробуйте ще раз.',

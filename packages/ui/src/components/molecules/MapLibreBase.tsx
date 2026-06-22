@@ -311,7 +311,7 @@ export function MapLibreBase({
   return (
     <div ref={containerRef} className={`relative ${className}`}>
       {!loaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[var(--brand-surface)] text-[var(--brand-text-muted)] text-sm z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-[var(--brand-surface)] text-[var(--brand-text-muted)] text-sm z-20">
           {t('map.loading', 'Loading map…')}
         </div>
       )}
