@@ -162,6 +162,38 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     }
   });
 
+  // GET /media/* — serve a rich-media object (image/video/spin frame) by R2 key.
+  // Mirrors /images/* (same traversal guard + storage.get), but content-addressed
+  // keys are immutable so we serve a 1-year immutable cache. Content-Type is
+  // derived from the extension since these keys carry varied media types.
+  fastify.get('/media/*', async (request, reply) => {
+    const raw = (request.params as any)['*'] as string;
+    const key = raw.startsWith('/') ? raw.slice(1) : raw;
+    // SECURITY: same rationale as /images/* — Fastify decodes %2f in the wildcard,
+    // so reject traversal here before touching storage or an encoded '..%2f' could
+    // escape the prefix and read arbitrary bucket objects.
+    if (!key || key.includes('..') || key.includes('\0') || key.includes('\\')) {
+      return reply.status(400).send({ error: 'Invalid media key' });
+    }
+    const ext = key.slice(key.lastIndexOf('.') + 1).toLowerCase();
+    const contentType =
+      ext === 'webp' ? 'image/webp'
+      : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
+      : ext === 'png' ? 'image/png'
+      : ext === 'mp4' ? 'video/mp4'
+      : 'application/octet-stream';
+    try {
+      const buf = await storage.get(key);
+      if (!buf) return reply.status(404).send({ error: 'Media not found' });
+      reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+      reply.header('Content-Type', contentType);
+      return reply.send(buf);
+    } catch (err: any) {
+      console.warn('[spa-proxy] media fetch failed:', err?.message);
+      return reply.status(404).send({ error: 'Media not found' });
+    }
+  });
+
   // POST /api/owner/menu/products/:productId/image — upload product image
   fastify.post('/api/owner/menu/products/:productId/image', async (request, reply) => {
     const locId = await getLocationId(request);

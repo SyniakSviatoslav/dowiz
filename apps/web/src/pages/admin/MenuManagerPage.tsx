@@ -20,6 +20,12 @@ const MenuImportCommitResponse = z.object({
   }).optional(),
 }).passthrough();
 import { RecipeEditor } from './RecipeEditor.js';
+import { MediaManager } from '../../components/admin/MediaManager.js';
+
+// Rich-media (cinematic product-media, ADR-0002) is DARK by default. The admin
+// manager renders only when the build flag is on; the server independently gates
+// on business tier, so this is a hint, not the authority.
+const MEDIA_RICH_ENABLED = import.meta.env?.VITE_MEDIA_RICH_ENABLED === 'true';
 
 function getProductAllergens(product: Product): string[] {
   const set = new Set<string>();
@@ -62,6 +68,16 @@ export function MenuManagerPage() {
 
   const [saving, setSaving] = useState(false);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+
+  // Owner location slug — needed by MediaManager's public lazy-media list. Only
+  // fetched when the rich-media flag is on (otherwise the manager never renders).
+  const [locationSlug, setLocationSlug] = useState<string | null>(null);
+  useEffect(() => {
+    if (!MEDIA_RICH_ENABLED) return;
+    apiClient<any>('/owner/settings').then((res: any) => {
+      if (res?.slug) setLocationSlug(res.slug);
+    }).catch(() => {});
+  }, []);
 
   // Import state
   const [showImport, setShowImport] = useState(false);
@@ -708,6 +724,17 @@ export function MenuManagerPage() {
                 </div>
               </div>
             </div>
+
+            {/* Rich media gallery — only for an existing product (needs a productId),
+                DARK behind MEDIA_RICH_ENABLED + business-tier (server-gated). */}
+            {MEDIA_RICH_ENABLED && editingProduct && (
+              <MediaManager
+                productId={editingProduct.id}
+                enabled={MEDIA_RICH_ENABLED}
+                slug={locationSlug}
+                onPrimaryChange={() => loadProducts(expandedCat || undefined)}
+              />
+            )}
 
             <div>
               <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.name', 'Name')} *</label>
