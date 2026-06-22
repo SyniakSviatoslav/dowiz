@@ -8,16 +8,19 @@ import type { MigrationBuilder } from 'node-pg-migrate';
  * hot path now surfaces the column — a COLUMN read on products, ZERO join to product_media
  * (secondary media are fetched lazily on modal open by a separate endpoint, never here).
  *
- * Byte-identity property (provable): for a product with NULL primary_media_id the emitted
- * JSON gains `"primary_media_id": null` — additive, the client's existing image_key →
- * gradient fallback is unaffected. When set, the client resolves the primary media.
+ * Body is a VERBATIM copy of the latest definition (migration 1790000000033 — locale-aware
+ * modifiers + published-status serving + the `p_locale text DEFAULT ''::text` signature) with
+ * a SINGLE added field (`primary_media_id`) — no other logic touched. CREATE OR REPLACE must
+ * preserve the parameter default (Postgres forbids removing it); the signature matches 033.
  *
- * Re-runnable: CREATE OR REPLACE FUNCTION. Body is a verbatim copy of the latest definition
- * (migration 1780338982022) with a SINGLE added field — no other logic touched.
+ * Additive / byte-identical: a product with NULL primary_media_id gains `"primary_media_id":
+ * null`; the client's image_key → gradient fallback is unaffected. The crawler/SSR function
+ * read_public_menu_all_locales is deliberately NOT touched (SSR/JSON-LD carry the primary image
+ * only via image_key; secondary media never enter SSR).
  */
 export async function up(pgm: MigrationBuilder): Promise<void> {
   pgm.sql(`
-    CREATE OR REPLACE FUNCTION read_public_menu(p_location_id_or_slug text, p_locale text)
+    CREATE OR REPLACE FUNCTION public.read_public_menu(p_location_id_or_slug text, p_locale text DEFAULT ''::text)
     RETURNS jsonb
     SECURITY DEFINER
     LANGUAGE plpgsql
@@ -34,7 +37,8 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
       SELECT id, default_locale, supported_locales, currency_code, currency_minor_unit
       INTO v_location_id, v_def_locale, v_supp_locales, v_currency_code, v_currency_minor_unit
       FROM locations
-      WHERE id::text = p_location_id_or_slug OR slug = p_location_id_or_slug;
+      WHERE (id::text = p_location_id_or_slug OR slug = p_location_id_or_slug)
+        AND (status IN ('active', 'open') OR published_at IS NOT NULL);
 
       IF NOT FOUND THEN
         RETURN NULL;
@@ -56,13 +60,15 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
           jsonb_agg(
             jsonb_build_object(
               'id', m.id,
-              'name', m.name,
+              'name', COALESCE(mt.name, mt_def.name, m.name),
               'price_delta', m.price_delta,
               'available', m.available,
               'sort_order', m.sort_order
             ) ORDER BY m.sort_order
           ) as modifiers
         FROM modifiers m
+        LEFT JOIN modifier_translations mt ON mt.modifier_id = m.id AND mt.locale = p_locale
+        LEFT JOIN modifier_translations mt_def ON mt_def.modifier_id = m.id AND mt_def.locale = v_def_locale
         WHERE m.location_id = v_location_id AND m.available = true
         GROUP BY m.group_id
       ),
@@ -72,7 +78,7 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
           jsonb_agg(
             jsonb_build_object(
               'id', mg.id,
-              'name', mg.name,
+              'name', COALESCE(mgt.name, mgt_def.name, mg.name),
               'min_select', mg.min_select,
               'max_select', mg.max_select,
               'required', mg.required,
@@ -82,6 +88,8 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
           ) as modifier_groups
         FROM modifier_groups mg
         JOIN product_modifier_groups pmg ON pmg.group_id = mg.id
+        LEFT JOIN modifier_group_translations mgt ON mgt.group_id = mg.id AND mgt.locale = p_locale
+        LEFT JOIN modifier_group_translations mgt_def ON mgt_def.group_id = mg.id AND mgt_def.locale = v_def_locale
         LEFT JOIN modifiers_json mj ON mj.group_id = mg.id
         WHERE mg.location_id = v_location_id
         GROUP BY pmg.product_id
