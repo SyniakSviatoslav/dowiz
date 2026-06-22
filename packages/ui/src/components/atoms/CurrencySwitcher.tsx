@@ -11,9 +11,10 @@ export function CurrencySwitcher() {
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors hover:bg-[var(--brand-surface-raised)]"
-        style={{ color: 'var(--brand-text-muted)', border: '1px solid var(--brand-border)', background: 'var(--brand-surface)' }}
+        style={{ color: 'var(--brand-text)', border: '1px solid var(--brand-border)', background: 'var(--brand-surface)' }}
         aria-label={`Switch currency. Current: ${current?.code || currency}`}
       >
+        <i className="ti ti-coin" style={{ color: 'var(--brand-text-muted)', fontSize: '0.85rem' }} aria-hidden="true" />
         <span className="font-mono font-bold">{current?.symbol || currency}</span>
         <span className="hidden sm:inline text-[10px]">{currency}</span>
       </button>

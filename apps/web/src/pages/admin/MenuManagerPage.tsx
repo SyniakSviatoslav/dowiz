@@ -481,7 +481,7 @@ export function MenuManagerPage() {
 
       {/* Category tabs */}
       {!loading && categories.length > 0 && (
-        <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory sticky top-0 z-10" style={{ background: 'var(--brand-bg)' }}>
+        <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory sticky top-0 z-10" style={{ background: 'var(--brand-bg)', WebkitMaskImage: 'linear-gradient(to right, #000 92%, transparent)', maskImage: 'linear-gradient(to right, #000 92%, transparent)' }}>
           <motion.button onClick={() => setSelectedCategory(null)} whileTap={{ scale: 0.97 }}
             className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${selectedCategory === null ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}>
             {t('common.all', 'All')}
