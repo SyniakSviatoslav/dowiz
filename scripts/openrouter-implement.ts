@@ -72,6 +72,21 @@ async function callModel(model: string, prompt: string): Promise<string | null> 
       ],
       temperature: 0.05,
       max_tokens: MAX_TOKENS,
+      // Provider routing hardening (harness tune-up H2). NOTE: OpenRouter's
+      // `provider.order` takes PROVIDER names (e.g. "DeepInfra"), NOT model slugs —
+      // model rotation is handled by the DEFAULT_MODELS loop above, which is the
+      // actual "order". So we set only the provider-level guards here:
+      //  - allow_fallbacks: a single provider failing for a model doesn't fail the task.
+      //  - require_parameters: never route to a provider that would IGNORE temperature/
+      //    max_tokens (silent quality degradation — the thing this step prevents).
+      //  - data_collection 'deny': free providers often train on input; refuse it
+      //    (governance: null PII / no-training). INVARIANT: only CODE tasks traverse
+      //    this bridge — never client PII.
+      provider: {
+        allow_fallbacks: true,
+        require_parameters: true,
+        data_collection: 'deny',
+      },
     }),
   });
 

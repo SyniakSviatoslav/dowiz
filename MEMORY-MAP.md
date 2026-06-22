@@ -5,6 +5,14 @@
 > `docs/DeliveryOS-Context-Handoff-v4_5.md` (authoritative for roadmap),
 > `docs/DeliveryOS-Architecture-Update-v3.1.md` (authoritative for infrastructure).
 
+> **STATUS (harness H4, 2026-06-22): memory = markdown-vault.** Single source of truth
+> is this markdown corpus (`v3.1`/`v4.x` + handoffs); authority lives outside process
+> memory. **Mem0 / mempalace = DEFERRED** — not on the critical path to the first 50
+> orders; adds a node + store + LLM calls against the minimalism axiom. The
+> `mempalace`/`mempalace.yaml` scaffold stays in place but is NOT installed/configured.
+> Code-retrieval is served by repowise (structural layer live; semantic wiki pending an
+> LLM-backend decision). RAGFlow: NOT installed (repowise covers code-RAG; one RAG layer only).
+
 ## Canonical Store Ownership
 
 Each knowledge type has exactly **one** canonical store. All other stores link back.
