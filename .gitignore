@@ -34,3 +34,7 @@ graphify-out/
 .claude/state/
 .claude/logs/
 .audit/
+# E2E auth state — live signed JWTs / storage state written by the lifecycle harness.
+# NEVER commit (ADR-0003 #7): these are real bearer tokens valid until expiry.
+.auth/
+**/.auth/
