@@ -11,6 +11,8 @@ import { acceptCourierAssignment } from '../lib/courierAssignmentService';
 import { openShift } from '../lib/shiftService';
 import { setStorefrontPaused, createCloseNonce, getLocationStorefront } from '../lib/storefrontService';
 import { setCategoryPref, isToggleableCategory } from '../lib/notificationPrefsService';
+import { botT } from '../notifications/bot-strings.js';
+import type { Locale } from '../notifications/locales.js';
 
 // TG_CATEGORY_GATING (default off): owner can toggle notification categories
 // (operational/quality) from Telegram via /settings → pref.toggle:<loc>:<category>.
@@ -111,16 +113,21 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
   async function handleCallbackQuery(callbackQuery: any, deps: { db: Pool; queue: PgBoss }) {
     const { db, queue } = deps;
     const client = await db.connect();
-    
+
+    // Owner locale — follows the admin dashboard language via the notification
+    // target's `locale` column. Defaults to 'sq' until a target resolves.
+    // Hoisted above the try so the catch fallback can localize too.
+    let locale: Locale = 'sq';
+
     try {
       const { data, from, message } = callbackQuery;
       const chatId = from.id.toString();
       const userId = from.id;
-      
+
       // Parse callback_data - expected format: "action:entityId"
       // Examples: "order.confirm:123", "order.reject:123", "shift.open"
       if (!data || typeof data !== 'string') {
-        await answerCallbackQuery(callbackQuery.id, { text: 'Invalid request' });
+        await answerCallbackQuery(callbackQuery.id, { text: botT(locale, 'cb.invalid_request') });
         return;
       }
 
@@ -128,7 +135,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
       const action = parts[0];
       const entityId = parts[1];
       if (!action) {
-        await answerCallbackQuery(callbackQuery.id, { text: 'Invalid action' });
+        await answerCallbackQuery(callbackQuery.id, { text: botT(locale, 'cb.invalid_action') });
         return;
       }
 
@@ -143,7 +150,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
       //   2. same chat may be linked to multiple locations
       if (action.startsWith('order.')) {
         if (!entityId) {
-          await answerCallbackQuery(callbackQuery.id, { text: 'Invalid order' });
+          await answerCallbackQuery(callbackQuery.id, { text: botT(locale, 'cb.invalid_order') });
           return;
         }
         const orderRes = await client.query(
@@ -151,23 +158,24 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
           [entityId]
         );
         if (orderRes.rows.length === 0) {
-          await answerCallbackQuery(callbackQuery.id, { text: 'Order not found' });
+          await answerCallbackQuery(callbackQuery.id, { text: botT(locale, 'cb.order_not_found') });
           return;
         }
         locationId = orderRes.rows[0].location_id;
 
         // Now verify the chat is linked to THIS location
         const targetRes = await client.query(
-          `SELECT ont.id, ont.user_id
+          `SELECT ont.id, ont.user_id, ont.locale
            FROM owner_notification_targets ont
            WHERE ont.address = $1 AND ont.channel = 'telegram' AND ont.status = 'active' AND ont.location_id = $2`,
           [chatId, locationId]
         );
         if (targetRes.rows.length === 0) {
-          await answerCallbackQuery(callbackQuery.id, { text: 'Account not linked to this location' });
+          await answerCallbackQuery(callbackQuery.id, { text: botT(locale, 'cb.not_linked_location') });
           return;
         }
         targetUserId = targetRes.rows[0].user_id;
+        locale = (targetRes.rows[0].locale as Locale) ?? locale;
       } else if (action.startsWith('store.') || action.startsWith('pref.')) {
         // Storefront + preference actions carry the locationId as the first segment
         // (store.open:<loc>, store.close:<loc>, store.confirm:<loc>:<nonce>,
@@ -175,51 +183,53 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
         // — never rows[0] (BR-3) — and require a real user_id (no legacy-NULL bypass).
         const flagOk = action.startsWith('store.') ? TG_STOREFRONT_ACTION : TG_CATEGORY_GATING;
         if (!flagOk) {
-          await answerCallbackQuery(callbackQuery.id, { text: 'Action not supported' });
+          await answerCallbackQuery(callbackQuery.id, { text: botT(locale, 'cb.action_not_supported') });
           return;
         }
         if (!entityId) {
-          await answerCallbackQuery(callbackQuery.id, { text: 'Invalid request' });
+          await answerCallbackQuery(callbackQuery.id, { text: botT(locale, 'cb.invalid_request') });
           return;
         }
         locationId = entityId;
         const targetRes = await client.query(
-          `SELECT ont.id, ont.user_id
+          `SELECT ont.id, ont.user_id, ont.locale
            FROM owner_notification_targets ont
            WHERE ont.address = $1 AND ont.channel = 'telegram' AND ont.status = 'active' AND ont.location_id = $2`,
           [chatId, locationId]
         );
         if (targetRes.rows.length === 0) {
-          await answerCallbackQuery(callbackQuery.id, { text: 'Account not linked to this location' });
+          await answerCallbackQuery(callbackQuery.id, { text: botT(locale, 'cb.not_linked_location') });
           return;
         }
         resolvedTargetId = targetRes.rows[0].id;
         targetUserId = targetRes.rows[0].user_id;
+        locale = (targetRes.rows[0].locale as Locale) ?? locale;
         if (!targetUserId) {
-          await answerCallbackQuery(callbackQuery.id, { text: 'Reconnect Telegram to use this action' });
+          await answerCallbackQuery(callbackQuery.id, { text: botT(locale, 'cb.reconnect') });
           return;
         }
       } else {
         // Non-order actions: look up by chatId without location scope
         const targetRes = await client.query(
-          `SELECT ont.id, ont.location_id, ont.user_id
+          `SELECT ont.id, ont.location_id, ont.user_id, ont.locale
            FROM owner_notification_targets ont
            WHERE ont.address = $1 AND ont.channel = 'telegram' AND ont.status = 'active'`,
           [chatId]
         );
         if (targetRes.rows.length === 0) {
-          await answerCallbackQuery(callbackQuery.id, { text: 'Account not linked' });
+          await answerCallbackQuery(callbackQuery.id, { text: botT(locale, 'cb.not_linked') });
           return;
         }
         const target = targetRes.rows[0];
         locationId = target.location_id;
         targetUserId = target.user_id;
+        locale = (target.locale as Locale) ?? locale;
       }
 
       // Both branches above set locationId (or return early), but TypeScript
       // needs a narrowing guard to treat it as string below.
       if (!locationId) {
-        await answerCallbackQuery(callbackQuery.id, { text: 'Action not supported' });
+        await answerCallbackQuery(callbackQuery.id, { text: botT(locale, 'cb.action_not_supported') });
         return;
       }
 
@@ -232,7 +242,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
           [targetUserId, locationId]
         );
         if (memberRes.rowCount === 0) {
-          await answerCallbackQuery(callbackQuery.id, { text: 'Unauthorized: not a member of this location' });
+          await answerCallbackQuery(callbackQuery.id, { text: botT(locale, 'cb.unauthorized_member') });
           return;
         }
       }
@@ -248,7 +258,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
       }
 
       if (!authorized) {
-        await answerCallbackQuery(callbackQuery.id, { text: 'Unauthorized' });
+        await answerCallbackQuery(callbackQuery.id, { text: botT(locale, 'cb.unauthorized') });
         return;
       }
 
@@ -264,36 +274,36 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
       switch (action) {
         case 'order.confirm': {
           if (!entityId) {
-            resultText = '❌ Order not found';
+            resultText = botT(locale, 'order.not_found');
             break;
           }
           try {
             await client.query("SELECT set_config('app.current_tenant', $1, true)", [locationId]);
             await updateOrderStatus(client, entityId, locationId, 'CONFIRMED', { messageBus: opts.messageBus });
-            resultText = '✅ ЗАМОВЛЕННЯ ПІДТВЕРДЖЕНО';
+            resultText = botT(locale, 'order.confirmed');
             sendFollowUp = true;
           } catch (err: any) {
             if (err.statusCode === 404) {
-              resultText = '❌ Order not found';
+              resultText = botT(locale, 'order.not_found');
             } else if (err.statusCode === 409) {
               const orderCheck = await client.query(
                 `SELECT status FROM orders WHERE id = $1 AND location_id = $2`,
                 [entityId, locationId]
               );
               if (orderCheck.rowCount === 0) {
-                resultText = '❌ Order not found';
+                resultText = botT(locale, 'order.not_found');
               } else {
                 const currentStatus = orderCheck.rows[0].status;
                 if (currentStatus === 'CONFIRMED') {
-                  resultText = '✅ Already confirmed';
+                  resultText = botT(locale, 'order.already_confirmed');
                 } else if (currentStatus === 'REJECTED' || currentStatus === 'CANCELLED') {
-                  resultText = '❌ Cannot confirm cancelled order';
+                  resultText = botT(locale, 'order.cannot_confirm_cancelled');
                 } else {
-                  resultText = `⚠️ Cannot confirm order in state ${currentStatus}`;
+                  resultText = botT(locale, 'order.cannot_confirm_state', { status: currentStatus });
                 }
               }
             } else {
-              resultText = '⚠️ Error confirming order';
+              resultText = botT(locale, 'order.error_confirming');
               console.error('[TelegramWebhook] Error confirming order:', err);
             }
           }
@@ -302,10 +312,10 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
 
         case 'order.reject_choose': {
           const presetReasons = [
-            { text: 'Client changed mind', callback_data: `order.reject_reason_1:${entityId}` },
-            { text: 'Item unavailable', callback_data: `order.reject_reason_2:${entityId}` },
-            { text: 'Wrong address', callback_data: `order.reject_reason_3:${entityId}` },
-            { text: 'Add to stop-list', url: `https://app.dowiz.org/admin/locations/${locationId}/stop-list` }
+            { text: botT(locale, 'order.reason_changed_mind'), callback_data: `order.reject_reason_1:${entityId}` },
+            { text: botT(locale, 'order.reason_unavailable'), callback_data: `order.reject_reason_2:${entityId}` },
+            { text: botT(locale, 'order.reason_wrong_address'), callback_data: `order.reject_reason_3:${entityId}` },
+            { text: botT(locale, 'order.reason_stop_list'), url: `https://app.dowiz.org/admin/locations/${locationId}/stop-list` }
           ];
           const keyboard: any[][] = [];
           for (const reason of presetReasons) {
@@ -318,7 +328,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
           try {
             await callTelegramApi('sendMessage', {
               chat_id: chatId,
-              text: `Select reason for rejecting order #${entityId ?? '???'}:`,
+              text: botT(locale, 'order.reject_select', { orderId: entityId ?? '???' }),
               reply_markup: { inline_keyboard: keyboard }
             });
           } catch (e) {
@@ -330,9 +340,9 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
 
         case 'store.open': {
           const r = await setStorefrontPaused(client, locationId, targetUserId!, false);
-          if (r.result === 'denied') resultText = '⚠️ Не вдалося. Спробуйте у застосунку.';
-          else if (r.result === 'noop') resultText = '🟢 Приймання вже відкрите';
-          else resultText = '🟢 Приймання відкрито';
+          if (r.result === 'denied') resultText = botT(locale, 'store.open_failed');
+          else if (r.result === 'noop') resultText = botT(locale, 'store.open_noop');
+          else resultText = botT(locale, 'store.open_ok');
           break;
         }
 
@@ -340,15 +350,15 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
           // First tap → ask to confirm with a one-shot nonce (asymmetric friction:
           // close confirms, open does not — Counsel R3). Echo the location name (BR-15).
           const state = await getLocationStorefront(client, locationId);
-          if (!state) { resultText = '⚠️ Заклад не знайдено'; break; }
-          if (state.paused) { resultText = '🔴 Приймання вже закрите'; break; }
+          if (!state) { resultText = botT(locale, 'store.not_found'); break; }
+          if (state.paused) { resultText = botT(locale, 'store.already_closed'); break; }
           const nonce = await createCloseNonce(client, locationId, targetUserId!, chatId);
           try {
             await callTelegramApi('sendMessage', {
               chat_id: chatId,
-              text: `⚠️ Закрити приймання для «${state.name}»? Клієнти бачитимуть «зачинено».`,
+              text: botT(locale, 'store.close_confirm_prompt', { name: state.name }),
               reply_markup: { inline_keyboard: [[
-                { text: '🔴 Так, закрити', callback_data: `store.confirm:${locationId}:${nonce}` }
+                { text: botT(locale, 'store.btn_confirm_close'), callback_data: `store.confirm:${locationId}:${nonce}` }
               ]] }
             });
           } catch (e) {
@@ -360,12 +370,12 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
 
         case 'store.confirm': {
           const nonce = parts[2];
-          if (!nonce) { resultText = '⚠️ Недійсний запит'; break; }
+          if (!nonce) { resultText = botT(locale, 'store.invalid_request'); break; }
           const r = await setStorefrontPaused(client, locationId, targetUserId!, true, { consumeNonce: nonce });
-          if (r.result === 'nonce_invalid') resultText = '⚠️ Підтвердження протерміновано. Спробуйте ще раз або у застосунку.';
-          else if (r.result === 'denied') resultText = '⚠️ Не вдалося. Спробуйте у застосунку.';
-          else if (r.result === 'noop') resultText = '🔴 Приймання вже закрите';
-          else resultText = '🔴 Приймання закрито';
+          if (r.result === 'nonce_invalid') resultText = botT(locale, 'store.confirm_expired');
+          else if (r.result === 'denied') resultText = botT(locale, 'store.open_failed');
+          else if (r.result === 'noop') resultText = botT(locale, 'store.already_closed');
+          else resultText = botT(locale, 'store.close_ok');
           break;
         }
 
@@ -374,7 +384,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
           const category = parts[2];
           const valueStr = parts[3];
           if (!category || !isToggleableCategory(category) || (valueStr !== '0' && valueStr !== '1')) {
-            resultText = '⚠️ Недійсний запит';
+            resultText = botT(locale, 'pref.invalid_request');
             break;
           }
           const r = await setCategoryPref(client, {
@@ -385,50 +395,50 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
             value: valueStr === '1',
             changedVia: 'telegram',
           });
-          if (!r.ok) { resultText = '⚠️ Не вдалося оновити'; break; }
-          const label = category === 'operational' ? 'Операційні' : 'Якість/аналітика';
-          resultText = `${r.newValue ? '🔔' : '🔕'} ${label}: ${r.newValue ? 'увімкнено' : 'вимкнено'}`;
+          if (!r.ok) { resultText = botT(locale, 'pref.update_failed'); break; }
+          const label = category === 'operational' ? botT(locale, 'pref.cat_operational') : botT(locale, 'pref.cat_quality');
+          resultText = botT(locale, r.newValue ? 'pref.set_on' : 'pref.set_off', { label });
           break;
         }
 
         default:
           if (action.startsWith('order.reject_reason_')) {
             if (!entityId) {
-              resultText = '❌ Order not found';
+              resultText = botT(locale, 'order.not_found');
               break;
             }
             try {
               await client.query("SELECT set_config('app.current_tenant', $1, true)", [locationId]);
               await updateOrderStatus(client, entityId, locationId, 'REJECTED', { messageBus: opts.messageBus });
-              resultText = '❌ ЗАМОВЛЕННЯ ВІДХИЛЕНО';
+              resultText = botT(locale, 'order.rejected');
               sendFollowUp = true;
             } catch (err: any) {
               if (err.statusCode === 404) {
-                resultText = '❌ Order not found';
+                resultText = botT(locale, 'order.not_found');
               } else if (err.statusCode === 409) {
                 const orderCheck = await client.query(
                   `SELECT status FROM orders WHERE id = $1 AND location_id = $2`,
                   [entityId, locationId]
                 );
                 if ((orderCheck.rowCount ?? 0) === 0) {
-                  resultText = '❌ Order not found';
+                  resultText = botT(locale, 'order.not_found');
                 } else {
                   const currentStatus = orderCheck.rows[0].status;
                   if (currentStatus === 'REJECTED' || currentStatus === 'CANCELLED') {
-                    resultText = '❌ Already rejected';
+                    resultText = botT(locale, 'order.already_rejected');
                   } else if (currentStatus === 'CONFIRMED') {
-                    resultText = '❌ Cannot reject confirmed order';
+                    resultText = botT(locale, 'order.cannot_reject_confirmed');
                   } else {
-                    resultText = `⚠️ Cannot reject order in state ${currentStatus}`;
+                    resultText = botT(locale, 'order.cannot_reject_state', { status: currentStatus });
                   }
                 }
               } else {
-                resultText = '⚠️ Error rejecting order';
+                resultText = botT(locale, 'order.error_rejecting');
                 console.error('[TelegramWebhook] Error rejecting order:', err);
               }
             }
           } else {
-            resultText = 'Unknown action';
+            resultText = botT(locale, 'cb.unknown_action');
             shouldEditMessage = false;
           }
       }
@@ -438,7 +448,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
         try {
           await callTelegramApi('sendMessage', {
             chat_id: chatId,
-            text: `${resultText}\n\nOrder #${entityId.substring(0, 8)}`,
+            text: botT(locale, 'order.followup', { result: resultText, shortId: entityId.substring(0, 8) }),
             parse_mode: 'HTML',
           });
         } catch (followErr) {
@@ -465,8 +475,8 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
       console.error('Error handling callback query:', err);
       // Try to answer the callback query even if we failed
       try {
-        await answerCallbackQuery(callbackQuery.id, { 
-          text: 'Помилка обробки',
+        await answerCallbackQuery(callbackQuery.id, {
+          text: botT(locale, 'cb.processing_error'),
           showAlert: true
         });
       } catch (e) {
@@ -481,16 +491,33 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
   async function handleMessage(message: any, deps: { db: Pool; queue: PgBoss }) {
     const { db, queue } = deps;
     const client = await db.connect();
-    
+
+    // Owner locale — follows the admin dashboard language via the notification
+    // target's `locale` column. Defaults to 'sq' until a target resolves (e.g.
+    // an early /start before any target exists). Hoisted above the try so the
+    // catch fallback can localize too.
+    let locale: Locale = 'sq';
+
     try {
       const { text, chat } = message;
       const chatId = chat.id.toString();
-      
+
+      try {
+        const localeRes = await client.query(
+          `SELECT locale FROM owner_notification_targets
+           WHERE address = $1 AND channel = 'telegram' AND status = 'active' LIMIT 1`,
+          [chatId]
+        );
+        if (localeRes.rows[0]?.locale) locale = localeRes.rows[0].locale as Locale;
+      } catch {
+        // best-effort: fall back to 'sq'
+      }
+
       // Check if this is a /start command with a token
       if (text.startsWith('/start ')) {
         const token = text.split(' ')[1];
         if (!token) {
-          await sendMessage(chatId, 'Будь ласка, forneжте дійсний токен.');
+          await sendMessage(chatId, botT(locale, 'start.invalid_token'));
           return;
         }
 
@@ -499,7 +526,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
         if (token.startsWith('login_')) {
           const loginToken = token.slice('login_'.length);
           if (!/^[0-9a-f-]{36}$/i.test(loginToken)) {
-            await sendMessage(chatId, '⚠️ Invalid login link.');
+            await sendMessage(chatId, botT(locale, 'start.invalid_login_link'));
             return;
           }
           const tgUserId = String(message.from?.id ?? chat.id);
@@ -509,7 +536,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
             [loginToken],
           );
           if (lt.rows.length === 0 || new Date(lt.rows[0].expires_at) < new Date() || lt.rows[0].status !== 'pending') {
-            await sendMessage(chatId, '⚠️ This login link has expired. Please start again from your browser.');
+            await sendMessage(chatId, botT(locale, 'start.login_expired'));
             return;
           }
           const ur = await client.query(
@@ -523,7 +550,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
             `UPDATE telegram_login_tokens SET status = 'authenticated', user_id = $2, telegram_user_id = $3 WHERE token = $1::uuid`,
             [loginToken, ownerId, tgUserId],
           );
-          await sendMessage(chatId, '✅ Logged in! Return to your browser — it will continue automatically.');
+          await sendMessage(chatId, botT(locale, 'start.logged_in'));
           return;
         }
 
@@ -539,7 +566,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
         );
 
         if (tokenRes.rows.length === 0) {
-          await sendMessage(chatId, 'Недійсний або протермінований токен.');
+          await sendMessage(chatId, botT(locale, 'start.token_invalid_or_expired'));
           return;
         }
 
@@ -566,8 +593,8 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
           [token, chatId]
         );
 
-        await sendMessage(chatId, '✅ Телеграм успішно підключено! Ви будете отримувати сповіщення.');
-      } 
+        await sendMessage(chatId, botT(locale, 'start.connected'));
+      }
       // Handle /stop command to disconnect
       else if (text === '/stop') {
         // Find and disable the target for this chat
@@ -580,9 +607,9 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
         );
 
         if ((result.rowCount ?? 0) > 0) {
-          await sendMessage(chatId, '🔌 Телеграм відключено. Ви не будете отримувати сповіщення.');
+          await sendMessage(chatId, botT(locale, 'stop.disconnected'));
         } else {
-          await sendMessage(chatId, 'Телеграм не був підключений.');
+          await sendMessage(chatId, botT(locale, 'stop.not_connected'));
         }
       }
        // Handle /open command to open shift (guarded UPDATE)
@@ -595,7 +622,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
            [chatId]
          );
          if (openTargetRes.rows.length === 0) {
-           await sendMessage(chatId, '⚠️ Телеграм не підключений до жодного закладу. Використайте /start <token>.');
+           await sendMessage(chatId, botT(locale, 'open.not_linked'));
            return;
          }
          const openTarget = openTargetRes.rows[0];
@@ -603,12 +630,12 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
          try {
            await client.query("SELECT set_config('app.current_tenant', $1, true)", [openLocationId]);
            await openShift(client, openTarget.user_id, openLocationId, { messageBus });
-           await sendMessage(chatId, '🔓 Зміна відкрита. Почніть приймати замовлення.');
+           await sendMessage(chatId, botT(locale, 'open.shift_opened'));
          } catch (err: any) {
            if (err.statusCode === 400) {
-             await sendMessage(chatId, `⚠️ Неможливо відкрити зміну: ${err.message}`);
+             await sendMessage(chatId, botT(locale, 'open.shift_error_reason', { message: String(err.message ?? '') }));
            } else {
-             await sendMessage(chatId, '⚠️ Помилка при відкритті зміни');
+             await sendMessage(chatId, botT(locale, 'open.shift_error'));
              console.error('[TelegramWebhook] Error opening shift:', err);
            }
          }
@@ -616,7 +643,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
       // Handle /close command to close shift (deep-link to PWA as per prompt)
       else if (text === '/close') {
         // Send deep-link to PWA for shift closing
-        await sendMessage(chatId, '🔒 Зачекайте, перенаправляємо до закриття зміни...\n🔗 https://app.dowiz.org/courier/shifts/close');
+        await sendMessage(chatId, botT(locale, 'close.redirect'));
       }
       // Handle /store command — show storefront state + open/close toggle (dark until flag on)
       else if (text === '/store') {
@@ -629,15 +656,15 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
           [chatId]
         );
         if (storeTargets.rows.length === 0) {
-          await sendMessage(chatId, '⚠️ Telegram не підключений до жодного закладу. Використайте /start <token>.');
+          await sendMessage(chatId, botT(locale, 'store.not_linked'));
           return;
         }
         for (const t of storeTargets.rows) {
           const paused = t.delivery_paused ?? false;
-          const stateLine = paused ? '🔴 Приймання ЗАКРИТО' : '🟢 Приймання ВІДКРИТО';
+          const stateLine = paused ? botT(locale, 'store.state_closed') : botT(locale, 'store.state_open');
           const btn = paused
-            ? { text: '🟢 Відкрити приймання', callback_data: `store.open:${t.location_id}` }
-            : { text: '🔴 Закрити приймання', callback_data: `store.close:${t.location_id}` };
+            ? { text: botT(locale, 'store.btn_open'), callback_data: `store.open:${t.location_id}` }
+            : { text: botT(locale, 'store.btn_close'), callback_data: `store.close:${t.location_id}` };
           await callTelegramApi('sendMessage', {
             chat_id: chatId,
             text: `«${t.name}»\n${stateLine}`,
@@ -656,7 +683,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
           [chatId]
         );
         if (rows.rows.length === 0) {
-          await sendMessage(chatId, '⚠️ Telegram не підключений до жодного закладу. Використайте /start <token>.');
+          await sendMessage(chatId, botT(locale, 'settings.not_linked'));
           return;
         }
         for (const t of rows.rows) {
@@ -664,16 +691,16 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
           const opOn = prefs.operational !== false; // default ON
           const qOn = prefs.quality === true;        // default OFF
           const body =
-            `«${t.name}» — сповіщення\n` +
-            `🔴 Транзакційні: завжди увімкнено\n` +
-            `${opOn ? '🔔' : '🔕'} Операційні: ${opOn ? 'увімкнено' : 'вимкнено'}\n` +
-            `${qOn ? '🔔' : '🔕'} Якість/аналітика: ${qOn ? 'увімкнено' : 'вимкнено'}`;
+            `${botT(locale, 'settings.header', { name: t.name })}\n` +
+            `${botT(locale, 'settings.transactional_always')}\n` +
+            `${botT(locale, opOn ? 'settings.operational_on' : 'settings.operational_off')}\n` +
+            `${botT(locale, qOn ? 'settings.quality_on' : 'settings.quality_off')}`;
           await callTelegramApi('sendMessage', {
             chat_id: chatId,
             text: body,
             reply_markup: { inline_keyboard: [
-              [{ text: opOn ? '🔕 Вимкнути операційні' : '🔔 Увімкнути операційні', callback_data: `pref.set:${t.location_id}:operational:${opOn ? '0' : '1'}` }],
-              [{ text: qOn ? '🔕 Вимкнути якість' : '🔔 Увімкнути якість', callback_data: `pref.set:${t.location_id}:quality:${qOn ? '0' : '1'}` }],
+              [{ text: botT(locale, opOn ? 'settings.btn_op_disable' : 'settings.btn_op_enable'), callback_data: `pref.set:${t.location_id}:operational:${opOn ? '0' : '1'}` }],
+              [{ text: botT(locale, qOn ? 'settings.btn_q_disable' : 'settings.btn_q_enable'), callback_data: `pref.set:${t.location_id}:quality:${qOn ? '0' : '1'}` }],
             ] },
           });
         }
@@ -687,7 +714,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
       console.error('Error handling Telegram message:', err);
       // Best-effort: try to send error message
       try {
-        await sendMessage(message.chat.id, 'Виникла помилка при обробці вашого запиту.');
+        await sendMessage(message.chat.id, botT(locale, 'msg.error'));
       } catch (e) {
         // Ignore
       }
