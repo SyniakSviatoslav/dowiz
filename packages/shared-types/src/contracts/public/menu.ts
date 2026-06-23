@@ -16,6 +16,14 @@ export const PublicProduct = z.object({
 export type PublicProduct = z.infer<typeof PublicProduct>;
 
 /**
+ * MENU-AVAILABILITY (additive) · explicit modifier-group render control. NULL/absent
+ * => the client falls back to inferring radio (max_select===1) vs checkbox. Surfaced
+ * by read_public_menu as `display_type`; optional so older payloads stay valid.
+ */
+export const ModifierGroupDisplayType = z.enum(['radio', 'checkbox', 'select', 'quantity']);
+export type ModifierGroupDisplayType = z.infer<typeof ModifierGroupDisplayType>;
+
+/**
  * Cinematic product media (Phase 2, dark behind MEDIA_RICH_ENABLED).
  * Resolved view served by the lazy media endpoint — `url`/`posterUrl` are
  * already absolute (server resolves storage_key → /media/ or http(s) passthrough).

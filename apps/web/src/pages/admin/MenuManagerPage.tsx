@@ -46,6 +46,121 @@ function getProductAllergens(product: Product): string[] {
 }
 
 
+// MENU-AVAILABILITY (additive) · owner schedule + busy editor. Self-contained,
+// collapsed by default, zero impact on existing flows. Reads the location id from
+// /owner/settings; writes go to the FORCE-RLS menu_schedules table via the owner API.
+interface ScheduleRow {
+  id: string; productId: string | null; categoryId: string | null;
+  mode: 'daily' | 'recurring' | 'period';
+  startMinute: number | null; endMinute: number | null;
+}
+function MenuScheduleEditor({ categories }: { categories: Category[] }) {
+  const { t } = useI18n();
+  const { showToast } = useToast();
+  const [locationId, setLocationId] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
+  const [targetCategory, setTargetCategory] = useState('');
+  const [startHHMM, setStartHHMM] = useState('07:00');
+  const [endHHMM, setEndHHMM] = useState('11:00');
+
+  useEffect(() => {
+    apiClient<any>('/owner/settings').then((r: any) => { if (r?.id) setLocationId(r.id); }).catch(() => {});
+  }, []);
+
+  const load = async (locId: string) => {
+    try {
+      const r = await apiClient<any>(`/owner/locations/${locId}/menu-schedules`);
+      setSchedules(r?.data ?? []);
+    } catch { /* best-effort */ }
+  };
+  useEffect(() => { if (open && locationId) load(locationId); }, [open, locationId]);
+
+  const toMinutes = (hhmm: string) => {
+    const [h, m] = hhmm.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  const addSchedule = async () => {
+    if (!locationId || !targetCategory) return;
+    try {
+      await apiClient(`/owner/locations/${locationId}/menu-schedules`, {
+        method: 'POST',
+        body: { category_id: targetCategory, mode: 'daily', start_minute: toMinutes(startHHMM), end_minute: toMinutes(endHHMM), available: true },
+      });
+      showToast(t('admin.schedule_saved', 'Availability window saved'), 'success');
+      await load(locationId);
+    } catch {
+      showToast(t('common.error_save', 'Failed to save.'), 'error');
+    }
+  };
+
+  const removeSchedule = async (id: string) => {
+    if (!locationId) return;
+    try {
+      await apiClient(`/owner/locations/${locationId}/menu-schedules/${id}`, { method: 'DELETE' });
+      setSchedules(prev => prev.filter(s => s.id !== id));
+    } catch { /* ignore */ }
+  };
+
+  const fmt = (min: number | null) => min == null ? '—' : `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+  const catName = (id: string | null) => categories.find(c => c.id === id)?.name ?? (id ?? '');
+
+  return (
+    <div data-testid="schedule-editor" className="rounded-xl border p-4" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between text-left">
+        <span className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--brand-text)' }}>
+          <i className="ti ti-calendar-time" style={{ color: 'var(--brand-primary)' }} />
+          {t('admin.menu_schedules', 'Availability schedules (mealtimes)')}
+        </span>
+        <i className={`ti ${open ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ color: 'var(--brand-text-muted)' }} />
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <p className="text-[11px]" style={{ color: 'var(--brand-text-muted)' }}>
+            {t('admin.menu_schedules_hint', 'Restrict a category to a daily window (e.g. breakfast 07:00–11:00). Items with no schedule stay always-available.')}
+          </p>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-[11px] flex flex-col gap-1" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('admin.category', 'Category')}
+              <select value={targetCategory} onChange={e => setTargetCategory(e.target.value)}
+                className="h-9 rounded-lg px-2 text-sm border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                <option value="">{t('admin.select_category', 'Select…')}</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+            <label className="text-[11px] flex flex-col gap-1" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('admin.from', 'From')}
+              <input type="time" value={startHHMM} onChange={e => setStartHHMM(e.target.value)}
+                className="h-9 rounded-lg px-2 text-sm border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+            </label>
+            <label className="text-[11px] flex flex-col gap-1" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('admin.to', 'To')}
+              <input type="time" value={endHHMM} onChange={e => setEndHHMM(e.target.value)}
+                className="h-9 rounded-lg px-2 text-sm border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+            </label>
+            <Button onClick={addSchedule} size="sm" disabled={!targetCategory}>
+              <i className="ti ti-plus" /> {t('admin.add_window', 'Add window')}
+            </Button>
+          </div>
+          {schedules.length > 0 && (
+            <ul className="space-y-1.5">
+              {schedules.map(s => (
+                <li key={s.id} className="flex items-center justify-between text-sm rounded-lg px-3 py-2 border" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                  <span><strong>{catName(s.categoryId)}</strong> · {fmt(s.startMinute)}–{fmt(s.endMinute)}</span>
+                  <button onClick={() => removeSchedule(s.id)} aria-label={t('common.delete', 'Delete')} style={{ color: 'var(--color-danger)' }}>
+                    <i className="ti ti-trash" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MenuManagerPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
@@ -377,6 +492,9 @@ export function MenuManagerPage() {
           <i className="ti ti-file-import" /> {t('admin.import_pdf', 'Import PDF')}
         </Button>
       </div>
+
+      {/* MENU-AVAILABILITY · schedule / mealtime editor (additive, collapsed by default) */}
+      <MenuScheduleEditor categories={categories} />
 
       {error && (
         <div className="p-3 rounded-lg text-sm flex items-center justify-between" style={{ background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>

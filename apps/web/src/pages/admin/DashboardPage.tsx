@@ -39,9 +39,14 @@ export function DashboardPage() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [readiness, setReadiness] = useState<{ menu: boolean; phone: boolean; address: boolean; couriers: boolean; branding: boolean; placeOrder: boolean; telegram: boolean }>({ menu: false, phone: false, address: false, couriers: false, branding: false, placeOrder: false, telegram: false });
 
-  const { play: playPing } = useSound('/sounds/ping.mp3');
+  const { start: startPing, stop: stopPing, unlock: unlockSound, armed: soundArmed } = useSound('/sounds/ping.mp3');
   const { trigger: haptic } = useHaptics();
-  const { alertSoundEnabled } = useSoundPrefs();
+  const { alertSoundEnabled, toggleAlertSound } = useSoundPrefs();
+  // A new PENDING order is "unacknowledged" until the owner accepts/rejects it
+  // (any status change off PENDING) or taps the dismiss affordance. While the
+  // set is non-empty we keep the alert alive: looping ping if armed, or — the
+  // honest fallback — a persistent on-screen banner if audio is blocked/muted.
+  const [unackOrders, setUnackOrders] = useState<Set<string>>(new Set());
   const [tenantId, setTenantId] = useState('');
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
   const [messagesByOrder, setMessagesByOrder] = useState<Record<string, any[]>>({});
@@ -135,7 +140,9 @@ export function DashboardPage() {
       if (envelope.type === 'order.created') {
         setOrders(prev => mergeDelta(prev, payload, true));
         scheduleAuthedRefresh(); // pull name/items from the authenticated endpoint
-        if (alertSoundEnabled) playPing();
+        // Mark this order unacknowledged; the effect below drives the persistent
+        // ping (or banner fallback). No fire-and-forget .play() here.
+        if (payload?.id) setUnackOrders(prev => new Set(prev).add(payload.id));
         haptic('tap');
       }
       else if (envelope.type === 'order.status') {
@@ -172,6 +179,53 @@ export function DashboardPage() {
       }
     },
   });
+
+  // Drop any order from the unacknowledged set once it is no longer PENDING
+  // (the owner accepted/rejected it elsewhere, or an authed refetch corrected
+  // it). This is the natural acknowledge path beside the explicit dismiss.
+  useEffect(() => {
+    setUnackOrders(prev => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of prev) {
+        const o = orders.find(ord => ord.id === id);
+        if (!o || o.status !== 'PENDING') { next.delete(id); changed = true; }
+      }
+      return changed ? next : prev;
+    });
+  }, [orders]);
+
+  // Persistent audible alert: loop the ping while there is an unacknowledged
+  // PENDING order AND sound is both enabled (pref) and armed (unlocked). When
+  // any of those is false we stop audio — the visible banner below carries the
+  // alert instead, so a missed order is impossible even with no sound.
+  const hasUnack = unackOrders.size > 0;
+  useEffect(() => {
+    if (hasUnack && alertSoundEnabled && soundArmed) {
+      startPing();
+    } else {
+      stopPing();
+    }
+    return () => stopPing();
+  }, [hasUnack, alertSoundEnabled, soundArmed, startPing, stopPing]);
+
+  const acknowledgeOrders = useCallback(() => {
+    setUnackOrders(new Set());
+    stopPing();
+  }, [stopPing]);
+
+  // One-tap "Enable sound": runs the unlock inside this gesture, then ARMs.
+  const handleEnableSound = useCallback(async () => {
+    if (!alertSoundEnabled) toggleAlertSound();
+    await unlockSound();
+  }, [alertSoundEnabled, toggleAlertSound, unlockSound]);
+
+  // Honest alert state for the indicator. ARMED only when sound is on AND the
+  // audio context is genuinely unlocked; otherwise BLOCKED/MUTED — never a
+  // silent false promise.
+  const alertState: 'armed' | 'muted' | 'blocked' =
+    !alertSoundEnabled ? 'muted' : soundArmed ? 'armed' : 'blocked';
 
   const fetchMessages = async (orderId: string) => {
     if (messagesByOrder[orderId]) return;
@@ -305,6 +359,33 @@ export function DashboardPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4" role="region" aria-live="polite" aria-label={t('admin.live_orders', 'Live orders')}>
+      {/* Persistent new-order banner — the honest fallback. Shown whenever an
+          order is unacknowledged AND audio cannot carry the alert (sound off,
+          or not yet unlocked/blocked). Guarantees a missed order is impossible
+          even with no sound. Tapping it views orders + acknowledges. */}
+      {hasUnack && alertState !== 'armed' && (
+        <button
+          type="button"
+          data-testid="owner-new-order-banner"
+          onClick={() => { setViewMode('live'); setStatusFilter('PENDING'); acknowledgeOrders(); }}
+          className="w-full flex items-center gap-3 p-4 rounded-xl border text-left transition-all hover:opacity-95 animate-pulse"
+          style={{ background: 'var(--brand-primary-light)', borderColor: 'var(--brand-primary)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}
+        >
+          <i className="ti ti-bell-ringing text-xl shrink-0" style={{ color: 'var(--brand-primary)' }} />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold">
+              {unackOrders.size > 1
+                ? t('admin.new_orders_count', '{count} new orders').replace('{count}', String(unackOrders.size))
+                : t('admin.new_order_alert', 'New order')}
+            </div>
+            <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('admin.new_order_tap_view', 'Tap to view')}
+            </div>
+          </div>
+          <i className="ti ti-chevron-right text-lg shrink-0" style={{ color: 'var(--brand-primary)' }} />
+        </button>
+      )}
+
       {/* Welcome Hint */}
       {showHint && (
         <HintCard
@@ -350,6 +431,35 @@ export function DashboardPage() {
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{viewMode === 'live' ? t('admin.live_orders', 'Live Orders') : t('courier.history', 'Order History')}</h2>
                   <div data-testid="ws-status-dot" data-connected={connectionStatus === 'connected' ? 'true' : 'false'}><WSStatusDot status={connectionStatus === 'disabled' ? 'disconnected' : connectionStatus} /></div>
+                  {/* Honest alert-state indicator. ARMED = audio unlocked + sound on
+                      (new orders will ping). Otherwise an actionable "Enable sound"
+                      affordance that performs the unlock inside the gesture. Never
+                      claims an alert it cannot deliver. */}
+                  {alertState === 'armed' ? (
+                    <span
+                      data-testid="owner-alert-status"
+                      data-state="armed"
+                      title={t('admin.alert_armed', 'Sound alerts on')}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border"
+                      style={{ background: 'var(--brand-primary-light)', borderColor: 'var(--brand-primary)', color: 'var(--brand-primary)' }}
+                    >
+                      <i className="ti ti-bell-ringing text-[11px]" />
+                      {t('admin.alert_armed_short', 'Alerts on')}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      data-testid="owner-alert-enable"
+                      data-state={alertState}
+                      onClick={handleEnableSound}
+                      title={t('admin.alert_enable_hint', 'New-order sound is off — tap to enable')}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-all hover:opacity-90"
+                      style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)', minHeight: 'var(--tap-min-sm, 1.5rem)' }}
+                    >
+                      <i className="ti ti-bell-off text-[11px]" />
+                      {t('admin.alert_enable', 'Enable sound')}
+                    </button>
+                  )}
                 </div>
                 <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{filteredOrders.length}</p>
               </div>

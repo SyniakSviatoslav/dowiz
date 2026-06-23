@@ -10,7 +10,7 @@ const MediaRenderer = lazy(() => import('../../components/media').then(m => ({ d
 const RevealOverlay = lazy(() => import('../../components/media/RevealOverlay').then(m => ({ default: m.RevealOverlay })));
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ProductCard, useI18n, useToast, PriceDisplay, getAllergenStyle } from '@deliveryos/ui';
+import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 
 interface ProductModifier {
@@ -21,6 +21,8 @@ interface ProductModifier {
   sort_order: number;
 }
 
+type ModifierDisplayType = 'radio' | 'checkbox' | 'select' | 'quantity';
+
 interface ModifierGroup {
   id: string;
   name: string;
@@ -28,7 +30,17 @@ interface ModifierGroup {
   max_select: number;
   required: boolean;
   sort_order: number;
+  // MENU-AVAILABILITY (additive) · explicit render control. Absent => infer from max_select.
+  display_type?: ModifierDisplayType | null;
   modifiers: ProductModifier[];
+}
+
+// MENU-AVAILABILITY · resolve the effective control explicitly. Prefer the owner-set
+// display_type; fall back to the legacy max_select inference (radio when single-select,
+// checkbox otherwise) so unscheduled/un-typed groups render exactly as before.
+function resolveDisplayType(g: ModifierGroup): ModifierDisplayType {
+  if (g.display_type) return g.display_type;
+  return g.max_select === 1 ? 'radio' : 'checkbox';
 }
 
 interface Product {
@@ -254,7 +266,10 @@ export function MenuPage() {
   const HEADER_H = 56;
   const scrollOffset = HEADER_H + stickyHeight + 8;
 
-  interface LocationInfo { lat: number; lng: number; googleRating?: number | null; googleReviewCount?: number | null; isOpen?: boolean; }
+  interface LocationInfo { lat: number; lng: number; googleRating?: number | null; googleReviewCount?: number | null; isOpen?: boolean; status?: 'open' | 'closed' | 'busy'; }
+  // MENU-AVAILABILITY · venue state (open|closed|busy) decoupled from lat/lng so it
+  // surfaces even when geo is absent. `busy` is a distinct eater-facing state.
+  const [venueStatus, setVenueStatus] = useState<'open' | 'closed' | 'busy' | null>(null);
   const [locationInfo, setLocationInfo] = useState<LocationInfo | null>(null);
   // UX-1 storefront footer links — decoupled from geo so they show even without lat/lng.
   const [storeLinks, setStoreLinks] = useState<{ mapsUrl?: string | null; instagram?: string | null; facebook?: string | null }>({});
@@ -270,7 +285,10 @@ export function MenuPage() {
       .then(r => r.ok ? r.json() : null)
       .then((d: any) => {
         if (!d) return;
-        if (d.lat && d.lng) setLocationInfo({ lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount, isOpen: d.isOpen });
+        if (d.lat && d.lng) setLocationInfo({ lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount, isOpen: d.isOpen, status: d.status });
+        // Derive venue state from the contract status; fall back to the legacy isOpen
+        // boolean for older payloads (busy only ever comes from the new `status` field).
+        setVenueStatus(d.status ?? (d.isOpen === false ? 'closed' : 'open'));
         setStoreLinks({ mapsUrl: d.googleMapsUrl ?? null, instagram: d.socialInstagram ?? null, facebook: d.socialFacebook ?? null });
         setStoreAddress(d.address ?? null);
       })
@@ -530,6 +548,11 @@ export function MenuPage() {
           <h1 className="text-[22px] md:text-[26px] font-bold leading-tight" style={{ color: 'var(--color-on-primary)', fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 16px color-mix(in srgb, var(--brand-bg) 40%, transparent)' }}>
             {menu?.location_name || t('client.menu', 'Menu')}
           </h1>
+          {venueStatus && (
+            <div className="mt-2">
+              <StateChip state={venueStatus} scope="venue" data-testid="venue-state-chip" />
+            </div>
+          )}
         </motion.div>
       </section>
 
@@ -630,16 +653,30 @@ export function MenuPage() {
         )}
       </div>
 
-      {/* Delivery closed banner */}
-      {locationInfo?.isOpen === false && (
+      {/* Venue state banner — closed vs busy are distinct eater-facing states.
+          `busy` (kitchen busy / raised ETA) is NOT closed: ordering stays open. */}
+      {venueStatus === 'closed' && (
         <motion.div
+          data-testid="venue-closed-banner"
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           className="mx-4 my-3 px-4 py-3 rounded-xl border flex items-center gap-3 text-sm font-medium"
-          style={{ background: 'var(--color-warning-light, rgba(217,119,6,0.08))', borderColor: 'var(--color-warning, #D97706)', color: 'var(--color-warning, #D97706)' }}
+          style={{ background: 'color-mix(in srgb, var(--brand-text-muted) 8%, transparent)', borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}
         >
           <i className="ti ti-clock-off text-lg shrink-0" />
           <span>{t('client.delivery_closed', 'We are currently closed. Check back during opening hours.')}</span>
+        </motion.div>
+      )}
+      {venueStatus === 'busy' && (
+        <motion.div
+          data-testid="venue-busy-banner"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mx-4 my-3 px-4 py-3 rounded-xl border flex items-center gap-3 text-sm font-medium"
+          style={{ background: 'color-mix(in srgb, var(--color-warning, #D97706) 10%, transparent)', borderColor: 'var(--color-warning, #D97706)', color: 'var(--color-warning, #D97706)' }}
+        >
+          <i className="ti ti-flame text-lg shrink-0" />
+          <span>{t('client.kitchen_busy', 'The kitchen is busy right now — orders may take a little longer than usual.')}</span>
         </motion.div>
       )}
 
@@ -1003,9 +1040,21 @@ export function MenuPage() {
                   <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
                     <i className="ti ti-settings" /> {t('client.customize', 'Customize')}
                   </h3>
-                  {(detailProduct.modifier_groups || []).map(group => (
-                    <div key={group.id} className="mb-4 last:mb-0">
+                  {(detailProduct.modifier_groups || []).map(group => {
+                    const displayType = resolveDisplayType(group);
+                    return (
+                    <div
+                      key={group.id}
+                      className="mb-4 last:mb-0"
+                      data-testid="modifier-group"
+                      data-display-type={displayType}
+                    >
                       <div className="flex items-center gap-2 mb-2.5">
+                        <i
+                          className={`ti ${displayType === 'radio' ? 'ti-circle-dot' : displayType === 'checkbox' ? 'ti-checkbox' : displayType === 'quantity' ? 'ti-number' : 'ti-chevron-down'}`}
+                          style={{ fontSize: '0.8rem', color: 'var(--brand-text-muted)' }}
+                          aria-hidden="true"
+                        />
                         <span className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{group.name}</span>
                         {group.required && (
                           <span className="text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ background: 'rgba(220,38,38,0.08)', color: 'var(--color-danger)' }}>
@@ -1048,7 +1097,8 @@ export function MenuPage() {
                         })}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 

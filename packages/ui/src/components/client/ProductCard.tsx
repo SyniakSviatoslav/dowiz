@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useI18n, PriceDisplay, getAllergenStyle } from '../../index.js';
+import { StateChip } from './StateChip.js';
 
 interface ProductCardProps {
   product: {
@@ -165,9 +166,8 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
           <>
             <div className="absolute inset-0 z-10" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 100%)' }} />
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
-              <span className="text-[10px] font-semibold px-2.5 py-1 rounded-md" style={{ background: 'var(--color-danger)', color: 'var(--color-on-primary)' }}>
-                {t('client.unavailable', 'Unavailable')}
-              </span>
+              {/* MENU-AVAILABILITY · explicit sold-out/86 chip alongside the greying. */}
+              <StateChip state="sold_out" scope="item" data-testid="item-state-chip" />
             </div>
           </>
         )}

@@ -31,6 +31,12 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
          SELECT o.id, o.status, o.type, o.delivery_address, o.delivery_instructions,
                 o.total, o.tip_amount, o.created_at::text as created_at,
                 o.delivery_lat, o.delivery_lng,
+                o.confirmed_at::text   as confirmed_at,
+                o.preparing_at::text   as preparing_at,
+                o.ready_at::text       as ready_at,
+                o.in_delivery_at::text as in_delivery_at,
+                o.delivered_at::text   as delivered_at,
+                o.picked_up_at::text   as picked_up_at,
                ca.courier_id, ca.status as assignment_status
         FROM orders o
         LEFT JOIN courier_assignments ca ON ca.order_id = o.id AND ca.status IN ('accepted', 'picked_up')
@@ -134,6 +140,15 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
           quantity: r.quantity,
         })),
         createdAt: row.created_at,
+        // ORDER-TRACKING: per-transition timestamps (nullable until reached).
+        // The stepper lights up filled steps from these; falls back to
+        // status-only when null.
+        confirmedAt: row.confirmed_at,
+        preparingAt: row.preparing_at,
+        readyAt: row.ready_at,
+        inDeliveryAt: row.in_delivery_at,
+        deliveredAt: row.delivered_at,
+        pickedUpAt: row.picked_up_at,
         etaMinutes,
         courierName: row.courier_id ? courierName : null,
         courierPhoneMasked: row.courier_id ? courierPhone : null,
