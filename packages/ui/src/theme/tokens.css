@@ -357,3 +357,123 @@ html[data-sunlight="on"] [class*="shadow"] { box-shadow: 0 0 0 1px var(--brand-b
 /* Heavier type for glare legibility */
 html[data-sunlight="on"] body { font-weight: 500; }
 html[data-sunlight="on"] :is(h1, h2, h3, button, a, label, th) { font-weight: 700 !important; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   PAPER / MOEBIUS — internal brand skin for /admin + /courier (NOT the client
+   storefront, which stays white-label per tenant). Scoped to a wrapper that
+   carries data-skin="paper"; it RE-MAPS the existing brand tokens to a warm
+   paper palette and ADDS ink, paper and display-font tokens, so every shadcn /
+   Tailwind component inherits the look with zero forks. Because the scope sits
+   on a descendant of <html>, it wins over ThemeProvider's inline :root vars by
+   proximity (no !important needed). Internal brand is FIXED — never tenant-
+   overridable. Palette verified WCAG AA on all text pairs (ink 15:1 AAA,
+   ink-muted 5.6:1, action-ink 5.8:1).
+   ════════════════════════════════════════════════════════════════════════ */
+[data-skin="paper"] {
+  /* Paper surfaces — warm, not white */
+  --paper-bg:      #F4ECDB;
+  --paper-surface: #FBF5E9;
+  --paper-raised:  #FFFDF7;
+
+  /* Ink — warm, not cold grey */
+  --ink:       #241F1A;
+  --ink-muted: #6B6054;
+  --ink-line:  #C9BCA6;
+
+  /* Accents (Nomadic Tribe palette) — decorative, NOT a bg under text */
+  --sand:      #987654;
+  --teal:      #49C5B6;
+  --teal-deep: #3EA094;
+  --gold:      #ECD06F;
+
+  /* Action — darkened teal so light text clears AA (~5.8:1) */
+  --action:       #246B61;
+  --action-hover: #1C564E;
+  --action-ink:   #FBF5E9;
+
+  /* Re-map brand tokens → shadcn/Tailwind inherit automatically */
+  --brand-bg:             var(--paper-bg);
+  --brand-surface:        var(--paper-surface);
+  --brand-surface-raised: var(--paper-raised);
+  --brand-text:           var(--ink);
+  --brand-text-muted:     var(--ink-muted);
+  --brand-border:         var(--ink-line);
+  --brand-primary:        var(--action);
+  --brand-primary-hover:  var(--action-hover);
+  --brand-primary-strong: var(--action-hover); /* already AA on light text */
+  --brand-primary-light:  rgba(36, 107, 97, 0.10);
+  --brand-accent:         var(--teal-deep);
+  --color-on-primary:     var(--action-ink);
+
+  /* Warm, soft elevation for a light surface (cool black shadows look digital) */
+  --elev-1: 0 1px 2px rgba(60, 40, 20, .06);
+  --elev-2: 0 4px 14px rgba(60, 40, 20, .08);
+  --elev-3: 0 10px 30px rgba(60, 40, 20, .10);
+  --elev-4: 0 18px 44px rgba(60, 40, 20, .13);
+  --elevation-1: 0 1px 3px rgba(60, 40, 20, .10);
+  --elevation-2: 0 4px 12px rgba(60, 40, 20, .12);
+  --elevation-3: 0 8px 24px rgba(60, 40, 20, .14);
+
+  /* Typography — Fraunces gives the warm "book" character of the paper world */
+  --font-display:       'Fraunces', Georgia, serif;
+  --brand-font-heading: 'Fraunces', Georgia, serif;
+  --brand-font-body:    'DM Sans', 'Inter', sans-serif;
+
+  --paper-grain-opacity: 0.06;
+}
+
+/* Display type on internal headings (body stays DM Sans for dense data zones). */
+[data-skin="paper"] :is(h1, h2, h3) {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+}
+
+/* One cheap GPU-light grain layer that NEVER touches data. pointer-events:none so
+   it never eats a click; opt OUT for tables/forms/charts via .data-surface. */
+[data-skin="paper"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  mix-blend-mode: multiply;
+  opacity: var(--paper-grain-opacity);
+  background-image: url("/textures/paper-grain.svg");
+  background-size: 320px 320px;
+}
+[data-skin="paper"] .data-surface {
+  position: relative;
+  z-index: 2;
+  background: var(--paper-surface);
+}
+
+/* Aged-paper-at-night: warm brown-black, warm-white ink, lower grain. Semantic
+   colors stay fixed. Triggered by the app's existing dark-mode attribute. */
+html[data-theme="dark"] [data-skin="paper"],
+[data-skin="paper"][data-theme="dark"] {
+  --paper-bg:      #1E1A16;
+  --paper-surface: #26211B;
+  --paper-raised:  #2F2920;
+  --ink:           #F1E8D8;
+  --ink-muted:     #B0A28C;
+  --ink-line:      #4A4034;
+  --action:        #49C5B6;
+  --action-hover:  #5fd3c5;
+  --action-ink:    #1E1A16;
+  --paper-grain-opacity: 0.04;
+}
+@media (prefers-color-scheme: dark) {
+  [data-skin="paper"] {
+    --paper-bg:      #1E1A16;
+    --paper-surface: #26211B;
+    --paper-raised:  #2F2920;
+    --ink:           #F1E8D8;
+    --ink-muted:     #B0A28C;
+    --ink-line:      #4A4034;
+    --action:        #49C5B6;
+    --action-hover:  #5fd3c5;
+    --action-ink:    #1E1A16;
+    --paper-grain-opacity: 0.04;
+  }
+}
