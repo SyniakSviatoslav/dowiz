@@ -31,6 +31,12 @@ button, a, [role="button"], input, select, textarea, label {
 input, select, textarea {
   font-size: max(16px, 1rem);
 }
+/* Error state is driven by explicit border-color in components, never the
+   browser's native :invalid styling (Firefox flags every required field with a
+   red glow before the user has even typed — read as a false "error ring"). */
+input:invalid, select:invalid, textarea:invalid {
+  box-shadow: none;
+}
 .scroll-area, .sheet-content {
   overscroll-behavior: contain;
 }
