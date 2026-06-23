@@ -22,17 +22,25 @@ Categories → route: `BUG`/`A11Y_FUNC` → new RED row in `e2e/MATRIX.md` (inne
 ## Saturation tracker
 | Round | Personas × VP × locale run | NEW valid in-scope (≥minor) | Rounds-without-new | Notes |
 |------:|----------------------------|----------------------------:|-------------------:|-------|
-| 0 (smoke) | 1 (client-first-timer, scripted) | 0 | 0 | Checkpoint-A plumbing smoke only — NOT a discovery round (ScriptedReasoner ≠ discovery engine; does not count toward saturation) |
-| —     | (Phase B not entered — needs driver LLM key) | — | 0 | — |
+| 0 (smoke) | 1 (client-first-timer, scripted) | 0 | — | Checkpoint-A plumbing smoke — NOT a discovery round (ScriptedReasoner ≠ discovery engine) |
+| 1 | client-first-timer, client-price-skeptic (LlmReasoner, free) | 0 valid | 0 | 3 findings — all NOT_A_BUG (LLM hallucinated selectors); driver hardened |
+| 2 | client-first-timer (LlmReasoner, free) | 0 valid | 0 | exposed observe-before-hydrate timing bug (fixed); no valid finding |
+| 3 | client-first-timer (LlmReasoner, free, grounded+settle) | 0 valid | 1 | clean session — searched + add-to-cart via real data-testids; 0 false findings |
 
-### Smoke triage (round 0)
-The plumbing smoke surfaced 2 friction findings: `…:click:add it to the cart:unactionable`.
-**Verdict: NOT_A_BUG (scripted-selector artifact).** The real add-to-cart control exists
-(`packages/ui/src/components/client/ProductCard.tsx:182`, `aria-label` = `tooltip.add_to_cart`;
-modal CTA `client.add_to_cart`, `MenuPage.tsx:1150`) — there is no `data-testid="add-to-cart"`,
-so the ScriptedReasoner's guessed selector simply didn't match. Dropped with reason. This is
-exactly why authentic discovery needs `LlmReasoner` (it reads the observation and clicks the
-real label) — a scripted plan cannot adapt, so it must NOT be used as the discovery engine.
+> NOTE: rounds run a cost-bounded SUBSET on free models — these are NOT full saturation rounds.
+> A saturation round = all personas × {390,768,1280} × {al,en}; deep discovery wants more rounds
+> and/or a stronger model (free slugs are heavily 429'd and weak → short sessions). The set is
+> expand-only; subset rounds never count toward the K-round saturation exit.
+
+### Triage log
+- **R1 F-21311 / F-41412 / F-74853** (`/s/demo:click:{menu-button|California (6)|item-card-0}:unactionable`):
+  **NOT_A_BUG — LLM hallucinated selectors** (none exist; real testid is `menu-item`). Root cause:
+  observation was too thin, so the model guessed. **Fixed** by grounding observe() with real
+  selectors + instructing the reasoner to copy only from the actions list. Dropped with reason.
+- **R0 smoke ×2** (`…:add it to the cart:unactionable`): NOT_A_BUG — ScriptedReasoner guessed
+  wrong selector; real add-to-cart at `ProductCard.tsx:182` (`tooltip.add_to_cart`). Dropped.
+- **R3**: no findings — the grounded persona completed its happy path on real controls (signal
+  that the storefront client happy-path has no friction at this depth).
 
 Exit (discovery) = a FULL round (all personas × {390,768,1280} × {al,en}) yields **0** new valid in-scope findings ≥ minor, held **K** consecutive rounds (K=2; go-live K=3). The set is fixed-or-expanding between rounds, never narrowed.
 
