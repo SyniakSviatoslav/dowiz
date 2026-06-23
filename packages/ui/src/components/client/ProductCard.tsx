@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useI18n, PriceDisplay, getAllergenStyle } from '../../index.js';
-import { StateChip } from './StateChip.js';
 
 interface ProductCardProps {
   product: {
@@ -162,15 +161,8 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             </motion.span>
           </div>
         )}
-        {!product.isAvailable && (
-          <>
-            <div className="absolute inset-0 z-10" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 100%)' }} />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
-              {/* MENU-AVAILABILITY · explicit sold-out/86 chip alongside the greying. */}
-              <StateChip state="sold_out" scope="item" data-testid="item-state-chip" />
-            </div>
-          </>
-        )}
+        {/* No sold-out overlay/chip: read_public_menu only returns is_available=true products,
+            so the storefront hides unavailable items rather than greying them. */}
       </div>
       <div className="p-2.5 flex flex-col flex-1 gap-1 min-h-0">
         <div className="flex items-start justify-between gap-1.5">
