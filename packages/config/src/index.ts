@@ -60,6 +60,11 @@ const EnvSchema = z.object({
   R2_ENDPOINT: z.string().optional(),
   R2_BUCKET: z.string().optional(),
   R2_PUBLIC_URL: z.string().optional(),
+  // Operational (hot-path) pool size per API instance. Runs through Supavisor's transaction
+  // pooler (:6543), which multiplexes, so this can safely exceed the old hardcoded 8. Raised
+  // to give public-storefront bursts headroom over owner/courier/order writes (see the menu
+  // pool-starvation fix). Tune per Supabase plan / instance count via env.
+  OPERATIONAL_POOL_SIZE: z.coerce.number().int().positive().default(20),
   BACKUP_ENABLED: z.enum(['true', 'false']).default('false'),
   BACKUP_POOL_SIZE: z.coerce.number().int().positive().default(2),
   BACKUP_HOURLY_CRON: z.string().default('0 * * * *'),
