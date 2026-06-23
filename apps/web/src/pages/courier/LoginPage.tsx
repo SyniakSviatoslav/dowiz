@@ -1,7 +1,7 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Input, FormField, LanguageSwitcher, useI18n, PaperIllustration, isPaperSkinEnabled } from '@deliveryos/ui';
+import { Button, Input, FormField, LanguageSwitcher, useI18n, NomadicScene, ArtNouveauFrame, isPaperSkinEnabled } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { CourierLoginResponse } from '@deliveryos/shared-types';
 
@@ -44,18 +44,28 @@ export function LoginPage() {
           <LanguageSwitcher variant="full" />
         </div>
         {isPaperSkinEnabled() ? (
-          <div className="mx-auto mb-4 max-w-[220px]">
-            <PaperIllustration name="scooter" animated />
+          <div className="mb-5 overflow-hidden rounded-[20px]" style={{ background: 'color-mix(in srgb, var(--teal) 16%, var(--paper-surface))', border: '1.5px solid var(--ink-line)' }}>
+            <NomadicScene animated />
+            <div className="px-5 pb-5 -mt-2 text-center">
+              <p className="uppercase tracking-[0.25em] text-[11px] font-semibold" style={{ color: 'var(--teal-deep)' }}>
+                {t('courier.journey_kicker', 'The journey begins')}
+              </p>
+              <h1 className="text-4xl leading-[1.05] mt-1" style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.02em' }}>
+                {t('courier.login', 'Courier')}
+              </h1>
+            </div>
           </div>
         ) : (
           <div className="h-1 w-16 mx-auto mb-6 rounded-full" style={{ background: 'linear-gradient(90deg, var(--brand-primary), var(--brand-primary-hover))' }} />
         )}
 
-        <div className="card-base p-8 space-y-6">
+        <ArtNouveauFrame className="card-base p-8 space-y-6 block">
           <div className="text-center space-y-1.5">
-            <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>
-              {t('courier.login', 'Courier Login')}
-            </h1>
+            {!isPaperSkinEnabled() && (
+              <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>
+                {t('courier.login', 'Courier Login')}
+              </h1>
+            )}
             <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>
               {t('courier.login_subtitle', 'Enter your email and password to continue')}
             </p>
@@ -100,7 +110,7 @@ export function LoginPage() {
               {t('auth.login', 'Log In')}
             </Button>
           </form>
-        </div>
+        </ArtNouveauFrame>
       </div>
     </div>
   );
