@@ -52,13 +52,33 @@ export function NomadicScene({ animated = true, className, style }: NomadicScene
       {/* winding path to the horizon */}
       <path d="M150 256 q14 -40 -6 -70 q-18 -28 18 -52 q24 -16 12 -36" {...INK} strokeWidth={2.5} strokeDasharray="1 10" opacity="0.7" />
 
-      {/* lone caravan — a stylized camel + rider in ink */}
-      <g transform="translate(196 150)">
-        <path d="M0 26 q4 -18 12 -18 q3 -14 9 -2 q10 -2 12 8 q8 0 10 12" {...INK} strokeWidth={3} />
-        <path d="M2 26 l-2 12 M12 28 l0 12 M30 28 l2 12 M40 30 l2 12" {...INK} strokeWidth={3} />
-        <path d="M20 -4 q4 -8 10 -4" {...INK} strokeWidth={2.5} />
-        <circle cx="22" cy="-8" r="3.4" fill="var(--ink, #241F1A)" />
+      {/* lone caravan — a two-hump camel + rider, Moebius ink */}
+      <g transform="translate(188 150)">
+        {/* body silhouette (sand fill) */}
+        <path d="M4 22 q2 -9 9 -9 q2 -9 7 -2 q2 2 2 6 q3 -8 8 -7 q5 1 5 9 q0 3 -1 5 Z" fill="var(--sand, #987654)" opacity="0.55" />
+        {/* back + two humps */}
+        <path d="M4 22 q2 -9 9 -9 q2 -9 7 -2 q2 2 2 6 q3 -8 8 -7 q5 1 5 9" {...INK} strokeWidth={3.5} />
+        {/* neck + head */}
+        <path d="M35 19 q6 -3 8 -11 q1 -4 4 -2 q2 2 -1 5" {...INK} strokeWidth={3} />
+        {/* four legs */}
+        <path d="M9 21 l-1 13 M17 23 l0 12 M29 23 l1 12 M37 21 l1 13" {...INK} strokeWidth={3} />
+        {/* rider */}
+        <circle cx="22" cy="0" r="3" fill="var(--ink, #241F1A)" />
+        <path d="M22 3 q0 6 -3 8" {...INK} strokeWidth={3} />
       </g>
+    </svg>
+  );
+}
+
+// Art-Nouveau ornamental divider — a flowing horizontal rule with mirrored whiplash curves and
+// a central gold node. Used under section headings to carry the language into the chrome.
+export function ArtNouveauDivider({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg viewBox="0 0 200 14" preserveAspectRatio="xMidYMid meet" aria-hidden
+      className={className} style={{ width: '100%', height: 14, display: 'block', ...style }}>
+      <path d="M2 7 H78 q8 0 12 -5 M198 7 H122 q-8 0 -12 -5" stroke="var(--teal-deep, #3EA094)" fill="none" strokeWidth={1.5} strokeLinecap="round" />
+      <path d="M90 2 q10 5 0 10 q-10 -5 0 -10 M110 2 q-10 5 0 10 q10 -5 0 -10" stroke="var(--ink, #241F1A)" fill="none" strokeWidth={1.25} opacity="0.7" />
+      <circle cx="100" cy="7" r="3.2" fill="var(--gold, #ECD06F)" stroke="var(--ink, #241F1A)" strokeWidth={1.25} />
     </svg>
   );
 }

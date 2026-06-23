@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useI18n } from '../lib/I18nProvider.js';
 import { PaperIllustration } from './PaperIllustration.js';
+import { ArtNouveauDivider } from './NomadicScene.js';
 import { isPaperSkinEnabled } from '../theme/paperSkin.js';
 
 // --- SkeletonBase ---
@@ -21,7 +22,12 @@ export function EmptyState({ title, description, icon, action }: { title: string
   return (
     <div className="flex flex-col items-center justify-center p-8 text-center rounded-[var(--brand-radius)] border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface)]">
       {icon && <div className="mb-4 text-4xl text-[var(--brand-text-muted)]">{icon}</div>}
-      {paperFallback && <div className="mb-4 w-full">{paperFallback}</div>}
+      {paperFallback && (
+        <div className="mb-4 w-full flex flex-col items-center">
+          {paperFallback}
+          <div className="w-40 mt-3"><ArtNouveauDivider /></div>
+        </div>
+      )}
       <h3 className="mb-2 text-lg font-semibold text-[var(--brand-text)]">{title}</h3>
       <p className="mb-6 text-sm text-[var(--brand-text-muted)] max-w-sm">{description}</p>
       {action}
