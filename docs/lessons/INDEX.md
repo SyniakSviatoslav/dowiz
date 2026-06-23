@@ -13,3 +13,4 @@ error signature. file is repo-relative.
 |---------|------|
 | apps/api/src/routes/auth/** | docs/lessons/2026-06-22-inline-vs-plugin-local-login.md |
 | packages/db/migrations/**read*public*menu** | docs/lessons/2026-06-22-read-public-menu-redefine.md |
+| packages/ui/src/theme/**.css | docs/lessons/2026-06-23-css-comment-star-slash.md |
