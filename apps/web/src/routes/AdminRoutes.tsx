@@ -2,7 +2,7 @@ import { safeStorage } from '../lib/safeStorage.js';
 import React, { useState, useEffect, Suspense } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { apiClient } from '../lib/index.js';
-import { ToastProvider, LanguageSwitcher, useI18n, BottomTabBar, ResponsiveDialog, CurrencySwitcher, SunlightToggle } from '@deliveryos/ui';
+import { ToastProvider, LanguageSwitcher, useI18n, BottomTabBar, ResponsiveDialog, CurrencySwitcher, SunlightToggle, paperSkinAttr } from '@deliveryos/ui';
 import type { TabItem } from '@deliveryos/ui';
 import { DashboardPage } from '../pages/admin/DashboardPage.js';
 import { MenuManagerPage } from '../pages/admin/MenuManagerPage.js';
@@ -118,7 +118,7 @@ function AdminLayout() {
   if (!isAuthed && !isDev) return null;
 
   return (
-    <div className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] overflow-hidden lg:flex-row">
+    <div {...paperSkinAttr()} className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] overflow-hidden lg:flex-row">
       {/* Desktop sidebar */}
       <aside className={`hidden lg:flex flex-col shrink-0 bg-[var(--brand-surface)] border-r border-[var(--brand-border)] sidebar-transition ${collapsed ? 'w-[56px]' : 'w-56'}`}>
         <div className={`flex items-center border-b border-[var(--brand-border)] ${collapsed ? 'justify-center p-3' : 'justify-between p-4'}`}>
