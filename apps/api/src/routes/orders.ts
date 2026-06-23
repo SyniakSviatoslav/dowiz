@@ -780,6 +780,14 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       if (error?.code === '23505') { // Unique violation
         return reply.status(409).send({ error: 'Idempotency key conflict', code: 'IDEMPOTENCY_CONFLICT' });
       }
+      // Transient DB contention under load (serialization / deadlock / statement-timeout from the
+      // bounded write-hold / connection drop) — the order is safe to retry, so surface a graceful
+      // 503 the client can show as "try again" instead of a scary 500 (matches the db.connect()
+      // 503 guard above and the login-503 hardening).
+      const TRANSIENT_PG = new Set(['40001', '40P01', '57014', '53300', '08006', '08003', '08000']);
+      if (typeof error?.code === 'string' && TRANSIENT_PG.has(error.code)) {
+        return reply.status(503).send({ code: 503, error: 'Service temporarily unavailable, please try again' });
+      }
       return reply.status(500).send({ error: 'Internal server error' });
     } finally {
       if (client) client.release();
