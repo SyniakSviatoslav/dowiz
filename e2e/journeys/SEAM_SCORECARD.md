@@ -1,0 +1,31 @@
+# Seam Scorecard — final UX/seam-polish loop (FE-only, server read-only)
+
+Synthesized from 3 adversarial audits (hater · UX-critique · QA-seams). Status: ROUGH → SMOOTH
+(proven by a fix + verification) or BLOCKED-server (needs a server change — out of scope, flagged).
+
+## Tier-1 order-lifecycle seams
+
+| ID | Seam / defect | Class (Q) | File:line | Sev | Status |
+|----|---------------|-----------|-----------|-----|--------|
+| F1 | Courier "Slide to Deliver" shows "Delivered!" BEFORE server responds; error swallowed; navigates regardless → optimistic overrides server truth (red-line) | Q-reconcile/Q7 | DeliveryPage.tsx handleComplete | 🔴crit | FIXING |
+| F2 | Courier never learns order cancelled/rejected mid-delivery (no order.status WS branch) → drives to dead order | frozen/dead-end | DeliveryPage.tsx WS onMessage | 🔴crit | FIXING |
+| F3 | Terminal states (REJECTED/CANCELLED/DELIVERED) are dead-ends — no "order again", phone gated behind WS banner only | Q1 | OrderStatusPage.tsx terminal | high | FIXING |
+| F4 | Token-expiry mid-tracking renders "Not Found" (mislabel) with no reload/menu/phone CTA | Q6/Q1 | OrderStatusPage.tsx:381 | high | FIXING |
+| F5 | Live map first frame centered on hardcoded Tirana, jerks to real courier pos (FOWS) | Q2 | OrderStatusPage.tsx:52,421 | major | FIXING |
+| F6 | Owner kanban status flip reverts silently on failure (no error toast) | Q7 | DashboardPage.tsx handleUpdateStatus | major | TODO |
+| F7 | Owner new-order card flashes nameless/item-less ~800ms during rush | FOWS | DashboardPage.tsx mergeDelta | major | TODO |
+| F8 | Checkout has no venue-closed awareness → full form then raw "Failed to place order" | Q6/Q7 | CheckoutPage.tsx | high | TODO |
+| F9 | Cart never reconciles to menu_version → stale price ambush at checkout | Q7 | CartProvider.tsx:5 | high | TODO (partial-BS: detection may need server) |
+| F10 | Phantom status toast on cold page open | Q4/surprise | OrderStatusPage.tsx:271 | minor | TODO |
+| F11 | DeliveryPage/OrderStatusPage 404 → fabricated mock task / fake PENDING order leaks into real failure path | Q2/Q7 | DeliveryPage.tsx:92, OrderStatusPage.tsx:173 | high | VERIFY (dev-gated?) |
+
+## Resilience / a11y
+
+| ID | Seam | File:line | Status |
+|----|------|-----------|--------|
+| F12 | Q4 aria-live: status changes weakly announced | OrderStatusPage.tsx:388,431 | TODO |
+| F13 | Q5 continuity-on-refresh mid-journey untested | — | TODO (add assertion) |
+| F14 | Two divergent WS clients (forever vs 10-cap reconnect) — one freezes permanently | useWebSocket.ts vs ui/websocket.ts | TODO/refactor |
+
+> Iron rules: server read-only; never block the human (courier always completes); optimistic always
+> reconciles to server; never accuse the client; flag-debt anything needing a server change.
