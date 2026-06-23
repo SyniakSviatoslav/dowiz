@@ -70,7 +70,17 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
     }
 
     // ---- Path 2: real argon2 password login ------------------------------------------
-    const client = await db.connect();
+    // Guard the pool checkout: under connection contention db.connect() rejects after
+    // connectionTimeoutMillis — without this it surfaces as a 500 ("login failed") on the
+    // first hit under load (the cold/load-correlated login 500). Return a graceful 503 the
+    // UI can show as "try again", matching the order-create path.
+    let client;
+    try {
+      client = await db.connect();
+    } catch (err) {
+      request.log.error({ err }, '[auth] failed to acquire DB connection');
+      return reply.status(503).send({ error: 'Service temporarily unavailable, please try again' });
+    }
     try {
       const res = await client.query(
         `SELECT id, password_hash, display_name FROM users WHERE email = $1`,
