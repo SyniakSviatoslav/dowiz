@@ -1,7 +1,7 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay } from '@deliveryos/ui';
+import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay, PaperIllustration, isPaperSkinEnabled } from '@deliveryos/ui';
 import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
@@ -359,6 +359,27 @@ export function DashboardPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4" role="region" aria-live="polite" aria-label={t('admin.live_orders', 'Live orders')}>
+      {/* Paper skin: an illustrated header-band — the dashboard is the richest internal
+          surface (spec §5). The "moment" as a cheap animated SVG; flag-gated, off elsewhere. */}
+      {isPaperSkinEnabled() && (
+        <div
+          className="relative overflow-hidden rounded-2xl border border-[var(--brand-border)] flex items-center justify-between gap-4 px-5 py-4"
+          style={{ background: 'var(--paper-raised, var(--brand-surface-raised))' }}
+        >
+          <div className="min-w-0">
+            <h2 className="text-2xl leading-tight" style={{ fontFamily: 'var(--font-display)' }}>
+              {t('admin.dashboard', 'Dashboard')}
+            </h2>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('admin.dashboard_band_sub', 'Your kitchen at a glance')}
+            </p>
+          </div>
+          <div className="w-36 md:w-44 shrink-0 hidden xs:block">
+            <PaperIllustration name="sunrise" animated />
+          </div>
+        </div>
+      )}
+
       {/* Persistent new-order banner — the honest fallback. Shown whenever an
           order is unacknowledged AND audio cannot carry the alert (sound off,
           or not yet unlocked/blocked). Guarantees a missed order is impossible
