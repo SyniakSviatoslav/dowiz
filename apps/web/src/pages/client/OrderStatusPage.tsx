@@ -247,6 +247,13 @@ export function OrderStatusPage() {
         // ORDER-TRACKING: additively merge the just-stamped *_at so the stepper
         // lights up the new step live (statusAtField names the camelCase key).
         setOrder((prev: any) => {
+          // Terminal lock: WS frames can arrive reordered across pub/sub instances. Once the
+          // order is terminal (DELIVERED/REJECTED/CANCELLED), ignore a late non-terminal frame
+          // that would visibly revert "Delivered!" back to "in delivery" (money-adjacent truth).
+          const TERMINAL = new Set(['DELIVERED', 'REJECTED', 'CANCELLED']);
+          if (prev?.status && TERMINAL.has(prev.status) && !TERMINAL.has(inner.status)) {
+            return prev;
+          }
           const next = { ...prev, status: inner.status };
           if (inner.statusAtField && inner.statusAt) {
             next[inner.statusAtField] = inner.statusAt;
