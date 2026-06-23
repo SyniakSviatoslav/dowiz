@@ -1,19 +1,21 @@
 ---
 TRIGGER: apps/api/src/routes/auth/**
 CAUSE: >
-  The active /api/auth/local/login handler is registered INLINE in
-  apps/api/src/server.ts ("inline below for reliability"). The
-  routes/auth/local.ts plugin registers /auth/local/login (no /api prefix)
-  which 404s — so editing the plugin alone has ZERO runtime effect.
+  HISTORICAL (pre-6fdb6e2a): the live /api/auth/local/login was an INLINE
+  handler in server.ts while routes/auth/local.ts registered /auth/local/login
+  (no /api prefix) → 404. As of 6fdb6e2a this is CONSOLIDATED: the plugin
+  routes/auth/local.ts IS the live handler, registered with the /api prefix
+  (server.ts:580-581), and the inline handler was REMOVED (server.ts:877-878).
 ACTION: >
   When editing the auth/local login handler in apps/api/src/routes/auth/** →
-  cause: the live route is served inline in server.ts, not this plugin → do:
-  grep server.ts for the inline /api/auth/local/login handler FIRST and fix
-  THAT, or confirm the plugin is actually registered with the /api prefix
-  before assuming your edit takes effect. Also: the signed token MUST carry
-  activeLocationId (resolved from an active owner membership), not just
+  the plugin routes/auth/local.ts is now the live handler (verify the
+  fastify.register(localAuthRoutes, { prefix: '/api' }) at server.ts:580-581 is
+  still present; there is NO inline handler anymore). Note there are TWO token
+  paths in local.ts: the flag-gated dev bypass (signDevToken, inert on prod) and
+  the real argon2 login — change BOTH when adjusting token TTL/claims. The signed
+  token MUST carry activeLocationId (from an active owner membership), not just
   {role,userId,sub} — token-scoped menu/orders endpoints read it.
-LINK: apps/api/src/server.ts:868 (commit a3efed36; later consolidated in 6fdb6e2a)
+LINK: apps/api/src/routes/auth/local.ts (live handler; consolidated in 6fdb6e2a, was inline a3efed36)
 SCOPE: apps/api/src/routes/auth/** AND the inline login handler in server.ts ONLY. Not other routes.
 STATUS: active
 ---
