@@ -888,7 +888,13 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
     preHandler: [(fastify as any).verifyAuth, (fastify as any).requireRole(['owner'])],
   }, async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
-    const { status: newStatus } = StatusUpdateInput.parse(request.body);
+    // safeParse → typed 400 (a bad `status` enum is client input, not a 500). A bare .parse()
+    // threw a ZodError that the global handler didn't normalize → raw 500. Matches the create route.
+    const parsed = StatusUpdateInput.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ code: 400, error: parsed.error.issues?.map((i: any) => i.message).join('; ') || 'Invalid status' });
+    }
+    const { status: newStatus } = parsed.data;
     const user = request.user!;
     if (user.role !== 'owner') {
       return reply.status(403).send({ error: 'Forbidden' });
