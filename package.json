@@ -19,6 +19,7 @@
     "verify:migrations": "tsx scripts/verify-migrations.ts",
     "verify:fresh-provision": "bash scripts/verify-fresh-provision.sh",
     "compliance:gate": "tsx scripts/compliance-gate.ts",
+    "guardrail:owner-active": "node scripts/guardrail-owner-active-membership.mjs",
     "verify:all": "tsx scripts/verify-all.ts",
     "backup:restore": "tsx --env-file=.env scripts/backup-restore.ts",
     "migrate:create": "node-pg-migrate create -j ts -m packages/db/migrations",

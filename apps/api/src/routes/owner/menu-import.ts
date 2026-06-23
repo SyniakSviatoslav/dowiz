@@ -12,8 +12,9 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
 
   async function getLocationId(user: any): Promise<string | null> {
     if (!user?.userId) return null;
+    // P-d (ADR-0004): active owner membership only — a removed owner can't import into the tenant.
     const res = await db.query(
-      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1`,
       [user.userId]
     );
     return res.rows.length > 0 ? res.rows[0].location_id : null;

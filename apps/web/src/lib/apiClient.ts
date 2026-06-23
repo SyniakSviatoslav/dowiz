@@ -11,15 +11,27 @@ const API_BASE = import.meta.env?.VITE_API_BASE_URL || '/api';
 // twice — which would trip the server's reuse-detection and revoke the whole family.
 let inflightRefresh: Promise<string | null> | null = null;
 
+// Best-effort decode of the (possibly-expired) access token's activeLocationId, so a refresh
+// preserves a multi-location owner's working tenant instead of letting the server re-pick (P-c).
+function currentActiveLocationId(): string | undefined {
+  try {
+    const part = safeStorage.get('dos_access_token')?.split('.')[1];
+    if (!part) return undefined;
+    const payload = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload?.activeLocationId === 'string' ? payload.activeLocationId : undefined;
+  } catch { return undefined; }
+}
+
 async function doRefresh(): Promise<string | null> {
   const refreshToken = typeof window !== 'undefined' ? safeStorage.get('dos_refresh_token') : null;
   if (!refreshToken) return null;
   let res: Response;
   try {
+    const activeLocationId = currentActiveLocationId();
     res = await fetch(`${API_BASE}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify(activeLocationId ? { refresh_token: refreshToken, active_location_id: activeLocationId } : { refresh_token: refreshToken }),
     });
   } catch {
     return null;
