@@ -52,3 +52,5 @@ e2e/findings/*.json
 e2e/findings/traces/
 e2e/findings/videos/
 e2e/findings/transcripts/
+
+e2e/findings/round-*/

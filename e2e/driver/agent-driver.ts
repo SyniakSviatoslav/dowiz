@@ -79,6 +79,11 @@ export class AgentDriver {
   }
 
   private async observe(): Promise<Observation> {
+    // Let the SPA hydrate before reading the DOM — otherwise we observe an empty shell and
+    // the reasoner (correctly) sees "no actions". Best-effort: network-idle then a real
+    // actionable element, both time-boxed so a genuinely empty page still returns fast.
+    await this.page.waitForLoadState('networkidle', { timeout: 6000 }).catch(() => {});
+    await this.page.locator('button,[role="button"],a[href],[data-testid]').first().waitFor({ state: 'visible', timeout: 6000 }).catch(() => {});
     const url = this.page.url();
     const title = await this.page.title().catch(() => '');
     // a11y tree is the primary, cheap observation surface; fall back to a compact DOM
@@ -89,17 +94,29 @@ export class AgentDriver {
       if (snap) a11y = JSON.stringify(snap).slice(0, 4000);
     } catch { /* fall through to DOM summary */ }
     if (a11y === '(no observation)') {
+      // Grounded observation: list REAL actionable elements with a CONCRETE, usable selector
+      // each, so the reasoner chooses an existing target instead of hallucinating one.
       a11y = await this.page.evaluate(() => {
-        const pick = (sel: string) => Array.from(document.querySelectorAll(sel))
-          .slice(0, 40)
-          .map((e) => (e.getAttribute('aria-label') || (e as HTMLElement).innerText || '').trim().slice(0, 60))
-          .filter(Boolean);
-        return JSON.stringify({
-          headings: pick('h1,h2,h3'),
-          buttons: pick('button,[role="button"]'),
-          links: pick('a'),
-          fields: pick('input,select,textarea'),
-        }).slice(0, 4000);
+        const headings = Array.from(document.querySelectorAll('h1,h2,h3'))
+          .slice(0, 12).map((e) => (e as HTMLElement).innerText.trim().slice(0, 60)).filter(Boolean);
+        const seen = new Set<string>();
+        const actions: Array<{ selector: string; role: string; label: string }> = [];
+        const els = Array.from(document.querySelectorAll('button,[role="button"],a[href],input,select,textarea,[data-testid]'));
+        for (const e of els) {
+          if (actions.length >= 40) break;
+          const el = e as HTMLElement;
+          const r = el.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) continue; // skip hidden
+          const tid = el.getAttribute('data-testid');
+          const label = (el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.innerText || el.getAttribute('title') || '').trim().slice(0, 50);
+          // Prefer a stable [data-testid]; else aria-label; else tag — always a REAL selector.
+          const selector = tid ? `[data-testid="${tid}"]`
+            : el.getAttribute('aria-label') ? `[aria-label="${el.getAttribute('aria-label')!.slice(0, 40)}"]`
+            : el.tagName.toLowerCase();
+          if (seen.has(selector)) continue; seen.add(selector);
+          actions.push({ selector, role: el.getAttribute('role') || el.tagName.toLowerCase(), label });
+        }
+        return JSON.stringify({ headings, actions }).slice(0, 4000);
       }).catch(() => '(no observation)');
     }
     return { url, title, a11y };
