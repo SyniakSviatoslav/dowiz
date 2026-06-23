@@ -363,22 +363,23 @@ export function DashboardPage() {
           surface (spec §5). The "moment" as a cheap animated SVG; flag-gated, off elsewhere. */}
       {isPaperSkinEnabled() && (
         <div
-          className="relative overflow-hidden rounded-[20px] border-[1.5px] border-[var(--ink-line,var(--brand-border))] flex items-stretch justify-between gap-4"
+          className="relative overflow-hidden rounded-[24px] border-[1.5px] border-[var(--ink-line,var(--brand-border))] flex items-end justify-between gap-4 min-h-[180px]"
           style={{ background: 'color-mix(in srgb, var(--teal) 14%, var(--paper-surface, var(--brand-surface)))' }}
         >
-          <div className="min-w-0 flex flex-col justify-center pl-6 py-5">
-            <p className="uppercase tracking-[0.25em] text-[11px] font-semibold" style={{ color: 'var(--teal-deep)' }}>
+          <div className="min-w-0 flex flex-col justify-center pl-7 py-7 z-10">
+            <p className="uppercase tracking-[0.28em] text-[11px] font-semibold" style={{ color: 'var(--teal-deep)' }}>
               {t('admin.dashboard_band_kicker', 'Your atelier')}
             </p>
-            <h2 className="text-3xl md:text-4xl leading-[1.05] mt-1" style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.02em' }}>
+            <h2 className="text-4xl md:text-5xl leading-[1.0] mt-1.5" style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.025em' }}>
               {t('admin.dashboard', 'Dashboard')}
             </h2>
-            <p className="text-sm mt-1.5" style={{ color: 'var(--brand-text-muted)' }}>
+            <p className="text-sm mt-2" style={{ color: 'var(--brand-text-muted)' }}>
               {t('admin.dashboard_band_sub', 'Your kitchen at a glance')}
             </p>
           </div>
-          <div className="w-44 md:w-72 shrink-0 self-end hidden xs:block">
-            <NomadicScene animated />
+          {/* full-bleed peaks scene anchored to the right, behind the heading */}
+          <div className="absolute right-0 bottom-0 w-[55%] max-w-[480px] hidden sm:block opacity-95">
+            <NomadicScene variant="peaks" animated />
           </div>
         </div>
       )}
