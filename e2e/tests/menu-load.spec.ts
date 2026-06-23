@@ -49,3 +49,22 @@ test('public menu survives a concurrent burst with zero 5xx and always has produ
   }
   expect(served, 'at least the warmed/served requests returned real menus').toBeGreaterThan(0);
 });
+
+// GUARDRAIL for the cache memory-exhaustion vector (the in-process Map is keyed on the
+// caller-controlled ?locale). A fan-out of distinct locales must NOT 5xx/crash the instance —
+// the route normalizes the locale and the Map is FIFO-bounded (MENU_CACHE_MAX_ENTRIES).
+test('menu endpoint stays healthy under a distinct-locale fan-out (no 5xx)', async ({ request }) => {
+  const LOCALES = Array.from({ length: 24 }, (_, i) => `zz${i}`); // unsupported → server coerces to default
+  const results = await Promise.all(
+    LOCALES.map((l) => request.get(`${MENU}?locale=${l}`, { headers: { accept: 'application/json' } })),
+  );
+  const statuses = results.map((r) => r.status());
+  expect(statuses.filter((s) => s >= 500), `no 5xx on locale fan-out (got: ${statuses.join(',')})`).toHaveLength(0);
+  // The unsupported locales fall back to the default menu — any served response still has products.
+  const oneOk = results.find((r) => r.status() === 200);
+  if (oneOk) {
+    const body = await oneOk.json();
+    const products = (body.categories ?? []).flatMap((c: any) => c.products ?? []);
+    expect(products.length, 'fallback-locale menu still has products').toBeGreaterThan(0);
+  }
+});
