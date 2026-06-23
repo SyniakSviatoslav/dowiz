@@ -3,7 +3,7 @@ export * from './theme/palette.js';
 export { isPaperSkinEnabled, paperSkinAttr } from './theme/paperSkin.js';
 export { PaperIllustration } from './components/PaperIllustration.js';
 export type { PaperIllustrationName, PaperIllustrationProps } from './components/PaperIllustration.js';
-export { NomadicScene, ArtNouveauFrame } from './components/NomadicScene.js';
+export { NomadicScene, ArtNouveauFrame, ArtNouveauDivider } from './components/NomadicScene.js';
 export * from './components/Base.js';
 export { ErrorBoundary, withErrorBoundary } from './components/ErrorBoundary.js';
 export * from './components/Overlays.js';
