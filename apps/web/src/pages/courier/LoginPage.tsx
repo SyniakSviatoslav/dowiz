@@ -1,7 +1,7 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Input, FormField, LanguageSwitcher, useI18n, NomadicScene, ArtNouveauFrame, isPaperSkinEnabled } from '@deliveryos/ui';
+import { Button, Input, FormField, LanguageSwitcher, useI18n, NomadicScene, ArtNouveauFrame, NomadicCredit, isPaperSkinEnabled } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { CourierLoginResponse } from '@deliveryos/shared-types';
 
@@ -111,6 +111,7 @@ export function LoginPage() {
             </Button>
           </form>
         </ArtNouveauFrame>
+        {isPaperSkinEnabled() && <NomadicCredit className="mt-6" />}
       </div>
     </div>
   );

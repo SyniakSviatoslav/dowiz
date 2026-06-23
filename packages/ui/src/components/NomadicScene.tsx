@@ -7,7 +7,7 @@ import React from 'react';
 
 const INK = { fill: 'none', stroke: 'var(--ink, #241F1A)', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
 
-export type NomadicSceneVariant = 'journey' | 'peaks';
+export type NomadicSceneVariant = 'journey' | 'peaks' | 'oasis';
 export interface NomadicSceneProps { animated?: boolean; variant?: NomadicSceneVariant; className?: string; style?: React.CSSProperties; }
 
 // Moebius landscapes, vibrant flat fills + bold ink. `journey` = desert dunes + a lone caravan;
@@ -24,8 +24,39 @@ export function NomadicScene({ animated = true, variant = 'journey', className, 
         </linearGradient>
       </defs>
       <rect x="0" y="0" width="400" height="200" fill={`url(#${sky})`} />
-      {variant === 'peaks' ? <PeaksLayers animated={animated} /> : <JourneyLayers animated={animated} />}
+      {variant === 'peaks' ? <PeaksLayers animated={animated} />
+        : variant === 'oasis' ? <OasisLayers animated={animated} />
+        : <JourneyLayers animated={animated} />}
     </svg>
+  );
+}
+
+// A desert oasis: low gold sun, a teal water pool, two palms, sand banks — the "arrival".
+function OasisLayers({ animated }: { animated?: boolean }) {
+  return (
+    <>
+      <g className={animated ? 'paper-rise' : undefined}>
+        <circle cx="312" cy="66" r="24" fill="var(--gold, #ECD06F)" />
+        <circle cx="312" cy="66" r="24" {...INK} strokeWidth={3} />
+      </g>
+      {/* sand horizon */}
+      <path d="M0 150 q120 -26 240 -2 q90 18 160 -6 V210 H0 Z" fill="var(--sand, #987654)" opacity="0.4" />
+      <path d="M0 150 q120 -26 240 -2 q90 18 160 -6" {...INK} strokeWidth={3} />
+      {/* water pool — teal ellipse with an ink rim + a couple of ripples */}
+      <ellipse cx="150" cy="196" rx="120" ry="30" fill="var(--teal, #49C5B6)" opacity="0.55" />
+      <ellipse cx="150" cy="196" rx="120" ry="30" {...INK} strokeWidth={3} />
+      <path d="M96 192 q14 6 30 0 M150 200 q16 6 34 0" {...INK} strokeWidth={2} opacity="0.6" />
+      {/* two palms — trunks + fronds */}
+      <g>
+        <path d="M214 168 q6 -40 2 -64" {...INK} strokeWidth={3.5} />
+        <path d="M216 104 q-16 -10 -26 -4 M216 104 q16 -10 28 -2 M216 106 q-12 10 -24 12 M216 106 q14 10 26 10" {...INK} strokeWidth={2.5} />
+        <circle cx="216" cy="104" r="3" fill="var(--sand, #987654)" stroke="var(--ink,#241F1A)" strokeWidth={1.5} />
+      </g>
+      <g opacity="0.9">
+        <path d="M250 172 q4 -30 0 -48" {...INK} strokeWidth={3} />
+        <path d="M250 124 q-12 -8 -20 -3 M250 124 q12 -8 22 -2 M250 126 q-10 8 -18 9 M250 126 q11 8 20 8" {...INK} strokeWidth={2.25} />
+      </g>
+    </>
   );
 }
 
@@ -133,5 +164,21 @@ export function ArtNouveauFrame({ children, className, style }: { children?: Rea
       ))}
       <div style={{ position: 'relative', zIndex: 3 }}>{children}</div>
     </div>
+  );
+}
+
+// Honourable mention — credits the design inspiration (makemepulse's Nomadic Tribe). Shown
+// only under the internal Nomadic skin (callers gate on isPaperSkinEnabled). Kudos to theirs.
+export function NomadicCredit({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <p className={className} style={{ fontSize: 11, lineHeight: 1.6, textAlign: 'center', color: 'var(--ink-muted, var(--brand-text-muted))', ...style }}>
+      <span aria-hidden style={{ color: 'var(--gold, #ECD06F)' }}>✦ </span>
+      Design inspired by{' '}
+      <a href="https://www.awwwards.com/sites/nomadic-tribe" target="_blank" rel="noopener noreferrer"
+        style={{ color: 'var(--teal-deep, #3EA094)', fontWeight: 600, textDecoration: 'none', borderBottom: '1px solid color-mix(in srgb, var(--teal-deep) 40%, transparent)' }}>
+        Nomadic Tribe by makemepulse
+      </a>
+      {' '}— kudos to their boundless creativity.
+    </p>
   );
 }
