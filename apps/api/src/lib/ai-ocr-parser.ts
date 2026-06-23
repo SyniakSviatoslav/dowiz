@@ -77,16 +77,20 @@ const llmSchema = z.object({
 // 'heuristic' is the zero-dependency, no-API-key structurer (pure code) used
 // when no LLM provider is configured — so menu import works on a server with
 // nothing wired up (open-source, free). A real LLM, when configured, still wins.
-type LlmProvider = 'ollama' | 'groq' | 'openai' | 'openrouter' | 'mock' | 'heuristic';
+type LlmProvider = 'ollama' | 'groq' | 'openai' | 'openrouter' | 'zen' | 'mock' | 'heuristic';
 
 function detectProvider(model: string): LlmProvider {
   if (model === 'mock') return 'mock';
   const env = (process.env.LLM_ADAPTER || process.env.LLM_PROVIDER || '').toLowerCase();
   if (env === 'heuristic' || env === 'none' || env === 'offline') return 'heuristic';
+  if (env === 'zen' || env === 'opencode') return 'zen';
   if (env === 'groq') return 'groq';
   if (env === 'openai') return 'openai';
   if (env === 'openrouter') return 'openrouter';
   if (env === 'ollama') return 'ollama';
+  // OpenCode Zen is preferred when configured: OpenAI-wire compatible, free models, and the
+  // fallback for the OpenRouter account running out of credits. Detected before the others.
+  if (process.env.OPENCODE_ZEN_API_KEY) return 'zen';
   if (process.env.GROQ_API_KEY) return 'groq';
   if (process.env.OPENAI_API_KEY) return 'openai';
   // OpenRouter is the configured provider in prod (***REDACTED***). It is OpenAI-wire
@@ -195,6 +199,41 @@ async function callLlm(provider: LlmProvider, prompt: string, model: string, tim
       const content = data?.choices?.[0]?.message?.content;
       if (!content) throw new Error('OpenRouter returned empty content');
       return content;
+
+    } else if (provider === 'zen') {
+      // OpenCode Zen — OpenAI-wire compatible gateway with free models. A free model can have its
+      // free promotion end (returns 4xx), so try the configured model then a chain of other live
+      // free models before failing — import keeps working without a redeploy. All share the
+      // standard chat/completions shape; the local OCR step already produced the text.
+      const apiKey = process.env.OPENCODE_ZEN_API_KEY || '';
+      const endpoint = process.env.OPENCODE_ZEN_ENDPOINT || 'https://opencode.ai/zen/v1/chat/completions';
+      const candidates = [...new Set([model, 'deepseek-v4-flash-free', 'nemotron-3-ultra-free', 'mimo-v2.5-free'])];
+      let lastErr = '';
+      for (const m of candidates) {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: m,
+            messages: [
+              { role: 'system', content: 'You are a menu data extraction assistant. Return ONLY valid JSON matching the requested schema. No markdown, no commentary.' },
+              { role: 'user', content: prompt },
+            ],
+            temperature: 0.1,
+            response_format: { type: 'json_object' },
+          }),
+          signal: controller.signal,
+        });
+        if (!res.ok) { lastErr = `${m} → ${res.status}: ${(await res.text().catch(() => '')).slice(0, 160)}`; continue; }
+        const data = await res.json() as any;
+        const content = data?.choices?.[0]?.message?.content;
+        if (content) return content;
+        lastErr = `${m} → empty content`;
+      }
+      throw new Error(`OpenCode Zen failed (tried ${candidates.join(', ')}): ${lastErr}`);
 
     } else {
       // Ollama
@@ -373,7 +412,9 @@ export class AiOcrParser implements MenuParserProvider {
       return this.heuristicResult(rawText, input.config, issues, ocrEngineUsed, ocrMs, redactedText);
     }
 
-    const modelForProvider = provider === 'groq'
+    const modelForProvider = provider === 'zen'
+      ? (process.env.OPENCODE_ZEN_MODEL || 'deepseek-v4-flash-free')
+      : provider === 'groq'
       ? (process.env.GROQ_MODEL || 'llama-3.1-8b-instant')
       : provider === 'openai'
         ? (process.env.OPENAI_MODEL || 'gpt-4o-mini')

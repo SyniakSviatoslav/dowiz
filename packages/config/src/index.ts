@@ -53,6 +53,12 @@ const EnvSchema = z.object({
   ***REDACTED***: z.string().optional(),
   OPENROUTER_MODEL: z.string().optional(), // default 'openai/gpt-4o-mini'
   OPENROUTER_ENDPOINT: z.string().optional(),
+  // OpenCode Zen — OpenAI-wire compatible gateway with free models. Preferred over OpenRouter
+  // when its key is set (OpenRouter account ran out of credits). Free-model fallback chain lives
+  // in the parser; all optional, read via process.env there.
+  OPENCODE_ZEN_API_KEY: z.string().optional(),
+  OPENCODE_ZEN_MODEL: z.string().optional(), // default 'deepseek-v4-flash-free'
+  OPENCODE_ZEN_ENDPOINT: z.string().optional(),
   // Backup Configuration
   BACKUP_ENCRYPTION_KEY: z.string().optional(), // 32 bytes base64 (required if BACKUP_ENABLED=true)
   R2_ACCESS_KEY_ID: z.string().optional(),
