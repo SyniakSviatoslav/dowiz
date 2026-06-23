@@ -7,23 +7,57 @@ import React from 'react';
 
 const INK = { fill: 'none', stroke: 'var(--ink, #241F1A)', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
 
-export interface NomadicSceneProps { animated?: boolean; className?: string; style?: React.CSSProperties; }
+export type NomadicSceneVariant = 'journey' | 'peaks';
+export interface NomadicSceneProps { animated?: boolean; variant?: NomadicSceneVariant; className?: string; style?: React.CSSProperties; }
 
-// A layered desert-journey landscape: gold sun + rays, teal/sand dunes, a winding path, a lone
-// caravan, drifting birds. Bold Moebius ink, flat vibrant fills.
-export function NomadicScene({ animated = true, className, style }: NomadicSceneProps) {
+// Moebius landscapes, vibrant flat fills + bold ink. `journey` = desert dunes + a lone caravan;
+// `peaks` = layered mountains + a soaring bird — so different surfaces show a different scene.
+export function NomadicScene({ animated = true, variant = 'journey', className, style }: NomadicSceneProps) {
+  const sky = `nt-sky-${variant}`;
   return (
     <svg viewBox="0 0 400 260" role="presentation" aria-hidden className={className}
       style={{ width: '100%', height: 'auto', display: 'block', ...style }}>
-      {/* warm sky wash */}
       <defs>
-        <linearGradient id="nt-sky" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={sky} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="var(--gold, #ECD06F)" stopOpacity="0.35" />
           <stop offset="100%" stopColor="var(--paper-surface, #FBF5E9)" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <rect x="0" y="0" width="400" height="200" fill="url(#nt-sky)" />
+      <rect x="0" y="0" width="400" height="200" fill={`url(#${sky})`} />
+      {variant === 'peaks' ? <PeaksLayers animated={animated} /> : <JourneyLayers animated={animated} />}
+    </svg>
+  );
+}
 
+// Layered mountain range with a low sun and a soaring bird.
+function PeaksLayers({ animated }: { animated?: boolean }) {
+  return (
+    <>
+      <g className={animated ? 'paper-rise' : undefined}>
+        <circle cx="92" cy="78" r="26" fill="var(--gold, #ECD06F)" />
+        <circle cx="92" cy="78" r="26" {...INK} strokeWidth={3} />
+      </g>
+      {/* far range — teal-deep */}
+      <path d="M0 150 L70 96 L120 140 L190 84 L250 146 L320 100 L400 150 V210 H0 Z" fill="var(--teal-deep, #3EA094)" opacity="0.8" />
+      <path d="M0 150 L70 96 L120 140 L190 84 L250 146 L320 100 L400 150" {...INK} strokeWidth={3} />
+      {/* snow/ink ridge accents */}
+      <path d="M190 84 l-14 22 M190 84 l16 26 M70 96 l-10 16 M70 96 l12 20" {...INK} strokeWidth={2} opacity="0.6" />
+      {/* near range — teal */}
+      <path d="M0 178 L90 128 L170 176 L260 120 L360 178 L400 156 V230 H0 Z" fill="var(--teal, #49C5B6)" opacity="0.6" />
+      {/* foothills — sand */}
+      <path d="M0 200 q120 -22 230 4 q110 26 170 -2 V260 H0 Z" fill="var(--sand, #987654)" opacity="0.4" />
+      <path d="M0 200 q120 -22 230 4 q110 26 170 -2" {...INK} strokeWidth={3} />
+      {/* soaring bird */}
+      <path d="M286 60 q12 -10 24 0 q12 -10 24 0" {...INK} strokeWidth={2.5} opacity="0.75" />
+    </>
+  );
+}
+
+// A layered desert-journey landscape: gold sun + rays, teal/sand dunes, a winding path, a lone
+// caravan, drifting birds.
+function JourneyLayers({ animated }: { animated?: boolean }) {
+  return (
+    <>
       {/* sun — gold disc with Art-Nouveau curved rays */}
       <g className={animated ? 'paper-rise' : undefined}>
         <circle cx="278" cy="74" r="34" fill="var(--gold, #ECD06F)" />
@@ -54,19 +88,14 @@ export function NomadicScene({ animated = true, className, style }: NomadicScene
 
       {/* lone caravan — a two-hump camel + rider, Moebius ink */}
       <g transform="translate(188 150)">
-        {/* body silhouette (sand fill) */}
         <path d="M4 22 q2 -9 9 -9 q2 -9 7 -2 q2 2 2 6 q3 -8 8 -7 q5 1 5 9 q0 3 -1 5 Z" fill="var(--sand, #987654)" opacity="0.55" />
-        {/* back + two humps */}
         <path d="M4 22 q2 -9 9 -9 q2 -9 7 -2 q2 2 2 6 q3 -8 8 -7 q5 1 5 9" {...INK} strokeWidth={3.5} />
-        {/* neck + head */}
         <path d="M35 19 q6 -3 8 -11 q1 -4 4 -2 q2 2 -1 5" {...INK} strokeWidth={3} />
-        {/* four legs */}
         <path d="M9 21 l-1 13 M17 23 l0 12 M29 23 l1 12 M37 21 l1 13" {...INK} strokeWidth={3} />
-        {/* rider */}
         <circle cx="22" cy="0" r="3" fill="var(--ink, #241F1A)" />
         <path d="M22 3 q0 6 -3 8" {...INK} strokeWidth={3} />
       </g>
-    </svg>
+    </>
   );
 }
 
