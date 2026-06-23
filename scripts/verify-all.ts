@@ -23,6 +23,7 @@ const STEPS = [
   { name: 'event wiring (NX)', cmd: 'pnpm verify:event-wiring' },
   { name: 'connection lifecycle (NX)', cmd: 'pnpm verify:connection-lifecycle' },
   { name: 'owner active-membership (ADR-0004 P-d)', cmd: 'pnpm guardrail:owner-active' },
+  { name: 'spike boundary (operating-model)', cmd: 'pnpm guardrail:spike-boundary' },
 ];
 
 function run(cmd: string): { ok: boolean; output: string } {
