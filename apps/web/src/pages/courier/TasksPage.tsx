@@ -2,7 +2,7 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TaskCard, EmptyState, useI18n } from '@deliveryos/ui';
+import { TaskCard, EmptyState, useI18n, PaperIllustration, isPaperSkinEnabled } from '@deliveryos/ui';
 import type { CourierTask } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
 
@@ -120,7 +120,11 @@ export function TasksPage() {
       ) : error ? (
         <EmptyState title={t('common.error', 'Error')} description={error} />
       ) : tasks.length === 0 ? (
-        <EmptyState title={t('courier.no_tasks', 'No active tasks')} description={t('courier.no_tasks_desc', 'We\'ll notify you when a new delivery is ready.')} />
+        <EmptyState
+          title={t('courier.no_tasks', 'No active tasks')}
+          description={t('courier.no_tasks_desc', 'We\'ll notify you when a new delivery is ready.')}
+          icon={isPaperSkinEnabled() ? <PaperIllustration name="island" animated className="mx-auto max-w-[200px]" /> : undefined}
+        />
       ) : (
         <motion.div className="space-y-4" variants={containerVariants} initial="hidden" animate="visible">
           <AnimatePresence mode="popLayout">

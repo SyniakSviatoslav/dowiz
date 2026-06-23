@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { useI18n } from '../lib/I18nProvider.js';
+import { PaperIllustration } from './PaperIllustration.js';
+import { isPaperSkinEnabled } from '../theme/paperSkin.js';
 
 // --- SkeletonBase ---
 export function SkeletonBase({ className = '' }: { className?: string }) {
@@ -10,9 +12,16 @@ export function SkeletonBase({ className = '' }: { className?: string }) {
 
 // --- EmptyState ---
 export function EmptyState({ title, description, icon, action }: { title: string; description: string; icon?: ReactNode; action?: ReactNode }) {
+  // Paper skin: when no icon is supplied, fall back to a Moebius line illustration so
+  // internal empty states feel hand-drawn rather than blank. Opt-in via the global skin
+  // flag; off everywhere else (incl. the white-label client storefront).
+  const paperFallback = !icon && isPaperSkinEnabled()
+    ? <PaperIllustration name="island" className="mx-auto max-w-[200px]" />
+    : null;
   return (
     <div className="flex flex-col items-center justify-center p-8 text-center rounded-[var(--brand-radius)] border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface)]">
       {icon && <div className="mb-4 text-4xl text-[var(--brand-text-muted)]">{icon}</div>}
+      {paperFallback && <div className="mb-4 w-full">{paperFallback}</div>}
       <h3 className="mb-2 text-lg font-semibold text-[var(--brand-text)]">{title}</h3>
       <p className="mb-6 text-sm text-[var(--brand-text-muted)] max-w-sm">{description}</p>
       {action}
