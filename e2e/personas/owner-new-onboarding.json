@@ -1,0 +1,20 @@
+{
+  "id": "owner-new-onboarding",
+  "role": "owner",
+  "goals": [
+    "first magic-link login",
+    "complete the setup checklist"
+  ],
+  "traits": {
+    "patience": "med",
+    "tech_savvy": "low",
+    "careful_or_sloppy": "careful"
+  },
+  "device": "desktop",
+  "viewport": 1280,
+  "locale": "en",
+  "network_profile": "4g",
+  "constraints": [
+    "never seen the admin before"
+  ]
+}

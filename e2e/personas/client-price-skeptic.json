@@ -1,0 +1,20 @@
+{
+  "id": "client-price-skeptic",
+  "role": "client",
+  "goals": [
+    "verify the total, try a valid and an invalid promo"
+  ],
+  "traits": {
+    "patience": "high",
+    "tech_savvy": "high",
+    "careful_or_sloppy": "careful"
+  },
+  "device": "tablet",
+  "viewport": 768,
+  "locale": "en",
+  "network_profile": "4g",
+  "constraints": [
+    "re-checks subtotal+fees+tax",
+    "expects clear promo errors"
+  ]
+}

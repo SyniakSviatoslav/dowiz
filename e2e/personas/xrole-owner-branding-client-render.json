@@ -1,0 +1,17 @@
+{
+  "id": "xrole-owner-branding-client-render",
+  "role": "cross",
+  "goals": "owner branding preview ↔ client storefront render",
+  "traits": {
+    "patience": "high",
+    "tech_savvy": "high",
+    "careful_or_sloppy": "careful"
+  },
+  "device": "desktop",
+  "viewport": 1280,
+  "locale": "en",
+  "network_profile": "wifi",
+  "constraints": [
+    "preview must match live render"
+  ]
+}

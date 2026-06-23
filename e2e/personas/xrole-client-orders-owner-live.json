@@ -1,0 +1,18 @@
+{
+  "id": "xrole-client-orders-owner-live",
+  "role": "cross",
+  "goals": "client places order ↔ owner sees it live",
+  "traits": {
+    "patience": "med",
+    "tech_savvy": "high",
+    "careful_or_sloppy": "careful"
+  },
+  "device": "desktop",
+  "viewport": 1280,
+  "locale": "en",
+  "network_profile": "4g",
+  "constraints": [
+    "two tabs",
+    "WS propagation"
+  ]
+}
