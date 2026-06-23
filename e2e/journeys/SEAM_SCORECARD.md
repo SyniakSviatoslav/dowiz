@@ -34,6 +34,13 @@ Synthesized from 3 adversarial audits (hater · UX-critique · QA-seams). Status
 - F4 (token-expiry soft state), F5 (map FOWS), F6 (owner error toast), F8/F9-partial (humane checkout
   errors), F10 (no phantom toast) — committed, typecheck green.
 
+## Batch 3 + hater re-audit → SATISFIED
+- F2 residual closed: cancellation banner lifted out of the picked-up branch (shows pre- AND
+  post-pickup). F8/F9 residual closed: 200-body hard_block now shows the designed "review your
+  cart" message (not the generic). Hater re-audit verdict: **SATISFIED — no remaining blockers**
+  (F1,F3,F4,F5,F6,F10,F11 verified SMOOTH; F7/F12/F14 non-blocking). Commits b033bf8e, 2074f7d4,
+  c1fb3ea1; real-UI proof e2e/tests/seam-polish.spec.ts (CANCELLED green on staging).
+
 ## Remaining (polish-debt, next rounds)
 - F7 owner hollow-card flash · F9-full cart↔menu_version reconcile · F12 aria-live announce ·
   F13 continuity-on-refresh assertion · F14 consolidate the two WS clients (forever vs 10-cap).
