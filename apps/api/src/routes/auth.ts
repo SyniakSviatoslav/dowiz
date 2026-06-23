@@ -288,7 +288,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       [tokenRecord.user_id]
     );
     const activeLocationId = locRes.rows[0]?.location_id ?? null;
-    const newAccessToken = await signAuthToken(refreshedOwnerClaims(tokenRecord.user_id, activeLocationId) as any, '1h');
+    const newAccessToken = await signAuthToken(refreshedOwnerClaims(tokenRecord.user_id, activeLocationId) as any, '7d');
     const newRefreshToken = crypto.randomBytes(32).toString('hex');
     const newRefreshTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
 

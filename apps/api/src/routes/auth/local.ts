@@ -140,22 +140,32 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
       const familyId = crypto.randomUUID();
       const tokenPayload: Record<string, unknown> = { role, userId: user.id, sub: user.id };
       if (activeLocationId) tokenPayload.activeLocationId = activeLocationId;
-      // Short-lived access (1h) + rotating refresh (7d): the web app refreshes on 401, so the
-      // session rolls forward up to the refresh window without a surprise logout.
-      const accessToken = await signAuthToken(tokenPayload as any, '1h');
+      // Access TTL matches the OAuth/Telegram paths (7d). A 1h password-login token forced an
+      // hourly relogin treadmill that depended on a flawless refresh round-trip; the 7d token
+      // removes that single point of failure. Rotating refresh (7d) still rolls the session on 401.
+      const accessToken = await signAuthToken(tokenPayload as any, '7d');
       const refreshToken = crypto.randomBytes(32).toString('hex');
       const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+      let refreshPersisted = false;
       try {
         await client.query(
           `INSERT INTO auth_refresh_tokens (user_id, family_id, token_hash, expires_at)
            VALUES ($1, $2, $3, now() + interval '7 days')`,
           [user.id, familyId, refreshTokenHash]
         );
+        refreshPersisted = true;
       } catch (err: any) {
         request.log.warn({ err: err?.message }, '[auth] refresh token insert failed');
       }
 
-      return { access_token: accessToken, refresh_token: refreshToken, userId: user.id, activeLocationId };
+      // Only hand back a refresh token the server can actually honour — if the insert failed, the
+      // 7d access token still carries the session; the client simply has no refresh path.
+      return {
+        access_token: accessToken,
+        ...(refreshPersisted ? { refresh_token: refreshToken } : {}),
+        userId: user.id,
+        activeLocationId,
+      };
     } finally {
       client.release();
     }
