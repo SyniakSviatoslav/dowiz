@@ -17,7 +17,10 @@ const env = loadEnv();
 export function createOperationalPool(): pg.Pool {
   const pool = new Pool({
     connectionString: env.***REDACTED***,
-    max: 8,
+    // Hot-path pool size. Supavisor transaction mode (:6543) multiplexes, so this safely
+    // exceeds the old hardcoded 8 — raised to stop public-storefront bursts from starving the
+    // pool (the "menu blinks empty under load" fix). Env-tunable; default 20.
+    max: env.OPERATIONAL_POOL_SIZE,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
     // Honor sslmode=disable (local / tunneled DBs without TLS); default to TLS otherwise.
