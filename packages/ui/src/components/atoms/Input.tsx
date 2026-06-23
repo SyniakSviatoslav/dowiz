@@ -17,7 +17,7 @@ export function Input({ label, helper, error, className = '', id, ...props }: In
       )}
       <input
         id={inputId}
-        className={`w-full px-4 py-2.5 bg-brand-surface border rounded-md text-brand-text placeholder-brand-text-muted font-body transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary ${
+        className={`w-full px-4 py-2.5 min-h-11 bg-brand-surface border rounded-md text-brand-text placeholder-brand-text-muted font-body transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary ${
           error ? 'border-semantic-danger' : 'border-brand-border'
         } ${className}`}
         {...props}
