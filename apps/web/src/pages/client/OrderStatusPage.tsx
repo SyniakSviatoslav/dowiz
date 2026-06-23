@@ -333,7 +333,9 @@ export function OrderStatusPage() {
   // extend the courier-events emit + this handler — reuse this event, do not
   // invent a parallel courier-location channel.
   const couriers: CourierOnMap[] = useMemo(() => {
-    if (order?.courierName) {
+    // Don't render a courier marker until we have a REAL fix — otherwise it sits at the
+    // hardcoded default (FOWS: a pin at the wrong city before the first ping lands).
+    if (order?.courierName && hasCourierFix) {
       return [{
         id: 'c1',
         name: order.courierName,
@@ -343,7 +345,7 @@ export function OrderStatusPage() {
       }];
     }
     return [];
-  }, [order?.courierName, courierPos]);
+  }, [order?.courierName, courierPos, hasCourierFix]);
 
   // Live courier position as {lat,lng} for the tweened marker + local ETA.
   const courierLatLng = useMemo(
@@ -379,7 +381,29 @@ export function OrderStatusPage() {
   }
 
   if (error || !order) {
-    return <EmptyState title={t('order.not_found_title', 'Not Found')} description={error || t('order.not_found_desc', 'Order not found')} />;
+    // Never a dead-end: a session-expired / not-found tracking page always offers a way back to
+    // the menu and a way to reach the restaurant (the fallback phone, un-gated from the WS banner).
+    const backToMenu = slug ? `/s/${slug}` : '/';
+    return (
+      <div className="max-w-md mx-auto p-6">
+        <EmptyState
+          title={error ? t('order.unavailable_title', 'This link is no longer active') : t('order.not_found_title', 'Order not found')}
+          description={error || t('order.not_found_desc', 'Order not found')}
+          action={
+            <div className="flex flex-col gap-2 w-full max-w-xs">
+              <a href={backToMenu} data-testid="order-back-to-menu" className="w-full h-11 inline-flex items-center justify-center rounded-[var(--brand-radius-btn)] font-semibold" style={{ background: 'var(--brand-primary)', color: 'var(--color-on-primary, var(--brand-bg))' }}>
+                {t('order.back_to_menu', 'Back to the menu')}
+              </a>
+              {fallbackPhone && (
+                <a href={`tel:${fallbackPhone}`} data-testid="order-call-restaurant" className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-[var(--brand-radius-btn)] border font-medium" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                  <i className="ti ti-phone" aria-hidden="true" />{t('order.call_restaurant', 'Call the restaurant')}
+                </a>
+              )}
+            </div>
+          }
+        />
+      </div>
+    );
   }
 
   const isDisconnected = wsStatus === 'disconnected' || wsStatus === 'reconnecting' || wsStatus === 'error';
@@ -417,7 +441,7 @@ export function OrderStatusPage() {
             liveCourier={courierLatLng}
             routeLine={routeLine}
             destinationPin={destPin}
-            center={courierPos}
+            center={hasCourierFix ? courierPos : destPin}
             zoom={14}
           />
           <div className="absolute top-4 left-4 bg-white/90 p-1.5 rounded-full shadow-md z-10" title={t('tooltip.ws_status', 'Connection status')}>
@@ -464,6 +488,32 @@ export function OrderStatusPage() {
             pickedUpAt={order.pickedUpAt}
           />
         </div>
+
+        {/* S2/S6/S7 seam — every terminal state gets an exit (never a dead-end) and a humane,
+            non-accusing explanation (the customer is never blamed; they were never charged). */}
+        {(order.status === 'REJECTED' || order.status === 'CANCELLED' || order.status === 'DELIVERED') && (
+          <div data-testid="order-terminal-exit" className="flex flex-col gap-3 px-1">
+            {(order.status === 'REJECTED' || order.status === 'CANCELLED') && (
+              <p className="text-sm text-center" style={{ color: 'var(--brand-text-muted)' }}>
+                {order.status === 'REJECTED'
+                  ? t('order.rejected_help', "The restaurant couldn't take this order — you haven't been charged. Try again or give them a call.")
+                  : t('order.cancelled_help', "This order was cancelled — you haven't been charged. You can order again or call the restaurant.")}
+              </p>
+            )}
+            <a href={slug ? `/s/${slug}` : '/'} data-testid="order-again"
+              className="w-full h-11 inline-flex items-center justify-center rounded-[var(--brand-radius-btn)] font-semibold"
+              style={{ background: 'var(--brand-primary)', color: 'var(--color-on-primary, var(--brand-bg))' }}>
+              {t('order.order_again', 'Order again')}
+            </a>
+            {fallbackPhone && order.status !== 'DELIVERED' && (
+              <a href={`tel:${fallbackPhone}`} data-testid="order-call-restaurant-terminal"
+                className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-[var(--brand-radius-btn)] border font-medium"
+                style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                <i className="ti ti-phone" aria-hidden="true" />{t('order.call_restaurant', 'Call the restaurant')}
+              </a>
+            )}
+          </div>
+        )}
 
         {/* CR-6: Share my location (visible during IN_DELIVERY) */}
         {isInDelivery && (
