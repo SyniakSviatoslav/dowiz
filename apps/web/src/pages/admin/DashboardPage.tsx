@@ -1,7 +1,7 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay, PaperIllustration, isPaperSkinEnabled } from '@deliveryos/ui';
+import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay, NomadicScene, isPaperSkinEnabled } from '@deliveryos/ui';
 import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
@@ -363,19 +363,22 @@ export function DashboardPage() {
           surface (spec §5). The "moment" as a cheap animated SVG; flag-gated, off elsewhere. */}
       {isPaperSkinEnabled() && (
         <div
-          className="relative overflow-hidden rounded-2xl border border-[var(--brand-border)] flex items-center justify-between gap-4 px-5 py-4"
-          style={{ background: 'var(--paper-raised, var(--brand-surface-raised))' }}
+          className="relative overflow-hidden rounded-[20px] border-[1.5px] border-[var(--ink-line,var(--brand-border))] flex items-stretch justify-between gap-4"
+          style={{ background: 'color-mix(in srgb, var(--teal) 14%, var(--paper-surface, var(--brand-surface)))' }}
         >
-          <div className="min-w-0">
-            <h2 className="text-2xl leading-tight" style={{ fontFamily: 'var(--font-display)' }}>
+          <div className="min-w-0 flex flex-col justify-center pl-6 py-5">
+            <p className="uppercase tracking-[0.25em] text-[11px] font-semibold" style={{ color: 'var(--teal-deep)' }}>
+              {t('admin.dashboard_band_kicker', 'Your atelier')}
+            </p>
+            <h2 className="text-3xl md:text-4xl leading-[1.05] mt-1" style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.02em' }}>
               {t('admin.dashboard', 'Dashboard')}
             </h2>
-            <p className="text-sm mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>
+            <p className="text-sm mt-1.5" style={{ color: 'var(--brand-text-muted)' }}>
               {t('admin.dashboard_band_sub', 'Your kitchen at a glance')}
             </p>
           </div>
-          <div className="w-36 md:w-44 shrink-0 hidden xs:block">
-            <PaperIllustration name="sunrise" animated />
+          <div className="w-44 md:w-72 shrink-0 self-end hidden xs:block">
+            <NomadicScene animated />
           </div>
         </div>
       )}
