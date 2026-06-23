@@ -1,0 +1,21 @@
+{
+  "id": "courier-mid-delivery-backgrounding",
+  "role": "courier",
+  "goals": [
+    "keep an active delivery alive when app is backgrounded"
+  ],
+  "traits": {
+    "patience": "med",
+    "tech_savvy": "med",
+    "careful_or_sloppy": "sloppy"
+  },
+  "device": "mobile",
+  "viewport": 390,
+  "locale": "en",
+  "network_profile": "4g",
+  "constraints": [
+    "Page Visibility",
+    "WakeLock",
+    "returns after minutes"
+  ]
+}

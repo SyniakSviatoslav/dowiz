@@ -1,0 +1,20 @@
+{
+  "id": "courier-gps-denied",
+  "role": "courier",
+  "goals": [
+    "complete a delivery with location permission denied"
+  ],
+  "traits": {
+    "patience": "med",
+    "tech_savvy": "low",
+    "careful_or_sloppy": "careful"
+  },
+  "device": "mobile",
+  "viewport": 390,
+  "locale": "en",
+  "network_profile": "4g",
+  "constraints": [
+    "no GPS grant",
+    "manual fallback expected"
+  ]
+}

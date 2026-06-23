@@ -1,0 +1,19 @@
+{
+  "id": "courier-go-online-first-task",
+  "role": "courier",
+  "goals": [
+    "go online, accept the first offered task"
+  ],
+  "traits": {
+    "patience": "med",
+    "tech_savvy": "med",
+    "careful_or_sloppy": "careful"
+  },
+  "device": "mobile",
+  "viewport": 390,
+  "locale": "al",
+  "network_profile": "4g",
+  "constraints": [
+    "first shift"
+  ]
+}

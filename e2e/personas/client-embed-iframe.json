@@ -1,0 +1,21 @@
+{
+  "id": "client-embed-iframe",
+  "role": "client",
+  "goals": [
+    "order from a restaurant site embed"
+  ],
+  "traits": {
+    "patience": "med",
+    "tech_savvy": "med",
+    "careful_or_sloppy": "sloppy"
+  },
+  "device": "mobile",
+  "viewport": 390,
+  "locale": "en",
+  "network_profile": "4g",
+  "constraints": [
+    "?embed=true",
+    "iOS Safari",
+    "no top-level nav"
+  ]
+}
