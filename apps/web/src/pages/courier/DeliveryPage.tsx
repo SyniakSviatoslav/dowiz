@@ -404,7 +404,9 @@ export function DeliveryPage() {
                 />
               </div>
             )}
-            <SwipeToComplete onComplete={handleComplete} label={t('courier.slide_to_deliver', 'Slide to Deliver')} />
+            <div data-testid="courier-advance-action">
+              <SwipeToComplete onComplete={handleComplete} label={t('courier.slide_to_deliver', 'Slide to Deliver')} />
+            </div>
           </>
         )}
       </div>
