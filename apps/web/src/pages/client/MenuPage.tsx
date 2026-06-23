@@ -526,14 +526,14 @@ export function MenuPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.4, delay: 0.15 }}
-            style={{ color: 'color-mix(in srgb, var(--color-on-primary) 70%, transparent)' }}
+            style={{ color: 'var(--brand-text-muted)' }}
           >
             {locationInfo?.googleRating != null ? (
               <>
                 <span className="inline-flex gap-0.5" style={{ color: 'var(--color-warning)' }}>
                   {[1,2,3,4,5].map(i => <i key={i} className={`ti ${i <= Math.round(locationInfo.googleRating!) ? 'ti-star-filled' : 'ti-star'}`} style={{ fontSize: '0.7rem' }} />)}
                 </span>
-                <span style={{ color: 'var(--color-on-primary)', fontWeight: 600 }}>{locationInfo.googleRating.toFixed(1)}</span>
+                <span style={{ color: 'var(--brand-text)', fontWeight: 600 }}>{locationInfo.googleRating.toFixed(1)}</span>
                 {locationInfo.googleReviewCount != null && <span className="opacity-70">({locationInfo.googleReviewCount})</span>}
               </>
             ) : null}
@@ -545,7 +545,7 @@ export function MenuPage() {
               </>
             )}
           </motion.div>
-          <h1 className="text-[22px] md:text-[26px] font-bold leading-tight" style={{ color: 'var(--color-on-primary)', fontFamily: 'var(--brand-font-heading)', textShadow: '0 2px 16px color-mix(in srgb, var(--brand-bg) 40%, transparent)' }}>
+          <h1 className="text-[22px] md:text-[26px] font-bold leading-tight" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)', textShadow: '0 1px 2px color-mix(in srgb, var(--brand-bg) 70%, transparent)' }}>
             {menu?.location_name || t('client.menu', 'Menu')}
           </h1>
           {venueStatus && (
@@ -601,7 +601,8 @@ export function MenuPage() {
 
         {/* Search + Sort + Allergen — single compact scrollable row */}
         {!loading && categories.length > 0 && (
-          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-3 py-2 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+          <div className="relative border-b" style={{ borderColor: 'var(--brand-border)' }}>
+          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-3 py-2">
             {/* Compact search pill */}
             <div className="relative shrink-0" style={{ width: searchQuery ? 140 : 100, transition: 'width 0.2s', minWidth: 100 }}>
               <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px]" style={{ color: 'var(--brand-text-muted)' }} />
@@ -649,6 +650,9 @@ export function MenuPage() {
                 </motion.button>
               );
             })}
+          </div>
+          {/* Right fade hint for horizontal scroll (matches category nav) */}
+          <div className="absolute right-0 top-0 bottom-0 w-6 pointer-events-none" style={{ background: 'linear-gradient(to right, transparent, var(--brand-bg))' }} />
           </div>
         )}
       </div>
