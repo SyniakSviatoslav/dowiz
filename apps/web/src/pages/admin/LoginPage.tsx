@@ -5,6 +5,11 @@ import { apiClient } from '../../lib/apiClient.js';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
 
+// Google OAuth sign-in is hidden by default (temporarily disabled). Re-enable by building with
+// VITE_GOOGLE_OAUTH_ENABLED=true. The backend /api/auth/google route stays live, so this is a
+// one-flag flip with no server change. Email/password + Telegram login are unaffected.
+const GOOGLE_OAUTH_ENABLED = import.meta.env.VITE_GOOGLE_OAUTH_ENABLED === 'true';
+
 const AuthLoginResponse = z.object({
   access_token: z.string(),
 }).passthrough();
@@ -158,14 +163,16 @@ export function LoginPage() {
           </div>
 
           <div className="space-y-3">
-            <a 
-              href="/api/auth/google" 
-              className="flex items-center justify-center gap-3 w-full px-4 py-2.5 rounded-lg transition-all duration-200 active:scale-[0.98]"
-              style={{ border: '1px solid var(--brand-border)', background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
-            >
-              <i className="ti ti-brand-google" />
-              <span className="text-sm font-medium">{t('admin.sign_in_google', 'Sign in with Google')}</span>
-            </a>
+            {GOOGLE_OAUTH_ENABLED && (
+              <a
+                href="/api/auth/google"
+                className="flex items-center justify-center gap-3 w-full px-4 py-2.5 rounded-lg transition-all duration-200 active:scale-[0.98]"
+                style={{ border: '1px solid var(--brand-border)', background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
+              >
+                <i className="ti ti-brand-google" />
+                <span className="text-sm font-medium">{t('admin.sign_in_google', 'Sign in with Google')}</span>
+              </a>
+            )}
 
             <button
               type="button"
