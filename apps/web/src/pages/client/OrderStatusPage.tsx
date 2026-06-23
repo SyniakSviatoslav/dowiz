@@ -244,7 +244,15 @@ export function OrderStatusPage() {
       }
 
       if (inner.type === 'order.status' && inner.status) {
-        setOrder((prev: any) => ({ ...prev, status: inner.status }));
+        // ORDER-TRACKING: additively merge the just-stamped *_at so the stepper
+        // lights up the new step live (statusAtField names the camelCase key).
+        setOrder((prev: any) => {
+          const next = { ...prev, status: inner.status };
+          if (inner.statusAtField && inner.statusAt) {
+            next[inner.statusAtField] = inner.statusAt;
+          }
+          return next;
+        });
       }
 
       if (inner.type === 'order.message' && inner.data) {
@@ -314,6 +322,16 @@ export function OrderStatusPage() {
     setSharingLocation(false);
   }, [sendMessage]);
 
+  // ── SEAM (COURIER agent owns the emit) ─────────────────────────────────────
+  // The live courier pin below is fed by `courierPos`/`hasCourierFix`, which are
+  // set from the existing `order.courier_updated` WS event (payload.position =
+  // {lat,lng}) handled in the onMessage block above, and seeded by the REST
+  // `courierPosition` field. This ORDER-TRACKING change does NOT emit courier
+  // location — that is the courier-events worker's job
+  // (apps/api/src/workers/courier-events.ts → 'order.courier_updated').
+  // TODO(courier-agent): if the pin needs richer data (heading, accuracy, eta),
+  // extend the courier-events emit + this handler — reuse this event, do not
+  // invent a parallel courier-location channel.
   const couriers: CourierOnMap[] = useMemo(() => {
     if (order?.courierName) {
       return [{
@@ -433,7 +451,18 @@ export function OrderStatusPage() {
         </div>
 
         <div data-testid="order-status-badge" data-status={order?.status} aria-live="polite" aria-atomic="true">
-          <OrderProgress status={order.status} />
+          {/* ORDER-TRACKING: real-machine stepper. type drives pickup vs delivery
+              branch; the *At timestamps light up filled steps (status-only fallback). */}
+          <OrderProgress
+            status={order.status}
+            type={order.type}
+            confirmedAt={order.confirmedAt}
+            preparingAt={order.preparingAt}
+            readyAt={order.readyAt}
+            inDeliveryAt={order.inDeliveryAt}
+            deliveredAt={order.deliveredAt}
+            pickedUpAt={order.pickedUpAt}
+          />
         </div>
 
         {/* CR-6: Share my location (visible during IN_DELIVERY) */}
