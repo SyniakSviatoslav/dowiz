@@ -1,0 +1,19 @@
+{
+  "id": "client-returning-reorder",
+  "role": "client",
+  "goals": [
+    "reorder my usual quickly"
+  ],
+  "traits": {
+    "patience": "low",
+    "tech_savvy": "high",
+    "careful_or_sloppy": "sloppy"
+  },
+  "device": "mobile",
+  "viewport": 390,
+  "locale": "al",
+  "network_profile": "4g",
+  "constraints": [
+    "expects saved details"
+  ]
+}

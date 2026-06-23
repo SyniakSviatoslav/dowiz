@@ -1,0 +1,20 @@
+{
+  "id": "owner-reconnect",
+  "role": "owner",
+  "goals": [
+    "keep working through a Wi-Fi drop, expect reconcile"
+  ],
+  "traits": {
+    "patience": "low",
+    "tech_savvy": "med",
+    "careful_or_sloppy": "sloppy"
+  },
+  "device": "desktop",
+  "viewport": 1280,
+  "locale": "en",
+  "network_profile": "wifi-drops",
+  "constraints": [
+    "WS reconnect",
+    "no lost/duplicated orders"
+  ]
+}

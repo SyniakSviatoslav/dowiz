@@ -1,0 +1,20 @@
+{
+  "id": "courier-bad-gps",
+  "role": "courier",
+  "goals": [
+    "finish a delivery despite a noisy GPS track"
+  ],
+  "traits": {
+    "patience": "med",
+    "tech_savvy": "low",
+    "careful_or_sloppy": "sloppy"
+  },
+  "device": "mobile",
+  "viewport": 390,
+  "locale": "al",
+  "network_profile": "4g",
+  "constraints": [
+    "jumpy/garbage coordinates",
+    "must still complete"
+  ]
+}

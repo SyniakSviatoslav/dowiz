@@ -1,0 +1,19 @@
+{
+  "id": "owner-crm-reveal-contact",
+  "role": "owner",
+  "goals": [
+    "reveal a customer contact (audited, rate-limited)"
+  ],
+  "traits": {
+    "patience": "med",
+    "tech_savvy": "high",
+    "careful_or_sloppy": "careful"
+  },
+  "device": "desktop",
+  "viewport": 1280,
+  "locale": "en",
+  "network_profile": "wifi",
+  "constraints": [
+    "expects audit log + throttle messaging"
+  ]
+}
