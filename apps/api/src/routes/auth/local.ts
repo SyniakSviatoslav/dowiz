@@ -140,10 +140,9 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
       const familyId = crypto.randomUUID();
       const tokenPayload: Record<string, unknown> = { role, userId: user.id, sub: user.id };
       if (activeLocationId) tokenPayload.activeLocationId = activeLocationId;
-      // Access TTL matches the OAuth/Telegram paths (7d). A 1h password-login token forced an
-      // hourly relogin treadmill that depended on a flawless refresh round-trip; the 7d token
-      // removes that single point of failure. Rotating refresh (7d) still rolls the session on 401.
-      const accessToken = await signAuthToken(tokenPayload as any, '7d');
+      // Access TTL = 24h (ADR-0004): bounds a leaked token's blast radius while the rotating 7d
+      // refresh family still rolls the session forward silently on 401 (no relogin treadmill).
+      const accessToken = await signAuthToken(tokenPayload as any, '24h');
       const refreshToken = crypto.randomBytes(32).toString('hex');
       const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
       let refreshPersisted = false;

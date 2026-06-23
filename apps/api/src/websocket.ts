@@ -85,7 +85,7 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
         const locId = room.split(':')[1];
         if (!locId) return false;
         const r = await fastify.db.query(
-          `SELECT 1 FROM memberships WHERE user_id = $1 AND location_id = $2 AND role = 'owner' LIMIT 1`,
+          `SELECT 1 FROM memberships WHERE user_id = $1 AND location_id = $2 AND role = 'owner' AND status = 'active' LIMIT 1`, // P-d (ADR-0004)
           [userId, locId],
         );
         return (r.rowCount ?? 0) > 0;

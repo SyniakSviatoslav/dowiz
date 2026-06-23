@@ -60,7 +60,7 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
 
     if (!activeLocationId) {
       const memberRes = await (fastify as any).db.query(
-        `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+        `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1`, // P-d (ADR-0004)
         [userId]
       );
       if (memberRes.rowCount > 0) activeLocationId = memberRes.rows[0].location_id;

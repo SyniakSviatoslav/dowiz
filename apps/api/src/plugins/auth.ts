@@ -143,8 +143,10 @@ export const requireLocationAccess = async (request: FastifyRequest, reply: Fast
   if (!pool) throw new Error('Database pool not attached to fastify');
 
   try {
+    // P-d (ADR-0004): require an ACTIVE owner membership — a removed/downgraded owner holding a
+    // valid ≤24h token is denied per-request (status='active' is index-backed, migration-free).
     const res = await pool.query(
-      `SELECT 1 FROM memberships WHERE location_id = $1 AND user_id = $2 AND role = 'owner'`,
+      `SELECT 1 FROM memberships WHERE location_id = $1 AND user_id = $2 AND role = 'owner' AND status = 'active'`,
       [locationId, user.userId]
     );
     if (res.rowCount === 0) {

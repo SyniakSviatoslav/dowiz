@@ -701,7 +701,7 @@ fastify.register(mockAuthRoutes, { db: pool });
     }
 
     const memberRes = await pool.query(
-      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1`, // P-d (ADR-0004)
       [userId]
     );
     let activeLocationId = memberRes.rowCount > 0 ? memberRes.rows[0].location_id : undefined;

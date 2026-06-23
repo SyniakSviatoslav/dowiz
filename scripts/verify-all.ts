@@ -22,6 +22,7 @@ const STEPS = [
   { name: 'contrast audit', cmd: `tsx apps/api/scripts/verify-contrast.ts` },
   { name: 'event wiring (NX)', cmd: 'pnpm verify:event-wiring' },
   { name: 'connection lifecycle (NX)', cmd: 'pnpm verify:connection-lifecycle' },
+  { name: 'owner active-membership (ADR-0004 P-d)', cmd: 'pnpm guardrail:owner-active' },
 ];
 
 function run(cmd: string): { ok: boolean; output: string } {

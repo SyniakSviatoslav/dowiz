@@ -143,15 +143,16 @@ export default async function authRoutes(fastify: FastifyInstance) {
       userId = updateRes.rows[0].id;
     }
 
-    // Issue tokens
+    // Issue tokens (ADR-0004: 24h access bounds a leaked-token's blast radius; the 7d refresh
+    // family preserves the no-relogin UX via silent refresh).
     const familyId = crypto.randomUUID();
-    const accessToken = await signAuthToken({ role: 'owner', userId } as any, '7d');
+    const accessToken = await signAuthToken({ role: 'owner', userId } as any, '24h');
     const refreshToken = crypto.randomBytes(32).toString('hex');
     const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
     await (fastify as any).db.query(
       `INSERT INTO auth_refresh_tokens (user_id, family_id, token_hash, expires_at)
-       VALUES ($1, $2, $3, now() + interval '30 days')`,
+       VALUES ($1, $2, $3, now() + interval '7 days')`,
       [userId, familyId, refreshTokenHash]
     );
 
@@ -220,12 +221,12 @@ export default async function authRoutes(fastify: FastifyInstance) {
     if (upd.rowCount === 0) return reply.status(410).send({ status: 'consumed' });
 
     const userId = upd.rows[0].user_id;
-    const accessToken = await signAuthToken({ role: 'owner', userId } as any, '7d');
+    const accessToken = await signAuthToken({ role: 'owner', userId } as any, '24h'); // ADR-0004
     const refreshToken = crypto.randomBytes(32).toString('hex');
     const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
     await (fastify as any).db.query(
       `INSERT INTO auth_refresh_tokens (user_id, family_id, token_hash, expires_at)
-       VALUES ($1, $2, $3, now() + interval '30 days')`,
+       VALUES ($1, $2, $3, now() + interval '7 days')`,
       [userId, crypto.randomUUID(), refreshTokenHash],
     );
     return reply.send({ status: 'authenticated', access_token: accessToken, refresh_token: refreshToken });
@@ -234,7 +235,9 @@ export default async function authRoutes(fastify: FastifyInstance) {
   fastify.post('/auth/refresh', {
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     schema: {
-      body: z.object({ refresh_token: z.string() }).strict()
+      // active_location_id (optional): the caller's current working tenant, so a multi-location
+      // owner keeps it across refresh instead of being silently switched (ADR-0004 P-c R2-2).
+      body: z.object({ refresh_token: z.string(), active_location_id: z.string().uuid().optional() }).strict()
     }
   }, async (request: any, reply: any) => {
     const { refresh_token } = request.body as any;
@@ -282,16 +285,26 @@ export default async function authRoutes(fastify: FastifyInstance) {
       return reply.status(401).send({ error: 'Token reuse detected. Family revoked.' });
     }
 
-    // This endpoint only ever issues owner tokens (couriers refresh via courier_sessions).
-    // Mint the role explicitly; carry activeLocationId through the rotation so the owner UI
-    // stays scoped after refresh (a nullable google_sub-inferred role previously flipped).
-    const locRes = await (fastify as any).db.query(
-      `SELECT location_id FROM memberships WHERE user_id = $1 AND status = 'active'
-       ORDER BY (role = 'owner') DESC LIMIT 1`,
+    // P-c (ADR-0004): re-derive authority from LIVE memberships on every refresh. This endpoint
+    // only serves owners (couriers refresh via courier_sessions). If the user no longer holds an
+    // ACTIVE OWNER membership (removed, or downgraded to staff), refresh is denied — closing the
+    // privilege roll-forward where a revoked owner kept re-minting an owner token. The token was
+    // already consumed by the claim UPDATE above, so a 401 here ends the session.
+    const ownerMemberships = await (fastify as any).db.query(
+      `SELECT location_id FROM memberships
+       WHERE user_id = $1 AND role = 'owner' AND status = 'active'
+       ORDER BY created_at, location_id`,
       [tokenRecord.user_id]
     );
-    const activeLocationId = locRes.rows[0]?.location_id ?? null;
-    const newAccessToken = await signAuthToken(refreshedOwnerClaims(tokenRecord.user_id, activeLocationId) as any, '7d');
+    if (ownerMemberships.rowCount === 0) {
+      return reply.status(401).send({ error: 'No active owner membership', code: 'OWNER_REVOKED' });
+    }
+    // Preserve the caller's working tenant (R2-2): keep the requested activeLocationId iff it is
+    // still one of their active owner memberships; else a STABLE deterministic pick (no flap).
+    const ownerLocs: string[] = ownerMemberships.rows.map((r: any) => r.location_id);
+    const requestedLoc = (request.body as any).active_location_id as string | undefined;
+    const activeLocationId = requestedLoc && ownerLocs.includes(requestedLoc) ? requestedLoc : ownerLocs[0];
+    const newAccessToken = await signAuthToken(refreshedOwnerClaims(tokenRecord.user_id, activeLocationId) as any, '24h');
     const newRefreshToken = crypto.randomBytes(32).toString('hex');
     const newRefreshTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
 
@@ -302,6 +315,21 @@ export default async function authRoutes(fastify: FastifyInstance) {
     );
 
     return { access_token: newAccessToken, refresh_token: newRefreshToken };
+  });
+
+  // P-b (ADR-0004): real server-side logout. Previously the web client POSTed here and got a 404,
+  // so "log out" never killed the session. Authenticated, user-wide: revokes EVERY refresh family
+  // for the caller ("log out all devices"), so no session can roll forward. The access token
+  // itself remains valid until its ≤24h exp (accepted risk, ADR-0004); per-device logout is a
+  // future enhancement (needs the refresh token in the body).
+  fastify.post('/auth/logout', {
+    preHandler: [(fastify as any).verifyAuth],
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request: any, reply: any) => {
+    const userId = request.user?.userId;
+    if (!userId) return reply.status(401).send({ error: 'Authentication required' });
+    await (fastify as any).db.query(`DELETE FROM auth_refresh_tokens WHERE user_id = $1`, [userId]);
+    return reply.status(204).send();
   });
 
   // ============================================================================
