@@ -44,3 +44,11 @@ graphify-out/
 
 # Doubt model: loop-detector counters (ephemeral, per-session)
 .claude/.loop-state/
+
+# RSI synthetic-user loop — runtime artifacts (generated, never committed)
+e2e/mempalace/*.jsonl
+e2e/mempalace/*.json
+e2e/findings/*.json
+e2e/findings/traces/
+e2e/findings/videos/
+e2e/findings/transcripts/
