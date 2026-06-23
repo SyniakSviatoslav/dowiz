@@ -10,7 +10,7 @@ export function CurrencySwitcher() {
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors hover:bg-[var(--brand-surface-raised)]"
+        className="flex items-center gap-1 px-2.5 py-1.5 min-h-11 text-xs font-medium rounded-lg transition-colors hover:bg-[var(--brand-surface-raised)]"
         style={{ color: 'var(--brand-text)', border: '1px solid var(--brand-border)', background: 'var(--brand-surface)' }}
         aria-label={`Switch currency. Current: ${current?.code || currency}`}
       >
