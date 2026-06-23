@@ -288,6 +288,9 @@ export function DashboardPage() {
       }
     } catch (err) {
       console.error('[DashboardPage] update status failed:', err);
+      // Reconcile to server truth (the optimistic flip snaps back) AND tell the owner why —
+      // a silent revert during the rush reads as "did I mis-tap?".
+      showToast(t('admin.order_update_failed', "Couldn't update the order — it's been refreshed. Please try again."), 'error');
       fetchOrders();
     }
   };

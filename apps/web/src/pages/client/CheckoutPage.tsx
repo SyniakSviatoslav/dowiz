@@ -463,6 +463,22 @@ export function CheckoutPage() {
         }));
         return false;
       }
+      // Make the known business rejections feel DESIGNED, not a cold "failed" — and never let a
+      // price/availability change ambush the customer at submit (S11/S14 surprise). Server-read-only.
+      if (err?.status === 422 || err?.status === 409) {
+        const code = err?.data?.code;
+        if (code === 'NOT_DELIVERABLE') {
+          setOrderError(t('checkout.not_deliverable_error', 'This address is outside the delivery area. Try pickup or a different address.'));
+          return false;
+        }
+        if (code === 'item_unavailable' || err?.data?.outcome === 'hard_block') {
+          setOrderError(t('checkout.item_unavailable_error', 'Something in your cart just changed (an item sold out or its price updated). Please review your cart and try again.'));
+          return false;
+        }
+        // The server often phrases the rejection humanely already — surface that over a generic.
+        const serverMsg = err?.data?.reasons?.[0]?.message || (typeof err?.data?.message === 'string' ? err.data.message : null);
+        if (serverMsg) { setShowPhoneFallback(true); setOrderError(serverMsg); return false; }
+      }
       // Non-422 (5xx / network / timeout) is not customer-fixable → offer the
       // out-of-band path ("call the restaurant"). 422 business errors carry an
       // actionable message and the customer can fix the cart, so no phone CTA.

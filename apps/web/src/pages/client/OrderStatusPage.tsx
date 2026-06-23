@@ -271,7 +271,11 @@ export function OrderStatusPage() {
   useEffect(() => {
     if (!order?.status) return;
     if (order.status === prevStatusRef.current) return;
+    // Cold open: adopt the current status silently — don't announce a "change" the user
+    // didn't witness (phantom toast). Only real transitions after the page is open toast.
+    const isFirstObservation = prevStatusRef.current === '';
     prevStatusRef.current = order.status;
+    if (isFirstObservation) return;
     const label = t(STATUS_LABELS_KEYS[order.status] || '', order.status.replace(/_/g, ' '));
     const variant = STATUS_VARIANTS[order.status] || 'info';
     showToast(label, variant);
