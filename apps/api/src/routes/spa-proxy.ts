@@ -71,7 +71,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       const uid = claims.userId || claims.sub;
       if (uid) {
         const res = await db.query(
-          `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+          `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1`, // P-d (ADR-0004)
           [uid]
         );
         if (res.rows.length > 0) return res.rows[0].location_id;
@@ -126,7 +126,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       if (claims.activeLocationId) return { locId: claims.activeLocationId, userId: uid };
       // Fall back to memberships lookup (legacy auth)
       const res = await db.query(
-        `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+        `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1`, // P-d (ADR-0004)
         [uid]
       );
       if (res.rows.length > 0) return { locId: res.rows[0].location_id, userId: uid };

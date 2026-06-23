@@ -46,9 +46,17 @@ export default async function ownerProductMediaRoutes(
   async function getOwnerLocation(request: any): Promise<{ locId: string; userId: string } | null> {
     const user = request.user;
     if (!user?.userId) return null;
-    if (user.activeLocationId) return { locId: user.activeLocationId, userId: user.userId };
+    // P-d (ADR-0004): verify the baked activeLocationId against a LIVE active owner membership —
+    // a removed/downgraded owner's ≤24h token must not write media into a tenant it left.
+    if (user.activeLocationId) {
+      const ok = await db.query(
+        `SELECT 1 FROM memberships WHERE user_id = $1 AND location_id = $2 AND role = 'owner' AND status = 'active' LIMIT 1`,
+        [user.userId, user.activeLocationId],
+      );
+      return (ok.rowCount ?? 0) > 0 ? { locId: user.activeLocationId, userId: user.userId } : null;
+    }
     const res = await db.query(
-      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1`,
       [user.userId],
     );
     if (res.rows.length === 0) return null;
