@@ -34,6 +34,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
   fastify.get('/auth/google', {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } }
   }, async (request: any, reply: any) => {
+    // Launch-gated OFF: closed at the server, not just hidden in the FE.
+    if (env.GOOGLE_OAUTH_ENABLED !== 'true') return reply.status(404).send({ error: 'Not found' });
     const state = crypto.randomUUID();
     const nonce = crypto.randomUUID();
 
@@ -60,6 +62,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
   fastify.get('/auth/google/callback', {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } }
   }, async (request: any, reply: any) => {
+    if (env.GOOGLE_OAUTH_ENABLED !== 'true') return reply.status(404).send({ error: 'Not found' });
     const querySchema = z.object({
       code: z.string(),
       state: z.string()

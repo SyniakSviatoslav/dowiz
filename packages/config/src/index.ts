@@ -13,6 +13,10 @@ const EnvSchema = z.object({
   JWT_KID: z.string().min(1),
   ***REDACTED***: z.string().min(1),
   ***REDACTED***: z.string().min(1),
+  // Google OAuth is launch-gated OFF by default: when 'false' BOTH the FE button
+  // (VITE_GOOGLE_OAUTH_ENABLED) and the backend /api/auth/google routes are closed, so
+  // "hidden" actually means "disabled" (not just a hidden-but-reachable auth path).
+  GOOGLE_OAUTH_ENABLED: z.enum(['true', 'false']).default('false'),
   // Shared secret gating the /dev and /api/dev test-only endpoints (mock-auth, etc).
   // When unset/empty, those endpoints are fully disabled (404) — the safe prod default.
   DEV_AUTH_SECRET: z.string().optional(),
