@@ -29,9 +29,11 @@ read-only here). Each line below → artifact OR explicit no-op.
 ## Systemic roots (pattern-critic) — candidate ratchet items (NOT yet enacted; need design)
 - **R1 · Defects invisible to text-level gates** (grep/typecheck/build/lint green, behaviour
   wrong): CSS-comment drop #13, contrast #6, read_public_menu stale-copy, localStorage #12, the
-  driver findings. Point-guardrails exist per symptom; the **gap** is a generalized behavioural/
-  live-DOM verification before merge/deploy. Candidate: a small pre-merge behavioural smoke
-  asserting computed outcomes (theme applies + WCAG, status monotonic, token fields present).
+  driver findings. Point-guardrails exist per symptom; the **gap** was a generalized behavioural/
+  live-DOM verification. **ENACTED 2026-06-23 (ledger #14)**: `e2e/tests/behavioural-invariants.spec.ts`
+  — the systemic home for computed-outcome invariants (WCAG-AA contrast on solid surfaces +
+  resolved-surface), red→green-proven, green on the live repo, extensible. Future invariants
+  (status monotonicity, token-field presence) are added here as `expect`s, never weakened.
 - **R2 · Stale/fragmented single-source-of-truth**: read_public_menu (multi-`CREATE OR REPLACE`),
   inline-vs-plugin local-login, dev-login shared path #1. Lessons are advisory; the **gap** is a
   deterministic barrier (e.g. CI check that a redefined plpgsql function matches the live
