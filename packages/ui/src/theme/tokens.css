@@ -509,6 +509,32 @@ html[data-theme="dark"] [data-skin="paper"],
   box-shadow: var(--elev-1);
 }
 
+/* ── Deeper ornament (iteration 5) — crafted across the whole internal UI ── */
+[data-skin="paper"] {
+  /* organic soft rectangles instead of hard pills/round — an editorial, hand-made feel */
+  --brand-radius:     16px;
+  --brand-radius-sm:  10px;
+  --brand-radius-btn: 16px;
+}
+/* Confident inked edge on bordered cards/panels (not data tables) — reads as drawn. */
+[data-skin="paper"] :is(.rounded-lg, .rounded-xl, .rounded-2xl)[class*="border"]:not(.data-surface) {
+  border-color: var(--ink-line);
+}
+/* Primary actions: a thin ink hairline + warm lift so the teal button looks inked, not flat. */
+[data-skin="paper"] button.bg-\[var\(--brand-primary\)\],
+[data-skin="paper"] a.bg-\[var\(--brand-primary\)\] {
+  border: 1.5px solid color-mix(in srgb, var(--ink) 65%, var(--action));
+  box-shadow: var(--elev-2);
+}
+/* Inputs: warm inked border + a teal focus glow (replaces the default cool ring). */
+[data-skin="paper"] :is(input, select, textarea) {
+  border-color: var(--ink-line);
+}
+[data-skin="paper"] :is(input, select, textarea):focus {
+  border-color: var(--action);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 28%, transparent);
+}
+
 /* ── Courier MapLibre → warm sepia (item 4) ── The "same WebGL context, no second
    layer" trick: a CSS filter on the map CANVAS only (not the whole .maplibregl-map,
    so route lines + white courier/destination markers stay crisp on top). Scoped to
