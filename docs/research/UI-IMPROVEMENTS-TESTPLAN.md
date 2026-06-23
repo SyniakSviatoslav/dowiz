@@ -25,7 +25,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
     - expect: expect(page.locator('[data-testid="venue-busy-banner"]')).not.toBeVisible()
     - expect: expect(page.locator('[data-testid="venue-closed-banner"]')).not.toBeVisible()
 
-#### 1.2. 1b — venue-closed-banner renders when demo location is closed [BLOCKED: seed required]
+#### 1.2. 1b — venue-closed-banner renders when demo location is closed [PROVEN: e2e/tests/client/venue-state.spec.ts — via PUT /api/owner/settings deliveryPaused]
 
 **File:** `e2e/tests/client/venue-state.spec.ts`
 
@@ -217,7 +217,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
 
 **Seed:** `e2e/tests/smoke.spec.ts`
 
-#### 4.1. 4a — modifier-group with data-display-type renders in product modal for a product with modifier groups [BLOCKED: no product on demo has modifier groups seeded]
+#### 4.1. 4a — modifier-group with data-display-type renders in product modal [PROVEN: e2e/tests/client/modifier-display-type.spec.ts — seeds radio/checkbox/select/quantity + inferred-radio fallback]
 
 **File:** `e2e/tests/client/modifier-display-type.spec.ts`
 
@@ -236,7 +236,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
   6. Verify that a group without an explicit display_type and max_select=1 defaults to data-display-type='radio' (inferred fallback).
     - expect: Inferred group renders with data-display-type='radio' matching the resolveDisplayType fallback logic
 
-#### 4.2. 4b — modifier-group with display_type='select' renders a <select> control [BLOCKED: needs seeded data]
+#### 4.2. 4b — modifier-group display_type='select' [PARTIAL: data-display-type=select PROVEN; a native <select> control is NOT shipped — options render as buttons for all types]
 
 **File:** `e2e/tests/client/modifier-display-type.spec.ts`
 
@@ -248,7 +248,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
   3. Assert a native <select> element is rendered inside that modifier-group.
     - expect: expect(page.locator('[data-testid="modifier-group"][data-display-type="select"] select')).toBeVisible()
 
-#### 4.3. 4c — modifier-group with display_type='quantity' renders quantity controls [BLOCKED: needs seeded data]
+#### 4.3. 4c — modifier-group display_type='quantity' [PARTIAL: data-display-type=quantity PROVEN; quantity steppers are NOT shipped — options render as buttons]
 
 **File:** `e2e/tests/client/modifier-display-type.spec.ts`
 
@@ -316,7 +316,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
 
 **Seed:** `e2e/tests/smoke.spec.ts`
 
-#### 6.1. 6a — courier-offer-timer renders with data-remaining when a task is offered [BLOCKED: needs courier session + dispatched offer]
+#### 6.1. 6a — courier-offer-timer renders + ticks down [PROVEN: e2e/tests/courier/offer-timer.spec.ts — /api/dev mock-auth + create-assignment]
 
 **File:** `e2e/tests/courier/offer-timer.spec.ts`
 
@@ -333,7 +333,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
   5. Wait 3 seconds. Assert data-remaining has decreased (the countdown is ticking).
     - expect: data-remaining value after 3s is less than the initial value (countdown is active)
 
-#### 6.2. 6b — task-accept button is visible and accepting navigates to delivery page [BLOCKED: needs courier session + offered task]
+#### 6.2. 6b — task-accept navigates to /courier/delivery/:id [PROVEN: e2e/tests/courier/offer-timer.spec.ts]
 
 **File:** `e2e/tests/courier/offer-timer.spec.ts`
 
@@ -345,7 +345,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
   3. Assert the delivery page loaded (URL contains /courier/delivery/).
     - expect: expect(page.url()).toContain('/courier/delivery/')
 
-#### 6.3. 6c — courier-offer-decline releases the task and hides the card [BLOCKED: needs courier session + offered task]
+#### 6.3. 6c — courier-offer-decline removes the task card [PROVEN: e2e/tests/courier/offer-timer.spec.ts]
 
 **File:** `e2e/tests/courier/offer-timer.spec.ts`
 
@@ -371,7 +371,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
     - expect: Task card disappears from the list after the countdown completes
     - expect: POST /api/courier/assignments/:id/reject was called (check network request or server state)
 
-#### 6.5. 6e — courier-advance-action testid [BLOCKED: testid does not exist in codebase]
+#### 6.5. 6e — courier-advance-action testid [RESOLVED: testid DOES exist (DeliveryPage.tsx:407, gated behind in-page pickup); PROVEN in e2e/tests/courier/offer-timer.spec.ts — the prior 'missing' note was stale]
 
 **File:** `e2e/tests/courier/offer-timer.spec.ts`
 
