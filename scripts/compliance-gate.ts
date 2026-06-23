@@ -79,6 +79,7 @@ if (existsSync(join(ROOT, migDir))) {
 const config = read('packages/config/src/index.ts');
 const SERVICE_ENV = [
   'RESEND_API_KEY', '***REDACTED***', 'SENTRY_DSN', 'GROQ_API_KEY', 'OPENAI_API_KEY',
+  '***REDACTED***', 'OPENCODE_ZEN_API_KEY',
   'REDIS_URL', 'ROUTING_BASE_URL', 'R2_ENDPOINT', 'VAPID_PUBLIC_KEY', '***REDACTED***',
 ];
 for (const env of SERVICE_ENV) {
