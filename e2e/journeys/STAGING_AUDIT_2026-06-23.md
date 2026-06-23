@@ -37,10 +37,14 @@ F4 equivalence SQL green (18 cases); preflight 17/17 + ui tests green; typecheck
 - **HIGH-2 (UX) logo 404**: `/images/locations/28239442-.../logo.webp` 404s on every storefront+branding load — clear the dangling logo URL or upload the asset. (Data.)
 - **Telegram token rotation**: the leaked bot token (now removed from code) is still in git history — rotate it.
 
-### FE polish (real, customer-facing; batch in a follow-up)
-- HIGH-1 hero title contrast (white on light-pink gradient — WCAG-AA fail).
-- HIGH-3 checkout "Shënime" field keeps red error ring when validly filled.
-- MED i18n gaps (admin: "Enable sound", "Mark kitchen busy", "Choose File"…), mobile filter/category overflow (no scroll cue), broken-image glyph vs branded placeholder, bare 404 page, map null-coord console warnings, KPI alarming-zero colors.
+### FE polish (real, customer-facing) — ✅ batch landed 2026-06-23 (commits 1feff7c0 + 2ac2ab72, staging-proven)
+- ✅ HIGH-1 hero title contrast — hero h1 + rating moved off `--color-on-primary` (white) onto `--brand-text`/`--brand-text-muted` (contrast-correct over the brand-bg-tinted bottom scrim). (MenuPage)
+- ✅ HIGH-3 false red error ring — neutralized the browser's native `:invalid` glow on `required` fields; error state is now driven only by explicit component border-color. (index.css)
+- ✅ MED i18n gaps — added `admin.alert_enable` / `admin.kitchen_busy_on` / `admin.kitchen_busy_off` to sq+en+uk (English was leaking into Albanian/Ukrainian admin).
+- ✅ MED mobile filter/sort/allergen overflow — added the right-fade scroll cue matching the category nav. (MenuPage)
+- ✅ MED bare 404 page — rebuilt as a branded soft state (brand tokens, icon, styled return-home CTA, humane copy). (main.tsx)
+- Proof: `e2e/tests/fe-polish-batch.spec.ts` GREEN 2/2 on desktop + mobile vs staging; typecheck green; full pre-commit build green.
+- ⏳ DEFERRED (lower value): "Choose File" (hidden native inputs use custom triggers — not the visible gap), broken-image card glyph (modal already has an onError fallback), map null-coord console warnings (console-only), KPI alarming-zero colors.
 
 ### Server / hardening (defense-in-depth, low urgency)
 - HIGH (security best-practice) read_public_menu SECURITY DEFINER lacks `SET search_path = public` — add in a future migration (currently safe: unqualified names + parameterized).
