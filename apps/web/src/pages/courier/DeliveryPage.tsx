@@ -33,6 +33,8 @@ export function DeliveryPage() {
   const [loading, setLoading] = useState(true);
   const [courierPos, setCourierPos] = useState<LngLatLike>(TIRANA_CENTER);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [deliverError, setDeliverError] = useState<string | null>(null);
+  const [orderClosed, setOrderClosed] = useState<string | null>(null); // CANCELLED/REJECTED while en route
   const [clientLocation, setClientLocation] = useState<LngLatLike | null>(null);
   const { t } = useI18n();
   const [messages, setMessages] = useState<any[]>([]);
@@ -89,7 +91,10 @@ export function DeliveryPage() {
       const data = await apiClient<typeof CourierTaskDetail>(`/courier/assignments/${id}`, { schema: CourierTaskDetail });
       setTask(data);
     } catch (err: any) {
-      if (err.status === 404) {
+      // DEV-ONLY mock so the courier UI can be previewed without a live assignment. In prod a
+      // 404 (expired/reassigned) must NOT fabricate a fake drop-off the courier could act on —
+      // it falls through to the real "task not found" soft state below.
+      if (err.status === 404 && import.meta.env.DEV) {
         setTask({
           id: id!,
           status: 'IN_DELIVERY',
@@ -127,6 +132,13 @@ export function DeliveryPage() {
           const exists = prev.some(m => m.id === msg.data.data.id);
           return exists ? prev : [...prev, msg.data.data];
         });
+      }
+      // S2/S6 seam: the courier must learn if the restaurant cancels/rejects mid-delivery,
+      // otherwise they drive to a dead order. A soft banner (not a wall — the human is never
+      // blocked), reconciled from the same WS the client uses.
+      if (msg.data?.type === 'order.status' && msg.data?.status) {
+        const s = String(msg.data.status).toUpperCase();
+        if (s === 'CANCELLED' || s === 'REJECTED') setOrderClosed(s);
       }
     }
   });
@@ -174,20 +186,31 @@ export function DeliveryPage() {
   };
 
   const handleComplete = async () => {
-    setShowCelebration(true);
+    // INVARIANT: never fake success. The celebration + navigate happen ONLY after the server
+    // confirms the delivery (optimistic UI must always reconcile to server truth). The human is
+    // never blocked: a transient failure surfaces a retry-able error and resets the swipe; a
+    // terminal order (already cancelled/delivered) gets a soft "closed" message, not a fake win.
+    setDeliverError(null);
+    const isCash = Boolean(task?.cashPayWith);
+    const body: Record<string, unknown> = {
+      cash_collected: isCash,
+      ...(isCash && task?.total != null ? { cash_amount: task.total } : {}),
+    };
     try {
-      const isCash = Boolean(task?.cashPayWith);
-      const body: Record<string, unknown> = {
-        cash_collected: isCash,
-        ...(isCash && task?.total != null ? { cash_amount: task.total } : {}),
-      };
-      await apiClient(`/courier/assignments/${id}/delivered`, {
-        method: 'POST',
-        body,
-      });
-    } catch (e) {
-      console.debug('[DeliveryPage] delivery status update failed', e);
+      await apiClient(`/courier/assignments/${id}/delivered`, { method: 'POST', body });
+    } catch (e: any) {
+      const status = e?.status;
+      if (status === 409 || status === 422) {
+        // Reconcile to server: the order is no longer deliverable (cancelled / already closed).
+        setOrderClosed((prev) => prev ?? 'CLOSED');
+        setDeliverError(t('courier.delivery_already_closed', 'This order was already closed. Returning to your tasks.'));
+        setTimeout(() => navigate('/courier'), 1800);
+        return;
+      }
+      setDeliverError(t('courier.delivery_failed_retry', 'Could not confirm delivery — check your connection and slide again.'));
+      throw e; // re-throw so SwipeToComplete resets and the courier can retry (not blocked, not faked)
     }
+    setShowCelebration(true);
     setTimeout(() => navigate('/courier'), 1500);
   };
 
@@ -402,6 +425,16 @@ export function DeliveryPage() {
                   className="w-full h-12 px-4 outline-none text-base font-bold border rounded-xl transition-colors"
                   style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
                 />
+              </div>
+            )}
+            {orderClosed && (
+              <div role="status" aria-live="polite" data-testid="courier-order-closed" className="rounded-xl px-3 py-2 text-sm text-center" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--brand-text)' }}>
+                {t('courier.order_closed_banner', 'The restaurant closed this order. You can stop — no delivery needed.')}
+              </div>
+            )}
+            {deliverError && (
+              <div role="alert" aria-live="assertive" data-testid="courier-deliver-error" className="rounded-xl px-3 py-2 text-sm text-center" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--color-danger)' }}>
+                {deliverError}
               </div>
             )}
             <div data-testid="courier-advance-action">
