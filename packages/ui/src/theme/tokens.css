@@ -477,3 +477,34 @@ html[data-theme="dark"] [data-skin="paper"],
     --paper-grain-opacity: 0.04;
   }
 }
+
+/* ── Paper chrome polish (iteration 2) — scoped character, no data interference ── */
+
+/* Fraunces display character: heavier, high optical size, tighter measure. */
+[data-skin="paper"] h1 { font-weight: 600; font-variation-settings: "opsz" 96, "SOFT" 0, "WONK" 0; letter-spacing: -0.018em; }
+[data-skin="paper"] h2 { font-weight: 600; font-variation-settings: "opsz" 60; letter-spacing: -0.014em; }
+[data-skin="paper"] h3 { font-weight: 550; font-variation-settings: "opsz" 36; }
+
+/* Warm text selection + focus ring in the action teal (instead of the OS blue). */
+[data-skin="paper"] ::selection { background: rgba(73, 197, 182, 0.28); color: var(--ink); }
+[data-skin="paper"] :focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
+
+/* Warm "paper-shimmer" for skeletons instead of cool grey. Scoped to skeleton classes
+   only — deliberately NOT [class*=animate-pulse], which also drives live alert banners
+   (e.g. owner-new-order-banner) that must not get a shimmer gradient. */
+[data-skin="paper"] [class*="skeleton"],
+[data-skin="paper"] [class*="Skeleton"] {
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(152, 118, 84, 0.10) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+}
+
+/* A barely-there inked rule under the grain on raised cards reads as pressed paper.
+   Kept off .data-surface (tables/forms/charts) so dense data stays crisp. */
+[data-skin="paper"] :is(.rounded-lg, .rounded-xl, .rounded-2xl)[class*="border"]:not(.data-surface) {
+  box-shadow: var(--elev-1);
+}
