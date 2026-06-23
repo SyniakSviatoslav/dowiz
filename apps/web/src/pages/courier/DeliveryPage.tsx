@@ -392,6 +392,13 @@ export function DeliveryPage() {
         />
         {/* eslint-enable jsx-a11y/aria-role */}
 
+        {/* Cancellation notice shows REGARDLESS of pickup state — a cancel BEFORE pickup is the
+            case worth surfacing (saves a wasted trip). Soft, not a wall; the human is never blocked. */}
+        {orderClosed && (
+          <div role="status" aria-live="polite" data-testid="courier-order-closed" className="rounded-xl px-3 py-2 text-sm text-center" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--brand-text)' }}>
+            {t('courier.order_closed_banner', 'The restaurant closed this order. You can stop — no delivery needed.')}
+          </div>
+        )}
         {!pickedUp ? (
           <motion.button
             onClick={handlePickup}
@@ -425,11 +432,6 @@ export function DeliveryPage() {
                   className="w-full h-12 px-4 outline-none text-base font-bold border rounded-xl transition-colors"
                   style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
                 />
-              </div>
-            )}
-            {orderClosed && (
-              <div role="status" aria-live="polite" data-testid="courier-order-closed" className="rounded-xl px-3 py-2 text-sm text-center" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--brand-text)' }}>
-                {t('courier.order_closed_banner', 'The restaurant closed this order. You can stop — no delivery needed.')}
               </div>
             )}
             {deliverError && (

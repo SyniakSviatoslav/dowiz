@@ -426,6 +426,14 @@ export function CheckoutPage() {
         await beginOtpFlow();
         return true;
       }
+      // A 200-body hard_block (item sold out / price changed since the cart was built) must show
+      // the designed "review your cart" message — not fall through Zod-parse into the generic
+      // "failed to place order" (the customer is never ambushed by a silent change). S11/S14.
+      if (pre.success && pre.data.outcome === 'hard_block') {
+        const reason = (pre.data as any).reasons?.[0]?.message;
+        setOrderError(reason || t('checkout.item_unavailable_error', 'Something in your cart just changed (an item sold out or its price updated). Please review your cart and try again.'));
+        return false;
+      }
 
       const orderRes = OrderCreateResponse.parse(raw);
       try {
