@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
-const BOT_SECRET = 'Ihatenuclearwar';
+const BOT_SECRET = process.env.***REDACTED***;
 const WEBHOOK_URL = `${BASE}/webhook/telegram/${BOT_SECRET}`;
-const BOT_TOKEN = '8996764379:AAHkuc5mgYQdkWG5rLZEjHc8a8k5MQsHDIk';
+const BOT_TOKEN = process.env.***REDACTED***;
 
 function uuid() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
