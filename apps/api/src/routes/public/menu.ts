@@ -49,7 +49,16 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
   // background, so a customer NEVER blocks on the DB once the cache is warm.
   const MENU_CACHE_TTL_MS = 30_000;
   const MENU_CACHE_STALE_MS = 300_000;
-  type MenuCacheEntry = { payload: any; freshUntil: number; staleUntil: number };
+  // Hard bound on cache size: the key is (slug,locale) and `locale` is caller-controlled, so
+  // without a cap an attacker can fan out `?locale=<counter>` and grow the Map until the
+  // instance OOMs (the cache built to stop the blink would become a remote crash primitive).
+  // FIFO eviction on insert keeps memory at ≤ MAX_ENTRIES × ~40KB ≈ 20MB regardless of input;
+  // real storefronts use a handful of locales so legit entries are never evicted in practice.
+  const MENU_CACHE_MAX_ENTRIES = 500;
+  // stale-on-error is a brief-hiccup guard, NOT an infinite fallback: never serve a copy older
+  // than this on the error path (beyond it, surface the failure rather than ancient prices).
+  const MENU_STALE_ON_ERROR_MAX_MS = 3_600_000; // 1h
+  type MenuCacheEntry = { payload: any; freshUntil: number; staleUntil: number; bornAt: number };
   const menuCache = new Map<string, MenuCacheEntry>();
   const menuInflight = new Map<string, Promise<any>>();
 
@@ -84,7 +93,12 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
     }
 
     const now = Date.now();
-    menuCache.set(key, { payload: menu, freshUntil: now + MENU_CACHE_TTL_MS, staleUntil: now + MENU_CACHE_STALE_MS });
+    // FIFO-evict the oldest entry when inserting a NEW key past the cap (bounds memory).
+    if (!menuCache.has(key) && menuCache.size >= MENU_CACHE_MAX_ENTRIES) {
+      const oldest = menuCache.keys().next().value;
+      if (oldest !== undefined) menuCache.delete(oldest);
+    }
+    menuCache.set(key, { payload: menu, freshUntil: now + MENU_CACHE_TTL_MS, staleUntil: now + MENU_CACHE_STALE_MS, bornAt: now });
     return menu;
   }
 
@@ -117,17 +131,24 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
     '/public/locations/:locationIdOrSlug/menu',
     async (request, reply) => {
       const { locationIdOrSlug } = request.params as any;
-      const locale = (request.query as any)?.locale || '';
+      // Normalize the caller-controlled locale to a bounded shape (BCP-47-ish: letters, digits,
+      // '-' '_', ≤12 chars) before it ever becomes a cache key — shrinks the key space and stops
+      // junk/unicode fan-out. read_public_menu still coerces unsupported locales to the default.
+      const locale = String((request.query as any)?.locale || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '')
+        .slice(0, 12);
       const key = `${locationIdOrSlug}::${locale}`;
 
       let menu: any;
       try {
         menu = await getMenu(key, locationIdOrSlug, locale);
       } catch (err) {
-        // Last-ditch blink guard: if the DB/pool hiccups but we have ANY cached copy,
-        // serve it rather than 500 → a blank storefront. A slightly stale menu beats none.
+        // Last-ditch blink guard: if the DB/pool hiccups but we have a RECENT-ENOUGH cached
+        // copy, serve it rather than 500 → a blank storefront. Bounded by MENU_STALE_ON_ERROR_MAX_MS
+        // so a prolonged outage surfaces the failure instead of serving ancient prices forever.
         const stale = menuCache.get(key);
-        if (stale) {
+        if (stale && Date.now() - stale.bornAt < MENU_STALE_ON_ERROR_MAX_MS) {
           reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
           reply.header('X-Menu-Version', String(stale.payload.menu_version));
           reply.header('X-Menu-Cache', 'stale-on-error');
