@@ -42,7 +42,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
   5. CLEANUP: Restore the location to open hours.
     - expect: Location returns to open state
 
-#### 1.3. 1c — venue-busy-banner renders and ordering stays open when kitchen_busy_until is set [BLOCKED: seed required]
+#### 1.3. 1c — venue-busy-banner renders and ordering stays open when kitchen_busy_until is set [PROVEN: e2e/tests/ui-improvements.spec.ts]
 
 **File:** `e2e/tests/client/venue-state.spec.ts`
 
@@ -62,7 +62,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
   6. CLEANUP: PATCH /api/owner/locations/:locationId/kitchen-busy with { busy_until: null } to clear the busy state.
     - expect: Location returns to open state
 
-#### 1.4. 1d — item-state-chip (sold-out) renders on unavailable products [BLOCKED: no sold-out item in demo]
+#### 1.4. 1d — item-state-chip (sold-out) renders on unavailable products [RESOLVED: corrected to real contract — unavailable product is HIDDEN (read_public_menu filters is_available=true); sold-out chip removed as dead code (4a249faa). PROVEN: e2e/tests/ui-improvements.spec.ts]
 
 **File:** `e2e/tests/client/venue-state.spec.ts`
 
@@ -82,7 +82,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
 
 **Seed:** `e2e/tests/smoke.spec.ts`
 
-#### 2.1. 2a — order-progress container renders with correct data-order-type for a CONFIRMED delivery order [BLOCKED: needs customer order session + order ID]
+#### 2.1. 2a — order-progress container renders with correct data-order-type for a CONFIRMED delivery order [PROVEN: e2e/tests/client/order-stepper.spec.ts]
 
 **File:** `e2e/tests/client/order-stepper.spec.ts`
 
@@ -108,7 +108,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
     - expect: expect(page.locator('[data-testid="order-step-delivered"]')).toBeVisible()
     - expect: expect(page.locator('[data-testid="order-step-picked_up"]')).not.toBeVisible()
 
-#### 2.2. 2b — order-progress shows pickup branch (READY→PICKED_UP) for a pickup order [BLOCKED: needs pickup order]
+#### 2.2. 2b — order-progress shows pickup branch (READY→PICKED_UP) for a pickup order [PROVEN: e2e/tests/client/order-stepper.spec.ts]
 
 **File:** `e2e/tests/client/order-stepper.spec.ts`
 
@@ -124,7 +124,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
     - expect: expect(page.locator('[data-testid="order-step-in_delivery"]')).not.toBeVisible()
     - expect: expect(page.locator('[data-testid="order-step-delivered"]')).not.toBeVisible()
 
-#### 2.3. 2c — order-progress shows terminal styling for REJECTED order [BLOCKED: needs rejected order]
+#### 2.3. 2c — order-progress shows terminal styling for REJECTED order [PROVEN: e2e/tests/client/order-stepper.spec.ts]
 
 **File:** `e2e/tests/client/order-stepper.spec.ts`
 
@@ -139,7 +139,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
     - expect: The progress fill element has background containing 'danger' or a danger-red hex value
     - expect: The order-step-rejected dot colour reflects the terminal/danger state
 
-#### 2.4. 2d — order-progress shows terminal styling for CANCELLED order [BLOCKED: needs cancelled order]
+#### 2.4. 2d — order-progress shows terminal styling for CANCELLED order [PROVEN: e2e/tests/client/order-stepper.spec.ts]
 
 **File:** `e2e/tests/client/order-stepper.spec.ts`
 
@@ -303,7 +303,7 @@ Comprehensive Playwright test plan for the six UI improvements shipped to stagin
   4. CLEANUP: Click the delete (trash) button on the new schedule row to remove it.
     - expect: Schedule row is removed from the list
 
-#### 5.4. 5d — Kitchen-busy toggle (API only — no UI testid present on staging) [BLOCKED: no data-testid='kitchen-busy-toggle' in admin UI]
+#### 5.4. 5d — Kitchen-busy toggle [RESOLVED: data-testid='kitchen-busy-toggle' added to MenuManagerPage (f87391b5); visibility PROVEN in e2e/tests/ui-improvements.spec.ts; the busy END-TO-END effect is proven via §1c (banner + chip=busy on /s/demo)]
 
 **File:** `e2e/tests/admin/menu-schedule.spec.ts`
 
