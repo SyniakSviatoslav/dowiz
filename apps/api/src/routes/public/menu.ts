@@ -76,7 +76,7 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
       const { slug } = request.params as any;
       const res = await server.db.query(
         `SELECT l.id, l.name, l.slug, l.currency_code, l.currency_minor_unit, l.default_locale,
-                l.lat, l.lng, l.delivery_paused, l.hours_json, l.address,
+                l.lat, l.lng, l.delivery_paused, l.hours_json, l.address, l.kitchen_busy_until,
                 lt.google_rating, lt.google_review_count, lt.google_maps_url,
                 lt.google_place_id, lt.social_instagram, lt.social_facebook
          FROM locations l
@@ -110,6 +110,14 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
         } catch { /* ignore parse errors */ }
       }
 
+      // MENU-AVAILABILITY (additive) · surface the contract's `status` (open|closed|busy)
+      // distinct from the legacy `isOpen` boolean. `busy` = venue is OPEN but the owner
+      // has flagged the kitchen busy / raised ETA until kitchen_busy_until (a future ts).
+      // NULL/past kitchen_busy_until => the open/closed result is untouched.
+      const busyUntil = r.kitchen_busy_until ? new Date(r.kitchen_busy_until) : null;
+      const isBusy = isOpen && busyUntil != null && busyUntil.getTime() > Date.now();
+      const status: 'open' | 'closed' | 'busy' = !isOpen ? 'closed' : isBusy ? 'busy' : 'open';
+
       return reply.send({
         id: r.id, name: r.name, slug: r.slug,
         currency_code: r.currency_code, currency_minor_unit: r.currency_minor_unit,
@@ -118,6 +126,7 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
         lng: r.lng != null ? Number(r.lng) : null,
         address: r.address ?? null,
         isOpen,
+        status,
         googleRating: r.google_rating != null ? Number(r.google_rating) : null,
         googleReviewCount: r.google_review_count != null ? Number(r.google_review_count) : null,
         googleMapsUrl: r.google_maps_url ?? null,

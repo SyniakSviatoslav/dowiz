@@ -575,7 +575,11 @@ async function transitionOrder(db: any, messageBus: any, orderId: string, locati
     if (!cur.rowCount) throw { statusCode: 404, error: 'Order not found' };
 
     // Canonical path: updateOrderStatus handles state machine, anti-race, and events.
-    await updateOrderStatus(client, orderId, locationId, newStatus as any, { messageBus });
+    // ORDER-TRACKING: pass the reason as the order_status_history.comment (additive).
+    await updateOrderStatus(client, orderId, locationId, newStatus as any, {
+      messageBus,
+      comment: reason && newStatus === 'REJECTED' ? reason : null,
+    });
 
     // Handle rejection_reason separately (updateOrderStatus doesn't set it)
     if (reason && newStatus === 'REJECTED') {
