@@ -10,7 +10,7 @@ const MediaRenderer = lazy(() => import('../../components/media').then(m => ({ d
 const RevealOverlay = lazy(() => import('../../components/media/RevealOverlay').then(m => ({ default: m.RevealOverlay })));
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle } from '@deliveryos/ui';
+import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, NomadicCredit, isPaperSkinEnabled } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 
 interface ProductModifier {
@@ -1191,6 +1191,7 @@ export function MenuPage() {
               )}
             </div>
           )}
+          {isPaperSkinEnabled() && <NomadicCredit className="mt-3 max-w-xs" />}
         </footer>
       )}
 
