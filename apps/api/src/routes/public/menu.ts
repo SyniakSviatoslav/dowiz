@@ -34,33 +34,110 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
   // a per-request toggle.
   const mediaRichEnabled = loadEnv().MEDIA_RICH_ENABLED === 'true';
 
+  // ── In-process menu cache (the storefront-blink fix) ──────────────────────────────
+  // The public menu is the hottest read and changes only when the owner republishes
+  // (menu_version bumps). Under load WITHOUT this cache every customer hit ran the full
+  // read_public_menu query: a concurrent burst checked out more operational-pool
+  // connections than the pool has (max), so excess requests waited connectionTimeoutMillis
+  // then threw → HTTP 500 → the FE rendered an empty storefront. Caching collapses a burst
+  // into ONE DB execution per (slug,locale,TTL), taking the DB off the hot path.
+  //
+  // Per-instance (each machine warms its own). TTL is short because availability windows
+  // (menu_schedules) are time-based — 30s sits well under the finest mealtime boundary, and
+  // the FE already polls menu_version for finer-grained invalidation. Stale-while-revalidate:
+  // an expired-but-usable copy is served instantly while a single deduped refresh runs in the
+  // background, so a customer NEVER blocks on the DB once the cache is warm.
+  const MENU_CACHE_TTL_MS = 30_000;
+  const MENU_CACHE_STALE_MS = 300_000;
+  type MenuCacheEntry = { payload: any; freshUntil: number; staleUntil: number };
+  const menuCache = new Map<string, MenuCacheEntry>();
+  const menuInflight = new Map<string, Promise<any>>();
+
+  // One DB load + shaping pass. Returns the fully-shaped payload (image URLs resolved,
+  // location_id/name present) or null for an unknown location. Updates the cache on success.
+  async function refreshMenu(key: string, slug: string, locale: string): Promise<any | null> {
+    const res = await server.db.query(`SELECT read_public_menu($1, $2) as menu`, [slug, locale]);
+    const menu = res.rows[0]?.menu;
+    if (!menu) return null;
+
+    // F2: location_id/name come straight from read_public_menu (migration 1790000000064),
+    // so the route no longer needs a second query. Fallback for deploy/rollback skew where
+    // the live function predates 064 and omits them — keeps a down() safe.
+    if (menu.location_id === undefined || menu.location_name === undefined) {
+      const locRes = await server.db.query(
+        `SELECT id, name FROM locations WHERE id::text = $1 OR slug = $1`,
+        [slug],
+      );
+      menu.location_id = locRes.rows[0]?.id ?? null;
+      menu.location_name = locRes.rows[0]?.name ?? '';
+    }
+    menu.locationId = menu.location_id; // preserve the camelCase alias prior consumers saw
+
+    if (menu.categories && Array.isArray(menu.categories)) {
+      for (const cat of menu.categories) {
+        if (cat.products && Array.isArray(cat.products)) {
+          for (const prod of cat.products) {
+            prod.imageUrl = getImageUrl(prod.image_key || prod.imageKey);
+          }
+        }
+      }
+    }
+
+    const now = Date.now();
+    menuCache.set(key, { payload: menu, freshUntil: now + MENU_CACHE_TTL_MS, staleUntil: now + MENU_CACHE_STALE_MS });
+    return menu;
+  }
+
+  async function getMenu(key: string, slug: string, locale: string): Promise<any | null> {
+    const now = Date.now();
+    const cached = menuCache.get(key);
+    if (cached && now < cached.freshUntil) return cached.payload;
+
+    // Stale-but-usable: serve it now, refresh in the background (deduped per key).
+    if (cached && now < cached.staleUntil) {
+      if (!menuInflight.has(key)) {
+        menuInflight.set(
+          key,
+          refreshMenu(key, slug, locale).catch(() => null).finally(() => menuInflight.delete(key)),
+        );
+      }
+      return cached.payload;
+    }
+
+    // Cold (or fully stale): block on a single shared refresh so a burst makes one DB call.
+    let inflight = menuInflight.get(key);
+    if (!inflight) {
+      inflight = refreshMenu(key, slug, locale).finally(() => menuInflight.delete(key));
+      menuInflight.set(key, inflight);
+    }
+    return inflight;
+  }
+
   server.get(
     '/public/locations/:locationIdOrSlug/menu',
     async (request, reply) => {
       const { locationIdOrSlug } = request.params as any;
       const locale = (request.query as any)?.locale || '';
+      const key = `${locationIdOrSlug}::${locale}`;
 
-      const [res, locRes] = await Promise.all([
-        server.db.query(`SELECT read_public_menu($1, $2) as menu`, [locationIdOrSlug, locale]),
-        server.db.query(`SELECT id, name FROM locations WHERE id::text = $1 OR slug = $1`, [locationIdOrSlug]),
-      ]);
-
-      const menu = res.rows[0]?.menu;
-      if (!menu) {
-        return reply.status(404).send({ error: 'Location not found' });
+      let menu: any;
+      try {
+        menu = await getMenu(key, locationIdOrSlug, locale);
+      } catch (err) {
+        // Last-ditch blink guard: if the DB/pool hiccups but we have ANY cached copy,
+        // serve it rather than 500 → a blank storefront. A slightly stale menu beats none.
+        const stale = menuCache.get(key);
+        if (stale) {
+          reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+          reply.header('X-Menu-Version', String(stale.payload.menu_version));
+          reply.header('X-Menu-Cache', 'stale-on-error');
+          return reply.send(stale.payload);
+        }
+        throw err;
       }
 
-      menu.location_id = menu.locationId = locRes.rows[0]?.id || null;
-      menu.location_name = locRes.rows[0]?.name || '';
-
-      if (menu.categories && Array.isArray(menu.categories)) {
-        for (const cat of menu.categories) {
-          if (cat.products && Array.isArray(cat.products)) {
-            for (const prod of cat.products) {
-              prod.imageUrl = getImageUrl(prod.image_key || prod.imageKey);
-            }
-          }
-        }
+      if (!menu) {
+        return reply.status(404).send({ error: 'Location not found' });
       }
 
       reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
