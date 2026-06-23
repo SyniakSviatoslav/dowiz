@@ -22,7 +22,17 @@ Categories → route: `BUG`/`A11Y_FUNC` → new RED row in `e2e/MATRIX.md` (inne
 ## Saturation tracker
 | Round | Personas × VP × locale run | NEW valid in-scope (≥minor) | Rounds-without-new | Notes |
 |------:|----------------------------|----------------------------:|-------------------:|-------|
-| —     | (loop not yet entered)     | —                           | 0                  | Phase A scaffolding only |
+| 0 (smoke) | 1 (client-first-timer, scripted) | 0 | 0 | Checkpoint-A plumbing smoke only — NOT a discovery round (ScriptedReasoner ≠ discovery engine; does not count toward saturation) |
+| —     | (Phase B not entered — needs driver LLM key) | — | 0 | — |
+
+### Smoke triage (round 0)
+The plumbing smoke surfaced 2 friction findings: `…:click:add it to the cart:unactionable`.
+**Verdict: NOT_A_BUG (scripted-selector artifact).** The real add-to-cart control exists
+(`packages/ui/src/components/client/ProductCard.tsx:182`, `aria-label` = `tooltip.add_to_cart`;
+modal CTA `client.add_to_cart`, `MenuPage.tsx:1150`) — there is no `data-testid="add-to-cart"`,
+so the ScriptedReasoner's guessed selector simply didn't match. Dropped with reason. This is
+exactly why authentic discovery needs `LlmReasoner` (it reads the observation and clicks the
+real label) — a scripted plan cannot adapt, so it must NOT be used as the discovery engine.
 
 Exit (discovery) = a FULL round (all personas × {390,768,1280} × {al,en}) yields **0** new valid in-scope findings ≥ minor, held **K** consecutive rounds (K=2; go-live K=3). The set is fixed-or-expanding between rounds, never narrowed.
 
