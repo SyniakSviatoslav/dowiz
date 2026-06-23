@@ -217,6 +217,12 @@ export function CheckoutPage() {
   const [cashAmount, setCashAmount] = useState<number>(0);
   const [tipAmount, setTipAmount] = useState<number>(0); // UX-4 optional courier tip
   const [orderError, setOrderError] = useState('');
+  const orderErrorRef = useRef<HTMLDivElement>(null);
+  // On a submit failure the form scrolls to top; the error banner sits at the bottom and was
+  // off-screen on mobile (read as a "silent" failure). Bring it into view whenever it's set.
+  useEffect(() => {
+    if (orderError) orderErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [orderError]);
   // #4 — restaurant phone for the failure fallback, cached on mount so the "call the
   // restaurant" CTA never depends on a network fetch made under the same load that
   // caused the failure. Null = no CTA (fail-soft to the generic toast).
@@ -398,7 +404,6 @@ export function CheckoutPage() {
             delivery: {
               pin: { lat: pinLat, lng: pinLng },
               address_text: address || undefined,
-              notes: notes.trim() || undefined,
             },
           }),
           payment: { method: 'cash' },
@@ -412,11 +417,13 @@ export function CheckoutPage() {
               apartment: apartment.trim(),
             }
           },
-          delivery_instructions: instructionOption
-            ? instructionCustom
-              ? `${instructionOption}: ${instructionCustom}`
-              : instructionOption
-            : undefined,
+          // The required "how to find you" notes are location-finding detail for the courier, so
+          // they ride in delivery_instructions (the persisted, courier-visible field) — the server
+          // delivery schema is .strict() and rejects an unknown `notes` key. Dropoff chip appended.
+          delivery_instructions: [
+            notes.trim(),
+            instructionOption ? (instructionCustom ? `${instructionOption}: ${instructionCustom}` : instructionOption) : '',
+          ].filter(Boolean).join(' · ').slice(0, 500) || undefined,
         },
       });
 
@@ -904,7 +911,7 @@ export function CheckoutPage() {
       </form>
 
       {orderError && (
-        <div role="alert" className="p-4 rounded-xl border text-sm flex items-start gap-3" style={{ background: 'var(--color-danger-light)', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>
+        <div ref={orderErrorRef} role="alert" className="p-4 rounded-xl border text-sm flex items-start gap-3" style={{ background: 'var(--color-danger-light)', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>
           <i className="ti ti-alert-triangle text-lg shrink-0 mt-0.5" />
           <div>
             <p className="font-semibold mb-1">{t('checkout.cannot_place', 'Order cannot be placed')}</p>
