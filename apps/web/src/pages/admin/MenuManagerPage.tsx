@@ -54,6 +54,51 @@ interface ScheduleRow {
   mode: 'daily' | 'recurring' | 'period';
   startMinute: number | null; endMinute: number | null;
 }
+// MENU-AVAILABILITY · owner toggle for venue `busy` mode (kitchen_busy_until). Completes the
+// busy feature: the storefront already SHOWS busy; this is how the owner SETS it. Honest initial
+// state read from the public /info; PATCH sets a 30-min window or clears it.
+function KitchenBusyToggle() {
+  const { t } = useI18n();
+  const [locationId, setLocationId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    apiClient<any>('/owner/settings').then((r: any) => {
+      if (r?.id) setLocationId(r.id);
+      if (r?.slug) {
+        fetch(`/public/locations/${r.slug}/info`).then(x => (x.ok ? x.json() : null))
+          .then(d => { if (d?.status === 'busy') setBusy(true); }).catch(() => {});
+      }
+    }).catch(() => {});
+  }, []);
+  const toggle = async () => {
+    if (!locationId || loading) return;
+    setLoading(true);
+    const next = !busy;
+    try {
+      const busy_until = next ? new Date(Date.now() + 30 * 60 * 1000).toISOString() : null;
+      const r = await apiClient<any>(`/owner/locations/${locationId}/kitchen-busy`, { method: 'PATCH', body: { busy_until } });
+      setBusy(!!r?.kitchenBusyUntil && new Date(r.kitchenBusyUntil) > new Date());
+    } catch { /* keep prior state */ } finally { setLoading(false); }
+  };
+  return (
+    <button
+      type="button"
+      data-testid="kitchen-busy-toggle"
+      data-busy={busy}
+      onClick={toggle}
+      disabled={loading || !locationId}
+      className="w-full rounded-xl border p-3 text-sm font-semibold transition-colors disabled:opacity-50"
+      style={busy
+        ? { background: 'var(--status-pending-bg)', color: 'var(--status-pending)', borderColor: 'var(--status-pending)' }
+        : { background: 'var(--brand-surface)', color: 'var(--brand-text)', borderColor: 'var(--brand-border)' }}
+    >
+      <i className={`ti ${busy ? 'ti-flame' : 'ti-flame-off'} mr-1.5`} />
+      {busy ? t('admin.kitchen_busy_on', 'Kitchen busy — tap to clear') : t('admin.kitchen_busy_off', 'Mark kitchen busy (raised ETA)')}
+    </button>
+  );
+}
+
 function MenuScheduleEditor({ categories }: { categories: Category[] }) {
   const { t } = useI18n();
   const { showToast } = useToast();
@@ -494,6 +539,7 @@ export function MenuManagerPage() {
       </div>
 
       {/* MENU-AVAILABILITY · schedule / mealtime editor (additive, collapsed by default) */}
+      <KitchenBusyToggle />
       <MenuScheduleEditor categories={categories} />
 
       {error && (
