@@ -1,7 +1,7 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Input, FormField, LanguageSwitcher, useI18n } from '@deliveryos/ui';
+import { Button, Input, FormField, LanguageSwitcher, useI18n, PaperIllustration, isPaperSkinEnabled } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { CourierLoginResponse } from '@deliveryos/shared-types';
 
@@ -43,7 +43,13 @@ export function LoginPage() {
         <div className="absolute top-4 right-4">
           <LanguageSwitcher variant="full" />
         </div>
-        <div className="h-1 w-16 mx-auto mb-6 rounded-full" style={{ background: 'linear-gradient(90deg, var(--brand-primary), var(--brand-primary-hover))' }} />
+        {isPaperSkinEnabled() ? (
+          <div className="mx-auto mb-4 max-w-[220px]">
+            <PaperIllustration name="scooter" animated />
+          </div>
+        ) : (
+          <div className="h-1 w-16 mx-auto mb-6 rounded-full" style={{ background: 'linear-gradient(90deg, var(--brand-primary), var(--brand-primary-hover))' }} />
+        )}
 
         <div className="card-base p-8 space-y-6">
           <div className="text-center space-y-1.5">
