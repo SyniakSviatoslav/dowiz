@@ -65,7 +65,7 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
       const devLoc = memRes.rows[0]?.location_id || null;
       const payload: Record<string, unknown> = { role: 'owner', userId: uid, sub: uid };
       if (devLoc) payload.activeLocationId = devLoc;
-      const devToken = await signDevToken(payload as any, '1d');
+      const devToken = await signDevToken(payload as any, '7d');
       return reply.send({ access_token: devToken, userId: uid, activeLocationId: devLoc });
     }
 
