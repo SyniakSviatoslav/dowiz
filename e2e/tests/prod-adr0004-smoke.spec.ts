@@ -6,9 +6,10 @@ import { test, expect } from '@playwright/test';
 // Run: VITE_BASE_URL=https://dowiz.fly.dev pnpm exec playwright test prod-adr0004-smoke --project=desktop --reporter=list
 const CREDS = { email: 'test@dowiz.com', password: 'test123456' };
 
-test('prod up + storefront SSR serves', async ({ request }) => {
-  const res = await request.get('/s/demo/');
-  expect([200, 304], `storefront (${res.status()})`).toContain(res.status());
+test('prod up + app shell serves', async ({ request }) => {
+  // Env-agnostic liveness (slug data differs per env): the app root must serve.
+  const res = await request.get('/');
+  expect([200, 304], `prod root (${res.status()})`).toContain(res.status());
 });
 
 test('security: Google OAuth backend gated on prod (404)', async ({ request }) => {
