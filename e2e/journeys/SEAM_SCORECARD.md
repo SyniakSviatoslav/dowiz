@@ -27,5 +27,22 @@ Synthesized from 3 adversarial audits (hater · UX-critique · QA-seams). Status
 | F13 | Q5 continuity-on-refresh mid-journey untested | — | TODO (add assertion) |
 | F14 | Two divergent WS clients (forever vs 10-cap reconnect) — one freezes permanently | useWebSocket.ts vs ui/websocket.ts | TODO/refactor |
 
+## Status after batch 1+2 (commits b033bf8e, 2074f7d4 + seam-polish.spec.ts)
+- F1/F2/F11 SMOOTH (courier delivery honesty; cancel-aware; dev-mock gated) — committed, typecheck green.
+- F3 SMOOTH — verified on real staging UI (CANCELLED green: order-terminal-exit + order-again→/s/;
+  REJECTED is the identical render block, blocked from a clean run only by the menu flake below).
+- F4 (token-expiry soft state), F5 (map FOWS), F6 (owner error toast), F8/F9-partial (humane checkout
+  errors), F10 (no phantom toast) — committed, typecheck green.
+
+## Remaining (polish-debt, next rounds)
+- F7 owner hollow-card flash · F9-full cart↔menu_version reconcile · F12 aria-live announce ·
+  F13 continuity-on-refresh assertion · F14 consolidate the two WS clients (forever vs 10-cap).
+
+## BLOCKED-server (flagged, NOT fixed here — server/infra read-only)
+- 🔴 The public menu endpoint `/public/locations/demo/menu` intermittently returns EMPTY
+  (0 products) for multi-second windows under load on staging — the storefront would blink
+  empty for real customers. curl + the app both see it. This is a server/DB/infra issue, not a
+  FE seam; needs a separate server-side diagnosis (caching/pool/read_public_menu under load).
+
 > Iron rules: server read-only; never block the human (courier always completes); optimistic always
 > reconciles to server; never accuse the client; flag-debt anything needing a server change.
