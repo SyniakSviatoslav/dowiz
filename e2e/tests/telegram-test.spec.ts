@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Telegram Bot Tests', () => {
   test('should get bot info', async () => {
-    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8996764379:AAHkuc5mgYQdkWG5rLZEjHc8a8k5MQsHDIk';
+    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
     const url = `https://api.telegram.org/bot${BOT_TOKEN}/getMe`;
     const resp = await fetch(url);
     expect(resp.ok).toBeTruthy();
@@ -12,7 +12,7 @@ test.describe('Telegram Bot Tests', () => {
   });
   
   test('should get webhook info', async () => {
-    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8996764379:AAHkuc5mgYQdkWG5rLZEjHc8a8k5MQsHDIk';
+    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
     const url = `https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`;
     const resp = await fetch(url);
     expect(resp.ok).toBeTruthy();
@@ -22,7 +22,7 @@ test.describe('Telegram Bot Tests', () => {
   });
   
   test('should get updates', async () => {
-    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8996764379:AAHkuc5mgYQdkWG5rLZEjHc8a8k5MQsHDIk';
+    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
     const url = `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=0&limit=1&timeout=0`;
     const resp = await fetch(url);
     // Don't fail on 409, just log it
