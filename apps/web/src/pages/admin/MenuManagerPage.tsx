@@ -1062,6 +1062,10 @@ export function MenuManagerPage() {
                     </div>
                   )}
 
+                  <p className="text-[10px] flex items-start gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
+                    <i className="ti ti-info-circle mt-0.5 shrink-0" aria-hidden="true" />
+                    <span>{t('admin.import_privacy_notice', 'Your file is sent to an AI service to read the menu. Upload only your menu — avoid pages with other people’s personal data (staff lists, invoices, customer details).')}</span>
+                  </p>
                   <Button onClick={handleImportUpload} isLoading={importLoading} disabled={!importFile} className="w-full">
                     <i className="ti ti-brain" /> {t('admin.analyze_menu', 'Analyze with AI')}
                   </Button>

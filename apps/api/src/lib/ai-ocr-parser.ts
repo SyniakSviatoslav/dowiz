@@ -516,8 +516,11 @@ CRITICAL RULES:
 
       llmResponse = await callLlm(provider, prompt, modelForProvider, 120000);
     } catch (e: any) {
-      issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `LLM Failed (${provider}): ${e.message}`, severity: 'error' });
-      return this.fallbackError(issues);
+      // The configured LLM failed (provider down / out of credits / every free-model promo ended).
+      // Degrade — don't cascade to 0 products: fall back to the zero-dependency heuristic structurer
+      // so the owner still gets a reviewable draft. Surfaced as a warning, not a hard error.
+      issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `LLM unavailable (${provider}): ${e.message} — fell back to heuristic extraction`, severity: 'warning' });
+      return this.heuristicResult(rawText, input.config, issues, ocrEngineUsed, ocrMs, redactedText);
     }
     const llmMs = Date.now() - t1;
 
