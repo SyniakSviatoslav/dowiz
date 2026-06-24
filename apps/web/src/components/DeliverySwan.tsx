@@ -126,4 +126,6 @@ const DSWAN_CSS = `
   0%,100%{transform:rotate(-5deg)}
   50%{transform:rotate(5deg)}
 }
+/* self-draw the ink line: pathLength=1 → reveal the stroke from hidden to full */
+@keyframes dzDSwanDraw{to{stroke-dashoffset:0}}
 `;
