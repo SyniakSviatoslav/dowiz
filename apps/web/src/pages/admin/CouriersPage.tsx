@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { Button, Input, EmptyState, CourierLiveMap, useI18n, PriceDisplay, useToast } from '@deliveryos/ui';
+import { motion, useReducedMotion } from 'framer-motion';
+import { Button, Input, EmptyState, CourierLiveMap, useI18n, PriceDisplay, useToast, SkeletonBase } from '@deliveryos/ui';
 import type { CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
@@ -47,9 +47,34 @@ const STATUS_COLORS: Record<string, string> = {
   offline: 'var(--brand-text-muted)',
 };
 
+// Derive a human label even when the courier name is unresolved: prefer the
+// real name, fall back to the (masked) phone, never the literal "Unknown".
+function displayName(c: { name: string; phone: string }): string {
+  const name = (c.name || '').trim();
+  if (name && name.toLowerCase() !== 'unknown') return name;
+  if (c.phone) return c.phone;
+  return '';
+}
+
+// Initials from the best label; phone-only labels collapse to the leading
+// digit, and a truly empty label gets a neutral glyph (never a stray "U").
+function initialsOf(label: string): string {
+  const parts = label.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) {
+    const p = parts[0] ?? '';
+    const alpha = p.replace(/[^A-Za-zÀ-ÿ]/g, '');
+    return ((alpha || p).slice(0, 2) || '?').toUpperCase();
+  }
+  const first = parts[0]?.[0] ?? '';
+  const last = parts[parts.length - 1]?.[0] ?? '';
+  return ((first + last) || '?').toUpperCase();
+}
+
 export function CouriersPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
+  const reduceMotion = useReducedMotion();
   const [couriers, setCouriers] = useState<Courier[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -69,12 +94,22 @@ export function CouriersPage() {
 
   useEffect(() => {
     apiClient<any>('/owner/settings').then((res: any) => {
-      if (res.id) setLocationId(res.id);
+      if (res.id) {
+        setLocationId(res.id);
+      } else {
+        // No location resolved → fetchCouriers will never run; release the
+        // skeleton so the empty state shows instead of a perpetual loader.
+        setLoading(false);
+      }
       // Center the live map on the store's stored coords (same source SettingsPage uses).
       if (typeof res.lat === 'number' && typeof res.lng === 'number') {
         setMapCenter([res.lng, res.lat]);
       }
-    }).catch((err) => console.debug('[CouriersPage] failed to load settings:', err));
+    }).catch((err) => {
+      console.debug('[CouriersPage] failed to load settings:', err);
+      setLoading(false);
+      setError(t('admin.couriers_load_error', 'Could not load couriers. Check your connection and try again.'));
+    });
   }, []);
 
   const fetchDetails = async (courierId: string) => {
@@ -115,11 +150,11 @@ export function CouriersPage() {
         setNewCourierEmail('');
         fetchCouriers();
       } else {
-        setInviteError('Failed to create invite');
+        setInviteError(t('admin.invite_failed', 'Could not create invite. Please try again.'));
       }
     } catch (err) { 
       console.error('[CouriersPage] failed to create invite:', err);
-      setInviteError('Failed to create invite'); 
+      setInviteError(t('admin.invite_failed', 'Could not create invite. Please try again.')); 
     }
   };
 
@@ -139,7 +174,7 @@ export function CouriersPage() {
       if (Array.isArray(list) && list.length > 0) {
         setCouriers(list.map((c: any) => ({
           id: c.id,
-          name: c.full_name || c.name || 'Unknown',
+          name: (c.full_name || c.name || '').trim(),
           phone: c.masked_phone || c.maskedPhone || '',
           status: c.status === 'active' || c.status === 'available' ? 'online' : c.status === 'on_delivery' ? 'busy' : 'offline',
           deliveriesCompleted: c.deliveries_completed || c.ordersToday || 0,
@@ -161,24 +196,24 @@ export function CouriersPage() {
     if (locationId) fetchCouriers();
   }, [locationId, fetchCouriers]);
 
-  const filtered = couriers.filter(
-    (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.phone.includes(search)
-  );
+  const filtered = couriers.filter((c) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return displayName(c).toLowerCase().includes(q) || c.phone.toLowerCase().includes(q);
+  });
 
   const couriersOnMap: CourierOnMap[] = useMemo(() => {
-    return filtered.map((c) => ({
+    return filtered.map((c) => {
+      const label = displayName(c) || t('admin.courier_role', 'Courier');
+      return {
       id: c.id,
-      name: c.name,
-      initials: c.name
-        .split(' ')
-        .map((n) => n[0])
-        .join(''),
+      name: label,
+      initials: initialsOf(label),
       lngLat: courierPositions[c.id] || mapCenter || [19.817, 41.331],
       status: c.status === 'offline' ? 'offline' : c.status === 'busy' ? 'busy' : 'online',
-    }));
-  }, [filtered, courierPositions, mapCenter]);
+    };
+    });
+  }, [filtered, courierPositions, mapCenter, t]);
 
   const onlineCount = couriers.filter((c) => c.status !== 'offline').length;
 
@@ -281,69 +316,107 @@ export function CouriersPage() {
       </div>
 
       {error ? (
-        <EmptyState title={t('common.error', 'Error')} description={error} />
+        <EmptyState
+          title={t('common.error', 'Error')}
+          description={error}
+          icon={<i className="ti ti-cloud-off text-3xl text-[var(--brand-text-muted)]" />}
+          action={
+            <Button variant="secondary" size="sm" onClick={() => { setError(''); setLoading(true); fetchCouriers(); }}>
+              {t('common.retry', 'Try again')}
+            </Button>
+          }
+        />
       ) : loading ? (
-        <div className="animate-pulse space-y-3">
+        <div
+          className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] overflow-hidden"
+          aria-busy="true"
+          aria-live="polite"
+        >
           {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-16 bg-[var(--brand-surface)] rounded-[var(--brand-radius)] w-full"
-            />
+            <div key={i} className="p-4 border-b border-[var(--brand-border)] last:border-b-0 flex items-center gap-3">
+              <SkeletonBase className="w-10 h-10 rounded-full shrink-0" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <SkeletonBase className="h-4 w-1/3 rounded" />
+                <SkeletonBase className="h-3 w-1/4 rounded" />
+              </div>
+              <SkeletonBase className="h-5 w-16 rounded-full shrink-0" />
+            </div>
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <EmptyState title={t('admin.no_couriers', 'No couriers')} description={search ? t('admin.no_couriers_match', 'No couriers match your search.') : t('admin.no_couriers_hint', 'Send an invite link to add your first courier.')} />
+        <EmptyState
+          title={search ? t('admin.no_couriers_match_title', 'No matches') : t('admin.no_couriers', 'No couriers yet')}
+          description={search ? t('admin.no_couriers_match', 'No couriers match your search.') : t('admin.no_couriers_hint', 'Send an invite link to add your first courier.')}
+          icon={<i className="ti ti-moped text-3xl text-[var(--brand-text-muted)]" />}
+          action={!search ? (
+            <Button size="sm" onClick={() => setShowAddForm(true)}>
+              + {t('admin.add_courier', 'Add Courier')}
+            </Button>
+          ) : undefined}
+        />
       ) : (
         <motion.div
           className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] overflow-hidden"
-          variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.04, delayChildren: 0.05 } } }}
+          variants={{ hidden: {}, visible: { transition: { staggerChildren: reduceMotion ? 0 : 0.04, delayChildren: reduceMotion ? 0 : 0.05 } } }}
           initial="hidden"
           animate="visible"
         >
           {filtered.map((c) => (
             <motion.div
               key={c.id}
-              variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24 } } }}
+              variants={reduceMotion
+                ? { hidden: { opacity: 1 }, visible: { opacity: 1 } }
+                : { hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24 } } }}
             >
-              <motion.div
+              <motion.button
+                type="button"
                 whileTap={{ scale: 0.99 }}
-                className="p-4 border-b border-[var(--brand-border)] flex items-center justify-between gap-3 cursor-pointer hover:bg-[var(--brand-surface-raised)] transition-colors"
+                aria-expanded={selectedCourier === c.id}
+                className="w-full text-left p-4 border-b border-[var(--brand-border)] flex items-center justify-between gap-3 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] [@media(hover:hover)]:hover:bg-[var(--brand-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
                 onClick={() => fetchDetails(c.id)}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
-                    style={{
-                      backgroundColor:
-                        c.status === 'offline'
-                          ? 'var(--brand-text-muted)'
-                          : 'var(--brand-primary)',
-                    }}
-                  >
-                    {c.name
-                      .split(' ')
-                      .map((n) => n[0])
-                      .join('')}
+                  <div className="relative shrink-0">
+                    <div
+                      className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
+                      style={{
+                        backgroundColor:
+                          c.status === 'offline'
+                            ? 'var(--brand-text-muted)'
+                            : 'var(--brand-primary)',
+                      }}
+                    >
+                      {initialsOf(displayName(c))}
+                    </div>
+                    <span
+                      aria-hidden
+                      className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--brand-surface)]"
+                      style={{ backgroundColor: STATUS_COLORS[c.status] }}
+                    />
                   </div>
                   <div className="min-w-0">
-                    <div className="font-medium truncate">{c.name}</div>
-                    <div className="text-xs text-[var(--brand-text-muted)]">{c.phone}</div>
+                    <div className="font-medium truncate text-[var(--brand-text)]">
+                      {displayName(c) || t('admin.unnamed_courier', 'Pending courier')}
+                    </div>
+                    {c.phone
+                      ? <div className="text-xs text-[var(--brand-text-muted)] truncate">{c.phone}</div>
+                      : <div className="text-xs text-[var(--brand-text-muted)] truncate">{t('admin.no_phone', 'No phone yet')}</div>}
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right hidden sm:block">
-                    <div className="text-sm font-medium">{c.deliveriesCompleted}</div>
+                    <div className="text-sm font-medium text-[var(--brand-text)]">{c.deliveriesCompleted}</div>
                     <div className="text-xs text-[var(--brand-text-muted)]">{t('admin.deliveries', 'deliveries')}</div>
                   </div>
                   <span
                     className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize"
                     style={{ backgroundColor: `${STATUS_COLORS[c.status]}20`, color: STATUS_COLORS[c.status] }}
                   >
-                    {c.status}
+                    {t(`admin.courier_status_${c.status}`, c.status)}
                   </span>
-                  <i className={`ti ${selectedCourier === c.id ? 'ti-chevron-up' : 'ti-chevron-down'} text-sm text-[var(--brand-text-muted)]`} />
+                  <i className={`ti ${selectedCourier === c.id ? 'ti-chevron-up' : 'ti-chevron-down'} text-sm text-[var(--brand-text-muted)] transition-transform duration-[var(--motion-fast)] ease-[var(--ease-soft)]`} />
                 </div>
-              </motion.div>
+              </motion.button>
               {selectedCourier === c.id && (
                 <div className="p-4 border-b border-[var(--brand-border)] bg-[var(--brand-surface-raised)]/50">
                   {detailsLoading ? (
@@ -417,7 +490,12 @@ export function CouriersPage() {
                       )}
                     </div>
                   ) : (
-                    <div className="text-sm text-[var(--brand-text-muted)]">{t('common.error', 'Failed to load details')}                    </div>
+                    <div className="flex items-center justify-between gap-3 text-sm text-[var(--brand-text-muted)]">
+                      <span>{t('admin.courier_details_error', 'Could not load details.')}</span>
+                      <Button variant="secondary" size="sm" onClick={() => { setSelectedCourier(null); fetchDetails(c.id); }}>
+                        {t('common.retry', 'Try again')}
+                      </Button>
+                    </div>
                   )}
                 </div>
               )}
@@ -434,7 +512,7 @@ export function CouriersPage() {
           {t('admin.live_map', 'Live Map')}
         </h3>
         <CourierLiveMap
-          className="h-72 w-full rounded-lg"
+          className="h-64 sm:h-72 lg:h-80 w-full rounded-[var(--brand-radius)] border border-[var(--brand-border)] overflow-hidden"
           couriers={couriersOnMap}
           center={mapCenter || [19.817, 41.331]}
           zoom={13}
