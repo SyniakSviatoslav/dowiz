@@ -364,7 +364,9 @@ function initScene(THREE: ThreeNS, host: HTMLElement): () => void {
     moteGeo.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
     const moteMat = track(
       new THREE.ShaderMaterial({
-        uniforms: { uTime: { value: 0 }, uColor: { value: c(PAPER.cream) }, uPx: { value: dpr } },
+        // warm gold-cream so the motes read as sun-lit dust, tying them to the
+        // dawn sky + halo rather than reading as cold white specks.
+        uniforms: { uTime: { value: 0 }, uColor: { value: c('#F0E1B5') }, uPx: { value: dpr } },
         transparent: true,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
