@@ -5,6 +5,7 @@ import { Button, Input, FormField, useI18n, ArtNouveauFrame, ArtNouveauDivider, 
 import { PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient, ApiError } from '../lib/index.js';
 import { AccessRequestGate } from '../components/AccessRequestForm.js';
+import { DeliverySwan } from '../components/DeliverySwan.js';
 
 // Path A (Nomadic-Tribe redesign): the anonymous hero is a real-time 3D
 // paper/Moebius canvas. React.lazy keeps three.js in its own chunk, off the
@@ -225,21 +226,27 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
                 // Comic-panel hero: the live paper scene framed in an inked Art-Nouveau
                 // border with corner flourishes. The frame is decorative (aria-hidden in
                 // the component); PaperScene wiring is untouched.
-                <div className="dz-fade-in">
-                  <ArtNouveauFrame
-                    style={{ background: 'var(--paper-surface, var(--brand-surface))', borderRadius: 'var(--brand-radius)', overflow: 'hidden', boxShadow: 'var(--elev-2)', padding: 6 }}
-                  >
-                    {/* Hero art: live 3D paper scene; falls back to the Moebius SVG scene
-                        (on-brand, art-only) for reduced-motion / no-WebGL / lazy-load. The
-                        value-prop headline lives BELOW in the page so it shows either way. */}
-                    <Suspense fallback={<NomadicScene variant="journey" animated />}>
-                      <PaperScene fallback={<NomadicScene variant="journey" animated />} />
-                    </Suspense>
-                  </ArtNouveauFrame>
-                  <h1 className="mt-5 text-3xl leading-[1.1]" style={{ ...S.heading, letterSpacing: '-0.01em' }}>
+                <div>
+                  {/* Hero stage: the live paper panel with the delivery swan gliding
+                      ON TOP (pointer-events:none so it never blocks the canvas). */}
+                  <div className="dz-stage dz-stage-1" style={{ position: 'relative' }}>
+                    <ArtNouveauFrame
+                      style={{ background: 'var(--paper-surface, var(--brand-surface))', borderRadius: 'var(--brand-radius)', overflow: 'hidden', boxShadow: 'var(--elev-2)', padding: 6 }}
+                    >
+                      {/* Hero art: live 3D paper scene; falls back to the Moebius SVG scene
+                          (on-brand, art-only) for reduced-motion / no-WebGL / lazy-load. The
+                          value-prop headline lives BELOW in the page so it shows either way. */}
+                      <Suspense fallback={<NomadicScene variant="journey" animated />}>
+                        <PaperScene fallback={<NomadicScene variant="journey" animated />} />
+                      </Suspense>
+                    </ArtNouveauFrame>
+                    {/* Signature delivery swan — flies the parcel across the sky. */}
+                    <DeliverySwan />
+                  </div>
+                  <h1 className="dz-stage dz-stage-2 mt-5 text-3xl leading-[1.1]" style={{ ...S.heading, letterSpacing: '-0.01em' }}>
                     {t('start.hero_title', 'Your menu, online tonight.')}
                   </h1>
-                  <p className="mt-2 text-sm leading-relaxed" style={S.helper}>
+                  <p className="dz-stage dz-stage-3 mt-2 text-sm leading-relaxed" style={S.helper}>
                     {t('start.hero_sub', 'Snap a photo of your menu — we read it, build your storefront, and you’re taking orders. No code, no wait.')}
                   </p>
                 </div>
@@ -252,12 +259,12 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
               )}
 
             {/* Ornamental divider carrying the Art-Nouveau line into the chrome. */}
-            <ArtNouveauDivider className="dz-fade-in" style={{ maxWidth: 220, margin: '0.25rem auto' }} />
+            <ArtNouveauDivider className={mode === 'anonymous' ? 'dz-stage dz-stage-4' : 'dz-fade-in'} style={{ maxWidth: 220, margin: '0.25rem auto' }} />
 
             {/* Three inked feature glyphs in the limited palette (upload / AI / online). */}
-            <FeatureGlyphs />
+            <FeatureGlyphs staged={mode === 'anonymous'} />
 
-            <div style={S.card} className="dz-fade-in space-y-5">
+            <div style={S.card} className={`${mode === 'anonymous' ? 'dz-stage dz-stage-6' : 'dz-fade-in'} space-y-5`}>
             <button
               type="button"
               onClick={onPickFile}
@@ -377,7 +384,7 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
 // Three feature glyphs in the limited paper palette (sand / teal / gold on ink),
 // rendered as small inked icons — the "drawn on paper" how-it-works trio. Purely
 // decorative iconography (aria-hidden); the visible labels carry the meaning.
-function FeatureGlyphs() {
+function FeatureGlyphs({ staged = false }: { staged?: boolean }) {
   const { t } = useI18n();
   const items: { icon: string; tint: string; label: string }[] = [
     { icon: 'ti ti-file-upload', tint: 'var(--sand, #987654)', label: t('start.feat_upload', 'Upload your menu') },
@@ -385,9 +392,9 @@ function FeatureGlyphs() {
     { icon: 'ti ti-bolt', tint: 'var(--gold, #ECD06F)', label: t('start.feat_online', 'Go online fast') },
   ];
   return (
-    <ul className="dz-fade-in grid grid-cols-3 gap-3 text-center" aria-label={t('start.how_it_works', 'How it works')}>
-      {items.map((it) => (
-        <li key={it.label} className="flex flex-col items-center gap-2 min-w-0">
+    <ul className={`${staged ? 'dz-stage dz-stage-5' : 'dz-fade-in'} grid grid-cols-3 gap-3 text-center`} aria-label={t('start.how_it_works', 'How it works')}>
+      {items.map((it, i) => (
+        <li key={it.label} className="dz-glyph flex flex-col items-center gap-2 min-w-0" style={staged ? ({ '--dz-i': i } as React.CSSProperties) : undefined}>
           <span
             className="inline-flex items-center justify-center"
             aria-hidden="true"
@@ -437,8 +444,27 @@ function ParsingState() {
 const ONBOARD_CSS = `
 @media (prefers-reduced-motion: no-preference){
   .dz-fade-in{animation:dzFadeIn var(--motion-base,240ms) var(--ease-out,cubic-bezier(.16,1,.3,1)) both}
+
+  /* First-paint entrance choreography (anonymous hero). Beats arrive in sequence
+     ~1.5–2.2s total: panel → headline → (swan flies in, owned by DeliverySwan)
+     → divider → glyphs (per-item stagger) → upload card. Each element's own
+     reveal stays snappy (≤320ms ease-out); the cascade comes from delays, not
+     slow transitions. Runs once on mount (these nodes only exist in 'choose'). */
+  .dz-stage{opacity:0;transform:translateY(10px) scale(.985);
+    animation:dzStageRise 320ms var(--ease-out,cubic-bezier(.16,1,.3,1)) both}
+  .dz-stage-1{animation-delay:0ms}
+  .dz-stage-2{animation-delay:140ms}
+  .dz-stage-3{animation-delay:260ms}
+  .dz-stage-4{animation-delay:1340ms}
+  .dz-stage-5{animation-delay:1460ms}
+  .dz-stage-6{animation-delay:1640ms}
+  /* glyphs cascade within their own beat (stage-5) */
+  .dz-stage-5 .dz-glyph{opacity:0;transform:translateY(8px);
+    animation:dzStageRise 300ms var(--ease-out,cubic-bezier(.16,1,.3,1)) both;
+    animation-delay:calc(1460ms + var(--dz-i,0) * 70ms)}
 }
 @keyframes dzFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes dzStageRise{to{opacity:1;transform:none}}
 .dz-dropzone:hover{border-color:var(--brand-primary);box-shadow:var(--elev-2)}
 `;
 
