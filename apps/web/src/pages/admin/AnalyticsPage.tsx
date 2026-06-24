@@ -311,7 +311,7 @@ export function AnalyticsPage() {
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
                                 <span className="font-medium"><PriceDisplay amount={o.price} /></span>
-                                <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{new Date(o.created_at).toLocaleDateString()}</span>
+                                <span data-dynamic className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{new Date(o.created_at).toLocaleDateString()}</span>
                               </div>
                             </div>
                           ))}

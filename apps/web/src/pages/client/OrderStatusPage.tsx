@@ -472,7 +472,7 @@ export function OrderStatusPage() {
 
       {/* Screen-reader accessible courier status */}
       {order?.courierName && (
-        <div className="sr-only" role="status" aria-live="polite">
+        <div data-dynamic className="sr-only" role="status" aria-live="polite">
           Courier {order.courierName} is delivering your order.
           {etaMinutes ? ` Approximately ${etaMinutes} minutes away.` : ''}
           {order.deliveryAddress ? ` Delivering to ${order.deliveryAddress}.` : ''}
@@ -482,7 +482,7 @@ export function OrderStatusPage() {
       <div className="p-4 space-y-6 -mt-4 relative z-10 bg-[var(--brand-surface)] rounded-t-[24px]">
         
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-[var(--brand-text)] mb-1" style={{ fontFamily: 'var(--brand-font-heading)' }}>
+          <h1 data-dynamic className="text-2xl font-bold text-[var(--brand-text)] mb-1" style={{ fontFamily: 'var(--brand-font-heading)' }}>
             {isPickup
               ? (order.status === 'READY' ? t('order.ready_for_pickup', 'Ready for pickup')
                  : order.status === 'PICKED_UP' ? t('order.picked_up', 'Picked up')

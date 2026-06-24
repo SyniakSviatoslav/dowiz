@@ -194,4 +194,239 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
       ownedOrgs: ownedOrgs.rowCount, membershipsBefore: before.rows, membershipsAfter: after.rows,
     });
   });
+
+  // ── Visual-regression fixtures ──────────────────────────────────────────────
+  // Seeds the DETERMINISTIC state the visual net's harness contract expects
+  // (e2e/visual/harness.ts → VisualFixtures): one OPEN venue (categories +
+  // products, one product carrying a modifier_group + modifiers, one product
+  // 86'd via is_available=false), one CLOSED venue, one BUSY venue, plus a
+  // seeded order on the open venue and a (stable) courier id.
+  //
+  // GATING — none added here. The /dev + /api/dev family is gated globally by the
+  // server.ts onRequest hook (isDevRequestAuthorized): every dev path 404s unless
+  // BOTH ALLOW_DEV_LOGIN='true' AND a matching x-dev-auth-secret header are present
+  // (ADR-0003, fails closed on prod). Registering under /dev (+ the /api/dev alias
+  // the harness calls) automatically inherits that gate — no new prod surface.
+  //
+  // RLS — uses the same plain (fastify as any).db.query path as /dev/repair-test-owner
+  // above: the operational pool role is the established write path for these dev
+  // seeders, so we follow that proven convention rather than re-deriving tenant ctx.
+  //
+  // OPEN vs CLOSED vs BUSY is driven through the REAL read paths so the storefront
+  // actually renders each state (see apps/api/src/routes/public/menu.ts):
+  //   • read_public_menu() only returns a venue when status IN ('active','open')
+  //     OR published_at IS NOT NULL — so ALL three set published_at (else 404, not
+  //     "closed"). Product visibility = is_available=true (the 86'd product vanishes).
+  //   • GET /:slug/info computes status: 'closed' when hours_json reads closed now /
+  //     delivery_paused; 'busy' when (open AND) kitchen_busy_until is a future ts;
+  //     else 'open'. MenuPage.tsx derives venueStatus from that field.
+  // Determinism: CLOSED uses an always-closed hours_json (every day isOpen:false) so
+  // the verdict is time-of-run independent; BUSY pins kitchen_busy_until to a fixed
+  // far-future ts. busy_mode=true is also set on BUSY to satisfy the contract literally
+  // (it's the column read by orders.ts for confirm-timeout doubling).
+  const VIS_COURIER_ID = '00000000-0000-4000-8000-0000000000c1'; // stable, returned to the harness
+  const seedVisualHandler = async (_request: any, reply: any) => {
+    const db = (fastify as any).db;
+
+    // hours_json shapes consumed by /info's open/closed computation.
+    const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const OPEN_ALL_DAY = JSON.stringify(
+      Object.fromEntries(DAYS.map((d) => [d, { isOpen: true, open: '00:00', close: '23:59' }])),
+    );
+    const CLOSED_ALL_DAY = JSON.stringify(
+      Object.fromEntries(DAYS.map((d) => [d, { isOpen: false }])),
+    );
+
+    // 1. Owner user + organization (org_id is NOT NULL on locations). Both upsert by a
+    //    stable natural key so their ids never churn across runs.
+    const ownerRes = await db.query(
+      `INSERT INTO users (email, google_sub, display_name)
+         VALUES ('vis-owner@dowiz.com', 'vis-owner-sub', 'Visual Net Owner')
+       ON CONFLICT (google_sub) DO UPDATE SET email = EXCLUDED.email
+       RETURNING id`,
+    );
+    const ownerId = ownerRes.rows[0].id;
+
+    // organizations has no unique business key → look up by owner+name, insert once.
+    let orgId: string;
+    const orgSel = await db.query(
+      `SELECT id FROM organizations WHERE owner_id = $1 AND name = 'Visual Net Org' LIMIT 1`,
+      [ownerId],
+    );
+    if (orgSel.rowCount > 0) {
+      orgId = orgSel.rows[0].id;
+    } else {
+      const orgIns = await db.query(
+        `INSERT INTO organizations (name, owner_id) VALUES ('Visual Net Org', $1) RETURNING id`,
+        [ownerId],
+      );
+      orgId = orgIns.rows[0].id;
+    }
+
+    // 2. The three venues — UPSERT on slug (UNIQUE) so re-running never duplicates.
+    //    phone is NOT NULL; currency/locales default sensibly but we pin them for snapshot
+    //    stability. timezone='UTC' makes the schedule engine deterministic.
+    async function upsertLocation(
+      slug: string,
+      name: string,
+      opts: { status: string; busyMode: boolean; hours: string; kitchenBusyUntil: string | null },
+    ): Promise<string> {
+      const res = await db.query(
+        `INSERT INTO locations
+           (org_id, slug, name, phone, status, busy_mode, published_at,
+            delivery_paused, hours_json, kitchen_busy_until, timezone,
+            default_locale, supported_locales, currency_code, currency_minor_unit,
+            lat, lng)
+         VALUES
+           ($1, $2, $3, '+355690000000', $4, $5, now(),
+            false, $6::jsonb, $7::timestamptz, 'UTC',
+            'sq', ARRAY['sq','en'], 'ALL', 0,
+            41.3275, 19.8187)
+         ON CONFLICT (slug) DO UPDATE SET
+           org_id = EXCLUDED.org_id,
+           name = EXCLUDED.name,
+           status = EXCLUDED.status,
+           busy_mode = EXCLUDED.busy_mode,
+           published_at = COALESCE(locations.published_at, EXCLUDED.published_at),
+           delivery_paused = EXCLUDED.delivery_paused,
+           hours_json = EXCLUDED.hours_json,
+           kitchen_busy_until = EXCLUDED.kitchen_busy_until,
+           timezone = EXCLUDED.timezone
+         RETURNING id`,
+        [orgId, slug, name, opts.status, opts.busyMode, opts.hours, opts.kitchenBusyUntil],
+      );
+      return res.rows[0].id;
+    }
+
+    const openId = await upsertLocation('vis-open', 'Visual Open Venue', {
+      status: 'active', busyMode: false, hours: OPEN_ALL_DAY, kitchenBusyUntil: null,
+    });
+    const closedId = await upsertLocation('vis-closed', 'Visual Closed Venue', {
+      // published (so the menu renders, not 404) but hours read closed → /info ⇒ 'closed'.
+      status: 'active', busyMode: false, hours: CLOSED_ALL_DAY, kitchenBusyUntil: null,
+    });
+    const busyId = await upsertLocation('vis-busy', 'Visual Busy Venue', {
+      // open hours + busy_mode + a fixed far-future kitchen_busy_until → /info ⇒ 'busy'.
+      status: 'active', busyMode: true, hours: OPEN_ALL_DAY, kitchenBusyUntil: '2999-01-01T00:00:00Z',
+    });
+
+    // 3. menu_versions row (PK location_id) for each venue — read_public_menu defaults to 1
+    //    when absent, but seeding it keeps the X-Menu-Version header stable.
+    for (const id of [openId, closedId, busyId]) {
+      await db.query(
+        `INSERT INTO menu_versions (location_id, version) VALUES ($1, 1)
+         ON CONFLICT (location_id) DO NOTHING`,
+        [id],
+      );
+    }
+
+    // 4. Owner membership on the OPEN venue (so /admin snapshots can authenticate to it).
+    await db.query(
+      `INSERT INTO memberships (user_id, location_id, role, status)
+         VALUES ($1, $2, 'owner', 'active')
+       ON CONFLICT (user_id, location_id, role) DO UPDATE SET status = 'active'`,
+      [ownerId, openId],
+    );
+
+    // 5. Menu on the OPEN venue. Children have no natural unique key, so wipe-and-reseed
+    //    scoped to this location → re-runs stay clean and never accumulate. (modifiers /
+    //    product_modifier_groups cascade from their parents; products clear first.)
+    await db.query(`DELETE FROM modifiers WHERE location_id = $1`, [openId]);
+    await db.query(`DELETE FROM modifier_groups WHERE location_id = $1`, [openId]);
+    await db.query(`DELETE FROM products WHERE location_id = $1`, [openId]);
+    await db.query(`DELETE FROM categories WHERE location_id = $1`, [openId]);
+
+    const catRes = await db.query(
+      `INSERT INTO categories (location_id, name, sort_order)
+         VALUES ($1, 'Pizza', 0) RETURNING id`,
+      [openId],
+    );
+    const categoryId = catRes.rows[0].id;
+
+    // Product A — carries a modifier group (radio: pick a size) with two modifiers.
+    const prodARes = await db.query(
+      `INSERT INTO products (location_id, category_id, name, description, price, is_available, sort_order)
+         VALUES ($1, $2, 'Margherita', 'Tomato, mozzarella, basil', 850, true, 0) RETURNING id`,
+      [openId, categoryId],
+    );
+    const productWithModifiersId = prodARes.rows[0].id;
+
+    // Product B — flagged unavailable (86'd). This is the stoplistProductId; read_public_menu
+    // filters is_available=true so it is absent from the public menu (the stoplist behaviour).
+    const prodBRes = await db.query(
+      `INSERT INTO products (location_id, category_id, name, description, price, is_available, sort_order)
+         VALUES ($1, $2, 'Quattro Formaggi (86''d)', 'Currently unavailable', 950, false, 1) RETURNING id`,
+      [openId, categoryId],
+    );
+    const stoplistProductId = prodBRes.rows[0].id;
+
+    // Modifier group + modifiers, linked to product A.
+    const mgRes = await db.query(
+      `INSERT INTO modifier_groups (location_id, name, min_select, max_select, required, display_type)
+         VALUES ($1, 'Size', 1, 1, true, 'radio') RETURNING id`,
+      [openId],
+    );
+    const groupId = mgRes.rows[0].id;
+    await db.query(
+      `INSERT INTO modifiers (group_id, location_id, name, price_delta, available, sort_order)
+         VALUES ($1, $2, 'Small', 0, true, 0), ($1, $2, 'Large', 300, true, 1)`,
+      [groupId, openId],
+    );
+    await db.query(
+      `INSERT INTO product_modifier_groups (product_id, group_id, sort_order)
+         VALUES ($1, $2, 0) ON CONFLICT (product_id, group_id) DO NOTHING`,
+      [productWithModifiersId, groupId],
+    );
+
+    // 6. One order on the OPEN venue for the status screen. orders has no natural unique
+    //    key, so a sentinel pickup_code makes it idempotent: reuse if present, else create
+    //    (with its customer + one line item). Pricing in integer minor units (cash, pending).
+    let orderId: string;
+    const existingOrder = await db.query(
+      `SELECT id FROM orders WHERE location_id = $1 AND pickup_code = 'VIS-ORDER' LIMIT 1`,
+      [openId],
+    );
+    if (existingOrder.rowCount > 0) {
+      orderId = existingOrder.rows[0].id;
+    } else {
+      const custRes = await db.query(
+        `INSERT INTO customers (location_id, phone, name)
+           VALUES ($1, '+355690000001', 'Visual Net Customer')
+         ON CONFLICT (location_id, phone) DO UPDATE SET name = EXCLUDED.name
+         RETURNING id`,
+        [openId],
+      );
+      const customerId = custRes.rows[0].id;
+      const orderRes = await db.query(
+        `INSERT INTO orders
+           (location_id, customer_id, type, status, delivery_address,
+            subtotal, total, payment_method, payment_outcome, pickup_code)
+         VALUES ($1, $2, 'delivery', 'CONFIRMED', 'Rruga e Durresit 1, Tirana',
+            850, 850, 'cash', 'pending', 'VIS-ORDER')
+         RETURNING id`,
+        [openId, customerId],
+      );
+      orderId = orderRes.rows[0].id;
+      await db.query(
+        `INSERT INTO order_items (order_id, product_id, name_snapshot, price_snapshot, quantity)
+           VALUES ($1, $2, 'Margherita', 850, 1)`,
+        [orderId, productWithModifiersId],
+      );
+    }
+
+    // 7. Return the contract shape verbatim (VisualFixtures).
+    return reply.send({
+      open: { slug: 'vis-open', locationId: openId },
+      closed: { slug: 'vis-closed', locationId: closedId },
+      busy: { slug: 'vis-busy', locationId: busyId },
+      stoplistProductId,
+      orderId,
+      courierId: VIS_COURIER_ID,
+    });
+  };
+
+  // Register on both the /dev and /api/dev paths the harness may call. Both are
+  // covered by isDevPath() → the same global dev gate applies to each.
+  fastify.post('/dev/seed-visual-state', seedVisualHandler);
+  fastify.post('/api/dev/seed-visual-state', seedVisualHandler);
 }
