@@ -3387,4 +3387,39 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Plotësoni listën dhe publikoni — vitrina juaj e drejtpërdrejtë shfaqet këtu. Ndërkohë përdorni listën për të konfirmuar menunë.',
     uk: "Завершіть список і опублікуйте — ваша вітрина з'явиться тут. Тим часом скористайтеся списком, щоб підтвердити меню.",
   },
+  'admin.menu_load_error': {
+    en: 'Failed to load menu',
+    sq: 'Ngarkimi i menusë dështoi',
+    uk: 'Не вдалося завантажити меню',
+  },
+  'admin.settings_load_error': {
+    en: 'Failed to load settings',
+    sq: 'Ngarkimi i cilësimeve dështoi',
+    uk: 'Не вдалося завантажити налаштування',
+  },
+  'promotions.load_error': {
+    en: 'Could not load promotions. Please try again.',
+    sq: 'Promocionet nuk u ngarkuan. Provo përsëri.',
+    uk: 'Не вдалося завантажити акції. Спробуйте ще раз.',
+  },
+  'admin.logo_preview_alt': {
+    en: 'Logo preview',
+    sq: 'Pamja paraprake e logos',
+    uk: 'Попередній перегляд логотипа',
+  },
+  'time.never': { en: 'never', sq: 'asnjëherë', uk: 'ніколи' },
+  'time.minutes_ago': { en: '{n}m ago', sq: '{n}min më parë', uk: '{n} хв тому' },
+  'time.hours_ago': { en: '{n}h ago', sq: '{n}orë më parë', uk: '{n} год тому' },
+  'time.days_ago': { en: '{n}d ago', sq: '{n}ditë më parë', uk: '{n} дн тому' },
+  'time.weeks_ago': { en: '{n}w ago', sq: '{n}javë më parë', uk: '{n} тиж тому' },
+  'activation.subtitle_v2': {
+    en: 'Three steps left. Watch it come together in the preview.',
+    sq: 'Tri hapa të mbetura. Shikoje si merr formë te pamja paraprake.',
+    uk: 'Залишилось три кроки. Дивіться, як усе складається у попередньому перегляді.',
+  },
+  'activation.subtitle_live_v2': {
+    en: 'Customers can order now. Keep polishing in the preview.',
+    sq: 'Klientët mund të porosisin tani. Vazhdo ta përmirësosh te pamja paraprake.',
+    uk: 'Клієнти вже можуть замовляти. Продовжуйте вдосконалювати у попередньому перегляді.',
+  },
 };

@@ -45,14 +45,16 @@ export function ActivationPage() {
     try { setStatus(await apiClient<any>(`/owner/activation/${locationId}/status`)); } catch { /* keep last */ }
   }, [locationId]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  // Guard the status fetch until locationId resolves so the first render doesn't hit
+  // /owner/activation//status (empty id → 404 in console).
+  useEffect(() => { if (locationId) refresh(); }, [locationId, refresh]);
   // Poll while a draft so connecting notifications / committing the menu lights the
   // checklist without a manual refresh.
   useEffect(() => {
-    if (status?.published) return;
+    if (!locationId || status?.published) return;
     const iv = setInterval(refresh, 8000);
     return () => clearInterval(iv);
-  }, [status?.published, refresh]);
+  }, [locationId, status?.published, refresh]);
 
   // Tap-to-edit from the preview iframe (MenuPage posts in activation mode).
   useEffect(() => {
@@ -147,9 +149,11 @@ export function ActivationPage() {
           {status?.published ? t('activation.title_live', 'Your storefront is live') : t('activation.title', 'Get your storefront live')}
         </h1>
         <p className="text-sm mt-1" style={{ color: 'var(--brand-text-muted)' }}>
+          {/* Viewport-neutral copy: on mobile the preview is a separate "Preview" tab,
+              not on the right — so avoid "on the right" / "në të djathtë". */}
           {status?.published
-            ? t('activation.subtitle_live', 'Customers can order now. Keep polishing on the right.')
-            : t('activation.subtitle', 'Three steps left. Watch it come together on the right.')}
+            ? t('activation.subtitle_live_v2', 'Customers can order now. Keep polishing in the preview.')
+            : t('activation.subtitle_v2', 'Three steps left. Watch it come together in the preview.')}
         </p>
       </div>
 

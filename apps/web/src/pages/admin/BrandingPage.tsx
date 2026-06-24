@@ -155,6 +155,10 @@ export function BrandingPage() {
   };
 
   const logoPreview = logoDataUrl || logoUrl;
+  // Track a broken/404 logo URL so we render a placeholder instead of a broken <img>.
+  // Reset whenever the source changes so a fixed URL gets a fresh chance to load.
+  const [logoBroken, setLogoBroken] = useState(false);
+  useEffect(() => { setLogoBroken(false); }, [logoPreview]);
 
   // Push the concrete (non-token) colour payload to the live preview.
   const postTheme = useCallback((win: Window | null | undefined) => {
@@ -243,11 +247,20 @@ export function BrandingPage() {
                   <Input value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="https://cdn.example.com/logo.png" />
                 </FormField>
               </div>
-              {logoPreview && (
-                <div className="shrink-0 w-20 h-20 rounded-xl border border-[var(--brand-border)] overflow-hidden bg-white/5 flex items-center justify-center">
-                  <img src={logoPreview} alt="Logo preview" className="max-w-full max-h-full object-contain" />
-                </div>
-              )}
+              <div className="shrink-0 w-20 h-20 rounded-xl border border-[var(--brand-border)] overflow-hidden bg-white/5 flex items-center justify-center">
+                {logoPreview && !logoBroken ? (
+                  // onError → placeholder so a missing/invalid stored URL never shows a
+                  // broken-image glyph or 404s the preview box.
+                  <img
+                    src={logoPreview}
+                    alt={t('admin.logo_preview_alt', 'Logo preview')}
+                    className="max-w-full max-h-full object-contain"
+                    onError={() => setLogoBroken(true)}
+                  />
+                ) : (
+                  <i className="ti ti-photo text-2xl" style={{ color: 'var(--brand-text-muted)' }} aria-hidden="true" />
+                )}
+              </div>
             </div>
           </div>
           <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-xl p-5 space-y-4">

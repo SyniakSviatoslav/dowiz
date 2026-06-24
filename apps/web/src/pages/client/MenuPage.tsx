@@ -1197,12 +1197,12 @@ export function MenuPage() {
                   onClick={handleAddDetail}
                   disabled={!canAdd()}
                   whileTap={{ scale: 0.95 }}
-                  className="flex-1 h-[48px] rounded-xl text-[var(--brand-bg)] font-bold text-[14px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-between gap-2 px-4"
+                  className="flex-1 min-w-0 h-[48px] rounded-xl text-[var(--brand-bg)] font-bold text-[14px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-between gap-2 px-3.5"
                   style={{ background: detailProduct.available ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
                   {detailProduct.available ? (
                     <>
-                      <span className="whitespace-nowrap">{t('client.add_to_cart', 'Add to Cart')}</span>
+                      <span className="truncate min-w-0">{t('client.add_to_cart', 'Add to Cart')}</span>
                       <span className="font-extrabold shrink-0"><PriceDisplay amount={(detailProduct.price + calcModifierDelta()) * quantity} /></span>
                     </>
                   ) : (

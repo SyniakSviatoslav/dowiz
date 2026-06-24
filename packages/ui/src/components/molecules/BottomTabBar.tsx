@@ -25,7 +25,7 @@ export function BottomTabBar({ tabs, activeKey, onTabClick, className = '' }: Bo
       className={`embed-hidden sticky bottom-0 left-0 right-0 z-sticky bg-[var(--brand-surface)] border-t border-[var(--brand-border)] ${className}`}
       style={{ paddingBottom: 'var(--safe-bottom)' }}
     >
-      <div className="flex items-center justify-around h-14" role="tablist">
+      <div className="flex items-center justify-around h-14 max-w-md mx-auto" role="tablist">
         {tabs.map(tab => {
           const isActive = activeKey === tab.key;
           return (

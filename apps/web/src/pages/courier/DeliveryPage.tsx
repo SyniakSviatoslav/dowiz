@@ -235,17 +235,27 @@ export function DeliveryPage() {
   if (loading) return <div className="p-4"><SkeletonBase className="h-64 w-full" /></div>;
   // The delivery layout hides the bottom tab bar, so a bare EmptyState strands the
   // courier with no way back. Give them an explicit route home.
+  // The delivery layout renders full-screen with no header/centered shell. When there is no
+  // task we fall back to the standard centered courier shell (header + max-w-md + safe-area top)
+  // so the not-found state reads like every other courier page instead of a stranded full-bleed card.
   if (!task) return (
-    <div className="p-5">
-      <EmptyState
-        title={t('courier.not_found', 'Not found')}
-        description={t('courier.task_not_found', 'Delivery task not found.')}
-        action={
-          <Button variant="primary" onClick={() => navigate('/courier')}>
-            {t('courier.back_to_tasks', 'Back to tasks')}
-          </Button>
-        }
-      />
+    <div className="min-h-screen bg-[var(--brand-bg)] text-[var(--brand-text)]">
+      <div className="flex items-center px-4 h-14 bg-[var(--brand-surface)]/95 backdrop-blur-sm border-b border-[var(--brand-border)]" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <div className="w-full max-w-md mx-auto">
+          <span className="text-sm font-semibold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('courier.dropoff', 'Drop-off')}</span>
+        </div>
+      </div>
+      <div className="w-full max-w-md mx-auto p-5 pt-8">
+        <EmptyState
+          title={t('courier.not_found', 'Not found')}
+          description={t('courier.task_not_found', 'Delivery task not found.')}
+          action={
+            <Button variant="primary" onClick={() => navigate('/courier')}>
+              {t('courier.back_to_tasks', 'Back to tasks')}
+            </Button>
+          }
+        />
+      </div>
     </div>
   );
 
@@ -324,7 +334,7 @@ export function DeliveryPage() {
           </div>
           <div className="text-right">
             <div data-dynamic className="text-2xl font-black text-[var(--brand-primary)]">{task.eta}</div>
-            <div className="text-sm text-[var(--brand-text-muted)]">to destination</div>
+            <div className="text-sm text-[var(--brand-text-muted)]">{t('courier.to_destination', 'to destination')}</div>
           </div>
         </div>
 
