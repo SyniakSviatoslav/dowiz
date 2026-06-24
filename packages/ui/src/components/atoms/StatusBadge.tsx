@@ -1,3 +1,4 @@
+import { type ReactNode } from 'react';
 import { t } from '../../lib/i18n.js';
 
 const STATUS_MAP: Record<string, { color: string; label: string; tooltip: string }> = {
@@ -16,14 +17,20 @@ const STATUS_MAP: Record<string, { color: string; label: string; tooltip: string
 interface StatusBadgeProps {
   status: string;
   pulse?: boolean;
+  icon?: ReactNode;
 }
 
-export function StatusBadge({ status, pulse }: StatusBadgeProps) {
+export function StatusBadge({ status, pulse, icon }: StatusBadgeProps) {
   const key = status.toUpperCase().replace(/-/g, '_');
   const config = STATUS_MAP[key] || STATUS_MAP[status] || { color: 'bg-brand-text-muted', label: status, tooltip: '' };
   return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold text-white ${config.color} ${pulse ? 'animate-pulse' : ''}`} title={config.tooltip || undefined}>
-      {pulse && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+    <span
+      className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white ${config.color} ${pulse ? 'animate-pulse' : ''}`}
+      style={{ borderRadius: 'var(--brand-radius-btn)', transition: 'background-color var(--motion-fast) var(--ease-soft)' }}
+      title={config.tooltip || undefined}
+    >
+      {pulse && <span className="w-1.5 h-1.5 rounded-full bg-white" aria-hidden="true" />}
+      {icon && <span className="inline-flex shrink-0 items-center" aria-hidden="true">{icon}</span>}
       {config.label}
     </span>
   );
