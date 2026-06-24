@@ -58,6 +58,14 @@ export function DeliverySwan() {
               <line className="dz-dswan-tie" x1="98" y1="155" x2="98" y2="177" />
             </g>
 
+            {/* Released parcel: periodically the swan lets one go — it drifts
+                down on a soft arc and fades as it's "delivered", then a new one
+                appears at the sling. Pure transform/opacity, motion-gated. */}
+            <g className="dz-dswan-drop">
+              <rect className="dz-dswan-box" x="85" y="156" width="24" height="19" rx="3" />
+              <line className="dz-dswan-tie" x1="97" y1="156" x2="97" y2="175" />
+            </g>
+
             {/* The swan — body + S-neck + head + beak + eye + wing.
                 Geometry matches SwanHero's authored dz-swan paths. */}
             <g className="dz-dswan-bird">
@@ -110,6 +118,9 @@ const DSWAN_CSS = `
 /* motion-line speed trail */
 .dz-dswan-speed line{stroke:var(--ink,var(--brand-text));stroke-width:3;stroke-linecap:round;opacity:0}
 
+/* released parcel (the "delivery" beat) — hidden at rest */
+.dz-dswan-drop{transform-box:fill-box;transform-origin:97px 165px;opacity:0}
+
 /* Default (reduced-motion-safe): perched, fully drawn, parcel at rest, no trail,
    clouds static, swan settled in the upper-left sky clear of the sun. */
 .dz-dswan-fly{transform:translate(2%,2%)}
@@ -145,6 +156,10 @@ const DSWAN_CSS = `
   /* clouds drift slowly across the sky at different speeds (parallax depth) */
   .dz-dswan-cloud.c-far{left:-32%;animation:dzDSwanCloud 64s linear infinite}
   .dz-dswan-cloud.c-near{left:-26%;animation:dzDSwanCloud 44s linear 6s infinite}
+
+  /* the delivery beat: release a parcel that drifts down + away and fades, on a
+     slow loop offset from the glide so it reads as an occasional drop-off */
+  .dz-dswan-drop{animation:dzDSwanDrop 11s var(--ease-in-out,cubic-bezier(.65,0,.35,1)) 5s infinite}
 }
 
 /* delivery: arrive from the left and bank level into the upper-left sky */
@@ -174,4 +189,13 @@ const DSWAN_CSS = `
 @keyframes dzDSwanTrail{0%{opacity:0;transform:translateX(10px)}35%{opacity:.5}100%{opacity:0;transform:translateX(-4px)}}
 /* clouds drift left→right across and beyond the panel, then loop */
 @keyframes dzDSwanCloud{from{transform:translateX(0)}to{transform:translateX(520%)}}
+/* released parcel: appears at the sling, drifts down + slightly right on a soft
+   arc with a little tumble, then fades as it's delivered. One beat per loop. */
+@keyframes dzDSwanDrop{
+  0%{opacity:0;transform:translate(0,0) rotate(-4deg)}
+  10%{opacity:1;transform:translate(2px,6px) rotate(2deg)}
+  46%{opacity:1;transform:translate(14px,86px) rotate(20deg)}
+  66%{opacity:0;transform:translate(22px,128px) rotate(30deg)}
+  100%{opacity:0;transform:translate(22px,128px) rotate(30deg)}
+}
 `;
