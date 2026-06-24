@@ -373,9 +373,10 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
       [groupId, openId],
     );
     await db.query(
-      `INSERT INTO product_modifier_groups (product_id, group_id, sort_order)
-         VALUES ($1, $2, 0) ON CONFLICT (product_id, group_id) DO NOTHING`,
-      [productWithModifiersId, groupId],
+      // product_modifier_groups.location_id is NOT NULL (RLS retrofit, migration 1780338982019).
+      `INSERT INTO product_modifier_groups (product_id, group_id, location_id, sort_order)
+         VALUES ($1, $2, $3, 0) ON CONFLICT (product_id, group_id) DO NOTHING`,
+      [productWithModifiersId, groupId, openId],
     );
 
     // 6. One order on the OPEN venue for the status screen. orders has no natural unique
