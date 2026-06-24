@@ -1,6 +1,7 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Button, Input, FormField, LanguageSwitcher, useI18n, NomadicScene, ArtNouveauFrame, NomadicCredit, isPaperSkinEnabled } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { CourierLoginResponse } from '@deliveryos/shared-types';
@@ -14,6 +15,7 @@ function FrameOrPlain({ children, className }: { children?: React.ReactNode; cla
 
 export function LoginPage() {
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -46,7 +48,12 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--brand-bg)' }}>
-      <div className="w-full max-w-sm">
+      <motion.div
+        className="w-full max-w-sm"
+        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="absolute top-4 right-4">
           <LanguageSwitcher variant="full" />
         </div>
@@ -71,7 +78,7 @@ export function LoginPage() {
           </div>
         )}
 
-        <FrameOrPlain className="card-base p-8 space-y-6 block">
+        <FrameOrPlain className="card-base p-8 space-y-6 block shadow-[var(--elev-1)]">
           <div className="text-center space-y-1.5">
             {!isPaperSkinEnabled() && (
               <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>
@@ -84,9 +91,17 @@ export function LoginPage() {
           </div>
 
           {error && (
-            <div role="alert" aria-live="polite" className="p-3 text-sm text-center rounded-lg" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--color-danger)' }}>
+            <motion.div
+              role="alert"
+              aria-live="polite"
+              className="p-3 text-sm text-center"
+              style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--color-danger)', borderRadius: 'var(--brand-radius-sm)' }}
+              initial={{ opacity: 0 }}
+              animate={reduceMotion ? { opacity: 1 } : { opacity: 1, x: [0, -6, 6, -4, 4, 0] }}
+              transition={reduceMotion ? { duration: 0.15 } : { x: { duration: 0.4, ease: 'easeInOut' }, opacity: { duration: 0.15 } }}
+            >
               {error}
-            </div>
+            </motion.div>
           )}
 
           <form onSubmit={handleLogin} className="space-y-4">
@@ -124,7 +139,7 @@ export function LoginPage() {
           </form>
         </FrameOrPlain>
         {isPaperSkinEnabled() && <NomadicCredit className="mt-6" />}
-      </div>
+      </motion.div>
     </div>
   );
 }

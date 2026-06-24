@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Button, EmptyState, SkeletonBase, useI18n, PriceDisplay } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
@@ -40,6 +40,12 @@ export function ShiftPage() {
   const [msgSaving, setMsgSaving] = useState(false);
   const [msgSaved, setMsgSaved] = useState(false);
   const { t } = useI18n();
+  const reduce = useReducedMotion();
+  // ease-out tween (contract: no spring/bounce); reduced-motion → instant crossfade.
+  const rise = reduce
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0 } }
+    : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.24, ease: [0.16, 1, 0.3, 1] as const } };
+  const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg,var(--brand-surface))]';
 
   const saveMessenger = async () => {
     setMsgSaving(true); setMsgSaved(false);
@@ -137,18 +143,18 @@ export function ShiftPage() {
   };
 
   const statItems: { label: string; value: string | React.ReactNode; icon: React.ReactNode }[] = stats ? [
-    { label: 'Deliveries', value: String(stats.deliveries), icon: <i className="ti ti-package" aria-hidden="true"></i> },
-    { label: 'Earnings', value: <PriceDisplay amount={stats.earnings} />, icon: <i className="ti ti-moneybag" aria-hidden="true"></i> },
-    { label: 'Distance', value: `${stats.distance} km`, icon: <i className="ti ti-motorbike" aria-hidden="true"></i> },
-    { label: 'Online', value: stats.onlineTime, icon: <i className="ti ti-clock" aria-hidden="true"></i> },
+    { label: t('courier.stat_deliveries', 'Deliveries'), value: String(stats.deliveries), icon: <i className="ti ti-package" aria-hidden="true"></i> },
+    { label: t('courier.stat_earnings', 'Earnings'), value: <PriceDisplay amount={stats.earnings} />, icon: <i className="ti ti-moneybag" aria-hidden="true"></i> },
+    { label: t('courier.stat_distance', 'Distance'), value: `${stats.distance} km`, icon: <i className="ti ti-motorbike" aria-hidden="true"></i> },
+    { label: t('courier.stat_online', 'Online'), value: stats.onlineTime, icon: <i className="ti ti-clock" aria-hidden="true"></i> },
   ] : [];
 
   return (
     <div className="p-4 space-y-6">
       <div className="flex justify-between items-center pb-4 border-b border-[var(--brand-border)]">
         <h1 className="text-2xl font-bold text-[var(--brand-text)]" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('courier.shift_title', 'Shift')}</h1>
-        <div className="flex items-center gap-2 text-sm">
-          <div className={`w-2 h-2 rounded-full ${shift.isActive ? 'bg-[var(--color-success)] animate-pulse' : 'bg-[var(--brand-text-muted)]'}`} />
+        <div className="flex items-center gap-2 text-sm transition-colors duration-150" role="status" aria-live="polite">
+          <span className={`w-2 h-2 rounded-full transition-colors duration-150 ${shift.isActive ? 'bg-[var(--color-success)] motion-safe:animate-pulse' : 'bg-[var(--brand-text-muted)]'}`} aria-hidden="true" />
           <span className={shift.isActive ? 'text-[var(--color-success)] font-medium' : 'text-[var(--brand-text-muted)]'}>
             {shift.isActive ? t('courier.on_shift', 'On Shift') : t('courier.offline', 'Offline')}
           </span>
@@ -165,14 +171,24 @@ export function ShiftPage() {
           </div>
         </div>
       ) : error ? (
-        <EmptyState title={t('common.error', 'Error')} description={error} />
+        <EmptyState
+          title={t('common.error', 'Error')}
+          description={error}
+          icon={<i className="ti ti-alert-triangle" aria-hidden="true"></i>}
+          action={
+            <Button variant="secondary" size="sm" onClick={() => { setError(''); fetchShift(); }} className={focusRing}>
+              {t('common.retry', 'Try again')}
+            </Button>
+          }
+        />
       ) : (
         <>
           <motion.div
-            className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-6 text-center"
-            initial={{ opacity: 0, y: 12, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+            className="bg-[var(--brand-surface)] rounded-[var(--brand-radius)] p-6 text-center"
+            style={{ boxShadow: 'var(--elev-2)' }}
+            initial={rise.initial}
+            animate={rise.animate}
+            transition={rise.transition}
           >
             {shift.isActive ? (
               <div className="space-y-4">
@@ -183,12 +199,12 @@ export function ShiftPage() {
                   {formatElapsed(shift.elapsedSeconds)}
                 </div>
                 <div data-dynamic className="text-xs text-[var(--brand-text-muted)]">
-                  Started at {shift.startedAt ? new Date(shift.startedAt).toLocaleTimeString() : '--'}
+                  {t('courier.started_at', 'Started at')} {shift.startedAt ? new Date(shift.startedAt).toLocaleTimeString() : '--'}
                 </div>
                 <Button
                   variant="danger"
                   size="lg"
-                  className="w-full mt-2"
+                  className={`w-full mt-2 ${focusRing}`}
                   onClick={handleEndShift}
                   isLoading={actionLoading}
                 >
@@ -197,14 +213,14 @@ export function ShiftPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="text-5xl mb-2"><i className="ti ti-clock" aria-hidden="true"></i></div>
-                <div className="text-sm text-[var(--brand-text-muted)]">
+                <div className="text-5xl mb-2 text-[var(--brand-primary)]"><i className="ti ti-clock" aria-hidden="true"></i></div>
+                <div className="text-sm text-[var(--brand-text)]">
                   {t('courier.offline_hint', 'You are currently offline. Start your shift to begin receiving delivery tasks.')}
                 </div>
                 <Button
                   variant="primary"
                   size="lg"
-                  className="w-full"
+                  className={`w-full ${focusRing}`}
                   onClick={handleStartShift}
                   isLoading={actionLoading}
                 >
@@ -219,21 +235,25 @@ export function ShiftPage() {
               <h2 className="text-lg font-bold text-[var(--brand-text)]">{t('courier.today_stats', 'Today\'s Stats')}</h2>
               <motion.div
                 className="grid grid-cols-2 gap-3"
-                variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.06, delayChildren: 0.1 } } }}
+                variants={{ hidden: {}, visible: { transition: { staggerChildren: reduce ? 0 : 0.06, delayChildren: reduce ? 0 : 0.08 } } }}
                 initial="hidden"
                 animate="visible"
               >
                 {statItems.map((item) => (
                   <motion.div
                     key={item.label}
-                    variants={{ hidden: { opacity: 0, y: 12, scale: 0.97 }, visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 260, damping: 24 } } }}
-                    className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4"
+                    variants={{
+                      hidden: reduce ? { opacity: 0 } : { opacity: 0, y: 12 },
+                      visible: { opacity: 1, y: 0, transition: { duration: reduce ? 0 : 0.24, ease: [0.16, 1, 0.3, 1] } },
+                    }}
+                    className="bg-[var(--brand-surface)] rounded-[var(--brand-radius)] p-4 min-w-0 transition-shadow duration-150 hover:[box-shadow:var(--elev-2)]"
+                    style={{ boxShadow: 'var(--elev-1)' }}
                   >
-                    <div className="text-2xl mb-1">{item.icon}</div>
-                    <div className="text-xs text-[var(--brand-text-muted)] uppercase tracking-wider font-semibold mb-1">
+                    <div className="text-2xl mb-1 text-[var(--brand-primary)]">{item.icon}</div>
+                    <div className="text-xs text-[var(--brand-text-muted)] uppercase tracking-wider font-semibold mb-1 truncate">
                       {item.label}
                     </div>
-                    <div className="text-lg font-bold text-[var(--brand-text)]">{item.value}</div>
+                    <div className="text-lg font-bold text-[var(--brand-text)] truncate">{item.value}</div>
                   </motion.div>
                 ))}
               </motion.div>
@@ -243,12 +263,19 @@ export function ShiftPage() {
       )}
 
       {/* UX-2: how customers reach you during a delivery */}
-      <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4 space-y-3">
+      <motion.div
+        className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4 space-y-3"
+        initial={rise.initial}
+        animate={rise.animate}
+        transition={rise.transition}
+      >
         <div className="text-sm font-semibold text-[var(--brand-text)]">{t('courier.messenger_title', 'Messenger for customers')}</div>
         <div className="text-xs text-[var(--brand-text-muted)]">{t('courier.messenger_hint', 'Optional — lets customers text you during an active delivery instead of calling.')}</div>
         <div className="flex gap-2">
           <select value={msgKind} onChange={e => { setMsgKind(e.target.value); setMsgSaved(false); }} data-testid="courier-messenger-kind"
-            className="h-[44px] px-2 border rounded-[8px] text-sm" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+            aria-label={t('courier.messenger_kind_label', 'Messenger app')}
+            className={`h-11 px-2 border rounded-[var(--brand-radius-sm)] text-sm transition-colors duration-150 ${focusRing}`}
+            style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
             <option value="">—</option>
             <option value="telegram">Telegram</option>
             <option value="whatsapp">WhatsApp</option>
@@ -256,12 +283,18 @@ export function ShiftPage() {
           </select>
           <input value={msgHandle} onChange={e => { setMsgHandle(e.target.value); setMsgSaved(false); }} disabled={!msgKind}
             placeholder={msgKind === 'telegram' ? '@username' : '+355 6X XXX XXXX'} data-testid="courier-messenger-handle"
-            className="flex-1 min-w-0 h-[44px] px-3 border rounded-[8px] text-sm disabled:opacity-50" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+            aria-label={t('courier.messenger_handle_label', 'Your messenger handle')}
+            className={`flex-1 min-w-0 h-11 px-3 border rounded-[var(--brand-radius-sm)] text-sm transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${focusRing}`}
+            style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
         </div>
-        <Button onClick={saveMessenger} isLoading={msgSaving} variant="secondary" className="w-full border border-[var(--brand-primary)] !text-[var(--brand-primary)] !bg-transparent hover:!bg-[var(--brand-surface-raised)]">
-          {msgSaved ? t('common.saved', 'Saved') : t('common.save', 'Save')}
+        <Button onClick={saveMessenger} isLoading={msgSaving} variant="secondary"
+          aria-live="polite"
+          className={`w-full border border-[var(--brand-primary)] !text-[var(--brand-primary)] !bg-transparent transition-colors duration-150 hover:!bg-[var(--brand-surface-raised)] active:scale-[0.98] ${focusRing}`}>
+          {msgSaved
+            ? <span className="inline-flex items-center gap-1.5"><i className="ti ti-check" aria-hidden="true"></i>{t('common.saved', 'Saved')}</span>
+            : t('common.save', 'Save')}
         </Button>
-      </div>
+      </motion.div>
     </div>
   );
 }

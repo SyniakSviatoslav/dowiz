@@ -2,7 +2,7 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TaskCard, EmptyState, useI18n, PaperIllustration, isPaperSkinEnabled } from '@deliveryos/ui';
+import { TaskCard, EmptyState, Button, useI18n, PaperIllustration, isPaperSkinEnabled } from '@deliveryos/ui';
 import type { CourierTask } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
 
@@ -111,14 +111,19 @@ export function TasksPage() {
 
   return (
     <div className="p-5 space-y-5">
-      <div className="flex justify-between items-center pb-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
-        <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('courier.tasks_title', 'Tasks')}</h1>
-        <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--brand-text-muted)' }}>
+      <div className="flex justify-between items-center gap-3 pb-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+        <h1 className="text-2xl font-bold min-w-0 truncate" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>{t('courier.tasks_title', 'Tasks')}</h1>
+        <div
+          className="flex items-center gap-2 shrink-0 rounded-[var(--brand-radius-btn)] px-2.5 py-1 text-sm"
+          style={{ color: onShift ? 'var(--color-success)' : 'var(--brand-text-muted)', backgroundColor: 'var(--brand-surface-raised)' }}
+          role="status"
+          aria-label={onShift ? t('courier.online_status', 'Online') : t('courier.offline', 'Offline')}
+        >
           <span className="relative flex h-2.5 w-2.5">
             {onShift && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--color-success)] opacity-75"></span>}
             <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${onShift ? 'bg-[var(--color-success)]' : 'bg-[var(--brand-text-muted)]'}`}></span>
           </span>
-          <span className="text-xs">{onShift ? t('courier.online_status', 'Online') : t('courier.offline', 'Offline')}</span>
+          <span className="text-xs font-medium">{onShift ? t('courier.online_status', 'Online') : t('courier.offline', 'Offline')}</span>
         </div>
       </div>
 
@@ -133,12 +138,27 @@ export function TasksPage() {
           ))}
         </div>
       ) : error ? (
-        <EmptyState title={t('common.error', 'Error')} description={error} />
+        <EmptyState
+          title={t('common.error', 'Error')}
+          description={error}
+          action={
+            <Button type="button" variant="primary" className="min-h-[44px]" onClick={() => { setError(''); fetchTasks(); }}>
+              {t('common.retry', 'Try again')}
+            </Button>
+          }
+        />
       ) : tasks.length === 0 ? (
         <EmptyState
-          title={t('courier.no_tasks', 'No active tasks')}
-          description={t('courier.no_tasks_desc', 'We\'ll notify you when a new delivery is ready.')}
+          title={onShift ? t('courier.no_tasks', 'No active tasks') : t('courier.offline_title', 'You\'re offline')}
+          description={onShift
+            ? t('courier.no_tasks_desc', 'We\'ll notify you when a new delivery is ready.')
+            : t('courier.offline_desc', 'Go online from the Shift tab to start receiving deliveries.')}
           icon={isPaperSkinEnabled() ? <PaperIllustration name="island" animated className="mx-auto max-w-[200px]" /> : undefined}
+          action={!onShift ? (
+            <Button type="button" variant="primary" className="min-h-[44px]" onClick={() => navigate('/courier/shift')}>
+              {t('courier.go_online', 'Go to Shift')}
+            </Button>
+          ) : undefined}
         />
       ) : (
         <motion.div className="space-y-4" variants={containerVariants} initial="hidden" animate="visible">
