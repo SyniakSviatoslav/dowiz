@@ -6,6 +6,7 @@ import { CustomerOrderStatusResponse } from '@deliveryos/shared-types';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { distanceKm } from '../../lib/geo.js';
 import { loadRoute } from '../../lib/routing.js';
+import { gatherOrderEtaRange } from '../../lib/etaGather.js';
 
 const env = loadEnv();
 
@@ -37,8 +38,10 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
                 o.in_delivery_at::text as in_delivery_at,
                 o.delivered_at::text   as delivered_at,
                 o.picked_up_at::text   as picked_up_at,
+                o.location_id, l.lat AS loc_lat, l.lng AS loc_lng,
                ca.courier_id, ca.status as assignment_status
         FROM orders o
+        JOIN locations l ON l.id = o.location_id
         LEFT JOIN courier_assignments ca ON ca.order_id = o.id AND ca.status IN ('accepted', 'picked_up')
         WHERE o.id = $1 AND o.customer_id = $2
       `, [orderId, userId]);
@@ -118,6 +121,29 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
         } catch { /* order_routes may not be migrated yet — advisory, fail soft */ }
       }
 
+      // ETA range (v1) — compute-on-read; honest [low,high], never a single number / 0.
+      // Fails soft: a bad ETA must never break the order-status page.
+      let etaRange = null;
+      try {
+        etaRange = await gatherOrderEtaRange(db, {
+          orderId: row.id,
+          status: row.status,
+          locationId: row.location_id,
+          createdAt: row.created_at,
+          preparingAt: row.preparing_at,
+          deliveryLat: row.delivery_lat,
+          deliveryLng: row.delivery_lng,
+          locationLat: row.loc_lat,
+          locationLng: row.loc_lng,
+          courierId: row.courier_id ?? null,
+          assignmentStatus: row.assignment_status ?? null,
+          courierLat,
+          courierLng,
+        });
+      } catch (e) {
+        request.log.error({ e }, 'etaRange compute failed (soft)');
+      }
+
       return reply.status(200).send({
         id: row.id,
         status: row.status,
@@ -150,6 +176,8 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
         deliveredAt: row.delivered_at,
         pickedUpAt: row.picked_up_at,
         etaMinutes,
+        etaRange, // { lowMin, highMin, phase, overdue } | null — the v1 honest range
+
         courierName: row.courier_id ? courierName : null,
         courierPhoneMasked: row.courier_id ? courierPhone : null,
         courierMessenger: row.courier_id && courierActive && courierMsgKind && courierMsgHandle

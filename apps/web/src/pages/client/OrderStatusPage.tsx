@@ -2,12 +2,11 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay, useDeliveryEta } from '@deliveryos/ui';
+import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay } from '@deliveryos/ui';
 import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { messengerLink } from '../../lib/messenger.js';
 import { z } from 'zod';
-import { calcETA } from '@deliveryos/shared-types';
 
 const MessagesResponse = z.object({
   messages: z.array(z.any()),
@@ -77,10 +76,11 @@ export function OrderStatusPage() {
   const [error, setError] = useState('');
   const [courierPos, setCourierPos] = useState<LngLatLike>([19.817, 41.331]);
   const [hasCourierFix, setHasCourierFix] = useState(false);
-  const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
+  // HONEST ETA range from the server (Prep-Time + Client ETA v1). Null for terminal
+  // orders or when the server can't estimate. Drives the headline range text below.
+  const [etaRange, setEtaRange] = useState<{ lowMin: number; highMin: number; phase: 'pre_assign' | 'assigned'; overdue: boolean } | null>(null);
   // Real road route (G1/G2): polyline drawn on the map; duration paces local ETA.
   const [routePolyline, setRoutePolyline] = useState<{ lat: number; lng: number }[] | null>(null);
-  const [routeDuration, setRouteDuration] = useState<number | null>(null);
   const [sharingLocation, setSharingLocation] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [ratingComment, setRatingComment] = useState('');
@@ -157,13 +157,11 @@ export function OrderStatusPage() {
         setCourierPos([data.courierPosition.lng, data.courierPosition.lat]);
         setHasCourierFix(true);
       }
-      if (data.etaMinutes != null) {
-        setEtaMinutes(data.etaMinutes);
-      }
+      // HONEST range (range or nothing — never a single number). Null clears it.
+      setEtaRange(data.etaRange ?? null);
       // Stored road route (served for reconnecting clients).
       if (Array.isArray(data.route?.polyline) && data.route.polyline.length >= 2) {
         setRoutePolyline(data.route.polyline);
-        setRouteDuration(data.route.durationSeconds ?? null);
       }
     } catch (err: any) {
       // 401 (no/expired token) or 403 (wrong role) → no valid customer session.
@@ -243,7 +241,6 @@ export function OrderStatusPage() {
         const p = inner.payload;
         if (Array.isArray(p?.polyline) && p.polyline.length >= 2) {
           setRoutePolyline(p.polyline);
-          setRouteDuration(p.durationSeconds ?? null);
         }
         return;
       }
@@ -254,9 +251,8 @@ export function OrderStatusPage() {
           setCourierPos([p.position.lng, p.position.lat]);
           setHasCourierFix(true);
         }
-        if (p.etaSeconds != null) {
-          setEtaMinutes(Math.ceil(p.etaSeconds / 60));
-        }
+        // NOTE: etaSeconds was removed server-side — the honest ETA is the range from
+        // /status (refetched on status transitions below). The map keeps p.position.
          if (p.courierName) {
            setOrder((prev: any) => ({ ...prev, courierName: p.courierName }));
          }
@@ -286,6 +282,10 @@ export function OrderStatusPage() {
           }
           return next;
         });
+        // Refetch so the ETA range re-derives and visibly narrows as the order
+        // advances (e.g. pre_assign → assigned on IN_DELIVERY). The 30s watchdog
+        // is a backstop; this makes the narrowing immediate on a status change.
+        fetchOrder();
       }
 
       if (inner.type === 'order.message' && inner.data) {
@@ -393,8 +393,9 @@ export function OrderStatusPage() {
     () => routePolyline?.map((p) => [p.lng, p.lat] as LngLatLike),
     [routePolyline],
   );
-  // Local, smoothed ETA along the real polyline — zero routing calls per ping.
-  const eta = useDeliveryEta(routePolyline, routeDuration, courierLatLng);
+  // NOTE: the headline ETA is now the HONEST server range (etaRange), never a single
+  // local number — so the useDeliveryEta single-number hook is no longer used for the
+  // headline. The map is fed by routeLine + courierLatLng (the live polyline + pin).
 
   const destPin: LngLatLike = order?.deliveryLat
     ? [order.deliveryLng || 19.817, order.deliveryLat || 41.331]
@@ -402,16 +403,15 @@ export function OrderStatusPage() {
 
   const isInDelivery = order?.status === 'IN_DELIVERY';
   const isPickup = order?.type === 'pickup';
-  // Prefer the smoothed route-based ETA; fall back to the WS naive ETA, then calcETA.
-  const displayEta = eta.arriving
-    ? t('order.arriving', 'Arriving')
-    : eta.etaSeconds != null
-      ? `${Math.max(1, Math.round(eta.etaSeconds / 60))} ${t('order.eta_min', 'min')}`
-      : etaMinutes != null
-        ? `${etaMinutes} min`
-        : order?.createdAt
-          ? calcETA(order.createdAt, order.elapsedSeconds || 0)
-          : '';
+  // HONEST headline ETA — ALWAYS a range, NEVER a single number, NEVER "0".
+  // overdue → reassuring line instead of implying on-time. Null/terminal → no ETA.
+  const isTerminalStatus = order?.status === 'DELIVERED' || order?.status === 'REJECTED' || order?.status === 'CANCELLED';
+  const showEtaRange = !!etaRange && !isTerminalStatus;
+  const displayEta = etaRange?.overdue
+    ? t('order.eta_overdue', 'A little longer than expected — almost there')
+    : etaRange
+      ? t('order.eta_range', '{{low}}–{{high}} min', { low: etaRange.lowMin, high: etaRange.highMin })
+      : '';
 
   if (loading) {
     // Skeleton matches the real layout: map → hero ETA → timeline → summary card.
@@ -537,7 +537,7 @@ export function OrderStatusPage() {
       {order?.courierName && (
         <div data-dynamic className="sr-only" role="status" aria-live="polite">
           {t('order.sr_courier_delivering', '{{name}} is delivering your order.', { name: order.courierName })}
-          {etaMinutes ? ` ${t('order.sr_courier_eta', 'Approximately {{min}} minutes away.', { min: etaMinutes })}` : ''}
+          {etaRange && !isTerminalStatus ? ` ${t('order.sr_courier_eta_range', 'Estimated {{low}} to {{high}} minutes away.', { low: etaRange.lowMin, high: etaRange.highMin })}` : ''}
           {order.deliveryAddress ? ` ${t('order.sr_courier_dest', 'Delivering to {{addr}}.', { addr: order.deliveryAddress })}` : ''}
         </div>
       )}
@@ -545,16 +545,28 @@ export function OrderStatusPage() {
       <div className="p-4 space-y-6 -mt-4 relative z-10 bg-[var(--brand-surface)] rounded-t-[var(--brand-radius)]">
 
         <motion.div className="text-center" {...enter}>
-          <h1 data-dynamic className="text-2xl font-bold text-[var(--brand-text)] mb-1 break-words" style={{ fontFamily: 'var(--brand-font-heading)' }}>
+          <h1 data-dynamic data-testid="order-eta-headline" className="text-2xl font-bold text-[var(--brand-text)] mb-1 break-words" style={{ fontFamily: 'var(--brand-font-heading)' }}>
             {isPickup
               ? (order.status === 'READY' ? t('order.ready_for_pickup', 'Ready for pickup')
                  : order.status === 'PICKED_UP' ? t('order.picked_up', 'Picked up')
                  : t('order.preparing', 'Preparing your order'))
-              : displayEta}
+              : showEtaRange
+                ? displayEta
+                : (statusMsg
+                    ? t(statusMsg.key, statusMsg.fallback)
+                    : t(STATUS_LABELS_KEYS[order.status] || '', order.status.replace(/_/g, ' ')))}
           </h1>
-          <p className="text-sm text-[var(--brand-text-muted)]">
-            {isPickup ? t('order.pickup_at_restaurant', 'Collect at the restaurant') : t('client.estimated_arrival', 'Estimated arrival')}
-          </p>
+          {/* Subline: only claim "estimated arrival" when we actually show a range.
+              pre_assign → caption that the estimate refines after restaurant confirms. */}
+          {isPickup ? (
+            <p className="text-sm text-[var(--brand-text-muted)]">{t('order.pickup_at_restaurant', 'Collect at the restaurant')}</p>
+          ) : showEtaRange && !etaRange?.overdue ? (
+            <p className="text-sm text-[var(--brand-text-muted)]">
+              {etaRange?.phase === 'pre_assign'
+                ? t('order.eta_refines', 'Refines once the restaurant confirms')
+                : t('client.estimated_arrival', 'Estimated arrival')}
+            </p>
+          ) : null}
           {/* Status-aware reassuring line with the lifecycle accent + a gentle live pulse while in delivery. */}
           {statusMsg && (
             <p
