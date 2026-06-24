@@ -955,6 +955,22 @@ export function CheckoutPage() {
               <span className="shrink-0 tabular-nums"><PriceDisplay amount={total + tipAmount} /></span>
             </div>
           )}
+          {/* Pre-order ETA — there is no order yet, so this is a deliberately WIDE
+              approximate range that refines once the order is placed (the status page
+              then shows the honest server range). Delivery only; pickup has no ETA. */}
+          {deliveryType === 'delivery' && (
+            <div className="mt-4 pt-4 border-t flex items-start gap-2.5" style={{ borderColor: 'var(--brand-border)' }} data-testid="checkout-eta-estimate">
+              <i className="ti ti-clock text-lg shrink-0 mt-0.5" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
+              <div className="min-w-0">
+                <div className="text-[14px] font-semibold tabular-nums" style={{ color: 'var(--brand-text)' }}>
+                  {t('order.eta_range', '{{low}}–{{high}} min', { low: 25, high: 45 })}
+                </div>
+                <p className="text-[12px] leading-snug" style={{ color: 'var(--brand-text-muted)' }}>
+                  {t('checkout.eta_estimate', 'Estimated time — refines after you place the order')}
+                </p>
+              </div>
+            </div>
+          )}
         </motion.div>
       </form>
 

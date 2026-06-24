@@ -74,6 +74,20 @@ Both new ESLint rules live in `tools/eslint-plugin-local/src/index.js`, are regi
   legacy reconcile, `isOrderDetailsPending` truth table, and an `existsSync` guard that fails if the
   capped `websocket.ts` is reintroduced. Runs headless (no browser): `playwright test polish-debt-logic`.
 
+### `eta-range-invariants` regression test (row 8)
+- **Bug class:** the customer-facing ETA must NEVER be a single number, NEVER "0", NEVER NaN, never
+  `low>high`; must widen with queue depth, floor near the end, and not re-widen on Phase-2 jitter. The
+  pre-existing machine (`courier-events.ts` `etaSeconds` via `calculateNaiveETASeconds`) emitted a single
+  number that hit 0 on close distance — the exact failure this guards.
+- **RED** — a naive `dist/speed` ETA returns one number and 0 near the door (the removed behavior).
+- **GREEN** — `apps/api/tests/eta-service.test.ts` (20 cases, node:test) asserts every invariant of
+  `computeEtaRange`/`deliveryLegMinutes`: always a range (low<high via minBandMin), never 0 (minLowFloor),
+  phase-1 wider than phase-2, deeper queue → higher, near-end floor band, monotonic-but-honest top, and
+  NaN/null-pin/negative/Infinity never leaking NaN/0/single/low>high. Run: `node --test --import tsx
+  tests/eta-service.test.ts` (headless, no DB). Payload guardrail: `etaSeconds` removed from the customer
+  WS payload (`courier-events.ts`); the honest `etaRange` on `/customer/orders/:id/status` is the sole
+  customer ETA (D1 kept live position/route). | 2026-06-24 · this change
+
 ## Reversal log
 
 _(none — both guardrails active. To remove a guardrail, delete its rule + fixtures and append a

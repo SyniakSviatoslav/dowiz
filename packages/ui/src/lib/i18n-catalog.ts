@@ -3736,4 +3736,29 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Vendosni një kohë përgatitjeje prej të paktën 1 minute',
     uk: 'Вкажіть час приготування щонайменше 1 хвилина',
   },
+  'order.eta_range': {
+    en: '{{low}}–{{high}} min',
+    sq: '{{low}}–{{high}} min',
+    uk: '{{low}}–{{high}} хв',
+  },
+  'order.eta_refines': {
+    en: 'Refines once the restaurant confirms',
+    sq: 'Përditësohet pasi restoranti konfirmon',
+    uk: 'Уточниться після підтвердження рестораном',
+  },
+  'order.eta_overdue': {
+    en: 'A little longer than expected — almost there',
+    sq: 'Pak më gjatë se pritej — gati po vjen',
+    uk: 'Трохи довше, ніж очікувалось — майже на місці',
+  },
+  'order.sr_courier_eta_range': {
+    en: 'Estimated {{low}} to {{high}} minutes away.',
+    sq: 'Rreth {{low}} deri {{high}} minuta larg.',
+    uk: 'Орієнтовно за {{low}}–{{high}} хвилин.',
+  },
+  'checkout.eta_estimate': {
+    en: 'Estimated time — refines after you place the order',
+    sq: 'Koha e parashikuar — përditësohet pasi bën porosinë',
+    uk: 'Орієнтовний час — уточниться після оформлення замовлення',
+  },
 };

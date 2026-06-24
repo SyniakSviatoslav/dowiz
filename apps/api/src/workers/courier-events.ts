@@ -3,7 +3,6 @@ import { Pool } from 'pg';
 import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
 import { decryptPII } from '../lib/pii-cipher.js';
-import { calculateNaiveETASeconds } from '../lib/geo.js';
 import { getRoutingService, saveRoute, loadRoute, claimOnce, shouldReroute } from '../lib/routing.js';
 
 export class CourierEventsWorker {
@@ -168,13 +167,9 @@ export class CourierEventsWorker {
     const details = await this.fetchCourierDetailsAndOrder(msg.courierId);
     if (!details) return;
 
-    // Dispatch to customer WS
-    let etaSeconds = null;
+    // Dispatch to customer WS — D1: do NOT push a single-number ETA to the customer; the honest
+    // range comes from the order-status endpoint's `etaRange` (etaService). Live position/route stay.
     if (details.assignmentStatus === 'picked_up' && details.position && details.destination) {
-      etaSeconds = calculateNaiveETASeconds(
-        haversineDistanceKm(details.position, details.destination)
-      );
-
       // Per-leg routing — NOT per-ping. Only (re)compute when there's no stored
       // route yet, or the live position has strayed past the threshold.
       const existing = await loadRoute(details.orderId);
@@ -192,7 +187,6 @@ export class CourierEventsWorker {
         courierName: details.courierName,
         phoneMasked: details.phoneMasked,
         position: details.position,
-        etaSeconds,
         status: this.mapAssignmentStatusToDisplay(details.assignmentStatus)
       }
     });
@@ -202,14 +196,10 @@ export class CourierEventsWorker {
     const details = await this.fetchCourierDetailsAndOrder(msg.courierId, msg.orderId, msg.locationId);
     if (!details) return;
 
-    let etaSeconds = null;
     if (statusOverride === 'heading_to_destination' && details.position && details.destination) {
-      etaSeconds = calculateNaiveETASeconds(
-        haversineDistanceKm(details.position, details.destination)
-      );
       // The single per-delivery route() call: courier just picked up → heading to
       // the customer. Pushed once to order:{id}; reconnecting clients read it back
-      // from the status endpoint.
+      // from the status endpoint. (D1: no single-number ETA pushed; range is on the status endpoint.)
       await this.publishRouteOnce(msg.orderId, msg.locationId, details.position, details.destination, `route:init:${msg.orderId}`, 300);
     }
 
@@ -227,24 +217,8 @@ export class CourierEventsWorker {
         courierName: details.courierName,
         phoneMasked: details.phoneMasked,
         position: details.position,
-        etaSeconds,
         status: statusOverride
       }
     });
   }
-}
-
-// Haversine implementation here for worker context
-function haversineDistanceKm(coord1: {lat: number, lng: number}, coord2: {lat: number, lng: number}): number {
-  const R = 6371; // Earth's radius in km
-  const dLat = (coord2.lat - coord1.lat) * (Math.PI / 180);
-  const dLng = (coord2.lng - coord1.lng) * (Math.PI / 180);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(coord1.lat * (Math.PI / 180)) * Math.cos(coord2.lat * (Math.PI / 180)) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
 }
