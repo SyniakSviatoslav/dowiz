@@ -5,7 +5,7 @@
    keyboard-a11y for the card is tracked separately. */
 import React, { memo, useState } from 'react';
 import { Button, useI18n, MessageThread, PriceDisplay } from '../../index.js';
-import type { AdminOrder } from './types.js';
+import { type AdminOrder, isOrderDetailsPending } from './types.js';
 
 interface OrderCardProps {
   order: AdminOrder;
@@ -67,6 +67,10 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
   const confirmDelta = getDeltaMin(order.createdAt, order.confirmedAt);
   const prepDelta = getDeltaMin(order.confirmedAt, order.readyAt);
   const deliveryDelta = getDeltaMin(order.readyAt, order.deliveredAt);
+
+  // F7: hollow-card guard — see isOrderDetailsPending. Placeholder while the authed
+  // backfill (name/items) is still in flight, instead of a nameless / "0 items" card.
+  const detailsPending = isOrderDetailsPending(order);
 
   return (
     <div className={`bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4 flex flex-col gap-4 ${isLoading ? 'opacity-50 pointer-events-none' : 'cursor-pointer hover:bg-[var(--brand-surface-raised)]'}`} onClick={() => onViewDetail?.(order.id)}>
@@ -130,10 +134,19 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
 
       {/* Details */}
       <div className="text-sm space-y-1 text-[var(--brand-text)]">
-        {order.customerName && order.customerName !== 'Unknown' && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.client', 'Client:')}</span> {order.customerName}</div>}
-        {order.customerPhone && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('common.phone', 'Phone:')}</span> {maskPhone(order.customerPhone)}</div>}
-        {order.deliveryAddress && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.to', 'To:')}</span> {order.deliveryAddress}</div>}
-        <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.items', 'Items:')}</span> {order.items?.length || 0} {t('admin.items_lower', 'items')} (<PriceDisplay amount={order.total} />)</div>
+        {detailsPending ? (
+          <div className="space-y-1.5 py-0.5" data-testid="order-details-pending" aria-label={t('admin.loading_details', 'Loading order details…')}>
+            <div className="h-4 w-2/3 rounded shimmer" />
+            <div className="h-3 w-2/5 rounded shimmer" />
+          </div>
+        ) : (
+          <>
+            {order.customerName && order.customerName !== 'Unknown' && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.client', 'Client:')}</span> {order.customerName}</div>}
+            {order.customerPhone && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('common.phone', 'Phone:')}</span> {maskPhone(order.customerPhone)}</div>}
+            {order.deliveryAddress && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.to', 'To:')}</span> {order.deliveryAddress}</div>}
+          </>
+        )}
+        <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.items', 'Items:')}</span> {order.items?.length || order.itemCount || 0} {t('admin.items_lower', 'items')} (<PriceDisplay amount={order.total} />)</div>
         {order.items && order.items.length > 0 && (
           <div className="ml-16 text-xs space-y-0.5" style={{ color: 'var(--brand-text-muted)' }}>
             {order.items.map((item: any, i: number) => (
