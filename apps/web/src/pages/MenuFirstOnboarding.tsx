@@ -1,7 +1,7 @@
 import { safeStorage } from '../lib/safeStorage.js';
 import React, { useCallback, useRef, useState, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Input, FormField, useI18n } from '@deliveryos/ui';
+import { Button, Input, FormField, useI18n, ArtNouveauFrame, ArtNouveauDivider, NomadicCredit } from '@deliveryos/ui';
 import { PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient, ApiError } from '../lib/index.js';
 import { SwanHero } from '../components/SwanHero.js';
@@ -162,13 +162,23 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
   };
 
   const S = {
+    // Inked-outline "drawn on paper" card: a soft paper surface fill with a
+    // 1.75px ink contour (not the soft default border), keeping --brand-radius.
     card: {
-      background: 'var(--brand-surface)',
+      background: 'var(--paper-surface, var(--brand-surface))',
       borderRadius: 'var(--brand-radius)',
-      boxShadow: 'var(--elev-2)',
+      border: '1.75px solid var(--ink, var(--brand-text))',
+      boxShadow: 'var(--elev-1)',
       padding: 'var(--space-5, 1.25rem)',
     },
-    heading: { fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' },
+    // Display face (Yeseva One, Art-Nouveau) for the big hero/section titles,
+    // with generous tracking/leading for an elegant display feel.
+    heading: {
+      fontFamily: 'var(--font-display, var(--brand-font-heading))',
+      color: 'var(--brand-text)',
+      letterSpacing: '-0.01em',
+      lineHeight: 1.12,
+    },
     // Body/helper copy uses --brand-text (not -muted) so it clears 4.5:1.
     helper: { color: 'var(--brand-text)' },
     muted: { color: 'var(--brand-text-muted)' },
@@ -207,22 +217,37 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
 
         {/* ── CHOOSE: upload your menu ── */}
         {phase === 'choose' && (
-          <div className="space-y-5">
+          <div className="space-y-6">
             {/* Soft access gate (ADR-soft-access-gate). Renders only when the build flag
                 is on (default off) — public "register interest" capture on the landing. */}
             {mode === 'anonymous' && <AccessRequestGate />}
             {mode === 'anonymous'
               ? (
-                <Suspense fallback={<SwanHero />}>
-                  <PaperScene fallback={<SwanHero />} />
-                </Suspense>
+                // Comic-panel hero: the live paper scene framed in an inked Art-Nouveau
+                // border with corner flourishes. The frame is decorative (aria-hidden in
+                // the component); PaperScene wiring is untouched.
+                <ArtNouveauFrame
+                  className="dz-fade-in"
+                  style={{ background: 'var(--paper-surface, var(--brand-surface))', borderRadius: 'var(--brand-radius)', overflow: 'hidden', boxShadow: 'var(--elev-2)', padding: 6 }}
+                >
+                  <Suspense fallback={<SwanHero />}>
+                    <PaperScene fallback={<SwanHero />} />
+                  </Suspense>
+                </ArtNouveauFrame>
               )
               : (
                 <div>
-                  <h2 className="text-2xl font-bold tracking-tight" style={S.heading}>{t('start.title', 'Start with your menu')}</h2>
+                  <h2 className="text-3xl font-bold" style={S.heading}>{t('start.title', 'Start with your menu')}</h2>
                   <p className="mt-2 text-sm leading-relaxed" style={S.helper}>{t('start.subtitle', 'Upload a PDF or photo of your menu. We’ll read it, set up your storefront, and bring your items to life — review everything before anything goes public.')}</p>
                 </div>
               )}
+
+            {/* Ornamental divider carrying the Art-Nouveau line into the chrome. */}
+            <ArtNouveauDivider className="dz-fade-in" style={{ maxWidth: 220, margin: '0.25rem auto' }} />
+
+            {/* Three inked feature glyphs in the limited palette (upload / AI / online). */}
+            <FeatureGlyphs />
+
             <div style={S.card} className="dz-fade-in space-y-5">
             <button
               type="button"
@@ -232,9 +257,9 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
                 motion-safe:transition-[transform,box-shadow,border-color] duration-150 ease-[var(--ease-soft)]
                 hover:-translate-y-0.5 active:scale-[0.99]
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
-              style={{ border: '2px dashed var(--brand-border)', borderRadius: 'var(--brand-radius)', background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
+              style={{ border: '2px dashed var(--ink-line, var(--brand-border))', borderRadius: 'var(--brand-radius)', background: 'var(--paper-raised, var(--brand-surface-raised))', color: 'var(--brand-text)' }}
             >
-              <i className="ti ti-file-upload text-3xl motion-safe:transition-transform duration-150 ease-[var(--ease-soft)] group-hover:-translate-y-0.5" style={{ color: 'var(--brand-primary)' }} aria-hidden="true" />
+              <i className="ti ti-file-upload text-3xl motion-safe:transition-transform duration-150 ease-[var(--ease-soft)] group-hover:-translate-y-0.5" style={{ color: 'var(--teal-deep, var(--brand-primary))' }} aria-hidden="true" />
               <div className="mt-2 font-semibold">{t('start.upload_cta', 'Upload your menu')}</div>
               <div className="mt-0.5 text-sm" style={S.muted}>{t('start.upload_hint', 'PDF or photo · up to 10MB')}</div>
             </button>
@@ -264,10 +289,11 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
             onSubmit={(e) => { e.preventDefault(); void handleClaim(); }}
           >
             <div>
-              <h2 className="text-2xl font-bold tracking-tight" style={S.heading}>
+              <h2 className="text-3xl font-bold" style={S.heading}>
                 {importId ? t('start.review_title', 'Here’s your storefront') : t('admin.create_storefront', 'Create your storefront')}
               </h2>
-              <p className="mt-2 text-sm leading-relaxed" style={S.helper}>
+              <ArtNouveauDivider className="mt-3" style={{ maxWidth: 160, marginLeft: 0 }} />
+              <p className="mt-3 text-sm leading-relaxed" style={S.helper}>
                 {importId
                   ? t('start.review_desc', 'We pre-filled these from your menu. Edit anything, then claim it — nothing is public until you publish.')
                   : t('admin.create_storefront_desc', "Three details to start. You'll add your menu and go live on the next screen — nothing is public until you publish.")}
@@ -275,8 +301,8 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
             </div>
 
             {importId && preview && (
-              <div className="dz-fade-in flex items-start gap-3 p-3" style={{ background: 'var(--brand-surface-raised)', borderRadius: 'var(--brand-radius)', boxShadow: 'var(--elev-1)' }} data-testid="menu-preview">
-                <i className="ti ti-checks shrink-0 mt-0.5 text-lg" style={{ color: 'var(--brand-primary)' }} aria-hidden="true" />
+              <div className="dz-fade-in flex items-start gap-3 p-3" style={{ background: 'var(--paper-raised, var(--brand-surface-raised))', borderRadius: 'var(--brand-radius)', border: '1.5px solid var(--ink-line, var(--brand-border))' }} data-testid="menu-preview">
+                <i className="ti ti-checks shrink-0 mt-0.5 text-lg" style={{ color: 'var(--teal-deep, var(--brand-primary))' }} aria-hidden="true" />
                 <div className="min-w-0">
                   <div className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>
                     {t('start.found_items', '{count} items across {cats} categories')
@@ -328,8 +354,47 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
             )}
           </form>
         )}
+
+        {/* Homage attribution (Nomadic Tribe / makemepulse) — paper-margin footer. */}
+        <footer className="mt-10 pt-2">
+          <ArtNouveauDivider className="dz-fade-in" style={{ maxWidth: 180, margin: '0 auto 0.75rem' }} />
+          <NomadicCredit />
+        </footer>
       </div>
     </div>
+  );
+}
+
+// Three feature glyphs in the limited paper palette (sand / teal / gold on ink),
+// rendered as small inked icons — the "drawn on paper" how-it-works trio. Purely
+// decorative iconography (aria-hidden); the visible labels carry the meaning.
+function FeatureGlyphs() {
+  const { t } = useI18n();
+  const items: { icon: string; tint: string; label: string }[] = [
+    { icon: 'ti ti-file-upload', tint: 'var(--sand, #987654)', label: t('start.feat_upload', 'Upload your menu') },
+    { icon: 'ti ti-sparkles', tint: 'var(--teal-deep, #3EA094)', label: t('start.feat_ai', 'We read it for you') },
+    { icon: 'ti ti-bolt', tint: 'var(--gold, #ECD06F)', label: t('start.feat_online', 'Go online fast') },
+  ];
+  return (
+    <ul className="dz-fade-in grid grid-cols-3 gap-3 text-center" aria-label={t('start.how_it_works', 'How it works')}>
+      {items.map((it) => (
+        <li key={it.label} className="flex flex-col items-center gap-2 min-w-0">
+          <span
+            className="inline-flex items-center justify-center"
+            aria-hidden="true"
+            style={{
+              width: 44, height: 44, borderRadius: 'var(--brand-radius)',
+              border: '1.75px solid var(--ink, #241F1A)',
+              background: 'var(--paper-raised, var(--brand-surface-raised))',
+              color: 'var(--ink, #241F1A)',
+            }}
+          >
+            <i className={`${it.icon} text-xl`} style={{ color: it.tint }} />
+          </span>
+          <span className="text-xs leading-tight" style={{ color: 'var(--brand-text)' }}>{it.label}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
