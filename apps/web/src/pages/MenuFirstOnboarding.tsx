@@ -275,7 +275,7 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
               )}
 
             {/* Ornamental divider carrying the Art-Nouveau line into the chrome. */}
-            <ArtNouveauDivider className={mode === 'anonymous' ? 'dz-stage dz-stage-4' : 'dz-fade-in'} style={{ maxWidth: 220, margin: '0.25rem auto' }} />
+            <ArtNouveauDivider className={mode === 'anonymous' ? 'dz-stage dz-stage-4 dz-divider-draw' : 'dz-fade-in'} style={{ maxWidth: 220, margin: '0.25rem auto' }} />
 
             {/* Three inked feature glyphs in the limited palette (upload / AI / online). */}
             <FeatureGlyphs staged={mode === 'anonymous'} />
@@ -424,7 +424,7 @@ function FeatureGlyphs({ staged = false }: { staged?: boolean }) {
       {items.map((it, i) => (
         <li key={it.label} className="dz-glyph flex flex-col items-center gap-2 min-w-0" style={staged ? ({ '--dz-i': i } as React.CSSProperties) : undefined}>
           <span
-            className="inline-flex items-center justify-center"
+            className="dz-glyph-tile inline-flex items-center justify-center"
             aria-hidden="true"
             style={{
               width: 44, height: 44, borderRadius: 'var(--brand-radius)',
@@ -506,6 +506,29 @@ const ONBOARD_CSS = `
   100%{opacity:1;filter:blur(0);transform:none}
 }
 .dz-dropzone:hover{border-color:var(--brand-primary);box-shadow:var(--elev-2)}
+
+/* Feature glyphs: the inked tile lifts + tilts on hover and presses on active,
+   the icon nudges up — a small tactile reward. Colour-only under reduced motion. */
+.dz-glyph-tile{transition:transform var(--motion-fast,150ms) var(--ease-soft,cubic-bezier(.4,0,.2,1)),
+  box-shadow var(--motion-fast,150ms) var(--ease-soft,cubic-bezier(.4,0,.2,1)),
+  border-color var(--motion-fast,150ms) var(--ease-soft,cubic-bezier(.4,0,.2,1))}
+.dz-glyph-tile .ti{transition:transform var(--motion-fast,150ms) var(--ease-soft,cubic-bezier(.4,0,.2,1))}
+@media (prefers-reduced-motion: no-preference){
+  .dz-glyph:hover .dz-glyph-tile{transform:translateY(-3px) rotate(-2deg);box-shadow:var(--elev-2)}
+  .dz-glyph:hover .dz-glyph-tile .ti{transform:translateY(-1px) scale(1.12)}
+  .dz-glyph:active .dz-glyph-tile{transform:translateY(-1px) scale(.96)}
+}
+
+/* Art-Nouveau divider draws itself in (ink strokes reveal, then the gold seal
+   pops), synced to the staged reveal (~1.34s) so it lands as the panel settles. */
+@media (prefers-reduced-motion: no-preference){
+  .dz-divider-draw path{stroke-dasharray:200;stroke-dashoffset:200;
+    animation:dzDividerDraw 1s var(--ease-out,cubic-bezier(.16,1,.3,1)) 1.34s forwards}
+  .dz-divider-draw circle{transform-box:fill-box;transform-origin:50% 50%;
+    animation:dzDividerPop 440ms var(--ease-out,cubic-bezier(.16,1,.3,1)) 2.0s both}
+}
+@keyframes dzDividerDraw{to{stroke-dashoffset:0}}
+@keyframes dzDividerPop{from{transform:scale(0)}to{transform:scale(1)}}
 /* drag-over: the dropzone lifts (border colour/style cue is inline-driven so it
    beats the inline base border). Reduced-motion keeps only the colour cue. */
 .dz-dropzone-active{box-shadow:var(--elev-2)}
