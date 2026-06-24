@@ -193,3 +193,26 @@ This repo has the Repowise MCP server configured. The tools below answer questio
 - Typecheck: `pnpm typecheck`
 
 <!-- REPOWISE:END -->
+
+## Task-Exit Rule (universal — every agent, every task, every change, no exception)
+
+Before executing ANY task — independent of spec completeness or clarifications — in this order:
+
+1. **Enrich conditions.** Derive the full definition of "done", not just the literal task text.
+   Enrich by fixed dimensions: states (loading/empty/error/success); error matrix
+   (401/403/404/422/429/5xx/network); rare/edge states; regression radius (what this could break);
+   design system/tokens; i18n (al/en); security (no cookie/secret/PII, Zod-parse); api/ws contract
+   parity. A non-applicable dimension → mark `N/A — why`, never skip silently.
+2. **Author task-exit.** Write a checkable exit checklist for *this* change — one item per enriched
+   condition, each with the proof that confirms it (file:line / test name / command output / artifact).
+   **Write it BEFORE touching code.**
+
+Then make the change. Then:
+
+3. **Verify against the pre-written exit.** Walk each item → PASS/FAIL with proof. "Looks fine" = FAIL.
+   No item is credited by intent — only by observed proof.
+
+Don't declare a task done until every item is green or raised as an explicit flag. Flag class:
+**inline-fix** (cosmetic/states/tokens — fix now) vs **escalate** (contract / price-status business
+logic / security — don't touch, raise separately). **No size exemption:** the smaller the change, the
+likelier a missed detail. Full spec: docs/operating-model/task-exit-rule.md.
