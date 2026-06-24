@@ -23,9 +23,9 @@ Synthesized from 3 adversarial audits (hater · UX-critique · QA-seams). Status
 
 | ID | Seam | File:line | Status |
 |----|------|-----------|--------|
-| F12 | Q4 aria-live: status changes weakly announced | OrderStatusPage.tsx:388,431 | TODO |
-| F13 | Q5 continuity-on-refresh mid-journey untested | — | TODO (add assertion) |
-| F14 | Two divergent WS clients (forever vs 10-cap reconnect) — one freezes permanently | useWebSocket.ts vs ui/websocket.ts | TODO/refactor |
+| F12 | Q4 aria-live: status changes weakly announced | OrderStatusPage.tsx:388,431 | SMOOTH (sr-only role=status announcer; proof pending deploy) |
+| F13 | Q5 continuity-on-refresh mid-journey untested | — | SMOOTH (assertion added, GREEN on staging) |
+| F14 | Two divergent WS clients (forever vs 10-cap reconnect) — one freezes permanently | useWebSocket.ts vs ui/websocket.ts | SMOOTH (dead capped client deleted; one client) |
 
 ## Status after batch 1+2 (commits b033bf8e, 2074f7d4 + seam-polish.spec.ts)
 - F1/F2/F11 SMOOTH (courier delivery honesty; cancel-aware; dev-mock gated) — committed, typecheck green.
@@ -41,9 +41,26 @@ Synthesized from 3 adversarial audits (hater · UX-critique · QA-seams). Status
   (F1,F3,F4,F5,F6,F10,F11 verified SMOOTH; F7/F12/F14 non-blocking). Commits b033bf8e, 2074f7d4,
   c1fb3ea1; real-UI proof e2e/tests/seam-polish.spec.ts (CANCELLED green on staging).
 
-## Remaining (polish-debt, next rounds)
-- F7 owner hollow-card flash · F9-full cart↔menu_version reconcile · F12 aria-live announce ·
-  F13 continuity-on-refresh assertion · F14 consolidate the two WS clients (forever vs 10-cap).
+## Polish-debt round → SMOOTH (commit f79e2910, FE-only) ✅
+- **F7** owner hollow-card flash: OrderCard shows a shimmer placeholder while `isOrderDetailsPending`
+  (itemCount>0 but items not yet backfilled) instead of a nameless / "0 items" card; count falls
+  back to `itemCount`.
+- **F9** cart↔menu_version reconcile: cart stores the `menu_version` it was priced against; on every
+  menu load `reconcileCart()` re-prices drifted modifier-free lines, drops sold-out/removed items,
+  and shows a non-blocking notice — checkout no longer ambushes with a server hard-block. (Modifier
+  lines deferred to the server guard.)
+- **F12** a11y: dedicated sr-only `role="status"` aria-live region speaks each status transition as
+  explicit localized text (visual toast wasn't reliably announced; stepper is graphical).
+- **F14** WS consolidation: deleted the dead reconnect-capped `WsClient` (0 consumers, froze after
+  10 tries); `useWebSocket` (reconnect-forever) is the single client; `no-direct-websocket` rule
+  tightened to one exception.
+- Proof: `e2e/tests/polish-debt-logic.spec.ts` 11/11 GREEN (F9 reconcile branches · F7 predicate ·
+  F14 re-add guard) + `e2e/tests/polish-debt.spec.ts` **F13 GREEN on staging** (refresh continuity);
+  **F12 proof pending deploy** (the new sr-announcer element 404s on the not-yet-deployed staging —
+  the expected red half; goes green once f79e2910 ships). Ledger rows 5 (updated) + 7.
+- ⚠️ Deploy gap: no fly CLI in this sandbox → operator must deploy f79e2910 to staging, then re-run
+  `VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test polish-debt --project=desktop`
+  to flip F12 green.
 
 ## BLOCKED-server → FIXED + DEPLOYED + PROVEN on staging (commits d120a914, 57f32e11) ✅
 - 🔴→🟢 `/public/locations/demo/menu` "returns empty under load" — diagnosed read-only then
