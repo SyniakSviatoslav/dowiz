@@ -11,9 +11,9 @@ export function CartFAB({ itemsCount, total, onClick, isBouncing = false }: { it
         <motion.div
           className="fixed right-[20px] z-[100] embed-hidden"
           style={{ bottom: 'calc(80px + var(--safe-bottom))' }}
-          initial={reduce ? { opacity: 0 } : { scale: 0.6, opacity: 0, y: 12 }}
-          animate={reduce ? { opacity: 1 } : { scale: 1, opacity: 1, y: 0 }}
-          exit={reduce ? { opacity: 0 } : { scale: 0.6, opacity: 0, y: 12 }}
+          initial={reduce ? { opacity: 0 } : { transform: 'translateY(12px) scale(0.92)', opacity: 0 }}
+          animate={reduce ? { opacity: 1 } : { transform: 'translateY(0px) scale(1)', opacity: 1 }}
+          exit={reduce ? { opacity: 0 } : { transform: 'translateY(12px) scale(0.92)', opacity: 0 }}
           transition={reduce ? { duration: 0.15 } : { type: 'spring', stiffness: 320, damping: 26 }}
         >
           <motion.button
@@ -26,17 +26,17 @@ export function CartFAB({ itemsCount, total, onClick, isBouncing = false }: { it
               boxShadow: 'var(--elev-3)',
             }}
             onClick={onClick}
-            whileHover={reduce ? undefined : { y: -2, boxShadow: 'var(--elev-4)' }}
-            whileTap={{ scale: 0.96 }}
+            whileHover={reduce ? undefined : { transform: 'translateY(-2px)', boxShadow: 'var(--elev-4)' }}
+            whileTap={reduce ? undefined : { transform: 'scale(0.96)' }}
           >
             <span className="relative inline-flex">
               <i className="ti ti-shopping-cart text-lg leading-none" />
               <AnimatePresence mode="popLayout">
                 <motion.span
                   key={itemsCount > 99 ? '99+' : itemsCount}
-                  initial={reduce ? { opacity: 0 } : { scale: 0.4, opacity: 0 }}
-                  animate={reduce ? { opacity: 1 } : { scale: 1, opacity: 1 }}
-                  exit={reduce ? { opacity: 0 } : { scale: 0.4, opacity: 0 }}
+                  initial={reduce ? { opacity: 0 } : { transform: 'scale(0.6)', opacity: 0 }}
+                  animate={reduce ? { opacity: 1 } : { transform: 'scale(1)', opacity: 1 }}
+                  exit={reduce ? { opacity: 0 } : { transform: 'scale(0.6)', opacity: 0 }}
                   transition={reduce ? { duration: 0.1 } : { type: 'spring', stiffness: 500, damping: 22 }}
                   className="absolute -top-2 -right-2 min-w-[18px] h-[18px] rounded-full bg-[var(--color-danger)] text-white text-[10px] font-bold flex items-center justify-center leading-none px-1 tabular-nums"
                   style={{ boxShadow: 'var(--elev-2)' }}

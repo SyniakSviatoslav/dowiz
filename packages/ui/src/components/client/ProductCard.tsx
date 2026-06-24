@@ -27,7 +27,7 @@ const SPRING_OUT = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const cardVariants = {
   rest: { y: 0, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', scale: 1 },
   hover: { y: -2, boxShadow: '0 8px 22px rgba(0,0,0,0.11)', scale: 1.005, transition: { duration: 0.18, ease: SPRING_OUT } },
-  tap: { scale: 0.99, y: -1, transition: { duration: 0.08 } },
+  tap: { scale: 0.98, y: -1, transition: { duration: 0.08, ease: SPRING_OUT } },
 };
 const imgVariants = {
   rest: { scale: 1 },
