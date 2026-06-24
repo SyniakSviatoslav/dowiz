@@ -297,6 +297,8 @@ function initScene(THREE: ThreeNS, host: HTMLElement): () => void {
   // Animated-uniform handles set up below (sun halo + drifting dust motes).
   let haloUniforms: { uTime: { value: number } } | null = null;
   let moteUniforms: { uTime: { value: number } } | null = null;
+  // Distant flock — each bird flaps + drifts; animated per-frame (only a few).
+  const birds: import('three').Group[] = [];
 
   // Low gold sun (a flat circle so it reads as a printed disc, not a sphere).
   {
@@ -444,6 +446,42 @@ function initScene(THREE: ThreeNS, host: HTMLElement): () => void {
     mid.add(caravan);
   }
 
+  // ── Distant flock: a few inked "V" gulls drifting across the far sky. Each is
+  //   two thin bars hinged into a wing; the hinge angle flaps and the whole bird
+  //   drifts + bobs (animated in the loop). Geometry/material shared → cheap. ──
+  {
+    const wingGeo = track(new THREE.PlaneGeometry(0.5, 0.055));
+    const birdMat = track(
+      new THREE.MeshBasicMaterial({ color: c(PAPER.ink), side: THREE.DoubleSide, transparent: true, opacity: 0.7 }),
+    ) as import('three').MeshBasicMaterial;
+    const seeds: Array<[number, number, number, number]> = [
+      // [x, y, z, scale]
+      [-2.2, 2.6, -6, 0.85],
+      [-1.4, 3.0, -6.2, 1.0],
+      [-0.5, 2.7, -6, 0.78],
+      [2.4, 3.1, -6.4, 0.92],
+    ];
+    seeds.forEach(([x, y, z, s], i) => {
+      const bird = new THREE.Group();
+      const lw = new THREE.Mesh(wingGeo, birdMat);
+      lw.position.x = -0.22;
+      const rw = new THREE.Mesh(wingGeo, birdMat);
+      rw.position.x = 0.22;
+      bird.add(lw, rw);
+      bird.scale.setScalar(s);
+      bird.position.set(x, y, z);
+      (bird.userData as { phase: number; baseX: number; baseY: number; lw: unknown; rw: unknown }) = {
+        phase: i * 1.7,
+        baseX: x,
+        baseY: y,
+        lw,
+        rw,
+      };
+      bg.add(bird);
+      birds.push(bird);
+    });
+  }
+
   // ── (1+4) Post-process: render scene to a target, then a fullscreen pass that
   //   adds screen-space grain, vignette, desaturation/palette bias + subtle CA. ─
   const target = new THREE.WebGLRenderTarget(W() * dpr, H() * dpr, {
@@ -481,6 +519,10 @@ function initScene(THREE: ThreeNS, host: HTMLElement): () => void {
 
         void main() {
           vec2 uv = vUv;
+          // (4b) horizon heat-shimmer: a faint horizontal ripple that peaks at
+          // the dune horizon (~mid-height) and fades away from it.
+          float hz = exp(-pow((uv.y - 0.52) * 6.5, 2.0));
+          uv.x += sin(uv.y * 70.0 + uTime * 2.2) * 0.0016 * hz;
           // (4) subtle chromatic aberration — grows toward the edges.
           vec2 dir = uv - 0.5;
           float ca = dot(dir, dir) * 0.010;
@@ -620,6 +662,17 @@ function initScene(THREE: ThreeNS, host: HTMLElement): () => void {
     (postMat.uniforms.uTime as { value: number }).value = t;
     if (haloUniforms) haloUniforms.uTime.value = t;
     if (moteUniforms) moteUniforms.uTime.value = t;
+
+    // Flock: slow rightward drift that wraps, a gentle bob, and a wing flap.
+    for (const bird of birds) {
+      const u = bird.userData as { phase: number; baseX: number; baseY: number; lw: import('three').Object3D; rw: import('three').Object3D };
+      const x = ((u.baseX + 8 + t * 0.32 + u.phase) % 16) - 8; // wrap across the sky
+      bird.position.x = x;
+      bird.position.y = u.baseY + Math.sin(t * 0.6 + u.phase) * 0.12;
+      const flap = 0.5 + Math.sin(t * 4.0 + u.phase) * 0.32; // hinge angle
+      u.lw.rotation.z = flap;
+      u.rw.rotation.z = -flap;
+    }
 
     // Pass 1: scene → target. Pass 2: target → screen with the grade pass.
     renderer.setRenderTarget(target);
