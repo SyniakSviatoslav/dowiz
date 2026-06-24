@@ -225,6 +225,7 @@ export function MenuManagerPage() {
   const [formAvailable, setFormAvailable] = useState(true);
   const [formImage, setFormImage] = useState<string | null>(null);
   const [formStock, setFormStock] = useState('');
+  const [formPrepTime, setFormPrepTime] = useState('15');
 
   const [saving, setSaving] = useState(false);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
@@ -282,6 +283,7 @@ export function MenuManagerPage() {
     setFormAvailable(true);
     setFormImage(null);
     setFormStock('');
+    setFormPrepTime('15');
 
     setFormTaste({});
     setExpandedCat(categoryId);
@@ -296,6 +298,7 @@ export function MenuManagerPage() {
     setFormAvailable(product.available);
     setFormImage(product.imageUrl || null);
     setFormStock(product.stockCount != null ? String(product.stockCount) : '');
+    setFormPrepTime((product as any).prepTimeMinutes != null ? String((product as any).prepTimeMinutes) : '15');
 
     setFormTaste(product.taste || {});
     setFormRecipeLines(product.recipeLines || []);
@@ -305,7 +308,7 @@ export function MenuManagerPage() {
     setShowForm(false);
     setEditingProduct(null);
     setFormName(''); setFormPrice(''); setFormDesc('');
-    setFormImage(null); setFormStock(''); setPendingImageFile(null);
+    setFormImage(null); setFormStock(''); setFormPrepTime('15'); setPendingImageFile(null);
     setSaving(false);
   };
 
@@ -313,6 +316,8 @@ export function MenuManagerPage() {
     if (!formName.trim() || !formPrice || !expandedCat) return;
     const price = parseInt(formPrice);
     if (isNaN(price) || price <= 0) return;
+    const prepTime = parseInt(formPrepTime);
+    if (isNaN(prepTime) || prepTime < 1 || prepTime > 1440) return;
     const stock = formStock ? parseInt(formStock) : undefined;
     if (stock !== undefined && (isNaN(stock) || stock < 0)) return;
 
@@ -321,6 +326,7 @@ export function MenuManagerPage() {
     const hasRecipeLines = formRecipeLines.length > 0;
     const product: Record<string, any> = {
       name: formName.trim(), price,
+      prep_time_minutes: prepTime,
       description: formDesc || undefined,
       available: formAvailable,
       categoryId: expandedCat,
@@ -966,6 +972,14 @@ export function MenuManagerPage() {
             </div>
 
             <div>
+              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.prep_time_label', 'Prep time (min)')} *</label>
+              <Input value={formPrepTime} onChange={e => setFormPrepTime(e.target.value)} placeholder="15" type="number" min={1} max={1440} />
+              {(!formPrepTime || isNaN(parseInt(formPrepTime)) || parseInt(formPrepTime) < 1) && (
+                <p className="text-[10px] mt-1" style={{ color: 'var(--color-danger)' }}>{t('admin.prep_time_required', 'Enter a prep time of at least 1 minute')}</p>
+              )}
+            </div>
+
+            <div>
               <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.description', 'Description')}</label>
               <Input value={formDesc} onChange={e => setFormDesc(e.target.value)} placeholder={t('admin.short_description', 'Short description...')} />
             </div>
@@ -1030,7 +1044,7 @@ export function MenuManagerPage() {
 
             <div className="flex gap-3 pt-2">
               <Button onClick={closeForm} variant="ghost" className="flex-1">{t('common.cancel', 'Cancel')}</Button>
-              <Button onClick={handleSaveProduct} isLoading={saving} disabled={!formName.trim() || !formPrice} className="flex-1">
+              <Button onClick={handleSaveProduct} isLoading={saving} disabled={!formName.trim() || !formPrice || !formPrepTime || isNaN(parseInt(formPrepTime)) || parseInt(formPrepTime) < 1} className="flex-1">
                 {editingProduct ? t('common.save', 'Save Changes') : t('admin.add_item', 'Add Item')}
               </Button>
             </div>
