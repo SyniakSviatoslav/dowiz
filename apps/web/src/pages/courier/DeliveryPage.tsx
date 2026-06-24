@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useReducedMotion } from 'framer-motion';
 import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot, PriceDisplay, Button } from '@deliveryos/ui';
 import type { CourierTask, CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
@@ -37,6 +38,7 @@ export function DeliveryPage() {
   const [orderClosed, setOrderClosed] = useState<string | null>(null); // CANCELLED/REJECTED while en route
   const [clientLocation, setClientLocation] = useState<LngLatLike | null>(null);
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
   const [messages, setMessages] = useState<any[]>([]);
   const [pickedUp, setPickedUp] = useState(false);
   const [pickupLoading, setPickupLoading] = useState(false);
@@ -232,7 +234,26 @@ export function DeliveryPage() {
     destPin,
   ];
 
-  if (loading) return <div className="p-4"><SkeletonBase className="h-64 w-full" /></div>;
+  if (loading) return (
+    <div className="flex flex-col h-screen bg-[var(--brand-surface)]">
+      <SkeletonBase className="flex-1 w-full rounded-none" />
+      <div className="bg-[var(--brand-surface)] rounded-t-[var(--brand-radius)] -mt-6 relative z-10 p-6 flex flex-col gap-4" style={{ boxShadow: 'var(--elevation-3)' }}>
+        <div className="w-12 h-1.5 bg-[var(--brand-border)] rounded-full mx-auto -mt-2" />
+        <div className="flex justify-between items-start gap-4">
+          <div className="flex flex-col gap-2 min-w-0 flex-1">
+            <SkeletonBase className="h-6 w-28" />
+            <SkeletonBase className="h-4 w-40" />
+          </div>
+          <SkeletonBase className="h-8 w-16" />
+        </div>
+        <div className="flex gap-4">
+          <SkeletonBase className="h-12 flex-1 rounded-full" />
+          <SkeletonBase className="h-12 flex-1 rounded-full" />
+        </div>
+        <SkeletonBase className="h-14 w-full rounded-full" />
+      </div>
+    </div>
+  );
   // The delivery layout hides the bottom tab bar, so a bare EmptyState strands the
   // courier with no way back. Give them an explicit route home.
   // The delivery layout renders full-screen with no header/centered shell. When there is no
@@ -271,10 +292,10 @@ export function DeliveryPage() {
             style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)' }}
           >
             <motion.div
-              initial={{ scale: 0.5, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+              initial={reduceMotion ? { opacity: 0 } : { scale: 0.5, opacity: 0 }}
+              animate={reduceMotion ? { opacity: 1 } : { scale: 1, opacity: 1 }}
+              exit={reduceMotion ? { opacity: 0 } : { scale: 0.8, opacity: 0 }}
+              transition={reduceMotion ? { duration: 0.2, ease: 'easeOut' } : { type: 'spring', stiffness: 260, damping: 24 }}
               className="flex flex-col items-center gap-3"
             >
               <AnimatedCheck size={80} strokeWidth={4} />
@@ -296,20 +317,22 @@ export function DeliveryPage() {
         />
 
         {geoError && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-[var(--color-danger)] text-[var(--color-on-danger)] px-4 py-2 rounded-lg text-sm text-center max-w-xs shadow-lg z-10">
-            {geoError.message}
+          <div role="status" aria-live="polite" className="absolute left-1/2 -translate-x-1/2 bg-[var(--color-danger)] text-[var(--color-on-danger)] px-4 py-2 rounded-[var(--brand-radius-sm)] text-sm text-center max-w-[18rem] z-10" style={{ top: 'max(1rem, env(safe-area-inset-top))', boxShadow: 'var(--elev-2)' }}>
+            {t('courier.gps_unavailable', 'Location unavailable — turn on GPS to track the route.')}
           </div>
         )}
 
         <motion.button
           onClick={() => navigate('/courier')}
-          whileTap={{ scale: 0.97 }}
-          className="absolute top-4 left-4 w-10 h-10 bg-[var(--brand-surface)] text-[var(--brand-text)] rounded-full shadow-lg flex items-center justify-center text-xl font-bold z-10"
+          whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+          aria-label={t('common.close', 'Close')}
+          style={{ top: 'max(1rem, env(safe-area-inset-top))', boxShadow: 'var(--elev-2)' }}
+          className="absolute left-4 w-11 h-11 bg-[var(--brand-surface)] text-[var(--brand-text)] rounded-full flex items-center justify-center text-xl font-bold z-10 transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
         >
           &times;
         </motion.button>
 
-        <div className="absolute top-4 right-4 bg-white/90 p-1.5 rounded-full shadow-md flex gap-2 items-center px-3 z-10">
+        <div className="absolute right-4 bg-[var(--brand-surface)]/95 backdrop-blur-sm p-1.5 rounded-full flex gap-2 items-center px-3 z-10" style={{ top: 'max(1rem, env(safe-area-inset-top))', boxShadow: 'var(--elev-1)' }}>
           <div className="flex items-center gap-1.5">
             <LiveDot size={6} pulse={wsStatus !== 'disabled' && wsStatus !== 'disconnected'} color="var(--color-success)" />
             <WSStatusDot status={wsStatus === 'disabled' ? 'disconnected' : wsStatus} />
@@ -323,24 +346,27 @@ export function DeliveryPage() {
         </div>
       </div>
 
-      <div className="bg-[var(--brand-surface)] rounded-t-3xl shadow-elevation-3 -mt-6 relative z-10 p-6 flex flex-col gap-6">
-        
+      <div
+        className="bg-[var(--brand-surface)] rounded-t-[var(--brand-radius)] -mt-6 relative z-10 p-6 flex flex-col gap-6 overflow-y-auto"
+        style={{ boxShadow: 'var(--elevation-3)', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+      >
+
         <div className="w-12 h-1.5 bg-[var(--brand-border)] rounded-full mx-auto -mt-2" />
 
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-bold text-[var(--brand-text)]">{t('courier.dropoff', 'Drop-off')}</h2>
-            <div className="text-[var(--brand-text-muted)]">{task.customer.address}</div>
+        <div className="flex justify-between items-start gap-4">
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold text-[var(--brand-text)]" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('courier.dropoff', 'Drop-off')}</h2>
+            <div className="text-[var(--brand-text)] break-words">{task.customer.address}</div>
           </div>
-          <div className="text-right">
-            <div data-dynamic className="text-2xl font-black text-[var(--brand-primary)]">{task.eta}</div>
+          <div className="text-right shrink-0">
+            <div data-dynamic className="text-2xl font-black text-[var(--brand-primary)] tabular-nums">{task.eta}</div>
             <div className="text-sm text-[var(--brand-text-muted)]">{t('courier.to_destination', 'to destination')}</div>
           </div>
         </div>
 
         {task.customer.instructions && (
-          <div className="bg-[var(--status-pending-light)] border border-[var(--status-pending-border)] text-[var(--status-pending)] p-3 rounded-[var(--brand-radius-sm)] text-sm font-medium">
-            Note: {task.customer.instructions}
+          <div className="bg-[var(--status-pending-light)] border border-[var(--status-pending-border)] text-[var(--status-pending)] p-3 rounded-[var(--brand-radius-sm)] text-sm font-medium break-words">
+            <span className="font-bold">{t('courier.note_label', 'Note')}:</span> {task.customer.instructions}
           </div>
         )}
 
@@ -392,14 +418,15 @@ export function DeliveryPage() {
         )}
 
         <div className="flex gap-4">
-          <a href={`tel:${task.customer.phone}`} className="flex-1 bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] py-3 rounded-full flex items-center justify-center font-bold gap-2">
-            {t('courier.call_button', 'Call')}
+          <a href={`tel:${task.customer.phone}`}
+            className="flex-1 min-h-[44px] bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] py-3 rounded-full flex items-center justify-center font-bold gap-2 text-[var(--brand-text)] transition-[transform,box-shadow,background-color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 hover:hover:shadow-[var(--elev-2)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]">
+            <i className="ti ti-phone" aria-hidden="true" /> {t('courier.call_button', 'Call')}
           </a>
           {/* UX-2: message the customer in their app, if they shared a messenger */}
           {messengerLink((task.customer as any).messengerKind, (task.customer as any).messengerHandle) && (
             <a href={messengerLink((task.customer as any).messengerKind, (task.customer as any).messengerHandle)!}
               target="_blank" rel="noopener noreferrer" data-testid="message-customer-btn"
-              className="flex-1 bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] py-3 rounded-full flex items-center justify-center font-bold gap-2">
+              className="flex-1 min-h-[44px] bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] py-3 rounded-full flex items-center justify-center font-bold gap-2 text-[var(--brand-text)] transition-[transform,box-shadow,background-color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 hover:hover:shadow-[var(--elev-2)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]">
               <i className="ti ti-message-circle" aria-hidden="true" /> {t('courier.message_button', 'Message')}
             </a>
           )}
@@ -419,7 +446,7 @@ export function DeliveryPage() {
         {/* Cancellation notice shows REGARDLESS of pickup state — a cancel BEFORE pickup is the
             case worth surfacing (saves a wasted trip). Soft, not a wall; the human is never blocked. */}
         {orderClosed && (
-          <div role="status" aria-live="polite" data-testid="courier-order-closed" className="rounded-xl px-3 py-2 text-sm text-center" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--brand-text)' }}>
+          <div role="status" aria-live="polite" data-testid="courier-order-closed" className="rounded-[var(--brand-radius)] px-3 py-2 text-sm text-center font-medium" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--brand-text)' }}>
             {t('courier.order_closed_banner', 'The restaurant closed this order. You can stop — no delivery needed.')}
           </div>
         )}
@@ -427,8 +454,8 @@ export function DeliveryPage() {
           <motion.button
             onClick={handlePickup}
             disabled={pickupLoading}
-            whileTap={{ scale: 0.97 }}
-            className="w-full h-14 bg-[var(--brand-primary)] text-[var(--brand-bg)] font-bold text-base rounded-full shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+            className="w-full h-14 bg-[var(--brand-primary)] text-[var(--brand-on-primary)] font-bold text-base rounded-full shadow-[var(--elev-3)] transition-[transform,box-shadow,opacity] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 hover:hover:shadow-[var(--elev-4)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
           >
             {pickupLoading ? (
               <span className="inline-flex items-center gap-2">
@@ -453,13 +480,13 @@ export function DeliveryPage() {
                   value={cashCollected ?? task.cashPayWith}
                   onChange={e => setCashCollected(e.target.value ? parseFloat(e.target.value) : null)}
                   min={0}
-                  className="w-full h-12 px-4 outline-none text-base font-bold border rounded-xl transition-colors"
+                  className="w-full h-12 px-4 outline-none text-base font-bold border rounded-[var(--brand-radius)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
                   style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
                 />
               </div>
             )}
             {deliverError && (
-              <div role="alert" aria-live="assertive" data-testid="courier-deliver-error" className="rounded-xl px-3 py-2 text-sm text-center" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--color-danger)' }}>
+              <div role="alert" aria-live="assertive" data-testid="courier-deliver-error" className="rounded-[var(--brand-radius)] px-3 py-2 text-sm text-center font-medium" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--color-danger)' }}>
                 {deliverError}
               </div>
             )}
