@@ -24,7 +24,7 @@ export function DeliverySwan() {
       <style>{DSWAN_CSS}</style>
       {/* dz-dswan-fly: the arc travel + bank. Inner svg holds the bob + draw. */}
       <div className="dz-dswan-fly">
-        <svg className="dz-dswan-svg" viewBox="0 0 240 200" role="presentation" focusable="false">
+        <svg className="dz-dswan-svg" viewBox="44 46 150 142" role="presentation" focusable="false">
           <g className="dz-dswan-bob">
             {/* Parcel slung beneath the body: a tiny inked box on a sling line,
                 hung from the swan's underside. Swings from the sling anchor. */}
@@ -59,7 +59,7 @@ export function DeliverySwan() {
 
 const DSWAN_CSS = `
 .dz-dswan{position:absolute;inset:0;pointer-events:none;z-index:2;overflow:hidden}
-.dz-dswan-fly{position:absolute;top:6%;left:0;width:46%;max-width:200px}
+.dz-dswan-fly{position:absolute;top:4%;left:3%;width:52%;max-width:220px}
 .dz-dswan-svg{width:100%;height:auto;display:block;overflow:visible}
 
 .dz-dswan-line{fill:none;stroke:var(--ink,var(--brand-text));stroke-width:5;
