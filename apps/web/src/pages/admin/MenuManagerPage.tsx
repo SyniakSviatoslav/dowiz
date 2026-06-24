@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Button, Input, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle, useToast } from '@deliveryos/ui';
+import { Button, Input, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle, useToast, staggerChildren, cardEntry } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 import { useMenuData, type Product, type Category } from '../../hooks/useMenuData.js';
@@ -746,7 +746,7 @@ export function MenuManagerPage() {
           ) : (
           <motion.div
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
-            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.03, delayChildren: 0.05 } } }}
+            variants={staggerChildren}
             initial="hidden"
             animate="visible"
           >
@@ -756,7 +756,7 @@ export function MenuManagerPage() {
               if (products.length === 0 && searchQuery) return null;
               return products.map((product) => (
                 <motion.div key={product.id}
-                  variants={{ hidden: { opacity: 0, y: 12, scale: 0.97 }, visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 260, damping: 24 } } }}
+                  variants={cardEntry}
                   whileTap={{ scale: 0.98 }}
                   role="button"
                   tabIndex={0}
@@ -1013,8 +1013,8 @@ export function MenuManagerPage() {
                             type="button"
                             whileTap={{ scale: 0.97 }}
                             onClick={() => setFormTaste(prev => prev[axis] === level ? Object.fromEntries(Object.entries(prev).filter(([k]) => k !== axis)) : { ...prev, [axis]: level })}
-                            className={`flex-1 h-6 rounded text-[10px] font-medium transition-all ${
-                              active ? 'text-white scale-105' : 'hover:bg-[var(--brand-surface-raised)]'
+                            className={`flex-1 h-6 rounded text-[10px] font-medium transition-[background-color,color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] ${
+                              active ? 'text-white scale-105' : '[@media(hover:hover)]:hover:bg-[var(--brand-surface-raised)]'
                             }`}
                             style={{
                               background: active ? `hsl(${axis === 'spicy' ? 10 : axis === 'sweet' ? 35 : axis === 'salty' ? 200 : axis === 'sour' ? 70 : 30}, ${level * 25}%, ${60 - level * 5}%)` : 'var(--brand-surface-raised)',

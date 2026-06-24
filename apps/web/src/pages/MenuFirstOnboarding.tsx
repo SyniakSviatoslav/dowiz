@@ -218,11 +218,11 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
               data-testid="upload-menu-cta"
               className="dz-dropzone group w-full py-10 px-4 text-center min-w-0
                 motion-safe:transition-[transform,box-shadow,border-color] duration-150 ease-[var(--ease-soft)]
-                hover:hover:-translate-y-0.5 active:scale-[0.99]
+                hover:-translate-y-0.5 active:scale-[0.99]
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
               style={{ border: '2px dashed var(--brand-border)', borderRadius: 'var(--brand-radius)', background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
             >
-              <i className="ti ti-file-upload text-3xl motion-safe:transition-transform duration-150 ease-[var(--ease-soft)] group-hover:hover:-translate-y-0.5" style={{ color: 'var(--brand-primary)' }} aria-hidden="true" />
+              <i className="ti ti-file-upload text-3xl motion-safe:transition-transform duration-150 ease-[var(--ease-soft)] group-hover:-translate-y-0.5" style={{ color: 'var(--brand-primary)' }} aria-hidden="true" />
               <div className="mt-2 font-semibold">{t('start.upload_cta', 'Upload your menu')}</div>
               <div className="mt-0.5 text-sm" style={S.muted}>{t('start.upload_hint', 'PDF or photo · up to 10MB')}</div>
             </button>

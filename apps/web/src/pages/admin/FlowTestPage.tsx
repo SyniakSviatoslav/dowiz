@@ -298,7 +298,7 @@ export function FlowTestPage() {
         {steps.map((step, i) => (
           <div
             key={step.id}
-            className={`flex items-center gap-3 p-3 rounded-xl border transition-all duration-300 ${
+            className={`flex items-center gap-3 p-3 rounded-xl border transition-[background-color,box-shadow,border-color] duration-300 ${
               step.status === 'active' ? 'ring-2 ring-[var(--brand-primary)] ring-opacity-30' : ''
             }`}
             style={{

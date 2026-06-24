@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { apiClient } from '../../lib/index.js';
-import { useI18n, useToast, SkeletonBase } from '@deliveryos/ui';
+import { useI18n, useToast, SkeletonBase, ease, duration } from '@deliveryos/ui';
 
 // Menu-first onboarding — split-screen activation tool (O2).
 // Left: the gate checklist + Publish. Right: the live draft storefront preview.
@@ -135,7 +135,7 @@ export function ActivationPage() {
       key={done ? 'done' : 'pending'}
       initial={reduceMotion || !done ? false : { scale: 0.6 }}
       animate={{ scale: 1 }}
-      transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: duration.base, ease: ease.out }}
       className="inline-flex items-center justify-center w-6 h-6 rounded-full shrink-0 transition-colors duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)]"
       style={{ background: done ? 'var(--color-success)' : 'var(--brand-surface)', color: done ? '#fff' : 'var(--brand-text)', border: done ? 'none' : '2px solid var(--brand-text-muted)' }}
       aria-hidden
@@ -191,7 +191,7 @@ export function ActivationPage() {
           );
           const reveal = reduceMotion
             ? {}
-            : { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.24, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] as const } };
+            : { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: duration.base, delay: i * 0.05, ease: ease.out } };
           return it.done ? (
             <motion.div key={it.key} {...reveal} className={rowBase} style={{ background: 'var(--brand-bg)' }}>{body}</motion.div>
           ) : (
@@ -250,7 +250,7 @@ export function ActivationPage() {
               onClick={publish}
               disabled={!status?.canPublish || publishing}
               animate={justPublished && !reduceMotion ? { scale: [1, 1.04, 1] } : undefined}
-              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: duration.slow, ease: ease.out }}
               className="w-full min-h-[44px] py-3 rounded-[var(--brand-radius)] font-bold transition-[box-shadow,transform,opacity] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] shadow-[var(--elev-1)] [@media(hover:hover)]:hover:shadow-[var(--elev-2)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
               style={{ background: 'var(--brand-primary-strong)', color: '#fff' }}
             >
@@ -338,7 +338,7 @@ export function ActivationPage() {
             initial={reduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={reduceMotion ? undefined : { opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            transition={{ duration: duration.fast }}
             onClick={() => setEditing(null)}
             role="dialog"
             aria-modal="true"
@@ -350,7 +350,7 @@ export function ActivationPage() {
               initial={reduceMotion ? false : { y: 24, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={reduceMotion ? undefined : { y: 24, opacity: 0 }}
-              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: duration.base, ease: ease.out }}
               onClick={(e) => e.stopPropagation()}
             >
               <h3 className="font-bold mb-3" style={{ color: 'var(--brand-text)' }}>{t('activation.edit_item', 'Edit menu item')}</h3>

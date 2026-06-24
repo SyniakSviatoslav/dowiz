@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-
-// Soft easing matched to --ease-soft cubic-bezier(0.4, 0, 0.2, 1) — gentle, no bounce.
-const EASE_SOFT: [number, number, number, number] = [0.4, 0, 0.2, 1];
+import { ease } from '../../lib/motion.js';
 
 interface LiveDotProps {
   color?: string;
@@ -61,14 +59,14 @@ export function LiveDot({ color, size = 8, pulse = true }: LiveDotProps) {
         className="absolute rounded-full"
         style={{ width: size, height: size, backgroundColor: dotColor }}
         animate={{ scale: [1, 2.2], opacity: [0.45, 0] }}
-        transition={{ duration: 1.8, repeat: Infinity, ease: EASE_SOFT, repeatDelay: 0.2 }}
+        transition={{ duration: 1.8, repeat: Infinity, ease: ease.soft, repeatDelay: 0.2 }}
       />
       {/* Solid core — a soft scale/opacity breath, no harsh blink. */}
       <motion.span
         className="relative rounded-full"
         style={{ width: size, height: size, backgroundColor: dotColor }}
         animate={{ scale: [1, 1.12, 1], opacity: [1, 0.82, 1] }}
-        transition={{ duration: 1.8, repeat: Infinity, ease: EASE_SOFT, repeatDelay: 0.2 }}
+        transition={{ duration: 1.8, repeat: Infinity, ease: ease.soft, repeatDelay: 0.2 }}
       />
     </div>
   );

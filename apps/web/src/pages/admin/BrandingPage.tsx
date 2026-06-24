@@ -1,7 +1,7 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, Input, ColorInput, FormField, SkeletonBase, useI18n, useToast } from '@deliveryos/ui';
+import { Button, Input, ColorInput, FormField, SkeletonBase, useI18n, useToast, ease, duration } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
@@ -246,7 +246,7 @@ export function BrandingPage() {
       : {
           initial: { opacity: 0, y: 8 },
           animate: { opacity: 1, y: 0 },
-          transition: { duration: 0.24, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] as const },
+          transition: { duration: duration.base, delay: i * 0.05, ease: ease.out },
         };
 
   if (initLoading) {

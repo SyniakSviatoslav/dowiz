@@ -57,7 +57,7 @@ function SimpleBar({ value, maxValue, label, dayLabel, delay }: { value: number;
         {label}
       </span>
       <div
-        className="w-full rounded-t-md transition-all duration-500 ease-out"
+        className="w-full rounded-t-md transition-[height,width,background-color] duration-500 ease-out"
         style={{
           height: `${height}%`,
           minHeight: 4,
@@ -161,7 +161,7 @@ export function AnalyticsPage() {
         action={
           <button
             onClick={() => setPeriod(p => p)}
-            className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--brand-primary)] text-[var(--brand-bg)] transition-all duration-200 active:scale-[0.97] hover:bg-[var(--brand-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
+            className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--brand-primary)] text-[var(--brand-bg)] transition-[background-color,transform,box-shadow] duration-200 active:scale-[0.97] hover:bg-[var(--brand-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
           >
             {t('common.retry', 'Retry')}
           </button>
@@ -185,7 +185,7 @@ export function AnalyticsPage() {
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface-raised)] ${period === p ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] shadow-sm' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-[background-color,color,transform,box-shadow] duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface-raised)] ${period === p ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] shadow-sm' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
             >
               {p === '7d' ? t('admin.7_days', '7 days') : t('admin.30_days', '30 days')}
             </button>
@@ -229,7 +229,7 @@ export function AnalyticsPage() {
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface-raised)] ${period === p ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] shadow-sm' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-[background-color,color,transform,box-shadow] duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface-raised)] ${period === p ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] shadow-sm' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
             >
               {p === '7d' ? t('admin.7_days', '7 days') : t('admin.30_days', '30 days')}
             </button>
@@ -432,7 +432,7 @@ export function AnalyticsPage() {
           </p>
           <button
             onClick={handleCopyReorder}
-            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 text-[11px] font-medium rounded-lg border transition-all duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
+            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 text-[11px] font-medium rounded-lg border transition-[background-color,transform,box-shadow] duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
             style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-primary)' }}
           >
             {copied ? (
@@ -477,7 +477,7 @@ export function AnalyticsPage() {
                     return (
                       <td key={ci} className="p-0.5 relative group">
                         <div
-                          className="rounded-sm transition-all duration-300 hover:scale-110 cursor-default"
+                          className="rounded-sm transition-transform duration-300 [@media(hover:hover)]:hover:scale-110 cursor-default"
                           title={productList ? `${row.day} ${HOUR_LABELS[ci]}: ${count} orders\nProducts: ${productList}` : `${row.day} ${HOUR_LABELS[ci]}: ${count} orders`}
                           style={{
                             minHeight: 28,

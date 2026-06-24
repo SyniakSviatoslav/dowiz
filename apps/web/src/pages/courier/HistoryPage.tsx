@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { EmptyState, SkeletonBase, StatusBadge, useI18n, PriceDisplay } from '@deliveryos/ui';
+import { EmptyState, SkeletonBase, StatusBadge, useI18n, PriceDisplay, ease, duration } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 
@@ -122,7 +122,7 @@ export function HistoryPage() {
               tabIndex={0}
               variants={{
                 hidden: reduceMotion ? { opacity: 0 } : { opacity: 0, y: 12 },
-                visible: { opacity: 1, y: 0, transition: { duration: 0.24, ease: [0.16, 1, 0.3, 1] } },
+                visible: { opacity: 1, y: 0, transition: { duration: duration.base, ease: ease.out } },
               }}
               className="bg-[var(--brand-surface)] rounded-[var(--brand-radius)] p-4 shadow-[var(--elev-1)] outline-none transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 hover:hover:shadow-[var(--elev-2)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
             >

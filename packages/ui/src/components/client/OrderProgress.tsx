@@ -1,14 +1,12 @@
 import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../../lib/I18nProvider.js';
+import { ease } from '../../lib/motion.js';
 
-// Easing matched to --ease-out cubic-bezier(0.16, 1, 0.3, 1): expo-out, no bounce.
-// Used for one-shot advances (connector width, dot fill, check pop) — entering motion.
-const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
-// Easing matched to --ease-soft cubic-bezier(0.4, 0, 0.2, 1): gentle, symmetric.
-// Used for the continuous "you are here" breath, so it reads as a calm loop (and
-// matches LiveDot's halo) rather than the punchy expo curve meant for one-shots.
-const EASE_SOFT: [number, number, number, number] = [0.4, 0, 0.2, 1];
+// ease.out (expo-out, no bounce) drives one-shot advances (connector width, dot
+// fill, check pop) — entering motion. ease.soft (gentle, symmetric) drives the
+// continuous "you are here" breath so it reads as a calm loop (matches LiveDot's
+// halo) rather than the punchy expo curve meant for one-shots.
 
 // ORDER-TRACKING: honest stepper for the real 10-state order machine.
 //
@@ -124,7 +122,7 @@ export function OrderProgress(props: OrderProgressProps) {
   // No-bounce spring → settle the connector + dots with one ease-out curve.
   const fillTransition = prefersReducedMotion
     ? { duration: 0 }
-    : { duration: 0.5, ease: EASE_OUT };
+    : { duration: 0.5, ease: ease.out };
 
   return (
     <div
@@ -168,7 +166,7 @@ export function OrderProgress(props: OrderProgressProps) {
                     className="absolute w-4 h-4 rounded-full"
                     style={{ background: accent }}
                     animate={{ scale: [1, 1.9], opacity: [0.4, 0] }}
-                    transition={{ duration: 1.8, repeat: Infinity, ease: EASE_SOFT, repeatDelay: 0.2 }}
+                    transition={{ duration: 1.8, repeat: Infinity, ease: ease.soft, repeatDelay: 0.2 }}
                   />
                 )}
                 <motion.span
@@ -192,9 +190,9 @@ export function OrderProgress(props: OrderProgressProps) {
                       strokeWidth={2}
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      initial={prefersReducedMotion ? false : { scale: 0.4, opacity: 0 }}
+                      initial={prefersReducedMotion ? false : { scale: 0.6, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
-                      transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.24, ease: EASE_OUT }}
+                      transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.24, ease: ease.out }}
                     >
                       <path d="M2.5 6.5 L5 9 L9.5 3.5" />
                     </motion.svg>
