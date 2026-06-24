@@ -3676,4 +3676,20 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Nuk u ngarkuan fitimet',
     uk: 'Не вдалося завантажити заробіток',
   },
+  'activation.preview_iframe_title': {
+    en: 'Storefront preview',
+    sq: 'Pamja paraprake e dyqanit',
+    uk: 'Попередній перегляд вітрини',
+  },
+  'admin.recipe_empty_title': {
+    en: 'No ingredients yet',
+    sq: 'Ende nuk ka përbërës',
+    uk: 'Ще немає інгредієнтів',
+  },
+  'admin.recipe_empty_help': {
+    en: 'Add supplies to auto-calculate nutrition and flag allergens.',
+    sq: 'Shto furnizime për të llogaritur automatikisht ushqyesit dhe për të shënuar alergenët.',
+    uk: 'Додайте складники, щоб автоматично рахувати поживність і позначати алергени.',
+  },
+  'admin.qty': { en: 'quantity', sq: 'sasia', uk: 'кількість' },
 };
