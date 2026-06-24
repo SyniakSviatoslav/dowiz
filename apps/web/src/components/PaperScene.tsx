@@ -198,6 +198,8 @@ function initScene(THREE: ThreeNS, host: HTMLElement): () => void {
         uLightDir: { value: sunLight.position.clone().normalize() },
         uPaper: { value: paperTex },
         uAmbient: { value: 0.4 },
+        uInk: { value: c(PAPER.ink) },
+        uPx: { value: dpr },
       },
       vertexShader: /* glsl */ `
         varying vec3 vNormal;
@@ -213,13 +215,36 @@ function initScene(THREE: ThreeNS, host: HTMLElement): () => void {
         uniform vec3 uLightDir;
         uniform float uAmbient;
         uniform sampler2D uPaper;
+        uniform vec3 uInk;
+        uniform float uPx;
         varying vec3 vNormal;
         varying vec2 vUv;
+
+        // One family of parallel ink strokes in screen space. Returns ~0 ON a
+        // stroke, ~1 between strokes (dpr-normalised so spacing is stable).
+        float strokeMask(vec2 fc, float angle, float freq, float thick) {
+          vec2 d = vec2(cos(angle), sin(angle));
+          float v = abs(fract(dot(fc, d) * freq) - 0.5) * 2.0;
+          return smoothstep(thick, thick + 0.10, v);
+        }
+
         void main() {
           float ndl = max(dot(normalize(vNormal), normalize(uLightDir)), 0.0);
           // 3 flat bands — no smooth ramp, no specular.
           float band = ndl > 0.66 ? 1.0 : (ndl > 0.33 ? 0.72 : 0.5);
           vec3 lit = uColor * (uAmbient + (1.0 - uAmbient) * band);
+
+          // (2b) Moebius cross-hatch: ink strokes accumulate in the shadow bands.
+          // The mid band gets one diagonal family; the darkest band crosses a
+          // second family for true cross-hatch. Strokes lay ink, not pure black,
+          // so the drawn texture stays warm.
+          vec2 fc = gl_FragCoord.xy / max(uPx, 1.0);
+          float hatch = 0.0;
+          if (band < 0.95) hatch += 1.0 - strokeMask(fc, 0.70, 0.045, 0.42);
+          if (band < 0.60) hatch += 1.0 - strokeMask(fc, -0.70, 0.045, 0.42);
+          hatch = clamp(hatch, 0.0, 1.0);
+          lit = mix(lit, uInk, hatch * 0.16);
+
           // (3) MULTIPLY procedural paper grain over the toon colour.
           vec3 paper = texture2D(uPaper, vUv * 3.0).rgb;
           lit *= mix(vec3(1.0), paper, 0.35);
