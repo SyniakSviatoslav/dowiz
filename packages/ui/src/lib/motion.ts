@@ -1,5 +1,17 @@
 import { type Transition, type Variants } from 'framer-motion';
 
+/*
+ * THE motion source of truth (Emil-calibrated). Import from here / the @deliveryos/ui barrel —
+ * never inline `[0.16,1,0.3,1]` or a raw cubic-bezier in a component. These mirror the CSS tokens
+ * in theme/tokens.css (--ease-out / --ease-soft / --ease-in-out / --motion-*). Conventions:
+ *  - entrances/exits use ease.out (strong expo — "instant feedback"); on-screen movement ease.inOut.
+ *  - UI durations stay < 0.3s (fast/base); modals/drawers may use slow. Exit faster than enter.
+ *  - never animate from scale(0) (variants start at 0.95+); :active press = scalePress (0.97).
+ *  - bounce is reserved for rare playful moments (NOT default card/list entry — Emil: avoid bounce in UI).
+ *  - every consumer must honor prefers-reduced-motion (useReducedMotion) — these variants are motion;
+ *    gate or swap to opacity-only under reduced motion at the call site.
+ */
+
 /* ── Easing curves ── */
 export const ease = {
   out:   [0.16, 1, 0.3, 1] as const,
@@ -115,8 +127,10 @@ export const scaleTap = { scale: 0.95 };
 
 /* ── Card entry — for items appearing in a grid ── */
 export const cardEntry: Variants = {
+  // Emil-calibration: cards in a grid are seen often → crisp expo ease-out, NOT bounce
+  // (bounce on frequent entries reads as attention-seeking). Bounce stays for rare delight only.
   hidden: { opacity: 0, y: 16, scale: 0.97 },
-  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: duration.slow, ease: ease.bounce } },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: duration.base, ease: ease.out } },
   exit: { opacity: 0, y: -8, scale: 0.97, transition: { duration: duration.fast, ease: ease.soft } },
 };
 
@@ -126,7 +140,7 @@ export const pulseDot: Variants = {
   pulse: {
     scale: [1, 0.85, 1],
     opacity: [1, 0.4, 1],
-    transition: { duration: 2, repeat: Infinity, ease: 'easeInOut' },
+    transition: { duration: 2, repeat: Infinity, ease: ease.soft },
   },
 };
 

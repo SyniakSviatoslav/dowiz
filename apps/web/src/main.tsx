@@ -2,7 +2,7 @@ import { StrictMode, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { MotionConfig, AnimatePresence, motion } from 'framer-motion';
-import { ThemeProvider, TourProvider, I18nProvider, CurrencyProvider, ErrorBoundary, t } from '@deliveryos/ui';
+import { ThemeProvider, TourProvider, I18nProvider, CurrencyProvider, ErrorBoundary, t, ease, duration } from '@deliveryos/ui';
 import './index.css';
 
 import { Navigate } from 'react-router-dom';
@@ -32,9 +32,8 @@ function AnimatedRoutes() {
       <motion.div
         key={location.pathname}
         initial={{ opacity: 0, y: 8, scale: 0.99 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -8, scale: 0.99 }}
-        transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: duration.base, ease: ease.out } }}
+        exit={{ opacity: 0, y: -8, scale: 0.99, transition: { duration: duration.fast, ease: ease.soft } }}
       >
         <Suspense fallback={<LoadingFallback />}>
           <Routes location={location}>

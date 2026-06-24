@@ -1,6 +1,7 @@
 import React from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../../lib/I18nProvider.js';
+import { ease, duration } from '../../lib/motion.js';
 import type { DeliveryEta } from '../../hooks/use-delivery-eta.js';
 
 export interface ETADisplayProps {
@@ -41,7 +42,7 @@ export function ETADisplay({ eta, fallback, className }: ETADisplayProps) {
           initial={reduceMotion ? false : { opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
-          transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: duration.base, ease: ease.out }}
         >
           {text}
         </motion.span>

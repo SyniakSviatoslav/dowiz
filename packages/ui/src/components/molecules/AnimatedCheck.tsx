@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { ease } from '../../lib/motion.js';
 
 interface AnimatedCheckProps {
   size?: number;
@@ -16,9 +17,9 @@ export function AnimatedCheck({ size = 48, strokeWidth = 3, className = '', colo
       height={size}
       viewBox="0 0 24 24"
       fill="none"
-      initial={{ opacity: 0, scale: 0.8 }}
+      initial={{ opacity: 0, scale: 0.85 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.2, ease: ease.out }}
     >
       <motion.circle
         cx="12" cy="12" r="11"
@@ -27,7 +28,7 @@ export function AnimatedCheck({ size = 48, strokeWidth = 3, className = '', colo
         fill="none"
         initial={{ pathLength: 0 }}
         animate={{ pathLength: 1 }}
-        transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.3, ease: ease.out }}
       />
       <motion.path
         d="M7 12.5l3 3 7-7"
@@ -38,7 +39,7 @@ export function AnimatedCheck({ size = 48, strokeWidth = 3, className = '', colo
         fill="none"
         initial={{ pathLength: 0 }}
         animate={{ pathLength: 1 }}
-        transition={{ duration: 0.25, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.25, delay: 0.15, ease: ease.out }}
       />
     </motion.svg>
   );

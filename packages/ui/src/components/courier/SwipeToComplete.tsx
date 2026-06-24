@@ -1,9 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../../lib/I18nProvider.js';
-
-// Matches the design-system --ease-out token cubic-bezier(0.16, 1, 0.3, 1): expo-out, no bounce.
-const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
+import { ease, duration } from '../../lib/motion.js';
 
 interface SwipeToCompleteProps {
   onComplete: () => Promise<void>;
@@ -103,7 +101,7 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
       <motion.div
         initial={reduceMotion ? false : { scale: 0.97, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.24, ease: EASE_OUT }}
+        transition={{ duration: duration.base, ease: ease.out }}
         className="h-14 rounded-full bg-[var(--color-success)] flex items-center justify-center gap-2 font-bold text-[var(--color-on-success)] shadow-[var(--elevation-2)]"
       >
         {t('order.delivered', 'Delivered')}
@@ -146,7 +144,7 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
           ? { transform: ['translateX(0px)', 'translateX(6px)', 'translateX(0px)'] }
           : { transform: `translateX(${slideRatio * (containerRef.current ? containerRef.current.clientWidth - 56 : 0)}px)` }}
         transition={hint
-          ? { duration: 1.4, repeat: Infinity, repeatDelay: 0.6, ease: EASE_OUT }
+          ? { duration: 1.4, repeat: Infinity, repeatDelay: 0.6, ease: ease.out }
           : { duration: 0 }}
         role="presentation"
         aria-hidden="true"

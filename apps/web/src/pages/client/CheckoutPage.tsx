@@ -2,7 +2,7 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal } from '@deliveryos/ui';
+import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal, ease, duration } from '@deliveryos/ui';
 import { CURRENCIES } from '@deliveryos/shared-types';
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_REGEX } from '@deliveryos/shared-types';
@@ -108,7 +108,7 @@ function NutritionRing({ kcal, protein, fat, carbs }: { kcal: number; protein: n
       initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-40px' }}
-      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.35, ease: ease.out }}
       className="rounded-[var(--brand-radius)] p-4 border"
       style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}
     >
@@ -129,7 +129,7 @@ function NutritionRing({ kcal, protein, fat, carbs }: { kcal: number; protein: n
                 strokeLinecap="butt"
                 initial={{ pathLength: 0, pathOffset: arc.startOffset }}
                 animate={{ pathLength: arc.fraction, pathOffset: arc.startOffset }}
-                transition={{ duration: 0.9, delay: 0.15 + i * 0.18, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.9, delay: 0.15 + i * 0.18, ease: ease.out }}
               />
             )) : (
               <motion.circle
@@ -140,7 +140,7 @@ function NutritionRing({ kcal, protein, fat, carbs }: { kcal: number; protein: n
                 strokeLinecap="round"
                 initial={{ pathLength: 0, pathOffset: 0 }}
                 animate={{ pathLength: 0.78, pathOffset: 0 }}
-                transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 1.1, ease: ease.out }}
               />
             )}
           </svg>
@@ -582,7 +582,7 @@ export function CheckoutPage() {
       <motion.div
         initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.25, ease: ease.out }}
         className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6 py-12 gap-4 max-w-sm mx-auto"
       >
         <div
@@ -623,7 +623,7 @@ export function CheckoutPage() {
           initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.25, ease: ease.out }}
           className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
           <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.contact_info', 'Contact Info')}</h2>
           <div className="space-y-3">
@@ -685,7 +685,7 @@ export function CheckoutPage() {
           initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
+          transition={{ duration: 0.25, ease: ease.out, delay: 0.05 }}
           className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
           <h2 className="text-[20px] font-semibold mb-6" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.delivery_address')}</h2>
           <div className="flex p-1 rounded-[var(--brand-radius-sm)] mb-6 gap-0.5" role="tablist" aria-label={t('checkout.delivery_type', 'Delivery type')} style={{ background: 'var(--brand-surface)' }}>
@@ -811,7 +811,7 @@ export function CheckoutPage() {
           initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
+          transition={{ duration: 0.25, ease: ease.out, delay: 0.1 }}
           className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
           <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.payment_method')}</h2>
           <div className="border rounded-[var(--brand-radius-sm)] p-3 mb-3" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-primary)' }}>
@@ -884,7 +884,7 @@ export function CheckoutPage() {
           <motion.div
             initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: duration.slow, ease: ease.out }}
             className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)' }}>
             <div className="flex items-start gap-3">
               <span className="text-xl shrink-0 mt-0.5">🌍</span>
@@ -909,7 +909,7 @@ export function CheckoutPage() {
           initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
+          transition={{ duration: 0.25, ease: ease.out, delay: 0.15 }}
           className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
           <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('order.title')}</h2>
           <div className="space-y-3 mb-4">
@@ -944,7 +944,7 @@ export function CheckoutPage() {
               className="shrink-0 tabular-nums"
               initial={prefersReducedMotion ? false : { opacity: 0.4, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: duration.base, ease: ease.out }}
             >
               <PriceDisplay amount={total} size="lg" />
             </motion.span>

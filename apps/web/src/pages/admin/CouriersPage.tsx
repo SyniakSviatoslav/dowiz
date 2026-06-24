@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, Input, EmptyState, CourierLiveMap, useI18n, PriceDisplay, useToast, SkeletonBase } from '@deliveryos/ui';
+import { Button, Input, EmptyState, CourierLiveMap, useI18n, PriceDisplay, useToast, SkeletonBase, scalePress } from '@deliveryos/ui';
 import type { CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
@@ -370,7 +370,7 @@ export function CouriersPage() {
             >
               <motion.button
                 type="button"
-                whileTap={{ scale: 0.99 }}
+                whileTap={scalePress}
                 aria-expanded={selectedCourier === c.id}
                 className="w-full text-left p-4 border-b border-[var(--brand-border)] flex items-center justify-between gap-3 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] [@media(hover:hover)]:hover:bg-[var(--brand-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
                 onClick={() => fetchDetails(c.id)}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../../lib/I18nProvider.js';
+import { ease, duration } from '../../lib/motion.js';
 import type { MessageSender, OrderStatusForMsg } from '@deliveryos/shared-types';
 
 interface MessageData {
@@ -146,7 +147,7 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
               className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
               initial={reduceMotion ? false : { opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: duration.base, ease: ease.out }}
             >
               <div
                 className={`max-w-[78%] min-w-0 px-3 py-2 text-sm break-words [overflow-wrap:anywhere] rounded-[var(--brand-radius)] ${

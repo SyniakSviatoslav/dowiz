@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher, SunlightToggle, PriceDisplay, useCurrency, derivePalette, isPaperSkinEnabled, paperSkinAttr } from '@deliveryos/ui';
+import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher, SunlightToggle, PriceDisplay, useCurrency, derivePalette, isPaperSkinEnabled, paperSkinAttr, staggerChildren, listItem } from '@deliveryos/ui';
 import { formatMoney } from '@deliveryos/shared-types';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../lib/index.js';
@@ -143,6 +143,7 @@ function ClientLayoutInner() {
                       key={itemsCount}
                       initial={{ scale: 1.4 }}
                       animate={{ scale: 1 }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                       className="absolute -top-2 -right-2 min-w-[18px] h-[18px] rounded-full bg-[var(--color-danger)] text-white text-[10px] font-bold flex items-center justify-center leading-none px-1 shadow-md"
                     >
                       {itemsCount > 99 ? '99+' : itemsCount}
@@ -165,14 +166,14 @@ function ClientLayoutInner() {
               <div className="flex flex-col">
                 <motion.div
                   className="flex-1 overflow-y-auto space-y-4 pb-4 max-h-[50vh]"
-                  variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
+                  variants={staggerChildren}
                   initial="hidden"
                   animate="visible"
                 >
                   {items.map(item => (
                     <motion.div
                       key={item.id}
-                      variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } } }}
+                      variants={listItem}
                       className="flex items-center justify-between">
                       <div className="flex-1 min-w-0">
                         <div className="text-[var(--brand-text)] font-medium truncate">{item.name}</div>
