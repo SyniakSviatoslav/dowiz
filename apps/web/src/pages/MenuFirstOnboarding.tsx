@@ -243,8 +243,12 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
                     {/* Signature delivery swan — flies the parcel across the sky. */}
                     <DeliverySwan />
                   </div>
-                  <h1 className="dz-stage dz-stage-2 mt-5 text-3xl leading-[1.1]" style={{ ...S.heading, letterSpacing: '-0.01em' }}>
-                    {t('start.hero_title', 'Your menu, online tonight.')}
+                  <h1 className="dz-headline mt-5 text-3xl leading-[1.1]" style={{ ...S.heading, letterSpacing: '-0.01em' }}>
+                    {t('start.hero_title', 'Your menu, online tonight.').split(' ').map((w, i) => (
+                      <React.Fragment key={i}>
+                        <span className="dz-word" style={{ '--dz-w': i } as React.CSSProperties}>{w}</span>{' '}
+                      </React.Fragment>
+                    ))}
                   </h1>
                   <p className="dz-stage dz-stage-3 mt-2 text-sm leading-relaxed" style={S.helper}>
                     {t('start.hero_sub', 'Snap a photo of your menu — we read it, build your storefront, and you’re taking orders. No code, no wait.')}
@@ -462,7 +466,13 @@ const ONBOARD_CSS = `
   .dz-stage-5 .dz-glyph{opacity:0;transform:translateY(8px);
     animation:dzStageRise 300ms var(--ease-out,cubic-bezier(.16,1,.3,1)) both;
     animation-delay:calc(1460ms + var(--dz-i,0) * 70ms)}
+  /* headline reveals word-by-word — the Art-Nouveau display cascades in */
+  .dz-word{opacity:0;transform:translateY(0.5em);
+    animation:dzStageRise 380ms var(--ease-out,cubic-bezier(.16,1,.3,1)) both;
+    animation-delay:calc(160ms + var(--dz-w,0) * 80ms)}
 }
+/* default (reduced-motion-safe): words visible, inline so they wrap naturally */
+.dz-word{display:inline-block}
 @keyframes dzFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes dzStageRise{to{opacity:1;transform:none}}
 .dz-dropzone:hover{border-color:var(--brand-primary);box-shadow:var(--elev-2)}
