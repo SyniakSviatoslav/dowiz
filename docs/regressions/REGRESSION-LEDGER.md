@@ -28,7 +28,8 @@
 | 2 | Predictable / forgeable security tokens, OTPs, nonces, session ids (same trust-boundary class as #1) | `Math.random()` is non-CSPRNG; if used to mint a token/otp/secret it is guessable | **`eslint`** | **`local/no-insecure-random`** — flags `Math.random()` assigned to a security-named identifier (token/otp/secret/nonce/session/passwd/salt/csrf/api-key/verif/recovery/reset/magic); requires `crypto.*`. Fixtures: `__fixtures__/{bad,good}-insecure-random.ts` | 2026-06-22 · this change |
 | 3 | Prod outage — API crash-loops at boot, both machines `stopped`, 000 timeouts | Schema drift: image boot-guard FATAL-exits when DB head < expected migration; CI deployed code needing migrations 032–040 but ran NONE (no `release_command`) | `release_command` + `boot-guard` | `release_command` wired in `fly.toml` to auto-migrate before rollout; pre-existing boot-guard that asserts DB head ≥ expected | 2026-06-20 / 2026-06-21 · `a91e78e9`, `5e2bc924` |
 | 4 | Prod boot hangs before `listen` — `/livez` critical, never binds `:8080` | Worker `start()` calls `boss.createQueue()` → needs `CREATE on schema pgboss`; runtime role had `USAGE` only; schema owned by `postgres` | `migration` / `CI-gate` | `GRANT CREATE ON SCHEMA pgboss`; migration 042 made resilient to `insufficient_privilege`; fresh-provision pre-creates pgboss schema | 2026-06-21 / `929f0282`, `c55074fa`, `9589c2e7` |
-| 5 | Out-of-order WebSocket frames flip order status backwards; reconnect-storm bugs | Components subscribing to a raw `new WebSocket()` bypass the shared client that owns reconnect-jitter + frame ordering | **`eslint`** + guard | **`local/no-direct-websocket`** — flags `new WebSocket()` in `apps/web/**` and `packages/ui/src/**` outside the two shared clients (`useWebSocket.ts`, `websocket.ts`). Fixtures: `__fixtures__/{bad,good}-websocket.tsx`. Complements the runtime status-monotonicity guard (`3b186fcb`) | 2026-06-22 · this change |
+| 5 | Out-of-order WebSocket frames flip order status backwards; reconnect-storm bugs | Components subscribing to a raw `new WebSocket()` bypass the shared client that owns reconnect-jitter + frame ordering | **`eslint`** + guard | **`local/no-direct-websocket`** — flags `new WebSocket()` in `apps/web/**` and `packages/ui/src/**` outside the **single** shared client (`useWebSocket.ts`). Fixtures: `__fixtures__/{bad,good}-websocket.tsx`. Complements the runtime status-monotonicity guard (`3b186fcb`). **F14 (2026-06-24):** the dead reconnect-capped `packages/ui/src/lib/websocket.ts` (froze after 10 tries, 0 consumers) was deleted; its rule exception removed so a re-add is now flagged | 2026-06-22 · this change |
+| 7 | Cart silently carries stale prices → checkout hard-block ambush (F9); owner card flashes nameless/"0 items" on a fresh WS order (F7); a 2nd reconnect-capped WS client freezes permanently (F14) | Cart never tracked `menu_version`; OrderCard rendered `items.length` before the authed backfill arrived; a dead capped WS client diverged from the reconnect-forever one | **`test`** + `eslint` | `e2e/tests/polish-debt-logic.spec.ts` (11 cases): `reconcileCart` reprice/remove/modifier-skip/version-gate/legacy + `isOrderDetailsPending` + a guardrail asserting the capped `websocket.ts` cannot be reintroduced. Pure cores extracted (`apps/web/src/lib/cartReconcile.ts`, `isOrderDetailsPending`). Tightened `local/no-direct-websocket` (row 5) | 2026-06-24 · this change |
 | 6 | Storefront cards unreadable — dark text on dark surface (~1.08:1 contrast) on light tenant themes | Partial tenant theme (primary/bg/text only) merged with default-DARK tokens; `var(...)` placeholders fell through to Food-Dark surfaces | `eslint` (existing) | `local/no-hardcoded-color`, `local/no-hardcoded-tailwind-color` + `derivePalette` coherent-palette util | 2026-06-21 · `4dab5af4` |
 | 7 | Money rendered/stored with float drift | Currency handled as float instead of integer minor units | `eslint` (existing) + test | integer-tax fix + money assertions in E2E | 2026-06-20 · `otp-disabled-money-fix` |
 | 8 | Hardcoded user-visible strings ship untranslated; Albanian diacritics lost | UI strings not routed through `t('key','fallback')` | `eslint` (existing) | `local/no-hardcoded-string` | 2026-06-21 · `f1f044da`, `be1529c3` |
@@ -57,9 +58,18 @@ Both new ESLint rules live in `tools/eslint-plugin-local/src/index.js`, are regi
 ### `local/no-direct-websocket` (row 5)
 - **RED** — `__fixtures__/bad-websocket.tsx`: flags `new WebSocket(url)` in a component.
 - **GREEN** — `__fixtures__/good-websocket.tsx`: subscribing via the shared `useWebSocket` client.
-- **Repo-green**: the only two frontend `new WebSocket(` are the designated shared clients
-  (`apps/web/src/lib/useWebSocket.ts`, `packages/ui/src/lib/websocket.ts`), both excluded;
-  scope is frontend-only so back-end/test WS constructions are untouched.
+- **Repo-green**: the only frontend `new WebSocket(` is the designated shared client
+  (`apps/web/src/lib/useWebSocket.ts`), excluded; scope is frontend-only so back-end/test WS
+  constructions are untouched. **F14 (2026-06-24):** the second client
+  `packages/ui/src/lib/websocket.ts` was deleted and its exception removed — re-adding it (or any
+  raw `new WebSocket`) is now flagged.
+
+### `polish-debt-logic` regression test (row 7)
+- **RED** — pre-fix, `reconcileCart` didn't exist (cart never tracked `menu_version`) and OrderCard
+  rendered `items.length` (→ "0 items" on a fresh WS order); the capped `websocket.ts` existed.
+- **GREEN** — `e2e/tests/polish-debt-logic.spec.ts` 11/11: reprice/remove/modifier-skip/version-gate/
+  legacy reconcile, `isOrderDetailsPending` truth table, and an `existsSync` guard that fails if the
+  capped `websocket.ts` is reintroduced. Runs headless (no browser): `playwright test polish-debt-logic`.
 
 ## Reversal log
 

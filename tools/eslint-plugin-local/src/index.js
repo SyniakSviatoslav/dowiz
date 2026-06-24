@@ -369,10 +369,11 @@ export default {
       },
     },
     // Ratchet (Regression Ledger): in the frontend, every WebSocket must go through the
-    // shared client (apps/web useWebSocket.ts / packages/ui websocket.ts) which owns
-    // reconnect-jitter + ordered-frame handling. Recurrent: out-of-order WS frames +
-    // reconnect bugs. A second `new WebSocket(...)` in a component re-introduces them.
-    // Scoped to apps/web + packages/ui/src and excludes the two shared-client files.
+    // single shared client (apps/web useWebSocket.ts) which owns reconnect-jitter +
+    // ordered-frame handling. Recurrent: out-of-order WS frames + reconnect bugs. A second
+    // `new WebSocket(...)` in a component re-introduces them. (F14: the old capped
+    // packages/ui/src/lib/websocket.ts client was deleted — there is now exactly one.)
+    // Scoped to apps/web + packages/ui/src and excludes the one shared-client file.
     'no-direct-websocket': {
       meta: {
         type: 'problem',
@@ -384,9 +385,8 @@ export default {
           || /\/packages\/ui\/src\//.test(filename)
           || /\/__fixtures__\//.test(filename); // fixtures exercise the rule for the red→green proof
         if (!inFrontend) return {};
-        // The shared clients are the one allowed place to construct a raw WebSocket.
-        const isSharedClient = /\/apps\/web\/src\/lib\/useWebSocket\.tsx?$/.test(filename)
-          || /\/packages\/ui\/src\/lib\/websocket\.tsx?$/.test(filename);
+        // The shared client is the one allowed place to construct a raw WebSocket.
+        const isSharedClient = /\/apps\/web\/src\/lib\/useWebSocket\.tsx?$/.test(filename);
         if (isSharedClient) return {};
         const isTestFile = /\.(spec|test)\.(ts|js|tsx|jsx)$/.test(filename);
         if (isTestFile) return {};
@@ -396,7 +396,7 @@ export default {
             if (node.callee.type === 'Identifier' && node.callee.name === 'WebSocket') {
               context.report({
                 node,
-                message: 'direct `new WebSocket()` in a frontend component — use the shared WS client (useWebSocket / packages/ui websocket) so reconnect + frame-ordering stay centralized',
+                message: 'direct `new WebSocket()` in a frontend component — use the shared WS client (useWebSocket) so reconnect + frame-ordering stay centralized',
               });
             }
           },
