@@ -1,4 +1,5 @@
 import React from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../../lib/I18nProvider.js';
 import type { DeliveryEta } from '../../hooks/use-delivery-eta.js';
 
@@ -16,6 +17,7 @@ export interface ETADisplayProps {
  */
 export function ETADisplay({ eta, fallback, className }: ETADisplayProps) {
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
 
   let text: string;
   if (eta.arriving) {
@@ -28,5 +30,22 @@ export function ETADisplay({ eta, fallback, className }: ETADisplayProps) {
   }
 
   // data-dynamic: live ETA countdown varies run-to-run — masked from the visual net.
-  return <span data-dynamic className={className} style={{ color: 'var(--brand-text)' }}>{text}</span>;
+  // tabular-nums keeps the digits from jittering as the value ticks; a gentle
+  // crossfade softens each update (instant under reduced-motion).
+  return (
+    <span data-dynamic className={`tabular-nums ${className ?? ''}`} style={{ color: 'var(--brand-text)' }}>
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={text}
+          className="inline-block"
+          initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
+          transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        >
+          {text}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
 }

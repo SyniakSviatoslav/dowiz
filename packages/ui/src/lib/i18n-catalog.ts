@@ -3714,4 +3714,10 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Konfirmo dorëzimin',
     uk: 'Підтвердити доставку',
   },
+  'otp.resending': { en: 'Sending…', sq: 'Po dërgohet…', uk: 'Надсилання…' },
+  'message.empty_hint': {
+    en: 'Tap a quick reply below to start the conversation.',
+    sq: 'Trokitni një përgjigje të shpejtë më poshtë për të nisur bisedën.',
+    uk: 'Торкніться швидкої відповіді нижче, щоб почати розмову.',
+  },
 };

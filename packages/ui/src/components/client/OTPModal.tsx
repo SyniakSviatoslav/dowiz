@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Button, Modal, useI18n } from '../../index.js';
 
 interface OTPModalProps {
@@ -23,8 +24,10 @@ const CODE_LENGTH = 6;
  */
 export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent }: OTPModalProps) {
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState('');
   const [cooldown, setCooldown] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -73,15 +76,18 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
   }, [code, loading, handleVerify]);
 
   const handleResend = async () => {
-    if (cooldown > 0 || loading) return;
+    if (cooldown > 0 || loading || resending) return;
     setError('');
     setCode('');
+    setResending(true);
     try {
       await onResend();
       setCooldown(30);
       inputRef.current?.focus();
     } catch (err: any) {
       setError(err?.message || t('otp.send_failed', 'Couldn’t send the code. Try again.'));
+    } finally {
+      setResending(false);
     }
   };
 
@@ -96,7 +102,7 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
         <label htmlFor="otp-code" className="text-[13px] font-bold block" style={{ color: 'var(--brand-text)' }}>
           {t('otp.code_label', 'Verification code')}
         </label>
-        <input
+        <motion.input
           id="otp-code"
           ref={inputRef}
           type="text"
@@ -111,16 +117,30 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
           aria-label={t('otp.code_label', 'Verification code')}
           aria-invalid={!!error}
           data-testid="otp-code-input"
-          className="w-full h-[56px] text-center text-2xl font-bold tracking-[0.5em] outline-none border rounded-[10px] transition-colors focus-visible:ring-2"
+          // Gentle shake on a wrong code; static under reduced-motion.
+          animate={error && !reduceMotion ? { x: [0, -6, 6, -4, 4, 0] } : { x: 0 }}
+          transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
+          className="w-full h-[var(--tap-critical,56px)] text-center text-2xl font-bold tracking-[0.5em] outline-none border transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:border-[var(--brand-primary)]"
           style={{
             background: 'var(--brand-surface-raised)',
             borderColor: error ? 'var(--color-danger)' : 'var(--brand-border)',
             color: 'var(--brand-text)',
+            borderRadius: 'var(--brand-radius)',
+            transitionDuration: 'var(--motion-fast)',
           }}
         />
 
         {error && (
-          <p role="alert" className="text-sm" style={{ color: 'var(--color-danger)' }}>{error}</p>
+          <motion.p
+            role="alert"
+            className="text-sm font-medium"
+            style={{ color: 'var(--color-danger)' }}
+            initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {error}
+          </motion.p>
         )}
 
         <Button
@@ -139,13 +159,15 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
             type="button"
             data-dynamic
             onClick={handleResend}
-            disabled={cooldown > 0 || loading}
-            className="text-sm underline disabled:opacity-50 disabled:no-underline"
-            style={{ color: 'var(--brand-primary)', minHeight: 'var(--tap-min, 44px)' }}
+            disabled={cooldown > 0 || loading || resending}
+            className="text-sm underline rounded-[var(--brand-radius-sm)] px-2 transition-[opacity,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:no-underline active:scale-[0.98]"
+            style={{ color: 'var(--brand-primary)', minHeight: 'var(--tap-min, 44px)', transitionDuration: 'var(--motion-fast)' }}
           >
-            {cooldown > 0
-              ? t('otp.resend_in', 'Resend code in {{n}}s', { n: cooldown })
-              : t('otp.resend', 'Resend code')}
+            {resending
+              ? t('otp.resending', 'Sending…')
+              : cooldown > 0
+                ? t('otp.resend_in', 'Resend code in {{n}}s', { n: cooldown })
+                : t('otp.resend', 'Resend code')}
           </button>
         </div>
       </div>
