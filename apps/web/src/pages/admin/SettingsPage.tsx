@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Button, Input, EmptyState, MapWithRadius, Toggle, useI18n, LanguageSwitcher, useToast } from '@deliveryos/ui';
 import type { LngLatLike, Locale } from '@deliveryos/ui';
 import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
@@ -79,6 +80,14 @@ const MOCK_SETTINGS: LocationSettings = {
 export function SettingsPage() {
   const { t, locale, setLocale } = useI18n();
   const { showToast } = useToast();
+  const reduceMotion = useReducedMotion();
+  // Soft-UI section reveal: ease-out fade+rise, collapsed to a crossfade under reduced-motion.
+  const sectionVariants = {
+    hidden: { opacity: 0, y: reduceMotion ? 0 : 12 },
+    visible: { opacity: 1, y: 0, transition: { duration: reduceMotion ? 0.01 : 0.32, ease: [0.16, 1, 0.3, 1] as const } },
+  };
+  // Shared soft-UI card classes: 1px border + elev-1 (no ghost-card — border is 1px), token radius/transition.
+  const cardClass = 'card-section bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4 shadow-[var(--elev-1)] transition-shadow duration-[var(--motion-fast)] ease-[var(--ease-soft)]';
   const [settings, setSettings] = useState<LocationSettings>({
     locationName: '',
     phone: '',
@@ -94,6 +103,7 @@ export function SettingsPage() {
   const [togglingDelivery, setTogglingDelivery] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState('');
 
   // Telegram state
@@ -248,7 +258,7 @@ export function SettingsPage() {
     setTgMessage(null);
     try {
       await apiClient(`/owner/locations/${locationId}/notifications/test`, { method: 'POST' });
-      setTgMessage({ type: 'success', text: 'Test notification sent! Check your Telegram.' });
+      setTgMessage({ type: 'success', text: t('admin.tg_test_sent', 'Test notification sent! Check your Telegram.') });
     } catch (err: any) {
       setTgMessage({ type: 'error', text: err.message || t('admin.tg_test_error', 'Failed to send test') });
     } finally {
@@ -313,18 +323,23 @@ export function SettingsPage() {
       return;
     }
     setSaving(true);
+    setError('');
     try {
       await apiClient('/owner/settings', {
         method: 'PUT',
         body: { ...settings, deliveryPaused },
       });
       showToast(t('common.saved', 'Settings saved'), 'success');
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2400);
     } catch (err: any) {
       if (err.status === 404) {
         showToast(t('common.saved', 'Settings saved'), 'success');
+        setJustSaved(true);
+        setTimeout(() => setJustSaved(false), 2400);
       } else {
         showToast(t('common.error', 'Failed to save settings'), 'error');
-        setError('Failed to save settings');
+        setError(t('admin.settings_save_error', 'Failed to save settings'));
       }
     } finally {
       setSaving(false);
@@ -343,25 +358,33 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="p-4 space-y-6 max-w-2xl mx-auto">
+    <div className="p-4 pb-12 space-y-6 max-w-2xl mx-auto">
       <div className="border-b border-[var(--brand-border)] pb-4">
         <h2
-          className="text-2xl font-bold"
+          className="text-2xl font-bold text-[var(--brand-text)]"
           style={{ fontFamily: 'var(--brand-font-heading)' }}
         >
           {t('admin.settings')}
         </h2>
+        <p className="text-sm mt-1" style={{ color: 'var(--brand-text-muted)' }}>
+          {t('admin.settings_subtitle', 'Manage your store details, delivery zone, hours and notifications.')}
+        </p>
       </div>
 
       {loading ? (
-        <div className="animate-pulse space-y-4">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i}>
-              <div className="h-4 bg-[var(--brand-surface)] rounded w-24 mb-2" />
-              <div className="h-10 bg-[var(--brand-surface)] rounded-[var(--brand-radius)] w-full" />
+        <div className="space-y-5" aria-busy="true" aria-label={t('admin.settings_loading', 'Loading settings')}>
+          {[1, 2, 3].map((card) => (
+            <div key={card} className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4 shadow-[var(--elev-1)]">
+              <div className="h-4 w-32 rounded-md shimmer" />
+              {[1, 2].map((row) => (
+                <div key={row} className="space-y-2">
+                  <div className="h-3.5 w-24 rounded-md shimmer" />
+                  <div className="h-10 w-full rounded-[var(--brand-radius)] shimmer" />
+                </div>
+              ))}
             </div>
           ))}
-          <div className="h-10 bg-[var(--brand-surface)] rounded-[var(--brand-radius)] w-32" />
+          <div className="h-11 w-36 rounded-[var(--brand-radius-btn,12px)] shimmer" />
         </div>
       ) : error && settings.locationName === '' ? (
         <EmptyState
@@ -374,8 +397,17 @@ export function SettingsPage() {
           }
         />
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">
+        <motion.form
+          onSubmit={handleSubmit}
+          className="space-y-5"
+          initial="hidden"
+          animate="visible"
+          variants={{ visible: { transition: { staggerChildren: reduceMotion ? 0 : 0.05 } } }}
+        >
+          <motion.div variants={sectionVariants} className={cardClass}>
+            <h3 className="font-semibold text-sm text-[var(--brand-text-muted)]">
+              {t('admin.store_details', 'Store Details')}
+            </h3>
             <div>
               <label htmlFor="settings-locationName" className="block text-sm font-medium mb-1" style={labelStyle}>
                 {t('admin.location_name', 'Location Name')}
@@ -416,9 +448,9 @@ export function SettingsPage() {
                 required
               />
             </div>
-          </div>
+          </motion.div>
 
-          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">
+          <motion.div variants={sectionVariants} className={cardClass}>
             <h3 className="font-semibold text-sm text-[var(--brand-text-muted)]">
               {t('admin.delivery_config', 'Delivery Config')}
             </h3>
@@ -456,7 +488,7 @@ export function SettingsPage() {
                 {t('admin.delivery_zone', 'Delivery Zone (Radius & Location)')}
               </label>
               <MapWithRadius
-                className="h-64 w-full rounded-lg mb-2"
+                className="h-56 sm:h-64 w-full min-w-0 rounded-[var(--brand-radius)] mb-2 overflow-hidden"
                 initialCenter={[settings.lng, settings.lat]}
                 initialRadiusKm={settings.radiusKm}
                 onRadiusChange={(c, r) => {
@@ -467,9 +499,9 @@ export function SettingsPage() {
               />
               <p className="text-xs" style={labelStyle}>{t('admin.map_hint', 'Drag the pin to update location, adjust radius for delivery zone.')}</p>
             </div>
-          </div>
+          </motion.div>
 
-          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">
+          <motion.div variants={sectionVariants} className={cardClass}>
             <h3 className="font-semibold text-sm text-[var(--brand-text-muted)]">
               {t('admin.working_hours', 'Working Hours')}
             </h3>
@@ -478,17 +510,20 @@ export function SettingsPage() {
                 const dayData = (settings.hoursJson[day as keyof WeeklySchedule] || DEFAULT_SCHEDULE[day]) as DaySchedule;
                 return (
                   <div key={day} className="contents">
-                    <div className="flex items-center h-10 px-2 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] font-medium text-sm capitalize">
+                    <div className="flex items-center min-h-[44px] px-3 rounded-[var(--brand-radius-sm,8px)] border border-[var(--brand-border)] bg-[var(--brand-bg)] font-medium text-sm capitalize text-[var(--brand-text)] truncate">
                       {t(`admin.days.${day}`, day)}
                     </div>
-                    <div className="flex items-center gap-2 p-2 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)]">
+                    <div
+                      className="flex items-center gap-2 p-2 min-w-0 rounded-[var(--brand-radius-sm,8px)] border bg-[var(--brand-bg)] transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)]"
+                      style={{ borderColor: dayData.isOpen ? 'var(--brand-primary)' : 'var(--brand-border)' }}
+                    >
                       <Toggle checked={dayData.isOpen} onChange={(v) => handleScheduleChange(day, 'isOpen', v)} aria-label={`${t(`admin.days.${day}`, day)} ${dayData.isOpen ? t('admin.open', 'Open') : t('admin.closed', 'Closed')}`} />
-                      <span className="text-xs w-10 text-[var(--brand-text-muted)] shrink-0">{dayData.isOpen ? t('admin.open', 'Open') : t('admin.closed', 'Closed')}</span>
+                      <span className="text-xs w-12 shrink-0" style={{ color: dayData.isOpen ? 'var(--color-success)' : 'var(--brand-text-muted)' }}>{dayData.isOpen ? t('admin.open', 'Open') : t('admin.closed', 'Closed')}</span>
                       {dayData.isOpen && (
-                        <div className="flex items-center gap-2 ml-auto">
-                          <Input type="time" value={dayData.open} onChange={(e) => handleScheduleChange(day, 'open', e.target.value)} aria-label={`${t(`admin.days.${day}`, day)} ${t('admin.open', 'open')}`} className="w-20 sm:w-28 text-sm" />
+                        <div className="flex items-center gap-1.5 ml-auto min-w-0">
+                          <Input type="time" value={dayData.open} onChange={(e) => handleScheduleChange(day, 'open', e.target.value)} aria-label={`${t(`admin.days.${day}`, day)} ${t('admin.open', 'open')}`} className="w-[5.5rem] sm:w-28 text-sm min-w-0" />
                           <span className="text-xs text-[var(--brand-text-muted)] shrink-0">{t('admin.to', 'to')}</span>
-                          <Input type="time" value={dayData.close} onChange={(e) => handleScheduleChange(day, 'close', e.target.value)} aria-label={`${t(`admin.days.${day}`, day)} ${t('admin.close', 'close')}`} className="w-20 sm:w-28 text-sm" />
+                          <Input type="time" value={dayData.close} onChange={(e) => handleScheduleChange(day, 'close', e.target.value)} aria-label={`${t(`admin.days.${day}`, day)} ${t('admin.close', 'close')}`} className="w-[5.5rem] sm:w-28 text-sm min-w-0" />
                         </div>
                       )}
                     </div>
@@ -496,10 +531,10 @@ export function SettingsPage() {
                 );
               })}
             </div>
-          </div>
+          </motion.div>
 
           {/* ── Language Preference ── */}
-          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">
+          <motion.div variants={sectionVariants} className={cardClass}>
             <h3 className="font-semibold text-sm" style={{ color: 'var(--brand-text-muted)' }}>
               {t('admin.language', 'Language')}
             </h3>
@@ -507,12 +542,12 @@ export function SettingsPage() {
               {t('admin.language_desc', 'Language for admin panel and Telegram notifications.')}
             </p>
             <LanguageSwitcher variant="full" />
-          </div>
+          </motion.div>
 
           {/* ── Telegram Notifications ── */}
-          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">
+          <motion.div variants={sectionVariants} className={cardClass}>
             <div className="flex items-center gap-2">
-              <i className="ti ti-brand-telegram text-lg" style={{ color: 'var(--color-info)' }} />
+              <i className="ti ti-brand-telegram text-lg" style={{ color: 'var(--color-info)' }} aria-hidden="true" />
               <h3 className="font-semibold text-sm text-[var(--brand-text-muted)]">
                 {t('admin.telegram_notifications', 'Telegram Notifications')}
               </h3>
@@ -526,22 +561,23 @@ export function SettingsPage() {
             {tgTargets.length > 0 && (
               <div className="space-y-2">
                 {tgTargets.map((tgt: any) => (
-                  <div key={tgt.id} className="flex items-center justify-between p-3 rounded-lg border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${tgt.status === 'active' ? 'bg-[var(--color-success)]' : 'bg-[var(--brand-text-muted)]'}`} />
-                      <div>
-                        <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>
+                  <div key={tgt.id} className="flex items-center justify-between gap-2 p-3 rounded-[var(--brand-radius-sm,8px)] border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${tgt.status === 'active' ? 'bg-[var(--color-success)]' : 'bg-[var(--brand-text-muted)]'}`} />
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate" style={{ color: 'var(--brand-text)' }}>
                           {tgt.channel === 'telegram' ? 'Telegram' : tgt.channel}
                         </div>
-                        <div className="text-[10px] font-mono" style={{ color: 'var(--brand-text-muted)' }}>
+                        <div className="text-[10px] font-mono truncate" style={{ color: 'var(--brand-text-muted)' }}>
                           {tgt.address?.slice(0, 12)}...
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       <button onClick={() => handleTgToggle(tgt.id, tgt.status)}
                         aria-label={tgt.status === 'active' ? t('admin.disable', 'Disable') : t('admin.enable', 'Enable')}
-                        className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${tgt.status === 'active' ? 'bg-[var(--color-success-light)]' : 'bg-[var(--brand-surface-raised)]'}`}
+                        aria-pressed={tgt.status === 'active'}
+                        className={`w-9 h-9 flex items-center justify-center rounded-[var(--brand-radius-sm,8px)] transition-all duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:[@media(hover:hover)]:-translate-y-0.5 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)] ${tgt.status === 'active' ? 'bg-[var(--color-success-light)]' : 'bg-[var(--brand-surface-raised)]'}`}
                         title={tgt.status === 'active' ? t('admin.disable', 'Disable') : t('admin.enable', 'Enable')}>
                         <i className={`ti ti-${tgt.status === 'active' ? 'check' : 'power'}`} style={{ fontSize: '0.85rem', color: tgt.status === 'active' ? 'var(--color-success)' : 'var(--brand-text-muted)' }} aria-hidden="true" />
                       </button>
@@ -607,7 +643,7 @@ export function SettingsPage() {
                       {t('admin.tg_step1', '1. Scan QR or open this link in Telegram:')}
                     </div>
                     <a href={tgDeepLink} target="_blank" rel="noopener noreferrer"
-                      className="text-sm font-mono underline break-all block" style={{ color: 'var(--brand-primary)' }}>
+                      className="text-sm font-mono underline break-all block rounded-[var(--brand-radius-sm,8px)] transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-primary-light)]" style={{ color: 'var(--brand-primary)' }}>
                       {tgDeepLink}
                     </a>
                     <div className="text-[10px] mt-2" style={{ color: 'var(--brand-text-muted)' }}>
@@ -644,11 +680,11 @@ export function SettingsPage() {
                 </Button>
               )}
             </div>
-          </div>
+          </motion.div>
 
           {/* ── Fallback Phone ── */}
           {locationId && (
-            <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">
+            <motion.div variants={sectionVariants} className={cardClass}>
               <div className="flex items-center gap-2">
                 <i className="ti ti-phone-call text-lg" style={{ color: 'var(--color-info)' }} aria-hidden="true" />
                 <h3 className="font-semibold text-sm text-[var(--brand-text-muted)]">
@@ -660,7 +696,7 @@ export function SettingsPage() {
               </p>
               <div>
                 <label htmlFor="settings-fallbackPhone" className="block text-sm font-medium mb-1" style={labelStyle}>
-                  {t('admin.fallback_phone', 'Fallback Phone')}
+                  {t('admin.fallback_phone_label', 'Contact number')}
                 </label>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Input
@@ -687,20 +723,20 @@ export function SettingsPage() {
                   </span>
                 )}
               </div>
-            </div>
+            </motion.div>
           )}
 
-          <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5">
+          <motion.div variants={sectionVariants} className={cardClass.replace(' space-y-4', '')}>
             <div className="flex items-center justify-between gap-4">
-              <div>
-                <h3 className="font-semibold text-sm">{t('admin.delivery_status', 'Delivery Status')}</h3>
+              <div className="min-w-0">
+                <h3 className="font-semibold text-sm text-[var(--brand-text)]">{t('admin.delivery_status', 'Delivery Status')}</h3>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>
                   {deliveryPaused
                     ? t('admin.delivery_paused_hint', 'Delivery is paused. Customers see a "Closed" message.')
                     : t('admin.delivery_open_hint', 'Delivery is open based on your hours schedule.')}
                 </p>
               </div>
-              <div style={{ opacity: togglingDelivery ? 0.5 : 1, pointerEvents: togglingDelivery ? 'none' : 'auto' }}>
+              <div className="shrink-0 transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-soft)]" style={{ opacity: togglingDelivery ? 0.5 : 1, pointerEvents: togglingDelivery ? 'none' : 'auto' }}>
                 <Toggle
                   checked={!deliveryPaused}
                   onChange={async (v) => {
@@ -717,17 +753,29 @@ export function SettingsPage() {
                 />
               </div>
             </div>
-          </div>
+          </motion.div>
 
-          <div className="flex items-center gap-4">
+          <motion.div variants={sectionVariants} className="flex flex-wrap items-center gap-3">
             <Button type="submit" isLoading={saving} size="lg">
               {t('common.save', 'Save Changes')}
             </Button>
+            {justSaved && !saving && (
+              <motion.span
+                role="status"
+                aria-live="polite"
+                initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.9 }}
+                animate={{ opacity: 1, scale: 1, transition: { duration: reduceMotion ? 0.01 : 0.24, ease: [0.16, 1, 0.3, 1] } }}
+                className="inline-flex items-center gap-1.5 text-sm font-medium"
+                style={{ color: 'var(--color-success)' }}
+              >
+                <i className="ti ti-circle-check" aria-hidden="true" /> {t('common.saved', 'Settings saved')}
+              </motion.span>
+            )}
             {error && settings.locationName !== '' && (
               <span role="alert" className="text-[var(--color-danger)] text-sm">{error}</span>
             )}
-          </div>
-        </form>
+          </motion.div>
+        </motion.form>
       )}
     </div>
   );

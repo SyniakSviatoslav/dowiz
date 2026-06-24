@@ -20,21 +20,23 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-[var(--brand-text-muted)]">{label}</span>
+      <span className="text-sm font-medium text-[var(--brand-text)]">{label}</span>
       <div className="flex items-center gap-2">
-        <div className="w-10 h-10 rounded-[var(--brand-radius-sm)] border border-[var(--brand-border)] overflow-hidden shrink-0">
+        <div className="w-10 h-10 rounded-[var(--brand-radius-sm)] border border-[var(--brand-border)] overflow-hidden shrink-0 transition-shadow duration-150 ease-[var(--ease-soft)] focus-within:ring-2 focus-within:ring-[var(--brand-primary)] focus-within:ring-offset-1 focus-within:ring-offset-[var(--brand-surface)]">
           <input
             type="color"
             value={pickerValue}
             onChange={e => onChange(e.target.value)}
-            className="w-full h-full p-0 border-none cursor-pointer scale-150"
+            aria-label={label}
+            className="w-full h-full p-0 border-none cursor-pointer scale-150 focus:outline-none"
           />
         </div>
         <input
           type="text"
           value={resolveColor(value)}
           onChange={e => onChange(e.target.value)}
-          className="flex-1 bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius-sm)] px-3 py-2 text-[var(--brand-text)]"
+          aria-label={label}
+          className="flex-1 min-w-0 bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius-sm)] px-3 py-2 text-[var(--brand-text)] transition-[border-color,box-shadow] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none hover:border-brand-text-muted/60 focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]"
         />
       </div>
     </div>

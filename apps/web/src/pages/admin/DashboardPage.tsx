@@ -1,6 +1,6 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay, NomadicScene, isPaperSkinEnabled } from '@deliveryos/ui';
 import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
@@ -34,6 +34,7 @@ export function DashboardPage() {
   const [showHint, setShowHint] = useState(() => safeStorage.get('dos_dash_hint_dismissed') !== '1');
   const { t } = useI18n();
   const isMobile = useIsMobile();
+  const prefersReducedMotion = useReducedMotion();
   const [clientSlug, setClientSlug] = useState('');
   const [sortPickerOpen, setSortPickerOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -59,7 +60,7 @@ export function DashboardPage() {
       setOrders(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setOrders([]);
-      setError('Failed to load orders');
+      setError(t('admin.orders_load_failed', "Couldn't load orders"));
     } finally {
       setLoading(false);
     }
@@ -396,7 +397,7 @@ export function DashboardPage() {
           type="button"
           data-testid="owner-new-order-banner"
           onClick={() => { setViewMode('live'); setStatusFilter('PENDING'); acknowledgeOrders(); }}
-          className="w-full flex items-center gap-3 p-4 rounded-xl border text-left transition-all hover:opacity-95 animate-pulse"
+          className="w-full flex items-center gap-3 p-4 rounded-[var(--brand-radius,12px)] border text-left animate-pulse motion-reduce:animate-none transition-[transform,box-shadow,opacity] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
           style={{ background: 'var(--brand-primary-light)', borderColor: 'var(--brand-primary)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}
         >
           <i className="ti ti-bell-ringing text-xl shrink-0" style={{ color: 'var(--brand-primary)' }} />
@@ -436,7 +437,7 @@ export function DashboardPage() {
           <div
             key={stat.label}
             title={stat.tooltip || undefined}
-            className="text-center p-3 rounded-xl fade-in card-base" style={{ animationDelay: `${i * 40}ms` }}
+            className="text-center p-3 rounded-[var(--brand-radius,12px)] fade-in card-base transition-[transform,box-shadow] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0" style={{ animationDelay: `${i * 40}ms` }}
           >
             <div className="text-2xl font-bold mb-0.5" style={{ color: stat.color }}>
               {stat.isCurrency ? (
@@ -489,16 +490,20 @@ export function DashboardPage() {
                     </button>
                   )}
                 </div>
-                <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{filteredOrders.length}</p>
+                <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>
+                  {filteredOrders.length === 1
+                    ? t('admin.order_count_one', '1 order')
+                    : t('admin.order_count_other', '{count} orders').replace('{count}', String(filteredOrders.length))}
+                </p>
               </div>
               <div className="flex bg-[var(--brand-surface)] border rounded-lg overflow-hidden p-0.5 shrink-0" role="tablist" aria-label={t('admin.view_mode', 'View mode')} style={{ borderColor: 'var(--brand-border)' }}>
                 <motion.button role="tab" whileTap={{ scale: 0.97 }} aria-selected={viewMode === 'live'}
                   onClick={() => { setViewMode('live'); setStatusFilter('all'); }}
-                  className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors text-center ${viewMode === 'live' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}
+                  className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${viewMode === 'live' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)] border border-transparent'}`}
                 >{t('admin.live', 'Live')}</motion.button>
                 <motion.button role="tab" whileTap={{ scale: 0.97 }} aria-selected={viewMode === 'history'}
                   onClick={() => { setViewMode('history'); setStatusFilter('all'); }}
-                  className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors text-center ${viewMode === 'history' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}
+                  className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${viewMode === 'history' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)] border border-transparent'}`}
                 >{t('courier.history', 'History')}</motion.button>
               </div>
               {clientSlug && (
@@ -511,7 +516,7 @@ export function DashboardPage() {
                       setCopiedLink(true);
                       setTimeout(() => setCopiedLink(false), 2000);
                     }}
-                    className="text-[var(--brand-primary)] hover:underline font-medium shrink-0"
+                    className="text-[var(--brand-primary)] [@media(hover:hover)]:hover:underline font-medium shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
                   >
                     {copiedLink ? t('common.copied', 'Copied!') : t('common.copy', 'Copy')}
                   </button>
@@ -531,7 +536,7 @@ export function DashboardPage() {
                   style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
                 />
               </div>
-              <motion.button onClick={() => exportCSV(filteredOrders, 'orders.csv')} whileTap={{ scale: 0.97 }} title={t('tooltip.export_csv', 'Export as CSV')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97] shrink-0" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}>
+              <motion.button onClick={() => exportCSV(filteredOrders, 'orders.csv')} whileTap={{ scale: 0.97 }} title={t('tooltip.export_csv', 'Export as CSV')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-[transform,box-shadow,background-color] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:bg-[var(--brand-surface)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 shrink-0" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}>
                 <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
               </motion.button>
             </div>
@@ -547,7 +552,7 @@ export function DashboardPage() {
                   whileTap={{ scale: 0.97 }}
                   aria-pressed={statusFilter === s}
                   title={t('tooltip.filter_status', 'Filter by status')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 capitalize snap-start shrink-0 whitespace-nowrap ${statusFilter === s ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-[transform,box-shadow,background-color,color] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] capitalize snap-start shrink-0 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${statusFilter === s ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)] border border-transparent'}`}
                   style={{ minHeight: 'var(--tap-min)' }}
                 >
                   {s === 'all' ? t('common.all', 'All') : t(`order.${s.toLowerCase()}`, s.replace('_', ' ').toLowerCase())}
@@ -558,7 +563,10 @@ export function DashboardPage() {
               <motion.button
                 onClick={() => setSortPickerOpen(true)}
                 whileTap={{ scale: 0.97 }}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium shrink-0"
+                aria-haspopup="listbox"
+                aria-expanded={sortPickerOpen}
+                title={t('admin.sort_orders', 'Sort orders')}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium shrink-0 transition-[transform,box-shadow,background-color] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:bg-[var(--brand-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
                 style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}
               >
                 <i className="ti ti-arrows-sort text-sm" />
@@ -605,44 +613,101 @@ export function DashboardPage() {
 
       {/* Orders grid */}
       {error ? (
-        <EmptyState title={t('common.error', 'Error')} description={error} />
+        <EmptyState
+          title={t('common.error', 'Error')}
+          description={error}
+          icon={<i className="ti ti-alert-triangle text-4xl" style={{ color: 'var(--color-warning, #D97706)' }} />}
+          action={
+            <button
+              type="button"
+              onClick={() => { setError(''); fetchOrders(); }}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-[var(--brand-radius-btn,9999px)] border transition-[transform,box-shadow,background-color] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+              style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}
+            >
+              <i className="ti ti-refresh" /> {t('common.retry', 'Try again')}
+            </button>
+          }
+        />
       ) : loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" aria-busy="true" aria-label={t('admin.loading_orders', 'Loading orders')}>
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-36 rounded-xl shimmer" />
+            <div key={i} className="rounded-[var(--brand-radius,12px)] p-4 card-base flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="h-4 w-24 rounded-md shimmer" />
+                <div className="h-5 w-16 rounded-full shimmer" />
+              </div>
+              <div className="h-3 w-3/4 rounded-md shimmer" />
+              <div className="h-3 w-1/2 rounded-md shimmer" />
+              <div className="mt-1 flex items-center justify-between gap-3">
+                <div className="h-4 w-16 rounded-md shimmer" />
+                <div className="h-8 w-24 rounded-[var(--brand-radius-btn,9999px)] shimmer" />
+              </div>
+            </div>
           ))}
         </div>
       ) : filteredOrders.length === 0 ? (
         <EmptyState
-          title={t('admin.no_orders_yet', 'No orders yet')}
-          description={t('admin.no_orders_hint', 'Share your menu link with customers to start receiving orders.')}
+          title={
+            statusFilter !== 'all' || search
+              ? t('admin.no_matching_orders', 'No matching orders')
+              : viewMode === 'history'
+                ? t('admin.no_past_orders', 'No past orders')
+                : t('admin.no_active_orders', 'No active orders')
+          }
+          description={
+            statusFilter !== 'all' || search
+              ? t('admin.no_matching_orders_hint', 'Try clearing the filter or search to see more.')
+              : viewMode === 'history'
+                ? t('admin.no_past_orders_hint', 'Completed and cancelled orders will appear here.')
+                : t('admin.no_orders_hint', 'Share your menu link with customers to start receiving orders.')
+          }
           icon={<i className="ti ti-inbox text-4xl" style={{ color: 'var(--brand-text-muted)', opacity: 0.4 }} />}
+          action={
+            (statusFilter !== 'all' || search) ? (
+              <button
+                type="button"
+                onClick={() => { setStatusFilter('all'); setSearch(''); }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-[var(--brand-radius-btn,9999px)] border transition-[transform,box-shadow,background-color] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}
+              >
+                <i className="ti ti-filter-off" /> {t('admin.clear_filters', 'Clear filters')}
+              </button>
+            ) : undefined
+          }
         />
       ) : (
         <motion.div
           className="grid grid-cols-1 md:grid-cols-2 gap-4"
-          variants={{ visible: { transition: { staggerChildren: 0.025 } } }}
+          variants={{ visible: { transition: { staggerChildren: prefersReducedMotion ? 0 : 0.025 } } }}
           initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: '-40px' }}
-          aria-live="polite" aria-atomic="true"
+          animate="visible"
+          aria-live="polite" aria-atomic="false"
         >
-          {filteredOrders.map(order => (
-            <motion.div
-              key={order.id}
-              variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } } }}
-              className="order-card-container" data-testid={`order-card-${order.id}`} data-status={order.status}>
-              <OrderCard
-                order={order}
-                onUpdateStatus={handleUpdateStatus}
-                showMessages={expandedMessages.has(order.id)}
-                onToggleMessages={handleToggleMessages}
-                messages={messagesByOrder[order.id]}
-                onSendMessage={handleSendMessage}
-                onViewDetail={(id) => setDetailOrder(orders.find(o => o.id === id) || null)}
-              />
-            </motion.div>
-          ))}
+          <AnimatePresence initial={false} mode="popLayout">
+            {filteredOrders.map(order => (
+              <motion.div
+                key={order.id}
+                layout={!prefersReducedMotion}
+                variants={{
+                  hidden: { opacity: 0, y: prefersReducedMotion ? 0 : 10 },
+                  visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] } },
+                }}
+                initial="hidden"
+                animate="visible"
+                exit={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.97, transition: { duration: prefersReducedMotion ? 0 : 0.15 } }}
+                className="order-card-container" data-testid={`order-card-${order.id}`} data-status={order.status}>
+                <OrderCard
+                  order={order}
+                  onUpdateStatus={handleUpdateStatus}
+                  showMessages={expandedMessages.has(order.id)}
+                  onToggleMessages={handleToggleMessages}
+                  messages={messagesByOrder[order.id]}
+                  onSendMessage={handleSendMessage}
+                  onViewDetail={(id) => setDetailOrder(orders.find(o => o.id === id) || null)}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </motion.div>
       )}
 
@@ -671,8 +736,8 @@ export function DashboardPage() {
             </div>
             <a
               href="/admin/settings"
-              className="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-full text-white transition-all hover:opacity-90"
-              style={{ background: 'var(--brand-primary)' }}
+              className="shrink-0 inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-[var(--brand-radius-btn,9999px)] text-white transition-[transform,box-shadow,opacity] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+              style={{ background: 'var(--brand-primary)', minHeight: 'var(--tap-min-sm, 2rem)' }}
             >
               <i className="ti ti-brand-telegram mr-1" />
               {t('admin.tg_connect', 'Connect')}
@@ -703,7 +768,7 @@ export function DashboardPage() {
           {readinessItems.map(item => (
             <div
               key={item.label}
-              className="flex items-center gap-2.5 p-2.5 rounded-lg transition-all duration-200"
+              className="flex items-center gap-2.5 p-2.5 rounded-lg transition-colors duration-[var(--motion-base,240ms)] ease-[var(--ease-soft,ease)]"
               style={{ background: item.done ? 'color-mix(in srgb, var(--color-success) 5%, transparent)' : 'var(--brand-surface-raised)' }}
             >
               <i

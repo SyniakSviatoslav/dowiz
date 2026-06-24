@@ -139,18 +139,18 @@ const SupplyForm = ({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.name', 'Name')}</label>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder={t('admin.eg_salmon', 'e.g. Salmon fillet')} className="w-full h-10 px-3 rounded-lg border text-sm outline-none focus:border-[var(--brand-primary)] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+          <input value={name} onChange={e => setName(e.target.value)} placeholder={t('admin.eg_salmon', 'e.g. Salmon fillet')} className="w-full h-10 px-3 rounded-lg border text-sm outline-none focus:border-[var(--brand-primary)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-surface)] transition-[border-color,box-shadow] duration-150" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
         </div>
         <div>
           <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.category', 'Category')}</label>
-          <input value={category} onChange={e => setCategory(e.target.value)} placeholder={t('admin.eg_category', 'e.g. Fish, Dairy')} className="w-full h-10 px-3 rounded-lg border text-sm outline-none focus:border-[var(--brand-primary)] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+          <input value={category} onChange={e => setCategory(e.target.value)} placeholder={t('admin.eg_category', 'e.g. Fish, Dairy')} className="w-full h-10 px-3 rounded-lg border text-sm outline-none focus:border-[var(--brand-primary)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-surface)] transition-[border-color,box-shadow] duration-150" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
         </div>
       </div>
       <div className="flex flex-wrap gap-1">
         <label className="text-[11px] font-medium block w-full mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.type', 'Type')}</label>
         {(['food_ingredient', 'condiment', 'packaging', 'utensil'] as SupplyKind[]).map(k => (
-          <button key={k} type="button" onClick={() => setKind(k)}
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-medium transition-all ${kind === k ? 'text-white' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+          <button key={k} type="button" onClick={() => setKind(k)} aria-pressed={kind === k}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-medium outline-none transition-[background-color,color,transform] duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-surface)] ${kind === k ? 'text-white' : 'text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)]'}`}
             style={{ background: kind === k ? 'var(--brand-primary)' : 'var(--brand-surface-raised)' }}>
             <i className={kindIcons[k]} style={{ fontSize: '0.7rem' }} />
             {k === 'food_ingredient' ? t('supply.ingredient', 'Ingredient') : k === 'condiment' ? t('supply.sauce', 'Sauce') : k === 'packaging' ? t('supply.packaging', 'Packaging') : t('supply.utensil', 'Utensil')}
@@ -158,7 +158,7 @@ const SupplyForm = ({
         ))}
         <div className="w-full sm:w-auto sm:ml-2">
           <label className="text-[10px] block mb-0.5" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.unit', 'Unit')}</label>
-          <select value={baseUnit} onChange={e => setBaseUnit(e.target.value)} className="h-8 px-2 rounded-md border text-[10px] outline-none" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+          <select value={baseUnit} onChange={e => setBaseUnit(e.target.value)} aria-label={t('admin.unit', 'Unit')} className="h-8 px-2 rounded-md border text-[10px] outline-none focus:border-[var(--brand-primary)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-surface)] transition-[border-color,box-shadow] duration-150" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
             <option value="g">g</option><option value="ml">ml</option><option value="unit">unit</option>
           </select>
         </div>
@@ -169,7 +169,7 @@ const SupplyForm = ({
           <div className="grid grid-cols-4 gap-2">
             {[{ label: t('admin.kcal', 'Kcal'), val: kcal, set: setKcal, ph: 'kcal' }, { label: t('admin.protein_g', 'Protein (g)'), val: protein, set: setProtein, ph: '0' }, { label: t('admin.fat_g', 'Fat (g)'), val: fat, set: setFat, ph: '0' }, { label: t('admin.carbs_g', 'Carbs (g)'), val: carbs, set: setCarbs, ph: '0' }].map(f => (
               <div key={f.label}>
-                <input value={f.val} onChange={e => f.set(e.target.value)} type="number" placeholder={f.ph} className="w-full h-9 px-2 rounded-lg border text-xs outline-none focus:border-[var(--brand-primary)] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                <input value={f.val} onChange={e => f.set(e.target.value)} type="number" placeholder={f.ph} aria-label={f.label} className="w-full h-9 px-2 rounded-lg border text-xs outline-none focus:border-[var(--brand-primary)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-surface)] transition-[border-color,box-shadow] duration-150" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                 <span className="text-[9px] block mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{f.label}</span>
               </div>
             ))}
@@ -179,8 +179,8 @@ const SupplyForm = ({
             {ALL_ALLERGENS.map(a => {
               const active = allergens.includes(a);
               return (
-                  <button key={a} type="button" onClick={() => setAllergens(prev => active ? prev.filter(x => x !== a) : [...prev, a])}
-                    className={`px-2 py-1 rounded-full text-[10px] font-medium transition-all ${active ? 'text-white' : 'text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)]'}`}
+                  <button key={a} type="button" onClick={() => setAllergens(prev => active ? prev.filter(x => x !== a) : [...prev, a])} aria-pressed={active}
+                    className={`px-2 py-1 rounded-full text-[10px] font-medium outline-none transition-[background-color,color,transform] duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-surface)] ${active ? 'text-white' : 'text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:bg-[var(--brand-surface-raised)]'}`}
                     style={{ background: active ? 'var(--color-warning)' : 'var(--brand-border)' }}>{t(`allergen.${a.toLowerCase()}`, a)}</button>
               );
             })}
@@ -189,7 +189,7 @@ const SupplyForm = ({
       )}
       <div className="border-t pt-3" style={{ borderColor: 'var(--brand-border)' }}>
         <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.reorder_threshold', 'Reorder threshold')} ({baseUnit})</label>
-        <input value={threshold} onChange={e => setThreshold(e.target.value)} type="number" className="w-full sm:w-48 h-9 px-3 rounded-lg border text-xs outline-none focus:border-[var(--brand-primary)] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+        <input value={threshold} onChange={e => setThreshold(e.target.value)} type="number" aria-label={t('admin.reorder_threshold', 'Reorder threshold')} className="w-full sm:w-48 h-9 px-3 rounded-lg border text-xs outline-none focus:border-[var(--brand-primary)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-surface)] transition-[border-color,box-shadow] duration-150" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
       </div>
       </div>
       <div className="flex justify-end gap-2 p-5 pt-3 border-t shrink-0" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
@@ -308,12 +308,12 @@ export function SupplyLibraryPage() {
         <div className="relative flex-1 sm:flex-none sm:w-64">
           <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--brand-text-muted)' }} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search')}
-            className="pl-9 pr-4 py-2 w-full rounded-lg border text-sm outline-none focus:border-[var(--brand-primary)] transition-colors"
+            className="pl-9 pr-4 py-2 w-full rounded-lg border text-sm outline-none focus:border-[var(--brand-primary)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)] transition-[border-color,box-shadow] duration-150"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
         </div>
         <div className="relative">
-          <button onClick={() => setSortOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none"
+          <button onClick={() => setSortOpen(true)} aria-label={t('admin.sort_supplies', 'Sort supplies')} aria-haspopup="menu" aria-expanded={sortOpen}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none transition-[background-color,box-shadow,transform] duration-150 [@media(hover:hover)]:hover:bg-[var(--brand-surface-raised)] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)]"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
             <i className="ti ti-arrows-sort text-base" />
           </button>
@@ -332,13 +332,13 @@ export function SupplyLibraryPage() {
           ) : sortOpen && (
             <>
               <div className="fixed inset-0 z-40" role="button" tabIndex={-1} aria-label={t('common.close_sort', 'Close sort picker')} onClick={() => setSortOpen(false)} onKeyDown={e => e.key === 'Escape' && setSortOpen(false)} />
-              <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[140px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+              <div role="menu" className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[140px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
                 {[
                   { value: 'name', label: t('admin.name_az', 'Name A-Z'), icon: 'ti ti-sort-az' },
                   { value: 'category', label: t('admin.category', 'Category'), icon: 'ti ti-folder' },
                 ].map(opt => (
-                  <button key={opt.value} onClick={() => { setSortBy(opt.value as any); setSortOpen(false); }}
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${sortBy === opt.value ? 'font-semibold' : ''}`}
+                  <button key={opt.value} role="menuitemradio" aria-checked={sortBy === opt.value} onClick={() => { setSortBy(opt.value as any); setSortOpen(false); }}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors [@media(hover:hover)]:hover:bg-[var(--brand-surface-raised)] outline-none focus-visible:bg-[var(--brand-surface-raised)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--brand-primary)] ${sortBy === opt.value ? 'font-semibold' : ''}`}
                     style={{ color: sortBy === opt.value ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
                     <i className={opt.icon} style={{ fontSize: '0.8rem' }} />
                     <span className="flex-1">{opt.label}</span>
@@ -353,8 +353,8 @@ export function SupplyLibraryPage() {
             isn't clipped without affordance (matches the storefront/menu category nav). */}
         <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory flex-1" style={{ background: 'var(--brand-bg)', WebkitMaskImage: 'linear-gradient(to right, #000 92%, transparent)', maskImage: 'linear-gradient(to right, #000 92%, transparent)' }}>
           {KINDS.map(k => (
-            <button key={k.key} onClick={() => setKindFilter(k.key)}
-              className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${kindFilter === k.key ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}>
+            <button key={k.key} onClick={() => setKindFilter(k.key)} aria-pressed={kindFilter === k.key}
+              className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium rounded-md transition-[background-color,color,box-shadow,transform] duration-150 snap-start shrink-0 whitespace-nowrap outline-none active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)] ${kindFilter === k.key ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)]'}`}>
               <i className={kindIcons[k.key]} style={{ fontSize: '0.8rem' }} />{k.label}
             </button>
           ))}
@@ -364,7 +364,21 @@ export function SupplyLibraryPage() {
       {loading ? (
         <div className="space-y-2">{[1,2,3,4,5].map(i => <SkeletonBase key={i} className="h-16 w-full rounded-xl" />)}</div>
       ) : filtered.length === 0 ? (
-        <EmptyState title={t('common.no_data')} description={search ? t('admin.no_supplies_match', 'No supplies match.') : t('admin.add_first_supply', 'Add your first supply to start.')} icon={<i className="ti ti-packages text-4xl" style={{ opacity: 0.3 }} />} />
+        (search || kindFilter !== 'all') ? (
+          <EmptyState
+            title={t('admin.no_supplies_match_title', 'No matches')}
+            description={t('admin.no_supplies_match', 'No supplies match your filters.')}
+            icon={<i className="ti ti-search-off text-4xl" style={{ opacity: 0.3 }} />}
+            action={<Button variant="ghost" size="sm" onClick={() => { setSearch(''); setKindFilter('all'); }}><i className="ti ti-x" /> {t('common.clear_filters', 'Clear filters')}</Button>}
+          />
+        ) : (
+          <EmptyState
+            title={t('admin.no_supplies_title', 'No supplies yet')}
+            description={t('admin.add_first_supply', 'Add your first supply to start.')}
+            icon={<i className="ti ti-packages text-4xl" style={{ opacity: 0.3 }} />}
+            action={<Button size="sm" onClick={() => { setAdding(true); setEditing(null); }}><i className="ti ti-plus" /> {t('admin.add_supply', 'Add Supply')}</Button>}
+          />
+        )
       ) : (
         <div className="space-y-1">
           {editing && (
@@ -379,7 +393,7 @@ export function SupplyLibraryPage() {
             const ico = kindIcons[supply.kind] || 'ti ti-circle';
             const icoColor = supply.kind === 'food_ingredient' ? 'var(--color-success)' : supply.kind === 'condiment' ? 'var(--color-warning)' : supply.kind === 'packaging' ? 'var(--color-info)' : 'var(--brand-text-muted)';
             return (
-              <div key={supply.id} className={`flex items-start sm:items-center gap-3 p-3 rounded-xl border transition-all duration-200 hover:bg-[var(--brand-surface)] slide-in-up`}
+              <div key={supply.id} className={`group flex items-start sm:items-center gap-3 p-3 rounded-xl border transition-[box-shadow,transform,border-color] duration-200 ease-out [@media(hover:hover)]:hover:-translate-y-0.5 [@media(hover:hover)]:hover:shadow-[var(--elev-2)] [@media(hover:hover)]:hover:border-[color-mix(in_srgb,var(--brand-primary)_25%,transparent)] slide-in-up`}
                 style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', animationDelay: `${i * 30}ms` }}>
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--brand-primary-light)' }}>
                   <i className={ico} style={{ fontSize: '1rem', color: icoColor }} />
@@ -403,15 +417,15 @@ export function SupplyLibraryPage() {
                   </div>
                   {supply.allergens.length > 0 && (
                     <div className="flex gap-1 mt-1 flex-wrap">{supply.allergens.map(a => (
-                      <span key={a} className="px-1.5 py-0.5 rounded-full text-[9px] font-medium" style={{ background: 'rgba(217,119,6,0.1)', color: 'var(--color-warning)' }}>{t(`allergen.${a}`, a)}</span>
+                      <span key={a} className="px-1.5 py-0.5 rounded-full text-[9px] font-medium" style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)' }}>{t(`allergen.${a}`, a)}</span>
                     ))}</div>
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => setEditing(supply)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--brand-surface-raised)] transition-colors" title={t('common.edit', 'Edit')}>
+                  <button onClick={() => setEditing(supply)} aria-label={`${t('common.edit', 'Edit')}: ${supply.name}`} className="w-9 h-9 flex items-center justify-center rounded-lg outline-none transition-[background-color,box-shadow,transform,color] duration-150 [@media(hover:hover)]:hover:bg-[var(--brand-surface-raised)] [@media(hover:hover)]:hover:text-[var(--brand-text)] active:scale-90 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-surface)]" title={t('common.edit', 'Edit')}>
                     <i className="ti ti-edit" style={{ fontSize: '0.85rem', color: 'var(--brand-text-muted)' }} />
                   </button>
-                  <button onClick={() => handleDelete(supply.id)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-danger-light)] transition-colors" title={t('common.delete', 'Delete')}>
+                  <button onClick={() => handleDelete(supply.id)} aria-label={`${t('common.delete', 'Delete')}: ${supply.name}`} className="w-9 h-9 flex items-center justify-center rounded-lg outline-none transition-[background-color,box-shadow,transform,color] duration-150 [@media(hover:hover)]:hover:bg-[var(--color-danger-light)] [@media(hover:hover)]:hover:text-[var(--color-danger)] active:scale-90 focus-visible:ring-2 focus-visible:ring-[var(--color-danger)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-surface)]" title={t('common.delete', 'Delete')}>
                     <i className="ti ti-trash" style={{ fontSize: '0.85rem', color: 'var(--brand-text-muted)' }} />
                   </button>
                 </div>
