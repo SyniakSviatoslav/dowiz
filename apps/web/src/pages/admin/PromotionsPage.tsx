@@ -192,8 +192,10 @@ export function PromotionsPage() {
       const data = await apiClient<typeof PromotionListResponse>('/owner/promotions', { schema: PromotionListResponse });
       setPromotions(data.promotions);
     } catch (err: any) {
+      // Keep the raw server detail in the console only — never surface a raw string
+      // like "Internal server error" to the owner.
       console.error('[Promotions] load failed:', err);
-      setError(err?.message || t('common.error'));
+      setError(t('promotions.load_error', 'Could not load promotions. Please try again.'));
     } finally {
       setLoading(false);
     }

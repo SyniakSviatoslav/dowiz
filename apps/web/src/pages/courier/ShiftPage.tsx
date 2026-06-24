@@ -256,9 +256,9 @@ export function ShiftPage() {
           </select>
           <input value={msgHandle} onChange={e => { setMsgHandle(e.target.value); setMsgSaved(false); }} disabled={!msgKind}
             placeholder={msgKind === 'telegram' ? '@username' : '+355 6X XXX XXXX'} data-testid="courier-messenger-handle"
-            className="flex-1 h-[44px] px-3 border rounded-[8px] text-sm disabled:opacity-50" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+            className="flex-1 min-w-0 h-[44px] px-3 border rounded-[8px] text-sm disabled:opacity-50" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
         </div>
-        <Button onClick={saveMessenger} isLoading={msgSaving} variant="secondary" className="w-full">
+        <Button onClick={saveMessenger} isLoading={msgSaving} variant="secondary" className="w-full border border-[var(--brand-primary)] !text-[var(--brand-primary)] !bg-transparent hover:!bg-[var(--brand-surface-raised)]">
           {msgSaved ? t('common.saved', 'Saved') : t('common.save', 'Save')}
         </Button>
       </div>

@@ -93,6 +93,27 @@ export function CRMPage() {
     }
   };
 
+  // The API sends the last-order time pre-formatted in English ("15h ago", "1d ago",
+  // "never"). Re-localize the unit suffix client-side so the Albanian UI doesn't show
+  // raw English. Helper kept local to the page (no shared util) per scope.
+  const localizeRelativeTime = (s: string): string => {
+    if (!s) return s;
+    if (s === 'never') return t('time.never', 'never');
+    const m = s.match(/^(\d+)([mhdw])\s*ago$/);
+    if (!m) return s;
+    const n = m[1] ?? '';
+    const unit = m[2] ?? '';
+    const unitKey: Record<string, [string, string]> = {
+      m: ['time.minutes_ago', '{n}m ago'],
+      h: ['time.hours_ago', '{n}h ago'],
+      d: ['time.days_ago', '{n}d ago'],
+      w: ['time.weeks_ago', '{n}w ago'],
+    };
+    const entry = unitKey[unit];
+    if (!entry) return s;
+    return t(entry[0], entry[1]).replace('{n}', n);
+  };
+
   const filtered = useMemo(() => {
     let result = [...customers];
     if (search) {
@@ -183,7 +204,7 @@ export function CRMPage() {
                       <PriceDisplay amount={c.ltv} />
                     </td>
                     <td className="p-3 text-right hidden lg:table-cell" style={{ color: 'var(--brand-text-muted)' }}>
-                      {c.lastOrder}
+                      {localizeRelativeTime(c.lastOrder)}
                     </td>
                     <td className="p-3 text-right">
                       <Button onClick={(e) => handleReveal(e, c.id)} disabled={!!revealed[c.id]} isLoading={revealing === c.id} size="sm">

@@ -136,14 +136,10 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             )}
           </div>
         )}
-        {!hasAllergens && product.isAvailable && (
-          <div className="absolute top-1.5 left-1.5 z-10">
-            <span className="text-[8px] font-medium px-1.5 py-0.5 rounded-md flex items-center gap-0.5" style={{ background: 'rgba(5,150,105,0.12)', color: 'var(--color-success)' }}>
-              <i className="ti ti-circle-check" style={{ fontSize: '0.55rem' }} />
-              {t('common.clean', 'Clean')}
-            </span>
-          </div>
-        )}
+        {/* No "Clean/allergen-free" fallback badge: absence of declared allergen
+            data is NOT a safety guarantee. Showing it on every product with no
+            allergen info was both misleading (e.g. a salmon roll reading "Clean")
+            and visual noise. Allergen scent now appears only when real data exists. */}
         {hasNutrition && !isChefPick && (
           <div className="absolute top-1.5 right-1.5 z-10">
               <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-1" style={{ background: 'rgba(0,0,0,0.6)', color: 'var(--color-on-primary)' }}>

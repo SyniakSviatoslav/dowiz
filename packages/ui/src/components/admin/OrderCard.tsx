@@ -35,10 +35,12 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
   const getStatusColor = (s: string) => {
     switch (s) {
       case 'PENDING': return 'bg-[var(--status-pending-bg)] text-[var(--status-pending)] border-[var(--status-pending-border)]';
+      case 'CONFIRMED': return 'bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed)] border-[var(--status-confirmed-border)]';
       case 'PREPARING': return 'bg-[var(--status-preparing-bg)] text-[var(--status-preparing)] border-[var(--status-preparing-border)]';
       case 'READY': return 'bg-[var(--status-ready-bg)] text-[var(--status-ready)] border-[var(--status-ready-border)]';
       case 'IN_DELIVERY': return 'bg-[var(--status-in-delivery-bg)] text-[var(--status-in-delivery)] border-[var(--status-in-delivery-border)]';
       case 'DELIVERED': return 'bg-[var(--status-delivered-bg)] text-[var(--status-delivered)] border-[var(--status-delivered-border)]';
+      case 'REJECTED': return 'bg-[var(--status-rejected-bg)] text-[var(--status-rejected)] border-[var(--status-rejected-border)]';
       case 'CANCELLED': return 'bg-[var(--status-cancelled-bg)] text-[var(--status-cancelled)] border-[var(--status-cancelled-border)]';
       default: return 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] border-[var(--brand-border)]';
     }
@@ -47,14 +49,25 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
   const getStatusIcon = (s: string) => {
     switch (s) {
       case 'PENDING': return 'ti ti-clock';
+      case 'CONFIRMED': return 'ti ti-circle-check';
       case 'PREPARING': return 'ti ti-chef-hat';
       case 'READY': return 'ti ti-check';
       case 'IN_DELIVERY': return 'ti ti-truck-delivery';
       case 'DELIVERED': return 'ti ti-package';
+      case 'REJECTED': return 'ti ti-ban';
       case 'CANCELLED': return 'ti ti-x';
       default: return 'ti ti-help';
     }
   };
+
+  // Localized status label — the raw uppercase enum ("REJECTED") leaked into the
+  // otherwise-Albanian owner UI. Reuses the canonical order.* label catalog.
+  const STATUS_LABEL_KEYS: Record<string, string> = {
+    PENDING: 'order.pending', CONFIRMED: 'order.confirmed', PREPARING: 'order.preparing',
+    READY: 'order.ready', IN_DELIVERY: 'order.in_delivery', DELIVERED: 'order.delivered',
+    REJECTED: 'order.rejected', CANCELLED: 'order.cancelled',
+  };
+  const statusLabel = (s: string) => t(STATUS_LABEL_KEYS[s] || '', s.replace(/_/g, ' '));
 
   const getDeltaMin = (start?: string, end?: string) => {
     if (!start || !end) return null;
@@ -85,7 +98,7 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
         </div>
         <div role="status" className={`px-2.5 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 transition-colors duration-200 ${getStatusColor(order.status)}`}>
           <i className={getStatusIcon(order.status)} style={{ fontSize: '0.75rem' }} />
-          {order.status}
+          {statusLabel(order.status)}
         </div>
       </div>
 

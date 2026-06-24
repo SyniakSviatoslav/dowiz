@@ -349,7 +349,9 @@ export function SupplyLibraryPage() {
             </>
           )}
         </div>
-        <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory flex-1" style={{ background: 'var(--brand-bg)' }}>
+        {/* Horizontal-scroll chip strip with a right-edge fade cue so the last chip
+            isn't clipped without affordance (matches the storefront/menu category nav). */}
+        <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory flex-1" style={{ background: 'var(--brand-bg)', WebkitMaskImage: 'linear-gradient(to right, #000 92%, transparent)', maskImage: 'linear-gradient(to right, #000 92%, transparent)' }}>
           {KINDS.map(k => (
             <button key={k.key} onClick={() => setKindFilter(k.key)}
               className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${kindFilter === k.key ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}>
@@ -377,7 +379,7 @@ export function SupplyLibraryPage() {
             const ico = kindIcons[supply.kind] || 'ti ti-circle';
             const icoColor = supply.kind === 'food_ingredient' ? 'var(--color-success)' : supply.kind === 'condiment' ? 'var(--color-warning)' : supply.kind === 'packaging' ? 'var(--color-info)' : 'var(--brand-text-muted)';
             return (
-              <div key={supply.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 hover:bg-[var(--brand-surface)] slide-in-up`}
+              <div key={supply.id} className={`flex items-start sm:items-center gap-3 p-3 rounded-xl border transition-all duration-200 hover:bg-[var(--brand-surface)] slide-in-up`}
                 style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', animationDelay: `${i * 30}ms` }}>
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--brand-primary-light)' }}>
                   <i className={ico} style={{ fontSize: '1rem', color: icoColor }} />
@@ -389,11 +391,14 @@ export function SupplyLibraryPage() {
                       {supply.kind === 'food_ingredient' ? t('supply.ingredient_short') : supply.kind === 'condiment' ? t('supply.sauces_short') : supply.kind === 'packaging' ? t('supply.packaging_short') : t('supply.utensils_short')}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-[11px] mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>
+                  {/* flex-wrap so on narrow widths (390px) the kcal text + "unconfirmed"
+                      badge wrap under the title instead of overflowing into the action
+                      icons. Desktop stays single-line (there's room). */}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>
                     <span>{supply.category}</span><span>·</span><span>{supply.baseUnit}</span>
-                    {supply.kcalPer100 && <><span>·</span><span>{supply.kcalPer100} kcal/100{supply.baseUnit}</span></>}
+                    {supply.kcalPer100 && <><span>·</span><span className="whitespace-nowrap">{supply.kcalPer100} kcal/100{supply.baseUnit}</span></>}
                     {!supply.nutritionConfirmedAt && (supply.kind === 'food_ingredient' || supply.kind === 'condiment') && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)' }}>{t('admin.unconfirmed', 'unconfirmed')}</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap" style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)' }}>{t('admin.unconfirmed', 'unconfirmed')}</span>
                     )}
                   </div>
                   {supply.allergens.length > 0 && (

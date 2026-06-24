@@ -5,6 +5,13 @@ import { Button, Input, FormField, LanguageSwitcher, useI18n, NomadicScene, ArtN
 import { apiClient } from '../../lib/index.js';
 import { CourierLoginResponse } from '@deliveryos/shared-types';
 
+// K7: the teal Art-Nouveau corner brackets are a paper-skin motif — render the decorative
+// frame only when the paper skin is on, otherwise a plain card (no clashing teal in the dark default).
+function FrameOrPlain({ children, className }: { children?: React.ReactNode; className?: string }) {
+  if (isPaperSkinEnabled()) return <ArtNouveauFrame className={className}>{children}</ArtNouveauFrame>;
+  return <div className={className}>{children}</div>;
+}
+
 export function LoginPage() {
   const { t } = useI18n();
   const [email, setEmail] = useState('');
@@ -56,10 +63,15 @@ export function LoginPage() {
             </div>
           </div>
         ) : (
-          <div className="h-1 w-16 mx-auto mb-6 rounded-full" style={{ background: 'linear-gradient(90deg, var(--brand-primary), var(--brand-primary-hover))' }} />
+          <div className="mb-6 text-center">
+            {/* Brand wordmark — a proper noun, not translated (mirrors the "Courier" wordmark in CourierRoutes). */}
+            <span className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-primary)' }}>
+              DeliveryOS
+            </span>
+          </div>
         )}
 
-        <ArtNouveauFrame className="card-base p-8 space-y-6 block">
+        <FrameOrPlain className="card-base p-8 space-y-6 block">
           <div className="text-center space-y-1.5">
             {!isPaperSkinEnabled() && (
               <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>
@@ -94,7 +106,7 @@ export function LoginPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
+                placeholder={t('login.password_placeholder', 'Enter your password')}
                 required
                 error={!!error}
               />
@@ -102,7 +114,7 @@ export function LoginPage() {
 
             <Button
               type="submit"
-              className="w-full"
+              className="w-full disabled:!bg-[var(--brand-surface-raised)] disabled:!text-[var(--brand-text-muted)] disabled:!opacity-100"
               size="lg"
               isLoading={loading}
               disabled={!email.trim() || !password}
@@ -110,7 +122,7 @@ export function LoginPage() {
               {t('auth.login', 'Log In')}
             </Button>
           </form>
-        </ArtNouveauFrame>
+        </FrameOrPlain>
         {isPaperSkinEnabled() && <NomadicCredit className="mt-6" />}
       </div>
     </div>

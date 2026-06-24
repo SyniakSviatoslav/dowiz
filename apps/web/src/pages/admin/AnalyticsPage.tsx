@@ -249,7 +249,7 @@ export function AnalyticsPage() {
             </div>
             <div className="text-xl font-bold mb-1" style={{ color: 'var(--brand-text)' }}>{card.value}</div>
             <span className="text-xs font-medium" style={{ color: card.trend.startsWith('+') ? 'var(--color-success)' : card.trend.startsWith('-') ? 'var(--color-danger)' : 'var(--brand-text-muted)' }}>
-              {card.trend} vs last period
+              {card.trend} {t('admin.vs_last_period', 'vs last period')}
             </span>
           </div>
         ))}
