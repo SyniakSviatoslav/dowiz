@@ -309,7 +309,7 @@ export function DeliveryPage() {
             <div className="text-[var(--brand-text-muted)]">{task.customer.address}</div>
           </div>
           <div className="text-right">
-            <div className="text-2xl font-black text-[var(--brand-primary)]">{task.eta}</div>
+            <div data-dynamic className="text-2xl font-black text-[var(--brand-primary)]">{task.eta}</div>
             <div className="text-sm text-[var(--brand-text-muted)]">to destination</div>
           </div>
         </div>
