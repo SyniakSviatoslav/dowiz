@@ -806,8 +806,8 @@ export function MenuPage() {
               ref={el => { sectionRefs.current[category.id] = el }}
               className="mb-7"
               style={{ scrollMarginTop: scrollOffset + 'px' }}
-              initial={prefersReduced ? false : { opacity: 0, y: 6 }}
-              whileInView={{ opacity: 1, y: 0 }}
+              initial={prefersReduced ? false : { opacity: 0, transform: 'translateY(6px)' }}
+              whileInView={{ opacity: 1, transform: 'translateY(0px)' }}
               viewport={{ once: true, margin: '-60px' }}
               transition={{ duration: prefersReduced ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] }}
             >
@@ -829,7 +829,7 @@ export function MenuPage() {
                     key={product.id}
                     variants={prefersReduced
                       ? { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0 } } }
-                      : { hidden: { opacity: 0, y: 6 }, visible: { opacity: 1, y: 0, transition: { duration: 0.18, ease: [0.16, 1, 0.3, 1] } } }}
+                      : { hidden: { opacity: 0, transform: 'translateY(6px)' }, visible: { opacity: 1, transform: 'translateY(0px)', transition: { duration: 0.18, ease: [0.16, 1, 0.3, 1] } } }}
                   >
                     <ProductCard product={{
                       id: product.id,
@@ -887,9 +887,9 @@ export function MenuPage() {
           <motion.div
             className="relative w-full md:max-w-lg max-h-[85vh] overflow-auto rounded-t-2xl md:rounded-2xl"
             style={{ background: 'var(--brand-bg)', boxShadow: 'var(--elev-4)' }}
-            initial={prefersReduced ? { opacity: 0 } : { y: 28, scale: 0.97, opacity: 0.5 }}
-            animate={{ y: 0, scale: 1, opacity: 1 }}
-            exit={prefersReduced ? { opacity: 0 } : { y: 18, scale: 0.97, opacity: 0 }}
+            initial={prefersReduced ? { opacity: 0 } : { transform: 'translateY(28px) scale(0.97)', opacity: 0 }}
+            animate={{ transform: 'translateY(0px) scale(1)', opacity: 1 }}
+            exit={prefersReduced ? { opacity: 0 } : { transform: 'translateY(18px) scale(0.97)', opacity: 0, transition: { duration: 0.18, ease: [0.4, 0, 0.2, 1] } }}
             transition={prefersReduced ? { duration: 0.15 } : { type: 'spring', stiffness: 340, damping: 32 }}
           >
             {/* Image */}
@@ -960,7 +960,7 @@ export function MenuPage() {
               )}
               <motion.button
                 whileTap={prefersReduced ? undefined : { scale: 0.95 }}
-                className="absolute top-4 right-4 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center backdrop-blur-md active:scale-[0.95] outline-none transition-transform duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
+                className="absolute top-4 right-4 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center backdrop-blur-md outline-none transition-transform duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
                 style={{ background: 'color-mix(in srgb, var(--brand-bg) 50%, transparent)', color: 'var(--color-on-primary)' }}
                 onClick={closeDetail}
                 aria-label={t('common.close', 'Close')}
@@ -1199,9 +1199,9 @@ export function MenuPage() {
                 <div className="flex items-center self-start shrink-0 rounded-xl p-1" style={{ background: 'var(--brand-surface)' }}>
                   <motion.button
                     onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                    whileTap={prefersReduced ? undefined : { scale: 0.9 }}
+                    whileTap={prefersReduced ? undefined : { scale: 0.92 }}
                     disabled={quantity <= 1}
-                    className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium outline-none transition-[color,transform] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] active:scale-90 disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
+                    className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium outline-none transition-[color,transform] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
                     style={{ color: 'var(--brand-text)' }}
                     aria-label={t('common.decrease_quantity', 'Decrease quantity')}
                   >
@@ -1210,8 +1210,8 @@ export function MenuPage() {
                   <span className="text-base font-semibold w-7 text-center" style={{ color: 'var(--brand-text)' }}>{quantity}</span>
                   <motion.button
                     onClick={() => setQuantity(q => q + 1)}
-                    whileTap={prefersReduced ? undefined : { scale: 0.9 }}
-                    className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium outline-none transition-[color,transform] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] active:scale-90 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
+                    whileTap={prefersReduced ? undefined : { scale: 0.92 }}
+                    className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium outline-none transition-[color,transform] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
                     style={{ color: 'var(--brand-text)' }}
                     aria-label={t('common.increase_quantity', 'Increase quantity')}
                   >
@@ -1223,7 +1223,7 @@ export function MenuPage() {
                   onClick={handleAddDetail}
                   disabled={!canAdd()}
                   whileTap={prefersReduced || !canAdd() ? undefined : { scale: 0.97 }}
-                  className="w-full sm:flex-1 min-w-0 h-[48px] text-[var(--brand-bg)] font-bold text-[14px] outline-none transition-[transform,box-shadow,opacity] duration-150 ease-out active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 flex items-center justify-between gap-2 px-4 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
+                  className="w-full sm:flex-1 min-w-0 h-[48px] text-[var(--brand-bg)] font-bold text-[14px] outline-none transition-[transform,opacity] duration-150 ease-out disabled:opacity-40 flex items-center justify-between gap-2 px-4 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
                   style={{ background: detailProduct.available ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
                   {detailProduct.available ? (

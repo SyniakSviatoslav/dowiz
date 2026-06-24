@@ -62,9 +62,9 @@ export function CartDrawer({ isOpen, onClose, items, onUpdateQuantity, onCheckou
           <motion.div
             className="absolute bottom-0 left-0 right-0 max-h-[85vh] flex flex-col bg-[var(--brand-surface)] rounded-t-2xl"
             style={{ boxShadow: 'var(--elev-4)', paddingBottom: 'var(--safe-bottom)' }}
-            initial={reduce ? { opacity: 0 } : { y: '100%' }}
-            animate={reduce ? { opacity: 1 } : { y: 0 }}
-            exit={reduce ? { opacity: 0 } : { y: '100%' }}
+            initial={reduce ? { opacity: 0 } : { transform: 'translateY(100%)' }}
+            animate={reduce ? { opacity: 1 } : { transform: 'translateY(0%)' }}
+            exit={reduce ? { opacity: 0 } : { transform: 'translateY(100%)', transition: { duration: 0.22, ease: [0.4, 0, 0.2, 1] } }}
             transition={reduce ? { duration: 0.18 } : { duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
           >
             <div className="flex items-center justify-center pt-2 pb-1 shrink-0">

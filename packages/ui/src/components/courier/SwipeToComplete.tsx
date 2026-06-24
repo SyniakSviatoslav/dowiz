@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../../lib/I18nProvider.js';
 
+// Matches the design-system --ease-out token cubic-bezier(0.16, 1, 0.3, 1): expo-out, no bounce.
+const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
 interface SwipeToCompleteProps {
   onComplete: () => Promise<void>;
   label?: string;
@@ -100,7 +103,7 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
       <motion.div
         initial={reduceMotion ? false : { scale: 0.97, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.24, ease: EASE_OUT }}
         className="h-14 rounded-full bg-[var(--color-success)] flex items-center justify-center gap-2 font-bold text-[var(--color-on-success)] shadow-[var(--elevation-2)]"
       >
         {t('order.delivered', 'Delivered')}
@@ -131,7 +134,7 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
         style={{ width: `${slideRatio * 100}%` }}
       />
       <span
-        className="font-bold text-[var(--brand-text)] z-10 pointer-events-none transition-opacity duration-150"
+        className="font-bold text-[var(--brand-text)] z-10 pointer-events-none transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-out)] motion-reduce:transition-none"
         style={{ opacity: 1 - slideRatio }}
       >
         {loading ? t('common.processing', 'Processing...') : resolvedLabel}
@@ -140,10 +143,10 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
       <motion.div
         className="absolute left-1 top-1 bottom-1 w-12 bg-[var(--brand-primary)] rounded-full shadow-[var(--elevation-2)] flex items-center justify-center cursor-grab active:cursor-grabbing z-20"
         animate={hint
-          ? { x: [0, 6, 0] }
-          : { x: slideRatio * (containerRef.current ? containerRef.current.clientWidth - 56 : 0) }}
+          ? { transform: ['translateX(0px)', 'translateX(6px)', 'translateX(0px)'] }
+          : { transform: `translateX(${slideRatio * (containerRef.current ? containerRef.current.clientWidth - 56 : 0)}px)` }}
         transition={hint
-          ? { duration: 1.4, repeat: Infinity, repeatDelay: 0.6, ease: 'easeOut' }
+          ? { duration: 1.4, repeat: Infinity, repeatDelay: 0.6, ease: EASE_OUT }
           : { duration: 0 }}
         role="presentation"
         aria-hidden="true"
