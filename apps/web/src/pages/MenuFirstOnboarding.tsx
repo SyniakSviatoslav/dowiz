@@ -1,11 +1,17 @@
 import { safeStorage } from '../lib/safeStorage.js';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, FormField, useI18n } from '@deliveryos/ui';
 import { PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient, ApiError } from '../lib/index.js';
 import { SwanHero } from '../components/SwanHero.js';
 import { AccessRequestGate } from '../components/AccessRequestForm.js';
+
+// Path A (Nomadic-Tribe redesign): the anonymous hero is a real-time 3D
+// paper/Moebius canvas. React.lazy keeps three.js in its own chunk, off the
+// main bundle. SwanHero is the Suspense fallback (during load) AND the runtime
+// fallback PaperScene swaps to for reduced-motion / no-WebGL / SSR / any error.
+const PaperScene = React.lazy(() => import('../components/PaperScene.js'));
 
 // Menu-first onboarding. The front door is "upload your menu" — we parse it with
 // the zero-dependency heuristic parser, pre-fill the storefront identity
@@ -206,7 +212,11 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
                 is on (default off) — public "register interest" capture on the landing. */}
             {mode === 'anonymous' && <AccessRequestGate />}
             {mode === 'anonymous'
-              ? <SwanHero />
+              ? (
+                <Suspense fallback={<SwanHero />}>
+                  <PaperScene fallback={<SwanHero />} />
+                </Suspense>
+              )
               : (
                 <div>
                   <h2 className="text-2xl font-bold tracking-tight" style={S.heading}>{t('start.title', 'Start with your menu')}</h2>
