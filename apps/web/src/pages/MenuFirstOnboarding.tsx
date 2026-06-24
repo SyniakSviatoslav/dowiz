@@ -1,10 +1,9 @@
 import { safeStorage } from '../lib/safeStorage.js';
 import React, { useCallback, useRef, useState, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Input, FormField, useI18n, ArtNouveauFrame, ArtNouveauDivider, NomadicCredit } from '@deliveryos/ui';
+import { Button, Input, FormField, useI18n, ArtNouveauFrame, ArtNouveauDivider, NomadicCredit, NomadicScene } from '@deliveryos/ui';
 import { PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient, ApiError } from '../lib/index.js';
-import { SwanHero } from '../components/SwanHero.js';
 import { AccessRequestGate } from '../components/AccessRequestForm.js';
 
 // Path A (Nomadic-Tribe redesign): the anonymous hero is a real-time 3D
@@ -226,14 +225,24 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
                 // Comic-panel hero: the live paper scene framed in an inked Art-Nouveau
                 // border with corner flourishes. The frame is decorative (aria-hidden in
                 // the component); PaperScene wiring is untouched.
-                <ArtNouveauFrame
-                  className="dz-fade-in"
-                  style={{ background: 'var(--paper-surface, var(--brand-surface))', borderRadius: 'var(--brand-radius)', overflow: 'hidden', boxShadow: 'var(--elev-2)', padding: 6 }}
-                >
-                  <Suspense fallback={<SwanHero />}>
-                    <PaperScene fallback={<SwanHero />} />
-                  </Suspense>
-                </ArtNouveauFrame>
+                <div className="dz-fade-in">
+                  <ArtNouveauFrame
+                    style={{ background: 'var(--paper-surface, var(--brand-surface))', borderRadius: 'var(--brand-radius)', overflow: 'hidden', boxShadow: 'var(--elev-2)', padding: 6 }}
+                  >
+                    {/* Hero art: live 3D paper scene; falls back to the Moebius SVG scene
+                        (on-brand, art-only) for reduced-motion / no-WebGL / lazy-load. The
+                        value-prop headline lives BELOW in the page so it shows either way. */}
+                    <Suspense fallback={<NomadicScene variant="journey" animated />}>
+                      <PaperScene fallback={<NomadicScene variant="journey" animated />} />
+                    </Suspense>
+                  </ArtNouveauFrame>
+                  <h1 className="mt-5 text-3xl leading-[1.1]" style={{ ...S.heading, letterSpacing: '-0.01em' }}>
+                    {t('start.hero_title', 'Your menu, online tonight.')}
+                  </h1>
+                  <p className="mt-2 text-sm leading-relaxed" style={S.helper}>
+                    {t('start.hero_sub', 'Snap a photo of your menu — we read it, build your storefront, and you’re taking orders. No code, no wait.')}
+                  </p>
+                </div>
               )
               : (
                 <div>
