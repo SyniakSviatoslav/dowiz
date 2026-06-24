@@ -19,7 +19,7 @@ export function PrivacyPage() {
   );
 
   return (
-    <div className="min-h-screen p-4" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }}>
+    <div data-skin="paper" className="min-h-screen p-4" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }}>
       <div className="mx-auto max-w-xl py-8 space-y-6" data-testid="privacy-page">
         <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>
           {t('privacy.title', 'Privacy Notice')}

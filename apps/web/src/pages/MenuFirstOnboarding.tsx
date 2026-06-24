@@ -173,7 +173,9 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
     : t('admin.create_continue', 'Create & continue');
 
   return (
-    <div className="min-h-screen bg-[var(--brand-bg)] text-[var(--brand-text)]">
+    // dowiz-owned page → always wears the Paper/Nomadic (Moebius) identity, independent of the
+    // global paper-skin flag. data-skin="paper" remaps --brand-* to the cream/ink palette + grain.
+    <div data-skin="paper" className="min-h-screen bg-[var(--brand-bg)] text-[var(--brand-text)]">
       <style>{ONBOARD_CSS}</style>
       <div className="w-full max-w-lg mx-auto px-4 py-8 md:py-12 min-w-0">
         <input
