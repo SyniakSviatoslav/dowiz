@@ -21,3 +21,13 @@ export interface AdminOrder {
     otpVerified: boolean;
   };
 }
+
+/**
+ * F7: a fresh order arrives over the WS carrying only non-PII fields (status, total,
+ * itemCount) — name/phone/items backfill from the authed endpoint moments later. While
+ * the count says items exist but the items haven't loaded, the card should show a
+ * placeholder rather than a hollow nameless / "0 items" card (flash of wrong state).
+ */
+export function isOrderDetailsPending(order: Pick<AdminOrder, 'itemCount' | 'items'>): boolean {
+  return (order.itemCount ?? 0) > 0 && (!order.items || order.items.length === 0);
+}
