@@ -1170,8 +1170,8 @@ export function MenuPage() {
               )}
 
               {/* Quantity + Add to Cart */}
-              <div className="flex items-center gap-2 pt-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-                <div className="flex items-center shrink-0 rounded-xl p-1" style={{ background: 'var(--brand-surface)' }}>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+                <div className="flex items-center self-start shrink-0 rounded-xl p-1" style={{ background: 'var(--brand-surface)' }}>
                   <motion.button
                     onClick={() => setQuantity(q => Math.max(1, q - 1))}
                     whileTap={{ scale: 0.9 }}
@@ -1197,7 +1197,7 @@ export function MenuPage() {
                   onClick={handleAddDetail}
                   disabled={!canAdd()}
                   whileTap={{ scale: 0.95 }}
-                  className="flex-1 min-w-0 h-[48px] rounded-xl text-[var(--brand-bg)] font-bold text-[13px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-between gap-1.5 px-3"
+                  className="w-full sm:flex-1 min-w-0 h-[48px] rounded-xl text-[var(--brand-bg)] font-bold text-[14px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-between gap-2 px-4"
                   style={{ background: detailProduct.available ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
                   {detailProduct.available ? (
