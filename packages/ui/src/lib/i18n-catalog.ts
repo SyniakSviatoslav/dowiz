@@ -3648,4 +3648,32 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: 'Поки немає запасів',
   },
   'common.clear_filters': { en: 'Clear filters', sq: 'Pastro filtrat', uk: 'Очистити фільтри' },
+  'courier.offline_title': { en: "You're offline", sq: 'Je jashtë linje', uk: 'Ви офлайн' },
+  'courier.offline_desc': {
+    en: 'Go online from the Shift tab to start receiving deliveries.',
+    sq: 'Kalo në linjë nga skeda Turni për të marrë dërgesa.',
+    uk: 'Перейдіть онлайн на вкладці «Зміна», щоб отримувати доставки.',
+  },
+  'courier.go_online': { en: 'Go to Shift', sq: 'Shko te Turni', uk: 'Перейти до зміни' },
+  'courier.note_label': { en: 'Note', sq: 'Shënim', uk: 'Примітка' },
+  'courier.gps_unavailable': {
+    en: 'Location unavailable — turn on GPS to track the route.',
+    sq: "Vendndodhja s'disponohet — aktivizo GPS-in për të ndjekur rrugën.",
+    uk: 'Місцезнаходження недоступне — увімкніть GPS, щоб відстежувати маршрут.',
+  },
+  'courier.messenger_kind_label': {
+    en: 'Messenger app',
+    sq: 'Aplikacioni i mesazheve',
+    uk: 'Застосунок месенджера',
+  },
+  'courier.messenger_handle_label': {
+    en: 'Your messenger handle',
+    sq: 'Emri juaj në mesazher',
+    uk: 'Ваш нік у месенджері',
+  },
+  'courier.earnings_error_title': {
+    en: 'Could not load earnings',
+    sq: 'Nuk u ngarkuan fitimet',
+    uk: 'Не вдалося завантажити заробіток',
+  },
 };
