@@ -532,8 +532,16 @@ function initScene(THREE: ThreeNS, host: HTMLElement): () => void {
           vec4 col = texture2D(uScene, uv);
           vec3 rgb = vec3(r, g, b);
 
-          // Where the scene is transparent (alpha ~0), fall back to cream paper.
-          rgb = mix(uCream, rgb, col.a);
+          // Where the scene is transparent (alpha ~0), fall back to a dawn sky:
+          // a vertical gradient that warms from cream up top toward a soft
+          // peach-gold near the horizon, plus a gentle radial warmth around the
+          // low sun (printed glow). Gives the empty sky depth instead of a flat fill.
+          vec3 skyTop = uCream;
+          vec3 skyHorizon = vec3(0.957, 0.847, 0.643); // warm peach-gold
+          vec3 sky = mix(skyHorizon, skyTop, smoothstep(0.30, 1.0, uv.y));
+          float sunGlow = exp(-pow(distance(uv, vec2(0.34, 0.62)) * 2.4, 2.0));
+          sky = mix(sky, vec3(0.97, 0.90, 0.72), sunGlow * 0.5);
+          rgb = mix(sky, rgb, col.a);
 
           // (4) slight desaturation toward a faded-print look.
           float luma = dot(rgb, vec3(0.299, 0.587, 0.114));
