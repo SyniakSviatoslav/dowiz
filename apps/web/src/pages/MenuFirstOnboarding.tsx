@@ -57,6 +57,7 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
   const [tgWaiting, setTgWaiting] = useState(false);
   const [tgLink, setTgLink] = useState('');
   const [error, setError] = useState('');
+  const [dragActive, setDragActive] = useState(false);
 
   const handleNameChange = useCallback((v: string) => {
     setName(v);
@@ -76,6 +77,17 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
   }, [t]);
 
   const onPickFile = () => fileRef.current?.click();
+
+  // Drag-and-drop onto the dropzone (the brief calls it a dropzone, so honour it).
+  // dragover must preventDefault for a drop to fire; we mirror the click path.
+  const onDragOver = (e: React.DragEvent) => { e.preventDefault(); if (!dragActive) setDragActive(true); };
+  const onDragLeave = (e: React.DragEvent) => { e.preventDefault(); setDragActive(false); };
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+    const f = e.dataTransfer?.files?.[0];
+    if (f) void onFile(f);
+  };
 
   const onFile = async (file: File) => {
     if (!file) return;
@@ -272,15 +284,27 @@ export function MenuFirstOnboarding({ mode }: { mode: 'anonymous' | 'authed' }) 
             <button
               type="button"
               onClick={onPickFile}
+              onDragOver={onDragOver}
+              onDragEnter={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
               data-testid="upload-menu-cta"
-              className="dz-dropzone group w-full py-10 px-4 text-center min-w-0
+              data-drag-active={dragActive ? '' : undefined}
+              className={`dz-dropzone group w-full py-10 px-4 text-center min-w-0
                 motion-safe:transition-[transform,box-shadow,border-color] duration-150 ease-[var(--ease-soft)]
                 hover:-translate-y-0.5 active:scale-[0.99]
-                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
-              style={{ border: '2px dashed var(--ink-line, var(--brand-border))', borderRadius: 'var(--brand-radius)', background: 'var(--paper-raised, var(--brand-surface-raised))', color: 'var(--brand-text)' }}
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2${dragActive ? ' dz-dropzone-active' : ''}`}
+              style={{
+                border: dragActive
+                  ? '2px solid var(--brand-primary)'
+                  : '2px dashed var(--ink-line, var(--brand-border))',
+                borderRadius: 'var(--brand-radius)',
+                background: dragActive ? 'var(--paper-surface, var(--brand-surface))' : 'var(--paper-raised, var(--brand-surface-raised))',
+                color: 'var(--brand-text)',
+              }}
             >
-              <i className="ti ti-file-upload text-3xl motion-safe:transition-transform duration-150 ease-[var(--ease-soft)] group-hover:-translate-y-0.5" style={{ color: 'var(--teal-deep, var(--brand-primary))' }} aria-hidden="true" />
-              <div className="mt-2 font-semibold">{t('start.upload_cta', 'Upload your menu')}</div>
+              <i className={`ti ${dragActive ? 'ti-file-download' : 'ti-file-upload'} text-3xl motion-safe:transition-transform duration-150 ease-[var(--ease-soft)] group-hover:-translate-y-0.5`} style={{ color: 'var(--teal-deep, var(--brand-primary))' }} aria-hidden="true" />
+              <div className="mt-2 font-semibold">{dragActive ? t('start.drop_cta', 'Drop to upload') : t('start.upload_cta', 'Upload your menu')}</div>
               <div className="mt-0.5 text-sm" style={S.muted}>{t('start.upload_hint', 'PDF or photo · up to 10MB')}</div>
             </button>
             <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
@@ -482,6 +506,13 @@ const ONBOARD_CSS = `
   100%{opacity:1;filter:blur(0);transform:none}
 }
 .dz-dropzone:hover{border-color:var(--brand-primary);box-shadow:var(--elev-2)}
+/* drag-over: the dropzone lifts (border colour/style cue is inline-driven so it
+   beats the inline base border). Reduced-motion keeps only the colour cue. */
+.dz-dropzone-active{box-shadow:var(--elev-2)}
+@media (prefers-reduced-motion: no-preference){
+  .dz-dropzone-active{transform:translateY(-2px) scale(1.012)}
+  .dz-dropzone-active .ti{transform:translateY(2px)}
+}
 `;
 
 const PARSE_CSS = `
