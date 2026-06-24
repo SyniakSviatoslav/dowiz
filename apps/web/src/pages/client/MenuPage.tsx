@@ -9,7 +9,7 @@ const MediaGallery = lazy(() => import('../../components/media/MediaGallery').th
 const MediaRenderer = lazy(() => import('../../components/media').then(m => ({ default: m.MediaRenderer })));
 const RevealOverlay = lazy(() => import('../../components/media/RevealOverlay').then(m => ({ default: m.RevealOverlay })));
 import { useParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, NomadicCredit, isPaperSkinEnabled } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 
@@ -81,6 +81,9 @@ const getCurrency = (m: MenuResponse | null): string => {
 export function MenuPage() {
   const { slug } = useParams<{ slug: string }>();
   const { t, locale } = useI18n();
+  // Honour the OS reduced-motion preference: framer's spring/stagger entrances become
+  // instant crossfades, matching the @media (prefers-reduced-motion) CSS rails.
+  const prefersReduced = useReducedMotion();
   const getAttr = (p: Product, key: string): any => {
     if (!p.attributes || typeof p.attributes !== 'object') return undefined;
     return (p.attributes as Record<string, any>)[key];
@@ -598,7 +601,7 @@ export function MenuPage() {
       <div ref={stickyRef} className="sticky top-0 z-40" style={{ background: 'var(--brand-bg)' }}>
         {/* Category nav */}
         <div className="relative border-b" style={{ borderColor: 'var(--brand-border)' }}>
-          <nav className="h-[44px] overflow-x-auto hide-scrollbar flex items-center gap-0.5 px-2 pr-8" aria-label={t('client.categories', 'Categories')}>
+          <nav className="h-11 overflow-x-auto hide-scrollbar flex items-center gap-0.5 px-3 pr-8" aria-label={t('client.categories', 'Categories')}>
             {loading ? (
               <div className="flex gap-4 px-2 h-full items-center">
                 <div className="w-14 h-3.5 skeleton-block" />
@@ -615,11 +618,11 @@ export function MenuPage() {
                 return (
                   <motion.button
                     key={cat.id}
-                    whileTap={{ scale: 0.97 }}
+                    whileTap={prefersReduced ? undefined : { scale: 0.97 }}
                     onClick={() => handleScrollTo(cat.id)}
                     role="tab"
                     aria-selected={activeTab === cat.id}
-                    className="h-[44px] flex items-center gap-1 px-3 whitespace-nowrap text-[12px] font-medium transition-all border-b-2 shrink-0"
+                    className="h-11 flex items-center gap-1 px-3 whitespace-nowrap text-[12px] font-medium border-b-2 shrink-0 outline-none transition-colors duration-150 ease-out rounded-t-md focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
                     style={{
                       color: activeTab === cat.id ? (isChefCat ? 'var(--brand-primary)' : 'var(--brand-text)') : 'var(--brand-text-muted)',
                       borderColor: activeTab === cat.id ? (isChefCat ? 'var(--brand-primary)' : 'var(--brand-primary)') : 'transparent',
@@ -642,26 +645,27 @@ export function MenuPage() {
           <div className="relative border-b" style={{ borderColor: 'var(--brand-border)' }}>
           <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-3 py-2 pr-8">
             {/* Compact search pill */}
-            <div className="relative shrink-0" style={{ width: searchQuery ? 140 : 100, transition: 'width 0.2s', minWidth: 100 }}>
-              <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px]" style={{ color: 'var(--brand-text-muted)' }} />
+            <div className="relative shrink-0" style={{ width: searchQuery ? 140 : 100, transition: 'width var(--motion-base) var(--ease-soft)', minWidth: 100 }}>
+              <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] pointer-events-none" style={{ color: 'var(--brand-text-muted)' }} />
               <input
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder={t('common.search', 'Search')}
-                className="w-full pl-7 pr-7 h-9 rounded-full text-[12px] outline-none"
+                className="w-full pl-7 pr-7 h-9 rounded-full text-[12px] outline-none transition-shadow duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)]"
                 style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery('')} aria-label={t('common.clear', 'Clear')} className="absolute right-0.5 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center">
+                <button onClick={() => setSearchQuery('')} aria-label={t('common.clear', 'Clear')} className="absolute right-0.5 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]">
                   <i className="ti ti-x text-[11px]" style={{ color: 'var(--brand-text-muted)' }} />
                 </button>
               )}
             </div>
             <div className="w-px h-4 shrink-0" style={{ background: 'var(--brand-border)' }} />
             {(['default', 'price-asc', 'price-desc', 'name'] as const).map(mode => (
-              <motion.button key={mode} onClick={() => setSortBy(mode)} whileTap={{ scale: 0.95 }}
+              <motion.button key={mode} onClick={() => setSortBy(mode)} whileTap={prefersReduced ? undefined : { scale: 0.95 }}
                 aria-label={t(`sort.${mode}`, mode)}
-                className="px-3 h-9 min-w-9 rounded-full text-[11px] font-medium transition-all whitespace-nowrap shrink-0 flex items-center justify-center"
+                aria-pressed={sortBy === mode}
+                className="px-3 h-9 min-w-9 rounded-full text-[11px] font-medium whitespace-nowrap shrink-0 flex items-center justify-center outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)]"
                 style={{
                   background: sortBy === mode ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
                   color: sortBy === mode ? 'color-mix(in srgb, var(--brand-bg) 86%, #000)' : 'var(--brand-text-muted)',
@@ -675,8 +679,9 @@ export function MenuPage() {
             {allAllergens.map(a => {
               const s = getAllergenStyle(a);
               return (
-                <motion.button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)} whileTap={{ scale: 0.95 }}
-                  className="px-3 h-9 rounded-full text-[10px] font-semibold uppercase whitespace-nowrap shrink-0 transition-all flex items-center border"
+                <motion.button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)} whileTap={prefersReduced ? undefined : { scale: 0.95 }}
+                  aria-pressed={filterAllergen === a}
+                  className="px-3 h-9 rounded-full text-[10px] font-semibold uppercase whitespace-nowrap shrink-0 flex items-center border outline-none transition-[background-color,color,opacity,border-color] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)]"
                   style={{
                     background: filterAllergen === a ? 'var(--brand-primary)' : s.bg,
                     color: filterAllergen === a ? 'color-mix(in srgb, var(--brand-bg) 86%, #000)' : s.text,
@@ -757,26 +762,29 @@ export function MenuPage() {
                 : t('client.empty_menu_unavailable_hint', "This restaurant hasn't published its menu yet.")}
             </p>
             {notFound ? (
-              <a href="/" className="mt-4 inline-flex items-center px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] transition-all active:scale-95 min-h-11" style={{ background: 'var(--brand-primary-strong)' }}>
+              <a href="/" className="mt-4 inline-flex items-center px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ background: 'var(--brand-primary-strong)' }}>
                 <i className="ti ti-home mr-1.5" />{t('client.go_home', 'Back to home')}
               </a>
             ) : fetchError && (
-              <motion.button onClick={() => { setRetryCount(c => c + 1); }} whileTap={{ scale: 0.97 }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] transition-all active:scale-95 min-h-11" style={{ background: 'var(--brand-primary-strong)' }}>
+              <motion.button onClick={() => { setRetryCount(c => c + 1); }} whileTap={prefersReduced ? undefined : { scale: 0.97 }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ background: 'var(--brand-primary-strong)' }}>
                 <i className="ti ti-refresh mr-1.5" />{t('client.retry', 'Retry')}
               </motion.button>
             )}
           </div>
 ) : displayCategories.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-            <i className="ti ti-search-off text-5xl opacity-20 mb-3" style={{ color: 'var(--brand-text-muted)' }} />
-            <p className="text-sm font-medium mb-4" style={{ color: 'var(--brand-text-muted)' }}>
+            <i className="ti ti-search-off text-5xl opacity-40 mb-3" style={{ color: 'var(--brand-primary)' }} />
+            <p className="text-base font-semibold" style={{ color: 'var(--brand-text)' }}>
               {t('client.no_results', 'No products match your filters')}
+            </p>
+            <p className="text-sm mt-1 mb-4 max-w-xs" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('client.no_results_hint', 'Try a different search or clear your filters to see the full menu.')}
             </p>
             <motion.button
               onClick={() => { setSortBy('default'); setFilterAllergen(null); setSearchQuery(''); }}
-              whileTap={{ scale: 0.97 }}
-              className="px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all active:scale-95 min-h-11"
-              style={{ background: 'var(--brand-primary)' }}
+              whileTap={prefersReduced ? undefined : { scale: 0.97 }}
+              className="px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
+              style={{ background: 'var(--brand-primary-strong)' }}
             >
               {t('client.browse_menu', 'Browse full menu')}
             </motion.button>
@@ -797,10 +805,10 @@ export function MenuPage() {
               ref={el => { sectionRefs.current[category.id] = el }}
               className="mb-7"
               style={{ scrollMarginTop: scrollOffset + 'px' }}
-              initial={{ opacity: 0, y: 6 }}
+              initial={prefersReduced ? false : { opacity: 0, y: 6 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-60px' }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: prefersReduced ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] }}
             >
               <h2 className="text-lg font-bold px-4 mb-3 flex items-center gap-2" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
                 {isChefCat && <span style={{ color: 'var(--brand-primary)', fontSize: '1rem' }}>✦</span>}
@@ -808,7 +816,7 @@ export function MenuPage() {
               </h2>
               <motion.div
                 className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 px-4"
-                variants={{ visible: { transition: { staggerChildren: 0.03 } } }}
+                variants={{ visible: { transition: { staggerChildren: prefersReduced ? 0 : 0.03 } } }}
                 initial="hidden"
                 whileInView="visible"
                 viewport={{ once: true, margin: '-40px' }}
@@ -818,7 +826,9 @@ export function MenuPage() {
                   return (
                   <motion.div
                     key={product.id}
-                    variants={{ hidden: { opacity: 0, y: 6 }, visible: { opacity: 1, y: 0, transition: { duration: 0.18, ease: [0.16, 1, 0.3, 1] } } }}
+                    variants={prefersReduced
+                      ? { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0 } } }
+                      : { hidden: { opacity: 0, y: 6 }, visible: { opacity: 1, y: 0, transition: { duration: 0.18, ease: [0.16, 1, 0.3, 1] } } }}
                   >
                     <ProductCard product={{
                       id: product.id,
@@ -869,14 +879,16 @@ export function MenuPage() {
           className="fixed inset-0 z-modal flex items-end md:items-center justify-center"
           style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)', backdropFilter: 'blur(4px)' }}
           role="dialog" aria-modal="true"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: prefersReduced ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] }}
         >
           <button type="button" className="absolute inset-0 cursor-default" aria-label={t('common.close', 'Close')} onClick={closeDetail} />
           <motion.div
-            className="relative w-full md:max-w-lg max-h-[85vh] overflow-auto rounded-t-2xl md:rounded-2xl shadow-2xl"
-            style={{ background: 'var(--brand-bg)' }}
-            initial={{ y: 28, scale: 0.97, opacity: 0.5 }} animate={{ y: 0, scale: 1, opacity: 1 }} exit={{ y: 18, scale: 0.97, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 340, damping: 32 }}
+            className="relative w-full md:max-w-lg max-h-[85vh] overflow-auto rounded-t-2xl md:rounded-2xl"
+            style={{ background: 'var(--brand-bg)', boxShadow: 'var(--elev-4)' }}
+            initial={prefersReduced ? { opacity: 0 } : { y: 28, scale: 0.97, opacity: 0.5 }}
+            animate={{ y: 0, scale: 1, opacity: 1 }}
+            exit={prefersReduced ? { opacity: 0 } : { y: 18, scale: 0.97, opacity: 0 }}
+            transition={prefersReduced ? { duration: 0.15 } : { type: 'spring', stiffness: 340, damping: 32 }}
           >
             {/* Image */}
             <div className="relative w-full aspect-[16/9] md:aspect-[2/1] flex items-center justify-center overflow-hidden" style={{ background: 'var(--brand-surface-raised)' }}>
@@ -945,8 +957,8 @@ export function MenuPage() {
                 </Suspense>
               )}
               <motion.button
-                whileTap={{ scale: 0.95 }}
-                className="absolute top-4 right-4 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center backdrop-blur-md active:scale-[0.95] transition-transform"
+                whileTap={prefersReduced ? undefined : { scale: 0.95 }}
+                className="absolute top-4 right-4 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center backdrop-blur-md active:scale-[0.95] outline-none transition-transform duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
                 style={{ background: 'color-mix(in srgb, var(--brand-bg) 50%, transparent)', color: 'var(--color-on-primary)' }}
                 onClick={closeDetail}
                 aria-label={t('common.close', 'Close')}
@@ -969,9 +981,9 @@ export function MenuPage() {
             {/* Content — gentle rise after the hero photo morphs into place */}
             <motion.div
               className="p-5 space-y-5"
-              initial={{ opacity: 0, y: 12 }}
+              initial={prefersReduced ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1, duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+              transition={prefersReduced ? { duration: 0 } : { delay: 0.1, duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
             >
               {/* Name, Description, Price */}
               <div>
@@ -994,14 +1006,15 @@ export function MenuPage() {
                   </div>
                   <motion.div
                     className="text-xl font-black whitespace-nowrap shrink-0" style={{ color: 'var(--brand-primary)' }}
-                    initial={{ scale: 0.82, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                    transition={{ delay: 0.24, type: 'spring', stiffness: 520, damping: 18 }}
+                    initial={prefersReduced ? false : { scale: 0.92, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={prefersReduced ? { duration: 0 } : { delay: 0.2, duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
                   >
                     <PriceDisplay amount={detailProduct.price + calcModifierDelta()} />
                   </motion.div>
                 </div>
                 {detailProduct.description && (
-                  <p className="text-sm mt-2 leading-relaxed" style={{ color: 'var(--brand-text-muted)' }}>{detailProduct.description}</p>
+                  <p className="text-sm mt-2 leading-relaxed" style={{ color: 'var(--brand-text)' }}>{detailProduct.description}</p>
                 )}
               </div>
 
@@ -1118,7 +1131,7 @@ export function MenuPage() {
                         )}
                         {group.max_select > 1 && (
                           <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
-                            up to {group.max_select}
+                            {t('client.up_to', 'up to')} {group.max_select}
                           </span>
                         )}
                       </div>
@@ -1131,11 +1144,13 @@ export function MenuPage() {
                               key={mod.id}
                               data-testid="modifier-option"
                               onClick={() => toggleModifier(group.id, mod.id, group)}
-                              whileTap={{ scale: 0.97 }}
-                              className={`px-3.5 py-2 rounded-[10px] text-[13px] font-medium transition-all active:scale-[0.97] border min-h-11 ${
+                              whileTap={prefersReduced ? undefined : { scale: 0.97 }}
+                              aria-pressed={isSelected}
+                              className={`px-3.5 py-2 text-[13px] font-medium active:scale-[0.97] border min-h-11 outline-none transition-[background-color,color,border-color,transform] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)] ${
                                 isSelected ? 'border-2' : ''
                               }`}
                               style={{
+                                borderRadius: 'var(--brand-radius-sm)',
                                 background: isSelected ? 'var(--brand-primary-light, var(--brand-surface-raised))' : 'var(--brand-surface)',
                                 borderColor: isSelected ? 'var(--brand-primary)' : 'var(--brand-border)',
                                 color: isSelected ? 'var(--brand-primary)' : 'var(--brand-text)',
@@ -1174,18 +1189,19 @@ export function MenuPage() {
                 <div className="flex items-center self-start shrink-0 rounded-xl p-1" style={{ background: 'var(--brand-surface)' }}>
                   <motion.button
                     onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                    whileTap={{ scale: 0.9 }}
-                    className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium transition-colors hover:opacity-80 active:scale-90"
+                    whileTap={prefersReduced ? undefined : { scale: 0.9 }}
+                    disabled={quantity <= 1}
+                    className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium outline-none transition-[color,transform] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] active:scale-90 disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
                     style={{ color: 'var(--brand-text)' }}
                     aria-label={t('common.decrease_quantity', 'Decrease quantity')}
                   >
                     <i className="ti ti-minus" />
                   </motion.button>
                   <span className="text-base font-semibold w-7 text-center" style={{ color: 'var(--brand-text)' }}>{quantity}</span>
-                  <motion.button 
+                  <motion.button
                     onClick={() => setQuantity(q => q + 1)}
-                    whileTap={{ scale: 0.9 }}
-                    className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium transition-colors hover:opacity-80 active:scale-90"
+                    whileTap={prefersReduced ? undefined : { scale: 0.9 }}
+                    className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium outline-none transition-[color,transform] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] active:scale-90 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
                     style={{ color: 'var(--brand-text)' }}
                     aria-label={t('common.increase_quantity', 'Increase quantity')}
                   >
@@ -1196,8 +1212,8 @@ export function MenuPage() {
                   data-testid="product-detail-confirm"
                   onClick={handleAddDetail}
                   disabled={!canAdd()}
-                  whileTap={{ scale: 0.95 }}
-                  className="w-full sm:flex-1 min-w-0 h-[48px] rounded-xl text-[var(--brand-bg)] font-bold text-[14px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-between gap-2 px-4"
+                  whileTap={prefersReduced || !canAdd() ? undefined : { scale: 0.97 }}
+                  className="w-full sm:flex-1 min-w-0 h-[48px] text-[var(--brand-bg)] font-bold text-[14px] outline-none transition-[transform,box-shadow,opacity] duration-150 ease-out active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 flex items-center justify-between gap-2 px-4 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
                   style={{ background: detailProduct.available ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
                   {detailProduct.available ? (
@@ -1230,17 +1246,17 @@ export function MenuPage() {
           {(storeLinks.mapsUrl || storeLinks.instagram || storeLinks.facebook) && (
             <div className="flex items-center justify-center gap-4 mt-1">
               {storeLinks.mapsUrl && (
-                <a href={storeLinks.mapsUrl} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')} className="text-xl inline-flex items-center justify-center w-11 h-11 rounded-full" style={{ color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' }}>
+                <a href={storeLinks.mapsUrl} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')} className="text-xl inline-flex items-center justify-center w-11 h-11 rounded-full outline-none transition-[color,transform,box-shadow] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' }}>
                   <i className="ti ti-map-pin" />
                 </a>
               )}
               {storeLinks.instagram && (
-                <a href={storeLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-xl inline-flex items-center justify-center w-11 h-11 rounded-full" style={{ color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' }}>
+                <a href={storeLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-xl inline-flex items-center justify-center w-11 h-11 rounded-full outline-none transition-[color,transform,box-shadow] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' }}>
                   <i className="ti ti-brand-instagram" />
                 </a>
               )}
               {storeLinks.facebook && (
-                <a href={storeLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-xl inline-flex items-center justify-center w-11 h-11 rounded-full" style={{ color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' }}>
+                <a href={storeLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-xl inline-flex items-center justify-center w-11 h-11 rounded-full outline-none transition-[color,transform,box-shadow] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' }}>
                   <i className="ti ti-brand-facebook" />
                 </a>
               )}
