@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../../lib/I18nProvider.js';
 
 interface SwipeToCompleteProps {
@@ -9,6 +10,7 @@ interface SwipeToCompleteProps {
 
 export function SwipeToComplete({ onComplete, label, isCompleted = false }: SwipeToCompleteProps) {
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
   const resolvedLabel = label || t('courier.slide_to_deliver', 'Slide to Deliver');
   const [loading, setLoading] = useState(false);
   const [slideRatio, setSlideRatio] = useState(0);
@@ -95,35 +97,73 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
 
   if (isCompleted) {
     return (
-      <div className="h-14 rounded-full bg-[var(--color-success)] flex items-center justify-center font-bold text-[var(--color-on-success)] shadow-lg">
-        {t('order.delivered', 'Delivered')} \u2713
-      </div>
+      <motion.div
+        initial={reduceMotion ? false : { scale: 0.97, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        className="h-14 rounded-full bg-[var(--color-success)] flex items-center justify-center gap-2 font-bold text-[var(--color-on-success)] shadow-[var(--elevation-2)]"
+      >
+        {t('order.delivered', 'Delivered')}
+        <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 13l4 4L19 7" />
+        </svg>
+      </motion.div>
     );
   }
 
+  // Affordance: gentle, looping nudge inviting the swipe — only while idle (rest,
+  // not loading) and not when the user prefers reduced motion.
+  const idle = !loading && slideRatio === 0;
+  const hint = idle && !reduceMotion;
+
   return (
-    <div 
+    <div
       ref={containerRef}
       tabIndex={0}
       role="button"
       aria-label={resolvedLabel}
       data-testid="task-deliver"
       onKeyDown={handleKeyDown}
-      className="relative h-14 bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-full overflow-hidden flex items-center justify-center select-none focus:outline-2 focus:outline-[var(--brand-primary)]"
+      className="relative h-14 bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-full overflow-hidden flex items-center justify-center select-none transition-shadow duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
     >
-      <div className="absolute inset-0 bg-[var(--status-delivered-bg)]" style={{ width: `${slideRatio * 100}%` }} />
-      <span className="font-bold text-[var(--brand-text-muted)] z-10 pointer-events-none" style={{ opacity: 1 - slideRatio }}>                  {loading ? t('common.processing', 'Processing...') : resolvedLabel}</span>
-      
       <div
-        className="absolute left-1 top-1 bottom-1 w-12 bg-[var(--brand-primary)] rounded-full shadow-md flex items-center justify-center cursor-grab active:cursor-grabbing z-20 transition-transform"
-        style={{ transform: `translateX(${slideRatio * (containerRef.current ? containerRef.current.clientWidth - 56 : 0)}px)` }}
+        className="absolute inset-y-0 left-0 bg-[var(--status-delivered-bg)] transition-[width] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none"
+        style={{ width: `${slideRatio * 100}%` }}
+      />
+      <span
+        className="font-bold text-[var(--brand-text)] z-10 pointer-events-none transition-opacity duration-150"
+        style={{ opacity: 1 - slideRatio }}
+      >
+        {loading ? t('common.processing', 'Processing...') : resolvedLabel}
+      </span>
+
+      <motion.div
+        className="absolute left-1 top-1 bottom-1 w-12 bg-[var(--brand-primary)] rounded-full shadow-[var(--elevation-2)] flex items-center justify-center cursor-grab active:cursor-grabbing z-20"
+        animate={hint
+          ? { x: [0, 6, 0] }
+          : { x: slideRatio * (containerRef.current ? containerRef.current.clientWidth - 56 : 0) }}
+        transition={hint
+          ? { duration: 1.4, repeat: Infinity, repeatDelay: 0.6, ease: 'easeOut' }
+          : { duration: 0 }}
         role="presentation"
         aria-hidden="true"
         onMouseDown={handleDragStart}
         onTouchStart={handleDragStart}
       >
-        <div className="w-1.5 h-6 border-x-2 border-white/50" />
-      </div>
+        <svg className="h-5 w-5 text-[var(--brand-bg)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+      </motion.div>
+
+      {/* Keyboard-accessible fallback — explicit, visible action for non-pointer users. */}
+      <button
+        type="button"
+        onClick={() => { if (!loading && !isCompleted) { setSlideRatio(1); triggerComplete(); } }}
+        disabled={loading}
+        className="sr-only focus:not-sr-only focus:absolute focus:inset-0 focus:z-30 focus:flex focus:items-center focus:justify-center focus:rounded-full focus:bg-[var(--brand-primary)] focus:text-[var(--brand-bg)] focus:font-bold focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
+      >
+        {t('courier.confirm_delivery', 'Confirm delivery')}
+      </button>
     </div>
   );
 }

@@ -1,5 +1,9 @@
 import React from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../../lib/I18nProvider.js';
+
+// Soft easing matched to --ease-out cubic-bezier(0.16, 1, 0.3, 1): expo-out, no bounce.
+const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 // ORDER-TRACKING: honest stepper for the real 10-state order machine.
 //
@@ -39,6 +43,7 @@ interface Step {
 export function OrderProgress(props: OrderProgressProps) {
   const { status, type } = props;
   const { t } = useI18n();
+  const prefersReducedMotion = useReducedMotion();
 
   const isPickup = type === 'pickup';
   const isRejected = status === 'REJECTED';
@@ -106,6 +111,16 @@ export function OrderProgress(props: OrderProgressProps) {
     }
   };
 
+  // The "active" step is the furthest reached node — the one the customer is
+  // waiting on right now. We emphasize it (ring + pulse) so the live order
+  // feels alive; everything before it reads as calmly completed.
+  const activeIndex = lastFilled;
+  const fillPct = (lastFilled / denom) * 100;
+  // No-bounce spring → settle the connector + dots with one ease-out curve.
+  const fillTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : { duration: 0.5, ease: EASE_OUT };
+
   return (
     <div
       className="relative py-4"
@@ -114,35 +129,74 @@ export function OrderProgress(props: OrderProgressProps) {
       data-testid="order-progress"
       data-order-type={isPickup ? 'pickup' : 'delivery'}
     >
-      <div className="absolute top-1/2 left-0 right-0 h-1 bg-[var(--brand-surface-raised)] -translate-y-1/2 z-0" />
-      <div
-        className="absolute top-1/2 left-0 h-1 -translate-y-1/2 z-0 transition-all duration-500"
-        style={{
-          width: `${(lastFilled / denom) * 100}%`,
-          background: isTerminal ? 'var(--color-danger)' : 'var(--brand-primary)',
-        }}
+      {/* Track (upcoming) */}
+      <div className="absolute top-1/2 left-0 right-0 h-1 rounded-full bg-[var(--brand-surface-raised)] -translate-y-1/2 z-0" />
+      {/* Filled connector — animates its width on advance, ease-out only. */}
+      <motion.div
+        className="absolute top-1/2 left-0 h-1 rounded-full -translate-y-1/2 z-0"
+        style={{ background: isTerminal ? 'var(--status-rejected)' : 'var(--brand-primary)' }}
+        initial={false}
+        animate={{ width: `${fillPct}%` }}
+        transition={fillTransition}
       />
       <div className="relative z-10 flex justify-between">
         {steps.map((step, i) => {
           const isTerminalStep = step.key === 'CANCELLED' || step.key === 'REJECTED';
-          const isActive = isTerminalStep ? isTerminal : (i <= currentIndex || filledByTimestamp(i));
-          const dotColor = isTerminalStep && isActive ? 'var(--color-danger)' : 'var(--brand-primary)';
+          const isFilled = isTerminalStep ? isTerminal : (i <= currentIndex || filledByTimestamp(i));
+          const isCurrent = !isTerminal && i === activeIndex && isFilled;
+          const isDone = isFilled && !isCurrent;
+          const accent = isTerminalStep && isFilled ? 'var(--status-rejected)' : 'var(--brand-primary)';
           const time = fmtTime(step.at);
           return (
             <div
               key={step.key}
               className="flex flex-col items-center"
               data-testid={`order-step-${step.key.toLowerCase()}`}
-              data-active={isActive ? 'true' : 'false'}
+              data-active={isFilled ? 'true' : 'false'}
+              data-current={isCurrent ? 'true' : 'false'}
             >
-              <div
-                className="w-4 h-4 rounded-full border-2 transition-colors duration-500"
-                style={{
-                  background: isActive ? dotColor : 'var(--brand-surface)',
-                  borderColor: isActive ? dotColor : 'var(--brand-border)',
-                }}
-              />
-              <span className={`text-[10px] mt-1 ${isActive ? 'text-[var(--brand-text)] font-semibold' : 'text-[var(--brand-text-muted)]'}`}>
+              <span className="relative inline-flex items-center justify-center">
+                {/* Gentle "you are here" halo on the active step (terminal excluded). */}
+                {isCurrent && !prefersReducedMotion && (
+                  <motion.span
+                    aria-hidden
+                    className="absolute w-4 h-4 rounded-full"
+                    style={{ background: accent }}
+                    animate={{ scale: [1, 1.9], opacity: [0.4, 0] }}
+                    transition={{ duration: 1.8, repeat: Infinity, ease: EASE_OUT, repeatDelay: 0.2 }}
+                  />
+                )}
+                <motion.span
+                  className="relative w-4 h-4 rounded-full border-2 flex items-center justify-center"
+                  initial={false}
+                  animate={{
+                    background: isFilled ? accent : 'var(--brand-surface)',
+                    borderColor: isFilled ? accent : 'var(--brand-border)',
+                    scale: isCurrent ? 1.18 : 1,
+                    boxShadow: isCurrent ? 'var(--elev-2)' : 'var(--elev-0)',
+                  }}
+                  transition={fillTransition}
+                >
+                  {/* Check fills in with an ease-out micro-pop once a step completes. */}
+                  {isDone && (
+                    <motion.svg
+                      viewBox="0 0 12 12"
+                      className="w-2.5 h-2.5"
+                      fill="none"
+                      stroke="var(--color-on-primary)"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      initial={prefersReducedMotion ? false : { scale: 0.4, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.24, ease: EASE_OUT }}
+                    >
+                      <path d="M2.5 6.5 L5 9 L9.5 3.5" />
+                    </motion.svg>
+                  )}
+                </motion.span>
+              </span>
+              <span className={`text-[10px] mt-1 ${isFilled ? 'text-[var(--brand-text)] font-semibold' : 'text-[var(--brand-text-muted)]'}`}>
                 {step.label}
               </span>
               {time && (
