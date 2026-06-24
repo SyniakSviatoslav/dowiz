@@ -399,11 +399,12 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
       );
       const customerId = custRes.rows[0].id;
       const orderRes = await db.query(
+        // request_hash is NOT NULL with its default dropped (migration 1780338982024) → must be explicit.
         `INSERT INTO orders
            (location_id, customer_id, type, status, delivery_address,
-            subtotal, total, payment_method, payment_outcome, pickup_code)
+            subtotal, total, payment_method, payment_outcome, pickup_code, request_hash)
          VALUES ($1, $2, 'delivery', 'CONFIRMED', 'Rruga e Durresit 1, Tirana',
-            850, 850, 'cash', 'pending', 'VIS-ORDER')
+            850, 850, 'cash', 'pending', 'VIS-ORDER', 'visual-seed')
          RETURNING id`,
         [openId, customerId],
       );
