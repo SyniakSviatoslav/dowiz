@@ -1,0 +1,83 @@
+name: Skill Security (SkillSpector)
+
+# "Scan before install" governance gate (docs/security/skill-scanning.md).
+# Ratchet: scans ONLY the agent-skill dirs ADDED/CHANGED in a PR (path-filtered) with SkillSpector
+# --no-llm (pure static, zero content egress). Fails the build when a changed/new skill trips the risk
+# threshold (SkillSpector exits 1 when risk > 50). It does NOT re-litigate the existing trusted-but-
+# capable skills — a hard gate on all of them would false-fail on capability alone.
+
+on:
+  pull_request:
+    paths:
+      - '.agents/skills/**'
+      - '.claude/skills/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write   # upload SARIF
+
+concurrency:
+  group: skill-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan-changed-skills:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need the base to diff changed skill dirs
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install SkillSpector
+        run: |
+          git clone --depth 1 https://github.com/NVIDIA/SkillSpector.git "$RUNNER_TEMP/skillspector"
+          cd "$RUNNER_TEMP/skillspector"
+          uv venv .venv
+          . .venv/bin/activate
+          make install
+          echo "SKILLSPECTOR_VENV=$RUNNER_TEMP/skillspector/.venv" >> "$GITHUB_ENV"
+
+      - name: Determine changed skill dirs
+        id: changed
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.sha }}"
+          dirs=$(git diff --name-only "$base" "$head" \
+            | grep -E '^\.(agents|claude)/skills/[^/]+/' \
+            | sed -E 's#^(\.(agents|claude)/skills/[^/]+)/.*#\1#' \
+            | sort -u)
+          echo "dirs<<EOF" >> "$GITHUB_OUTPUT"; echo "$dirs" >> "$GITHUB_OUTPUT"; echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "Changed skill dirs:"; echo "$dirs"
+
+      - name: Scan changed skills (--no-llm)
+        if: steps.changed.outputs.dirs != ''
+        run: |
+          . "$SKILLSPECTOR_VENV/bin/activate"
+          fail=0
+          while IFS= read -r d; do
+            [ -z "$d" ] && continue
+            [ -d "$d" ] || continue
+            echo "::group::SkillSpector scan $d"
+            sarif="skillspector-$(echo "$d" | tr '/' '_').sarif"
+            if ! skillspector scan "$d" --no-llm --format sarif -o "$sarif"; then
+              echo "::error title=Skill risk threshold exceeded::$d tripped SkillSpector (risk > 50). Review docs/security/skill-scanning.md — judge by category, not the number."
+              fail=1
+            fi
+            echo "::endgroup::"
+          done <<< "${{ steps.changed.outputs.dirs }}"
+          exit $fail
+
+      - name: Upload SARIF
+        if: always() && steps.changed.outputs.dirs != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: .
+        continue-on-error: true
