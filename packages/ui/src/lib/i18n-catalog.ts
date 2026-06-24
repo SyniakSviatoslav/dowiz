@@ -3761,4 +3761,16 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Koha e parashikuar — përditësohet pasi bën porosinë',
     uk: 'Орієнтовний час — уточниться після оформлення замовлення',
   },
+  'start.feat_upload': { en: 'Upload your menu', sq: 'Ngarko menunë', uk: 'Завантажте меню' },
+  'start.feat_ai': {
+    en: 'We read it for you',
+    sq: 'Ne e lexojmë për ju',
+    uk: 'Ми прочитаємо її за вас',
+  },
+  'start.feat_online': {
+    en: 'Go online fast',
+    sq: 'Dilni online shpejt',
+    uk: 'Швидко вийдіть онлайн',
+  },
+  'start.how_it_works': { en: 'How it works', sq: 'Si funksionon', uk: 'Як це працює' },
 };
