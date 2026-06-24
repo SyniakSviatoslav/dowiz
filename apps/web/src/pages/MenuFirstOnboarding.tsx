@@ -466,15 +466,21 @@ const ONBOARD_CSS = `
   .dz-stage-5 .dz-glyph{opacity:0;transform:translateY(8px);
     animation:dzStageRise 300ms var(--ease-out,cubic-bezier(.16,1,.3,1)) both;
     animation-delay:calc(1460ms + var(--dz-i,0) * 70ms)}
-  /* headline reveals word-by-word — the Art-Nouveau display cascades in */
-  .dz-word{opacity:0;transform:translateY(0.5em);
-    animation:dzStageRise 380ms var(--ease-out,cubic-bezier(.16,1,.3,1)) both;
+  /* headline reveals word-by-word with an ink-bleed: each word arrives soft and
+     blurred, then sharpens as if the ink were settling into the paper. */
+  .dz-word{opacity:0;
+    animation:dzInkBleed 520ms var(--ease-out,cubic-bezier(.16,1,.3,1)) both;
     animation-delay:calc(160ms + var(--dz-w,0) * 80ms)}
 }
 /* default (reduced-motion-safe): words visible, inline so they wrap naturally */
 .dz-word{display:inline-block}
 @keyframes dzFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes dzStageRise{to{opacity:1;transform:none}}
+@keyframes dzInkBleed{
+  0%{opacity:0;filter:blur(7px);transform:translateY(0.42em) scale(.98)}
+  55%{opacity:1}
+  100%{opacity:1;filter:blur(0);transform:none}
+}
 .dz-dropzone:hover{border-color:var(--brand-primary);box-shadow:var(--elev-2)}
 `;
 
