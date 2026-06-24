@@ -444,8 +444,8 @@ html[data-sunlight="on"] :is(h1, h2, h3, button, a, label, th) { font-weight: 70
   --elevation-3: 0 8px 24px rgba(60, 40, 20, .14);
 
   /* Typography — Fraunces gives the warm "book" character of the paper world */
-  --font-display:       'Fraunces', Georgia, serif;
-  --brand-font-heading: 'Fraunces', Georgia, serif;
+  --font-display:       'Yeseva One', 'Fraunces', Georgia, serif;
+  --brand-font-heading: 'Yeseva One', 'Fraunces', Georgia, serif;
   --brand-font-body:    'DM Sans', 'Inter', sans-serif;
 
   --paper-grain-opacity: 0.06;
