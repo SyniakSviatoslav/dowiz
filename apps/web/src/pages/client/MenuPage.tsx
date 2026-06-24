@@ -110,6 +110,7 @@ export function MenuPage() {
   };
 
   const CHEF_PICKS_ID = '__chefs_picks__';
+  const SORTED_FLAT_ID = '__sorted_flat__';
 
   const MIN_SKELETON_DWELL = 300;
 
@@ -188,18 +189,27 @@ export function MenuPage() {
       result = result.filter(p => bomToNutrition(p).allergens.includes(filterAllergen));
     }
     if (sortBy === 'default' && !searchQuery && !filterAllergen) return categories;
-    const sorted = sortBy === 'default' ? result
-      : sortBy === 'price-asc' ? [...result].sort((a, b) => a.price - b.price)
-      : sortBy === 'price-desc' ? [...result].sort((a, b) => b.price - a.price)
-      : [...result].sort((a, b) => a.name.localeCompare(b.name));
+
+    // A non-default sort is a GLOBAL order ("cheapest first" etc.). Re-bucketing the
+    // sorted list back into categories breaks monotonicity (each category restarts the
+    // ordering), so when a sort is active we render ONE flat ungrouped section. Category
+    // grouping (and the nav tabs) only make sense for the 'default' order.
+    if (sortBy !== 'default') {
+      const sorted = sortBy === 'price-asc' ? [...result].sort((a, b) => a.price - b.price)
+        : sortBy === 'price-desc' ? [...result].sort((a, b) => b.price - a.price)
+        : [...result].sort((a, b) => a.name.localeCompare(b.name));
+      return [{ id: SORTED_FLAT_ID, name: t('client.all_items', 'All items'), sort_order: 0, products: sorted }];
+    }
+
+    // sortBy === 'default' but a search/allergen filter is active → keep category grouping.
     const groups: MenuCategory[] = [];
-    for (const p of sorted) {
+    for (const p of result) {
       const g = groups.find(g => g.id === p._catId);
       if (g) g.products.push(p);
       else groups.push({ id: p._catId, name: p._catName, sort_order: 0, products: [p] });
     }
     return groups;
-  }, [categories, sortBy, filterAllergen, searchQuery]);
+  }, [categories, sortBy, filterAllergen, searchQuery, t]);
 
   const allAllergens = useMemo(() => {
     const set = new Set<string>();
@@ -536,6 +546,11 @@ export function MenuPage() {
       {/* Hero Section */}
       <section className="relative w-full h-[160px] md:h-[200px] flex items-end overflow-hidden" style={{ background: 'linear-gradient(160deg, var(--brand-surface-raised) 0%, var(--brand-accent) 50%, var(--brand-primary) 100%)' }}>
         <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, color-mix(in srgb, var(--brand-bg) 80%, transparent) 0%, color-mix(in srgb, var(--brand-bg) 40%, transparent) 50%, color-mix(in srgb, var(--brand-bg) 5%, transparent) 100%)' }} />
+        {/* Solid dark scrim band behind the title. The hero gradient fades to a light/pink
+            --brand-primary at the bottom — exactly where the title sits — so on light themes
+            --brand-text loses contrast. This bottom-anchored near-black scrim guarantees the
+            title stays ≥4.5:1 regardless of the tenant palette. */}
+        <div className="absolute inset-x-0 bottom-0 h-3/5" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.30) 45%, transparent 100%)' }} />
         <div className="absolute inset-0 opacity-[0.06]" style={{ background: 'radial-gradient(ellipse at 30% 50%, color-mix(in srgb, var(--brand-primary) 20%, transparent) 0%, transparent 60%)' }} />
         <div className="absolute inset-0 opacity-[0.03]" style={{ background: 'radial-gradient(ellipse at 70% 30%, color-mix(in srgb, var(--brand-text) 15%, transparent) 0%, transparent 50%)' }} />
         <motion.div
@@ -549,14 +564,14 @@ export function MenuPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.4, delay: 0.15 }}
-            style={{ color: 'var(--brand-text-muted)' }}
+            style={{ color: 'rgba(255,255,255,0.82)', textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}
           >
             {locationInfo?.googleRating != null ? (
               <>
                 <span className="inline-flex gap-0.5" style={{ color: 'var(--color-warning)' }}>
                   {[1,2,3,4,5].map(i => <i key={i} className={`ti ${i <= Math.round(locationInfo.googleRating!) ? 'ti-star-filled' : 'ti-star'}`} style={{ fontSize: '0.7rem' }} />)}
                 </span>
-                <span style={{ color: 'var(--brand-text)', fontWeight: 600 }}>{locationInfo.googleRating.toFixed(1)}</span>
+                <span style={{ color: '#ffffff', fontWeight: 600 }}>{locationInfo.googleRating.toFixed(1)}</span>
                 {locationInfo.googleReviewCount != null && <span className="opacity-70">({locationInfo.googleReviewCount})</span>}
               </>
             ) : null}
@@ -568,7 +583,7 @@ export function MenuPage() {
               </>
             )}
           </motion.div>
-          <h1 className="text-[22px] md:text-[26px] font-bold leading-tight" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)', textShadow: '0 1px 2px color-mix(in srgb, var(--brand-bg) 70%, transparent)' }}>
+          <h1 className="text-[22px] md:text-[26px] font-bold leading-tight" style={{ color: '#ffffff', fontFamily: 'var(--brand-font-heading)', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>
             {menu?.location_name || t('client.menu', 'Menu')}
           </h1>
           {venueStatus && (
@@ -768,7 +783,10 @@ export function MenuPage() {
           </div>
         ) : (
           [
-            ...(chefPicksCategory ? [chefPicksCategory] : []),
+            // Chef's Picks is a curated overlay on the DEFAULT category order; a global
+            // sort already reorders everything into one flat list, so prepending picks
+            // there would break the monotonic order. Only show it for 'default'.
+            ...(sortBy === 'default' && chefPicksCategory ? [chefPicksCategory] : []),
             ...displayCategories,
           ].map(category => {
             const isChefCat = category.id === CHEF_PICKS_ID;
@@ -779,10 +797,10 @@ export function MenuPage() {
               ref={el => { sectionRefs.current[category.id] = el }}
               className="mb-7"
               style={{ scrollMarginTop: scrollOffset + 'px' }}
-              initial={{ opacity: 0, y: 16 }}
+              initial={{ opacity: 0, y: 6 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-60px' }}
-              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             >
               <h2 className="text-lg font-bold px-4 mb-3 flex items-center gap-2" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
                 {isChefCat && <span style={{ color: 'var(--brand-primary)', fontSize: '1rem' }}>✦</span>}
@@ -800,7 +818,7 @@ export function MenuPage() {
                   return (
                   <motion.div
                     key={product.id}
-                    variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } } }}
+                    variants={{ hidden: { opacity: 0, y: 6 }, visible: { opacity: 1, y: 0, transition: { duration: 0.18, ease: [0.16, 1, 0.3, 1] } } }}
                   >
                     <ProductCard product={{
                       id: product.id,
@@ -960,7 +978,7 @@ export function MenuPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1.5">
-                      {t('client.recommended', '') && (
+                      {detailProduct.attributes?.chef_pick && (
                         <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1" style={{ background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)', color: 'var(--brand-primary)' }}>
                           <i className="ti ti-flame" style={{ fontSize: '0.6rem' }} />
                           {t('client.popular', 'Popular')}
@@ -991,9 +1009,11 @@ export function MenuPage() {
               {(() => {
                 const taste = getAttr(detailProduct, 'taste');
                 if (!taste || typeof taste !== 'object') return null;
-                const entries = Object.entries(taste).filter(([, v]) => (v as number) > 0);
-                if (!entries.length) return null;
                 const icons: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
+                // Skip axes we have no icon for — a hollow ti-circle fallback reads as an
+                // empty/broken glyph, so an unmapped axis is dropped rather than rendered blank.
+                const entries = Object.entries(taste).filter(([axis, v]) => (v as number) > 0 && icons[axis]);
+                if (!entries.length) return null;
                 return (
                   <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)' }}>
                     <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
@@ -1002,9 +1022,9 @@ export function MenuPage() {
                     <div className="flex flex-wrap gap-x-4 gap-y-2">
                       {entries.map(([axis, level]) => (
                         <span key={axis} className="inline-flex items-center gap-1 text-sm" style={{ color: 'var(--brand-text-muted)' }}>
-                          <i className={icons[axis] || 'ti ti-circle'} style={{ fontSize: '0.75rem' }} />
+                          <i className={icons[axis]} style={{ fontSize: '0.75rem' }} />
                           {Array.from({ length: level as number }).map((_, i) => (
-                            <i key={i} className={icons[axis] || 'ti ti-circle'} style={{ fontSize: '0.65rem' }} />
+                            <i key={i} className={icons[axis]} style={{ fontSize: '0.65rem' }} />
                           ))}
                         </span>
                       ))}
@@ -1177,12 +1197,12 @@ export function MenuPage() {
                   onClick={handleAddDetail}
                   disabled={!canAdd()}
                   whileTap={{ scale: 0.95 }}
-                  className="flex-1 min-w-0 h-[48px] rounded-xl text-[var(--brand-bg)] font-bold text-[14px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-between gap-2 px-4"
+                  className="flex-1 h-[48px] rounded-xl text-[var(--brand-bg)] font-bold text-[14px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-between gap-2 px-4"
                   style={{ background: detailProduct.available ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
                   {detailProduct.available ? (
                     <>
-                      <span className="truncate">{t('client.add_to_cart', 'Add to Cart')}</span>
+                      <span className="whitespace-nowrap">{t('client.add_to_cart', 'Add to Cart')}</span>
                       <span className="font-extrabold shrink-0"><PriceDisplay amount={(detailProduct.price + calcModifierDelta()) * quantity} /></span>
                     </>
                   ) : (

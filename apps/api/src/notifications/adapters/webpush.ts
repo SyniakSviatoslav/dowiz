@@ -1,6 +1,8 @@
 import { formatMoney, ensureCurrency } from '@deliveryos/shared-types';
 import webpush from 'web-push';
 import type { NotificationProvider, NotificationTarget, NotificationEvent, NotificationData, NotifyResult } from '../provider.js';
+import type { Locale } from '../locales.js';
+import { getPushText } from '../push-strings.js';
 
 export class WebPushAdapter implements NotificationProvider {
   readonly id = 'push';
@@ -9,7 +11,7 @@ export class WebPushAdapter implements NotificationProvider {
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
   }
 
-  async notify(target: NotificationTarget, _event: NotificationEvent, data: NotificationData): Promise<NotifyResult> {
+  async notify(target: NotificationTarget, event: NotificationEvent, data: NotificationData): Promise<NotifyResult> {
     let subscription: PushSubscriptionJSON;
     try {
       subscription = JSON.parse(target.address) as PushSubscriptionJSON;
@@ -22,7 +24,9 @@ export class WebPushAdapter implements NotificationProvider {
       return { delivered: false, reason: 'invalid_push_subscription_keys' };
     }
 
-    const payload = this.buildPayload(data);
+    // Thread the recipient locale (same source the Telegram path uses).
+    const locale = ((target.locale || data.locale || 'sq') as Locale);
+    const payload = this.buildPayload(event, data, locale);
 
     try {
       const result = await webpush.sendNotification(
@@ -49,20 +53,25 @@ export class WebPushAdapter implements NotificationProvider {
     }
   }
 
-  private buildPayload(data: NotificationData): string {
-    const parts: string[] = [];
-    const title = data.shortOrderId
-      ? `Order #${data.shortOrderId}`
-      : 'DeliveryOS';
+  private buildPayload(event: NotificationEvent, data: NotificationData, locale: Locale): string {
+    const { title, body } = getPushText(locale, event.type, {
+      shortOrderId: data.shortOrderId,
+      ageMinutes: data.ageMinutes != null ? String(data.ageMinutes) : undefined,
+      discrepancyFmt: data.discrepancy != null && data.currency
+        ? formatMoney(data.discrepancy, ensureCurrency(data.currency)) : undefined,
+      rating: data.rating != null ? String(data.rating) : undefined,
+      courierName: data.courierName,
+      message: data.message,
+    });
 
+    const parts: string[] = [body];
     if (data.total != null && data.currency) {
       parts.push(formatMoney(data.total, ensureCurrency(data.currency)));
     }
-    if (data.message) parts.push(data.message);
 
     return JSON.stringify({
       title,
-      body: parts.join(' · ') || 'New update',
+      body: parts.filter(Boolean).join(' · ') || 'New update',
       tag: data.orderId ? `order-${data.orderId}` : 'deliveryos',
       data: {
         orderId: data.orderId,

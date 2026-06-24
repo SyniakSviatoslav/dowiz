@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot, PriceDisplay } from '@deliveryos/ui';
+import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot, PriceDisplay, Button } from '@deliveryos/ui';
 import type { CourierTask, CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { messengerLink } from '../../lib/messenger.js';
@@ -233,7 +233,21 @@ export function DeliveryPage() {
   ];
 
   if (loading) return <div className="p-4"><SkeletonBase className="h-64 w-full" /></div>;
-  if (!task) return <EmptyState title={t('courier.not_found', 'Not found')} description={t('courier.task_not_found', 'Delivery task not found.')} />;
+  // The delivery layout hides the bottom tab bar, so a bare EmptyState strands the
+  // courier with no way back. Give them an explicit route home.
+  if (!task) return (
+    <div className="p-5">
+      <EmptyState
+        title={t('courier.not_found', 'Not found')}
+        description={t('courier.task_not_found', 'Delivery task not found.')}
+        action={
+          <Button variant="primary" onClick={() => navigate('/courier')}>
+            {t('courier.back_to_tasks', 'Back to tasks')}
+          </Button>
+        }
+      />
+    </div>
+  );
 
   return (
     <div className="flex flex-col h-screen bg-[var(--brand-surface)] text-[var(--brand-text)] relative">

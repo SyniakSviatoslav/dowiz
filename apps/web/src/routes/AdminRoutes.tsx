@@ -229,10 +229,16 @@ function AdminHome() {
     (async () => {
       try {
         const s = await apiClient<any>('/owner/settings');
-        if (!s?.id) { if (alive) setDest('/admin/onboarding'); return; } // brand-new owner → create a storefront
+        // Only treat as a brand-new owner on a DEFINITIVE ok-but-empty response: a real
+        // settings object that genuinely has no location/id. An error-shaped payload
+        // (e.g. `{ error: ... }`) or anything non-object is a transient failure — fall
+        // through to the dashboard rather than kicking an existing owner into onboarding.
+        const isSettingsShape = s && typeof s === 'object' && !('error' in s);
+        if (isSettingsShape && !s.id) { if (alive) setDest('/admin/onboarding'); return; } // brand-new owner → create a storefront
+        if (!s?.id) { if (alive) setDest(null); return; } // suspicious payload, no id → dashboard, never onboarding
         const st = await apiClient<any>(`/owner/activation/${s.id}/status`);
         if (alive) setDest(st?.published ? null : '/admin/activation'); // draft → activation tool
-      } catch { if (alive) setDest(null); }
+      } catch { if (alive) setDest(null); } // network/HTTP error → dashboard, never onboarding
     })();
     return () => { alive = false; };
   }, []);

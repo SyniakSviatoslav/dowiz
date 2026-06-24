@@ -25,18 +25,22 @@ const SPRING_OUT = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
 const cardVariants = {
   rest: { y: 0, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', scale: 1 },
-  hover: { y: -4, boxShadow: '0 12px 32px rgba(0,0,0,0.13)', scale: 1.01, transition: { duration: 0.18, ease: SPRING_OUT } },
-  tap: { scale: 0.975, y: -1, transition: { duration: 0.08 } },
+  hover: { y: -2, boxShadow: '0 8px 22px rgba(0,0,0,0.11)', scale: 1.005, transition: { duration: 0.18, ease: SPRING_OUT } },
+  tap: { scale: 0.99, y: -1, transition: { duration: 0.08 } },
 };
 const imgVariants = {
   rest: { scale: 1 },
-  hover: { scale: 1.06, transition: { duration: 0.35, ease: SPRING_OUT } },
+  hover: { scale: 1.04, transition: { duration: 0.35, ease: SPRING_OUT } },
 };
 const addBtnVariants = {
-  rest: { scale: 1, rotate: 0 },
-  hover: { scale: 1.14, rotate: 8, boxShadow: '0 6px 18px rgba(0,0,0,0.22)', transition: { duration: 0.18, ease: SPRING_OUT } },
-  tap: { scale: 0.82, rotate: 0, transition: { duration: 0.08 } },
+  rest: { scale: 1 },
+  hover: { scale: 1.06, boxShadow: '0 4px 12px rgba(0,0,0,0.18)', transition: { duration: 0.18, ease: SPRING_OUT } },
+  tap: { scale: 0.96, transition: { duration: 0.08 } },
 };
+
+// Hover lift is for pointer devices only — on touch the "hover" state sticks after a
+// tap, which reads as a stuck/janky card. Gate the lift behind a hover-capable pointer.
+const canHover = typeof window !== 'undefined' && window.matchMedia?.('(hover: hover)').matches;
 
 export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
   const { t } = useI18n();
@@ -59,7 +63,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
       onClick={onClick}
       variants={product.isAvailable ? cardVariants : undefined}
       initial="rest"
-      whileHover={product.isAvailable ? 'hover' : undefined}
+      whileHover={product.isAvailable && canHover ? 'hover' : undefined}
       whileTap={product.isAvailable && onClick ? 'tap' : undefined}
     >
       <div
@@ -224,10 +228,12 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
 
         {hasTaste && (
           <div className="flex gap-1.5 flex-wrap">
-            {Object.entries(product.taste!).filter(([, v]) => v > 0).map(([axis, level]) => (
+            {/* Skip axes we have no icon for — a hollow ti-circle fallback reads as an
+                empty/broken glyph, so an unmapped axis is dropped rather than rendered blank. */}
+            {Object.entries(product.taste!).filter(([axis, v]) => v > 0 && TASTE_ICONS[axis]).map(([axis, level]) => (
               <span key={axis} className="inline-flex items-center gap-0.5" style={{ color: 'var(--brand-text-muted)' }} title={`${TASTE_LABELS[axis] || axis}`}>
                 {Array.from({ length: level }).map((_, i) => (
-                  <i key={i} className={TASTE_ICONS[axis] || 'ti ti-circle'} style={{ fontSize: '0.6rem' }} />
+                  <i key={i} className={TASTE_ICONS[axis]} style={{ fontSize: '0.6rem' }} />
                 ))}
               </span>
             ))}

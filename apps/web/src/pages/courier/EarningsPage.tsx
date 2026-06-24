@@ -64,10 +64,10 @@ export function EarningsPage() {
         });
         setPayouts(Array.isArray(data?.payouts) ? data.payouts : []);
       } else {
-        setError('Unexpected response format');
+        setError(t('courier.error_unexpected_response', 'Unexpected response format'));
       }
     } catch (err: any) {
-      setError('Failed to fetch earnings data');
+      setError(t('courier.error_fetch_earnings', 'Failed to fetch earnings data'));
     } finally {
       setLoading(false);
     }

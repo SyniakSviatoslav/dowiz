@@ -65,6 +65,11 @@ export async function refreshAccessToken(): Promise<string | null> {
   return inflightRefresh;
 }
 
+// Guards the dead-session bounce so it fires at most once per page session: without this,
+// many in-flight admin requests can each 401 and stack redirects, re-triggering the
+// settings-refetch loop and tripping the rate limiter. Reset on a full page load.
+let authRedirectInFlight = false;
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -157,11 +162,20 @@ export const apiClient = async <T extends z.ZodType>(
           // session (e.g. OrderStatusPage shows a "reload the menu" message).
           // Reached only after a refresh attempt already failed above — the session is
           // genuinely dead, so clear both tokens before bouncing to login.
-          if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+          // Bounce to /login (NOT /admin): /admin re-fetches /owner/settings which re-401s,
+          // looping ~45× until the rate limiter trips. /login is a public page that does no
+          // authed fetch, breaking the cycle. The module-level guard ensures the redirect
+          // fires at most once per page session even if several requests 401 in parallel.
+          if (
+            typeof window !== 'undefined' &&
+            window.location.pathname.startsWith('/admin') &&
+            !authRedirectInFlight
+          ) {
+            authRedirectInFlight = true;
             safeStorage.remove('dos_access_token');
             safeStorage.remove('dos_refresh_token');
             sessionStorage.setItem('dos_auth_expired', '1');
-            window.location.href = '/admin';
+            window.location.href = '/login';
           }
           break;
         case 403:
