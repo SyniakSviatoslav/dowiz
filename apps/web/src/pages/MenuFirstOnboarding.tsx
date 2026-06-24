@@ -451,6 +451,24 @@ function ParsingState() {
     <div className="dz-parse dz-fade-in" style={{ background: 'var(--brand-surface)', borderRadius: 'var(--brand-radius)', boxShadow: 'var(--elev-2)' }} data-testid="menu-parsing">
       <style>{ONBOARD_CSS}</style>
       <style>{PARSE_CSS}</style>
+      {/* Brand sky: the signature swan glides across carrying the parcel while
+          we read — the same courier from the hero, now delivering your menu. */}
+      <div className="dz-parse-sky" aria-hidden="true">
+        <svg className="dz-parse-swan" viewBox="44 46 150 142" role="presentation" focusable="false">
+          <g className="dz-parse-parcel">
+            <line className="dz-parse-cord" x1="86" y1="134" x2="92" y2="156" />
+            <line className="dz-parse-cord" x1="110" y1="134" x2="104" y2="156" />
+            <rect className="dz-parse-box" x="84" y="155" width="28" height="22" rx="3" />
+            <line className="dz-parse-tie" x1="98" y1="155" x2="98" y2="177" />
+          </g>
+          <path className="dz-parse-ink" d="M52 138 C 48 112, 74 100, 104 102 C 130 104, 142 116, 140 132" />
+          <path className="dz-parse-ink" d="M136 132 C 124 110, 148 102, 150 84 C 151 70, 147 60, 159 57" />
+          <path className="dz-parse-ink dz-parse-wing" d="M70 132 C 82 112, 108 108, 126 122" />
+          <polygon className="dz-parse-beak" points="166,56 182,61 166,64" />
+          <circle className="dz-parse-ink dz-parse-headfill" cx="160" cy="57" r="7" />
+          <circle className="dz-parse-eye" cx="162" cy="55" r="1.6" />
+        </svg>
+      </div>
       <div className="dz-parse-stage" aria-hidden="true">
         <div className="dz-parse-doc">
           {['70%', '90%', '52%', '82%', '40%'].map((w, i) => (
@@ -540,6 +558,34 @@ const ONBOARD_CSS = `
 
 const PARSE_CSS = `
 .dz-parse{padding:34px 20px;display:flex;flex-direction:column;align-items:center;gap:20px}
+
+/* Brand sky strip — the swan courier glides across above the menu being read. */
+.dz-parse-sky{position:relative;width:100%;height:44px;overflow:hidden;margin-bottom:-6px}
+.dz-parse-swan{position:absolute;top:2px;left:0;width:60px;height:auto;overflow:visible;
+  transform:translateX(-72px)}
+.dz-parse-ink{fill:none;stroke:var(--ink,var(--brand-text));stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+.dz-parse-wing{opacity:.55}
+.dz-parse-headfill{fill:var(--paper-surface,var(--brand-bg))}
+.dz-parse-beak{fill:var(--brand-primary)}
+.dz-parse-eye{fill:var(--ink,var(--brand-text))}
+.dz-parse-cord{stroke:var(--ink,var(--brand-text));stroke-width:2;stroke-linecap:round;opacity:.7}
+.dz-parse-box{fill:var(--paper-raised,var(--brand-surface-raised));stroke:var(--ink,var(--brand-text));stroke-width:3}
+.dz-parse-tie{stroke:var(--brand-primary);stroke-width:2.5;stroke-linecap:round}
+.dz-parse-parcel{transform-box:fill-box;transform-origin:98px 134px}
+@media (prefers-reduced-motion: no-preference){
+  .dz-parse-swan{animation:dzParseFly 7s var(--ease-in-out,cubic-bezier(.65,0,.35,1)) infinite}
+  .dz-parse-parcel{animation:dzParseSway 3.4s var(--ease-in-out,cubic-bezier(.65,0,.35,1)) infinite}
+}
+@media (prefers-reduced-motion: reduce){
+  /* perched, centred, parcel at rest */
+  .dz-parse-swan{transform:translateX(calc(50% - 30px))}
+}
+@keyframes dzParseFly{
+  0%{transform:translateX(-72px) translateY(3px)}
+  50%{transform:translateX(min(180px, 60vw)) translateY(-3px)}
+  100%{transform:translateX(540px) translateY(3px)}
+}
+@keyframes dzParseSway{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
 .dz-parse-stage{position:relative}
 .dz-parse-doc{position:relative;width:124px;height:148px;border-radius:var(--brand-radius);overflow:hidden;
   background:linear-gradient(180deg, color-mix(in srgb, var(--brand-primary) 8%, var(--brand-surface-raised)), var(--brand-surface-raised));
