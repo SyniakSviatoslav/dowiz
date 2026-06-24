@@ -137,6 +137,7 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
         <div className="text-center">
           <button
             type="button"
+            data-dynamic
             onClick={handleResend}
             disabled={cooldown > 0 || loading}
             className="text-sm underline disabled:opacity-50 disabled:no-underline"

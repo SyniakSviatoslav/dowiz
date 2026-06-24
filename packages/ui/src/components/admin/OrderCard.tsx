@@ -79,7 +79,7 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
       <div className="flex justify-between items-start">
         <div>
           <div className="font-bold text-lg text-[var(--brand-text)]">{order.shortId || '#' + order.id.substring(0, 4).toUpperCase()}</div>
-          <div className="text-[var(--brand-text-muted)] text-sm flex items-center gap-2">
+          <div data-dynamic className="text-[var(--brand-text-muted)] text-sm flex items-center gap-2">
             {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>
@@ -170,7 +170,7 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
           </div>
         )}
         {order.elapsedSeconds !== undefined && order.elapsedSeconds > 1800 && (
-        <span className="text-[var(--color-danger)] font-bold ml-2">{t('admin.overdue', 'Overdue!')} ({Math.floor(order.elapsedSeconds / 60)} min)</span>
+        <span data-dynamic className="text-[var(--color-danger)] font-bold ml-2">{t('admin.overdue', 'Overdue!')} ({Math.floor(order.elapsedSeconds / 60)} min)</span>
         )}
       </div>
 

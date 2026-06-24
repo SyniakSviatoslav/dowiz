@@ -383,7 +383,7 @@ export function CouriersPage() {
                                     <i className="ti ti-map-pin" /> {h.delivery_address}
                                   </div>
                                 )}
-                                <div className="flex items-center gap-2 text-[11px] text-[var(--brand-text-muted)] mt-1.5 pt-1.5 border-t border-[var(--brand-border)]">
+                                <div data-dynamic className="flex items-center gap-2 text-[11px] text-[var(--brand-text-muted)] mt-1.5 pt-1.5 border-t border-[var(--brand-border)]">
                                   <span className="font-medium" style={{ color: 'var(--brand-text)' }}>{t('admin.timing', 'Timing')}:</span>
                                   <span>{t('admin.assigned', 'Assigned')} {new Date(h.assigned_at).toLocaleString()}</span>
                                   {h.accepted_at && <><span>·</span><span>{t('admin.accepted', 'Accepted')} {new Date(h.accepted_at).toLocaleString()}</span></>}
@@ -401,7 +401,7 @@ export function CouriersPage() {
                           <h4 className="text-sm font-semibold mb-2">{t('admin.recent_shifts', 'Recent Shifts')}</h4>
                           <div className="flex flex-wrap gap-2">
                             {courierDetails.shifts.slice(0, 5).map(s => (
-                              <span key={s.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
+                              <span key={s.id} data-dynamic className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
                                 style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
                                 <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'available' ? 'bg-[var(--color-success)]' : s.status === 'on_delivery' ? 'bg-[var(--color-warning)]' : 'bg-[var(--brand-text-muted)]'}`} />
                                 {s.status} {s.started_at ? new Date(s.started_at).toLocaleDateString() : ''}
@@ -480,7 +480,7 @@ export function CouriersPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>{s.label}</div>
-                        <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{new Date(s.time!).toLocaleString()}</div>
+                        <div data-dynamic className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{new Date(s.time!).toLocaleString()}</div>
                       </div>
                     </div>
                   ))}

@@ -27,5 +27,6 @@ export function ETADisplay({ eta, fallback, className }: ETADisplayProps) {
     text = fallback ?? '';
   }
 
-  return <span className={className} style={{ color: 'var(--brand-text)' }}>{text}</span>;
+  // data-dynamic: live ETA countdown varies run-to-run — masked from the visual net.
+  return <span data-dynamic className={className} style={{ color: 'var(--brand-text)' }}>{text}</span>;
 }

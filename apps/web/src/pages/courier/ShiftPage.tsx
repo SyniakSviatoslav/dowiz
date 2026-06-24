@@ -179,10 +179,10 @@ export function ShiftPage() {
                 <div className="text-sm font-semibold text-[var(--brand-text-muted)] uppercase tracking-wider">
                   {t('courier.current_shift', 'Current Shift')}
                 </div>
-                <div className="text-5xl font-black text-[var(--brand-primary)] tabular-nums" style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+                <div data-dynamic className="text-5xl font-black text-[var(--brand-primary)] tabular-nums" style={{ fontFamily: 'var(--font-mono, monospace)' }}>
                   {formatElapsed(shift.elapsedSeconds)}
                 </div>
-                <div className="text-xs text-[var(--brand-text-muted)]">
+                <div data-dynamic className="text-xs text-[var(--brand-text-muted)]">
                   Started at {shift.startedAt ? new Date(shift.startedAt).toLocaleTimeString() : '--'}
                 </div>
                 <Button
