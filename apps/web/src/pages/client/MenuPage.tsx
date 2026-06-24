@@ -117,6 +117,9 @@ export function MenuPage() {
   const [data, setData] = useState<MenuCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
+  // 404 (unknown venue slug) is distinct from a transient load failure: retrying a bad slug is
+  // futile, so we show a "venue not found" state with an escape, not a retry button.
+  const [notFound, setNotFound] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [activeTab, setActiveTab] = useState<string>('');
   const { addItem, bounceCart, reconcileToMenu } = useSharedCart();
@@ -222,8 +225,10 @@ export function MenuPage() {
     const start = Date.now();
     setLoading(true);
     setFetchError(false);
+    setNotFound(false);
     try {
       const res = await fetch(`/public/locations/${slug}/menu?locale=${encodeURIComponent(locale)}`);
+      if (res.status === 404) { setMenu(null); setData([]); setNotFound(true); return; }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const menuData: MenuResponse = await res.json();
       setMenu(menuData);
@@ -578,7 +583,7 @@ export function MenuPage() {
       <div ref={stickyRef} className="sticky top-0 z-40" style={{ background: 'var(--brand-bg)' }}>
         {/* Category nav */}
         <div className="relative border-b" style={{ borderColor: 'var(--brand-border)' }}>
-          <nav className="h-[44px] overflow-x-auto hide-scrollbar flex items-center gap-0.5 px-2" aria-label={t('client.categories', 'Categories')}>
+          <nav className="h-[44px] overflow-x-auto hide-scrollbar flex items-center gap-0.5 px-2 pr-8" aria-label={t('client.categories', 'Categories')}>
             {loading ? (
               <div className="flex gap-4 px-2 h-full items-center">
                 <div className="w-14 h-3.5 skeleton-block" />
@@ -620,7 +625,7 @@ export function MenuPage() {
         {/* Search + Sort + Allergen — single compact scrollable row */}
         {!loading && categories.length > 0 && (
           <div className="relative border-b" style={{ borderColor: 'var(--brand-border)' }}>
-          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-3 py-2">
+          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-3 py-2 pr-8">
             {/* Compact search pill */}
             <div className="relative shrink-0" style={{ width: searchQuery ? 140 : 100, transition: 'width 0.2s', minWidth: 100 }}>
               <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px]" style={{ color: 'var(--brand-text-muted)' }} />
@@ -723,16 +728,24 @@ export function MenuPage() {
           </div>
         ) : !categories.length ? (
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-            <i className="ti ti-tools-kitchen-2 text-5xl opacity-40 mb-3" style={{ color: 'var(--brand-primary)' }} />
+            <i className={`text-5xl opacity-40 mb-3 ${notFound ? 'ti ti-map-pin-off' : 'ti ti-tools-kitchen-2'}`} style={{ color: 'var(--brand-primary)' }} />
             <p className="text-base font-semibold" style={{ color: 'var(--brand-text)' }}>
-              {t('client.empty_menu', fetchError ? 'Failed to load menu' : 'Menu unavailable')}
+              {notFound
+                ? t('client.venue_not_found', 'Restaurant not found')
+                : t('client.empty_menu', fetchError ? 'Failed to load menu' : 'Menu unavailable')}
             </p>
             <p className="text-sm mt-1 max-w-xs" style={{ color: 'var(--brand-text-muted)' }}>
-              {fetchError
+              {notFound
+                ? t('client.venue_not_found_hint', "We couldn't find a restaurant at this link. Check the address or head back home.")
+                : fetchError
                 ? t('client.empty_menu_error_hint', "We couldn't load the menu. Please try again in a moment.")
                 : t('client.empty_menu_unavailable_hint', "This restaurant hasn't published its menu yet.")}
             </p>
-            {fetchError && (
+            {notFound ? (
+              <a href="/" className="mt-4 inline-flex items-center px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] transition-all active:scale-95 min-h-11" style={{ background: 'var(--brand-primary-strong)' }}>
+                <i className="ti ti-home mr-1.5" />{t('client.go_home', 'Back to home')}
+              </a>
+            ) : fetchError && (
               <motion.button onClick={() => { setRetryCount(c => c + 1); }} whileTap={{ scale: 0.97 }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] transition-all active:scale-95 min-h-11" style={{ background: 'var(--brand-primary-strong)' }}>
                 <i className="ti ti-refresh mr-1.5" />{t('client.retry', 'Retry')}
               </motion.button>

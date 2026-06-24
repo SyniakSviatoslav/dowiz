@@ -37,7 +37,7 @@ const catalogKeys = new Set(Object.keys(catalog));
 const usedKeys = new Set<string>();
 function walk(dir: string) {
   for (const name of readdirSync(dir)) {
-    if (name === 'node_modules' || name === 'dist') continue;
+    if (name === 'node_modules' || name === 'dist' || name === '__tests__') continue;
     const p = join(dir, name);
     if (statSync(p).isDirectory()) walk(p);
     else if (/\.tsx?$/.test(name) && !p.endsWith('i18n-catalog.ts')) {
