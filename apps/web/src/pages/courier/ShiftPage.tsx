@@ -65,7 +65,7 @@ export function ShiftPage() {
       });
       setStats(data?.stats || null);
     } catch (err: any) {
-      setError('Failed to fetch shift data');
+      setError(t('courier.error_fetch_shift', 'Failed to fetch shift data'));
     } finally {
       setLoading(false);
     }
@@ -117,7 +117,7 @@ export function ShiftPage() {
         status: data?.status ?? null
       });
     } catch (err: any) {
-      setError('Failed to start shift');
+      setError(t('courier.error_start_shift', 'Failed to start shift'));
     } finally {
       setActionLoading(false);
     }
@@ -130,7 +130,7 @@ export function ShiftPage() {
       setShift({ isActive: false, startedAt: null, elapsedSeconds: 0, shiftId: null, status: null });
       fetchShift();
     } catch (err: any) {
-      setError('Failed to end shift');
+      setError(t('courier.error_end_shift', 'Failed to end shift'));
     } finally {
       setActionLoading(false);
     }

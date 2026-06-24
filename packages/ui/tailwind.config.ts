@@ -44,6 +44,36 @@ const config: Config = {
       fontFamily: {
         heading: 'var(--brand-font-heading)',
         body: 'var(--brand-font-body)',
+        // Editorial display face (paper skin maps --font-display → Fraunces).
+        display: 'var(--font-display, var(--brand-font-heading))',
+      },
+      // Namespaced modular type scale. Intentionally NOT keyed xs/sm/base/... —
+      // that would override Tailwind's stock text-* and resize 500+ existing
+      // usages. `text-step-*` is additive; migrate incrementally.
+      // See docs/operating-model/typography-scale.md.
+      fontSize: {
+        'step-xs': ['var(--text-xs)', { lineHeight: 'var(--leading-normal)' }],
+        'step-sm': ['var(--text-sm)', { lineHeight: 'var(--leading-normal)' }],
+        'step-base': ['var(--text-base)', { lineHeight: 'var(--leading-normal)' }],
+        'step-lg': ['var(--text-lg)', { lineHeight: 'var(--leading-snug)' }],
+        'step-xl': ['var(--text-xl)', { lineHeight: 'var(--leading-snug)' }],
+        'step-2xl': ['var(--text-2xl)', { lineHeight: 'var(--leading-tight)' }],
+        'step-3xl': ['var(--text-3xl)', { lineHeight: 'var(--leading-tight)' }],
+      },
+      // Namespaced too: Tailwind's stock leading-tight/snug/relaxed have
+      // different values (1.25/1.375/1.625) and are used in ~15 places —
+      // overriding them would shift those. `leading-step-*` is additive.
+      lineHeight: {
+        'step-tight': 'var(--leading-tight)',
+        'step-snug': 'var(--leading-snug)',
+        'step-normal': 'var(--leading-normal)',
+        'step-relaxed': 'var(--leading-relaxed)',
+      },
+      fontWeight: {
+        normal: 'var(--weight-normal)',
+        medium: 'var(--weight-medium)',
+        semibold: 'var(--weight-semibold)',
+        bold: 'var(--weight-bold)',
       },
       borderRadius: {
         none: 'var(--radius-none)',

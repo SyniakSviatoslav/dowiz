@@ -3303,4 +3303,41 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: 'Ми не знайшли ресторан за цим посиланням. Перевірте адресу або поверніться на головну.',
   },
   'client.go_home': { en: 'Back to home', sq: 'Kthehu në fillim', uk: 'На головну' },
+  'client.all_items': { en: 'All items', sq: 'Të gjitha artikujt', uk: 'Усі позиції' },
+  'courier.back_to_tasks': { en: 'Back to tasks', sq: 'Kthehu te detyrat', uk: 'Назад до завдань' },
+  'courier.error_fetch_tasks': {
+    en: "Couldn't load tasks.",
+    sq: 'Nuk u ngarkuan dot detyrat.',
+    uk: 'Не вдалося завантажити завдання.',
+  },
+  'courier.error_fetch_shift': {
+    en: "Couldn't load shift data.",
+    sq: 'Nuk u ngarkuan dot të dhënat e ndërrimit.',
+    uk: 'Не вдалося завантажити дані зміни.',
+  },
+  'courier.error_start_shift': {
+    en: "Couldn't start the shift.",
+    sq: 'Ndërrimi nuk u nis dot.',
+    uk: 'Не вдалося розпочати зміну.',
+  },
+  'courier.error_end_shift': {
+    en: "Couldn't end the shift.",
+    sq: 'Ndërrimi nuk u mbyll dot.',
+    uk: 'Не вдалося завершити зміну.',
+  },
+  'courier.error_unexpected_response': {
+    en: 'Unexpected response from the server.',
+    sq: 'Përgjigje e papritur nga serveri.',
+    uk: 'Неочікувана відповідь сервера.',
+  },
+  'courier.error_fetch_earnings': {
+    en: "Couldn't load earnings.",
+    sq: 'Nuk u ngarkuan dot fitimet.',
+    uk: 'Не вдалося завантажити заробіток.',
+  },
+  'courier.error_fetch_history': {
+    en: "Couldn't load delivery history.",
+    sq: 'Nuk u ngarkua dot historiku i dorëzimeve.',
+    uk: 'Не вдалося завантажити історію доставок.',
+  },
 };

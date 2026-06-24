@@ -91,7 +91,7 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
       return {
         text,
         reply_markup: locationUrl ? {
-          inline_keyboard: [[{ text: '🔗 Open in app', url: locationUrl }]]
+          inline_keyboard: [[{ text: locale === 'sq' ? '🔗 Hap në aplikacion' : locale === 'uk' ? '🔗 Відкрити в додатку' : '🔗 Open in app', url: locationUrl }]]
         } : undefined,
       };
 
@@ -100,8 +100,8 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
         text,
         reply_markup: data.orderId ? {
           inline_keyboard: [[
-            { text: '✅ Confirm', callback_data: `order.confirm:${data.orderId}` },
-            { text: '❌ Reject', callback_data: `order.reject_choose:${data.orderId}` },
+            { text: locale === 'sq' ? '✅ Konfirmo' : locale === 'uk' ? '✅ Підтвердити' : '✅ Confirm', callback_data: `order.confirm:${data.orderId}` },
+            { text: locale === 'sq' ? '❌ Refuzo' : locale === 'uk' ? '❌ Відхилити' : '❌ Reject', callback_data: `order.reject_choose:${data.orderId}` },
           ]]
         } : undefined,
       };
@@ -110,7 +110,7 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
       return {
         text,
         reply_markup: data.orderId && locationUrl ? {
-          inline_keyboard: [[{ text: '👀 Track', url: locationUrl }]]
+          inline_keyboard: [[{ text: locale === 'sq' ? '👀 Ndiq' : locale === 'uk' ? '👀 Відстежити' : '👀 Track', url: locationUrl }]]
         } : undefined,
       };
 
@@ -120,7 +120,7 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
       return {
         text,
         reply_markup: data.locationId ? {
-          inline_keyboard: [[{ text: '🔗 Close shift', url: `${baseUrl}/admin/locations/${data.locationId}/shifts` }]]
+          inline_keyboard: [[{ text: locale === 'sq' ? '🔗 Mbyll ndërrimin' : locale === 'uk' ? '🔗 Закрити зміну' : '🔗 Close shift', url: `${baseUrl}/admin/locations/${data.locationId}/shifts` }]]
         } : undefined,
       };
 

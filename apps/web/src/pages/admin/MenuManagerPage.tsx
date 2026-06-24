@@ -529,9 +529,11 @@ export function MenuManagerPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.menu_manager', 'Menu Manager')}</h2>
-          <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>
-            {categories.length} {t('admin.categories', 'categories')} &middot; {totalDishes} {t('admin.dishes_available', 'available')}
-          </p>
+          {!error && (
+            <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>
+              {categories.length} {t('admin.categories', 'categories')} &middot; {totalDishes} {t('admin.dishes_available', 'available')}
+            </p>
+          )}
         </div>
         <Button onClick={() => setShowImport(true)} variant="ghost" size="sm">
           <i className="ti ti-file-import" /> {t('admin.import_pdf', 'Import PDF')}
@@ -678,6 +680,11 @@ export function MenuManagerPage() {
       {/* Products grid */}
       {loading ? (
         <div className="space-y-3">{ [1,2,3].map(i => <div key={i} className="h-12 shimmer rounded-lg" />) }</div>
+      ) : error ? (
+        // Load failed: the error+retry banner above is the only truth. Never show the
+        // "0 categories / add one to start" empty-state — it falsely tells the owner
+        // their menu is empty when it actually just failed to load.
+        null
       ) : categories.length === 0 ? (
         <EmptyState title={t('admin.no_categories', 'No categories')} description={t('admin.add_category_desc', 'Add a category above to start.')} />
       ) : (
