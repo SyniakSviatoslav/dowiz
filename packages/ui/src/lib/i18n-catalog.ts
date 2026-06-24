@@ -3692,4 +3692,26 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: 'Додайте складники, щоб автоматично рахувати поживність і позначати алергени.',
   },
   'admin.qty': { en: 'quantity', sq: 'sasia', uk: 'кількість' },
+  'cart.empty_hint': {
+    en: 'Add a few tasty items to get started.',
+    sq: 'Shtoni disa artikuj të shijshëm për të filluar.',
+    uk: 'Додайте кілька смачних позицій, щоб почати.',
+  },
+  'cart.decrease': { en: 'Decrease quantity', sq: 'Ulni sasinë', uk: 'Зменшити кількість' },
+  'cart.increase': { en: 'Increase quantity', sq: 'Rritni sasinë', uk: 'Збільшити кількість' },
+  'map.unavailable': {
+    en: 'Live location unavailable',
+    sq: 'Vendndodhja drejtpërdrejt e padisponueshme',
+    uk: 'Місцезнаходження наразі недоступне',
+  },
+  'map.unavailable_hint': {
+    en: "No position to show yet — it'll appear here once tracking starts.",
+    sq: "Ende s'ka pozicion për të shfaqur — do të shfaqet këtu sapo të fillojë ndjekja.",
+    uk: "Поки немає позиції для показу — вона з'явиться тут, щойно почнеться відстеження.",
+  },
+  'courier.confirm_delivery': {
+    en: 'Confirm delivery',
+    sq: 'Konfirmo dorëzimin',
+    uk: 'Підтвердити доставку',
+  },
 };
