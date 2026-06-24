@@ -244,6 +244,7 @@ export function AdminRoutes() {
   return (
     <ToastProvider>
       <Routes>
+        <Route path="login" element={<Navigate to="/login" replace />} />
         <Route path="/" element={<AdminLayout />}>
           <Route index element={<AdminHome />} />
           <Route path="orders" element={<DashboardPage />} />
@@ -261,6 +262,7 @@ export function AdminRoutes() {
             <Route path="_flow-test" element={<Suspense fallback={null}><FlowTestPage /></Suspense>} />
           )}
         </Route>
+        <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     </ToastProvider>
   );
