@@ -61,6 +61,7 @@ export function CouriersPage() {
   const [inviteResult, setInviteResult] = useState<{ link: string; code: string } | null>(null);
   const [inviteError, setInviteError] = useState('');
   const [locationId, setLocationId] = useState('');
+  const [mapCenter, setMapCenter] = useState<LngLatLike | null>(null);
   const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
   const [courierDetails, setCourierDetails] = useState<CourierDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -69,6 +70,10 @@ export function CouriersPage() {
   useEffect(() => {
     apiClient<any>('/owner/settings').then((res: any) => {
       if (res.id) setLocationId(res.id);
+      // Center the live map on the store's stored coords (same source SettingsPage uses).
+      if (typeof res.lat === 'number' && typeof res.lng === 'number') {
+        setMapCenter([res.lng, res.lat]);
+      }
     }).catch((err) => console.debug('[CouriersPage] failed to load settings:', err));
   }, []);
 
@@ -170,10 +175,10 @@ export function CouriersPage() {
         .split(' ')
         .map((n) => n[0])
         .join(''),
-      lngLat: courierPositions[c.id] || [19.817, 41.331],
+      lngLat: courierPositions[c.id] || mapCenter || [19.817, 41.331],
       status: c.status === 'offline' ? 'offline' : c.status === 'busy' ? 'busy' : 'online',
     }));
-  }, [filtered, courierPositions]);
+  }, [filtered, courierPositions, mapCenter]);
 
   const onlineCount = couriers.filter((c) => c.status !== 'offline').length;
 
@@ -431,7 +436,7 @@ export function CouriersPage() {
         <CourierLiveMap
           className="h-72 w-full rounded-lg"
           couriers={couriersOnMap}
-          center={[19.817, 41.331]}
+          center={mapCenter || [19.817, 41.331]}
           zoom={13}
         />
       </div>

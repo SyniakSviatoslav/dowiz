@@ -26,6 +26,7 @@ export function ActivationPage() {
   const [status, setStatus] = useState<GateStatus | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [tab, setTab] = useState<'edit' | 'preview'>('edit');
+  const [settingsError, setSettingsError] = useState(false);
   // Inline product edit (driven by taps inside the preview iframe, O2.2).
   const [editing, setEditing] = useState<{ id: string; name: string; price: number } | null>(null);
   const [editName, setEditName] = useState('');
@@ -35,8 +36,8 @@ export function ActivationPage() {
 
   useEffect(() => {
     apiClient<any>('/owner/settings')
-      .then((res: any) => { if (res.id) setLocationId(res.id); if (res.slug) setSlug(res.slug); })
-      .catch(() => {});
+      .then((res: any) => { if (res.id) setLocationId(res.id); if (res.slug) setSlug(res.slug); setSettingsError(false); })
+      .catch(() => setSettingsError(true)); // surface, don't swallow → preview shows a retry, not a stuck "Loading…"
   }, []);
 
   const refresh = useCallback(async () => {
@@ -239,14 +240,27 @@ export function ActivationPage() {
 
   const Preview = (
     <div className="h-full w-full relative" style={{ background: 'var(--brand-bg)' }}>
-      {previewUrl ? (
+      {settingsError ? (
+        // Don't leave the pane stuck on "Loading…" when settings failed to load — offer a retry.
+        <div className="flex flex-col items-center justify-center h-full text-center px-6 gap-3" style={{ color: 'var(--brand-text-muted)' }}>
+          <i className="ti ti-plug-connected-x text-3xl" style={{ color: 'var(--color-warning)' }} aria-hidden="true" />
+          <p className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>{t('activation.preview_load_failed', "Couldn't load your storefront preview.")}</p>
+          <button onClick={() => window.location.reload()} className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ background: 'var(--brand-primary-strong)', color: '#fff' }}>
+            <i className="ti ti-refresh mr-1.5" />{t('common.retry', 'Retry')}
+          </button>
+        </div>
+      ) : !status ? (
+        <div className="flex items-center justify-center h-full text-sm" style={{ color: 'var(--brand-text-muted)' }}>{t('common.loading', 'Loading…')}</div>
+      ) : status.published && previewUrl ? (
         <iframe key={iframeKey} src={previewUrl} title="storefront preview" className="w-full h-full border-0" />
       ) : (
-        <div className="flex items-center justify-center h-full text-sm" style={{ color: 'var(--brand-text-muted)' }}>{t('common.loading', 'Loading…')}</div>
-      )}
-      {status && !status.published && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs font-semibold shadow" style={{ background: 'var(--color-warning)', color: '#fff' }}>
-          {t('activation.draft_badge', 'Draft preview — not accepting orders yet')}
+        // Unpublished: the public storefront read excludes drafts, so an iframe would render a
+        // "not found" — show an honest publish-to-preview state instead. (Live owner draft-preview
+        // is a tracked follow-up requiring an owner-gated read.)
+        <div className="flex flex-col items-center justify-center h-full text-center px-6 gap-3" style={{ color: 'var(--brand-text-muted)' }}>
+          <i className="ti ti-eye-check text-3xl" style={{ color: 'var(--brand-primary)' }} aria-hidden="true" />
+          <p className="text-base font-semibold" style={{ color: 'var(--brand-text)' }}>{t('activation.preview_unpublished_title', 'Preview goes live when you publish')}</p>
+          <p className="text-sm max-w-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('activation.preview_unpublished_hint', 'Finish the checklist and publish — your live storefront appears here. Use the checklist to confirm your menu meanwhile.')}</p>
         </div>
       )}
     </div>
