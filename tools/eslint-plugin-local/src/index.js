@@ -105,6 +105,30 @@ export default {
         };
       },
     },
+    // UI Build-Verification Loop · Layer 1 (author-time rail): arbitrary Tailwind values
+    // (p-[13px], w-[100px], text-[#fff], gap-[7px]) bypass the design scale/tokens → off-rhythm
+    // spacing + off-token colour, the visually-wrong-but-valid class this loop exists to catch.
+    // Use scale classes (p-3, w-24) or var(--brand-*) instead. Warn-level design-drift signal.
+    'no-arbitrary-tailwind': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'disallow arbitrary Tailwind bracket values; use the design scale / tokens' },
+      },
+      create(context) {
+        const arb = /\b(p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|w|h|min-w|max-w|min-h|max-h|gap|space-x|space-y|text|leading|tracking|rounded|top|bottom|left|right|inset|z|translate-x|translate-y)-\[[^\]]+\]/;
+        const check = (node, val) => {
+          if (typeof val === 'string' && arb.test(val)) {
+            context.report({ node, message: 'arbitrary Tailwind value — use a design-scale class (p-3, w-24) or var(--brand-*), not p-[13px]/text-[#fff]' });
+          }
+        };
+        return {
+          JSXAttribute(node) {
+            if (node.value && node.value.type === 'Literal') check(node, node.value.value);
+          },
+          Literal(node) { check(node, node.value); },
+        };
+      },
+    },
     'no-ts-nocheck': {
       meta: {
         type: 'problem',
