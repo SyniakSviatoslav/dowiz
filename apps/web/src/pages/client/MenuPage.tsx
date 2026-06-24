@@ -1170,9 +1170,9 @@ export function MenuPage() {
               )}
 
               {/* Quantity + Add to Cart */}
-              <div className="flex items-center gap-3 pt-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-                <div className="flex items-center gap-2 rounded-xl p-1" style={{ background: 'var(--brand-surface)' }}>
-                  <motion.button 
+              <div className="flex items-center gap-2 pt-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+                <div className="flex items-center shrink-0 rounded-xl p-1" style={{ background: 'var(--brand-surface)' }}>
+                  <motion.button
                     onClick={() => setQuantity(q => Math.max(1, q - 1))}
                     whileTap={{ scale: 0.9 }}
                     className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-base font-medium transition-colors hover:opacity-80 active:scale-90"
@@ -1181,7 +1181,7 @@ export function MenuPage() {
                   >
                     <i className="ti ti-minus" />
                   </motion.button>
-                  <span className="text-base font-semibold w-8 text-center" style={{ color: 'var(--brand-text)' }}>{quantity}</span>
+                  <span className="text-base font-semibold w-7 text-center" style={{ color: 'var(--brand-text)' }}>{quantity}</span>
                   <motion.button 
                     onClick={() => setQuantity(q => q + 1)}
                     whileTap={{ scale: 0.9 }}
