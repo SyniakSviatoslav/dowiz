@@ -269,6 +269,10 @@ function initScene(THREE: ThreeNS, host: HTMLElement): () => void {
   const fg = new THREE.Group(); // near dune + caravan
   scene.add(bg, mid, fg);
 
+  // Animated-uniform handles set up below (sun halo + drifting dust motes).
+  let haloUniforms: { uTime: { value: number } } | null = null;
+  let moteUniforms: { uTime: { value: number } } | null = null;
+
   // Low gold sun (a flat circle so it reads as a printed disc, not a sphere).
   {
     const sunGeo = new THREE.CircleGeometry(1.5, 48);
@@ -279,6 +283,96 @@ function initScene(THREE: ThreeNS, host: HTMLElement): () => void {
     const sun = new THREE.Mesh(sunGeo, sunMat);
     sun.position.set(-1.4, 1.7, -8);
     bg.add(sun);
+
+    // Soft printed halo behind the disc — a larger additive ring whose alpha
+    // falls off radially, so the sun reads as warm light bleeding into paper
+    // rather than a hard sticker. Gently breathes via uTime.
+    const haloGeo = track(new THREE.CircleGeometry(3.6, 48));
+    const haloMat = track(
+      new THREE.ShaderMaterial({
+        uniforms: { uColor: { value: c(PAPER.gold) }, uTime: { value: 0 } },
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexShader: /* glsl */ `
+          varying vec2 vUv;
+          void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }
+        `,
+        fragmentShader: /* glsl */ `
+          precision mediump float;
+          uniform vec3 uColor; uniform float uTime;
+          varying vec2 vUv;
+          void main(){
+            float d = distance(vUv, vec2(0.5));
+            // soft radial falloff + a slow breathing of the bloom radius
+            float breathe = 0.5 + 0.5 * sin(uTime * 0.5);
+            float a = smoothstep(0.5, 0.04, d) * (0.18 + 0.07 * breathe);
+            gl_FragColor = vec4(uColor, a);
+          }
+        `,
+      }),
+    ) as import('three').ShaderMaterial;
+    const halo = new THREE.Mesh(haloGeo, haloMat);
+    halo.position.set(-1.4, 1.7, -8.1); // just behind the disc
+    bg.add(halo);
+    haloUniforms = haloMat.uniforms as { uTime: { value: number } };
+  }
+
+  // ── Dust motes: a sparse field of warm specks drifting up through the sky.
+  //   Pure GPU — positions animate in the vertex shader from a per-point seed,
+  //   so the CPU never loops over them. Soft round alpha, additive, no depth write.
+  {
+    const COUNT = 46;
+    const positions = new Float32Array(COUNT * 3);
+    const seeds = new Float32Array(COUNT); // phase/speed seed per mote
+    for (let i = 0; i < COUNT; i++) {
+      // deterministic-ish spread across the upper scene volume
+      positions[i * 3] = (Math.random() - 0.5) * 14;
+      positions[i * 3 + 1] = Math.random() * 4.2 - 0.5;
+      positions[i * 3 + 2] = -6 + Math.random() * 6;
+      seeds[i] = Math.random();
+    }
+    const moteGeo = track(new THREE.BufferGeometry());
+    moteGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    moteGeo.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
+    const moteMat = track(
+      new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 }, uColor: { value: c(PAPER.cream) }, uPx: { value: dpr } },
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexShader: /* glsl */ `
+          attribute float aSeed;
+          uniform float uTime; uniform float uPx;
+          varying float vTw;
+          void main(){
+            vec3 p = position;
+            float s = aSeed;
+            // slow upward drift that wraps, plus a lateral sway
+            p.y += mod(uTime * (0.06 + s * 0.05) + s * 6.0, 5.0);
+            p.y = mod(p.y + 1.0, 5.0) - 1.0;
+            p.x += sin(uTime * 0.2 + s * 6.28) * 0.3;
+            vTw = 0.5 + 0.5 * sin(uTime * (1.0 + s) + s * 10.0); // twinkle
+            vec4 mv = modelViewMatrix * vec4(p, 1.0);
+            gl_PointSize = (2.0 + s * 3.5) * uPx * (6.0 / -mv.z);
+            gl_Position = projectionMatrix * mv;
+          }
+        `,
+        fragmentShader: /* glsl */ `
+          precision mediump float;
+          uniform vec3 uColor; varying float vTw;
+          void main(){
+            float d = distance(gl_PointCoord, vec2(0.5));
+            float a = smoothstep(0.5, 0.0, d) * (0.10 + 0.16 * vTw);
+            gl_FragColor = vec4(uColor, a);
+          }
+        `,
+      }),
+    ) as import('three').ShaderMaterial;
+    const motes = new THREE.Points(moteGeo, moteMat);
+    motes.position.set(0, 0, 0);
+    mid.add(motes);
+    moteUniforms = moteMat.uniforms as { uTime: { value: number } };
   }
 
   // Dune ridge factory — a low-poly plane bent into a soft ridge silhouette.
@@ -499,6 +593,8 @@ function initScene(THREE: ThreeNS, host: HTMLElement): () => void {
     camera.lookAt(0, 0.6, 0);
 
     (postMat.uniforms.uTime as { value: number }).value = t;
+    if (haloUniforms) haloUniforms.uTime.value = t;
+    if (moteUniforms) moteUniforms.uTime.value = t;
 
     // Pass 1: scene → target. Pass 2: target → screen with the grade pass.
     renderer.setRenderTarget(target);
