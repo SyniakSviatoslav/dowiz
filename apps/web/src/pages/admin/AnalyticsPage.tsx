@@ -142,7 +142,52 @@ export function AnalyticsPage() {
     </div>
   );
 
-  if (!data) return <EmptyState title={t('admin.no_data', 'No data')} description={t('admin.analytics_empty_hint', 'Analytics populate after orders start coming in. You currently have no order data to display.')} icon={<i className="ti ti-chart-bar text-4xl opacity-30" />} />;
+  // Distinguish a failed request from a genuine "no orders" result. A caught error leaves
+  // `data` null; without this branch the user would see the "no orders" copy even though the
+  // request failed — which contradicts a dashboard that shows live orders.
+  if (error) return (
+    <div className="p-4 md:p-6 max-w-7xl mx-auto">
+      <EmptyState
+        title={t('admin.analytics_unavailable', 'Analytics unavailable')}
+        description={t('admin.analytics_error_hint', "We couldn't load analytics right now. Your orders are safe — please try again.")}
+        icon={<i className="ti ti-alert-triangle text-4xl opacity-30" />}
+        action={
+          <button
+            onClick={() => setPeriod(p => p)}
+            className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--brand-primary)] text-[var(--brand-bg)]"
+          >
+            {t('common.retry', 'Retry')}
+          </button>
+        }
+      />
+    </div>
+  );
+
+  // Honest empty copy: analytics is period-scoped (last 7 days), so older orders won't appear
+  // here even when the all-time dashboard shows them. Surface the period selector so the user
+  // understands the window and can switch it.
+  if (!data) return (
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.analytics', 'Analytics')}</h2>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.analytics_period_note', 'Showing the selected period only — older orders are not counted here.')}</p>
+        </div>
+        <div className="flex rounded-lg p-0.5" style={{ background: 'var(--brand-surface-raised)' }}>
+          {(['7d', '30d'] as const).map(p => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${period === p ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] shadow-sm' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+            >
+              {p === '7d' ? t('admin.7_days', '7 days') : t('admin.30_days', '30 days')}
+            </button>
+          ))}
+        </div>
+      </div>
+      <EmptyState title={t('admin.no_data', 'No data')} description={t('admin.analytics_empty_period_hint', 'No orders in this period. Try a wider range, or check back once new orders come in.')} icon={<i className="ti ti-chart-bar text-4xl opacity-30" />} />
+    </div>
+  );
 
   const maxRevenue = Math.max(...data.chart.map(c => c.revenue), 1);
   const heatmapData = data.heatmap || [

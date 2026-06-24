@@ -212,6 +212,10 @@ export function CheckoutPage() {
   };
   const [pinLocation, setPinLocation] = useState<LngLatLike | null>(null);
   const [locationId, setLocationId] = useState<string | null>(null);
+  // BUG-1: when /info fails, locationId stays null and every Place-Order submit is a
+  // silent no-op behind an active-looking button. Track the failure so we can DISABLE
+  // the button and show a humane, retryable message instead of failing silently.
+  const [locationLoadFailed, setLocationLoadFailed] = useState(false);
   const [locationCenter, setLocationCenter] = useState<LngLatLike>([19.456, 41.324]); // Durrës default
   const [notes, setNotes] = useState('');
   const [cashAmount, setCashAmount] = useState<number>(0);
@@ -246,8 +250,12 @@ export function CheckoutPage() {
 
     useEffect(() => {
     if (!slug) return;
-    fetch(`/public/locations/${slug}/info`).then(r => r.json())
+    setLocationLoadFailed(false);
+    fetch(`/public/locations/${slug}/info`)
+      .then(r => { if (!r.ok) throw new Error(`info ${r.status}`); return r.json(); })
       .then((info: any) => {
+        if (!info?.id) throw new Error('info: missing id');
+        setLocationLoadFailed(false);
         setLocationId(info.id);
         if (info.currency_code) setCurrencyCode(info.currency_code);
         if (info.lng && info.lat) setLocationCenter([info.lng, info.lat]);
@@ -266,6 +274,8 @@ export function CheckoutPage() {
       })
       .catch((err) => {
         console.debug('[CheckoutPage] failed to load location info:', err);
+        setLocationId(null);
+        setLocationLoadFailed(true);
       });
     // Cache the restaurant phone NOW (on mount) for the order-failure fallback, so
     // the CTA is available even when the order POST fails under DB/load pressure.
@@ -661,14 +671,14 @@ export function CheckoutPage() {
           {deliveryType === 'delivery' && (
             <div className="space-y-4">
               <div>
-                <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.delivery_address')}</label>
-                <MapWithPin className="h-48 w-full rounded-lg" initialCenter={locationCenter} onPinChange={setPinLocation} confirmLabel={t('common.confirm')} placeholder={t('checkout.delivery_address')} />
+                <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.pin_on_map', 'Drag the pin to your location')}</label>
+                <MapWithPin className="h-48 w-full rounded-lg" initialCenter={locationCenter} onPinChange={setPinLocation} confirmLabel={t('common.confirm')} placeholder={t('checkout.pin_on_map', 'Drag the pin to your location')} />
               </div>
               <div>
-                <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.delivery_address')}</label>
+                <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.street_address', 'Street address')}</label>
                 <div className="relative">
                   <i className="ti ti-map-pin absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                  <input required value={address} onChange={e => setAddress(e.target.value)} placeholder={t('checkout.delivery_address')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                  <input required value={address} onChange={e => setAddress(e.target.value)} placeholder={t('checkout.street_address', 'Street address')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                 </div>
               </div>
               <div className="space-y-4">
@@ -910,6 +920,34 @@ export function CheckoutPage() {
         </motion.div>
       </form>
 
+      {locationLoadFailed && (
+        <div role="alert" data-testid="checkout-location-load-failed" className="p-4 rounded-xl border text-sm flex items-start gap-3" style={{ background: 'var(--color-danger-light)', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>
+          <i className="ti ti-alert-triangle text-lg shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p>{t('checkout.location_load_failed', "We couldn't load this restaurant — please refresh and try again.")}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              data-testid="checkout-location-retry"
+              className="inline-flex items-center gap-2 mt-3 px-4 py-2 rounded-full font-semibold text-sm"
+              style={{ background: 'var(--brand-primary-strong)', color: '#fff', minHeight: 'var(--tap-min)' }}
+            >
+              <i className="ti ti-refresh" />
+              {t('common.refresh', 'Refresh')}
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLocationLoadFailed(false)}
+            aria-label={t('common.dismiss', 'Dismiss')}
+            className="shrink-0 p-1 -mt-1 -mr-1"
+            style={{ color: 'var(--color-danger)' }}
+          >
+            <i className="ti ti-x text-lg" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
       {orderError && (
         <div ref={orderErrorRef} role="alert" className="p-4 rounded-xl border text-sm flex items-start gap-3" style={{ background: 'var(--color-danger-light)', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>
           <i className="ti ti-alert-triangle text-lg shrink-0 mt-0.5" />
@@ -950,8 +988,8 @@ export function CheckoutPage() {
           type="submit"
           form="checkout-form"
           data-testid="order-confirm-button"
-          disabled={placing}
-          whileTap={{ scale: placing ? 1 : 0.97 }}
+          disabled={placing || !locationId}
+          whileTap={{ scale: (placing || !locationId) ? 1 : 0.97 }}
           className="w-full h-14 rounded-full bg-[var(--brand-primary-strong)] text-[var(--brand-bg)] font-bold text-base shadow-xl transition-all active:scale-[0.97] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ minHeight: 'var(--tap-critical)' }}
         >

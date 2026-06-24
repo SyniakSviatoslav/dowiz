@@ -3340,4 +3340,51 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Nuk u ngarkua dot historiku i dorëzimeve.',
     uk: 'Не вдалося завантажити історію доставок.',
   },
+  'common.dismiss': { en: 'Dismiss', sq: 'Mbyll', uk: 'Закрити' },
+  'checkout.location_load_failed': {
+    en: "We couldn't load this restaurant — please refresh and try again.",
+    sq: 'Nuk arritëm ta ngarkojmë këtë restorant — rifreskoni dhe provoni sërish.',
+    uk: 'Не вдалося завантажити цей ресторан — оновіть і спробуйте ще раз.',
+  },
+  'checkout.pin_on_map': {
+    en: 'Drag the pin to your location',
+    sq: 'Tërhiqni shënjuesin te vendndodhja juaj',
+    uk: 'Перетягніть мітку до вашого місцезнаходження',
+  },
+  'checkout.street_address': { en: 'Street address', sq: 'Adresa e rrugës', uk: 'Адреса (вулиця)' },
+  'admin.analytics_unavailable': {
+    en: 'Analytics unavailable',
+    sq: 'Analitika e padisponueshme',
+    uk: 'Аналітика недоступна',
+  },
+  'admin.analytics_error_hint': {
+    en: "We couldn't load analytics right now. Your orders are safe — please try again.",
+    sq: "Nuk arritëm t'i ngarkojmë analitikat tani. Porositë tuaja janë të sigurta — provoni sërish.",
+    uk: 'Не вдалося завантажити аналітику. Ваші замовлення в безпеці — спробуйте ще раз.',
+  },
+  'admin.analytics_period_note': {
+    en: 'Showing the selected period only — older orders are not counted here.',
+    sq: 'Po shfaqet vetëm periudha e zgjedhur — porositë më të vjetra nuk numërohen këtu.',
+    uk: 'Показано лише вибраний період — старіші замовлення тут не враховано.',
+  },
+  'admin.analytics_empty_period_hint': {
+    en: 'No orders in this period. Try a wider range, or check back once new orders come in.',
+    sq: 'Asnjë porosi në këtë periudhë. Provoni një interval më të gjerë ose kthehuni kur të vijnë porosi të reja.',
+    uk: 'Немає замовлень за цей період. Спробуйте ширший діапазон або поверніться, коли надійдуть нові.',
+  },
+  'activation.preview_load_failed': {
+    en: "Couldn't load your storefront preview.",
+    sq: 'Nuk u ngarkua dot pamja paraprake e vitrinës.',
+    uk: 'Не вдалося завантажити попередній перегляд вітрини.',
+  },
+  'activation.preview_unpublished_title': {
+    en: 'Preview goes live when you publish',
+    sq: 'Pamja paraprake aktivizohet kur publikoni',
+    uk: "Попередній перегляд з'явиться після публікації",
+  },
+  'activation.preview_unpublished_hint': {
+    en: 'Finish the checklist and publish — your live storefront appears here. Use the checklist to confirm your menu meanwhile.',
+    sq: 'Plotësoni listën dhe publikoni — vitrina juaj e drejtpërdrejtë shfaqet këtu. Ndërkohë përdorni listën për të konfirmuar menunë.',
+    uk: "Завершіть список і опублікуйте — ваша вітрина з'явиться тут. Тим часом скористайтеся списком, щоб підтвердити меню.",
+  },
 };
