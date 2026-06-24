@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Button, useI18n, PriceDisplay } from '../../index.js';
+import { ease, duration } from '../../lib/motion.js';
 
 export interface CartItem {
   id: string;
@@ -57,15 +58,15 @@ export function CartDrawer({ isOpen, onClose, items, onUpdateQuantity, onCheckou
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+            transition={{ duration: duration.fast, ease: ease.soft }}
           />
           <motion.div
             className="absolute bottom-0 left-0 right-0 max-h-[85vh] flex flex-col bg-[var(--brand-surface)] rounded-t-2xl"
             style={{ boxShadow: 'var(--elev-4)', paddingBottom: 'var(--safe-bottom)' }}
             initial={reduce ? { opacity: 0 } : { transform: 'translateY(100%)' }}
             animate={reduce ? { opacity: 1 } : { transform: 'translateY(0%)' }}
-            exit={reduce ? { opacity: 0 } : { transform: 'translateY(100%)', transition: { duration: 0.22, ease: [0.4, 0, 0.2, 1] } }}
-            transition={reduce ? { duration: 0.18 } : { duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+            exit={reduce ? { opacity: 0 } : { transform: 'translateY(100%)', transition: { duration: 0.22, ease: ease.soft } }}
+            transition={reduce ? { duration: duration.fast } : { duration: 0.32, ease: ease.out }}
           >
             <div className="flex items-center justify-center pt-2 pb-1 shrink-0">
               <div className="w-10 h-1 rounded-full bg-[var(--brand-border)]" />
@@ -99,8 +100,8 @@ export function CartDrawer({ isOpen, onClose, items, onUpdateQuantity, onCheckou
                         key={item.id}
                         layout={!reduce}
                         initial={reduce ? { opacity: 0 } : { opacity: 0, x: -12 }}
-                        animate={reduce ? { opacity: 1 } : { opacity: 1, x: 0, transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1], delay: Math.min(idx, 6) * 0.03 } }}
-                        exit={reduce ? { opacity: 0 } : { opacity: 0, x: 16, height: 0, marginTop: 0, transition: { duration: 0.18, ease: [0.4, 0, 0.2, 1] } }}
+                        animate={reduce ? { opacity: 1 } : { opacity: 1, x: 0, transition: { duration: 0.22, ease: ease.out, delay: Math.min(idx, 6) * 0.03 } }}
+                        exit={reduce ? { opacity: 0 } : { opacity: 0, x: 16, height: 0, marginTop: 0, transition: { duration: duration.fast, ease: ease.soft } }}
                         className="flex items-center justify-between gap-3 py-2"
                       >
                         <div className="flex-1 min-w-0">

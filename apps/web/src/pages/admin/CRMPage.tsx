@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Button, EmptyState, SkeletonBase, useI18n, PriceDisplay } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, useI18n, PriceDisplay, ease, duration } from '@deliveryos/ui';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/index.js';
@@ -243,7 +243,7 @@ export function CRMPage() {
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(c.id); } }}
                     initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={reduceMotion ? { duration: 0 } : { duration: 0.24, ease: [0.16, 1, 0.3, 1], delay: Math.min(i, 12) * 0.03 }}
+                    transition={reduceMotion ? { duration: 0 } : { duration: duration.base, ease: ease.out, delay: Math.min(i, 12) * 0.03 }}
                     className={`border-t cursor-pointer transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] outline-none hover:[@media(hover:hover)]:bg-[var(--brand-surface-raised)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--brand-primary)] ${expandedCustomer === c.id ? 'bg-[var(--brand-surface-raised)]' : ''}`}
                     style={{ borderColor: 'var(--brand-border)' }}
                   >
@@ -296,7 +296,7 @@ export function CRMPage() {
                 key={c.id}
                 initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={reduceMotion ? { duration: 0 } : { duration: 0.24, ease: [0.16, 1, 0.3, 1], delay: Math.min(i, 12) * 0.03 }}
+                transition={reduceMotion ? { duration: 0 } : { duration: duration.base, ease: ease.out, delay: Math.min(i, 12) * 0.03 }}
                 className="rounded-[var(--brand-radius)] overflow-hidden"
                 style={{ boxShadow: 'var(--elev-1)', background: 'var(--brand-surface)' }}
               >
@@ -361,7 +361,7 @@ function CustomerDetail({ t, loading, data, reduceMotion }: { t: (k: string, f: 
     <motion.div
       initial={reduceMotion ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={reduceMotion ? { duration: 0 } : { duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+      transition={reduceMotion ? { duration: 0 } : { duration: duration.base, ease: ease.out }}
       className="grid grid-cols-1 md:grid-cols-3 gap-6"
     >
       {/* Preferences */}

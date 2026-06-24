@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, Input, EmptyState, MapWithRadius, Toggle, useI18n, LanguageSwitcher, useToast } from '@deliveryos/ui';
+import { Button, Input, EmptyState, MapWithRadius, Toggle, useI18n, LanguageSwitcher, useToast, ease, duration } from '@deliveryos/ui';
 import type { LngLatLike, Locale } from '@deliveryos/ui';
 import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
@@ -84,7 +84,7 @@ export function SettingsPage() {
   // Soft-UI section reveal: ease-out fade+rise, collapsed to a crossfade under reduced-motion.
   const sectionVariants = {
     hidden: { opacity: 0, y: reduceMotion ? 0 : 12 },
-    visible: { opacity: 1, y: 0, transition: { duration: reduceMotion ? 0.01 : 0.32, ease: [0.16, 1, 0.3, 1] as const } },
+    visible: { opacity: 1, y: 0, transition: { duration: reduceMotion ? 0.01 : duration.slow, ease: ease.out } },
   };
   // Shared soft-UI card classes: 1px border + elev-1 (no ghost-card — border is 1px), token radius/transition.
   const cardClass = 'card-section bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4 shadow-[var(--elev-1)] transition-shadow duration-[var(--motion-fast)] ease-[var(--ease-soft)]';
@@ -577,7 +577,7 @@ export function SettingsPage() {
                       <button onClick={() => handleTgToggle(tgt.id, tgt.status)}
                         aria-label={tgt.status === 'active' ? t('admin.disable', 'Disable') : t('admin.enable', 'Enable')}
                         aria-pressed={tgt.status === 'active'}
-                        className={`w-9 h-9 flex items-center justify-center rounded-[var(--brand-radius-sm,8px)] transition-all duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:[@media(hover:hover)]:-translate-y-0.5 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)] ${tgt.status === 'active' ? 'bg-[var(--color-success-light)]' : 'bg-[var(--brand-surface-raised)]'}`}
+                        className={`w-9 h-9 flex items-center justify-center rounded-[var(--brand-radius-sm,8px)] transition-[background-color,transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:[@media(hover:hover)]:-translate-y-0.5 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)] ${tgt.status === 'active' ? 'bg-[var(--color-success-light)]' : 'bg-[var(--brand-surface-raised)]'}`}
                         title={tgt.status === 'active' ? t('admin.disable', 'Disable') : t('admin.enable', 'Enable')}>
                         <i className={`ti ti-${tgt.status === 'active' ? 'check' : 'power'}`} style={{ fontSize: '0.85rem', color: tgt.status === 'active' ? 'var(--color-success)' : 'var(--brand-text-muted)' }} aria-hidden="true" />
                       </button>
@@ -764,7 +764,7 @@ export function SettingsPage() {
                 role="status"
                 aria-live="polite"
                 initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.9 }}
-                animate={{ opacity: 1, scale: 1, transition: { duration: reduceMotion ? 0.01 : 0.24, ease: [0.16, 1, 0.3, 1] } }}
+                animate={{ opacity: 1, scale: 1, transition: { duration: reduceMotion ? 0.01 : duration.base, ease: ease.out } }}
                 className="inline-flex items-center gap-1.5 text-sm font-medium"
                 style={{ color: 'var(--color-success)' }}
               >

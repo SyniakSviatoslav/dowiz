@@ -166,7 +166,7 @@ export function LoginPage() {
             {GOOGLE_OAUTH_ENABLED && (
               <a
                 href="/api/auth/google"
-                className="flex items-center justify-center gap-3 w-full px-4 py-2.5 rounded-lg transition-all duration-200 active:scale-[0.98]"
+                className="flex items-center justify-center gap-3 w-full px-4 py-2.5 rounded-lg transition-[background-color,transform,opacity] duration-200 active:scale-[0.98]"
                 style={{ border: '1px solid var(--brand-border)', background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
               >
                 <i className="ti ti-brand-google" />
@@ -178,7 +178,7 @@ export function LoginPage() {
               type="button"
               onClick={handleTelegramLogin}
               disabled={tgWaiting}
-              className="flex items-center justify-center gap-3 w-full px-4 py-2.5 rounded-lg transition-all duration-200 active:scale-[0.98] disabled:opacity-60"
+              className="flex items-center justify-center gap-3 w-full px-4 py-2.5 rounded-lg transition-[background-color,transform,opacity] duration-200 active:scale-[0.98] disabled:opacity-60"
               style={{ background: 'var(--brand-telegram, #229ED9)', color: '#fff' }}
             >
               <i className="ti ti-brand-telegram" />

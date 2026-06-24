@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { Button, EmptyState, SkeletonBase, useI18n, useConfirm, Toggle } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, useI18n, useConfirm, Toggle, ease, duration } from '@deliveryos/ui';
 import { PromotionSchema, PromotionListResponse, CreatePromotionSchema } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
 import type { z } from 'zod';
@@ -313,7 +313,7 @@ export function PromotionsPage() {
               initial={{ opacity: 0, y: prefersReducedMotion ? 0 : -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: prefersReducedMotion ? 0 : -8 }}
-              transition={{ duration: prefersReducedMotion ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] }}>
+              transition={{ duration: prefersReducedMotion ? 0 : duration.base, ease: ease.out }}>
               <PromotionForm onSave={handleCreate} onCancel={() => setShowCreate(false)} />
             </motion.div>
           )}
@@ -350,7 +350,7 @@ export function PromotionsPage() {
               const usedRatio = p.max_uses ? Math.round((p.current_uses / p.max_uses) * 100) : null;
               return (
                 <motion.div key={p.id} data-testid="promotion-card"
-                  variants={{ hidden: { opacity: 0, y: prefersReducedMotion ? 0 : 8 }, visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] } } }}
+                  variants={{ hidden: { opacity: 0, y: prefersReducedMotion ? 0 : 8 }, visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : duration.base, ease: ease.out } } }}
                   whileHover={prefersReducedMotion ? undefined : { y: -2 }}
                   className={`flex items-start gap-4 p-4 rounded-[var(--brand-radius)] border transition-[box-shadow] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] shadow-[var(--elev-1)] [@media(hover:hover)]:hover:shadow-[var(--elev-2)] ${!p.is_active || isExpired ? 'opacity-60' : ''}`}
                   style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
@@ -415,14 +415,14 @@ export function PromotionsPage() {
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true">
             <motion.button type="button"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: prefersReducedMotion ? 0 : 0.2 }}
+              transition={{ duration: prefersReducedMotion ? 0 : duration.fast }}
               className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-default"
               aria-label={t('common.close', 'Close')} onClick={() => setEditing(null)} />
             <motion.div
               initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 24, scale: prefersReducedMotion ? 1 : 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: prefersReducedMotion ? 0 : 24, scale: prefersReducedMotion ? 1 : 0.98 }}
-              transition={{ duration: prefersReducedMotion ? 0 : 0.24, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: prefersReducedMotion ? 0 : duration.base, ease: ease.out }}
               className="relative w-full max-w-lg sm:mx-4 mb-0 sm:mb-auto">
               <PromotionForm initial={editing} onSave={handleEdit} onCancel={() => setEditing(null)} />
             </motion.div>

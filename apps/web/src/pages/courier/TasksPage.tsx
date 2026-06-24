@@ -2,7 +2,7 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TaskCard, EmptyState, Button, useI18n, PaperIllustration, isPaperSkinEnabled } from '@deliveryos/ui';
+import { TaskCard, EmptyState, Button, useI18n, PaperIllustration, isPaperSkinEnabled, ease } from '@deliveryos/ui';
 import type { CourierTask } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
 
@@ -164,7 +164,7 @@ export function TasksPage() {
         <motion.div className="space-y-4" variants={containerVariants} initial="hidden" animate="visible">
           <AnimatePresence mode="popLayout">
             {tasks.map(task => (
-              <motion.div key={task.id} variants={itemVariants} exit={{ opacity: 0, y: -8, scale: 0.97, transition: { duration: 0.2 } }} layout>
+              <motion.div key={task.id} variants={itemVariants} exit={{ opacity: 0, y: -8, scale: 0.97, transition: { duration: 0.15, ease: ease.out } }} layout>
                 <TaskCard task={task} onAccept={handleAccept} onReject={handleReject} isLoading={acceptingId === task.id} />
               </motion.div>
             ))}

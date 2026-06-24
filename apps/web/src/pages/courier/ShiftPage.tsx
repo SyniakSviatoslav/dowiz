@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, EmptyState, SkeletonBase, useI18n, PriceDisplay } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, useI18n, PriceDisplay, ease, duration } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 
@@ -44,7 +44,7 @@ export function ShiftPage() {
   // ease-out tween (contract: no spring/bounce); reduced-motion → instant crossfade.
   const rise = reduce
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0 } }
-    : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.24, ease: [0.16, 1, 0.3, 1] as const } };
+    : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: duration.base, ease: ease.out } };
   const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg,var(--brand-surface))]';
 
   const saveMessenger = async () => {
@@ -244,7 +244,7 @@ export function ShiftPage() {
                     key={item.label}
                     variants={{
                       hidden: reduce ? { opacity: 0 } : { opacity: 0, y: 12 },
-                      visible: { opacity: 1, y: 0, transition: { duration: reduce ? 0 : 0.24, ease: [0.16, 1, 0.3, 1] } },
+                      visible: { opacity: 1, y: 0, transition: { duration: reduce ? 0 : duration.base, ease: ease.out } },
                     }}
                     className="bg-[var(--brand-surface)] rounded-[var(--brand-radius)] p-4 min-w-0 transition-shadow duration-150 hover:[box-shadow:var(--elev-2)]"
                     style={{ boxShadow: 'var(--elev-1)' }}

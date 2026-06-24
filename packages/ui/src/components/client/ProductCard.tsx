@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useI18n, PriceDisplay, getAllergenStyle } from '../../index.js';
+import { ease, duration } from '../../lib/motion.js';
 
 interface ProductCardProps {
   product: {
@@ -22,21 +23,20 @@ interface ProductCardProps {
 
 const TASTE_ICONS: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
 const TASTE_LABELS: Record<string, string> = { spicy: 'Spicy', sweet: 'Sweet', salty: 'Salty', sour: 'Sour', richness: 'Rich' };
-const SPRING_OUT = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
 const cardVariants = {
   rest: { y: 0, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', scale: 1 },
-  hover: { y: -2, boxShadow: '0 8px 22px rgba(0,0,0,0.11)', scale: 1.005, transition: { duration: 0.18, ease: SPRING_OUT } },
-  tap: { scale: 0.98, y: -1, transition: { duration: 0.08, ease: SPRING_OUT } },
+  hover: { y: -2, boxShadow: '0 8px 22px rgba(0,0,0,0.11)', scale: 1.005, transition: { duration: duration.fast, ease: ease.out } },
+  tap: { scale: 0.98, y: -1, transition: { duration: duration.instant, ease: ease.out } },
 };
 const imgVariants = {
   rest: { scale: 1 },
-  hover: { scale: 1.04, transition: { duration: 0.35, ease: SPRING_OUT } },
+  hover: { scale: 1.04, transition: { duration: duration.slow, ease: ease.out } },
 };
 const addBtnVariants = {
   rest: { scale: 1 },
-  hover: { scale: 1.06, boxShadow: '0 4px 12px rgba(0,0,0,0.18)', transition: { duration: 0.18, ease: SPRING_OUT } },
-  tap: { scale: 0.96, transition: { duration: 0.08 } },
+  hover: { scale: 1.06, boxShadow: '0 4px 12px rgba(0,0,0,0.18)', transition: { duration: duration.fast, ease: ease.out } },
+  tap: { scale: 0.96, transition: { duration: duration.instant } },
 };
 
 // Hover lift is for pointer devices only — on touch the "hover" state sticks after a
@@ -154,7 +154,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             <motion.span
               className="text-[8px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
               style={{ background: 'var(--brand-primary)', color: 'color-mix(in srgb, var(--brand-bg) 88%, #000)', boxShadow: '0 2px 8px color-mix(in srgb, var(--brand-primary) 45%, transparent)' }}
-              initial={{ scale: 0.8, opacity: 0 }}
+              initial={{ scale: 0.85, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: 'spring', stiffness: 300, damping: 20 }}
             >

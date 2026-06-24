@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Button, Modal, useI18n } from '../../index.js';
+import { ease, duration } from '../../lib/motion.js';
 
 interface OTPModalProps {
   open: boolean;
@@ -119,7 +120,7 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
           data-testid="otp-code-input"
           // Gentle shake on a wrong code; static under reduced-motion.
           animate={error && !reduceMotion ? { x: [0, -6, 6, -4, 4, 0] } : { x: 0 }}
-          transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
+          transition={{ duration: 0.32, ease: ease.soft }}
           className="w-full h-[var(--tap-critical,56px)] text-center text-2xl font-bold tracking-[0.5em] outline-none border transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:border-[var(--brand-primary)]"
           style={{
             background: 'var(--brand-surface-raised)',
@@ -137,7 +138,7 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
             style={{ color: 'var(--color-danger)' }}
             initial={reduceMotion ? false : { opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: duration.fast, ease: ease.out }}
           >
             {error}
           </motion.p>

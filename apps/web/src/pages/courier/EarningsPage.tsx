@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { EmptyState, SkeletonBase, StatusBadge, useI18n, PriceDisplay } from '@deliveryos/ui';
+import { EmptyState, SkeletonBase, StatusBadge, useI18n, PriceDisplay, ease, duration } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 
@@ -79,7 +79,7 @@ export function EarningsPage() {
   };
   const cardItem = {
     hidden: reduce ? { opacity: 0 } : { opacity: 0, y: 12, scale: 0.97 },
-    visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const } },
+    visible: { opacity: 1, y: 0, scale: 1, transition: { duration: duration.base, ease: ease.out } },
   };
   const rowStagger = {
     hidden: {},
@@ -87,7 +87,7 @@ export function EarningsPage() {
   };
   const rowItem = {
     hidden: reduce ? { opacity: 0 } : { opacity: 0, x: -8 },
-    visible: { opacity: 1, x: 0, transition: { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const } },
+    visible: { opacity: 1, x: 0, transition: { duration: duration.base, ease: ease.out } },
   };
 
   const fetchEarnings = async () => {

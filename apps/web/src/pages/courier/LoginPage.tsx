@@ -2,7 +2,7 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, Input, FormField, LanguageSwitcher, useI18n, NomadicScene, ArtNouveauFrame, NomadicCredit, isPaperSkinEnabled } from '@deliveryos/ui';
+import { Button, Input, FormField, LanguageSwitcher, useI18n, NomadicScene, ArtNouveauFrame, NomadicCredit, isPaperSkinEnabled, ease, duration } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { CourierLoginResponse } from '@deliveryos/shared-types';
 
@@ -52,7 +52,7 @@ export function LoginPage() {
         className="w-full max-w-sm"
         initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: duration.slow, ease: ease.out }}
       >
         <div className="absolute top-4 right-4">
           <LanguageSwitcher variant="full" />
@@ -98,7 +98,7 @@ export function LoginPage() {
               style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--color-danger)', borderRadius: 'var(--brand-radius-sm)' }}
               initial={{ opacity: 0 }}
               animate={reduceMotion ? { opacity: 1 } : { opacity: 1, x: [0, -6, 6, -4, 4, 0] }}
-              transition={reduceMotion ? { duration: 0.15 } : { x: { duration: 0.4, ease: 'easeInOut' }, opacity: { duration: 0.15 } }}
+              transition={reduceMotion ? { duration: duration.fast } : { x: { duration: duration.slow, ease: ease.inOut }, opacity: { duration: duration.fast } }}
             >
               {error}
             </motion.div>

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useReducedMotion } from 'framer-motion';
-import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot, PriceDisplay, Button } from '@deliveryos/ui';
+import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot, PriceDisplay, Button, ease } from '@deliveryos/ui';
 import type { CourierTask, CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { messengerLink } from '../../lib/messenger.js';
@@ -295,7 +295,7 @@ export function DeliveryPage() {
               initial={reduceMotion ? { opacity: 0 } : { scale: 0.5, opacity: 0 }}
               animate={reduceMotion ? { opacity: 1 } : { scale: 1, opacity: 1 }}
               exit={reduceMotion ? { opacity: 0 } : { scale: 0.8, opacity: 0 }}
-              transition={reduceMotion ? { duration: 0.2, ease: 'easeOut' } : { type: 'spring', stiffness: 260, damping: 24 }}
+              transition={reduceMotion ? { duration: 0.2, ease: ease.out } : { type: 'spring', stiffness: 260, damping: 24 }}
               className="flex flex-col items-center gap-3"
             >
               <AnimatedCheck size={80} strokeWidth={4} />

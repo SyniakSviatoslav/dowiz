@@ -1,7 +1,7 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay, NomadicScene, isPaperSkinEnabled } from '@deliveryos/ui';
+import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay, NomadicScene, isPaperSkinEnabled, ease, duration } from '@deliveryos/ui';
 import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
@@ -482,7 +482,7 @@ export function DashboardPage() {
                       data-state={alertState}
                       onClick={handleEnableSound}
                       title={t('admin.alert_enable_hint', 'New-order sound is off — tap to enable')}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-all hover:opacity-90"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-opacity hover:opacity-90"
                       style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)', minHeight: 'var(--tap-min-sm, 1.5rem)' }}
                     >
                       <i className="ti ti-bell-off text-[11px]" />
@@ -532,7 +532,7 @@ export function DashboardPage() {
                   onChange={e => setSearch(e.target.value)}
                   placeholder={t('common.search', 'Search...')}
                   aria-label="Search orders by name or ID"
-                  className="pl-9 pr-4 py-2 rounded-lg border text-sm outline-none transition-all duration-200 focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary-light)] w-full sm:w-48"
+                  className="pl-9 pr-4 py-2 rounded-lg border text-sm outline-none transition-[border-color,box-shadow] duration-200 focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary-light)] w-full sm:w-48"
                   style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
                 />
               </div>
@@ -690,11 +690,11 @@ export function DashboardPage() {
                 layout={!prefersReducedMotion}
                 variants={{
                   hidden: { opacity: 0, y: prefersReducedMotion ? 0 : 10 },
-                  visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] } },
+                  visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : duration.base, ease: ease.out } },
                 }}
                 initial="hidden"
                 animate="visible"
-                exit={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.97, transition: { duration: prefersReducedMotion ? 0 : 0.15 } }}
+                exit={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.97, transition: { duration: prefersReducedMotion ? 0 : duration.fast } }}
                 className="order-card-container" data-testid={`order-card-${order.id}`} data-status={order.status}>
                 <OrderCard
                   order={order}

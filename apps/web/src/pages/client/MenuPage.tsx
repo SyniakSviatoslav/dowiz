@@ -10,7 +10,7 @@ const MediaRenderer = lazy(() => import('../../components/media').then(m => ({ d
 const RevealOverlay = lazy(() => import('../../components/media/RevealOverlay').then(m => ({ default: m.RevealOverlay })));
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, NomadicCredit, isPaperSkinEnabled } from '@deliveryos/ui';
+import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, NomadicCredit, isPaperSkinEnabled, ease } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 
 interface ProductModifier {
@@ -561,7 +561,7 @@ export function MenuPage() {
           className="relative z-10 w-full px-5 pb-5"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.45, ease: ease.out }}
         >
           <motion.div
             className="flex items-center gap-1.5 text-[12px] font-medium mb-1.5"
@@ -809,7 +809,7 @@ export function MenuPage() {
               initial={prefersReduced ? false : { opacity: 0, transform: 'translateY(6px)' }}
               whileInView={{ opacity: 1, transform: 'translateY(0px)' }}
               viewport={{ once: true, margin: '-60px' }}
-              transition={{ duration: prefersReduced ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: prefersReduced ? 0 : 0.22, ease: ease.out }}
             >
               <h2 className="text-lg font-bold px-4 mb-3 flex items-center gap-2" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
                 {isChefCat && <span style={{ color: 'var(--brand-primary)', fontSize: '1rem' }}>✦</span>}
@@ -829,7 +829,7 @@ export function MenuPage() {
                     key={product.id}
                     variants={prefersReduced
                       ? { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0 } } }
-                      : { hidden: { opacity: 0, transform: 'translateY(6px)' }, visible: { opacity: 1, transform: 'translateY(0px)', transition: { duration: 0.18, ease: [0.16, 1, 0.3, 1] } } }}
+                      : { hidden: { opacity: 0, transform: 'translateY(6px)' }, visible: { opacity: 1, transform: 'translateY(0px)', transition: { duration: 0.18, ease: ease.out } } }}
                   >
                     <ProductCard product={{
                       id: product.id,
@@ -881,7 +881,7 @@ export function MenuPage() {
           className="fixed inset-0 z-modal flex items-end md:items-center justify-center"
           style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)', backdropFilter: 'blur(4px)' }}
           role="dialog" aria-modal="true"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: prefersReduced ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: prefersReduced ? 0 : 0.22, ease: ease.out }}
         >
           <button type="button" className="absolute inset-0 cursor-default" aria-label={t('common.close', 'Close')} onClick={closeDetail} />
           <motion.div
@@ -889,7 +889,7 @@ export function MenuPage() {
             style={{ background: 'var(--brand-bg)', boxShadow: 'var(--elev-4)' }}
             initial={prefersReduced ? { opacity: 0 } : { transform: 'translateY(28px) scale(0.97)', opacity: 0 }}
             animate={{ transform: 'translateY(0px) scale(1)', opacity: 1 }}
-            exit={prefersReduced ? { opacity: 0 } : { transform: 'translateY(18px) scale(0.97)', opacity: 0, transition: { duration: 0.18, ease: [0.4, 0, 0.2, 1] } }}
+            exit={prefersReduced ? { opacity: 0 } : { transform: 'translateY(18px) scale(0.97)', opacity: 0, transition: { duration: 0.18, ease: ease.soft } }}
             transition={prefersReduced ? { duration: 0.15 } : { type: 'spring', stiffness: 340, damping: 32 }}
           >
             {/* Image */}
@@ -985,7 +985,7 @@ export function MenuPage() {
               className="p-5 space-y-5"
               initial={prefersReduced ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={prefersReduced ? { duration: 0 } : { delay: 0.1, duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+              transition={prefersReduced ? { duration: 0 } : { delay: 0.1, duration: 0.32, ease: ease.out }}
             >
               {/* Name, Description, Price */}
               <div>
@@ -1010,7 +1010,7 @@ export function MenuPage() {
                     className="flex flex-col items-end shrink-0"
                     initial={prefersReduced ? false : { scale: 0.92, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    transition={prefersReduced ? { duration: 0 } : { delay: 0.2, duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                    transition={prefersReduced ? { duration: 0 } : { delay: 0.2, duration: 0.28, ease: ease.out }}
                   >
                     <div className="text-xl font-black whitespace-nowrap" style={{ color: 'var(--brand-primary)' }}>
                       <PriceDisplay amount={detailProduct.price + calcModifierDelta()} />
