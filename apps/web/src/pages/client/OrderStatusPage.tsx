@@ -461,6 +461,15 @@ export function OrderStatusPage() {
         </div>
       )}
 
+      {/* Screen-reader status announcer — speaks every status transition with explicit
+          localized text. The visual toast isn't reliably announced and the stepper is
+          graphical; this dedicated role="status" region guarantees the change is spoken. */}
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="sr-status-announcer">
+        {order?.status
+          ? `${t('order.status_now', 'Order status:')} ${t(STATUS_LABELS_KEYS[order.status] || '', order.status.replace(/_/g, ' '))}`
+          : ''}
+      </div>
+
       {/* Screen-reader accessible courier status */}
       {order?.courierName && (
         <div className="sr-only" role="status" aria-live="polite">

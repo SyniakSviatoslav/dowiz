@@ -119,7 +119,7 @@ export function MenuPage() {
   const [fetchError, setFetchError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [activeTab, setActiveTab] = useState<string>('');
-  const { addItem, bounceCart } = useSharedCart();
+  const { addItem, bounceCart, reconcileToMenu } = useSharedCart();
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, string[]>>({});
   const [modifierGroupSelection, setModifierGroupSelection] = useState<Record<string, string[]>>({});
@@ -456,6 +456,24 @@ export function MenuPage() {
   };
 
   const { showToast } = useToast();
+
+  // F9: reconcile a persisted cart to the freshly-loaded menu. A cart can outlive a
+  // price/availability change (localStorage survives across sessions); without this the
+  // customer only discovers the drift as a server hard-block after filling out checkout.
+  // Re-pricing here means the cart they see is the cart the server will accept.
+  useEffect(() => {
+    if (!menu) return;
+    const products = (menu.categories || []).flatMap(c =>
+      (c.products || []).map(p => ({ id: p.id, price: p.price, available: p.available })));
+    const summary = reconcileToMenu(menu.menu_version, products);
+    if (!summary) return;
+    const parts: string[] = [];
+    if (summary.repriced.length) parts.push(t('cart.prices_updated', 'Some prices in your cart were updated to the latest menu.'));
+    if (summary.removed.length) parts.push(t('cart.items_removed', 'Some items are no longer available and were removed from your cart.'));
+    showToast(parts.join(' '), 'info');
+    // Keyed on menu_version only: reconcile is idempotent (it early-returns once the cart
+    // is stamped to this version), so a re-run from changed identities is harmless.
+  }, [menu?.menu_version]);
 
   // Light haptic tick on add-to-cart (where supported) — part of the tactile
   // ordering loop. Silent no-op on unsupported devices; never blocks the add.
