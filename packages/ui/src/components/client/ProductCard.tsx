@@ -227,9 +227,9 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             {/* Skip axes we have no icon for — a hollow ti-circle fallback reads as an
                 empty/broken glyph, so an unmapped axis is dropped rather than rendered blank. */}
             {Object.entries(product.taste!).filter(([axis, v]) => v > 0 && TASTE_ICONS[axis]).map(([axis, level]) => (
-              <span key={axis} className="inline-flex items-center gap-0.5" style={{ color: 'var(--brand-text-muted)' }} title={`${TASTE_LABELS[axis] || axis}`}>
+              <span key={axis} className="inline-flex items-center gap-0.5" style={{ color: 'color-mix(in srgb, var(--brand-text) 62%, transparent)' }} title={`${TASTE_LABELS[axis] || axis}`}>
                 {Array.from({ length: level }).map((_, i) => (
-                  <i key={i} className={TASTE_ICONS[axis]} style={{ fontSize: '0.6rem' }} />
+                  <i key={i} className={TASTE_ICONS[axis]} style={{ fontSize: '0.7rem' }} />
                 ))}
               </span>
             ))}
