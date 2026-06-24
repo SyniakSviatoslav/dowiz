@@ -1197,7 +1197,7 @@ export function MenuPage() {
                   onClick={handleAddDetail}
                   disabled={!canAdd()}
                   whileTap={{ scale: 0.95 }}
-                  className="flex-1 min-w-0 h-[48px] rounded-xl text-[var(--brand-bg)] font-bold text-[14px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-between gap-2 px-3.5"
+                  className="flex-1 min-w-0 h-[48px] rounded-xl text-[var(--brand-bg)] font-bold text-[13px] transition-all active:scale-[0.95] disabled:opacity-40 flex items-center justify-between gap-1.5 px-3"
                   style={{ background: detailProduct.available ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
                   {detailProduct.available ? (
