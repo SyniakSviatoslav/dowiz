@@ -3725,4 +3725,15 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Adresa shfaqet pasi restoranti konfirmon.',
     uk: 'Адресу буде показано після підтвердження рестораном.',
   },
+  'product.prep_minutes': { en: '~{{n}} min', sq: '~{{n}} min', uk: '~{{n}} хв' },
+  'admin.prep_time_label': {
+    en: 'Prep time (min)',
+    sq: 'Koha e përgatitjes (min)',
+    uk: 'Час приготування (хв)',
+  },
+  'admin.prep_time_required': {
+    en: 'Enter a prep time of at least 1 minute',
+    sq: 'Vendosni një kohë përgatitjeje prej të paktën 1 minute',
+    uk: 'Вкажіть час приготування щонайменше 1 хвилина',
+  },
 };

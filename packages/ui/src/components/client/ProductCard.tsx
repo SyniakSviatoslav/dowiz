@@ -5,6 +5,7 @@ import { useI18n, PriceDisplay, getAllergenStyle } from '../../index.js';
 interface ProductCardProps {
   product: {
     id: string; name: string; description?: string; price: number; image?: string;
+    prepTimeMinutes?: number;
     isAvailable: boolean; tags?: string[];
     taste?: Record<string, number>;
     allergens?: string[];
@@ -212,6 +213,12 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
         <div className="flex items-center justify-between mt-auto pt-1">
           <div className="flex items-baseline gap-1">
             <PriceDisplay amount={product.price} size="md" style={{ color: 'var(--brand-primary)', fontWeight: 800 }} />
+            {product.prepTimeMinutes != null && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium whitespace-nowrap" style={{ color: 'var(--brand-text-muted)' }}>
+                <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} aria-hidden="true" />
+                {t('product.prep_minutes', '~{{n}} min', { n: product.prepTimeMinutes })}
+              </span>
+            )}
             {hasNutrition && (
               <span className="text-[8px]" style={{ color: 'var(--brand-text-muted)' }}>
                 {product.kcal}kcal
