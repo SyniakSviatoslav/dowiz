@@ -48,6 +48,7 @@ interface Product {
   name: string;
   description?: string;
   price: number;
+  prep_time_minutes?: number;
   available: boolean;
   image_key?: string | null;
   imageUrl?: string | null;
@@ -835,6 +836,7 @@ export function MenuPage() {
                       name: product.name,
                       description: product.description,
                       price: product.price,
+                      prepTimeMinutes: product.prep_time_minutes,
                       image: getImageUrl(product) || undefined,
                       isAvailable: product.available,
                       kcal: nutrition.kcal || undefined,
@@ -1005,12 +1007,20 @@ export function MenuPage() {
                     )}
                   </div>
                   <motion.div
-                    className="text-xl font-black whitespace-nowrap shrink-0" style={{ color: 'var(--brand-primary)' }}
+                    className="flex flex-col items-end shrink-0"
                     initial={prefersReduced ? false : { scale: 0.92, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     transition={prefersReduced ? { duration: 0 } : { delay: 0.2, duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
                   >
-                    <PriceDisplay amount={detailProduct.price + calcModifierDelta()} />
+                    <div className="text-xl font-black whitespace-nowrap" style={{ color: 'var(--brand-primary)' }}>
+                      <PriceDisplay amount={detailProduct.price + calcModifierDelta()} />
+                    </div>
+                    {detailProduct.prep_time_minutes != null && (
+                      <span className="inline-flex items-center gap-0.5 text-[11px] font-medium whitespace-nowrap mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>
+                        <i className="ti ti-clock" style={{ fontSize: '0.75rem' }} aria-hidden="true" />
+                        {t('product.prep_minutes', '~{{n}} min', { n: detailProduct.prep_time_minutes })}
+                      </span>
+                    )}
                   </motion.div>
                 </div>
                 {detailProduct.description && (
