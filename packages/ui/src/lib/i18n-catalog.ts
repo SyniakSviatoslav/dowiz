@@ -3082,4 +3082,9 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: 'privacy@dowiz.org',
   },
   'privacy.back': { en: 'Back', sq: 'Kthehu', uk: 'Назад' },
+  'state.open': { en: 'Open', sq: 'Hapur', uk: 'Відчинено' },
+  'state.closed': { en: 'Closed', sq: 'Mbyllur', uk: 'Зачинено' },
+  'state.busy': { en: 'Kitchen busy', sq: 'Kuzhina e zënë', uk: 'Кухня завантажена' },
+  'state.sold_out': { en: 'Sold out', sq: 'Mbaroi', uk: 'Розпродано' },
+  'state.available': { en: 'Available', sq: 'Në dispozicion', uk: 'Доступно' },
 };

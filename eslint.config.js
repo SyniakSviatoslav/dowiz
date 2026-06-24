@@ -37,6 +37,7 @@ export default tseslint.config(
       'local/no-hardcoded-string': 'warn',
       'local/no-insecure-random': 'warn',
       'local/no-direct-websocket': 'warn',
+      'local/no-arbitrary-tailwind': 'warn',
 
       // --- Karpathy P2: Simplicity rules (warn-only, no CI block) ---
       'max-depth': ['warn', 4],
