@@ -4,6 +4,10 @@ const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 let authToken: string;
 let locationId: string;
 let locationSlug: string;
+// Suite-scoped so the afterAll cleanup can delete test data even if a mid-suite
+// step fails (mode:'serial' aborts later steps, so inline cleanup is unreliable).
+let createdCategoryId: string;
+let createdProductId: string;
 
 test.describe.configure({ mode: 'serial' });
 
@@ -86,9 +90,6 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
   });
 
   // ── 4. Owner menu — product creation with taste + recipeLines ──────
-  let createdCategoryId: string;
-  let createdProductId: string;
-
   test('4.1 — create category via owner API', async ({ request }) => {
     const catName = `Test-Cat-${Date.now()}`;
     const res = await request.post(`${BASE}/api/owner/menu/categories`, {
@@ -303,18 +304,31 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
     expect(hasAllergens).toBe(true);
   });
 
-  // ── 14. Cleanup: delete test product ────────────────────────────────
-  test('14.1 — delete test product', async ({ request }) => {
-    const res = await request.delete(`${BASE}/api/owner/menu/products/${createdProductId}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
-    });
-    expect([200, 204]).toContain(res.status());
-  });
-
-  test('14.2 — delete test category', async ({ request }) => {
-    const res = await request.delete(`${BASE}/api/owner/menu/categories/${createdCategoryId}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
-    });
-    expect([200, 204, 404]).toContain(res.status());
+  // ── 14. Cleanup ─────────────────────────────────────────────────────
+  // CRITICAL: cleanup MUST run even if an earlier step fails. With mode:'serial',
+  // a mid-suite failure aborts every later step — so inline cleanup tests would be
+  // skipped and the test category/product would orphan into the public /s/demo
+  // storefront (test@dowiz.com owns the shared demo location). afterAll always runs,
+  // so we delete the captured IDs here instead. Idempotent + tolerant: each delete is
+  // wrapped in try/catch and skipped if its id was never set (creation step never ran).
+  test.afterAll(async ({ request }) => {
+    if (createdProductId) {
+      try {
+        await request.delete(`${BASE}/api/owner/menu/products/${createdProductId}`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+      } catch (err) {
+        console.warn(`afterAll cleanup: failed to delete product ${createdProductId}:`, err);
+      }
+    }
+    if (createdCategoryId) {
+      try {
+        await request.delete(`${BASE}/api/owner/menu/categories/${createdCategoryId}`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+      } catch (err) {
+        console.warn(`afterAll cleanup: failed to delete category ${createdCategoryId}:`, err);
+      }
+    }
   });
 });

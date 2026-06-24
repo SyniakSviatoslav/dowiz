@@ -9,14 +9,22 @@ from staging (`https://dowiz-staging.fly.dev`) against the A–F rubric. Screens
 
 | # | Screen | Finding | Dim | Severity | Route | Status |
 |---|--------|---------|-----|----------|-------|--------|
-| 1 | all (StateChip) | `state.open/closed/busy/sold_out/available` missing from catalog → venue badge + sold-out/availability chips render **English to SQ/UK users** | E | high | **inline** | ✅ FIXED — added via `i18n-add` (5 keys, parity green) |
-| 2 | storefront 390/1280 | `Test-Cat-1782148864348` test category leaks into the public menu tabs | E | high | **data-cleanup** | routed (demo seed data, not UI) |
-| 3 | storefront 1280 | desktop menu is a single narrow column stretched into 1280px — one card/row, large empty right | D/F | high | **frontend-gate** | routed (responsive grid; phase-level layout) |
-| 4 | storefront 390 | add `+` button overlaps price/name and clips at card bottom-right | F | high | **frontend-gate** | routed (card layout; verify in current code on deploy) |
-| 5 | storefront 390 | filter/sort chip row clipped at right edge ("SOJE" sliced); weak horizontal-scroll cue | D | med | frontend-gate | routed |
-| 6 | product modal 390 | add-to-cart CTA "Shto në …" truncated by the inline price chip | E | med | **inline** | routed (FE; confirm key/layout in current code) |
-| 7 | not-found 390 | invalid slug rendered as transient "retry" state, no escape to home/search; copy implies temporary failure | spec | med | frontend-gate | routed |
-| 8 | `/admin/login` 390 | renders **blank** — 0 inputs, 0 buttons, empty root (48 chars), no console errors after networkidle+3s | — | high | **investigate** | routed (candidate regression; DOM probe + dark screenshot as proof) |
+| 1 | all (StateChip) | `state.open/closed/busy/sold_out/available` missing → venue/sold-out chips render **English to SQ/UK** | E | high | inline | ✅ **FIXED** — 5 keys via `i18n-add` |
+| 2 | storefront | `Test-Cat-1782148864348` leaks into public menu tabs | E | high | data-cleanup | ✅ **PREVENTED** (deploy-validation cleanup → `afterAll`) + existing orphan routed to operator reseed (DB access) |
+| 3 | storefront 1280 | desktop "single narrow column" | D/F | high | frontend-gate | ⚪ **NOT REAL in current code** — already `grid-cols-2 md:3 lg:4` (staging was stale) |
+| 4 | storefront 390 | add `+` overlaps/clips card | F | high | frontend-gate | ⚪ **NOT REAL** — in-flow flex, `shrink-0` 44px (staging stale) |
+| 5 | storefront 390 | filter chip row clipped ("SOJE"), weak scroll cue | D | med | inline | ✅ **FIXED** — `pr-8` clears the right-fade on chip row + category nav |
+| 6 | product modal 390 | CTA "Shto në …" truncated | E | med | inline | ⚪ **WORKING AS DESIGNED** — label `truncate`, price `shrink-0` (price protected); left as-is |
+| 7 | not-found 390 | 404 slug shown as transient "retry", no home escape | spec | med | frontend-gate | ✅ **FIXED** — 404 → distinct "Restaurant not found" + home CTA, no retry |
+| 8 | `/admin/login` | renders **blank** (0 inputs/buttons) | — | high | investigate | ✅ **FIXED** — `/admin/login` wasn't a route; added `login`→`/login` redirect + catch-all in AdminRoutes |
+
+## Fixes applied (commit follows)
+- **#8** AdminRoutes: `/admin/login` had no route (login is `/login`) and no catch-all → null render. Added a `login` redirect + `*` catch-all. Proof: `e2e/tests/ui-loop-fixes.spec.ts` (post-deploy).
+- **#7** MenuPage: `loadMenu` now treats `res.status===404` as a distinct `notFound` state → "Restaurant not found" + a home link, no futile retry. Proof: same spec.
+- **#1** + the **66-key backlog**: all uncatalogued keys backfilled with real sq/uk; parity `--strict` now green (1152 keys). Gate scoped to skip `__tests__/`.
+- **#5** chip clip: `pr-8` so the last chip clears the 24px fade.
+- **#2** Test-Cat: `deploy-validation.spec.ts` cleanup moved to `afterAll` (runs on mid-suite failure). The already-orphaned row needs the operator reseed (`apps/api/scripts/seed-demo-from-prod.mjs`, DB access).
+- **#3/#4/#6** were stale-staging artifacts or intended behavior — no change (verified in current code).
 
 ## Inline fix applied (the loop's fix arm)
 **#1 — silent English in SQ/UK.** `StateChip` uses `t('state.open','Open')` etc., but those 5 keys were
