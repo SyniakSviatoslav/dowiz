@@ -546,7 +546,9 @@ export function MenuManagerPage() {
 
       {error && (
         <div className="p-3 rounded-lg text-sm flex items-center justify-between" style={{ background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>
-          {error}
+          {/* Localize the load-error title so it doesn't sit in mixed language next to
+              the Albanian Retry label (the raw string comes from the data hook). */}
+          {t('admin.menu_load_error', 'Failed to load menu')}
           <motion.button onClick={fetchCategories} whileTap={{ scale: 0.97 }} className="underline ml-3 shrink-0">{t('common.retry', 'Retry')}</motion.button>
         </div>
       )}

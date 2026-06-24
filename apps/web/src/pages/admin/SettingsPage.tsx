@@ -144,7 +144,9 @@ export function SettingsPage() {
       if (err.status === 404) {
         setSettings(MOCK_SETTINGS);
       } else {
-        setError('Failed to load settings');
+        // Keep the raw server detail in the console; show a localized message.
+        console.error('[SettingsPage] fetch settings failed:', err);
+        setError(t('admin.settings_load_error', 'Failed to load settings'));
       }
     } finally {
       setLoading(false);
@@ -362,7 +364,15 @@ export function SettingsPage() {
           <div className="h-10 bg-[var(--brand-surface)] rounded-[var(--brand-radius)] w-32" />
         </div>
       ) : error && settings.locationName === '' ? (
-        <EmptyState title={t('common.error')} description={error} />
+        <EmptyState
+          title={t('common.error')}
+          description={error}
+          action={
+            <Button variant="outline" size="sm" onClick={fetchSettings}>
+              <i className="ti ti-refresh" /> {t('common.retry', 'Provo përsëri')}
+            </Button>
+          }
+        />
       ) : (
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-5 space-y-4">

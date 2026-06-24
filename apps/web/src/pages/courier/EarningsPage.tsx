@@ -78,7 +78,7 @@ export function EarningsPage() {
   }, []);
 
   const summaryCards = summary ? [
-    { label: t('courier.today', 'Today'), amount: summary.today, tips: summary.today_tips, icon: <i className="ti ti-sun" aria-hidden="true"></i> },
+    { label: t('courier.today', 'Today'), amount: summary.today, tips: summary.today_tips, icon: <i className="ti ti-clock-hour-4" aria-hidden="true"></i> },
     { label: t('courier.this_week', 'This Week'), amount: summary.week, tips: summary.week_tips, icon: <i className="ti ti-calendar" aria-hidden="true"></i> },
     { label: t('courier.this_month', 'This Month'), amount: summary.month, tips: summary.month_tips, icon: <i className="ti ti-moneybag" aria-hidden="true"></i> },
   ] : [];
