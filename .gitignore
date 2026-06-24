@@ -62,3 +62,5 @@ e2e/findings/round-*/
 scratch-*.mjs
 .claude/*.bak-*
 graphify-out/
+# NVIDIA SkillSpector — operator security tool (agent-skill scanner), not app code
+tools/skillspector/
