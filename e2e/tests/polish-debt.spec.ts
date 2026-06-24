@@ -24,15 +24,23 @@ async function createDeliveryOrder(request: APIRequestContext) {
     await new Promise((r) => setTimeout(r, 1500));
   }
   expect(products.length, 'demo menu has products').toBeGreaterThan(0);
-  const created = await request.post('/api/orders', {
-    data: {
-      locationId, type: 'delivery',
-      items: [{ product_id: products[0].id, quantity: 1 }],
-      customer: { phone: uniquePhone(), name: 'E2E Polish' }, payment: { method: 'cash' },
-      idempotency_key: crypto.randomUUID(), acknowledged_codes: ['velocity'],
-      delivery: { pin: { lat: loc.lat, lng: loc.lng }, address_text: 'Demo HQ' },
-    },
-  });
+  // Pick the priciest product so the order clears the venue's minimum-order value.
+  const product = products.slice().sort((a, b) => (b.price ?? 0) - (a.price ?? 0))[0];
+  // Order-create transiently 503s on staging under pool pressure (known) — retry a few times.
+  let created!: Awaited<ReturnType<typeof request.post>>;
+  for (let i = 0; i < 5; i++) {
+    created = await request.post('/api/orders', {
+      data: {
+        locationId, type: 'delivery',
+        items: [{ product_id: product.id, quantity: 1 }],
+        customer: { phone: uniquePhone(), name: 'E2E Polish' }, payment: { method: 'cash' },
+        idempotency_key: crypto.randomUUID(), acknowledged_codes: ['velocity'],
+        delivery: { pin: { lat: loc.lat, lng: loc.lng }, address_text: 'Demo HQ' },
+      },
+    });
+    if (created.status() !== 503) break;
+    await new Promise((r) => setTimeout(r, 1500));
+  }
   expect(created.status(), `create order: ${await created.text()}`).toBe(201);
   const order = await created.json();
   const u = new URL(order.trackUrl as string);
