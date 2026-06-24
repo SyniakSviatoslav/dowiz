@@ -1,7 +1,7 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal } from '@deliveryos/ui';
 import { CURRENCIES } from '@deliveryos/shared-types';
 import type { LngLatLike } from '@deliveryos/ui';
@@ -84,11 +84,13 @@ type DeliveryType = 'delivery' | 'pickup' | 'scheduled';
 
 interface MacroData { label: string; grams: number; color: string; kcalPer: number }
 function NutritionRing({ kcal, protein, fat, carbs }: { kcal: number; protein: number; fat: number; carbs: number }) {
+  const { t } = useI18n();
+  const prefersReducedMotion = useReducedMotion();
   const CX = 52, R = 38, SW = 10;
   const macros: MacroData[] = [
-    { label: 'Protein', grams: protein, color: '#3b82f6', kcalPer: 4 },
-    { label: 'Carbs',   grams: carbs,   color: '#22c55e', kcalPer: 4 },
-    { label: 'Fat',     grams: fat,     color: '#f59e0b', kcalPer: 9 },
+    { label: t('nutrition.protein', 'Protein'), grams: protein, color: '#3b82f6', kcalPer: 4 },
+    { label: t('nutrition.carbs', 'Carbs'),     grams: carbs,   color: '#22c55e', kcalPer: 4 },
+    { label: t('nutrition.fat', 'Fat'),         grams: fat,     color: '#f59e0b', kcalPer: 9 },
   ];
   const totalEnergy = macros.reduce((s, m) => s + m.grams * m.kcalPer, 0);
   let cumulative = 0;
@@ -103,15 +105,15 @@ function NutritionRing({ kcal, protein, fat, carbs }: { kcal: number; protein: n
   const hasMacros = arcs.length > 0;
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-40px' }}
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="rounded-[12px] p-4 border shadow-sm"
-      style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}
+      className="rounded-[var(--brand-radius)] p-4 border"
+      style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}
     >
       <p className="text-[11px] font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--brand-text-muted)' }}>
-        <i className="ti ti-flame mr-1" />Order Nutrition
+        <i className="ti ti-flame mr-1" aria-hidden="true" />{t('checkout.order_nutrition', 'Order Nutrition')}
       </p>
       <div className="flex items-center gap-5">
         <div className="relative shrink-0" style={{ width: CX * 2, height: CX * 2 }}>
@@ -186,6 +188,7 @@ export function CheckoutPage() {
   const { t } = useI18n();
   const { currency: activeCurrency } = useCurrency();
   const currencySymbol = CURRENCIES[activeCurrency]?.symbol ?? activeCurrency;
+  const prefersReducedMotion = useReducedMotion();
 
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('delivery');
   const [address, setAddress] = useState('');
@@ -571,11 +574,29 @@ export function CheckoutPage() {
 
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 gap-3">
-        <i className="ti ti-shopping-cart text-4xl" style={{ color: 'var(--brand-text-muted)', opacity: 0.4 }} />
-        <h2 className="text-xl font-bold">{t('cart.empty')}</h2>
-        <Button onClick={() => navigate(`/s/${slug}`)}>{t('common.back')}</Button>
-      </div>
+      <motion.div
+        initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+        className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6 py-12 gap-4 max-w-sm mx-auto"
+      >
+        <div
+          className="flex items-center justify-center w-20 h-20 rounded-full"
+          style={{ background: 'var(--brand-surface-raised)', boxShadow: 'var(--elev-1)' }}
+        >
+          <i className="ti ti-shopping-cart-off text-3xl" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
+        </div>
+        <h2 className="text-xl font-bold" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>
+          {t('checkout.empty_title', 'Your cart is empty')}
+        </h2>
+        <p className="text-sm leading-relaxed" style={{ color: 'var(--brand-text-muted)' }}>
+          {t('checkout.empty_body', 'Add a few dishes to get started — your order will appear here.')}
+        </p>
+        <Button onClick={() => navigate(`/s/${slug}`)} className="mt-1">
+          <i className="ti ti-arrow-left mr-2" aria-hidden="true" />
+          {t('checkout.browse_menu', 'Browse menu')}
+        </Button>
+      </motion.div>
     );
   }
 
@@ -586,33 +607,33 @@ export function CheckoutPage() {
   return (
     <div className="max-w-xl mx-auto p-4 md:py-8 space-y-6 pb-32">
       <div className="flex items-center gap-3 mb-6">
-        <motion.button onClick={() => navigate(-1)} whileTap={{ scale: 0.95 }} aria-label={t('common.back', 'Go back')} className="w-10 h-10 rounded-full flex items-center justify-center border transition-colors active:scale-95" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+        <motion.button onClick={() => navigate(-1)} whileTap={{ scale: 0.95 }} aria-label={t('common.back', 'Go back')} className="w-11 h-11 shrink-0 rounded-full flex items-center justify-center border transition-[transform,box-shadow,background-color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-95 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
           <i className="ti ti-arrow-left" aria-hidden="true" />
         </motion.button>
-        <h1 className="text-[24px] font-bold" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.title')}</h1>
+        <h1 className="text-[24px] font-bold min-w-0 truncate" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.title')}</h1>
       </div>
 
       <form id="checkout-form" onSubmit={handlePlaceOrder} className="space-y-6">
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-40px' }}
           transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-          className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+          className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
           <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.contact_info', 'Contact Info')}</h2>
           <div className="space-y-3">
             <div>
               <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.name', 'Name')}</label>
               <div className="relative">
                 <i className="ti ti-user absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                <input required value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t('checkout.name_placeholder', 'Your name')} autoComplete="name" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                <input required value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t('checkout.name_placeholder', 'Your name')} autoComplete="name" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
               </div>
             </div>
             <div>
               <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.phone', 'Phone')}</label>
               <div className="relative">
                 <i className="ti ti-phone absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} onBlur={() => setPhone(p => normalizeAlbanianPhone(p))} placeholder="+355 6X XXX XXXX" title="+355 followed by 7-14 digits" type="tel" inputMode="tel" autoComplete="tel" data-testid="checkout-phone" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} onBlur={() => setPhone(p => normalizeAlbanianPhone(p))} placeholder="+355 6X XXX XXXX" title="+355 followed by 7-14 digits" type="tel" inputMode="tel" autoComplete="tel" data-testid="checkout-phone" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
                 {phoneError && <p role="alert" className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{phoneError}</p>}
               </div>
             </div>
@@ -621,7 +642,7 @@ export function CheckoutPage() {
               <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.messenger', 'Messenger (optional)')}</label>
               <div className="flex gap-2">
                 <select value={messengerKind} onChange={e => setMessengerKind(e.target.value)} data-testid="checkout-messenger-kind"
-                  className="h-[48px] px-2 outline-none text-[14px] border rounded-[8px]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                  className="h-[48px] px-2 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
                   <option value="">{t('checkout.messenger_none', '—')}</option>
                   <option value="telegram">Telegram</option>
                   <option value="whatsapp">WhatsApp</option>
@@ -630,7 +651,7 @@ export function CheckoutPage() {
                 <input value={messengerHandle} onChange={e => setMessengerHandle(e.target.value)} disabled={!messengerKind}
                   required={!!messengerKind}
                   placeholder={messengerKind === 'telegram' ? '@username' : '+355 6X XXX XXXX'} data-testid="checkout-messenger-handle"
-                  className="flex-1 h-[48px] px-3 outline-none text-[14px] border rounded-[8px] disabled:opacity-50" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                  className="flex-1 min-w-0 h-[48px] px-3 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)] disabled:opacity-50" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
               </div>
             </div>
             {/* UX-3: optional entrance photo (delivery only) — camera or gallery */}
@@ -639,7 +660,7 @@ export function CheckoutPage() {
                 <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entry_photo', 'Entrance photo (optional)')}</label>
                 <div className="flex items-center gap-3">
                   <button type="button" onClick={() => entryFileRef.current?.click()} disabled={photoUploading}
-                    className="inline-flex items-center gap-2 px-4 py-2 border rounded-[8px] cursor-pointer text-sm disabled:opacity-60"
+                    className="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 border rounded-[var(--brand-radius-sm)] cursor-pointer text-sm transition-[background-color,box-shadow,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 disabled:opacity-60"
                     style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
                     <i className="ti ti-camera" aria-hidden="true" />
                     {photoUploading ? t('checkout.uploading', 'Uploading…') : (entryPhotoKey ? t('checkout.change_photo', 'Change photo') : t('checkout.add_photo', 'Add photo'))}
@@ -647,7 +668,7 @@ export function CheckoutPage() {
                   <input ref={entryFileRef} type="file" accept="image/*" className="hidden" data-testid="entry-photo-input" disabled={photoUploading}
                     onChange={e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void uploadEntryPhoto(f); }} />
                   {entryPhotoPreview && (
-                    <img src={entryPhotoPreview} alt={t('checkout.entry_photo', 'Entrance photo')} data-testid="entry-photo-preview" className="h-12 w-12 object-cover rounded-[8px] border" style={{ borderColor: 'var(--brand-border)' }} />
+                    <img src={entryPhotoPreview} alt={t('checkout.entry_photo', 'Entrance photo')} data-testid="entry-photo-preview" className="h-12 w-12 object-cover rounded-[var(--brand-radius-sm)] border" style={{ borderColor: 'var(--brand-border)' }} />
                   )}
                 </div>
                 <p className="text-[12px] mt-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.entry_photo_hint', 'Helps the courier find your entrance.')}</p>
@@ -656,15 +677,15 @@ export function CheckoutPage() {
           </div>
         </motion.div>
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-40px' }}
           transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
-          className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+          className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
           <h2 className="text-[20px] font-semibold mb-6" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.delivery_address')}</h2>
-          <div className="flex p-1 rounded-[10px] mb-6 gap-0.5" role="tablist" aria-label={t('checkout.delivery_type', 'Delivery type')} style={{ background: 'var(--brand-surface)' }}>
-            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'delivery'} onClick={() => setDeliveryType('delivery')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('delivery')}>{t('courier.deliver')}</motion.button>
-            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'pickup'} onClick={() => setDeliveryType('pickup')} className="flex-1 py-2 text-[13px] rounded-[8px] transition-all" style={btnStyle('pickup')}>{t('courier.pickup')}</motion.button>
+          <div className="flex p-1 rounded-[var(--brand-radius-sm)] mb-6 gap-0.5" role="tablist" aria-label={t('checkout.delivery_type', 'Delivery type')} style={{ background: 'var(--brand-surface)' }}>
+            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'delivery'} onClick={() => setDeliveryType('delivery')} className="flex-1 min-h-[44px] py-2 text-[13px] rounded-[var(--brand-radius-sm)] transition-[background-color,color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1" style={btnStyle('delivery')}>{t('courier.deliver')}</motion.button>
+            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'pickup'} onClick={() => setDeliveryType('pickup')} className="flex-1 min-h-[44px] py-2 text-[13px] rounded-[var(--brand-radius-sm)] transition-[background-color,color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1" style={btnStyle('pickup')}>{t('courier.pickup')}</motion.button>
             {/* Scheduled is scaffold (not yet implemented end-to-end) — hidden until supported. */}
           </div>
 
@@ -672,13 +693,13 @@ export function CheckoutPage() {
             <div className="space-y-4">
               <div>
                 <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.pin_on_map', 'Drag the pin to your location')}</label>
-                <MapWithPin className="h-48 w-full rounded-lg" initialCenter={locationCenter} onPinChange={setPinLocation} confirmLabel={t('common.confirm')} placeholder={t('checkout.pin_on_map', 'Drag the pin to your location')} />
+                <MapWithPin className="h-48 w-full rounded-[var(--brand-radius-sm)]" initialCenter={locationCenter} onPinChange={setPinLocation} confirmLabel={t('common.confirm')} placeholder={t('checkout.pin_on_map', 'Drag the pin to your location')} />
               </div>
               <div>
                 <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.street_address', 'Street address')}</label>
                 <div className="relative">
                   <i className="ti ti-map-pin absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                  <input required value={address} onChange={e => setAddress(e.target.value)} placeholder={t('checkout.street_address', 'Street address')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                  <input required value={address} onChange={e => setAddress(e.target.value)} placeholder={t('checkout.street_address', 'Street address')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                 </div>
               </div>
               <div className="space-y-4">
@@ -686,7 +707,7 @@ export function CheckoutPage() {
                   <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entrance')}</label>
                   <div className="relative">
                     <i className="ti ti-door-open absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                    <input required value={entrance} onChange={e => setEntrance(e.target.value)} data-testid="checkout-entrance" placeholder={t('checkout.entrance_placeholder', 'Entrance number or name')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                    <input required value={entrance} onChange={e => setEntrance(e.target.value)} data-testid="checkout-entrance" placeholder={t('checkout.entrance_placeholder', 'Entrance number or name')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                   </div>
                   {entranceError && <p role="alert" className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{entranceError}</p>}
                 </div>
@@ -694,7 +715,7 @@ export function CheckoutPage() {
                   <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.apartment')}</label>
                   <div className="relative">
                     <i className="ti ti-apartment absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                    <input required value={apartment} onChange={e => setApartment(e.target.value)} data-testid="checkout-apartment" placeholder={t('checkout.apartment_placeholder', 'Apartment or unit number')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                    <input required value={apartment} onChange={e => setApartment(e.target.value)} data-testid="checkout-apartment" placeholder={t('checkout.apartment_placeholder', 'Apartment or unit number')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                   </div>
                   {apartmentError && <p role="alert" className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{apartmentError}</p>}
                 </div>
@@ -711,7 +732,7 @@ export function CheckoutPage() {
                     onChange={e => setNotes(e.target.value)}
                     rows={3}
                     placeholder={t('checkout.notes_placeholder', 'Describe how to find the exact place: floor, building color, nearby landmark, gate code...')}
-                    className="w-full pl-10 pr-3 pt-2.5 pb-2 outline-none text-[14px] border rounded-[8px] transition-colors resize-none"
+                    className="w-full pl-10 pr-3 pt-2.5 pb-2 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)] resize-none"
                     style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
                   />
                 </div>
@@ -732,7 +753,7 @@ export function CheckoutPage() {
                       whileTap={{ scale: 0.95 }}
                       aria-pressed={instructionOption === opt.val}
                       onClick={() => setInstructionOption(instructionOption === opt.val ? '' : opt.val)}
-                      className="px-3 py-1.5 text-[12px] rounded-[20px] border transition-all active:scale-95"
+                      className="px-3 py-1.5 text-[12px] rounded-[var(--brand-radius-btn)] border transition-[background-color,border-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
                       style={{
                         background: instructionOption === opt.val ? 'var(--brand-primary-light)' : 'var(--brand-surface-raised)',
                         borderColor: instructionOption === opt.val ? 'var(--brand-primary)' : 'var(--brand-border)',
@@ -744,7 +765,7 @@ export function CheckoutPage() {
                 {instructionOption && (
                   <div className="relative">
                     <i className="ti ti-edit absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                    <input value={instructionCustom} onChange={e => setInstructionCustom(e.target.value)} placeholder={t('checkout.extra_notes', 'Extra notes...')} className="w-full h-[44px] pl-10 pr-3 outline-none text-[13px] border rounded-[8px] transition-colors" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                    <input value={instructionCustom} onChange={e => setInstructionCustom(e.target.value)} placeholder={t('checkout.extra_notes', 'Extra notes...')} className="w-full h-[44px] pl-10 pr-3 outline-none text-[13px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                   </div>
                 )}
               </div>
@@ -753,15 +774,15 @@ export function CheckoutPage() {
 
           {deliveryType === 'pickup' && (
             <div className="space-y-4">
-              <div className="border rounded-[12px] p-4" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+              <div className="border rounded-[var(--brand-radius)] p-4" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
                 <h3 className="text-[14px] font-bold mb-1" style={{ color: 'var(--brand-text)' }}>{t('courier.pickup')}</h3>
                 <p className="text-[14px] mb-4" style={{ color: 'var(--brand-text-muted)' }}>Dubin & Sushi, Rruga Sami Frasheri 12, Tirana</p>
-                <div className="w-full h-[120px] rounded-[8px] relative overflow-hidden border flex items-center justify-center" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)' }}>
+                <div className="w-full h-[120px] rounded-[var(--brand-radius-sm)] relative overflow-hidden border flex items-center justify-center" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)' }}>
                   <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(var(--brand-border) 1px, transparent 1px), linear-gradient(90deg, var(--brand-border) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
                   <i className="ti ti-building-store text-3xl relative z-10" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
                 </div>
               </div>
-              <div className="flex items-center gap-3 p-3 rounded-[8px] border" style={{ background: 'var(--color-info-light)', borderColor: 'var(--color-info)', color: 'var(--color-info)' }}>
+              <div className="flex items-center gap-3 p-3 rounded-[var(--brand-radius-sm)] border" style={{ background: 'var(--color-info-light)', borderColor: 'var(--color-info)', color: 'var(--color-info)' }}>
                 <i className="ti ti-info-circle" aria-hidden="true" />
                 <p className="text-[13px] font-medium">{t('checkout.phone_hint')}</p>
               </div>
@@ -769,8 +790,8 @@ export function CheckoutPage() {
           )}
 
           {deliveryType === 'scheduled' && (
-            <div className="flex items-center gap-3 p-4 rounded-[12px] border" style={{ background: 'var(--color-warning-light, rgba(217,119,6,0.1))', borderColor: 'var(--color-warning, #D97706)' }}>
-              <i className="ti ti-clock text-lg shrink-0" style={{ color: 'var(--color-warning, #D97706)' }} />
+            <div className="flex items-center gap-3 p-4 rounded-[var(--brand-radius)] border" style={{ background: 'var(--color-warning-light)', borderColor: 'var(--color-warning)' }}>
+              <i className="ti ti-clock text-lg shrink-0" aria-hidden="true" style={{ color: 'var(--color-warning)' }} />
               <p className="text-[13px] font-medium" style={{ color: 'var(--brand-text)' }}>
                 {t('checkout.scheduled_coming_soon', 'Scheduled delivery coming soon. Please select Delivery or Pickup.')}
               </p>
@@ -779,13 +800,13 @@ export function CheckoutPage() {
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-40px' }}
           transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
-          className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+          className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
           <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.payment_method')}</h2>
-          <div className="border rounded-[8px] p-3 mb-3" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-primary)' }}>
+          <div className="border rounded-[var(--brand-radius-sm)] p-3 mb-3" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-primary)' }}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <i className="ti ti-cash text-xl" aria-hidden="true" style={{ color: 'var(--brand-primary)' }} />
@@ -808,7 +829,7 @@ export function CheckoutPage() {
                     min={total}
                     value={cashAmount || ''}
                     onChange={e => setCashAmount(parseInt(e.target.value) || 0)}
-                    className="w-full h-[44px] pl-11 pr-3 outline-none text-[14px] font-bold border rounded-[8px] transition-colors"
+                    className="w-full h-[44px] pl-11 pr-3 outline-none text-[14px] font-bold border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]"
                     style={{ background: 'var(--brand-surface)', borderColor: cashAmount > 0 && cashAmount < total ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }}
                     placeholder={String(total)}
                   />
@@ -828,7 +849,7 @@ export function CheckoutPage() {
                     value={tipAmount || ''}
                     data-testid="checkout-tip"
                     onChange={e => setTipAmount(Math.min(1000000, Math.max(0, parseInt(e.target.value) || 0)))}
-                    className="w-full h-[44px] pl-11 pr-3 outline-none text-[14px] font-bold border rounded-[8px]"
+                    className="w-full h-[44px] pl-11 pr-3 outline-none text-[14px] font-bold border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]"
                     style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
                     placeholder="0"
                   />
@@ -853,10 +874,10 @@ export function CheckoutPage() {
 
         {cityFact && (
           <motion.div
-            initial={{ opacity: 0, y: 8 }}
+            initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="rounded-[12px] p-4 border" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)' }}>
+            className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)' }}>
             <div className="flex items-start gap-3">
               <span className="text-xl shrink-0 mt-0.5">🌍</span>
               <div>
@@ -877,51 +898,60 @@ export function CheckoutPage() {
         )}
 
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-40px' }}
           transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
-          className="rounded-[12px] p-4 border shadow-sm" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+          className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
           <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('order.title')}</h2>
           <div className="space-y-3 mb-4">
-            <div className="flex justify-between text-[14px]">
-              <span style={{ color: 'var(--brand-text-muted)' }}>{t('cart.subtotal')}</span>
-                  <PriceDisplay amount={subtotal} />
+            <div className="flex justify-between items-baseline gap-3 text-[14px]">
+              <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.subtotal')}</span>
+              <span className="shrink-0 tabular-nums"><PriceDisplay amount={subtotal} /></span>
             </div>
             {deliveryType === 'delivery' && (
-              <div className="flex justify-between text-[14px]">
-                <span style={{ color: 'var(--brand-text-muted)' }}>{t('cart.delivery_fee')}</span>
-                  <PriceDisplay amount={deliveryFee} />
+              <div className="flex justify-between items-baseline gap-3 text-[14px]">
+                <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.delivery_fee')}</span>
+                <span className="shrink-0 tabular-nums"><PriceDisplay amount={deliveryFee} /></span>
               </div>
             )}
             {tipAmount > 0 && (
-              <div className="flex justify-between text-[14px]" data-testid="checkout-tip-line">
-                <span style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_for_courier', 'Tip for courier (cash)')}</span>
-                <PriceDisplay amount={tipAmount} />
+              <div className="flex justify-between items-baseline gap-3 text-[14px]" data-testid="checkout-tip-line">
+                <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_for_courier', 'Tip for courier (cash)')}</span>
+                <span className="shrink-0 tabular-nums"><PriceDisplay amount={tipAmount} /></span>
               </div>
             )}
             {hasNutrition && (
-              <div className="flex justify-between text-[12px]">
-                <span style={{ color: 'var(--brand-text-muted)' }}>≈ {t('menu.nutrition')}</span>
-                <span className="font-medium" style={{ color: 'var(--brand-text-muted)' }}>~{nutritionTotal.kcal} kcal</span>
+              <div className="flex justify-between items-baseline gap-3 text-[12px]">
+                <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>≈ {t('menu.nutrition')}</span>
+                <span className="shrink-0 font-medium tabular-nums" style={{ color: 'var(--brand-text-muted)' }}>~{nutritionTotal.kcal} kcal</span>
               </div>
             )}
           </div>
-          <div className="pt-4 border-t flex justify-between items-center" style={{ borderColor: 'var(--brand-border)' }}>
-            <span className="text-[16px] font-bold" style={{ color: 'var(--brand-text)' }}>{t('cart.total')}</span>
-                  <span data-testid="checkout-total"><PriceDisplay amount={total} size="lg" /></span>
+          <div className="pt-4 border-t flex justify-between items-center gap-3" style={{ borderColor: 'var(--brand-border)' }}>
+            <span className="text-[16px] font-bold min-w-0 truncate" style={{ color: 'var(--brand-text)' }}>{t('cart.total')}</span>
+            <motion.span
+              key={total}
+              data-testid="checkout-total"
+              className="shrink-0 tabular-nums"
+              initial={prefersReducedMotion ? false : { opacity: 0.4, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <PriceDisplay amount={total} size="lg" />
+            </motion.span>
           </div>
           {tipAmount > 0 && (
-            <div className="flex justify-between items-center text-[13px] mt-2" style={{ color: 'var(--brand-text-muted)' }} data-testid="checkout-cash-due">
-              <span>{t('checkout.cash_to_courier', 'Cash to courier (incl. tip)')}</span>
-              <PriceDisplay amount={total + tipAmount} />
+            <div className="flex justify-between items-center gap-3 text-[13px] mt-2" style={{ color: 'var(--brand-text-muted)' }} data-testid="checkout-cash-due">
+              <span className="min-w-0 truncate">{t('checkout.cash_to_courier', 'Cash to courier (incl. tip)')}</span>
+              <span className="shrink-0 tabular-nums"><PriceDisplay amount={total + tipAmount} /></span>
             </div>
           )}
         </motion.div>
       </form>
 
       {locationLoadFailed && (
-        <div role="alert" data-testid="checkout-location-load-failed" className="p-4 rounded-xl border text-sm flex items-start gap-3" style={{ background: 'var(--color-danger-light)', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>
+        <div role="alert" data-testid="checkout-location-load-failed" className="p-4 rounded-[var(--brand-radius)] border text-sm flex items-start gap-3" style={{ background: 'var(--color-danger-light)', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>
           <i className="ti ti-alert-triangle text-lg shrink-0 mt-0.5" />
           <div className="flex-1">
             <p>{t('checkout.location_load_failed', "We couldn't load this restaurant — please refresh and try again.")}</p>
@@ -929,10 +959,10 @@ export function CheckoutPage() {
               type="button"
               onClick={() => window.location.reload()}
               data-testid="checkout-location-retry"
-              className="inline-flex items-center gap-2 mt-3 px-4 py-2 rounded-full font-semibold text-sm"
-              style={{ background: 'var(--brand-primary-strong)', color: '#fff', minHeight: 'var(--tap-min)' }}
+              className="inline-flex items-center gap-2 mt-3 px-4 py-2 rounded-full font-semibold text-sm transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+              style={{ background: 'var(--brand-primary-strong)', color: 'var(--brand-bg)', minHeight: 'var(--tap-min)' }}
             >
-              <i className="ti ti-refresh" />
+              <i className="ti ti-refresh" aria-hidden="true" />
               {t('common.refresh', 'Refresh')}
             </button>
           </div>
@@ -940,7 +970,7 @@ export function CheckoutPage() {
             type="button"
             onClick={() => setLocationLoadFailed(false)}
             aria-label={t('common.dismiss', 'Dismiss')}
-            className="shrink-0 p-1 -mt-1 -mr-1"
+            className="shrink-0 w-8 h-8 -mt-1 -mr-1 flex items-center justify-center rounded-full transition-[transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-danger)] focus-visible:ring-offset-1"
             style={{ color: 'var(--color-danger)' }}
           >
             <i className="ti ti-x text-lg" aria-hidden="true" />
@@ -949,19 +979,19 @@ export function CheckoutPage() {
       )}
 
       {orderError && (
-        <div ref={orderErrorRef} role="alert" className="p-4 rounded-xl border text-sm flex items-start gap-3" style={{ background: 'var(--color-danger-light)', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>
-          <i className="ti ti-alert-triangle text-lg shrink-0 mt-0.5" />
-          <div>
+        <div ref={orderErrorRef} role="alert" className="p-4 rounded-[var(--brand-radius)] border text-sm flex items-start gap-3" style={{ background: 'var(--color-danger-light)', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>
+          <i className="ti ti-alert-triangle text-lg shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="min-w-0">
             <p className="font-semibold mb-1">{t('checkout.cannot_place', 'Order cannot be placed')}</p>
-            <p>{orderError}</p>
+            <p className="break-words">{orderError}</p>
             {showPhoneFallback && fallbackPhone && (
               <a
                 href={`tel:${fallbackPhone}`}
                 data-testid="checkout-call-restaurant"
-                className="inline-flex items-center gap-2 mt-3 px-4 py-2 rounded-full font-semibold text-sm"
-                style={{ background: 'var(--brand-primary-strong)', color: '#fff', minHeight: 'var(--tap-min)' }}
+                className="inline-flex items-center gap-2 mt-3 px-4 py-2 rounded-full font-semibold text-sm transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+                style={{ background: 'var(--brand-primary-strong)', color: 'var(--brand-bg)', minHeight: 'var(--tap-min)' }}
               >
-                <i className="ti ti-phone" />
+                <i className="ti ti-phone" aria-hidden="true" />
                 {t('checkout.call_restaurant', 'Call the restaurant')}: {fallbackPhone}
               </a>
             )}
@@ -974,7 +1004,7 @@ export function CheckoutPage() {
           tenant isolation), and that identifying details are removed on request via
           the restaurant (anonymize-not-delete; no self-service button, no hard
           retention number the runtime can't yet positively prove). */}
-      <div data-testid="checkout-privacy-notice" className="px-4 py-3 rounded-xl border text-xs leading-relaxed" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-muted)' }}>
+      <div data-testid="checkout-privacy-notice" className="px-4 py-3 rounded-[var(--brand-radius)] border text-xs leading-relaxed" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
         <p className="font-semibold mb-1" style={{ color: 'var(--brand-text)' }}>
           <i className="ti ti-lock mr-1" />{t('checkout.privacy.title', 'Your data')}
         </p>
@@ -990,8 +1020,8 @@ export function CheckoutPage() {
           data-testid="order-confirm-button"
           disabled={placing || !locationId}
           whileTap={{ scale: (placing || !locationId) ? 1 : 0.97 }}
-          className="w-full h-14 rounded-full bg-[var(--brand-primary-strong)] text-[var(--brand-bg)] font-bold text-base shadow-xl transition-all active:scale-[0.97] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ minHeight: 'var(--tap-critical)' }}
+          className="w-full h-14 rounded-full bg-[var(--brand-primary-strong)] text-[var(--brand-bg)] font-bold text-base flex items-center justify-center gap-2 transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.97] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0"
+          style={{ minHeight: 'var(--tap-critical)', boxShadow: 'var(--elev-3)' }}
         >
           {placing ? (
             <span className="inline-flex items-center gap-2">
@@ -1024,9 +1054,9 @@ export function CheckoutPage() {
           style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)' }}
         >
           <motion.div
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+            initial={prefersReducedMotion ? { opacity: 0 } : { scale: 0.5, opacity: 0 }}
+            animate={prefersReducedMotion ? { opacity: 1 } : { scale: 1, opacity: 1 }}
+            transition={prefersReducedMotion ? { duration: 0.2 } : { type: 'spring', stiffness: 260, damping: 24 }}
             className="flex flex-col items-center gap-3"
           >
             <svg className="w-16 h-16 text-[var(--color-success)]" viewBox="0 0 24 24" fill="none">

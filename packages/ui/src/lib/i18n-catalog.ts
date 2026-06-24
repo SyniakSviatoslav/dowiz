@@ -3422,4 +3422,91 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Klientët mund të porosisin tani. Vazhdo ta përmirësosh te pamja paraprake.',
     uk: 'Клієнти вже можуть замовляти. Продовжуйте вдосконалювати у попередньому перегляді.',
   },
+  'client.no_results_hint': {
+    en: 'Try a different search or clear your filters to see the full menu.',
+    sq: 'Provo një kërkim tjetër ose pastro filtrat për të parë të gjithë menunë.',
+    uk: 'Спробуйте інший пошук або очистьте фільтри, щоб побачити все меню.',
+  },
+  'client.up_to': { en: 'up to', sq: 'deri në', uk: 'до' },
+  'checkout.empty_title': {
+    en: 'Your cart is empty',
+    sq: 'Shporta juaj është bosh',
+    uk: 'Ваш кошик порожній',
+  },
+  'checkout.empty_body': {
+    en: 'Add a few dishes to get started — your order will appear here.',
+    sq: 'Shtoni disa pjata për të filluar — porosia juaj do të shfaqet këtu.',
+    uk: "Додайте кілька страв, щоб почати — ваше замовлення з'явиться тут.",
+  },
+  'checkout.browse_menu': { en: 'Browse menu', sq: 'Shfleto menunë', uk: 'Переглянути меню' },
+  'checkout.order_nutrition': {
+    en: 'Order Nutrition',
+    sq: 'Vlerat ushqyese',
+    uk: 'Харчова цінність замовлення',
+  },
+  'order.msg_pending': {
+    en: 'Sending your order to the restaurant…',
+    sq: 'Po e dërgojmë porosinë te restoranti…',
+    uk: 'Надсилаємо ваше замовлення до ресторану…',
+  },
+  'order.msg_confirmed': {
+    en: 'The restaurant has your order.',
+    sq: 'Restoranti e ka porosinë tuaj.',
+    uk: 'Ресторан отримав ваше замовлення.',
+  },
+  'order.msg_preparing': {
+    en: 'Your food is being prepared.',
+    sq: 'Ushqimi juaj po përgatitet.',
+    uk: 'Ваша страва готується.',
+  },
+  'order.msg_ready': {
+    en: 'Your order is ready.',
+    sq: 'Porosia juaj është gati.',
+    uk: 'Ваше замовлення готове.',
+  },
+  'order.msg_in_delivery': {
+    en: 'Your courier is on the way.',
+    sq: 'Korrieri juaj është rrugës.',
+    uk: "Кур'єр уже в дорозі.",
+  },
+  'order.msg_delivered': {
+    en: 'Delivered — enjoy your meal!',
+    sq: 'U dorëzua — ju bëftë mirë!',
+    uk: 'Доставлено — смачного!',
+  },
+  'order.msg_rejected': {
+    en: "The restaurant couldn't take this order.",
+    sq: 'Restoranti nuk mundi ta pranojë këtë porosi.',
+    uk: 'Ресторан не зміг прийняти це замовлення.',
+  },
+  'order.msg_cancelled': {
+    en: 'This order was cancelled.',
+    sq: 'Kjo porosi u anulua.',
+    uk: 'Це замовлення скасовано.',
+  },
+  'order.loading': {
+    en: 'Loading your order',
+    sq: 'Po ngarkohet porosia juaj',
+    uk: 'Завантаження вашого замовлення',
+  },
+  'client.nutrition_estimate': { en: 'estimate only', sq: 'vetëm vlerësim', uk: 'лише оцінка' },
+  'client.nutrition_calories': { en: 'Calories', sq: 'Kalori', uk: 'Калорії' },
+  'client.nutrition_protein': { en: 'Protein', sq: 'Proteina', uk: 'Білки' },
+  'client.nutrition_fat': { en: 'Fat', sq: 'Yndyrë', uk: 'Жири' },
+  'client.nutrition_carbs': { en: 'Carbs', sq: 'Karbohidrate', uk: 'Вуглеводи' },
+  'order.sr_courier_delivering': {
+    en: '{{name}} is delivering your order.',
+    sq: '{{name}} po dorëzon porosinë tuaj.',
+    uk: '{{name}} доставляє ваше замовлення.',
+  },
+  'order.sr_courier_eta': {
+    en: 'Approximately {{min}} minutes away.',
+    sq: 'Rreth {{min}} minuta larg.',
+    uk: 'Приблизно за {{min}} хв.',
+  },
+  'order.sr_courier_dest': {
+    en: 'Delivering to {{addr}}.',
+    sq: 'Po dorëzohet te {{addr}}.',
+    uk: 'Доставка на {{addr}}.',
+  },
 };
