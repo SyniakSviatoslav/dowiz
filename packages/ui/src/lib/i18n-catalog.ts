@@ -3773,4 +3773,9 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: 'Швидко вийдіть онлайн',
   },
   'start.how_it_works': { en: 'How it works', sq: 'Si funksionon', uk: 'Як це працює' },
+  'start.drop_cta': {
+    en: 'Drop to upload',
+    sq: 'Lësho për të ngarkuar',
+    uk: 'Відпустіть, щоб завантажити',
+  },
 };
