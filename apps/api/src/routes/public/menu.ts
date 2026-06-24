@@ -62,6 +62,15 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
   const menuCache = new Map<string, MenuCacheEntry>();
   const menuInflight = new Map<string, Promise<any>>();
 
+  // /info shares the same starvation risk as /menu (a raw db.query on every storefront load):
+  // under a connection burst it waited connectionTimeoutMillis then 500'd → checkout breaks
+  // (locationId stays null). Cache the DB ROW (not the computed status) so the time-based
+  // open/closed/busy is always recomputed fresh from `now`, while the DB read is collapsed +
+  // protected by the same TTL / stale-on-error guard as the menu.
+  type InfoCacheEntry = { row: any; freshUntil: number; bornAt: number };
+  const infoCache = new Map<string, InfoCacheEntry>();
+  const infoInflight = new Map<string, Promise<any>>();
+
   // One DB load + shaping pass. Returns the fully-shaped payload (image URLs resolved,
   // location_id/name present) or null for an unknown location. Updates the cache on success.
   async function refreshMenu(key: string, slug: string, locale: string): Promise<any | null> {
@@ -168,22 +177,59 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
     }
   );
 
+  async function refreshInfoRow(slug: string): Promise<any | null> {
+    const res = await server.db.query(
+      `SELECT l.id, l.name, l.slug, l.currency_code, l.currency_minor_unit, l.default_locale,
+              l.lat, l.lng, l.delivery_paused, l.hours_json, l.address, l.kitchen_busy_until,
+              lt.google_rating, lt.google_review_count, lt.google_maps_url,
+              lt.google_place_id, lt.social_instagram, lt.social_facebook
+       FROM locations l
+       LEFT JOIN location_themes lt ON lt.location_id = l.id
+       WHERE l.slug = $1`,
+      [slug]
+    );
+    const row = res.rows[0] ?? null;
+    const now = Date.now();
+    if (!infoCache.has(slug) && infoCache.size >= MENU_CACHE_MAX_ENTRIES) {
+      const oldest = infoCache.keys().next().value;
+      if (oldest !== undefined) infoCache.delete(oldest);
+    }
+    // Cache the row (incl. a null result, so unknown slugs don't re-hit the DB on every probe).
+    infoCache.set(slug, { row, freshUntil: now + MENU_CACHE_TTL_MS, bornAt: now });
+    return row;
+  }
+
+  async function getInfoRow(slug: string): Promise<any | null> {
+    const cached = infoCache.get(slug);
+    if (cached && Date.now() < cached.freshUntil) return cached.row;
+    let inflight = infoInflight.get(slug);
+    if (!inflight) {
+      inflight = refreshInfoRow(slug).finally(() => infoInflight.delete(slug));
+      infoInflight.set(slug, inflight);
+    }
+    return inflight;
+  }
+
   server.get(
     '/public/locations/:slug/info',
     async (request, reply) => {
       const { slug } = request.params as any;
-      const res = await server.db.query(
-        `SELECT l.id, l.name, l.slug, l.currency_code, l.currency_minor_unit, l.default_locale,
-                l.lat, l.lng, l.delivery_paused, l.hours_json, l.address, l.kitchen_busy_until,
-                lt.google_rating, lt.google_review_count, lt.google_maps_url,
-                lt.google_place_id, lt.social_instagram, lt.social_facebook
-         FROM locations l
-         LEFT JOIN location_themes lt ON lt.location_id = l.id
-         WHERE l.slug = $1`,
-        [slug]
-      );
-      if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
-      const r = res.rows[0];
+      let r: any;
+      try {
+        r = await getInfoRow(slug);
+      } catch (err) {
+        // Pool/DB hiccup: serve a recent-enough cached row instead of 500 (which leaves the
+        // FE with no locationId → silent checkout failure). Bounded by the same stale window.
+        const stale = infoCache.get(slug);
+        if (stale && stale.row && Date.now() - stale.bornAt < MENU_STALE_ON_ERROR_MAX_MS) {
+          reply.header('X-Info-Cache', 'stale-on-error');
+          r = stale.row;
+        } else {
+          // No usable cache → a typed 503 (not a raw 500) so the FE can show "couldn't load".
+          return reply.status(503).send({ error: 'Temporarily unavailable' });
+        }
+      }
+      if (!r) return reply.status(404).send({ error: 'Not found' });
 
       // Compute isOpen from hours_json + delivery_paused
       let isOpen = !(r.delivery_paused ?? false);

@@ -132,8 +132,9 @@ export function EarningsPage() {
             </div>
 
             {payouts.length === 0 ? (
-              <div className="p-8">
-                <EmptyState title={t('courier.no_payouts', 'No payouts yet')} description={t('courier.no_payouts_desc', 'Your payouts will appear here once processed.')} />
+              <div className="flex flex-col items-center justify-center p-8 text-center">
+                <h3 className="mb-2 text-lg font-semibold text-[var(--brand-text)]">{t('courier.no_payouts', 'No payouts yet')}</h3>
+                <p className="text-sm text-[var(--brand-text-muted)] max-w-sm">{t('courier.no_payouts_desc', 'Your payouts will appear here once processed.')}</p>
               </div>
             ) : (
               <motion.div
