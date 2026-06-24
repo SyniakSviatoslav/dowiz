@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useReducedMotion } from 'framer-motion';
 
 interface AnimatedNumberProps {
   value: number;
@@ -9,11 +10,13 @@ interface AnimatedNumberProps {
 
 export function AnimatedNumber({ value, duration = 240, className = '', formatter }: AnimatedNumberProps) {
   const [display, setDisplay] = useState(value);
+  const reduceMotion = useReducedMotion();
   const rafRef = useRef<number>(0);
   const startRef = useRef<{ value: number; time: number }>({ value, time: Date.now() });
 
   useEffect(() => {
     if (value === display) return;
+    if (reduceMotion) { setDisplay(value); return; }
     startRef.current = { value: display, time: Date.now() };
 
     const animate = () => {
@@ -28,7 +31,11 @@ export function AnimatedNumber({ value, duration = 240, className = '', formatte
     };
     rafRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [value, duration]);
+  }, [value, duration, reduceMotion]);
 
-  return <span className={className}>{formatter ? formatter(display) : display}</span>;
+  return (
+    <span className={className} style={{ fontVariantNumeric: 'tabular-nums' }}>
+      {formatter ? formatter(display) : display}
+    </span>
+  );
 }

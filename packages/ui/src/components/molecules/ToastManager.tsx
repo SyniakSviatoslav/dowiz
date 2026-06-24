@@ -15,29 +15,30 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-const variantStyles: Record<ToastVariant, string> = {
-  success: 'bg-semantic-success text-white',
-  error: 'bg-semantic-danger text-white',
-  warning: 'bg-semantic-warning text-white',
-  info: 'bg-brand-primary text-[var(--brand-bg)]',
+const variantConfig: Record<ToastVariant, { bg: string; icon: string }> = {
+  success: { bg: 'var(--color-success)', icon: 'ti-circle-check' },
+  error: { bg: 'var(--color-danger)', icon: 'ti-alert-circle' },
+  warning: { bg: 'var(--color-warning)', icon: 'ti-alert-triangle' },
+  info: { bg: 'var(--brand-primary)', icon: 'ti-info-circle' },
 };
 
 function ToastItem({ toast, onDone }: { toast: Toast; onDone: (id: string) => void }) {
+  const config = variantConfig[toast.variant];
   return (
     <div
-      className={`${variantStyles[toast.variant]} px-4 py-3 rounded-lg shadow-elevation-3 text-sm font-medium animate-toast-in max-w-sm`}
+      className="flex items-center gap-2.5 px-4 py-3 rounded-[var(--brand-radius)] text-sm font-medium text-white max-w-sm animate-toast-in motion-reduce:animate-none"
       role="alert"
+      style={{ background: config.bg, boxShadow: 'var(--elev-3)' }}
     >
-      <div className="flex items-center gap-2">
-        <span className="flex-1">{toast.message}</span>
-        <button
-          onClick={() => onDone(toast.id)}
-          className="text-white/80 hover:text-white transition-colors shrink-0"
-          aria-label="Dismiss"
-        >
-          <i className="ti ti-x" />
-        </button>
-      </div>
+      <i className={`ti ${config.icon} shrink-0 text-base leading-none`} aria-hidden="true" />
+      <span className="flex-1 min-w-0">{toast.message}</span>
+      <button
+        onClick={() => onDone(toast.id)}
+        className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-white/80 hover:text-white hover:bg-white/15 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+        aria-label="Dismiss"
+      >
+        <i className="ti ti-x text-sm leading-none" aria-hidden="true" />
+      </button>
     </div>
   );
 }
