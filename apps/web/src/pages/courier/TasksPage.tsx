@@ -14,6 +14,9 @@ export function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  // Real shift state — the "Online" indicator must reflect this, not be a static lie.
+  // Mirrors ShiftPage's source of truth (GET /courier/me/shift → isActive).
+  const [onShift, setOnShift] = useState(false);
   const navigate = useNavigate();
   const { play: playPing } = useSound('/sounds/ping.mp3');
   const { t } = useI18n();
@@ -38,14 +41,26 @@ export function TasksPage() {
       const raw = data?.success && Array.isArray(data.assignments) ? data.assignments : [];
       setTasks(raw);
     } catch (err: any) {
-      setError('Failed to fetch tasks');
+      setError(t('courier.error_fetch_tasks', 'Failed to fetch tasks'));
     } finally {
       setLoading(false);
     }
   };
 
+  // Derive the real online status from shift state so the badge can't contradict
+  // the Shift tab. Best-effort: a failed read leaves the courier shown as offline.
+  const fetchShiftStatus = async () => {
+    try {
+      const data = await apiClient<any>('/courier/me/shift');
+      setOnShift(Boolean(data?.isActive));
+    } catch (err) {
+      setOnShift(false);
+    }
+  };
+
   useEffect(() => {
     fetchTasks();
+    fetchShiftStatus();
   }, []);
 
   // WebSocket: Listen for new assignments
@@ -100,10 +115,10 @@ export function TasksPage() {
         <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('courier.tasks_title', 'Tasks')}</h1>
         <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--brand-text-muted)' }}>
           <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--color-success)] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[var(--color-success)]"></span>
+            {onShift && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--color-success)] opacity-75"></span>}
+            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${onShift ? 'bg-[var(--color-success)]' : 'bg-[var(--brand-text-muted)]'}`}></span>
           </span>
-          <span className="text-xs">{t('courier.online_status', 'Online')}</span>
+          <span className="text-xs">{onShift ? t('courier.online_status', 'Online') : t('courier.offline', 'Offline')}</span>
         </div>
       </div>
 
