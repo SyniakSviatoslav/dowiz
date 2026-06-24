@@ -3720,4 +3720,9 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Trokitni një përgjigje të shpejtë më poshtë për të nisur bisedën.',
     uk: 'Торкніться швидкої відповіді нижче, щоб почати розмову.',
   },
+  'checkout.pickup_addr_tbd': {
+    en: 'Address shown after the restaurant confirms.',
+    sq: 'Adresa shfaqet pasi restoranti konfirmon.',
+    uk: 'Адресу буде показано після підтвердження рестораном.',
+  },
 };

@@ -184,6 +184,11 @@
   --z-modal-backdrop: 300;
   --z-modal: 400;
   --z-toast: 500;
+
+  /* ── Data-viz series (nutrition macros, charts) — categorical, brand-independent ── */
+  --chart-protein: #3b82f6; /* blue */
+  --chart-carbs:   #22c55e; /* green */
+  --chart-fat:     #f59e0b; /* amber */
 }
 
 /* ── Theme Presets ── */

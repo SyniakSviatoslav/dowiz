@@ -88,9 +88,9 @@ function NutritionRing({ kcal, protein, fat, carbs }: { kcal: number; protein: n
   const prefersReducedMotion = useReducedMotion();
   const CX = 52, R = 38, SW = 10;
   const macros: MacroData[] = [
-    { label: t('nutrition.protein', 'Protein'), grams: protein, color: '#3b82f6', kcalPer: 4 },
-    { label: t('nutrition.carbs', 'Carbs'),     grams: carbs,   color: '#22c55e', kcalPer: 4 },
-    { label: t('nutrition.fat', 'Fat'),         grams: fat,     color: '#f59e0b', kcalPer: 9 },
+    { label: t('nutrition.protein', 'Protein'), grams: protein, color: 'var(--chart-protein)', kcalPer: 4 },
+    { label: t('nutrition.carbs', 'Carbs'),     grams: carbs,   color: 'var(--chart-carbs)',   kcalPer: 4 },
+    { label: t('nutrition.fat', 'Fat'),         grams: fat,     color: 'var(--chart-fat)',     kcalPer: 9 },
   ];
   const totalEnergy = macros.reduce((s, m) => s + m.grams * m.kcalPer, 0);
   let cumulative = 0;
@@ -215,6 +215,9 @@ export function CheckoutPage() {
   };
   const [pinLocation, setPinLocation] = useState<LngLatLike | null>(null);
   const [locationId, setLocationId] = useState<string | null>(null);
+  // Pickup card shows the REAL venue (name + address) from /info — never a hardcoded address.
+  const [pickupName, setPickupName] = useState('');
+  const [pickupAddress, setPickupAddress] = useState('');
   // BUG-1: when /info fails, locationId stays null and every Place-Order submit is a
   // silent no-op behind an active-looking button. Track the failure so we can DISABLE
   // the button and show a humane, retryable message instead of failing silently.
@@ -260,6 +263,8 @@ export function CheckoutPage() {
         if (!info?.id) throw new Error('info: missing id');
         setLocationLoadFailed(false);
         setLocationId(info.id);
+        if (info.name) setPickupName(info.name);
+        if (info.address) setPickupAddress(info.address);
         if (info.currency_code) setCurrencyCode(info.currency_code);
         if (info.lng && info.lat) setLocationCenter([info.lng, info.lat]);
         if (info.address) {
@@ -776,7 +781,10 @@ export function CheckoutPage() {
             <div className="space-y-4">
               <div className="border rounded-[var(--brand-radius)] p-4" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
                 <h3 className="text-[14px] font-bold mb-1" style={{ color: 'var(--brand-text)' }}>{t('courier.pickup')}</h3>
-                <p className="text-[14px] mb-4" style={{ color: 'var(--brand-text-muted)' }}>Dubin & Sushi, Rruga Sami Frasheri 12, Tirana</p>
+                <p className="text-[14px] mb-4" style={{ color: 'var(--brand-text-muted)' }}>
+                  {pickupName && <span className="block font-semibold" style={{ color: 'var(--brand-text)' }}>{pickupName}</span>}
+                  {pickupAddress || t('checkout.pickup_addr_tbd', 'Address shown after the restaurant confirms.')}
+                </p>
                 <div className="w-full h-[120px] rounded-[var(--brand-radius-sm)] relative overflow-hidden border flex items-center justify-center" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)' }}>
                   <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(var(--brand-border) 1px, transparent 1px), linear-gradient(90deg, var(--brand-border) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
                   <i className="ti ti-building-store text-3xl relative z-10" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
