@@ -2,8 +2,13 @@ import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../../lib/I18nProvider.js';
 
-// Soft easing matched to --ease-out cubic-bezier(0.16, 1, 0.3, 1): expo-out, no bounce.
+// Easing matched to --ease-out cubic-bezier(0.16, 1, 0.3, 1): expo-out, no bounce.
+// Used for one-shot advances (connector width, dot fill, check pop) — entering motion.
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
+// Easing matched to --ease-soft cubic-bezier(0.4, 0, 0.2, 1): gentle, symmetric.
+// Used for the continuous "you are here" breath, so it reads as a calm loop (and
+// matches LiveDot's halo) rather than the punchy expo curve meant for one-shots.
+const EASE_SOFT: [number, number, number, number] = [0.4, 0, 0.2, 1];
 
 // ORDER-TRACKING: honest stepper for the real 10-state order machine.
 //
@@ -163,7 +168,7 @@ export function OrderProgress(props: OrderProgressProps) {
                     className="absolute w-4 h-4 rounded-full"
                     style={{ background: accent }}
                     animate={{ scale: [1, 1.9], opacity: [0.4, 0] }}
-                    transition={{ duration: 1.8, repeat: Infinity, ease: EASE_OUT, repeatDelay: 0.2 }}
+                    transition={{ duration: 1.8, repeat: Infinity, ease: EASE_SOFT, repeatDelay: 0.2 }}
                   />
                 )}
                 <motion.span
