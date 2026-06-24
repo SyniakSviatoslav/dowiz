@@ -78,7 +78,7 @@ function App() {
 
 function NotFound() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6 text-center" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }}>
+    <div data-skin="paper" className="min-h-screen flex flex-col items-center justify-center gap-4 px-6 text-center" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }}>
       <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-1" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-primary)' }}>
         <i className="ti ti-map-search text-3xl" aria-hidden="true" />
       </div>
