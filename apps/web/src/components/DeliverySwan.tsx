@@ -58,7 +58,9 @@ export function DeliverySwan() {
 }
 
 const DSWAN_CSS = `
-.dz-dswan{position:absolute;inset:0;pointer-events:none;z-index:2;overflow:hidden}
+/* z-index:4 clears the ArtNouveauFrame's internal content layer (z-index:3) so the
+   swan composites ABOVE the WebGL canvas; pointer-events:none keeps canvas drag alive. */
+.dz-dswan{position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden}
 .dz-dswan-fly{position:absolute;top:4%;left:3%;width:52%;max-width:220px}
 .dz-dswan-svg{width:100%;height:auto;display:block;overflow:visible}
 
