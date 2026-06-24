@@ -54,6 +54,19 @@ function prefersReducedMotion(): boolean {
   }
 }
 
+// Perf budget: don't pull the ~189KB-gzip three chunk on data-saver or slow links —
+// fall back to the lightweight SVG hero instead. (Network Information API; absent → render.)
+function saveDataOrSlow(): boolean {
+  try {
+    const conn = (navigator as unknown as { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+    if (!conn) return false;
+    if (conn.saveData) return true;
+    return typeof conn.effectiveType === 'string' && /(^|-)2g$/.test(conn.effectiveType);
+  } catch {
+    return false;
+  }
+}
+
 export interface PaperSceneProps {
   /** Rendered for SSR / no-WebGL / reduced-motion / any runtime error. */
   fallback: React.ReactNode;
@@ -67,7 +80,7 @@ export default function PaperScene({ fallback, className }: PaperSceneProps) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (prefersReducedMotion() || !webglAvailable()) {
+    if (prefersReducedMotion() || !webglAvailable() || saveDataOrSlow()) {
       setUseFallback(true);
       return;
     }
