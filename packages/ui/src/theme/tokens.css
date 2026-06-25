@@ -172,11 +172,15 @@
   --radius-2xl: 24px;
   --radius-full: 9999px;
 
-  /* ── Elevation shadows ── */
-  --elevation-1: 0 1px 3px rgba(0, 0, 0, 0.12);
-  --elevation-2: 0 4px 12px rgba(0, 0, 0, 0.15);
-  --elevation-3: 0 8px 24px rgba(0, 0, 0, 0.18);
-  --elevation-4: 0 16px 48px rgba(0, 0, 0, 0.22);
+  /* ── Elevation shadows ──
+     DEPRECATED legacy scale: these were heavier than the canonical soft `--elev-*` and produced
+     visibly different shadow weights for the "same" card across screens. Aliased to `--elev-*` so
+     every legacy `shadow-elevation-N` / `var(--elevation-N)` call-site now renders the soft
+     canonical shadow (zero churn, one source of truth). Prefer `--elev-*` in new code. */
+  --elevation-1: var(--elev-1);
+  --elevation-2: var(--elev-2);
+  --elevation-3: var(--elev-3);
+  --elevation-4: var(--elev-4);
 
   /* ── Z-index layers ── */
   --z-dropdown: 100;
