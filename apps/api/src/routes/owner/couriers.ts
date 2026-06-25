@@ -6,6 +6,7 @@ import argon2 from 'argon2';
 import { verifyAuth, requireLocationAccess } from '../../plugins/auth.js';
 import { decryptPII } from '../../lib/pii-cipher.js';
 import { maskStr } from '../../lib/pii-mask.js';
+import { SYNTHETIC_COURIER_EMAIL_HASH } from '../../lib/synthetic-courier.js';
 
 export default (async function ownerCourierRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
@@ -31,8 +32,9 @@ export default (async function ownerCourierRoutes(fastify: any, opts: any) {
                 (SELECT ROUND(AVG(orr.rating)::numeric, 2) FROM order_ratings orr WHERE orr.courier_id = c.id AND orr.location_id = $1) as avg_rating
          FROM couriers c
          JOIN courier_locations cl ON c.id = cl.courier_id
-         WHERE cl.location_id = $1`,
-        [locationId]
+         WHERE cl.location_id = $1
+           AND c.email_hash <> $2`,
+        [locationId, SYNTHETIC_COURIER_EMAIL_HASH]
       );
 
       const couriers = res.rows.map((row: any) => {

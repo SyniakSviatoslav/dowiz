@@ -29,14 +29,12 @@ test('capture courier delivery + tracking (390px)', async ({ page, request }) =>
   const locationId = seed.open.locationId;
   const slug = seed.open.slug;
 
-  // 2. Fresh courier token (random courierId) bound to the seeded venue.
-  const cRes = await request.post(`${BASE}/dev/mock-auth`, { headers: hdr, data: { role: 'courier', locationId } });
+  // 2. Token for the SYNTHETIC seeded courier — mock-auth re-derives that one fixture by its sentinel
+  //    email-hash (it never accepts a caller-supplied courierId). The seed already created an encrypted
+  //    courier + shift + assignment for the seeded order, so the live delivery view renders.
+  const cRes = await request.post(`${BASE}/dev/mock-auth`, { headers: hdr, data: { role: 'courier', synthetic: true, locationId } });
   const courier = await cRes.json();
-
-  // 3. Assign the seeded order to THIS courier so the delivery view renders. The delivery route
-  //    param is the ASSIGNMENT id (DeliveryPage fetches /courier/assignments/:id), not the order id.
-  const asgnRes = await request.post(`${BASE}/dev/create-assignment`, { headers: hdr, data: { orderId, courierId: courier.userId, locationId } });
-  const { assignmentId } = await asgnRes.json();
+  const assignmentId = seed.syntheticAssignmentId;
 
   const shot = async (name: string, token: string | undefined, path: string) => {
     await page.addInitScript((tk: any) => { if (tk) localStorage.setItem('dos_access_token', tk); else localStorage.removeItem('dos_access_token'); localStorage.setItem('dos_locale', 'sq'); }, token);

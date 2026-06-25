@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { signAuthToken, signDevToken } from '@deliveryos/platform';
 import { loadEnv } from '@deliveryos/config';
 import { devLoginAllowed } from '../../plugins/dev-guard.js';
+import { rejectReservedTld } from '../../lib/synthetic-courier.js';
 
 /** Constant-time string compare; false on any length mismatch (never throws). */
 function timingSafeStrEqual(a: string, b: string): boolean {
@@ -38,7 +39,7 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     schema: {
       body: z.object({
-        email: z.string().email().max(200),
+        email: z.string().email().max(200).refine(rejectReservedTld[0], rejectReservedTld[1]),
         password: z.string().min(1).max(200),
       }),
     },

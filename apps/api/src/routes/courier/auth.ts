@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import { encryptPII } from '../../lib/pii-cipher.js';
 import { signAuthToken } from '@deliveryos/platform';
 import { maskStr } from '../../lib/pii-mask.js';
+import { rejectReservedTld } from '../../lib/synthetic-courier.js';
 
 export default (async function courierAuthRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
@@ -31,7 +32,7 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
     
     // Manual Zod parsing to avoid AJV compilation failures
     const bodySchema = z.object({
-      email: z.string().email().transform(e => e.toLowerCase().trim()),
+      email: z.string().email().refine(rejectReservedTld[0], rejectReservedTld[1]).transform(e => e.toLowerCase().trim()),
       code: z.string().min(1),
       password: z.string().min(12),
       full_name: z.string().min(1),

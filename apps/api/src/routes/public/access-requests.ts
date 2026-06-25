@@ -3,6 +3,7 @@ import { z } from 'zod';
 import crypto from 'node:crypto';
 import { loadEnv } from '@deliveryos/config';
 import { QUEUE_NAMES } from '../../lib/registry.js';
+import { rejectReservedTld } from '../../lib/synthetic-courier.js';
 
 // POST /api/access-requests — public "register interest" capture (ADR-soft-access-gate).
 // This route is ONLY registered when ACCESS_GATE_PUBLIC_ENABLED=true (server.ts); while
@@ -53,7 +54,11 @@ const ControlFields = z.object({
   locale: z.string().max(8).optional(),
 });
 // Email is parsed SEPARATELY and leniently (never gated) so email-existence stays un-enumerated.
-const emailSchema = z.string().email().max(320);
+// The reserved-TLD reject (.test/.example/.invalid/.localhost — registration-namespace hygiene,
+// constraint #4) chains here: a reserved-TLD email simply fails the parse and takes the SAME
+// silent uniform-200 honeypot no-op path below (no INSERT, byte-identical reply), so the
+// anti-enumeration invariant (R3-3b) is preserved — NOT a 400.
+const emailSchema = z.string().email().max(320).refine(rejectReservedTld[0], rejectReservedTld[1]);
 
 // A cheap DB round-trip to keep the no-op (honeypot / no-consent / bad-email) path's
 // latency in the same ballpark as a real INSERT — blunts a fast-reject timing oracle.

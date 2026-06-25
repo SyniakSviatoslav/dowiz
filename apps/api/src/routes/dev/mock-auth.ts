@@ -2,6 +2,12 @@ import type { FastifyInstance } from 'fastify';
 import { signDevToken } from '@deliveryos/platform';
 import crypto from 'node:crypto';
 import { dashboardChannel } from '../../lib/registry.js';
+import { encryptPII } from '../../lib/pii-cipher.js';
+import argon2 from 'argon2';
+import {
+  SYNTHETIC_COURIER_EMAIL_HASH,
+  SYNTHETIC_COURIER_DISPLAY_NAME,
+} from '../../lib/synthetic-courier.js';
 
 export default async function mockAuthRoutes(fastify: FastifyInstance) {
   console.log('[API] Registering mockAuthRoutes: /dev/mock-auth');
@@ -10,6 +16,45 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
     const role = body.role === 'courier' ? 'courier' : 'owner';
 
     if (role === 'courier') {
+      // SYNTHETIC-ONLY RE-DERIVED MINT (constraint #1 / resolution NEW-M1, L1):
+      // when — and only when — the caller explicitly asks for synthetic:true, mint a token for
+      // the ONE seeded synthetic courier. The id is RE-DERIVED server-side by SELECTing on the
+      // sentinel email_hash — it reads NO caller-supplied courierId, so the "impersonate any
+      // courier" capability is reduced to "impersonate the one synthetic fixture" by
+      // construction (not by a guard — the echo-back/equality-check variant is deliberately
+      // NOT used; it would re-create the dev-login-backdoor shape). Any other input → the
+      // existing random-uuid behaviour below, unchanged.
+      if (body.synthetic === true) {
+        const cRes = await (fastify as any).db.query(
+          `SELECT c.id, cl.location_id
+             FROM couriers c
+             JOIN courier_locations cl ON cl.courier_id = c.id
+            WHERE c.email_hash = $1
+            ORDER BY cl.added_at ASC
+            LIMIT 1`,
+          [SYNTHETIC_COURIER_EMAIL_HASH],
+        );
+        if (cRes.rowCount === 0) {
+          return reply.status(409).send({
+            error: 'synthetic courier not seeded — run /dev/seed-visual-state first',
+            code: 'SYNTHETIC_COURIER_MISSING',
+          });
+        }
+        const syntheticId = cRes.rows[0].id as string;
+        const syntheticLocationId = cRes.rows[0].location_id as string;
+        const accessToken = await signDevToken({
+          role: 'courier',
+          sub: syntheticId,
+          activeLocationId: syntheticLocationId,
+        } as any, '1d');
+        return reply.send({
+          access_token: accessToken,
+          userId: syntheticId,
+          activeLocationId: syntheticLocationId,
+          synthetic: true,
+        });
+      }
+
       const locationId = (body.locationId as string) || '1f609add-062a-4bb5-89bf-d695f963ede6';
       const courierId = crypto.randomUUID();
 
@@ -416,7 +461,108 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
       );
     }
 
-    // 7. Return the contract shape verbatim (VisualFixtures).
+    // 7. SYNTHETIC COURIER + SHIFT + ASSIGNMENT (Item 3, council-hardened) so the live courier
+    //    active-delivery view (/courier/delivery/:assignmentId) renders against a REAL encrypted
+    //    courier + shift + assignment — impersonatable ONLY as this one identity via
+    //    /dev/mock-auth (role:'courier', synthetic:true; the id is re-derived from the sentinel
+    //    hash, never caller input).
+    //
+    //    email_hash is the NAMESPACED NON-EMAIL sentinel (SYNTHETIC_COURIER_EMAIL_HASH =
+    //    sha256('synthetic:visual-net-courier:v1')) — no z.string().email() input can produce it,
+    //    so ON CONFLICT (email_hash) DO UPDATE provably touches ONLY this row (never resurrects a
+    //    real courier). PII is synthetic constants only, encrypted with the app's real crypto
+    //    (encryptPII / argon2), matching courier/auth.ts's canonical email_hash/encrypt/insert flow.
+    //
+    //    Idempotency (constraint #2): couriers UPSERT on email_hash; courier_locations ON CONFLICT;
+    //    courier_shifts (no natural key) insert-fresh-then-delete-stale scoped to (synthetic
+    //    courier, open venue) — ordered so the assignment is re-pointed off the old shift before
+    //    that shift is deleted (FK-safe); courier_assignments ON CONFLICT (order_id) (UNIQUE) on
+    //    the seed's own order. Re-running never duplicates and never 500s on a unique/FK constraint.
+    const SYNTH_FULL_NAME = SYNTHETIC_COURIER_DISPLAY_NAME; // "Visual Net Courier" (Counsel A4)
+    const synthEmailEncrypted = encryptPII('synthetic+visual-net-courier@invalid'); // never parsed; PII at rest only
+    const synthFullNameEncrypted = encryptPII(SYNTH_FULL_NAME);
+    // A fixed argon2 hash of a constant throwaway password — never used to log in (mint is
+    // re-derived, not password-authed) but password_hash is NOT NULL on couriers.
+    const synthPasswordHash = await argon2.hash('synthetic-visual-net-courier-pw', {
+      type: argon2.argon2id, memoryCost: 65536, timeCost: 3, parallelism: 4,
+    });
+
+    // couriers has NO RLS → plain pool query. UPSERT on the sentinel email_hash.
+    const synthCourierRes = await db.query(
+      `INSERT INTO couriers (email_encrypted, email_hash, full_name_encrypted, password_hash, status)
+         VALUES ($1, $2, $3, $4, 'active')
+       ON CONFLICT (email_hash) DO UPDATE SET full_name_encrypted = EXCLUDED.full_name_encrypted, status = 'active'
+       RETURNING id`,
+      [synthEmailEncrypted, SYNTHETIC_COURIER_EMAIL_HASH, synthFullNameEncrypted, synthPasswordHash],
+    );
+    const syntheticCourierId = synthCourierRes.rows[0].id as string;
+
+    // courier_locations / courier_shifts / courier_assignments are FORCE RLS → tenant-scoped txn,
+    // exactly like /dev/create-assignment above (set app.current_tenant + app.user_id on the OPEN
+    // venue). app.user_id = the seeded owner so audit/insert policies that read it are satisfied.
+    let syntheticAssignmentId: string;
+    const synthClient = await db.connect();
+    try {
+      await synthClient.query('BEGIN');
+      await synthClient.query(`SELECT set_config('app.current_tenant', $1, true)`, [openId]);
+      await synthClient.query(`SELECT set_config('app.user_id', $1, true)`, [ownerId]);
+
+      // Membership (role courier) on the OPEN venue.
+      await synthClient.query(
+        `INSERT INTO courier_locations (courier_id, location_id, role, added_by_owner_id)
+           VALUES ($1, $2, 'courier', $3)
+         ON CONFLICT (courier_id, location_id) DO NOTHING`,
+        [syntheticCourierId, openId, ownerId],
+      );
+
+      // Shift (status 'available' — the proven pre-pickup state, M3). No natural key, so for
+      // idempotency we INSERT the fresh shift FIRST, re-point the assignment onto it, and only
+      // THEN delete any stale shift(s) from a prior run. Ordering matters: courier_assignments
+      // .shift_id REFERENCES courier_shifts(id) with NO ON DELETE cascade (NO ACTION/restrict),
+      // so deleting the old shift while a prior-run assignment still references it would raise an
+      // FK violation. Re-pointing the assignment first frees the old shift for deletion.
+      const synthShiftRes = await synthClient.query(
+        `INSERT INTO courier_shifts (courier_id, location_id, status, started_at, last_heartbeat_at)
+           VALUES ($1, $2, 'available', now(), now())
+         RETURNING id`,
+        [syntheticCourierId, openId],
+      );
+      const synthShiftId = synthShiftRes.rows[0].id as string;
+
+      // Assignment (status 'assigned') for the seed's own order. UNIQUE (order_id) → ON CONFLICT
+      // re-points to the synthetic courier + NEW shift on re-run (the seed owns this order,
+      // L3-bounded). This also detaches the prior-run assignment from the old shift below.
+      const synthAsgnRes = await synthClient.query(
+        `INSERT INTO courier_assignments (order_id, courier_id, location_id, shift_id, status)
+           VALUES ($1, $2, $3, $4, 'assigned')
+         ON CONFLICT (order_id) DO UPDATE SET
+           courier_id = EXCLUDED.courier_id,
+           shift_id = EXCLUDED.shift_id,
+           status = 'assigned'
+         RETURNING id`,
+        [orderId, syntheticCourierId, openId, synthShiftId],
+      );
+      syntheticAssignmentId = synthAsgnRes.rows[0].id as string;
+
+      // Now delete any STALE shift(s) for this synthetic courier+venue (i.e. a prior run's shift,
+      // no longer referenced by the just-re-pointed assignment). Scoped to the synthetic courier
+      // only and excluding the shift we just created → re-runs converge to exactly one shift, and
+      // the FK is never violated because nothing references the old shift any more.
+      await synthClient.query(
+        `DELETE FROM courier_shifts WHERE courier_id = $1 AND location_id = $2 AND id <> $3`,
+        [syntheticCourierId, openId, synthShiftId],
+      );
+
+      await synthClient.query('COMMIT');
+    } catch (err) {
+      await synthClient.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      synthClient.release();
+    }
+
+    // 8. Return the contract shape verbatim (VisualFixtures) + the synthetic-courier handles so
+    //    the capture harness can mint synthetic:true and hit /courier/delivery/:assignmentId.
     return reply.send({
       open: { slug: 'vis-open', locationId: openId },
       closed: { slug: 'vis-closed', locationId: closedId },
@@ -424,6 +570,9 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
       stoplistProductId,
       orderId,
       courierId: VIS_COURIER_ID,
+      syntheticCourierId,
+      syntheticAssignmentId,
+      syntheticCourier: true,
     });
   };
 
