@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button, useI18n } from '@deliveryos/ui';
+import { Button, Select, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 import { AssignCourierResponse, ProductResponse } from '@deliveryos/shared-types';
@@ -269,27 +269,24 @@ export function FlowTestPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-xl border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
         <div>
           <label className="text-step-2xs font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('flow_test.location', 'Location')}</label>
-          <select value={locationId} onChange={e => setLocationId(e.target.value)}
-            className="w-full text-sm rounded-lg px-3 py-2 border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+          <Select value={locationId} onChange={e => setLocationId(e.target.value)}>
             {locations.length === 0 && <option value="">{t('common.loading', 'Loading...')}</option>}
             {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
+          </Select>
         </div>
         <div>
           <label className="text-step-2xs font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('flow_test.product', 'Product')}</label>
-          <select value={productId} onChange={e => setProductId(e.target.value)}
-            className="w-full text-sm rounded-lg px-3 py-2 border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+          <Select value={productId} onChange={e => setProductId(e.target.value)}>
             {products.length === 0 && <option value="">{t('common.loading', 'Loading...')}</option>}
             {products.map(p => <option key={p.id} value={p.id}>{p.name} — {p.price}</option>)}
-          </select>
+          </Select>
         </div>
         <div>
           <label className="text-step-2xs font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('flow_test.courier', 'Courier')}</label>
-          <select value={courierId} onChange={e => setCourierId(e.target.value)}
-            className="w-full text-sm rounded-lg px-3 py-2 border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+          <Select value={courierId} onChange={e => setCourierId(e.target.value)}>
             {couriers.length === 0 && <option value="">{t('flow_test.none_available', 'None available')}</option>}
             {couriers.map(c => <option key={c.id} value={c.id}>{c.full_name || c.name} ({c.status})</option>)}
-          </select>
+          </Select>
         </div>
       </div>
 

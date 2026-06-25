@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Button, Input, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle, useToast, staggerChildren, cardEntry } from '@deliveryos/ui';
+import { Button, Input, Select, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle, useToast, staggerChildren, cardEntry } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 import { useMenuData, type Product, type Category } from '../../hooks/useMenuData.js';
@@ -168,11 +168,10 @@ function MenuScheduleEditor({ categories }: { categories: Category[] }) {
           <div className="flex flex-wrap items-end gap-2">
             <label className="text-step-2xs flex flex-col gap-1" style={{ color: 'var(--brand-text-muted)' }}>
               {t('admin.category', 'Category')}
-              <select value={targetCategory} onChange={e => setTargetCategory(e.target.value)}
-                className="h-9 rounded-lg px-2 text-sm border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+              <Select value={targetCategory} onChange={e => setTargetCategory(e.target.value)} aria-label={t('admin.category', 'Category')}>
                 <option value="">{t('admin.select_category', 'Select…')}</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              </Select>
             </label>
             <label className="text-step-2xs flex flex-col gap-1" style={{ color: 'var(--brand-text-muted)' }}>
               {t('admin.from', 'From')}

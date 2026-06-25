@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, EmptyState, SkeletonBase, useI18n, PriceDisplay, ease, duration } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, useI18n, PriceDisplay, ease, duration, Select } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 
@@ -272,15 +272,13 @@ export function ShiftPage() {
         <div className="text-sm font-semibold text-[var(--brand-text)]">{t('courier.messenger_title', 'Messenger for customers')}</div>
         <div className="text-xs text-[var(--brand-text-muted)]">{t('courier.messenger_hint', 'Optional — lets customers text you during an active delivery instead of calling.')}</div>
         <div className="flex gap-2">
-          <select value={msgKind} onChange={e => { setMsgKind(e.target.value); setMsgSaved(false); }} data-testid="courier-messenger-kind"
-            aria-label={t('courier.messenger_kind_label', 'Messenger app')}
-            className={`h-11 px-2 border rounded-[var(--brand-radius-sm)] text-sm transition-colors duration-150 ${focusRing}`}
-            style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+          <Select value={msgKind} onChange={e => { setMsgKind(e.target.value); setMsgSaved(false); }} data-testid="courier-messenger-kind"
+            aria-label={t('courier.messenger_kind_label', 'Messenger app')}>
             <option value="">—</option>
             <option value="telegram">Telegram</option>
             <option value="whatsapp">WhatsApp</option>
             <option value="viber">Viber</option>
-          </select>
+          </Select>
           <input value={msgHandle} onChange={e => { setMsgHandle(e.target.value); setMsgSaved(false); }} disabled={!msgKind}
             placeholder={msgKind === 'telegram' ? '@username' : '+355 6X XXX XXXX'} data-testid="courier-messenger-handle"
             aria-label={t('courier.messenger_handle_label', 'Your messenger handle')}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Button, EmptyState, SkeletonBase, useI18n, PriceDisplay, ease, duration } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, Select, useI18n, PriceDisplay, ease, duration } from '@deliveryos/ui';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/index.js';
@@ -181,16 +181,14 @@ export function CRMPage() {
               style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
             />
           </div>
-          <select
+          <Select
             value={sortKey}
             onChange={e => setSortKey(e.target.value as any)}
-            className="px-3 py-2 text-xs rounded-[var(--brand-radius)] border outline-none transition-[box-shadow,border-color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
-            style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
           >
             <option value="orders">{t('admin.most_orders', 'Most orders')}</option>
             <option value="ltv">{t('admin.highest_ltv', 'Highest LTV')}</option>
             <option value="name">{t('admin.name_az', 'Name A-Z')}</option>
-          </select>
+          </Select>
           <Button variant="secondary" size="sm" onClick={() => {
             const exportData = filtered.map(c => ({ name: c.name, phone: revealed[c.id] ? '***REDACTED***' : c.phone, orders: c.orders, ltv: c.ltv, lastOrder: c.lastOrder }));
             exportCSV(exportData, 'customers.csv');
