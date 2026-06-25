@@ -37,6 +37,7 @@ export { SunlightToggle } from './components/atoms/SunlightToggle.js';
 export { isSunlightOn, setSunlight, applySunlight } from './utils/sunlight.js';
 export { PriceDisplay } from './components/atoms/PriceDisplay.js';
 export { Select } from './components/atoms/Select.js';
+export { SearchInput } from './components/atoms/SearchInput.js';
 export { Textarea } from './components/atoms/Textarea.js';
 export { SegmentedControl } from './components/atoms/SegmentedControl.js';
 export type { SegmentOption } from './components/atoms/SegmentedControl.js';

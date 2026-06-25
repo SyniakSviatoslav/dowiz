@@ -1,6 +1,6 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import { useState, useEffect, useMemo } from 'react';
-import { Button, EmptyState, SkeletonBase, HintCard, useI18n, useConfirm, MobilePicker, useIsMobile, Select, SegmentedControl } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, HintCard, useI18n, useConfirm, MobilePicker, useIsMobile, Select, SegmentedControl, SearchInput } from '@deliveryos/ui';
 import { EU_ALLERGENS } from '@deliveryos/shared-types';
 
 type SupplyKind = 'food_ingredient' | 'condiment' | 'packaging' | 'utensil';
@@ -305,12 +305,7 @@ export function SupplyLibraryPage() {
       {adding && <SupplyForm onSave={handleSave} onCancel={() => setAdding(false)} />}
 
       <div className="flex gap-2">
-        <div className="relative flex-1 sm:flex-none sm:w-64">
-          <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--brand-text-muted)' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search')}
-            className="pl-9 pr-4 py-2 w-full rounded-lg border text-sm outline-none focus:border-[var(--brand-primary)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)] transition-[border-color,box-shadow] duration-150"
-            style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-        </div>
+        <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search')} containerClassName="flex-1 sm:flex-none sm:w-64" />
         <div className="relative">
           <button onClick={() => setSortOpen(true)} aria-label={t('admin.sort_supplies', 'Sort supplies')} aria-haspopup="menu" aria-expanded={sortOpen}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none transition-[background-color,box-shadow,transform] duration-150 [@media(hover:hover)]:hover:bg-[var(--brand-surface-raised)] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)]"
