@@ -40,3 +40,5 @@ Per-run learnings for the mobile (390px) polish loop. Append one block per run.
   Courier empty-state "void" = sparse page (content above the empty card), not a defect.
 - Report: loops/reports/mobile-polish-0.1.md. Rubric PASS/improved on all 8 items; remaining = documented
   low-value/UX deferrals. Loop effective; M1–M11 certification offered as a separate step.
+
+### CERTIFIED 2026-06-25 (loop-architect) — M1–M11 all PASS → v0.1 DRAFT promoted to v1.0 CERTIFIED (registry + card updated; report stamped).
