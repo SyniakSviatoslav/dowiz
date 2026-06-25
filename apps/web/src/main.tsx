@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { MotionConfig, AnimatePresence, motion } from 'framer-motion';
 import { ThemeProvider, TourProvider, I18nProvider, CurrencyProvider, ErrorBoundary, t, ease, duration } from '@deliveryos/ui';
+// Self-hosted Tabler icon webfont (was a jsdelivr CDN <link> in index.html). Vite bundles the CSS
+// + hashes/emits the woff2, so icons render offline / on blocked networks — no third-party CDN.
+import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import './index.css';
 
 import { LoginPage } from './pages/admin/LoginPage.js';
