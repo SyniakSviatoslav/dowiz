@@ -30,3 +30,13 @@ Per-run learnings for the mobile (390px) polish loop. Append one block per run.
   Also: `no-scrollbar` was used in components but NOT defined in CSS — now aliased.
 - DEFERRED to iter 2: CRM toolbar stack (search→full-width row), couriers "+ Shto Postier" → bottom
   FAB, tap-target ≥44px sweep (row icons ~36px), courier empty-state vertical-centering, lang→dropdown.
+
+### iteration 2 — DONE (commit 3f6f2204, deployed + verified on staging)
+- FIXED (verify-real): CRM toolbar search/sort/export → full-width stack on mobile (`flex-col sm:flex-row`);
+  tap targets — menu edit/delete + couriers modal-close → `w-11 h-11 sm:w-8 sm:h-8` (44px touch / 32px visual).
+- VERIFIED `m-admin-crm`: toolbar stacks full-width, search shows its placeholder (no longer an icon square).
+- **Lessons:** row chevrons (CRM/Couriers) are NOT separate small targets — the whole ~74px row is the
+  button (agent misread). Lang pills → dropdown REJECTED (1-tap quick-switch > 2-tap dropdown for 3 langs).
+  Courier empty-state "void" = sparse page (content above the empty card), not a defect.
+- Report: loops/reports/mobile-polish-0.1.md. Rubric PASS/improved on all 8 items; remaining = documented
+  low-value/UX deferrals. Loop effective; M1–M11 certification offered as a separate step.
