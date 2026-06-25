@@ -6,6 +6,7 @@ import { createOperationalPool } from '@deliveryos/db';
 import { RedisMessageBus, PgBossQueueProvider } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, ALL_QUEUES, CUSTOMER_PUSH_EVENTS, orderChannel, dashboardChannel } from './lib/registry.js';
 import { assertSchemaCurrent } from './lib/schema-guard.js';
+import { SYNTHETIC_COURIER_EMAIL_HASH } from './lib/synthetic-courier.js';
 import Redis from 'ioredis';
 import pg from 'pg';
 import { z, type ZodTypeAny } from 'zod';
@@ -653,6 +654,34 @@ fastify.register(mockAuthRoutes, { db: pool });
 
     // Courier role: simple JWT with real location UUID
     if (body.role === 'courier') {
+      // SYNTHETIC-ONLY RE-DERIVED MINT (constraint #1 / resolution NEW-M1, L1): mint for the ONE
+      // seeded synthetic courier ONLY on an explicit synthetic:true. The id is RE-DERIVED by
+      // SELECTing on the sentinel email_hash — NO caller-supplied courierId is read or echoed, so
+      // even on an open (staging) gate the capability is "impersonate the one synthetic fixture",
+      // never "impersonate any courier" (the dev-login-backdoor class). Any other input keeps the
+      // existing random-uuid behaviour below.
+      if (body.synthetic === true) {
+        const cRes = await pool.query(
+          `SELECT c.id, cl.location_id
+             FROM couriers c
+             JOIN courier_locations cl ON cl.courier_id = c.id
+            WHERE c.email_hash = $1
+            ORDER BY cl.added_at ASC
+            LIMIT 1`,
+          [SYNTHETIC_COURIER_EMAIL_HASH],
+        );
+        if (cRes.rowCount === 0) {
+          return reply.status(409).send({
+            error: 'synthetic courier not seeded — run /dev/seed-visual-state first',
+            code: 'SYNTHETIC_COURIER_MISSING',
+          });
+        }
+        const syntheticId = cRes.rows[0].id as string;
+        const syntheticLocationId = cRes.rows[0].location_id as string;
+        const accessToken = await signDevToken({ role: 'courier', sub: syntheticId, activeLocationId: syntheticLocationId } as any, '1d');
+        return reply.send({ access_token: accessToken, userId: syntheticId, activeLocationId: syntheticLocationId, synthetic: true });
+      }
+
       const courierId = crypto.randomUUID();
       const locRes = await pool.query(`SELECT id FROM locations WHERE slug = 'demo' LIMIT 1`);
       const locationId = locRes.rowCount > 0 ? locRes.rows[0].id : '1f609add-062a-4bb5-89bf-d695f963ede6';
