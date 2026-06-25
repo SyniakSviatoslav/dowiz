@@ -2,7 +2,7 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal, ease, duration, Select, Textarea } from '@deliveryos/ui';
+import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal, ease, duration, Select, Textarea, estimateOrderTotal, type OrderTotalConfig } from '@deliveryos/ui';
 import { CURRENCIES } from '@deliveryos/shared-types';
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_REGEX } from '@deliveryos/shared-types';
@@ -226,6 +226,10 @@ export function CheckoutPage() {
   const [notes, setNotes] = useState('');
   const [cashAmount, setCashAmount] = useState<number>(0);
   const [tipAmount, setTipAmount] = useState<number>(0); // UX-4 optional courier tip
+  // Delivery-fee inputs from /info → drives the client total MIRROR (ADR-0005). Defaults degrade
+  // safely: until /info loads (or for distance-tiered venues) the fee is "unknown" and we never
+  // pre-quote an exact total/cash figure — the server total + the cash-422 backstop are authoritative.
+  const [feeInputs, setFeeInputs] = useState<{ deliveryFeeFlat: number | null; freeDeliveryThreshold: number | null; minOrderValue: number | null; taxRate: number; priceIncludesTax: boolean; hasDistanceTiers: boolean } | null>(null);
   const [orderError, setOrderError] = useState('');
   const orderErrorRef = useRef<HTMLDivElement>(null);
   // On a submit failure the form scrolls to top; the error banner sits at the bottom and was
@@ -266,6 +270,14 @@ export function CheckoutPage() {
         if (info.name) setPickupName(info.name);
         if (info.address) setPickupAddress(info.address);
         if (info.currency_code) setCurrencyCode(info.currency_code);
+        setFeeInputs({
+          deliveryFeeFlat: info.deliveryFeeFlat ?? null,
+          freeDeliveryThreshold: info.freeDeliveryThreshold ?? null,
+          minOrderValue: info.minOrderValue ?? null,
+          taxRate: typeof info.taxRate === 'number' ? info.taxRate : 0,
+          priceIncludesTax: info.priceIncludesTax !== false,
+          hasDistanceTiers: info.hasDistanceTiers === true,
+        });
         if (info.lng && info.lat) setLocationCenter([info.lng, info.lat]);
         if (info.address) {
           const parts = info.address.split(',');
@@ -339,8 +351,28 @@ export function CheckoutPage() {
   }, [slug, phone, customerName, deliveryType, instructionOption, instructionCustom, cashAmount, entryPhotoKey, entryPhotoPreview, messengerKind, messengerHandle]);
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const deliveryFee = deliveryType === 'delivery' ? 200 : 0;
-  const total = subtotal + deliveryFee;
+  // Client total MIRROR of the server order math (ADR-0005, Approach M). For flat-fee/free/pickup
+  // venues this equals the server-charged total to the cent (proven by the parity guardrail); for
+  // distance-tiered venues (or before /info loads) feeKnown is false → we show "fee at checkout" and
+  // never pre-quote an exact cash figure. The server total + the cash-422 backstop stay authoritative.
+  const isPickup = deliveryType === 'pickup';
+  const estimateCfg: OrderTotalConfig = {
+    isPickup,
+    deliveryFeeFlat: feeInputs?.deliveryFeeFlat ?? null,
+    freeDeliveryThreshold: feeInputs?.freeDeliveryThreshold ?? null,
+    minOrderValue: feeInputs?.minOrderValue ?? null,
+    taxRate: feeInputs?.taxRate ?? 0,
+    priceIncludesTax: feeInputs?.priceIncludesTax ?? true,
+    // Until /info resolves we don't know the fee → treat as unknown (degrade), never a stale hardcode.
+    hasDistanceTiers: feeInputs ? feeInputs.hasDistanceTiers : true,
+  };
+  const estimate = estimateOrderTotal(subtotal, estimateCfg);
+  const feeKnown = estimate.feeKnown;
+  const deliveryFee = estimate.deliveryFee ?? 0;
+  const taxTotal = estimate.taxTotal;
+  // When the fee is known, `total` is authoritative-by-construction. When unknown, fall back to a
+  // lower-bound (subtotal+tax) used only for display; the cash-422 backstop catches any under-quote.
+  const total = estimate.total ?? subtotal + taxTotal;
 
   const hasNutrition = items.some((item: any) => (item as any).kcal != null);
   const nutritionTotal = items.reduce((acc, item: any) => ({
@@ -502,6 +534,13 @@ export function CheckoutPage() {
         const code = err?.data?.code;
         if (code === 'NOT_DELIVERABLE') {
           setOrderError(t('checkout.not_deliverable_error', 'This address is outside the delivery area. Try pickup or a different address.'));
+          return false;
+        }
+        // Door-handover-parity backstop (ADR-0005): the cash the customer pledged is below the
+        // server-authoritative total (e.g. a distance-tiered fee we couldn't pre-quote). Never let a
+        // wrong cash amount through — ask for the correct one rather than collect the wrong sum.
+        if (code === 'CASH_AMOUNT_TOO_LOW') {
+          setOrderError(t('checkout.cash_too_low_error', 'The cash amount is below the final total (including the delivery fee). Please increase it and try again.'));
           return false;
         }
         if (code === 'item_unavailable' || err?.data?.outcome === 'hard_block') {
@@ -918,7 +957,19 @@ export function CheckoutPage() {
             {deliveryType === 'delivery' && (
               <div className="flex justify-between items-baseline gap-3 text-step-sm">
                 <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.delivery_fee')}</span>
-                <span className="shrink-0 tabular-nums"><PriceDisplay amount={deliveryFee} /></span>
+                {feeKnown ? (
+                  <span className="shrink-0 tabular-nums"><PriceDisplay amount={deliveryFee} /></span>
+                ) : (
+                  // Distance-tiered venue — the fee depends on the delivery address and is finalised by
+                  // the server. We never invent a number we can't collect at the door (ADR-0005).
+                  <span className="shrink-0 text-step-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.fee_at_checkout', 'Calculated at checkout')}</span>
+                )}
+              </div>
+            )}
+            {taxTotal > 0 && (
+              <div className="flex justify-between items-baseline gap-3 text-step-sm">
+                <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.tax', 'Tax')}</span>
+                <span className="shrink-0 tabular-nums"><PriceDisplay amount={taxTotal} /></span>
               </div>
             )}
             {tipAmount > 0 && (
@@ -947,6 +998,11 @@ export function CheckoutPage() {
               <PriceDisplay amount={total} size="lg" />
             </motion.span>
           </div>
+          {deliveryType === 'delivery' && !feeKnown && (
+            <p className="text-step-xs mt-1 text-right" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('checkout.plus_delivery_fee', '+ delivery fee, calculated at checkout')}
+            </p>
+          )}
           {tipAmount > 0 && (
             <div className="flex justify-between items-center gap-3 text-step-sm mt-2" style={{ color: 'var(--brand-text-muted)' }} data-testid="checkout-cash-due">
               <span className="min-w-0 truncate">{t('checkout.cash_to_courier', 'Cash to courier (incl. tip)')}</span>
