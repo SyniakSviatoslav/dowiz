@@ -47,6 +47,26 @@ export class AnonymizerRetentionWorker {
         );
         console.log(`[AnonymizerRetention] Purged ${grantPurge.rowCount} expired track grants`);
 
+        // SENSOR-BUS §1.3: funnel_events 90-day retention sweep (ADR-0009). The funnel is the
+        // heaviest writer; bounded-batch DELETEs (LIMIT loop) keep it from lock-contending with live
+        // ingest (Breaker H4). Anonymous + advisory, so a straight age-based purge — no per-tenant
+        // policy. Best-effort: a sweep failure never blocks the rest of retention.
+        try {
+          let funnelPurged = 0;
+          for (let i = 0; i < 100; i++) {
+            const del = await client.query(
+              `DELETE FROM funnel_events
+                WHERE id IN (SELECT id FROM funnel_events WHERE created_at < now() - interval '90 days' LIMIT $1)`,
+              [BATCH_SIZE],
+            );
+            funnelPurged += del.rowCount ?? 0;
+            if ((del.rowCount ?? 0) < BATCH_SIZE) break;
+          }
+          if (funnelPurged > 0) console.log(`[AnonymizerRetention] Purged ${funnelPurged} funnel_events older than 90d`);
+        } catch (err) {
+          console.error('[AnonymizerRetention] funnel_events sweep failed (non-fatal):', err);
+        }
+
         const locationsRes = await client.query(`
           SELECT id, name, retention_days FROM locations
         `);

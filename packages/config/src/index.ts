@@ -51,6 +51,10 @@ const EnvSchema = z.object({
   // is byte-identical to today and product_media / primary_media_id are unread. The lazy
   // media endpoint + renderers (Phase 2) gate on this AND locations.plan='business'.
   MEDIA_RICH_ENABLED: z.enum(['true', 'false']).default('false'),
+  // SENSOR-BUS §1.3 funnel ingest kill-switch (ADR-0009). Default ON — the public ingest is
+  // non-blocking, per-IP rate-limited and best-effort, so capture is safe by default; this flag
+  // lets ops silence a misbehaving/abused funnel sensor WITHOUT a deploy (set 'false' as a secret).
+  FUNNEL_INGEST_ENABLED: z.enum(['true', 'false']).default('true'),
   // Menu-import LLM (ai-ocr-parser). OpenRouter is OpenAI-wire compatible; when its key is
   // set it serves PDF/image menu extraction. Without any provider the parser falls back to a
   // zero-dependency heuristic structurer. All optional — read via process.env in the parser.

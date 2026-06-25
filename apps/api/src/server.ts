@@ -28,6 +28,7 @@ import pwaRoutes from './routes/public/pwa.js';
 import vapidRoutes from './routes/public/vapid.js';
 import telemetryRoutes from './routes/public/telemetry.js';
 import accessRequestRoutes from './routes/public/access-requests.js';
+import funnelRoutes from './routes/public/funnel.js';
 import { AccessRequestNotifyWorker } from './workers/access-request-notify.js';
 import { AccessRequestRetentionWorker, assertAccessRequestSchedules } from './workers/access-request-retention.js';
 import ownerThemeRoutes from './routes/owner/themes.js';
@@ -595,6 +596,9 @@ const retryPolicy = new RetryPolicy();
   fastify.register(pwaRoutes, { db: pool });
   fastify.register(vapidRoutes);
   fastify.register(telemetryRoutes, { db: pool });
+  // SENSOR-BUS §1.3: anonymous storefront-funnel ingest. Always mounted; the FUNNEL_INGEST_ENABLED
+  // kill-switch is enforced inside (returns a uniform 204 when off) so it can be silenced without a deploy.
+  fastify.register(funnelRoutes, { db: pool });
   // R3-4 (STOP-1 reachable-surface gate): the access-request capture route is mounted
   // ONLY when the flag is on. While off, POST /api/access-requests 404s via
   // setNotFoundHandler — it is NOT publicly POST-able before invite-gating ships. The
