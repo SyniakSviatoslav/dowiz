@@ -268,6 +268,31 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         }
       }
 
+      // §4 (Breaker M5): the IP half of the phone+IP velocity throttle. clientIpHash was computed
+      // but never gated, so a phone-rotating attacker was bounded only per-phone. This caps orders
+      // to ONE location from ONE IP over the window — generously (legit shared-NAT rarely nears it)
+      // but enough to bound a phone-rotating flood. Same velocity_events table + ip index.
+      if (clientIpHash) {
+        const IP_THROTTLE_WINDOW_SECONDS = 900; // 15 minutes
+        const IP_THROTTLE_MAX_ORDERS = 20;       // per (location, IP) — well above any real shared NAT
+        const ipThrottleRes = await client.query(
+          `SELECT COUNT(*)::int AS cnt FROM velocity_events
+           WHERE location_id = $1 AND client_ip_hash = $2
+             AND kind = 'order_placed'
+             AND window_started_at > now() - ($3 || ' seconds')::interval`,
+          [locationId, clientIpHash, String(IP_THROTTLE_WINDOW_SECONDS)],
+        );
+        const recentIpOrders = ipThrottleRes.rows[0]?.cnt ?? 0;
+        if (recentIpOrders >= IP_THROTTLE_MAX_ORDERS) {
+          await client.query('ROLLBACK');
+          return reply.status(429).send({
+            error: 'Too many orders from this network. Please try again later.',
+            code: 'IP_THROTTLE',
+            retryAfterSeconds: IP_THROTTLE_WINDOW_SECONDS,
+          });
+        }
+      }
+
       const signals = await computeSignals(db, {
         locationId,
         phoneHash,
