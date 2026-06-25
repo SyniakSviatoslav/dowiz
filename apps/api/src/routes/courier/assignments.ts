@@ -5,6 +5,8 @@ import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { updateOrderStatus } from '../../lib/orderStatusService';
 import { getImageUrl } from '../../lib/image-url.js';
+import { distanceKm } from '../../lib/geo.js';
+import { ETA_DEFAULTS, deliveryLegMinutes } from '../../lib/etaService.js';
 
 const env = loadEnv();
 
@@ -288,9 +290,11 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
       const res = await client.query(`
-        SELECT ca.order_id, ca.shift_id, o.total 
+        SELECT ca.order_id, ca.shift_id, o.total,
+               o.delivery_lat, o.delivery_lng, l.lat AS loc_lat, l.lng AS loc_lng
         FROM courier_assignments ca
         JOIN orders o ON ca.order_id = o.id
+        JOIN locations l ON l.id = o.location_id
         WHERE ca.id = $1 AND ca.courier_id = $2 AND ca.status = 'picked_up' FOR UPDATE
       `, [id, courierId]);
 
@@ -300,6 +304,22 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       }
 
       const { order_id, shift_id, total } = res.rows[0];
+
+      // SENSOR-BUS §1.2: normalised delivery baseline — observed venue→customer road distance +
+      // expected leg minutes, NO router (brief §1.2). Pure haversine × road-factor on coords in-hand;
+      // null for pickup / missing pins. Written into the immutable delivery_trace audit below.
+      const dRow = res.rows[0];
+      const baselineKm = (dRow.delivery_lat != null && dRow.delivery_lng != null && dRow.loc_lat != null && dRow.loc_lng != null)
+        ? distanceKm(Number(dRow.loc_lat), Number(dRow.loc_lng), Number(dRow.delivery_lat), Number(dRow.delivery_lng)) * ETA_DEFAULTS.roadFactor
+        : null;
+      const routeDistanceM = baselineKm != null && Number.isFinite(baselineKm) ? Math.round(baselineKm * 1000) : null;
+      const legMin = deliveryLegMinutes(
+        dRow.loc_lat != null ? Number(dRow.loc_lat) : null,
+        dRow.loc_lng != null ? Number(dRow.loc_lng) : null,
+        dRow.delivery_lat != null ? Number(dRow.delivery_lat) : null,
+        dRow.delivery_lng != null ? Number(dRow.delivery_lng) : null,
+      );
+      const expectedDeliveryMin = legMin != null && Number.isFinite(legMin) ? Math.max(1, Math.round(legMin)) : null;
 
       if (cash_collected && cash_amount !== total) {
         await client.query('ROLLBACK');
@@ -319,12 +339,14 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       // Canonical path: update orders status + publish WS events (customer + owner)
       await updateOrderStatus(client, order_id, locationId, 'DELIVERED', { messageBus });
 
-      // Immutable delivery audit (one per order; idempotent).
+      // Immutable delivery audit (one per order; idempotent). §1.2: carries the normalised
+      // baseline (route_distance_m + expected_delivery_min); a re-fired DELIVERED is a no-op
+      // (DO NOTHING) so the first observed baseline is the immutable record.
       await client.query(`
-        INSERT INTO delivery_trace (order_id, location_id, courier_id, total, delivered_at)
-        VALUES ($1, $2, $3, $4, now())
+        INSERT INTO delivery_trace (order_id, location_id, courier_id, total, delivered_at, route_distance_m, expected_delivery_min)
+        VALUES ($1, $2, $3, $4, now(), $5, $6)
         ON CONFLICT (order_id) DO NOTHING
-      `, [order_id, locationId, courierId, total]);
+      `, [order_id, locationId, courierId, total, routeDistanceM, expectedDeliveryMin]);
 
       // Cash-collected → append a 'hold' audit row (NOT the settlement source of
       // truth; settlement_items remains authoritative). Idempotent per (order_id,type).
