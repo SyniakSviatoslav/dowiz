@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, Input, EmptyState, CourierLiveMap, useI18n, PriceDisplay, useToast, SkeletonBase, scalePress } from '@deliveryos/ui';
+import { Button, Input, Select, EmptyState, CourierLiveMap, useI18n, PriceDisplay, useToast, SkeletonBase, scalePress } from '@deliveryos/ui';
 import type { CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
@@ -249,12 +249,10 @@ export function CouriersPage() {
           </div>
           <div className="w-32">
             <label className="text-xs font-medium mb-1 block text-[var(--brand-text-muted)]">{t('admin.role', 'Role')}</label>
-            <select value={newCourierRole} onChange={e => setNewCourierRole(e.target.value)}
-              className="w-full h-10 px-3 rounded-lg border text-sm outline-none bg-[var(--brand-surface)]"
-              style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+            <Select value={newCourierRole} onChange={e => setNewCourierRole(e.target.value)}>
               <option value="courier">{t('admin.courier_role', 'Courier')}</option>
               <option value="dispatcher">{t('admin.dispatcher', 'Dispatcher')}</option>
-            </select>
+            </Select>
           </div>
           <Button onClick={handleAddCourier} variant="primary">{t('admin.send_invite', 'Send Invite')}</Button>
 

@@ -2,7 +2,7 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal, ease, duration } from '@deliveryos/ui';
+import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal, ease, duration, Select, Textarea } from '@deliveryos/ui';
 import { CURRENCIES } from '@deliveryos/shared-types';
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_REGEX } from '@deliveryos/shared-types';
@@ -646,13 +646,12 @@ export function CheckoutPage() {
             <div>
               <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.messenger', 'Messenger (optional)')}</label>
               <div className="flex gap-2">
-                <select value={messengerKind} onChange={e => setMessengerKind(e.target.value)} data-testid="checkout-messenger-kind"
-                  className="h-[48px] px-2 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                <Select value={messengerKind} onChange={e => setMessengerKind(e.target.value)} data-testid="checkout-messenger-kind">
                   <option value="">{t('checkout.messenger_none', '—')}</option>
                   <option value="telegram">Telegram</option>
                   <option value="whatsapp">WhatsApp</option>
                   <option value="viber">Viber</option>
-                </select>
+                </Select>
                 <input value={messengerHandle} onChange={e => setMessengerHandle(e.target.value)} disabled={!messengerKind}
                   required={!!messengerKind}
                   placeholder={messengerKind === 'telegram' ? '@username' : '+355 6X XXX XXXX'} data-testid="checkout-messenger-handle"
@@ -731,14 +730,13 @@ export function CheckoutPage() {
                 </label>
                 <div className="relative">
                   <i className="ti ti-map-2 absolute left-3 top-3 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                  <textarea
+                  <Textarea
                     required
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
                     rows={3}
                     placeholder={t('checkout.notes_placeholder', 'Describe how to find the exact place: floor, building color, nearby landmark, gate code...')}
-                    className="w-full pl-10 pr-3 pt-2.5 pb-2 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)] resize-none"
-                    style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
+                    className="pl-10"
                   />
                 </div>
               </div>

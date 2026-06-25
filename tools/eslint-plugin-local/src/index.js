@@ -133,6 +133,27 @@ export default {
     // intentional token brackets like text-[var(--brand-text)]). This one targets ONLY arbitrary
     // FONT SIZES — text-[10px] / text-[1.5rem] — which must use the type scale (text-step-2xs..3xl
     // → --text-* tokens). Zero violations after the Phase-B migration; error-level locks the win.
+    // Component-consolidation rail: in the React app, native <select>/<textarea> must use the shared
+    // design-system <Select>/<Textarea> (coherent padding/border/radius/focus). Enabled error-level
+    // ONLY for apps/web/src (the packages/ui atoms legitimately wrap the native elements). Zero
+    // violations after the consolidation migration → locks the win.
+    'no-raw-form-control': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'use the shared <Select>/<Textarea> instead of native <select>/<textarea>' },
+      },
+      create(context) {
+        const map = { select: 'Select', textarea: 'Textarea' };
+        return {
+          JSXOpeningElement(node) {
+            const name = node.name && node.name.type === 'JSXIdentifier' ? node.name.name : null;
+            if (name && map[name]) {
+              context.report({ node, message: `use the shared <${map[name]}> from @deliveryos/ui, not a native <${name}> (design-system consistency)` });
+            }
+          },
+        };
+      },
+    },
     'no-arbitrary-font-size': {
       meta: {
         type: 'problem',

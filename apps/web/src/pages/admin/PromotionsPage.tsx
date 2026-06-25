@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { Button, EmptyState, SkeletonBase, useI18n, useConfirm, Toggle, ease, duration } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, useI18n, useConfirm, Toggle, Select, Textarea, ease, duration } from '@deliveryos/ui';
 import { PromotionSchema, PromotionListResponse, CreatePromotionSchema } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
 import type { z } from 'zod';
@@ -123,13 +123,11 @@ function PromotionForm({
           </div>
           <div className="min-w-0">
             <label className={labelClass} style={{ color: 'var(--brand-text)' }}>{t('promotions.type', 'Type')} *</label>
-            <select value={form.type} onChange={e => set('type', e.target.value as any)}
-              className={inputClass}
-              style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+            <Select value={form.type} onChange={e => set('type', e.target.value as any)}>
               <option value="percentage">{t('promotions.percentage', 'Percentage')}</option>
               <option value="fixed">{t('promotions.fixed', 'Fixed amount')}</option>
               <option value="free_delivery">{t('promotions.free_delivery', 'Free delivery')}</option>
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -180,10 +178,8 @@ function PromotionForm({
 
         <div className="min-w-0">
           <label className={labelClass} style={{ color: 'var(--brand-text)' }}>{t('promotions.description', 'Description')}</label>
-          <textarea value={form.description ?? ''} onChange={e => set('description', e.target.value)} rows={3} maxLength={500}
-            placeholder={t('promotions.description_placeholder', 'e.g. Summer special - 20% off all sushi rolls')}
-            className="w-full px-3 py-2 rounded-[var(--brand-radius-sm)] border text-sm outline-none transition-[border-color,box-shadow] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-surface)] focus:border-[var(--brand-primary)] resize-none"
-            style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+          <Textarea value={form.description ?? ''} onChange={e => set('description', e.target.value)} rows={3} maxLength={500}
+            placeholder={t('promotions.description_placeholder', 'e.g. Summer special - 20% off all sushi rolls')} />
         </div>
       </div>
       <div className="flex justify-end gap-2 p-5 pt-3 border-t shrink-0" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
