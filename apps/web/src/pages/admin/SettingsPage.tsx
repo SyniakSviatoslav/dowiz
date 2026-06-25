@@ -568,7 +568,7 @@ export function SettingsPage() {
                         <div className="text-sm font-medium truncate" style={{ color: 'var(--brand-text)' }}>
                           {tgt.channel === 'telegram' ? 'Telegram' : tgt.channel}
                         </div>
-                        <div className="text-[10px] font-mono truncate" style={{ color: 'var(--brand-text-muted)' }}>
+                        <div className="text-step-2xs font-mono truncate" style={{ color: 'var(--brand-text-muted)' }}>
                           {tgt.address?.slice(0, 12)}...
                         </div>
                       </div>
@@ -601,16 +601,16 @@ export function SettingsPage() {
                   <div className="flex items-center justify-between p-3 rounded-lg border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
                     <div>
                       <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>🔴 {t('admin.notif_transactional', 'Transactional')}</div>
-                      <div className="text-[11px]" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.notif_transactional_desc', 'New orders, failures — cannot be turned off')}</div>
+                      <div className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.notif_transactional_desc', 'New orders, failures — cannot be turned off')}</div>
                     </div>
-                    <span data-testid="notif-cat-transactional" className="text-[11px] font-medium px-2 py-1 rounded" style={{ color: 'var(--color-success)', background: 'var(--color-success-light)' }}>
+                    <span data-testid="notif-cat-transactional" className="text-step-2xs font-medium px-2 py-1 rounded" style={{ color: 'var(--color-success)', background: 'var(--color-success-light)' }}>
                       {t('admin.notif_always_on', 'Always on')}
                     </span>
                   </div>
                   <div className="flex items-center justify-between p-3 rounded-lg border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
                     <div>
                       <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>🟠 {t('admin.notif_operational', 'Operational')}</div>
-                      <div className="text-[11px]" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.notif_operational_desc', 'Shift changes, storefront open/close')}</div>
+                      <div className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.notif_operational_desc', 'Shift changes, storefront open/close')}</div>
                     </div>
                     <span data-testid="notif-cat-operational">
                       <Toggle checked={opOn} onChange={(v) => handleCategoryToggle(primary.id, 'operational', v)} aria-label={t('admin.notif_operational', 'Operational')} />
@@ -619,7 +619,7 @@ export function SettingsPage() {
                   <div className="flex items-center justify-between p-3 rounded-lg border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
                     <div>
                       <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>🟡 {t('admin.notif_quality', 'Quality & analytics')}</div>
-                      <div className="text-[11px]" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.notif_quality_desc', 'Low ratings, digests')}</div>
+                      <div className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.notif_quality_desc', 'Low ratings, digests')}</div>
                     </div>
                     <span data-testid="notif-cat-quality">
                       <Toggle checked={qOn} onChange={(v) => handleCategoryToggle(primary.id, 'quality', v)} aria-label={t('admin.notif_quality', 'Quality & analytics')} />
@@ -646,7 +646,7 @@ export function SettingsPage() {
                       className="text-sm font-mono underline break-all block rounded-[var(--brand-radius-sm,8px)] transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-primary-light)]" style={{ color: 'var(--brand-primary)' }}>
                       {tgDeepLink}
                     </a>
-                    <div className="text-[10px] mt-2" style={{ color: 'var(--brand-text-muted)' }}>
+                    <div className="text-step-2xs mt-2" style={{ color: 'var(--brand-text-muted)' }}>
                       {t('admin.tg_step2', '2. Click Start in the bot. Your Telegram will be connected automatically.')}
                     </div>
                   </div>

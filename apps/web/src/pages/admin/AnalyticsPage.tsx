@@ -53,7 +53,7 @@ function SimpleBar({ value, maxValue, label, dayLabel, delay }: { value: number;
 
   return (
     <div className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
-      <span className="text-[10px] font-medium tabular-nums" style={{ color: 'var(--brand-text-muted)' }}>
+      <span className="text-step-2xs font-medium tabular-nums" style={{ color: 'var(--brand-text-muted)' }}>
         {label}
       </span>
       <div
@@ -64,7 +64,7 @@ function SimpleBar({ value, maxValue, label, dayLabel, delay }: { value: number;
           background: 'linear-gradient(to top, var(--brand-primary), var(--brand-primary-hover))',
         }}
       />
-      <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{dayLabel}</span>
+      <span className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{dayLabel}</span>
     </div>
   );
 }
@@ -277,10 +277,10 @@ export function AnalyticsPage() {
         <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
           <h3 className="text-sm font-semibold shrink-0" style={{ color: 'var(--brand-text)' }}>{t('admin.revenue_trend', 'Revenue Trend')}</h3>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] px-2 py-0.5 rounded-full tabular-nums whitespace-nowrap" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
+            <span className="text-step-2xs px-2 py-0.5 rounded-full tabular-nums whitespace-nowrap" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
               {t('admin.total', 'Total:')} <PriceDisplay amount={data.chart.reduce((s, c) => s + c.revenue, 0)} />
             </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full tabular-nums whitespace-nowrap" style={{ background: 'var(--color-success-light)', color: 'var(--color-success)' }}>
+            <span className="text-step-2xs px-2 py-0.5 rounded-full tabular-nums whitespace-nowrap" style={{ background: 'var(--color-success-light)', color: 'var(--color-success)' }}>
               {t('admin.avg', 'Avg:')} <PriceDisplay amount={Math.round(data.chart.reduce((s, c) => s + c.revenue, 0) / data.chart.length)} />
             </span>
           </div>
@@ -338,13 +338,13 @@ export function AnalyticsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <div className="text-sm font-medium truncate">{p.name}</div>
-                        {i === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>#1</span>}
+                        {i === 0 && <span className="text-step-2xs px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>#1</span>}
                       </div>
                       <div className="h-1 rounded-full" style={{ background: 'var(--brand-border)' }}>
                         <div className="h-full rounded-full progress-animate" style={{ width: `${barPct}%`, background: 'var(--brand-primary)', opacity: 0.3 + (barPct / 100) * 0.7 }} />
                       </div>
                       <div className="flex justify-between mt-1">
-                        <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{p.orders} {t('admin.orders', 'orders').toLowerCase()}</span>
+                        <span className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{p.orders} {t('admin.orders', 'orders').toLowerCase()}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -367,13 +367,13 @@ export function AnalyticsPage() {
                           {productOrders.map(o => (
                             <div key={o.id} className="flex items-center justify-between px-3 py-2 rounded-lg text-xs" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className="font-mono text-[10px] text-[var(--brand-text-muted)] shrink-0">{o.id.slice(0, 8)}</span>
+                                <span className="font-mono text-step-2xs text-[var(--brand-text-muted)] shrink-0">{o.id.slice(0, 8)}</span>
                                 <span className="truncate">{o.customer_name}</span>
-                                <span className="text-[10px] px-1 py-0.5 rounded tabular-nums shrink-0" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>x{o.quantity}</span>
+                                <span className="text-step-2xs px-1 py-0.5 rounded tabular-nums shrink-0" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>x{o.quantity}</span>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
                                 <span className="font-medium"><PriceDisplay amount={o.price} /></span>
-                                <span data-dynamic className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{new Date(o.created_at).toLocaleDateString()}</span>
+                                <span data-dynamic className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{new Date(o.created_at).toLocaleDateString()}</span>
                               </div>
                             </div>
                           ))}
@@ -391,11 +391,11 @@ export function AnalyticsPage() {
         <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>
-              {t('admin.ingredient_consumption', 'Ingredient Consumption')} <span className="text-[10px] font-normal opacity-50">({t('admin.derived', 'derived')})</span>
+              {t('admin.ingredient_consumption', 'Ingredient Consumption')} <span className="text-step-2xs font-normal opacity-50">({t('admin.derived', 'derived')})</span>
             </h3>
             <button
               onClick={() => exportCSV(CONSUMPTION_DATA, 'consumption.csv')}
-              className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border transition-colors hover:bg-[var(--brand-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
+              className="flex items-center gap-1 px-2 py-1 text-step-2xs rounded border transition-colors hover:bg-[var(--brand-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
               style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}
             >
               <i className="ti ti-download" /> {t('admin.export', 'Export')}
@@ -410,7 +410,7 @@ export function AnalyticsPage() {
               >
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-medium truncate">{item.name}</div>
-                  <div className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{item.consumed} {item.unit}</div>
+                  <div className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{item.consumed} {item.unit}</div>
                   <div className="w-full h-1 rounded-full mt-1.5" style={{ background: 'var(--brand-border)' }}>
                     <div
                       className="h-full rounded-full progress-animate"
@@ -423,19 +423,19 @@ export function AnalyticsPage() {
                   </div>
                 </div>
                 {item.pct > 80 && (
-                  <span className="text-[10px] ml-2 px-1.5 py-0.5 rounded font-medium shrink-0 animate-pulse" style={{ background: 'var(--color-warning-light, color-mix(in srgb, var(--color-warning) 15%, transparent))', color: 'var(--color-warning)' }}>
+                  <span className="text-step-2xs ml-2 px-1.5 py-0.5 rounded font-medium shrink-0 animate-pulse" style={{ background: 'var(--color-warning-light, color-mix(in srgb, var(--color-warning) 15%, transparent))', color: 'var(--color-warning)' }}>
                     {t('admin.reorder', 'Reorder')}
                   </span>
                 )}
               </div>
             ))}
           </div>
-          <p className="text-[10px] mt-3" style={{ color: 'var(--brand-text-muted)' }}>
+          <p className="text-step-2xs mt-3" style={{ color: 'var(--brand-text-muted)' }}>
             {t('admin.consumption_hint', 'Based on today\'s orders x recipe quantities. Estimates only.')}
           </p>
           <button
             onClick={handleCopyReorder}
-            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 text-[11px] font-medium rounded-lg border transition-[background-color,transform,box-shadow] duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
+            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 text-step-2xs font-medium rounded-lg border transition-[background-color,transform,box-shadow] duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
             style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-primary)' }}
           >
             {copied ? (
@@ -452,10 +452,10 @@ export function AnalyticsPage() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{t('admin.order_heatmap', 'Order Heatmap')}</h3>
           <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
+            <span className="flex items-center gap-1 text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>
               <span className="w-2 h-2 rounded-sm" style={{ background: 'var(--brand-surface-raised)' }} /> {t('admin.low', 'Low')}
             </span>
-            <span className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
+            <span className="flex items-center gap-1 text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>
               <span className="w-2 h-2 rounded-sm" style={{ background: 'var(--brand-primary)' }} /> {t('admin.peak', 'Peak')}
             </span>
           </div>
@@ -494,7 +494,7 @@ export function AnalyticsPage() {
                           }}
                         >
                           {count > 0 && (
-                            <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded text-[10px] whitespace-nowrap z-10 pointer-events-none shadow-lg"
+                            <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded text-step-2xs whitespace-nowrap z-10 pointer-events-none shadow-lg"
                               style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}>
                               <div className="font-semibold tabular-nums">{count} {count === 1 ? t('admin.order_one', 'order') : t('admin.order_other', 'orders')}</div>
                               {productList && <div className="text-[var(--brand-text-muted)] max-w-[200px] truncate">{productList}</div>}

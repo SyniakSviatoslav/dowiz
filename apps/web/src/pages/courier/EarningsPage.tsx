@@ -171,12 +171,12 @@ export function EarningsPage() {
                 className="min-w-0 flex flex-col items-center text-center bg-[var(--brand-surface)] rounded-[var(--brand-radius)] p-4 shadow-[var(--elev-1)] transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 hover:hover:shadow-[var(--elev-2)]"
               >
                 <div className="text-2xl mb-1 text-[var(--brand-primary)]">{card.icon}</div>
-                <div className="text-[11px] text-[var(--brand-text-muted)] uppercase tracking-wider font-semibold mb-1 truncate max-w-full">{card.label}</div>
+                <div className="text-step-2xs text-[var(--brand-text-muted)] uppercase tracking-wider font-semibold mb-1 truncate max-w-full">{card.label}</div>
                 <div className="text-lg font-bold text-[var(--brand-text)] tabular-nums min-w-0 truncate max-w-full">
                   <CountUpPrice amount={card.amount} reduce={!!reduce} />
                 </div>
                 {card.tips > 0 && (
-                  <div className="text-[11px] mt-0.5 text-[var(--brand-text-muted)] tabular-nums truncate max-w-full" data-testid="earnings-tips">
+                  <div className="text-step-2xs mt-0.5 text-[var(--brand-text-muted)] tabular-nums truncate max-w-full" data-testid="earnings-tips">
                     {t('courier.incl_tips', 'incl. tips')} <PriceDisplay amount={card.tips} />
                   </div>
                 )}

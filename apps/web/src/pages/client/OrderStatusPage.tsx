@@ -761,7 +761,7 @@ export function OrderStatusPage() {
           <motion.div className="rounded-[var(--brand-radius)] p-4" style={cardStyle} {...enter}>
             <div className="flex items-center gap-2 mb-3">
               <span className="text-sm font-semibold text-[var(--brand-text)]">≈ {t('client.nutrition', 'Nutrition')}</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-[var(--brand-radius-sm)]" style={{ background: 'var(--brand-surface)', color: 'var(--brand-text-muted)' }}>{t('client.nutrition_estimate', 'estimate only')}</span>
+              <span className="text-step-2xs px-1.5 py-0.5 rounded-[var(--brand-radius-sm)]" style={{ background: 'var(--brand-surface)', color: 'var(--brand-text-muted)' }}>{t('client.nutrition_estimate', 'estimate only')}</span>
             </div>
             <div className="grid grid-cols-4 gap-2 text-center">
               {[
@@ -772,7 +772,7 @@ export function OrderStatusPage() {
               ].map(n => (
                 <div key={n.label} className="p-2 rounded-[var(--brand-radius-sm)] min-w-0" style={{ background: 'var(--brand-surface)' }}>
                   <div className="text-lg font-bold tabular-nums" style={{ color: 'var(--brand-primary)' }}>{n.value || '—'}</div>
-                  <div className="text-[10px] truncate" style={{ color: 'var(--brand-text-muted)' }}>{n.label}</div>
+                  <div className="text-step-2xs truncate" style={{ color: 'var(--brand-text-muted)' }}>{n.label}</div>
                   <div className="text-[9px]" style={{ color: 'var(--brand-text-muted)' }}>{n.unit}</div>
                 </div>
               ))}

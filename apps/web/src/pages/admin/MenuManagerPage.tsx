@@ -162,11 +162,11 @@ function MenuScheduleEditor({ categories }: { categories: Category[] }) {
       </button>
       {open && (
         <div className="mt-3 space-y-3">
-          <p className="text-[11px]" style={{ color: 'var(--brand-text-muted)' }}>
+          <p className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>
             {t('admin.menu_schedules_hint', 'Restrict a category to a daily window (e.g. breakfast 07:00–11:00). Items with no schedule stay always-available.')}
           </p>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="text-[11px] flex flex-col gap-1" style={{ color: 'var(--brand-text-muted)' }}>
+            <label className="text-step-2xs flex flex-col gap-1" style={{ color: 'var(--brand-text-muted)' }}>
               {t('admin.category', 'Category')}
               <select value={targetCategory} onChange={e => setTargetCategory(e.target.value)}
                 className="h-9 rounded-lg px-2 text-sm border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
@@ -174,12 +174,12 @@ function MenuScheduleEditor({ categories }: { categories: Category[] }) {
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </label>
-            <label className="text-[11px] flex flex-col gap-1" style={{ color: 'var(--brand-text-muted)' }}>
+            <label className="text-step-2xs flex flex-col gap-1" style={{ color: 'var(--brand-text-muted)' }}>
               {t('admin.from', 'From')}
               <input type="time" value={startHHMM} onChange={e => setStartHHMM(e.target.value)}
                 className="h-9 rounded-lg px-2 text-sm border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
             </label>
-            <label className="text-[11px] flex flex-col gap-1" style={{ color: 'var(--brand-text-muted)' }}>
+            <label className="text-step-2xs flex flex-col gap-1" style={{ color: 'var(--brand-text-muted)' }}>
               {t('admin.to', 'To')}
               <input type="time" value={endHHMM} onChange={e => setEndHHMM(e.target.value)}
                 className="h-9 rounded-lg px-2 text-sm border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
@@ -680,7 +680,7 @@ export function MenuManagerPage() {
           {categories.map(cat => (
             <motion.button key={cat.id} onClick={async () => { setSelectedCategory(cat.id); await toggleExpand(cat.id); }} whileTap={{ scale: 0.97 }} aria-pressed={selectedCategory === cat.id}
               className={`max-w-[11rem] px-3 py-1.5 text-xs font-medium rounded-md outline-none transition-[color,background-color,box-shadow] duration-150 [transition-timing-function:var(--ease-soft)] snap-start shrink-0 whitespace-nowrap focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${selectedCategory === cat.id ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)] border border-transparent'}`}>
-              <span className="inline-flex items-center gap-1 max-w-full align-bottom"><span className="truncate">{cat.name}</span> <span className="text-[10px] opacity-70 shrink-0">({cat.productCount ?? cat.products?.length ?? 0})</span></span>
+              <span className="inline-flex items-center gap-1 max-w-full align-bottom"><span className="truncate">{cat.name}</span> <span className="text-step-2xs opacity-70 shrink-0">({cat.productCount ?? cat.products?.length ?? 0})</span></span>
             </motion.button>
           ))}
         </div>
@@ -779,7 +779,7 @@ export function MenuManagerPage() {
                         <span className="font-medium text-sm truncate" style={{ color: 'var(--brand-text)' }}>{product.name}</span>
                         <span className="text-sm font-bold shrink-0" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={product.price} /></span>
                       </div>
-                      {product.description && <div className="text-[11px] truncate mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{product.description}</div>}
+                      {product.description && <div className="text-step-2xs truncate mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{product.description}</div>}
                       <div className="flex items-center gap-2 mt-1.5">
                         <motion.button onClick={(e) => { e.stopPropagation(); handleToggleAvailable(cat.id, product); }} whileTap={{ scale: 0.97 }}
                           className={`relative w-8 h-4 rounded-full outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 ${product.available ? 'bg-[var(--brand-primary)]' : 'bg-[var(--brand-border)]'}`}
@@ -788,11 +788,11 @@ export function MenuManagerPage() {
                           role="switch" aria-checked={product.available}>
                           <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform duration-200 shadow-sm ${product.available ? 'left-[18px]' : 'left-0.5'}`} />
                         </motion.button>
-                        <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
+                        <span className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>
                           {product.available ? t('menu.available', 'Available') : t('menu.stop_listed', 'Stop-listed')}
                         </span>
                         {product.stockCount != null && (
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${product.stockCount > 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'}`}
+                          <span className={`text-step-2xs font-medium px-1.5 py-0.5 rounded-full ${product.stockCount > 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'}`}
                             style={{ background: product.stockCount > 0 ? 'var(--color-success-light)' : 'var(--color-danger-light)' }}>
                             {product.stockCount}
                           </span>
@@ -897,7 +897,7 @@ export function MenuManagerPage() {
                   {getProductAllergens(previewProduct).map(a => {
                     const s = getAllergenStyle(a);
                     return (
-                      <span key={a} className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      <span key={a} className="text-step-2xs font-bold px-2 py-0.5 rounded-full"
                         style={{ background: s.bg, color: s.text }}>
                         {t(`allergen.${a.toLowerCase()}`, a)}
                       </span>
@@ -975,7 +975,7 @@ export function MenuManagerPage() {
               <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.prep_time_label', 'Prep time (min)')} *</label>
               <Input value={formPrepTime} onChange={e => setFormPrepTime(e.target.value)} placeholder="15" type="number" min={1} max={1440} />
               {(!formPrepTime || isNaN(parseInt(formPrepTime)) || parseInt(formPrepTime) < 1) && (
-                <p className="text-[10px] mt-1" style={{ color: 'var(--color-danger)' }}>{t('admin.prep_time_required', 'Enter a prep time of at least 1 minute')}</p>
+                <p className="text-step-2xs mt-1" style={{ color: 'var(--color-danger)' }}>{t('admin.prep_time_required', 'Enter a prep time of at least 1 minute')}</p>
               )}
             </div>
 
@@ -1013,7 +1013,7 @@ export function MenuManagerPage() {
                             type="button"
                             whileTap={{ scale: 0.97 }}
                             onClick={() => setFormTaste(prev => prev[axis] === level ? Object.fromEntries(Object.entries(prev).filter(([k]) => k !== axis)) : { ...prev, [axis]: level })}
-                            className={`flex-1 h-6 rounded text-[10px] font-medium transition-[background-color,color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] ${
+                            className={`flex-1 h-6 rounded text-step-2xs font-medium transition-[background-color,color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] ${
                               active ? 'text-white scale-105' : '[@media(hover:hover)]:hover:bg-[var(--brand-surface-raised)]'
                             }`}
                             style={{
@@ -1073,7 +1073,7 @@ export function MenuManagerPage() {
                 <>
                   {/* Mode selector */}
                   <div>
-                    <label className="text-[11px] font-medium block mb-1.5" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.import_mode', 'Import Mode')}</label>
+                    <label className="text-step-2xs font-medium block mb-1.5" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.import_mode', 'Import Mode')}</label>
                     <div className="flex gap-2">
                       {[
                         { value: 'merge', label: t('admin.import_merge', 'Merge'), desc: t('admin.import_merge_desc', 'Update existing, add new') },
@@ -1084,7 +1084,7 @@ export function MenuManagerPage() {
                           className={`flex-1 p-2 rounded-lg border text-left transition-colors ${importMode === opt.value ? 'ring-2 ring-[var(--brand-primary)]' : ''}`}
                           style={{ background: importMode === opt.value ? 'var(--brand-primary-light)' : 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
                           <div className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>{opt.label}</div>
-                          <div className="text-[10px] mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{opt.desc}</div>
+                          <div className="text-step-2xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{opt.desc}</div>
                         </motion.button>
                       ))}
                     </div>
@@ -1130,7 +1130,7 @@ export function MenuManagerPage() {
                     </div>
                   )}
 
-                  <p className="text-[10px] flex items-start gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
+                  <p className="text-step-2xs flex items-start gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
                     <i className="ti ti-info-circle mt-0.5 shrink-0" aria-hidden="true" />
                     <span>{t('admin.import_privacy_notice', 'Your file is sent to an AI service to read the menu. Upload only your menu — avoid pages with other people’s personal data (staff lists, invoices, customer details).')}</span>
                   </p>
@@ -1157,7 +1157,7 @@ export function MenuManagerPage() {
                       <div key={i} className="p-3 rounded-lg border text-center" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
                         <i className={`${s.icon} text-lg`} style={{ color: s.danger ? 'var(--color-danger)' : 'var(--brand-primary)' }} />
                         <div className="text-lg font-bold" style={{ color: 'var(--brand-text)' }}>{s.value}</div>
-                        <div className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{s.label}</div>
+                        <div className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{s.label}</div>
                       </div>
                     ))}
                   </div>
@@ -1165,7 +1165,7 @@ export function MenuManagerPage() {
                   {/* Categories preview */}
                   {importPreview.draft_preview?.categories?.length > 0 && (
                     <div className="space-y-1.5">
-                      <div className="text-[11px] font-semibold" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.categories', 'Categories')}</div>
+                      <div className="text-step-2xs font-semibold" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.categories', 'Categories')}</div>
                       {importPreview.draft_preview.categories.map((c: any, i: number) => (
                         <div key={i} className="flex items-center gap-2 text-sm p-2 rounded-lg" style={{ background: 'var(--brand-surface)' }}>
                           <i className="ti ti-folder text-xs" style={{ color: 'var(--brand-primary)' }} />
@@ -1178,14 +1178,14 @@ export function MenuManagerPage() {
                   {/* Products preview */}
                   {importPreview.draft_preview?.products?.length > 0 && (
                     <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
-                      <div className="text-[11px] font-semibold" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.products', 'Products')}</div>
+                      <div className="text-step-2xs font-semibold" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.products', 'Products')}</div>
                       {importPreview.draft_preview.products.map((p: any, i: number) => (
                         <div key={i} className="flex items-center justify-between text-sm p-2 rounded-lg" style={{ background: 'var(--brand-surface)' }}>
                           <div className="flex items-center gap-2">
                             <i className="ti ti-package text-xs" style={{ color: 'var(--brand-primary)' }} />
                             <span style={{ color: 'var(--brand-text)' }}>{p.name}</span>
                             {p.categoryKey && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
+                              <span className="text-step-2xs px-1.5 py-0.5 rounded" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
                                 {p.categoryKey}
                               </span>
                             )}
@@ -1199,7 +1199,7 @@ export function MenuManagerPage() {
                   {/* Issues */}
                   {importPreview.issues?.length > 0 && (
                     <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
-                      <div className="text-[11px] font-semibold" style={{ color: 'var(--color-danger)' }}>{t('admin.issues', 'Issues')}</div>
+                      <div className="text-step-2xs font-semibold" style={{ color: 'var(--color-danger)' }}>{t('admin.issues', 'Issues')}</div>
                       {importPreview.issues.map((iss: any, i: number) => (
                         <div key={i} className="text-xs p-2 rounded" style={{ background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>
                           {iss.message}

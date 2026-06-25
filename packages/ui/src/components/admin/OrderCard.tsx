@@ -104,7 +104,7 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
 
       {/* Timeline Deltas */}
       {(confirmDelta != null || prepDelta != null || deliveryDelta != null) && (
-        <div className="flex items-center gap-2 text-[11px] font-medium mt-1">
+        <div className="flex items-center gap-2 text-step-2xs font-medium mt-1">
           {confirmDelta != null && (
             <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--status-pending-light)] text-[var(--status-pending)]" title={t('admin.confirm_time', 'Confirmation Time')}>
               <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} />

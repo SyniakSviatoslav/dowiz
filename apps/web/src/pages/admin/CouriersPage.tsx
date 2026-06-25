@@ -276,7 +276,7 @@ export function CouriersPage() {
               </div>
 
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--brand-text-muted)] block mb-1">Link</p>
+                <p className="text-step-2xs font-bold uppercase tracking-widest text-[var(--brand-text-muted)] block mb-1">Link</p>
                 <div className="flex gap-2 items-center">
                   <a 
                     href={inviteResult.link} 
@@ -290,7 +290,7 @@ export function CouriersPage() {
               </div>
 
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--brand-text-muted)] block mb-1">
+                <p className="text-step-2xs font-bold uppercase tracking-widest text-[var(--brand-text-muted)] block mb-1">
                   Kodi i Sigurisë / Security Code (16 chars)
                 </p>
                 <code className="block px-3 py-2 text-lg font-mono tracking-widest text-center font-bold rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-text)] select-all">
@@ -465,7 +465,7 @@ export function CouriersPage() {
                                     <i className="ti ti-map-pin" /> {h.delivery_address}
                                   </div>
                                 )}
-                                <div data-dynamic className="flex items-center gap-2 text-[11px] text-[var(--brand-text-muted)] mt-1.5 pt-1.5 border-t border-[var(--brand-border)]">
+                                <div data-dynamic className="flex items-center gap-2 text-step-2xs text-[var(--brand-text-muted)] mt-1.5 pt-1.5 border-t border-[var(--brand-border)]">
                                   <span className="font-medium" style={{ color: 'var(--brand-text)' }}>{t('admin.timing', 'Timing')}:</span>
                                   <span>{t('admin.assigned', 'Assigned')} {new Date(h.assigned_at).toLocaleString()}</span>
                                   {h.accepted_at && <><span>·</span><span>{t('admin.accepted', 'Accepted')} {new Date(h.accepted_at).toLocaleString()}</span></>}

@@ -40,7 +40,7 @@ export function CourierShell({ children, currentPath, onNavigate, tasksCount = 0
                   </span>
                 )}
               </span>
-              <span className="text-[10px] font-semibold">{tab.label}</span>
+              <span className="text-step-2xs font-semibold">{tab.label}</span>
             </button>
           );
         })}

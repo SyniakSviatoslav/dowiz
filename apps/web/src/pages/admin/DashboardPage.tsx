@@ -421,7 +421,7 @@ export function DashboardPage() {
                 <AnimatedNumber value={stat.value} />
               )}
             </div>
-            <div className="text-[10px] font-medium" style={{ color: 'var(--brand-text-muted)' }}>{stat.label}</div>
+            <div className="text-step-2xs font-medium" style={{ color: 'var(--brand-text-muted)' }}>{stat.label}</div>
           </div>
         ))}
       </div>
@@ -444,10 +444,10 @@ export function DashboardPage() {
                       data-testid="owner-alert-status"
                       data-state="armed"
                       title={t('admin.alert_armed', 'Sound alerts on')}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-step-2xs font-medium border"
                       style={{ background: 'var(--brand-primary-light)', borderColor: 'var(--brand-primary)', color: 'var(--brand-primary)' }}
                     >
-                      <i className="ti ti-bell-ringing text-[11px]" />
+                      <i className="ti ti-bell-ringing text-step-2xs" />
                       {t('admin.alert_armed_short', 'Alerts on')}
                     </span>
                   ) : (
@@ -457,10 +457,10 @@ export function DashboardPage() {
                       data-state={alertState}
                       onClick={handleEnableSound}
                       title={t('admin.alert_enable_hint', 'New-order sound is off — tap to enable')}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-opacity hover:opacity-90"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-step-2xs font-medium border transition-opacity hover:opacity-90"
                       style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)', minHeight: 'var(--tap-min-sm, 1.5rem)' }}
                     >
-                      <i className="ti ti-bell-off text-[11px]" />
+                      <i className="ti ti-bell-off text-step-2xs" />
                       {t('admin.alert_enable', 'Enable sound')}
                     </button>
                   )}

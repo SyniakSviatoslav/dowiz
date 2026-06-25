@@ -239,7 +239,7 @@ export function BrandingPage() {
         <button
           type="button"
           onClick={() => { navigator.clipboard.writeText(url); setCopied(k); setTimeout(() => setCopied(c => (c === k ? null : c)), 1500); }}
-          className="shrink-0 inline-flex items-center gap-1 text-[10px] text-[var(--brand-text-muted)] hover:text-[var(--brand-primary)] underline rounded-[var(--brand-radius-sm)] px-1 py-0.5 transition-colors duration-150 ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)] active:scale-[0.97]"
+          className="shrink-0 inline-flex items-center gap-1 text-step-2xs text-[var(--brand-text-muted)] hover:text-[var(--brand-primary)] underline rounded-[var(--brand-radius-sm)] px-1 py-0.5 transition-colors duration-150 ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)] active:scale-[0.97]"
           title={t('common.copy', 'Copy')}
         >
           <i className={`ti ${copied === k ? 'ti-check' : 'ti-copy'}`} aria-hidden="true" />
@@ -451,7 +451,7 @@ export function BrandingPage() {
             <UrlRow label={t('admin.client_url_ssr', 'Website URL (SEO)')} url={`${window.location.origin}/s/${slug}`} k="ssr" />
             <UrlRow label={t('admin.client_url_spa', 'Website URL (App)')} url={`${window.location.origin}/branding-preview/${slug}`} k="spa" />
 
-            <p className="text-[10px] text-center mt-2 opacity-60" style={{ color: 'var(--brand-text-muted)' }}>
+            <p className="text-step-2xs text-center mt-2 opacity-60" style={{ color: 'var(--brand-text-muted)' }}>
               {t('admin.branding_preview_note', 'Preview loads client page with draft colors')}
             </p>
           </>
