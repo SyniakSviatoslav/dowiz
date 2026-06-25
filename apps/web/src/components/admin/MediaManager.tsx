@@ -257,7 +257,7 @@ export function MediaManager({ productId, enabled, slug, onPrimaryChange }: Medi
         </label>
       </div>
 
-      <p className="text-[10px] mb-2" style={{ color: 'var(--brand-text-muted)' }}>
+      <p className="text-step-2xs mb-2" style={{ color: 'var(--brand-text-muted)' }}>
         {t('admin.media_hint', 'WebP/JPEG images or MP4 video. The first item is the storefront hero.')}
       </p>
 
@@ -317,7 +317,7 @@ export function MediaManager({ productId, enabled, slug, onPrimaryChange }: Medi
 
                 {/* Set primary */}
                 <motion.button type="button" onClick={() => handleSetPrimary(item.id)} disabled={isBusy} whileTap={{ scale: 0.97 }}
-                  className="px-2 py-1 text-[10px] font-medium rounded-md border hover:bg-[var(--brand-surface)]"
+                  className="px-2 py-1 text-step-2xs font-medium rounded-md border hover:bg-[var(--brand-surface)]"
                   style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}
                   title={t('admin.media_set_primary', 'Set as primary')}>
                   {t('admin.media_set_primary', 'Set primary')}

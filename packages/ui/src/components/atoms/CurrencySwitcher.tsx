@@ -16,7 +16,7 @@ export function CurrencySwitcher() {
       >
         <i className="ti ti-coin" style={{ color: 'var(--brand-text-muted)', fontSize: '0.85rem' }} aria-hidden="true" />
         <span className="font-mono font-bold">{current?.symbol || currency}</span>
-        <span className="hidden sm:inline text-[10px]">{currency}</span>
+        <span className="hidden sm:inline text-step-2xs">{currency}</span>
       </button>
       {open && (
         <>
@@ -34,7 +34,7 @@ export function CurrencySwitcher() {
                 className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${currency === c.code ? 'font-semibold' : ''}`}
                 style={{ color: currency === c.code ? 'var(--brand-primary)' : 'var(--brand-text)' }}
               >
-                <span className="text-[10px] font-mono font-bold w-6 text-center">{c.symbol}</span>
+                <span className="text-step-2xs font-mono font-bold w-6 text-center">{c.symbol}</span>
                 <span className="flex-1">{c.name}</span>
                 {currency === c.code && <i className="ti ti-check ml-1" style={{ color: 'var(--brand-primary)', fontSize: '0.7rem' }} />}
               </button>

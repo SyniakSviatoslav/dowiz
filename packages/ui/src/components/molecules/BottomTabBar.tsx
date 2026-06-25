@@ -44,14 +44,14 @@ export function BottomTabBar({ tabs, activeKey, onTabClick, className = '' }: Bo
                 />
               )}
               <span
-                className={`text-[11px] font-semibold leading-tight mt-0.5 truncate max-w-full px-1 ${
+                className={`text-step-2xs font-semibold leading-tight mt-0.5 truncate max-w-full px-1 ${
                   isActive ? 'text-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)]'
                 }`}
               >
                 {tab.label}
               </span>
               {tab.badge !== undefined && tab.badge > 0 && (
-                <span className="absolute -top-0.5 right-1/4 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-[var(--color-danger)] text-white text-[10px] font-bold px-1 leading-none">
+                <span className="absolute -top-0.5 right-1/4 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-[var(--color-danger)] text-white text-step-2xs font-bold px-1 leading-none">
                   {tab.badge > 99 ? '99+' : tab.badge}
                 </span>
               )}

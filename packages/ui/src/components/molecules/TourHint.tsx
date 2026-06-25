@@ -189,7 +189,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
             }}
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--brand-primary)' }}>
+              <span className="text-step-2xs font-medium uppercase tracking-wide" style={{ color: 'var(--brand-primary)' }}>
                 Step {currentStep + 1}/{steps.length}
               </span>
               <button
@@ -255,7 +255,7 @@ export function HintCard({
       )}
       <div className="flex-1 min-w-0">
         <div className="text-xs font-semibold mb-0.5" style={{ color: 'var(--brand-text)' }}>{title}</div>
-        <div className="text-[11px]" style={{ color: 'var(--brand-text-muted)', lineHeight: 1.4 }}>{description}</div>
+        <div className="text-step-2xs" style={{ color: 'var(--brand-text-muted)', lineHeight: 1.4 }}>{description}</div>
       </div>
       {onDismiss && (
         <button

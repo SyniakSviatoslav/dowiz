@@ -106,7 +106,7 @@ function AdminLayout() {
               : 'text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)] hover:text-[var(--brand-text)]'
           }`}
         >
-          <i className={`${item.icon} text-[18px] shrink-0 ${collapsed ? 'mx-auto' : ''}`} />
+          <i className={`${item.icon} text-step-lg shrink-0 ${collapsed ? 'mx-auto' : ''}`} />
           {!collapsed && <span className="truncate">{t(item.key)}</span>}
         </button>
       ))}
@@ -146,7 +146,7 @@ function AdminLayout() {
             }}
             className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)] hover:text-[var(--brand-text)] transition-colors ${collapsed ? 'justify-center' : ''}`}
           >
-            <i className="ti ti-logout text-[18px]" />
+            <i className="ti ti-logout text-step-lg" />
             {!collapsed && t('auth.logout', 'Exit')}
           </button>
         </div>

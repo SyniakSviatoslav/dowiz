@@ -124,6 +124,8 @@
      Exposed in Tailwind as `text-step-*` (NOT the default text-*, which stays
      Tailwind-stock so existing usages don't resize). Adopt incrementally —
      see docs/operating-model/typography-scale.md. rem so it respects user zoom. */
+  --text-2xs:  0.6875rem; /* 11px — micro labels: status pills, allergen chips, tabular meta (the
+                             dense tier the ad-hoc text-[10/11px] usages needed; tokenised here) */
   --text-xs:   0.75rem;   /* 12px — meta, captions, badges */
   --text-sm:   0.875rem;  /* 14px — secondary body, labels */
   --text-base: 1rem;      /* 16px — body default */

@@ -52,6 +52,7 @@ const config: Config = {
       // usages. `text-step-*` is additive; migrate incrementally.
       // See docs/operating-model/typography-scale.md.
       fontSize: {
+        'step-2xs': ['var(--text-2xs)', { lineHeight: 'var(--leading-normal)' }],
         'step-xs': ['var(--text-xs)', { lineHeight: 'var(--leading-normal)' }],
         'step-sm': ['var(--text-sm)', { lineHeight: 'var(--leading-normal)' }],
         'step-base': ['var(--text-base)', { lineHeight: 'var(--leading-normal)' }],
