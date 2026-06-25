@@ -234,9 +234,9 @@ export function CouriersPage() {
           <div className="bg-[var(--brand-surface-raised)] px-3 py-1 rounded-full text-sm font-medium">
             {onlineCount} {t('admin.online', 'online')}
           </div>
-          <motion.button onClick={() => exportCSV(filtered, 'couriers.csv')} whileTap={{ scale: 0.97 }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors hover:bg-[var(--brand-surface-raised)]" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
+          <Button variant="secondary" size="sm" onClick={() => exportCSV(filtered, 'couriers.csv')}>
             <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
-          </motion.button>
+          </Button>
           <Button onClick={() => setShowAddForm(!showAddForm)}>+ {t('admin.add_courier', 'Add Courier')}</Button>
         </div>
       </div>

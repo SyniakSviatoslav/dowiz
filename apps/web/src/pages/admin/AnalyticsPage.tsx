@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { EmptyState, SkeletonBase, useI18n, PriceDisplay, AnimatedNumber } from '@deliveryos/ui';
+import { EmptyState, SkeletonBase, useI18n, PriceDisplay, AnimatedNumber, Button } from '@deliveryos/ui';
 import Map, { Marker } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { apiClient } from '../../lib/index.js';
@@ -243,13 +243,9 @@ export function AnalyticsPage() {
       {/* Stat cards */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{t('admin.overview', 'Overview')}</h3>
-        <button
-          onClick={() => exportCSV(statCards.map(c => ({ Metric: c.label, Value: c.value, Trend: c.trend })), 'analytics-stats.csv')}
-          className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md hover:bg-[var(--brand-surface-raised)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
-          style={{ color: 'var(--brand-text-muted)' }}
-        >
+        <Button variant="secondary" size="sm" onClick={() => exportCSV(statCards.map(c => ({ Metric: c.label, Value: c.value, Trend: c.trend })), 'analytics-stats.csv')}>
           <i className="ti ti-download" /> {t('admin.export_csv', 'Export CSV')}
-        </button>
+        </Button>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 stagger-children">
         {statCards.map((card, i) => (
@@ -305,13 +301,9 @@ export function AnalyticsPage() {
         <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{t('admin.top_products', 'Top Products')}</h3>
-            <button
-              onClick={() => exportCSV(data.topProducts.map(p => ({ Product: p.name, Orders: p.orders, Revenue: p.revenue })), 'top-products.csv')}
-              className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md hover:bg-[var(--brand-surface-raised)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
-              style={{ color: 'var(--brand-text-muted)' }}
-            >
+            <Button variant="secondary" size="sm" onClick={() => exportCSV(data.topProducts.map(p => ({ Product: p.name, Orders: p.orders, Revenue: p.revenue })), 'top-products.csv')}>
               <i className="ti ti-download" /> {t('admin.export_csv', 'Export CSV')}
-            </button>
+            </Button>
           </div>
           <div className="space-y-1">
             {data.topProducts.map((p, i) => {
@@ -393,13 +385,9 @@ export function AnalyticsPage() {
             <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>
               {t('admin.ingredient_consumption', 'Ingredient Consumption')} <span className="text-step-2xs font-normal opacity-50">({t('admin.derived', 'derived')})</span>
             </h3>
-            <button
-              onClick={() => exportCSV(CONSUMPTION_DATA, 'consumption.csv')}
-              className="flex items-center gap-1 px-2 py-1 text-step-2xs rounded border transition-colors hover:bg-[var(--brand-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
-              style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}
-            >
-              <i className="ti ti-download" /> {t('admin.export', 'Export')}
-            </button>
+            <Button variant="secondary" size="sm" onClick={() => exportCSV(CONSUMPTION_DATA, 'consumption.csv')}>
+              <i className="ti ti-download" /> {t('admin.export_csv', 'Export CSV')}
+            </Button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {CONSUMPTION_DATA.map((item, i) => (

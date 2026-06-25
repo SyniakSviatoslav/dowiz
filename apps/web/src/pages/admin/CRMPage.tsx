@@ -191,12 +191,12 @@ export function CRMPage() {
             <option value="ltv">{t('admin.highest_ltv', 'Highest LTV')}</option>
             <option value="name">{t('admin.name_az', 'Name A-Z')}</option>
           </select>
-          <button onClick={() => {
+          <Button variant="secondary" size="sm" onClick={() => {
             const exportData = filtered.map(c => ({ name: c.name, phone: revealed[c.id] ? '***REDACTED***' : c.phone, orders: c.orders, ltv: c.ltv, lastOrder: c.lastOrder }));
             exportCSV(exportData, 'customers.csv');
-          }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-[var(--brand-radius)] border transition-[background-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:[@media(hover:hover)]:bg-[var(--brand-surface-raised)] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)] outline-none" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+          }}>
             <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
-          </button>
+          </Button>
         </div>
       </div>
 
