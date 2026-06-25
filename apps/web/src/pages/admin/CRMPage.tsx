@@ -170,12 +170,12 @@ export function CRMPage() {
           <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.customers', 'Customers')}</h2>
           <p className="text-sm tabular-nums" style={{ color: 'var(--brand-text)' }}>{filtered.length} {t('admin.customers_lower', 'customers')}</p>
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <SearchInput
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder={t('admin.search_customers', 'Search customers...')}
-            containerClassName="flex-1 sm:flex-none min-w-0 sm:w-48"
+            containerClassName="w-full sm:w-48"
           />
           <Select
             value={sortKey}

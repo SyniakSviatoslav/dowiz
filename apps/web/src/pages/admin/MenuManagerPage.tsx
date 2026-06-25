@@ -810,12 +810,12 @@ export function MenuManagerPage() {
                   </div>
                   <div className="flex items-center justify-end gap-1 mt-2 pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
                     <motion.button onClick={(e) => { e.stopPropagation(); openEditForm(product); }} whileTap={{ scale: 0.97 }}
-                      className="w-8 h-8 flex items-center justify-center rounded-md outline-none hover:bg-[var(--brand-surface-raised)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
+                      className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-md outline-none hover:bg-[var(--brand-surface-raised)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
                       title={t('common.edit', 'Edit')} aria-label={t('common.edit', 'Edit')}>
                       <i className="ti ti-edit" style={{ fontSize: '0.85rem', color: 'var(--brand-text-muted)' }} />
                     </motion.button>
                     <motion.button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(cat.id, product.id); }} whileTap={{ scale: 0.97 }}
-                      className="w-8 h-8 flex items-center justify-center rounded-md outline-none hover:bg-[var(--color-danger-light)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-danger)] focus-visible:ring-offset-1"
+                      className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-md outline-none hover:bg-[var(--color-danger-light)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-danger)] focus-visible:ring-offset-1"
                       title={t('common.delete', 'Delete')} aria-label={t('common.delete', 'Delete')}>
                       <i className="ti ti-trash" style={{ fontSize: '0.75rem', color: 'var(--brand-text-muted)' }} />
                     </motion.button>
@@ -921,7 +921,7 @@ export function MenuManagerPage() {
           <div className="relative w-full max-w-md bg-[var(--brand-surface)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 z-10 slide-in-up max-h-[85vh] overflow-auto pb-20 sm:pb-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{editingProduct ? t('admin.edit_item', 'Edit Item') : t('admin.add_item', 'Add Item')}</h3>
-              <motion.button onClick={closeForm} whileTap={{ scale: 0.97 }} aria-label={t('common.close', 'Close')} className="w-8 h-8 flex items-center justify-center rounded-md outline-none transition-colors hover:bg-[var(--brand-surface-raised)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1">
+              <motion.button onClick={closeForm} whileTap={{ scale: 0.97 }} aria-label={t('common.close', 'Close')} className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-md outline-none transition-colors hover:bg-[var(--brand-surface-raised)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1">
                 <i className="ti ti-x" style={{ color: 'var(--brand-text-muted)' }} />
               </motion.button>
             </div>
