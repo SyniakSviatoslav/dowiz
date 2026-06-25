@@ -446,6 +446,8 @@ export function OrderStatusPage() {
     return (
       <div className="max-w-md mx-auto p-6">
         <EmptyState
+          fullPage
+          icon={<i className={error ? 'ti ti-link-off' : 'ti ti-search-off'} aria-hidden="true" />}
           title={error ? t('order.unavailable_title', 'This link is no longer active') : t('order.not_found_title', 'Order not found')}
           description={error || t('order.not_found_desc', 'Order not found')}
           action={

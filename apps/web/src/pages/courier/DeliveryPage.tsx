@@ -266,8 +266,10 @@ export function DeliveryPage() {
           <span className="text-sm font-semibold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('courier.dropoff', 'Drop-off')}</span>
         </div>
       </div>
-      <div className="w-full max-w-md mx-auto p-5 pt-8">
+      <div className="w-full max-w-md mx-auto p-5">
         <EmptyState
+          fullPage
+          icon={<i className="ti ti-map-off" aria-hidden="true" />}
           title={t('courier.not_found', 'Not found')}
           description={t('courier.task_not_found', 'Delivery task not found.')}
           action={
