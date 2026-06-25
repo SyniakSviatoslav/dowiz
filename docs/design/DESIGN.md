@@ -43,20 +43,34 @@ DELIVERED:#059669  REJECTED:#DC2626  CANCELLED:#DC2626  SCHEDULED:#7C3AED  PICKE
 
 ## 2. Typography
 
-| Role | Font | Weight | Size |
+> **Font model (as shipped — `packages/ui/src/theme/tokens.css`).** The `:root` default UI font is
+> **Inter** (heading + body) — a deliberate, dense-UI choice used by admin/courier and any surface
+> without a theme preset. **Client / branded surfaces apply a serif display heading via the active
+> theme preset** (`[data-theme]` / `[data-skin]`), which is what gives the storefront its food-premium
+> warmth. So "client headings = serif" is honored by presets, not the base token.
+
+| Role | Font (as shipped) | Weight | Size |
 |------|------|--------|------|
-| Client headings (menu, hero) | DM Serif Display | 400 | 36px mobile / 48px desktop |
-| Admin headings | DM Sans | 600 | 18px |
-| Body UI | DM Sans | 400 | 14px |
-| Small / labels / meta | DM Sans | 400 | 12px |
+| Default UI (admin, courier, base) — heading + body | **Inter** | 400–700 | per type scale |
+| Client / branded headings (menu, hero) | serif display **via theme preset** (below) | 400–500 | 28px mobile / 36px desktop |
 | Code / keys | JetBrains Mono | 400 | 11px |
-| Ocean Fresh headings | Cormorant Garamond | 500 | same sizes |
-| Sage/Coral headings | Playfair Display | 500 | same sizes |
+
+Per-preset heading override (each preset sets `--brand-font-heading`):
+
+| Preset / skin | Heading face |
+|---|---|
+| Default (Food Dark) | DM Serif Display |
+| Ocean Fresh | Cormorant Garamond |
+| Sage / Coral | Playfair Display |
+| Paper skin (`data-skin=paper`) | Yeseva One → Fraunces |
 
 ### Font stacks
 ```
---brand-font-heading: 'DM Serif Display', 'Cormorant Garamond', 'Playfair Display', serif
---brand-font-body: 'DM Sans', 'Inter', sans-serif
+/* :root default — admin/courier/base */
+--brand-font-heading: 'Inter', sans-serif;
+--brand-font-body:    'Inter', sans-serif;
+/* preset blocks override --brand-font-heading to a serif display, e.g. default preset: */
+--brand-font-heading: 'DM Serif Display', 'Cormorant Garamond', 'Playfair Display', serif;
 ```
 
 ---
@@ -180,7 +194,7 @@ Fixed bottom-right, 48px height, brand-primary bg, bounce on item add. Hidden in
 
 ### Three surfaces
 1. **Client** (menu, cart, checkout, status): warm, food-premium, DM Serif Display headings
-2. **Owner** (dashboard, orders, menu, analytics, settings): utilitarian, dense, DM Sans
+2. **Owner** (dashboard, orders, menu, analytics, settings): utilitarian, dense, Inter
 3. **Courier** (tasks, delivery, earnings): readable one-handed, large tap targets
 
 ---
