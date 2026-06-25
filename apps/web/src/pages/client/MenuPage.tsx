@@ -10,7 +10,7 @@ const MediaRenderer = lazy(() => import('../../components/media').then(m => ({ d
 const RevealOverlay = lazy(() => import('../../components/media/RevealOverlay').then(m => ({ default: m.RevealOverlay })));
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease } from '@deliveryos/ui';
+import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 
 interface ProductModifier {
@@ -646,20 +646,15 @@ export function MenuPage() {
           <div className="relative border-b" style={{ borderColor: 'var(--brand-border)' }}>
           <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-3 py-2 pr-8">
             {/* Compact search pill */}
-            <div className="relative shrink-0" style={{ width: searchQuery ? 140 : 100, transition: 'width var(--motion-base) var(--ease-soft)', minWidth: 100 }}>
-              <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-step-2xs pointer-events-none" style={{ color: 'var(--brand-text-muted)' }} />
-              <input
+            <div className="shrink-0" style={{ width: searchQuery ? 140 : 100, transition: 'width var(--motion-base) var(--ease-soft)', minWidth: 100 }}>
+              <SearchInput
+                size="sm"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder={t('common.search', 'Search')}
-                className="w-full pl-7 pr-7 h-9 rounded-full text-step-xs outline-none transition-shadow duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)]"
-                style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
+                onClear={() => setSearchQuery('')}
+                containerClassName="w-full"
               />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} aria-label={t('common.clear', 'Clear')} className="absolute right-0.5 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]">
-                  <i className="ti ti-x text-step-2xs" style={{ color: 'var(--brand-text-muted)' }} />
-                </button>
-              )}
             </div>
             <div className="w-px h-4 shrink-0" style={{ background: 'var(--brand-border)' }} />
             {(['default', 'price-asc', 'price-desc', 'name'] as const).map(mode => (

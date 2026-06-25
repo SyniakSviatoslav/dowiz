@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { loadSupplies } from './SupplyLibraryPage.js';
-import { useI18n } from '@deliveryos/ui';
+import { useI18n, SearchInput } from '@deliveryos/ui';
 
 const KIND_ICONS: Record<string, string> = {
   food_ingredient: 'ti ti-meat',
@@ -147,9 +147,8 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
             })}
           </div>
           {/* eslint-disable jsx-a11y/no-autofocus */}
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search')}
-            autoFocus className="w-full h-8 px-2 mb-1 rounded text-xs outline-none border transition-shadow duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
-            style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+          <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search')}
+            autoFocus containerClassName="w-full mb-1" />
           {/* eslint-enable jsx-a11y/no-autofocus */}
           <div className="max-h-36 overflow-y-auto space-y-0.5 mb-1">
             {filteredSupplies.map(s => {

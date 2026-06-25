@@ -1,7 +1,7 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay, ease, duration } from '@deliveryos/ui';
+import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay, ease, duration, SearchInput } from '@deliveryos/ui';
 import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
@@ -500,17 +500,13 @@ export function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="relative flex-1 sm:flex-none">
-                <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--brand-text-muted)' }} />
-                <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder={t('common.search', 'Search...')}
-                  aria-label="Search orders by name or ID"
-                  className="pl-9 pr-4 py-2 rounded-lg border text-sm outline-none transition-[border-color,box-shadow] duration-200 focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary-light)] w-full sm:w-48"
-                  style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
-                />
-              </div>
+              <SearchInput
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={t('common.search', 'Search...')}
+                aria-label="Search orders by name or ID"
+                containerClassName="flex-1 sm:flex-none sm:w-48"
+              />
               <motion.button onClick={() => exportCSV(filteredOrders, 'orders.csv')} whileTap={{ scale: 0.97 }} title={t('tooltip.export_csv', 'Export as CSV')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-[transform,box-shadow,background-color] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:bg-[var(--brand-surface)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 shrink-0" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}>
                 <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
               </motion.button>
