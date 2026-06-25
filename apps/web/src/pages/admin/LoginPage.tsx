@@ -1,6 +1,6 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState } from 'react';
-import { Button, Input, useI18n, LanguageSwitcher, NomadicScene, NomadicCredit } from '@deliveryos/ui';
+import { Button, Input, useI18n, LanguageSwitcher } from '@deliveryos/ui';
 import { apiClient } from '../../lib/apiClient.js';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
@@ -103,19 +103,14 @@ export function LoginPage() {
   };
 
   return (
-    <div data-skin="paper" className="min-h-screen flex items-center justify-center p-4 text-[var(--brand-text)]" style={{ background: 'var(--brand-bg)' }}>
+    <div className="min-h-screen flex items-center justify-center p-4 text-[var(--brand-text)]" style={{ background: 'var(--brand-bg)' }}>
       <div className="w-full max-w-sm">
-        {/* Nomadic oasis hero — dowiz-owned page is always paper-skinned */}
-        <div className="mb-5 overflow-hidden rounded-[24px]" style={{ background: 'color-mix(in srgb, var(--teal) 16%, var(--paper-surface))', border: '1.5px solid var(--ink-line)' }}>
-          <NomadicScene variant="oasis" animated />
-          <div className="px-5 pb-5 -mt-2 text-center">
-            <p className="uppercase tracking-[0.25em] text-[11px] font-semibold" style={{ color: 'var(--teal-deep)' }}>{t('admin.login_kicker', 'Welcome back')}</p>
-            <h1 className="text-4xl leading-[1.05] mt-1" style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.02em' }}>DeliveryOS</h1>
-          </div>
-        </div>
+        {/* Brand accent bar */}
+        <div className="h-1 w-16 mx-auto mb-6 rounded-full" style={{ background: 'linear-gradient(90deg, var(--brand-primary), var(--brand-primary-hover))' }} />
 
         <div className="card-base p-8 space-y-6">
           <div className="text-center space-y-1.5">
+            <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>DeliveryOS</h1>
             <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.sign_in_owner', 'Sign in to your owner account')}</p>
           </div>
 
@@ -195,7 +190,6 @@ export function LoginPage() {
             )}
           </div>
         </div>
-        <NomadicCredit className="mt-6" />
       </div>
     </div>
   );

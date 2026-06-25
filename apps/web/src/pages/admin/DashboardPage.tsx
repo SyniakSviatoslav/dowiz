@@ -1,7 +1,7 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay, NomadicScene, isPaperSkinEnabled, ease, duration } from '@deliveryos/ui';
+import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay, ease, duration } from '@deliveryos/ui';
 import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
@@ -363,31 +363,6 @@ export function DashboardPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4" role="region" aria-live="polite" aria-label={t('admin.live_orders', 'Live orders')}>
-      {/* Paper skin: an illustrated header-band — the dashboard is the richest internal
-          surface (spec §5). The "moment" as a cheap animated SVG; flag-gated, off elsewhere. */}
-      {isPaperSkinEnabled() && (
-        <div
-          className="relative overflow-hidden rounded-[24px] border-[1.5px] border-[var(--ink-line,var(--brand-border))] flex items-end justify-between gap-4 min-h-[180px]"
-          style={{ background: 'color-mix(in srgb, var(--teal) 14%, var(--paper-surface, var(--brand-surface)))' }}
-        >
-          <div className="min-w-0 flex flex-col justify-center pl-7 py-7 z-10">
-            <p className="uppercase tracking-[0.28em] text-[11px] font-semibold" style={{ color: 'var(--teal-deep)' }}>
-              {t('admin.dashboard_band_kicker', 'Your atelier')}
-            </p>
-            <h2 className="text-4xl md:text-5xl leading-[1.0] mt-1.5" style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.025em' }}>
-              {t('admin.dashboard', 'Dashboard')}
-            </h2>
-            <p className="text-sm mt-2" style={{ color: 'var(--brand-text-muted)' }}>
-              {t('admin.dashboard_band_sub', 'Your kitchen at a glance')}
-            </p>
-          </div>
-          {/* full-bleed peaks scene anchored to the right, behind the heading */}
-          <div className="absolute right-0 bottom-0 w-[55%] max-w-[480px] hidden sm:block opacity-95">
-            <NomadicScene variant="peaks" animated />
-          </div>
-        </div>
-      )}
-
       {/* Persistent new-order banner — the honest fallback. Shown whenever an
           order is unacknowledged AND audio cannot carry the alert (sound off,
           or not yet unlocked/blocked). Guarantees a missed order is impossible

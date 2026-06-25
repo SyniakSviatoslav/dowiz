@@ -2,16 +2,9 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, Input, FormField, LanguageSwitcher, useI18n, NomadicScene, ArtNouveauFrame, NomadicCredit, isPaperSkinEnabled, ease, duration } from '@deliveryos/ui';
+import { Button, Input, FormField, LanguageSwitcher, useI18n, ease, duration } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { CourierLoginResponse } from '@deliveryos/shared-types';
-
-// K7: the teal Art-Nouveau corner brackets are a paper-skin motif — render the decorative
-// frame only when the paper skin is on, otherwise a plain card (no clashing teal in the dark default).
-function FrameOrPlain({ children, className }: { children?: React.ReactNode; className?: string }) {
-  if (isPaperSkinEnabled()) return <ArtNouveauFrame className={className}>{children}</ArtNouveauFrame>;
-  return <div className={className}>{children}</div>;
-}
 
 export function LoginPage() {
   const { t } = useI18n();
@@ -57,34 +50,18 @@ export function LoginPage() {
         <div className="absolute top-4 right-4">
           <LanguageSwitcher variant="full" />
         </div>
-        {isPaperSkinEnabled() ? (
-          <div className="mb-5 overflow-hidden rounded-[20px]" style={{ background: 'color-mix(in srgb, var(--teal) 16%, var(--paper-surface))', border: '1.5px solid var(--ink-line)' }}>
-            <NomadicScene animated />
-            <div className="px-5 pb-5 -mt-2 text-center">
-              <p className="uppercase tracking-[0.25em] text-[11px] font-semibold" style={{ color: 'var(--teal-deep)' }}>
-                {t('courier.journey_kicker', 'The journey begins')}
-              </p>
-              <h1 className="text-4xl leading-[1.05] mt-1" style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.02em' }}>
-                {t('courier.login', 'Courier')}
-              </h1>
-            </div>
-          </div>
-        ) : (
-          <div className="mb-6 text-center">
-            {/* Brand wordmark — a proper noun, not translated (mirrors the "Courier" wordmark in CourierRoutes). */}
-            <span className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-primary)' }}>
-              DeliveryOS
-            </span>
-          </div>
-        )}
+        <div className="mb-6 text-center">
+          {/* Brand wordmark — a proper noun, not translated (mirrors the "Courier" wordmark in CourierRoutes). */}
+          <span className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-primary)' }}>
+            DeliveryOS
+          </span>
+        </div>
 
-        <FrameOrPlain className="card-base p-8 space-y-6 block shadow-[var(--elev-1)]">
+        <div className="card-base p-8 space-y-6 block shadow-[var(--elev-1)]">
           <div className="text-center space-y-1.5">
-            {!isPaperSkinEnabled() && (
-              <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>
-                {t('courier.login', 'Courier Login')}
-              </h1>
-            )}
+            <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>
+              {t('courier.login', 'Courier Login')}
+            </h1>
             <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>
               {t('courier.login_subtitle', 'Enter your email and password to continue')}
             </p>
@@ -137,8 +114,7 @@ export function LoginPage() {
               {t('auth.login', 'Log In')}
             </Button>
           </form>
-        </FrameOrPlain>
-        {isPaperSkinEnabled() && <NomadicCredit className="mt-6" />}
+        </div>
       </motion.div>
     </div>
   );
