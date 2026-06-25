@@ -34,7 +34,7 @@ export function renderClientShell({ title, slug, scriptUrl, nonce, cssHash, them
         <link rel="manifest" href="/s/${slug}/manifest.webmanifest" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="icon" type="image/png" href="/favicon.png" />
-        <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet" />
+        <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" rel="stylesheet" />
         <link rel="stylesheet" href="/dist/tailwind.css" />
         ${cssHash ? html`<link rel="stylesheet" href="/public/locations/${locationId}/theme.css?hash=${cssHash}&v=${themeVersion}" />` : null}
         <style nonce="${nonce}">

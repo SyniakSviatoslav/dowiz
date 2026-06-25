@@ -10,6 +10,23 @@ radius **4/8/12/16/24/full** · elevation **`--elev-1…4`** (soft) · color = b
 
 ---
 
+## ⚠️ Capture-artifact correction (read first)
+
+Verified after the vision pass: **the Tabler icon webfont did not paint during the Playwright capture**
+(it loads from a CDN; `networkidle` doesn't guarantee webfont glyphs are rendered). Proof: in
+`m-client-menu.png` the cutlery placeholder glyph, the FAB `+`, the search/cart icons, and the card
+"taste" glyphs are all blank while text/gradients/colors render normally.
+
+**Therefore a large share of these findings are capture artifacts, not product bugs** and should NOT be
+"fixed": "empty header squares", "empty add-circle / FAB", "ghost-circle media placeholder",
+"sub-pixel glyph noise" on cards, "qty stepper has no −/+", "faint close button", supplies "stray glyph
+prefixes". The components render their icons correctly for real users when the CDN serves the font.
+(Several other findings were also false positives on inspection: supplies "unconfirmed" is already amber
+`--color-warning` — the green was the *ingredient-type icon*; the courier map-status default was already
+correct; the storefront loading/error states are good and branded.)
+
+**The real issue this exposes (A5 below) is genuine and worth fixing.**
+
 ## A. Systemic design-system breaks (code-grounded — the root causes)
 
 These are whole-system inconsistencies confirmed by grep across `apps/web/src` + `packages/ui/src`.
@@ -40,6 +57,16 @@ explicitly scoped.) `#ea4f16` (= brand-primary) and `#D97706` (= --color-warning
 written by hand → drift risk.
 → **Fix:** replace product-UI hex with `var(--brand-*)`/`var(--color-*)`; scope illustration palettes
 to a documented constants module.
+
+### A5 — Icons depend on a third-party CDN with no fallback (several pinned to `@latest`) · **High**
+All Tabler icons load from `cdn.jsdelivr.net/npm/@tabler/icons-webfont` — the SPA (`apps/web/index.html`),
+the SSR client/admin shells (`ssr-client-renderer.ts`, `ssr-renderer.ts`), and ~13 static admin pages.
+No local/vendored copy → if jsdelivr is slow, blocked, or down, **real users see the exact blank-icon
+storefront the capture showed** (especially relevant for the Albanian mobile-first market). It's also a
+supply-chain surface, and the SSR client shell + static admin pages used **unpinned `@latest`** (version
+drift / unreviewed updates). **Partial fix shipped:** all `@latest` refs pinned to `@3.31.0` to match the
+SPA. **Proper fix (needs a network install, do in CI):** `pnpm add @tabler/icons-webfont@3.31.0`, import
+the CSS in the app entry, drop the CDN `<link>`s → self-hosted, offline-safe, single pinned version.
 
 ### A4 — Font drift: spec vs reality · **Med**
 `tokens.css` sets `--brand-font-heading` AND `--brand-font-body` to **Inter**, but `DESIGN.md`
