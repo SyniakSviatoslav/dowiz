@@ -1518,6 +1518,12 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: '— або URL логотипу —',
   },
   'admin.restaurant_name': { en: 'Restaurant', sq: 'Restoranti', uk: 'Ресторан' },
+  'admin.restaurant_name_ph': { en: 'e.g. Pizza Roma', sq: 'p.sh. Pizza Roma', uk: 'напр. Pizza Roma' },
+  'admin.phone_pattern_hint': {
+    en: '+355 followed by 7–14 digits',
+    sq: '+355 i ndjekur nga 7–14 shifra',
+    uk: '+355, далі 7–14 цифр',
+  },
   'admin.add_products_preview': {
     en: 'Add products to the menu to see them here.',
     sq: "Shto produkte në menu për t'i parë këtu.",
