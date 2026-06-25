@@ -24,7 +24,10 @@ test('capture courier delivery + tracking (390px)', async ({ page, request }) =>
   const seedRes = await request.post(`${BASE}/api/dev/seed-visual-state`, { headers: hdr, data: {} });
   expect(seedRes.ok(), `seed failed ${seedRes.status()}`).toBeTruthy();
   const seed = await seedRes.json();
-  const { orderId, slug, locationId } = seed;
+  // The seeded order lives on the `open` venue; ids are nested there (not top-level).
+  const orderId = seed.orderId;
+  const locationId = seed.open.locationId;
+  const slug = seed.open.slug;
 
   // 2. Fresh courier token (random courierId) bound to the seeded venue.
   const cRes = await request.post(`${BASE}/dev/mock-auth`, { headers: hdr, data: { role: 'courier', locationId } });
