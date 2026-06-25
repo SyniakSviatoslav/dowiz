@@ -246,5 +246,27 @@ export async function synthesizeAndPersistEtaWindow(
     [orderId, loMin, hiMin],
   );
 
+  // §1.4: eta_cap is absolute (the clampWindow ceiling above). When the HONEST estimate exceeded the
+  // owner's cap, record an owner-readable signal so the clamp is "not silent" (brief §1.4). The right
+  // home is order_sensor_events: its DUAL-CONTEXT RLS lands the row in BOTH the owner-PATCH
+  // (app.user_id) and courier-accept (app.current_tenant) contexts — unlike location_alerts (member-
+  // only RLS, which would silently drop on a courier-driven confirm). UNIQUE(order_id,event_type) =
+  // exactly-once. Nested SAVEPOINT so a signal-insert failure never rolls back the window written above.
+  const etaCap = Number(g.eta_cap_min);
+  if (Number.isFinite(etaCap) && Math.round(range.highMin) > etaCap) {
+    try {
+      await client.query('SAVEPOINT eta_cap_signal');
+      await client.query(
+        `INSERT INTO order_sensor_events (location_id, order_id, event_type, payload)
+         VALUES ($1, $2, 'eta_cap_exceeded', $3::jsonb)
+         ON CONFLICT (order_id, event_type) DO NOTHING`,
+        [g.location_id, orderId, JSON.stringify({ requested_hi_min: Math.round(range.highMin), cap_min: etaCap })],
+      );
+      await client.query('RELEASE SAVEPOINT eta_cap_signal');
+    } catch {
+      try { await client.query('ROLLBACK TO SAVEPOINT eta_cap_signal'); } catch { /* no tx */ }
+    }
+  }
+
   return { loMin, hiMin };
 }
