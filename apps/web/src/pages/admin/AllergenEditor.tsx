@@ -144,7 +144,7 @@ export function ReadinessIndicator({
             <i className={`${c.pass ? 'ti ti-check' : 'ti ti-circle-dashed'} shrink-0`} style={{ fontSize: '0.7rem', color: c.pass ? 'var(--color-success)' : 'var(--brand-text-muted)' }} />
             <span className="flex-1 min-w-0 truncate">{c.label}</span>
             {!c.pass && c.action && (
-              <button type="button" onClick={c.onAction} className="shrink-0 text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] [@media(hover:hover)]:hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1" style={{ color: 'var(--brand-primary)' }}>
+              <button type="button" onClick={c.onAction} className="shrink-0 text-step-2xs px-1.5 py-0.5 rounded font-medium transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] [@media(hover:hover)]:hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1" style={{ color: 'var(--brand-primary)' }}>
                 {c.action}
               </button>
             )}

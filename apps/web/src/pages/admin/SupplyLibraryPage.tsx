@@ -170,7 +170,7 @@ const SupplyForm = ({
             {[{ label: t('admin.kcal', 'Kcal'), val: kcal, set: setKcal, ph: 'kcal' }, { label: t('admin.protein_g', 'Protein (g)'), val: protein, set: setProtein, ph: '0' }, { label: t('admin.fat_g', 'Fat (g)'), val: fat, set: setFat, ph: '0' }, { label: t('admin.carbs_g', 'Carbs (g)'), val: carbs, set: setCarbs, ph: '0' }].map(f => (
               <div key={f.label}>
                 <input value={f.val} onChange={e => f.set(e.target.value)} type="number" placeholder={f.ph} aria-label={f.label} className="w-full h-9 px-2 rounded-lg border text-xs outline-none focus:border-[var(--brand-primary)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-surface)] transition-[border-color,box-shadow] duration-150" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                <span className="text-[9px] block mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{f.label}</span>
+                <span className="text-step-2xs block mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{f.label}</span>
               </div>
             ))}
           </div>
@@ -417,7 +417,7 @@ export function SupplyLibraryPage() {
                   </div>
                   {supply.allergens.length > 0 && (
                     <div className="flex gap-1 mt-1 flex-wrap">{supply.allergens.map(a => (
-                      <span key={a} className="px-1.5 py-0.5 rounded-full text-[9px] font-medium" style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)' }}>{t(`allergen.${a}`, a)}</span>
+                      <span key={a} className="px-1.5 py-0.5 rounded-full text-step-2xs font-medium" style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)' }}>{t(`allergen.${a}`, a)}</span>
                     ))}</div>
                   )}
                 </div>

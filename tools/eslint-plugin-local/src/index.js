@@ -129,6 +129,29 @@ export default {
         };
       },
     },
+    // Focused ERROR rail (the broad no-arbitrary-tailwind above is warn-level and also fires on
+    // intentional token brackets like text-[var(--brand-text)]). This one targets ONLY arbitrary
+    // FONT SIZES — text-[10px] / text-[1.5rem] — which must use the type scale (text-step-2xs..3xl
+    // → --text-* tokens). Zero violations after the Phase-B migration; error-level locks the win.
+    'no-arbitrary-font-size': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'disallow arbitrary font sizes; use text-step-* / --text-* scale' },
+      },
+      create(context) {
+        const sizeArb = /\btext-\[\d+(?:\.\d+)?(?:px|rem|em)\]/;
+        const check = (node, val) => {
+          if (typeof val === 'string' && sizeArb.test(val)) {
+            context.report({ node, message: 'arbitrary font size — use the type scale (text-step-2xs / text-step-xs … text-step-3xl), not bracketed pixels' });
+          }
+        };
+        return {
+          JSXAttribute(node) { if (node.value && node.value.type === 'Literal') check(node, node.value.value); },
+          Literal(node) { check(node, node.value); },
+          TemplateElement(node) { check(node, node.value && node.value.raw); },
+        };
+      },
+    },
     'no-ts-nocheck': {
       meta: {
         type: 'problem',

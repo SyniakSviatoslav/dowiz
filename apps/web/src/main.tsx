@@ -83,7 +83,7 @@ function NotFound() {
         <i className="ti ti-map-search text-3xl" aria-hidden="true" />
       </div>
       <h1 className="text-5xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>404</h1>
-      <p className="text-[15px] max-w-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('error.page_not_found', 'This page took a wrong turn — it doesn’t exist.')}</p>
+      <p className="text-step-base max-w-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('error.page_not_found', 'This page took a wrong turn — it doesn’t exist.')}</p>
       <a href="/" className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-95 min-h-11" style={{ background: 'var(--brand-primary)', color: 'var(--color-on-primary)' }}>
         <i className="ti ti-arrow-left text-base" aria-hidden="true" />
         {t('error.return_home', 'Return home')}
