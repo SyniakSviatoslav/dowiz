@@ -12,14 +12,14 @@ export function SkeletonBase({ className = '' }: { className?: string }) {
 }
 
 // --- EmptyState ---
-export function EmptyState({ title, description, icon, action }: { title: string; description: string; icon?: ReactNode; action?: ReactNode }) {
+export function EmptyState({ title, description, icon, action, fullPage = false }: { title: string; description: string; icon?: ReactNode; action?: ReactNode; fullPage?: boolean }) {
   // Paper skin: when no icon is supplied, fall back to a Moebius line illustration so
   // internal empty states feel hand-drawn rather than blank. Opt-in via the global skin
   // flag; off everywhere else (incl. the white-label client storefront).
   const paperFallback = !icon && isPaperSkinEnabled()
     ? <PaperIllustration name="island" className="mx-auto max-w-[200px]" />
     : null;
-  return (
+  const card = (
     <div className="flex flex-col items-center justify-center p-8 text-center rounded-[var(--brand-radius)] border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface)]">
       {icon && <div className="mb-4 text-4xl text-[var(--brand-text-muted)]">{icon}</div>}
       {paperFallback && (
@@ -33,6 +33,9 @@ export function EmptyState({ title, description, icon, action }: { title: string
       {action}
     </div>
   );
+  // fullPage: this empty/error state IS the whole screen → vertically centre it so it doesn't
+  // strand at the top with a large dead void below (esp. on mobile). See mobile-polish #10.
+  return fullPage ? <div className="min-h-[68dvh] flex flex-col items-center justify-center">{card}</div> : card;
 }
 
 // --- OfflineBanner ---

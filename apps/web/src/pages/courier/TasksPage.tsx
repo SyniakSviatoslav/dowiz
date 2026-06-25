@@ -139,6 +139,8 @@ export function TasksPage() {
         </div>
       ) : error ? (
         <EmptyState
+          fullPage
+          icon={<i className="ti ti-alert-triangle" aria-hidden="true" />}
           title={t('common.error', 'Error')}
           description={error}
           action={
@@ -149,11 +151,12 @@ export function TasksPage() {
         />
       ) : tasks.length === 0 ? (
         <EmptyState
+          fullPage
           title={onShift ? t('courier.no_tasks', 'No active tasks') : t('courier.offline_title', 'You\'re offline')}
           description={onShift
             ? t('courier.no_tasks_desc', 'We\'ll notify you when a new delivery is ready.')
             : t('courier.offline_desc', 'Go online from the Shift tab to start receiving deliveries.')}
-          icon={isPaperSkinEnabled() ? <PaperIllustration name="island" animated className="mx-auto max-w-[200px]" /> : undefined}
+          icon={isPaperSkinEnabled() ? <PaperIllustration name="island" animated className="mx-auto max-w-[200px]" /> : <i className={onShift ? 'ti ti-checkup-list' : 'ti ti-zzz'} aria-hidden="true" />}
           action={!onShift ? (
             <Button type="button" variant="primary" className="min-h-[44px]" onClick={() => navigate('/courier/shift')}>
               {t('courier.go_online', 'Go to Shift')}
