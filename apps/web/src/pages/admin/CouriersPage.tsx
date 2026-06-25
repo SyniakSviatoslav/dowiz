@@ -391,11 +391,8 @@ export function CouriersPage() {
                     >
                       {initialsOf(displayName(c))}
                     </div>
-                    <span
-                      aria-hidden
-                      className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--brand-surface)]"
-                      style={{ backgroundColor: STATUS_COLORS[c.status] }}
-                    />
+                    {/* No presence dot — a green avatar dot reads as "online now", which the owner
+                        endpoint can't substantiate. Account status lives in the labelled pill. ADR-0006. */}
                   </div>
                   <div className="min-w-0">
                     <div className="font-medium truncate text-[var(--brand-text)]">
