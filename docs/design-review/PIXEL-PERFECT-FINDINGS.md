@@ -42,7 +42,7 @@ capture, or visual estimates that compute fine. **Verified real** issues are few
 | Muted text fails AA on dark cards | ❌ **False** | Computed `#959a93`: 4.57–6.21:1 on all default surfaces (≥4.5 AA). Passes (thin on raised). |
 | CSP `font-src` omits jsdelivr → blank icons | ⚠️ **Harmless** | The jsdelivr-less CSP (`headers.ts`) doesn't apply to icon pages; storefront uses the correct CSP. |
 | Two elevation systems (legacy `--elevation-*`) | ✅ **Real — FIXED** | 32 usages; aliased to `--elev-*`. |
-| Icons = unpinned third-party CDN, no fallback | ✅ **SPA SELF-HOSTED + proven** | Vendored + Vite-bundled; staging capture renders icons offline. SSR/static pages = follow-up. |
+| Icons = unpinned third-party CDN, no fallback | ✅ **FULLY SELF-HOSTED** | SPA Vite-bundled (proven offline); SSR renderers + static pages → vendored `/dist/tabler/` (served 200). Zero jsdelivr icon refs app-wide. |
 | Type scale bypassed by arbitrary `text-[Npx]` | ✅ **DONE (221/221) + guardrailed** | Fully migrated to `text-step-*` + `--text-2xs`; error-level ESLint rail (red→green); validated on staging. |
 | Font drift: DESIGN.md (DM) vs tokens.css (Inter) | ✅ **Real — FIXED** | Coherent as-shipped (Inter base + serif via preset); DESIGN.md §2/§8 reconciled. |
 | Button hierarchy fragmentation | 🔶 **Likely real — re-confirm** | Estimate confounded by missing icons; re-judge on an icon-rendering capture before consolidating. |
@@ -98,7 +98,10 @@ search/clock/cart/taste glyphs — confirming both the fix AND that the whole "e
 glyph-noise" finding cluster was this CDN artifact. **Remaining (follow-up):** the SSR client renderer +
 ~13 static admin HTML pages load `/dist/tailwind.css` (not the SPA bundle) — keep the pinned CDN until
 vendored to a `/vendor/tabler/` static route. Also flagged: the full icon CSS inlines ~40KB gzip — a
-subset/separate-chunk pass is worthwhile. Original note:
+subset/separate-chunk pass is worthwhile. **A5 now FULLY done** (`67b517d4`): the SSR client/server
+renderers + ~13 static admin pages are vendored too — `build-client.js` copies the webfont into the
+gitignored `public/dist/tabler/` at build time and all 15 CDN `<link>`s point there (served 200 on
+staging). No jsdelivr icon dependency remains anywhere. Original note:
 
 All Tabler icons load from `cdn.jsdelivr.net/npm/@tabler/icons-webfont` — the SPA (`apps/web/index.html`),
 the SSR client/admin shells (`ssr-client-renderer.ts`, `ssr-renderer.ts`), and ~13 static admin pages.
