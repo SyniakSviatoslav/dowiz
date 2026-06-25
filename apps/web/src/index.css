@@ -100,6 +100,16 @@ input:invalid, select:invalid, textarea:invalid {
 
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+/* Alias — some components use no-scrollbar; keep both working. */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Horizontal-scroll cue: fade the right edge so a clipped chip/tab row reads as "scroll for more"
+   rather than "truncated". Pair with overflow-x-auto + hide-scrollbar on chip/tab/KPI strips. */
+.scroll-fade-x {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+          mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+}
 
 /* ── Brand-aware card with elevation ── */
 .card-base {

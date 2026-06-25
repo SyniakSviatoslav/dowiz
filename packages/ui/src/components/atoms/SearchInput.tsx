@@ -18,7 +18,8 @@ interface SearchInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, '
  */
 export function SearchInput({ onClear, className = '', containerClassName = '', value, size = 'md', ...props }: SearchInputProps) {
   const hasValue = value != null && value !== '';
-  const sizeCls = size === 'sm' ? 'py-1.5 min-h-9 text-step-xs pl-9' : 'py-2.5 min-h-11 pl-10';
+  // 16px on mobile (no iOS zoom-on-focus), compact on desktop (md = 14px, sm = 12px).
+  const sizeCls = size === 'sm' ? 'py-1.5 min-h-9 text-base md:text-step-xs pl-9' : 'py-2.5 min-h-11 text-base md:text-sm pl-10';
   const iconCls = size === 'sm' ? 'left-2.5 text-step-xs' : 'left-3';
   return (
     <div className={`relative ${containerClassName}`}>

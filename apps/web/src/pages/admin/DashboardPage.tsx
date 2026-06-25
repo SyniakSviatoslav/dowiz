@@ -400,8 +400,9 @@ export function DashboardPage() {
         />
       )}
 
-      {/* Quick Stats Row */}
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 stagger-children">
+      {/* Quick Stats Row — single horizontal-scroll strip on mobile (1 row, not 2) so a real order
+          stays near the fold; a 5-col grid on ≥sm. */}
+      <div className="flex sm:grid sm:grid-cols-5 gap-3 stagger-children overflow-x-auto no-scrollbar scroll-fade-x sm:[mask-image:none] -mx-4 px-4 sm:mx-0 sm:px-0">
         {[
           { label: t('order.pending', 'Pending'), value: stats.pending, color: 'var(--status-pending)', isCurrency: false, tooltip: t('tooltip.pending_orders', 'Orders awaiting confirmation') },
           { label: t('order.preparing', 'Preparing'), value: stats.inProgress, color: 'var(--status-preparing)', isCurrency: false, tooltip: t('tooltip.active_orders', 'Orders being prepared') },
@@ -412,9 +413,10 @@ export function DashboardPage() {
           <div
             key={stat.label}
             title={stat.tooltip || undefined}
-            className="text-center p-3 rounded-[var(--brand-radius,12px)] fade-in card-base transition-[transform,box-shadow] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0" style={{ animationDelay: `${i * 40}ms` }}
+            className="text-center p-3 rounded-[var(--brand-radius,12px)] fade-in card-base shrink-0 min-w-[88px] sm:min-w-0 transition-[transform,box-shadow] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0" style={{ animationDelay: `${i * 40}ms` }}
           >
-            <div className="text-2xl font-bold mb-0.5" style={{ color: stat.color }}>
+            {/* A zero count is not an alert — render it neutral; reserve the status colour for >0. */}
+            <div className="text-2xl font-bold mb-0.5" style={{ color: (!stat.isCurrency && stat.value === 0) ? 'var(--brand-text-muted)' : stat.color }}>
               {stat.isCurrency ? (
                 <><AnimatedNumber value={Math.round(stats.revenue / 1000)} />k</>
               ) : (
@@ -515,7 +517,7 @@ export function DashboardPage() {
 
           {/* Filters row: statuses + sort — stacked on mobile, side-by-side on desktop */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-            <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory flex-1 w-full sm:w-auto" role="group" aria-label={t('admin.status_filter', 'Order status filter')}>
+            <div className="flex overflow-x-auto hide-scrollbar scroll-fade-x gap-1 pb-1 snap-x snap-mandatory flex-1 w-full sm:w-auto" role="group" aria-label={t('admin.status_filter', 'Order status filter')}>
               {STATUSES.map(s => (
                   <motion.button
                   key={s}
