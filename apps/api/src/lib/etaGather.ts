@@ -135,3 +135,116 @@ export async function gatherOrderEtaRange(db: Queryable, a: GatherArgs): Promise
     elapsedSincePlacedMinutes: minutesSince(a.createdAt) ?? undefined,
   });
 }
+
+// ─── SENSOR-BUS §1.1: promised_window (frozen) + live_eta (mutable) synthesis ────────────────
+// ESTOP-1 split (ADR-0009 v4): the synthesised window is persisted onto the order so the customer
+// reads a live, collapsing estimate (live_eta_*) while §8 measurement reads the frozen first promise
+// (promised_window_*). Both bounds only — range-never-point at the schema shape — and value-level via
+// the cap-last clamp below.
+
+export interface WindowCaps {
+  /** locations.eta_cap_min — absolute ceiling on the high bound. */
+  etaCapMin: number;
+  /** locations.min_window_width_min — the band is never narrower than this (range-never-point). */
+  minWindowWidthMin: number;
+}
+
+/**
+ * R3-M1 cap-last clamp: clamp `lo` FIRST (so the cap survives the width floor) → apply the width
+ * floor → clamp `hi` to eta_cap LAST so the cap is truly absolute and `hi` can never exceed it
+ * (the v3 floor-after-cap bug let lo=92→hi=97>90). Total: every degenerate input maps to a valid
+ * {1 ≤ lo < hi ≤ max(cap, lo+1)} band — never a point, never below 1, never above the cap.
+ */
+export function clampWindow(lowMin: number, highMin: number, caps: WindowCaps): { loMin: number; hiMin: number } {
+  const cap = Number.isFinite(caps.etaCapMin) && caps.etaCapMin > 0 ? Math.round(caps.etaCapMin) : 90;
+  const width = Math.max(1, Number.isFinite(caps.minWindowWidthMin) ? Math.round(caps.minWindowWidthMin) : 10);
+  let lo = Math.max(1, Math.round(num(lowMin) ?? 1));
+  let hi = Math.max(lo, Math.round(num(highMin) ?? lo + width));
+  // clamp lo first — leave room for the width floor under the cap.
+  if (lo > cap - width) lo = Math.max(1, cap - width);
+  // width floor (range-never-point, value-level).
+  if (hi < lo + width) hi = lo + width;
+  // eta_cap LAST — absolute ceiling (R3-M1).
+  if (hi > cap) hi = cap;
+  // belt-and-braces: never collapse to a point even when the cap is below lo+width.
+  if (hi < lo + 1) hi = lo + 1;
+  return { loMin: lo, hiMin: hi };
+}
+
+const SYNTH_TERMINAL = ['DELIVERED', 'REJECTED', 'CANCELLED'];
+
+/**
+ * Synthesise + persist the order's ETA window at a status transition. Frozen promised_window_* is
+ * written exactly once at CONFIRMED (guarded `WHERE promised_window_lo_min IS NULL` so the DB
+ * set-once trigger never raises); mutable live_eta_* is recomputed on EVERY stage with the width
+ * floor + cap-last clamp. Best-effort & total: any read hiccup degrades inside gatherOrderEtaRange,
+ * and the caller wraps this in a SAVEPOINT so a synthesis failure NEVER fails the status transition
+ * (observe-don't-control, brief §0.1). No-op for terminal statuses (no ETA past delivery).
+ */
+export async function synthesizeAndPersistEtaWindow(
+  client: Queryable,
+  orderId: string,
+  newStatus: string,
+): Promise<{ loMin: number; hiMin: number } | null> {
+  if (SYNTH_TERMINAL.includes(newStatus)) return null;
+
+  const r = await client.query(
+    `SELECT o.location_id, o.created_at::text AS created_at, o.preparing_at::text AS preparing_at,
+            o.delivery_lat, o.delivery_lng, o.promised_window_lo_min,
+            l.lat AS loc_lat, l.lng AS loc_lng,
+            COALESCE(l.eta_cap_min, 90)          AS eta_cap_min,
+            COALESCE(l.min_window_width_min, 10) AS min_window_width_min,
+            ca.courier_id, ca.status AS assignment_status,
+            cp.lat AS courier_lat, cp.lng AS courier_lng
+       FROM orders o
+       JOIN locations l ON l.id = o.location_id
+       LEFT JOIN courier_assignments ca ON ca.order_id = o.id AND ca.status IN ('accepted', 'picked_up')
+       LEFT JOIN LATERAL (
+         SELECT lat, lng FROM courier_positions
+          WHERE courier_id = ca.courier_id ORDER BY recorded_at DESC LIMIT 1
+       ) cp ON true
+      WHERE o.id = $1`,
+    [orderId],
+  );
+  const g = r.rows[0];
+  if (!g) return null;
+
+  const range = await gatherOrderEtaRange(client, {
+    orderId,
+    status: newStatus,
+    locationId: g.location_id,
+    createdAt: g.created_at,
+    preparingAt: g.preparing_at,
+    deliveryLat: g.delivery_lat,
+    deliveryLng: g.delivery_lng,
+    locationLat: g.loc_lat,
+    locationLng: g.loc_lng,
+    courierId: g.courier_id ?? null,
+    assignmentStatus: g.assignment_status ?? null,
+    courierLat: g.courier_lat,
+    courierLng: g.courier_lng,
+  });
+  if (!range) return null;
+
+  const { loMin, hiMin } = clampWindow(range.lowMin, range.highMin, {
+    etaCapMin: Number(g.eta_cap_min),
+    minWindowWidthMin: Number(g.min_window_width_min),
+  });
+
+  // Frozen promise: set ONCE at confirm. The `IS NULL` guard makes a re-confirm a no-op so the
+  // BEFORE-UPDATE set-once trigger (on the promised_window_* pair) can never raise.
+  if (newStatus === 'CONFIRMED') {
+    await client.query(
+      `UPDATE orders SET promised_window_lo_min = $2, promised_window_hi_min = $3
+        WHERE id = $1 AND promised_window_lo_min IS NULL`,
+      [orderId, loMin, hiMin],
+    );
+  }
+  // Live channel: always rewritten — never touches the frozen pair, so the trigger is never armed.
+  await client.query(
+    `UPDATE orders SET live_eta_lo_min = $2, live_eta_hi_min = $3 WHERE id = $1`,
+    [orderId, loMin, hiMin],
+  );
+
+  return { loMin, hiMin };
+}

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { roundCoordinate, isWithinGeofence } from '../../lib/geo.js';
+import { roundCoordinate, isWithinGeofence, distanceKm } from '../../lib/geo.js';
 import { loadEnv } from '@deliveryos/config';
 import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
@@ -337,11 +337,14 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
       // Range check vs location pin
-      const locRes = await client.query(`SELECT lat, lng FROM locations WHERE id = $1`, [locationId]);
+      const locRes = await client.query(`SELECT lat, lng, geofence_radius_m FROM locations WHERE id = $1`, [locationId]);
+      let venueCenter: { lat: number; lng: number } | null = null;
+      let geofenceRadiusM = 150;
       if (locRes.rowCount > 0 && locRes.rows[0].lat && locRes.rows[0].lng) {
-        const center = { lat: locRes.rows[0].lat, lng: locRes.rows[0].lng };
+        venueCenter = { lat: Number(locRes.rows[0].lat), lng: Number(locRes.rows[0].lng) };
+        geofenceRadiusM = Number(locRes.rows[0].geofence_radius_m) || 150;
         const maxDist = parseFloat((env as any).COURIER_GPS_MAX_DIST_KM || '50');
-        if (!isWithinGeofence(lat, lng, center.lat, center.lng, maxDist)) {
+        if (!isWithinGeofence(lat, lng, venueCenter.lat, venueCenter.lng, maxDist)) {
           await client.query('ROLLBACK');
           return reply.status(400).send({ error: 'GPS_OUT_OF_RANGE' });
         }
@@ -362,12 +365,19 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
       // P0-1 HARD GATE: store a GPS position ONLY while on an active delivery
       // (assignment accepted/picked_up — the courier's consent boundary). Tenant
       // is already scoped via set_config above, so this read is RLS-safe.
+      // SENSOR-BUS §1.1 (R3-H2): also return the courier's OWN active order_id — read
+      // server-side from their assignment, NEVER from the ping payload, so a courier can
+      // only stamp the order they are delivering. Deterministic ORDER BY over the (at-most-one,
+      // courier_one_active_assignment partial-unique) active set.
       const activeRes = await client.query(
-        `SELECT 1 FROM courier_assignments
-          WHERE courier_id = $1 AND status = ANY($2::text[]) LIMIT 1`,
+        `SELECT order_id FROM courier_assignments
+          WHERE courier_id = $1 AND status = ANY($2::text[])
+          ORDER BY picked_up_at DESC NULLS LAST, accepted_at DESC NULLS LAST, order_id
+          LIMIT 1`,
         [courierId, ACTIVE_DELIVERY_ASSIGNMENT_STATUSES as unknown as string[]]
       );
       const onActiveDelivery = activeRes.rowCount > 0;
+      const activeOrderId: string | null = onActiveDelivery ? activeRes.rows[0].order_id : null;
 
       if (onActiveDelivery) {
         const rLat = roundCoordinate(lat);
@@ -376,6 +386,30 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
           INSERT INTO courier_positions (courier_id, location_id, shift_id, lat, lng, accuracy_meters, source)
           VALUES ($1, $2, $3, $4, $5, $6, 'gps')
         `, [courierId, locationId, shiftId, rLat, rLng, accuracy_meters || null]);
+
+        // SENSOR-BUS §1.1: courier_geofence_enter — fire exactly once when the courier carrying an
+        // active order crosses the VENUE geofence (locations.lat/lng + geofence_radius_m). O(1)
+        // haversine on data already in-hand, zero new network call (no router — brief §1.2). Idempotent
+        // via UNIQUE(order_id,event_type)+ON CONFLICT DO NOTHING (GPS jitter re-cross is a no-op).
+        // Best-effort SAVEPOINT: a sensor write must NEVER fail the ping (observe-don't-control). RLS
+        // lands via app.current_tenant (set above) → the dual-context tenant_dual policy on the table.
+        if (venueCenter && activeOrderId) {
+          const distM = distanceKm(lat, lng, venueCenter.lat, venueCenter.lng) * 1000;
+          if (distM <= geofenceRadiusM) {
+            try {
+              await client.query('SAVEPOINT geofence_evt');
+              await client.query(
+                `INSERT INTO order_sensor_events (location_id, order_id, event_type, payload)
+                 VALUES ($1, $2, 'courier_geofence_enter', $3::jsonb)
+                 ON CONFLICT (order_id, event_type) DO NOTHING`,
+                [locationId, activeOrderId, JSON.stringify({ distance_m: Math.round(distM), radius_m: geofenceRadiusM })]
+              );
+              await client.query('RELEASE SAVEPOINT geofence_evt');
+            } catch {
+              try { await client.query('ROLLBACK TO SAVEPOINT geofence_evt'); } catch { /* no tx */ }
+            }
+          }
+        }
       }
 
       // Heartbeat ALWAYS updates while on shift — keeps the shift live (liveness) even

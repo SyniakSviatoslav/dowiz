@@ -32,6 +32,8 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
          SELECT o.id, o.status, o.type, o.delivery_address, o.delivery_instructions,
                 o.total, o.tip_amount, o.created_at::text as created_at,
                 o.delivery_lat, o.delivery_lng,
+                o.promised_window_lo_min, o.promised_window_hi_min,
+                o.live_eta_lo_min, o.live_eta_hi_min,
                 o.confirmed_at::text   as confirmed_at,
                 o.preparing_at::text   as preparing_at,
                 o.ready_at::text       as ready_at,
@@ -177,6 +179,15 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
         pickedUpAt: row.picked_up_at,
         etaMinutes,
         etaRange, // { lowMin, highMin, phase, overdue } | null — the v1 honest range
+        // SENSOR-BUS §1.1 (ESTOP-1): the frozen first promise (measurement) vs the live customer
+        // truth channel, recomputed per stage with the width-floor + absolute cap. Both bounds only
+        // (range-never-point); null until the order is confirmed.
+        promisedWindow: row.promised_window_lo_min != null && row.promised_window_hi_min != null
+          ? { loMin: Number(row.promised_window_lo_min), hiMin: Number(row.promised_window_hi_min) }
+          : null,
+        liveEta: row.live_eta_lo_min != null && row.live_eta_hi_min != null
+          ? { loMin: Number(row.live_eta_lo_min), hiMin: Number(row.live_eta_hi_min) }
+          : null,
 
         courierName: row.courier_id ? courierName : null,
         courierPhoneMasked: row.courier_id ? courierPhone : null,
