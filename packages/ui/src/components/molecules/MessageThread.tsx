@@ -185,7 +185,10 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
                   }}
                   className="px-3 py-1.5 min-h-[36px] text-xs rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-text)] transition-[background-color,color,border-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:bg-[var(--brand-primary)] hover:text-white hover:border-[var(--brand-primary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
                 >
-                  {t(preset.label as any, preset.key)}
+                  {/* Chip is a category trigger shown BEFORE the param is picked, so the raw
+                      label still carries `{{minutes}}`/`{{amount}}` placeholders — strip them to
+                      an ellipsis (the value is chosen on the next step) instead of leaking mustache. */}
+                  {t(preset.label as any, preset.key).replace(/\{\{\w+\}\}/g, '…')}
                 </button>
               ))}
             </div>

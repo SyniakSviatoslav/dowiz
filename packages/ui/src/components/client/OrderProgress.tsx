@@ -118,7 +118,11 @@ export function OrderProgress(props: OrderProgressProps) {
   // waiting on right now. We emphasize it (ring + pulse) so the live order
   // feels alive; everything before it reads as calmly completed.
   const activeIndex = lastFilled;
-  const fillPct = (lastFilled / denom) * 100;
+  // Dots are centered in equal flex-1 cells, so each dot sits at (i+0.5)/steps of the
+  // width. The connector must run between the first and last dot CENTERS — inset by half
+  // a cell on each side — and the fill spans that inset track, not the full width.
+  const inset = 50 / steps.length; // half-cell, in %
+  const fillW = (100 - 2 * inset) * (lastFilled / denom);
   // No-bounce spring → settle the connector + dots with one ease-out curve.
   const fillTransition = prefersReducedMotion
     ? { duration: 0 }
@@ -132,17 +136,17 @@ export function OrderProgress(props: OrderProgressProps) {
       data-testid="order-progress"
       data-order-type={isPickup ? 'pickup' : 'delivery'}
     >
-      {/* Track (upcoming) */}
-      <div className="absolute top-1/2 left-0 right-0 h-1 rounded-full bg-[var(--brand-surface-raised)] -translate-y-1/2 z-0" />
+      {/* Track (upcoming) — inset to align with the first/last dot centers. */}
+      <div className="absolute top-1/2 h-1 rounded-full bg-[var(--brand-surface-raised)] -translate-y-1/2 z-0" style={{ left: `${inset}%`, right: `${inset}%` }} />
       {/* Filled connector — animates its width on advance, ease-out only. */}
       <motion.div
-        className="absolute top-1/2 left-0 h-1 rounded-full -translate-y-1/2 z-0"
-        style={{ background: isTerminal ? 'var(--status-rejected)' : 'var(--brand-primary)' }}
+        className="absolute top-1/2 h-1 rounded-full -translate-y-1/2 z-0"
+        style={{ left: `${inset}%`, background: isTerminal ? 'var(--status-rejected)' : 'var(--brand-primary)' }}
         initial={false}
-        animate={{ width: `${fillPct}%` }}
+        animate={{ width: `${fillW}%` }}
         transition={fillTransition}
       />
-      <div className="relative z-10 flex justify-between">
+      <div className="relative z-10 flex">
         {steps.map((step, i) => {
           const isTerminalStep = step.key === 'CANCELLED' || step.key === 'REJECTED';
           const isFilled = isTerminalStep ? isTerminal : (i <= currentIndex || filledByTimestamp(i));
@@ -153,7 +157,7 @@ export function OrderProgress(props: OrderProgressProps) {
           return (
             <div
               key={step.key}
-              className="flex flex-col items-center"
+              className="flex flex-col items-center flex-1 min-w-0 px-0.5"
               data-testid={`order-step-${step.key.toLowerCase()}`}
               data-active={isFilled ? 'true' : 'false'}
               data-current={isCurrent ? 'true' : 'false'}
@@ -199,7 +203,7 @@ export function OrderProgress(props: OrderProgressProps) {
                   )}
                 </motion.span>
               </span>
-              <span className={`text-[10px] mt-1 ${isFilled ? 'text-[var(--brand-text)] font-semibold' : 'text-[var(--brand-text-muted)]'}`}>
+              <span className={`text-[10px] mt-1 text-center leading-tight break-words ${isFilled ? 'text-[var(--brand-text)] font-semibold' : 'text-[var(--brand-text-muted)]'}`}>
                 {step.label}
               </span>
               {time && (

@@ -1,7 +1,7 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, Input, ColorInput, FormField, SkeletonBase, useI18n, useToast, ease, duration } from '@deliveryos/ui';
+import { Button, Input, ColorInput, FormField, SkeletonBase, useI18n, useToast, ease, duration, contrastRatio, parseColor } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
@@ -197,6 +197,21 @@ export function BrandingPage() {
     postTheme(previewRef.current?.contentWindow);
   }, [postTheme]);
 
+  // AA contrast guardrail: derivePalette auto-corrects body TEXT on the live storefront,
+  // but the brand PRIMARY (the price colour) is never nudged — a pale primary on a pale
+  // background ships an illegible price. Warn the owner BEFORE they save either failure.
+  const contrastWarnings = useMemo(() => {
+    const bg = parseColor(concrete(config.bg)), text = parseColor(concrete(config.text)), primary = parseColor(concrete(config.primary));
+    const out: string[] = [];
+    if (bg && text && contrastRatio(text, bg) < 4.5) {
+      out.push(t('admin.contrast_text_warn', 'Text is hard to read on this background (below AA 4.5:1) — it will be auto-adjusted on your storefront.'));
+    }
+    if (bg && primary && contrastRatio(primary, bg) < 3) {
+      out.push(t('admin.contrast_primary_warn', 'Your primary colour is low-contrast on this background — prices and buttons may be hard to see. Pick a bolder primary or a different background.'));
+    }
+    return out;
+  }, [config.bg, config.text, config.primary, t]);
+
   // URL depends only on slug, so colour edits update via postMessage instead of
   // reloading the whole storefront (which reset scroll + flashed the slug name).
   const iframeUrl = useMemo(() => {
@@ -297,6 +312,16 @@ export function BrandingPage() {
             <ColorInput label={t('admin.primary_color', 'Primary Color')} value={config.primary} onChange={(c: string) => setConfig({ ...config, primary: c })} />
             <ColorInput label={t('admin.bg_color', 'Background Color')} value={config.bg} onChange={(c: string) => setConfig({ ...config, bg: c })} />
             <ColorInput label={t('admin.text_color', 'Text Color')} value={config.text} onChange={(c: string) => setConfig({ ...config, text: c })} />
+            {contrastWarnings.length > 0 && (
+              <div role="status" aria-live="polite" data-testid="branding-contrast-warning" className="rounded-[var(--brand-radius)] px-3 py-2 text-xs space-y-1" style={{ background: 'var(--status-pending-light, rgba(217,119,6,0.12))', border: '1px solid var(--color-warning)', color: 'var(--brand-text)' }}>
+                {contrastWarnings.map((w, i) => (
+                  <p key={i} className="flex items-start gap-1.5">
+                    <i className="ti ti-alert-triangle shrink-0 mt-0.5" aria-hidden="true" style={{ color: 'var(--color-warning)' }} />
+                    <span className="min-w-0">{w}</span>
+                  </p>
+                ))}
+              </div>
+            )}
           </motion.div>
           <motion.div {...sectionMotion(2)} className={cardCls}>
             <h3 className="font-semibold text-lg">{t('admin.logo', 'Logo')}</h3>
