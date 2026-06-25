@@ -42,3 +42,18 @@ Per-run learnings for the mobile (390px) polish loop. Append one block per run.
   low-value/UX deferrals. Loop effective; M1–M11 certification offered as a separate step.
 
 ### CERTIFIED 2026-06-25 (loop-architect) — M1–M11 all PASS → v0.1 DRAFT promoted to v1.0 CERTIFIED (registry + card updated; report stamped).
+
+### iteration 3 — DONE (commit f5896b5e, deployed + verified)
+- Extended SENSE to the 2 surfaces the main harness can't reach (need a live order):
+  new `e2e/tests/capture-delivery.spec.ts` seeds an order (`/dev/seed-visual-state`) → assigns it to
+  a fresh mock courier (`/dev/create-assignment`; the delivery route param is the ASSIGNMENT id, not
+  the order id) → captures `/courier/delivery/:asgnId` + `/s/:slug/order/:id` at 390px.
+- REVERSED an earlier mistake: the courier "stranded card + dead void" was deferred as a "sparse-page
+  artifact" in iter 1–2. A 3rd confirmation (delivery not-found + tracking session-expired, both
+  full-page) proves it's a REAL cross-cutting defect. Fix: `<EmptyState fullPage>` (min-h-[68dvh] flex
+  center) + meaningful icons, on courier DeliveryPage/TasksPage + client OrderStatusPage full-page states.
+  VERIFIED `m-client-tracking`: card now vertically centred.
+- **Capture limitation (not a bug):** the LIVE active-delivery view couldn't be seeded into a
+  renderable state (needs specific order/shift status) — the not-found state is what rendered.
+- **Lesson:** a deferral labelled "artifact" must be re-tested when the same pattern recurs on a new
+  surface — repetition flips "sparse page" into "real cross-cutting defect."
