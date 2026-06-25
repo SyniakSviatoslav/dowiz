@@ -34,6 +34,21 @@ function buildTailwind() {
   console.log('Tailwind CSS built -> public/dist/tailwind.css');
 }
 
+// Vendor the Tabler icon webfont locally (served at /dist/tabler/) so the SSR shells +
+// static admin pages don't depend on cdn.jsdelivr.net — same self-host as the SPA (A5).
+// Copies only the base set the min.css references (woff2/woff/ttf).
+function vendorTablerIcons() {
+  const src = path.join(__dirname, 'node_modules', '@tabler', 'icons-webfont', 'dist');
+  const dest = path.join(outDir, 'tabler');
+  const fontsDest = path.join(dest, 'fonts');
+  fs.mkdirSync(fontsDest, { recursive: true });
+  fs.copyFileSync(path.join(src, 'tabler-icons.min.css'), path.join(dest, 'tabler-icons.min.css'));
+  for (const f of ['tabler-icons.woff2', 'tabler-icons.woff', 'tabler-icons.ttf']) {
+    fs.copyFileSync(path.join(src, 'fonts', f), path.join(fontsDest, f));
+  }
+  console.log('Tabler icons vendored -> public/dist/tabler/');
+}
+
 async function build() {
   const options = {
     entryPoints: [
@@ -108,6 +123,7 @@ async function build() {
       console.log(`Widget compiled. SRI: sha384-${hash}`);
 
       buildTailwind();
+      vendorTablerIcons();
       console.log('Client scripts built successfully.');
     }
   } catch (err) {
