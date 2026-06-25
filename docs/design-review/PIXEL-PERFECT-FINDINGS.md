@@ -43,7 +43,7 @@ capture, or visual estimates that compute fine. **Verified real** issues are few
 | CSP `font-src` omits jsdelivr → blank icons | ⚠️ **Harmless** | The jsdelivr-less CSP (`headers.ts`) doesn't apply to icon pages; storefront uses the correct CSP. |
 | Two elevation systems (legacy `--elevation-*`) | ✅ **Real — FIXED** | 32 usages; aliased to `--elev-*`. |
 | Icons = unpinned third-party CDN, no fallback | ✅ **Real — partial fix** | `@latest` pinned to `@3.31.0`; self-host pending (needs install). |
-| Type scale bypassed by arbitrary `text-[Npx]` | ✅ **Real — pending** | grep-confirmed; needs a visually-validated migration (layout-break risk). |
+| Type scale bypassed by arbitrary `text-[Npx]` | 🟡 **Real — Phase B done (169/221)** | Migrated to `text-step-*` + new `--text-2xs`; validated on staging (no regressions). 52 off-scale left + ESLint rail. |
 | Font drift: DESIGN.md (DM) vs tokens.css (Inter) | ✅ **Real — FIXED** | Coherent as-shipped (Inter base + serif via preset); DESIGN.md §2/§8 reconciled. |
 | Button hierarchy fragmentation | 🔶 **Likely real — re-confirm** | Estimate confounded by missing icons; re-judge on an icon-rendering capture before consolidating. |
 
@@ -56,7 +56,13 @@ re-confirmation of the button/segmented-control consolidation on a clean (icon-r
 These are whole-system inconsistencies confirmed by grep across `apps/web/src` + `packages/ui/src`.
 Fixing these once removes most per-screen findings below.
 
-### A1 — Type scale is bypassed everywhere: arbitrary `text-[Npx]`, many OFF-SCALE · **High**
+### A1 — Type scale is bypassed everywhere: arbitrary `text-[Npx]`, many OFF-SCALE · 🟡 **Phase B done (169/221)**
+**Migrated (commit `7039fd94`, validated on staging):** on-scale `text-[12..36px]` → `text-step-*`
+(zero size change); the dominant micro tier `text-[10px]`×77 + `text-[11px]`×49 → a new `--text-2xs`
+(11px) + `text-step-2xs`. Visual check on the densest screens (admin Supplies badges, storefront cards)
+confirmed no pill/line-height regressions. **Remaining (52, follow-up):** the rarer off-scale
+`text-[7/8/9/13/15/20/24/26px]` need per-usage judgment + an ESLint rail to lock the win. Original note:
+
 The scale exists as tokens (`--text-xs…3xl`) but call-sites hardcode arbitrary pixel sizes instead.
 Counts: `text-[10px]` ×77, `text-[11px]` ×49, `text-[13px]` ×21, `text-[9px]` ×19, `text-[8px]` ×3,
 `text-[7px]` ×2, plus one-offs 15/20/24/26px. Even the on-scale sizes are arbitrary literals
