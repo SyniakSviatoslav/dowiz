@@ -57,3 +57,18 @@ Per-run learnings for the mobile (390px) polish loop. Append one block per run.
   renderable state (needs specific order/shift status) — the not-found state is what rendered.
 - **Lesson:** a deferral labelled "artifact" must be re-tested when the same pattern recurs on a new
   surface — repetition flips "sparse page" into "real cross-cutting defect."
+
+### iteration 3b — live active-delivery capture: HARD INFRA LIMIT (traced to root, not built)
+- Goal: render `/courier/delivery/:asgnId` LIVE (not the not-found state). Traced the full chain:
+  - seed returns ids NESTED under `open`/`closed`/`busy` (use `seed.open.locationId` + `seed.open.slug`,
+    not top-level — fixed in `capture-delivery.spec.ts`).
+  - `/dev/create-assignment` 500s: `courier_assignments.courier_id → couriers(id)`, and the mock courier
+    (random uuid) / `VIS_COURIER_ID` have NO row in `couriers`. The seed only creates an OWNER user.
+  - `couriers` requires encrypted PII (`email_encrypted`/`full_name_encrypted` bytea, `email_hash`,
+    `password_hash`) → seeding a courier needs the app's crypto/argon2 pipeline. Too heavy for a 390px
+    re-capture of a view already audited this session (the recapture pass fixed its {{minutes}} token bug,
+    state/CTA mismatch, missing map). **Documented as a capture limitation; not built.**
+  - WHAT DID get captured/verified: the delivery NOT-FOUND state — now centered + iconed (iter-3 fix holds
+    on this surface too). To enable the live view later: enhance the seed to UPSERT an encrypted courier +
+    courier_shift + courier_assignment for the seeded order, and let `/dev/mock-auth` impersonate it
+    (accept `body.courierId`).
