@@ -567,8 +567,10 @@ export function OrderStatusPage() {
                 : t('client.estimated_arrival', 'Estimated arrival')}
             </p>
           ) : null}
-          {/* Status-aware reassuring line with the lifecycle accent + a gentle live pulse while in delivery. */}
-          {statusMsg && (
+          {/* Status-aware reassuring line with the lifecycle accent + a gentle live pulse while in delivery.
+              Only when the h1 ISN'T already the same statusMsg (delivery-no-ETA falls back to it) — else
+              the identical line renders twice ("Your food is being prepared." stacked). */}
+          {statusMsg && (showEtaRange || isPickup) && (
             <p
               data-testid="order-status-message"
               data-dynamic
@@ -692,8 +694,10 @@ export function OrderStatusPage() {
           <div className="space-y-2 text-sm text-[var(--brand-text)]">
             {order.items?.map((item: any, i: number) => (
               <div key={i} className="flex justify-between gap-3">
-                <span className="min-w-0 break-words">{item.quantity}x {item.nameSnapshot ?? item.name}</span>
-                <span className="shrink-0 tabular-nums"><PriceDisplay amount={item.priceSnapshot ?? item.price} /></span>
+                <span className="min-w-0 break-words">{item.quantity ?? 1}× {item.nameSnapshot ?? item.name}</span>
+                {/* Show the LINE total (unit × qty), not the unit price — otherwise a 2× line
+                    reads as "800 ALL" yet the order Total counts 1600, looking like broken math. */}
+                <span className="shrink-0 tabular-nums"><PriceDisplay amount={(item.priceSnapshot ?? item.price ?? 0) * (item.quantity ?? 1)} /></span>
               </div>
             ))}
           </div>

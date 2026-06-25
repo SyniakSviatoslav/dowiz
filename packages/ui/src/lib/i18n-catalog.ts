@@ -1518,7 +1518,11 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: '— або URL логотипу —',
   },
   'admin.restaurant_name': { en: 'Restaurant', sq: 'Restoranti', uk: 'Ресторан' },
-  'admin.restaurant_name_ph': { en: 'e.g. Pizza Roma', sq: 'p.sh. Pizza Roma', uk: 'напр. Pizza Roma' },
+  'admin.restaurant_name_ph': {
+    en: 'e.g. Pizza Roma',
+    sq: 'p.sh. Pizza Roma',
+    uk: 'напр. Pizza Roma',
+  },
   'admin.phone_pattern_hint': {
     en: '+355 followed by 7–14 digits',
     sq: '+355 i ndjekur nga 7–14 shifra',
@@ -3784,4 +3788,18 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Lësho për të ngarkuar',
     uk: 'Відпустіть, щоб завантажити',
   },
+  'admin.otp': { en: 'OTP', sq: 'OTP', uk: 'OTP' },
+  'admin.no_data_yet': { en: 'No data yet', sq: 'Ende pa të dhëna', uk: 'Даних ще немає' },
+  'admin.contrast_text_warn': {
+    en: 'Text is hard to read on this background (below AA 4.5:1) — it will be auto-adjusted on your storefront.',
+    sq: "Teksti është i vështirë për t'u lexuar mbi këtë sfond (nën AA 4.5:1) — do të rregullohet automatikisht në dyqanin tuaj.",
+    uk: 'Текст погано читається на цьому фоні (нижче AA 4.5:1) — його буде автоматично скориговано у вашій вітрині.',
+  },
+  'admin.contrast_primary_warn': {
+    en: 'Your primary colour is low-contrast on this background — prices and buttons may be hard to see. Pick a bolder primary or a different background.',
+    sq: "Ngjyra juaj kryesore ka kontrast të ulët mbi këtë sfond — çmimet dhe butonat mund të jenë të vështira për t'u parë. Zgjidhni një ngjyrë kryesore më të theksuar ose një sfond tjetër.",
+    uk: 'Ваш основний колір має низький контраст на цьому фоні — ціни та кнопки може бути важко побачити. Виберіть яскравіший основний колір або інший фон.',
+  },
+  'admin.item_lower': { en: 'item', sq: 'artikull', uk: 'товар' },
+  'admin.order_lower': { en: 'order', sq: 'porosi', uk: 'замовлення' },
 };

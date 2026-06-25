@@ -210,10 +210,13 @@ export function AnalyticsPage() {
 
   const compactFmt = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
   const statCards = [
-    { label: t('admin.revenue', 'Revenue'), num: Math.round(data.revenue.today), format: (v: number) => compactFmt.format(v), value: compactFmt.format(Math.round(data.revenue.today)), trend: data.revenue.trend, icon: 'ti ti-wallet', colorVar: '--color-success' },
-    { label: t('admin.orders', 'Orders'), num: data.orders.today, format: (v: number) => v.toString(), value: data.orders.today.toString(), trend: data.orders.trend, icon: 'ti ti-shopping-cart', colorVar: '--color-info' },
-    { label: t('admin.avg_order', 'Avg Order'), num: data.avgOrderValue.value, format: (v: number) => String(v), value: String(data.avgOrderValue.value), trend: data.avgOrderValue.trend, icon: 'ti ti-receipt', colorVar: '--status-scheduled' },
-    { label: t('admin.delivery_time', 'Delivery'), num: data.deliveryTime.avg, format: (v: number) => `${v} ${t('admin.min', 'min')}`, value: `${data.deliveryTime.avg} ${t('admin.min', 'min')}`, trend: data.deliveryTime.trend, icon: 'ti ti-truck-delivery', colorVar: '--color-warning' },
+    { label: t('admin.revenue', 'Revenue'), num: Math.round(data.revenue.today), format: (v: number) => compactFmt.format(v), value: compactFmt.format(Math.round(data.revenue.today)), trend: data.revenue.trend, icon: 'ti ti-wallet', colorVar: '--color-success', noData: false },
+    { label: t('admin.orders', 'Orders'), num: data.orders.today, format: (v: number) => v.toString(), value: data.orders.today.toString(), trend: data.orders.trend, icon: 'ti ti-shopping-cart', colorVar: '--color-info', noData: false },
+    { label: t('admin.avg_order', 'Avg Order'), num: data.avgOrderValue.value, format: (v: number) => String(v), value: String(data.avgOrderValue.value), trend: data.avgOrderValue.trend, icon: 'ti ti-receipt', colorVar: '--status-scheduled', noData: false },
+    { label: t('admin.delivery_time', 'Delivery'), num: data.deliveryTime.avg, format: (v: number) => `${v} ${t('admin.min', 'min')}`, value: `${data.deliveryTime.avg} ${t('admin.min', 'min')}`, trend: data.deliveryTime.trend, icon: 'ti ti-truck-delivery', colorVar: '--color-warning',
+      // A 0-minute average delivery is impossible — it means no completed deliveries yet.
+      // Show a "no data" state instead of "0 min" + a meaningless −x% delta off a zero baseline.
+      noData: data.deliveryTime.avg === 0 },
   ];
 
   return (
@@ -259,11 +262,11 @@ export function AnalyticsPage() {
               <span className="text-xs font-medium truncate" style={{ color: 'var(--brand-text-muted)' }}>{card.label}</span>
               <i className={`${card.icon} text-lg shrink-0`} style={{ color: `var(${card.colorVar})` }} />
             </div>
-            <div className="text-xl font-bold mb-1 tabular-nums truncate" style={{ color: 'var(--brand-text)' }}>
-              <AnimatedNumber value={card.num} formatter={card.format} />
+            <div className="text-xl font-bold mb-1 tabular-nums truncate" style={{ color: card.noData ? 'var(--brand-text-muted)' : 'var(--brand-text)' }}>
+              {card.noData ? '—' : <AnimatedNumber value={card.num} formatter={card.format} />}
             </div>
-            <span className="text-xs font-medium tabular-nums" style={{ color: card.trend.startsWith('+') ? 'var(--color-success)' : card.trend.startsWith('-') ? 'var(--color-danger)' : 'var(--brand-text-muted)' }}>
-              {card.trend} {t('admin.vs_last_period', 'vs last period')}
+            <span className="text-xs font-medium tabular-nums" style={{ color: card.noData ? 'var(--brand-text-muted)' : card.trend.startsWith('+') ? 'var(--color-success)' : card.trend.startsWith('-') ? 'var(--color-danger)' : 'var(--brand-text-muted)' }}>
+              {card.noData ? t('admin.no_data_yet', 'No data yet') : `${card.trend} ${t('admin.vs_last_period', 'vs last period')}`}
             </span>
           </div>
         ))}
