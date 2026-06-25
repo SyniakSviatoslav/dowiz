@@ -1,11 +1,12 @@
+import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay, useDeliveryEta } from '@deliveryos/ui';
+import { motion, useReducedMotion } from 'framer-motion';
+import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay, ease, duration, Textarea } from '@deliveryos/ui';
 import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { messengerLink } from '../../lib/messenger.js';
 import { z } from 'zod';
-import { calcETA } from '@deliveryos/shared-types';
 
 const MessagesResponse = z.object({
   messages: z.array(z.any()),
@@ -37,10 +38,35 @@ const STATUS_VARIANTS: Record<string, 'info' | 'success' | 'warning' | 'error'> 
   CANCELLED: 'error',
 };
 
+// Per-status accent (drives the hero glow + reassuring subline color). Uses --status-* tokens.
+const STATUS_ACCENT: Record<string, string> = {
+  PENDING: 'var(--status-pending)',
+  CONFIRMED: 'var(--status-confirmed)',
+  PREPARING: 'var(--status-preparing)',
+  READY: 'var(--status-ready)',
+  IN_DELIVERY: 'var(--status-in-delivery)',
+  DELIVERED: 'var(--status-delivered)',
+  REJECTED: 'var(--status-rejected)',
+  CANCELLED: 'var(--status-cancelled)',
+};
+
+// Reassuring, status-aware subline. Each lifecycle state reads clearly and never as a dead-end.
+const STATUS_MESSAGE_KEYS: Record<string, { key: string; fallback: string }> = {
+  PENDING: { key: 'order.msg_pending', fallback: 'Sending your order to the restaurant…' },
+  CONFIRMED: { key: 'order.msg_confirmed', fallback: 'The restaurant has your order.' },
+  PREPARING: { key: 'order.msg_preparing', fallback: 'Your food is being prepared.' },
+  READY: { key: 'order.msg_ready', fallback: 'Your order is ready.' },
+  IN_DELIVERY: { key: 'order.msg_in_delivery', fallback: 'Your courier is on the way.' },
+  DELIVERED: { key: 'order.msg_delivered', fallback: 'Delivered — enjoy your meal!' },
+  REJECTED: { key: 'order.msg_rejected', fallback: "The restaurant couldn't take this order." },
+  CANCELLED: { key: 'order.msg_cancelled', fallback: 'This order was cancelled.' },
+};
+
 export function OrderStatusPage() {
   const { slug, id } = useParams<{ slug: string, id: string }>();
   const { t } = useI18n();
   const { showToast } = useToast();
+  const prefersReducedMotion = useReducedMotion();
   const prevStatusRef = useRef<string>('');
   const lastWsMsgRef = useRef<number>(Date.now());
   const watchIdRef = useRef<number | null>(null);
@@ -50,10 +76,11 @@ export function OrderStatusPage() {
   const [error, setError] = useState('');
   const [courierPos, setCourierPos] = useState<LngLatLike>([19.817, 41.331]);
   const [hasCourierFix, setHasCourierFix] = useState(false);
-  const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
+  // HONEST ETA range from the server (Prep-Time + Client ETA v1). Null for terminal
+  // orders or when the server can't estimate. Drives the headline range text below.
+  const [etaRange, setEtaRange] = useState<{ lowMin: number; highMin: number; phase: 'pre_assign' | 'assigned'; overdue: boolean } | null>(null);
   // Real road route (G1/G2): polyline drawn on the map; duration paces local ETA.
   const [routePolyline, setRoutePolyline] = useState<{ lat: number; lng: number }[] | null>(null);
-  const [routeDuration, setRouteDuration] = useState<number | null>(null);
   const [sharingLocation, setSharingLocation] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [ratingComment, setRatingComment] = useState('');
@@ -130,13 +157,11 @@ export function OrderStatusPage() {
         setCourierPos([data.courierPosition.lng, data.courierPosition.lat]);
         setHasCourierFix(true);
       }
-      if (data.etaMinutes != null) {
-        setEtaMinutes(data.etaMinutes);
-      }
+      // HONEST range (range or nothing — never a single number). Null clears it.
+      setEtaRange(data.etaRange ?? null);
       // Stored road route (served for reconnecting clients).
       if (Array.isArray(data.route?.polyline) && data.route.polyline.length >= 2) {
         setRoutePolyline(data.route.polyline);
-        setRouteDuration(data.route.durationSeconds ?? null);
       }
     } catch (err: any) {
       // 401 (no/expired token) or 403 (wrong role) → no valid customer session.
@@ -154,7 +179,7 @@ export function OrderStatusPage() {
               body: { code },
             });
             if (res?.token) {
-              localStorage.setItem('dos_access_token', res.token);
+              safeStorage.set('dos_access_token', res.token);
               // Strip ?t= so the secret never persists in history or leaks via Referer.
               window.history.replaceState({}, '', window.location.pathname + window.location.hash);
               return await fetchOrder(false); // retry once with the fresh token
@@ -216,7 +241,6 @@ export function OrderStatusPage() {
         const p = inner.payload;
         if (Array.isArray(p?.polyline) && p.polyline.length >= 2) {
           setRoutePolyline(p.polyline);
-          setRouteDuration(p.durationSeconds ?? null);
         }
         return;
       }
@@ -227,9 +251,8 @@ export function OrderStatusPage() {
           setCourierPos([p.position.lng, p.position.lat]);
           setHasCourierFix(true);
         }
-        if (p.etaSeconds != null) {
-          setEtaMinutes(Math.ceil(p.etaSeconds / 60));
-        }
+        // NOTE: etaSeconds was removed server-side — the honest ETA is the range from
+        // /status (refetched on status transitions below). The map keeps p.position.
          if (p.courierName) {
            setOrder((prev: any) => ({ ...prev, courierName: p.courierName }));
          }
@@ -243,7 +266,26 @@ export function OrderStatusPage() {
       }
 
       if (inner.type === 'order.status' && inner.status) {
-        setOrder((prev: any) => ({ ...prev, status: inner.status }));
+        // ORDER-TRACKING: additively merge the just-stamped *_at so the stepper
+        // lights up the new step live (statusAtField names the camelCase key).
+        setOrder((prev: any) => {
+          // Terminal lock: WS frames can arrive reordered across pub/sub instances. Once the
+          // order is terminal (DELIVERED/REJECTED/CANCELLED), ignore a late non-terminal frame
+          // that would visibly revert "Delivered!" back to "in delivery" (money-adjacent truth).
+          const TERMINAL = new Set(['DELIVERED', 'REJECTED', 'CANCELLED']);
+          if (prev?.status && TERMINAL.has(prev.status) && !TERMINAL.has(inner.status)) {
+            return prev;
+          }
+          const next = { ...prev, status: inner.status };
+          if (inner.statusAtField && inner.statusAt) {
+            next[inner.statusAtField] = inner.statusAt;
+          }
+          return next;
+        });
+        // Refetch so the ETA range re-derives and visibly narrows as the order
+        // advances (e.g. pre_assign → assigned on IN_DELIVERY). The 30s watchdog
+        // is a backstop; this makes the narrowing immediate on a status change.
+        fetchOrder();
       }
 
       if (inner.type === 'order.message' && inner.data) {
@@ -262,7 +304,11 @@ export function OrderStatusPage() {
   useEffect(() => {
     if (!order?.status) return;
     if (order.status === prevStatusRef.current) return;
+    // Cold open: adopt the current status silently — don't announce a "change" the user
+    // didn't witness (phantom toast). Only real transitions after the page is open toast.
+    const isFirstObservation = prevStatusRef.current === '';
     prevStatusRef.current = order.status;
+    if (isFirstObservation) return;
     const label = t(STATUS_LABELS_KEYS[order.status] || '', order.status.replace(/_/g, ' '));
     const variant = STATUS_VARIANTS[order.status] || 'info';
     showToast(label, variant);
@@ -313,8 +359,20 @@ export function OrderStatusPage() {
     setSharingLocation(false);
   }, [sendMessage]);
 
+  // ── SEAM (COURIER agent owns the emit) ─────────────────────────────────────
+  // The live courier pin below is fed by `courierPos`/`hasCourierFix`, which are
+  // set from the existing `order.courier_updated` WS event (payload.position =
+  // {lat,lng}) handled in the onMessage block above, and seeded by the REST
+  // `courierPosition` field. This ORDER-TRACKING change does NOT emit courier
+  // location — that is the courier-events worker's job
+  // (apps/api/src/workers/courier-events.ts → 'order.courier_updated').
+  // TODO(courier-agent): if the pin needs richer data (heading, accuracy, eta),
+  // extend the courier-events emit + this handler — reuse this event, do not
+  // invent a parallel courier-location channel.
   const couriers: CourierOnMap[] = useMemo(() => {
-    if (order?.courierName) {
+    // Don't render a courier marker until we have a REAL fix — otherwise it sits at the
+    // hardcoded default (FOWS: a pin at the wrong city before the first ping lands).
+    if (order?.courierName && hasCourierFix) {
       return [{
         id: 'c1',
         name: order.courierName,
@@ -324,7 +382,7 @@ export function OrderStatusPage() {
       }];
     }
     return [];
-  }, [order?.courierName, courierPos]);
+  }, [order?.courierName, courierPos, hasCourierFix]);
 
   // Live courier position as {lat,lng} for the tweened marker + local ETA.
   const courierLatLng = useMemo(
@@ -335,8 +393,9 @@ export function OrderStatusPage() {
     () => routePolyline?.map((p) => [p.lng, p.lat] as LngLatLike),
     [routePolyline],
   );
-  // Local, smoothed ETA along the real polyline — zero routing calls per ping.
-  const eta = useDeliveryEta(routePolyline, routeDuration, courierLatLng);
+  // NOTE: the headline ETA is now the HONEST server range (etaRange), never a single
+  // local number — so the useDeliveryEta single-number hook is no longer used for the
+  // headline. The map is fed by routeLine + courierLatLng (the live polyline + pin).
 
   const destPin: LngLatLike = order?.deliveryLat
     ? [order.deliveryLng || 19.817, order.deliveryLat || 41.331]
@@ -344,26 +403,86 @@ export function OrderStatusPage() {
 
   const isInDelivery = order?.status === 'IN_DELIVERY';
   const isPickup = order?.type === 'pickup';
-  // Prefer the smoothed route-based ETA; fall back to the WS naive ETA, then calcETA.
-  const displayEta = eta.arriving
-    ? t('order.arriving', 'Arriving')
-    : eta.etaSeconds != null
-      ? `${Math.max(1, Math.round(eta.etaSeconds / 60))} ${t('order.eta_min', 'min')}`
-      : etaMinutes != null
-        ? `${etaMinutes} min`
-        : order?.createdAt
-          ? calcETA(order.createdAt, order.elapsedSeconds || 0)
-          : '';
+  // HONEST headline ETA — ALWAYS a range, NEVER a single number, NEVER "0".
+  // overdue → reassuring line instead of implying on-time. Null/terminal → no ETA.
+  const isTerminalStatus = order?.status === 'DELIVERED' || order?.status === 'REJECTED' || order?.status === 'CANCELLED';
+  const showEtaRange = !!etaRange && !isTerminalStatus;
+  const displayEta = etaRange?.overdue
+    ? t('order.eta_overdue', 'A little longer than expected — almost there')
+    : etaRange
+      ? t('order.eta_range', '{{low}}–{{high}} min', { low: etaRange.lowMin, high: etaRange.highMin })
+      : '';
 
   if (loading) {
-    return <div className="p-6 space-y-4"><SkeletonBase className="h-40 w-full" /></div>;
+    // Skeleton matches the real layout: map → hero ETA → timeline → summary card.
+    return (
+      <div className="max-w-md mx-auto min-h-screen bg-[var(--brand-surface)] pb-10" aria-busy="true" aria-label={t('order.loading', 'Loading your order')}>
+        <SkeletonBase className="h-64 w-full rounded-none" />
+        <div className="p-4 space-y-6 -mt-4 relative z-10 bg-[var(--brand-surface)] rounded-t-[var(--brand-radius)]">
+          <div className="flex flex-col items-center gap-2 pt-2">
+            <SkeletonBase className="h-7 w-32" />
+            <SkeletonBase className="h-4 w-40" />
+          </div>
+          <div className="flex items-center justify-between gap-2 px-2">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <SkeletonBase key={i} className="h-9 w-9 rounded-full" />
+            ))}
+          </div>
+          <div className="rounded-[var(--brand-radius)] p-4 space-y-3" style={{ boxShadow: 'var(--elev-1)', background: 'var(--brand-surface-raised)' }}>
+            <SkeletonBase className="h-5 w-28" />
+            <SkeletonBase className="h-4 w-full" />
+            <SkeletonBase className="h-4 w-3/4" />
+            <SkeletonBase className="h-4 w-1/2" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (error || !order) {
-    return <EmptyState title={t('order.not_found_title', 'Not Found')} description={error || t('order.not_found_desc', 'Order not found')} />;
+    // Never a dead-end: a session-expired / not-found tracking page always offers a way back to
+    // the menu and a way to reach the restaurant (the fallback phone, un-gated from the WS banner).
+    const backToMenu = slug ? `/s/${slug}` : '/';
+    return (
+      <div className="max-w-md mx-auto p-6">
+        <EmptyState
+          fullPage
+          icon={<i className={error ? 'ti ti-link-off' : 'ti ti-search-off'} aria-hidden="true" />}
+          title={error ? t('order.unavailable_title', 'This link is no longer active') : t('order.not_found_title', 'Order not found')}
+          description={error || t('order.not_found_desc', 'Order not found')}
+          action={
+            <div className="flex flex-col gap-3 w-full max-w-xs">
+              <a href={backToMenu} data-testid="order-back-to-menu" className="w-full min-h-11 inline-flex items-center justify-center rounded-[var(--brand-radius-btn)] font-semibold transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2" style={{ background: 'var(--brand-primary)', color: 'var(--color-on-primary, var(--brand-bg))', boxShadow: 'var(--elev-1)' }}>
+                {t('order.back_to_menu', 'Back to the menu')}
+              </a>
+              {fallbackPhone && (
+                <a href={`tel:${fallbackPhone}`} data-testid="order-call-restaurant" className="w-full min-h-11 inline-flex items-center justify-center gap-2 rounded-[var(--brand-radius-btn)] border font-medium transition-[transform,background-color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                  <i className="ti ti-phone" aria-hidden="true" />{t('order.call_restaurant', 'Call the restaurant')}
+                </a>
+              )}
+            </div>
+          }
+        />
+      </div>
+    );
   }
 
   const isDisconnected = wsStatus === 'disconnected' || wsStatus === 'reconnecting' || wsStatus === 'error';
+
+  const statusAccent = STATUS_ACCENT[order.status] || 'var(--brand-primary)';
+  const statusMsg = STATUS_MESSAGE_KEYS[order.status];
+  const isTerminal = order.status === 'REJECTED' || order.status === 'CANCELLED' || order.status === 'DELIVERED';
+  const isLive = order.status === 'IN_DELIVERY';
+  // Shared soft-UI card surface (elev-1, no ghost-card: shadow xor heavy border).
+  const cardStyle: React.CSSProperties = { boxShadow: 'var(--elev-1)', background: 'var(--brand-surface-raised)' };
+  // Entrance: gentle staggered fade/rise; instant under reduced-motion.
+  const enter = prefersReducedMotion
+    ? { initial: { opacity: 1 }, animate: { opacity: 1 } }
+    : {
+        initial: { opacity: 0, y: 8 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: duration.base, ease: ease.out },
+      };
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-[var(--brand-surface)] pb-10" role="region" aria-live="polite" aria-label={t('order.status_updates', 'Order status updates')}>
@@ -379,7 +498,7 @@ export function OrderStatusPage() {
               href={`tel:${fallbackPhone}`}
               data-testid="offline-call-restaurant"
               title={t('order.call_restaurant', 'Call the restaurant')}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 px-3 py-1.5 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 px-3 py-1.5 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1"
               style={{ color: '#fff' }}
             >
               <i className="ti ti-phone" aria-hidden="true" />
@@ -398,7 +517,7 @@ export function OrderStatusPage() {
             liveCourier={courierLatLng}
             routeLine={routeLine}
             destinationPin={destPin}
-            center={courierPos}
+            center={hasCourierFix ? courierPos : destPin}
             zoom={14}
           />
           <div className="absolute top-4 left-4 bg-white/90 p-1.5 rounded-full shadow-md z-10" title={t('tooltip.ws_status', 'Connection status')}>
@@ -407,51 +526,129 @@ export function OrderStatusPage() {
         </div>
       )}
 
+      {/* Screen-reader status announcer — speaks every status transition with explicit
+          localized text. The visual toast isn't reliably announced and the stepper is
+          graphical; this dedicated role="status" region guarantees the change is spoken. */}
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="sr-status-announcer">
+        {order?.status
+          ? `${t('order.status_now', 'Order status:')} ${t(STATUS_LABELS_KEYS[order.status] || '', order.status.replace(/_/g, ' '))}`
+          : ''}
+      </div>
+
       {/* Screen-reader accessible courier status */}
       {order?.courierName && (
-        <div className="sr-only" role="status" aria-live="polite">
-          Courier {order.courierName} is delivering your order.
-          {etaMinutes ? ` Approximately ${etaMinutes} minutes away.` : ''}
-          {order.deliveryAddress ? ` Delivering to ${order.deliveryAddress}.` : ''}
+        <div data-dynamic className="sr-only" role="status" aria-live="polite">
+          {t('order.sr_courier_delivering', '{{name}} is delivering your order.', { name: order.courierName })}
+          {etaRange && !isTerminalStatus ? ` ${t('order.sr_courier_eta_range', 'Estimated {{low}} to {{high}} minutes away.', { low: etaRange.lowMin, high: etaRange.highMin })}` : ''}
+          {order.deliveryAddress ? ` ${t('order.sr_courier_dest', 'Delivering to {{addr}}.', { addr: order.deliveryAddress })}` : ''}
         </div>
       )}
 
-      <div className="p-4 space-y-6 -mt-4 relative z-10 bg-[var(--brand-surface)] rounded-t-[24px]">
-        
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-[var(--brand-text)] mb-1" style={{ fontFamily: 'var(--brand-font-heading)' }}>
+      <div className="p-4 space-y-6 -mt-4 relative z-10 bg-[var(--brand-surface)] rounded-t-[var(--brand-radius)]">
+
+        <motion.div className="text-center" {...enter}>
+          <h1 data-dynamic data-testid="order-eta-headline" className="text-2xl font-bold text-[var(--brand-text)] mb-1 break-words" style={{ fontFamily: 'var(--brand-font-heading)' }}>
             {isPickup
               ? (order.status === 'READY' ? t('order.ready_for_pickup', 'Ready for pickup')
                  : order.status === 'PICKED_UP' ? t('order.picked_up', 'Picked up')
                  : t('order.preparing', 'Preparing your order'))
-              : displayEta}
+              : showEtaRange
+                ? displayEta
+                : (statusMsg
+                    ? t(statusMsg.key, statusMsg.fallback)
+                    : t(STATUS_LABELS_KEYS[order.status] || '', order.status.replace(/_/g, ' ')))}
           </h1>
-          <p className="text-[var(--brand-text-muted)] text-sm">
-            {isPickup ? t('order.pickup_at_restaurant', 'Collect at the restaurant') : t('client.estimated_arrival', 'Estimated arrival')}
-          </p>
-        </div>
+          {/* Subline: only claim "estimated arrival" when we actually show a range.
+              pre_assign → caption that the estimate refines after restaurant confirms. */}
+          {isPickup ? (
+            <p className="text-sm text-[var(--brand-text-muted)]">{t('order.pickup_at_restaurant', 'Collect at the restaurant')}</p>
+          ) : showEtaRange && !etaRange?.overdue ? (
+            <p className="text-sm text-[var(--brand-text-muted)]">
+              {etaRange?.phase === 'pre_assign'
+                ? t('order.eta_refines', 'Refines once the restaurant confirms')
+                : t('client.estimated_arrival', 'Estimated arrival')}
+            </p>
+          ) : null}
+          {/* Status-aware reassuring line with the lifecycle accent + a gentle live pulse while in delivery.
+              Only when the h1 ISN'T already the same statusMsg (delivery-no-ETA falls back to it) — else
+              the identical line renders twice ("Your food is being prepared." stacked). */}
+          {statusMsg && (showEtaRange || isPickup) && (
+            <p
+              data-testid="order-status-message"
+              data-dynamic
+              className="mt-2 inline-flex items-center gap-2 text-sm font-medium break-words"
+              style={{ color: statusAccent }}
+            >
+              {isLive && (
+                <span
+                  aria-hidden="true"
+                  className={`inline-block w-2 h-2 rounded-full shrink-0${prefersReducedMotion ? '' : ' animate-pulse'}`}
+                  style={{ background: statusAccent }}
+                />
+              )}
+              {t(statusMsg.key, statusMsg.fallback)}
+            </p>
+          )}
+        </motion.div>
 
         <div data-testid="order-status-badge" data-status={order?.status} aria-live="polite" aria-atomic="true">
-          <OrderProgress status={order.status} />
+          {/* ORDER-TRACKING: real-machine stepper. type drives pickup vs delivery
+              branch; the *At timestamps light up filled steps (status-only fallback). */}
+          <OrderProgress
+            status={order.status}
+            type={order.type}
+            confirmedAt={order.confirmedAt}
+            preparingAt={order.preparingAt}
+            readyAt={order.readyAt}
+            inDeliveryAt={order.inDeliveryAt}
+            deliveredAt={order.deliveredAt}
+            pickedUpAt={order.pickedUpAt}
+          />
         </div>
+
+        {/* S2/S6/S7 seam — every terminal state gets an exit (never a dead-end) and a humane,
+            non-accusing explanation (the customer is never blamed; they were never charged). */}
+        {isTerminal && (
+          <motion.div data-testid="order-terminal-exit" className="flex flex-col gap-3 px-1" {...enter}>
+            {(order.status === 'REJECTED' || order.status === 'CANCELLED') && (
+              <p className="text-sm text-center break-words" style={{ color: 'var(--brand-text)' }}>
+                {order.status === 'REJECTED'
+                  ? t('order.rejected_help', "The restaurant couldn't take this order — you haven't been charged. Try again or give them a call.")
+                  : t('order.cancelled_help', "This order was cancelled — you haven't been charged. You can order again or call the restaurant.")}
+              </p>
+            )}
+            <a href={slug ? `/s/${slug}` : '/'} data-testid="order-again"
+              className="w-full min-h-11 inline-flex items-center justify-center rounded-[var(--brand-radius-btn)] font-semibold transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+              style={{ background: 'var(--brand-primary)', color: 'var(--color-on-primary, var(--brand-bg))', boxShadow: 'var(--elev-1)' }}>
+              {t('order.order_again', 'Order again')}
+            </a>
+            {fallbackPhone && order.status !== 'DELIVERED' && (
+              <a href={`tel:${fallbackPhone}`} data-testid="order-call-restaurant-terminal"
+                className="w-full min-h-11 inline-flex items-center justify-center gap-2 rounded-[var(--brand-radius-btn)] border font-medium transition-[transform,background-color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+                style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                <i className="ti ti-phone" aria-hidden="true" />{t('order.call_restaurant', 'Call the restaurant')}
+              </a>
+            )}
+          </motion.div>
+        )}
 
         {/* CR-6: Share my location (visible during IN_DELIVERY) */}
         {isInDelivery && (
-          <div className="flex flex-col gap-2">
+          <motion.div className="flex flex-col gap-3" {...enter}>
             {sharingLocation ? (
-              <div className="flex items-center gap-3 bg-[var(--color-success)]/10 border border-[var(--color-success)]/30 rounded-[var(--brand-radius)] p-3">
-                <div className="w-3 h-3 rounded-full bg-[var(--color-success)] animate-pulse shrink-0" />
-                <div className="flex-1 text-sm">
-                  <div className="font-semibold text-[var(--color-success)]">
+              <div className="flex items-center gap-3 rounded-[var(--brand-radius)] p-3" style={{ background: 'var(--status-delivered-light)', boxShadow: 'var(--elev-1)' }}>
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0${prefersReducedMotion ? '' : ' animate-pulse'}`} style={{ background: 'var(--color-success)' }} aria-hidden="true" />
+                <div className="flex-1 min-w-0 text-sm">
+                  <div className="font-semibold break-words" style={{ color: 'var(--color-success)' }}>
                     {t('client.sharing_location', 'Sharing your location')}
                   </div>
-                  <div className="text-xs text-[var(--brand-text-muted)]">
+                  <div className="text-xs break-words text-[var(--brand-text-muted)]">
                     {t('client.sharing_location_note', 'Courier can see your live position')}
                   </div>
                 </div>
                 <button
                   onClick={stopSharing}
-                  className="text-xs px-2.5 py-1.5 rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-text)]"
+                  className="shrink-0 text-xs px-3 py-1.5 rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-text)] transition-[transform,background-color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
                 >
                   {t('client.stop_sharing', 'Stop')}
                 </button>
@@ -459,10 +656,10 @@ export function OrderStatusPage() {
             ) : (
               <button
                 onClick={startSharing}
-                className="flex items-center justify-center gap-2 w-full py-3 rounded-[var(--brand-radius)] bg-[var(--brand-primary-light)] text-[var(--brand-text)] font-semibold text-sm border border-[var(--brand-primary)]"
+                className="flex items-center justify-center gap-2 w-full min-h-11 py-3 rounded-[var(--brand-radius)] bg-[var(--brand-primary-light)] text-[var(--brand-text)] font-semibold text-sm border border-[var(--brand-primary)] transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
               >
-                <span>📍</span>
-                <span>{t('client.share_location', 'Share my location with courier')}</span>
+                <i className="ti ti-map-pin" aria-hidden="true" />
+                <span className="min-w-0 break-words">{t('client.share_location', 'Share my location with courier')}</span>
               </button>
             )}
             {/* CR-8: CourierContactBtn — call courier */}
@@ -470,10 +667,11 @@ export function OrderStatusPage() {
               <a
                 href={`tel:${order.courier_phone}`}
                 title={t('tooltip.call_courier', 'Call your courier')}
-                className="flex items-center justify-center gap-2 w-full py-3 rounded-[var(--brand-radius)] bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] text-[var(--brand-text)] font-semibold text-sm"
+                className="flex items-center justify-center gap-2 w-full min-h-11 py-3 rounded-[var(--brand-radius)] bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] text-[var(--brand-text)] font-semibold text-sm transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+                style={{ boxShadow: 'var(--elev-1)' }}
               >
-                <span>📞</span>
-                <span>{t('client.call_courier', 'Call courier')}</span>
+                <i className="ti ti-phone" aria-hidden="true" />
+                <span className="min-w-0 break-words">{t('client.call_courier', 'Call courier')}</span>
               </a>
             )}
             {/* UX-2: message courier in their app (only within the active order) */}
@@ -483,41 +681,44 @@ export function OrderStatusPage() {
                 target="_blank" rel="noopener noreferrer"
                 title={t('client.message_courier', 'Message your courier')}
                 data-testid="message-courier-btn"
-                className="flex items-center justify-center gap-2 w-full py-3 mt-2 rounded-[var(--brand-radius)] bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] text-[var(--brand-text)] font-semibold text-sm"
+                className="flex items-center justify-center gap-2 w-full min-h-11 py-3 rounded-[var(--brand-radius)] bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] text-[var(--brand-text)] font-semibold text-sm transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+                style={{ boxShadow: 'var(--elev-1)' }}
               >
                 <i className="ti ti-message-circle" aria-hidden="true" />
-                <span>{t('client.message_courier', 'Message courier')}</span>
+                <span className="min-w-0 break-words">{t('client.message_courier', 'Message courier')}</span>
               </a>
             )}
-          </div>
+          </motion.div>
         )}
 
-        <div className="bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4">
-          <h2 className="font-semibold mb-3">{t('client.order_details', 'Order Details #{{id}}', { id: order.id.substring(0, 4) })}</h2>
-          <div className="space-y-2 text-sm">
+        <motion.div className="rounded-[var(--brand-radius)] p-4" style={cardStyle} {...enter}>
+          <h2 className="font-semibold mb-3 text-[var(--brand-text)]">{t('client.order_details', 'Order Details #{{id}}', { id: order.id.substring(0, 4) })}</h2>
+          <div className="space-y-2 text-sm text-[var(--brand-text)]">
             {order.items?.map((item: any, i: number) => (
-              <div key={i} className="flex justify-between">
-                <span>{item.quantity}x {item.nameSnapshot ?? item.name}</span>
-                <span><PriceDisplay amount={item.priceSnapshot ?? item.price} /></span>
+              <div key={i} className="flex justify-between gap-3">
+                <span className="min-w-0 break-words">{item.quantity ?? 1}× {item.nameSnapshot ?? item.name}</span>
+                {/* Show the LINE total (unit × qty), not the unit price — otherwise a 2× line
+                    reads as "800 ALL" yet the order Total counts 1600, looking like broken math. */}
+                <span className="shrink-0 tabular-nums"><PriceDisplay amount={(item.priceSnapshot ?? item.price ?? 0) * (item.quantity ?? 1)} /></span>
               </div>
             ))}
           </div>
-          <div className="border-t border-[var(--brand-border)] mt-4 pt-4 flex justify-between font-bold">
-            <span>{t('client.total', 'Total')}</span>
-            <span><PriceDisplay amount={order.total} /></span>
+          <div className="border-t border-[var(--brand-border)] mt-4 pt-4 flex justify-between gap-3 font-bold text-[var(--brand-text)]">
+            <span className="min-w-0">{t('client.total', 'Total')}</span>
+            <span className="shrink-0 tabular-nums"><PriceDisplay amount={order.total} /></span>
           </div>
           {order.tipAmount > 0 && (
-            <div className="flex justify-between text-sm mt-2" style={{ color: 'var(--brand-text-muted)' }} data-testid="order-tip">
-              <span>{t('client.tip_for_courier', 'Tip for courier (cash)')}</span>
-              <span><PriceDisplay amount={order.tipAmount} /></span>
+            <div className="flex justify-between gap-3 text-sm mt-2" style={{ color: 'var(--brand-text-muted)' }} data-testid="order-tip">
+              <span className="min-w-0 break-words">{t('client.tip_for_courier', 'Tip for courier (cash)')}</span>
+              <span className="shrink-0 tabular-nums"><PriceDisplay amount={order.tipAmount} /></span>
             </div>
           )}
-        </div>
+        </motion.div>
 
         {/* Rate your order — shown once DELIVERED; tap a star to submit */}
         {order.status === 'DELIVERED' && (
-          <div className="bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4" data-testid="rating-block">
-            <h2 className="font-semibold mb-3">{t('client.rate_order', 'Rate your order')}</h2>
+          <motion.div className="rounded-[var(--brand-radius)] p-4" style={cardStyle} data-testid="rating-block" {...enter}>
+            <h2 className="font-semibold mb-3 text-[var(--brand-text)]">{t('client.rate_order', 'Rate your order')}</h2>
             {order.rating ? (
               <div>
                 <div className="flex gap-1 text-2xl" aria-label={`${order.rating}/5`} data-testid="rating-submitted">
@@ -534,14 +735,13 @@ export function OrderStatusPage() {
                   {[1, 2, 3, 4, 5].map(s => (
                     <button key={s} type="button" disabled={ratingBusy} aria-label={`${s} ${t('client.stars', 'stars')}`}
                       data-testid={`rate-star-${s}`} onClick={() => submitRating(s)}
-                      className="transition-transform active:scale-90 disabled:opacity-50" style={{ color: 'var(--brand-primary)' }}>
+                      className="rounded-[var(--brand-radius-sm)] transition-transform duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:scale-110 active:scale-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2" style={{ color: 'var(--brand-primary)' }}>
                       <i className="ti ti-star" aria-hidden="true" />
                     </button>
                   ))}
                 </div>
-                <textarea value={ratingComment} onChange={e => setRatingComment(e.target.value)} maxLength={1000} rows={2}
-                  placeholder={t('client.feedback_placeholder', 'Add a comment (optional)')}
-                  className="w-full text-sm rounded-[var(--brand-radius)] p-2 bg-[var(--brand-surface)] border border-[var(--brand-border)]" />
+                <Textarea value={ratingComment} onChange={e => setRatingComment(e.target.value)} maxLength={1000} rows={2}
+                  placeholder={t('client.feedback_placeholder', 'Add a comment (optional)')} />
               </div>
             )}
             {/* Google review invite — shown to everyone (anti-gating), no incentive, no pre-fill. */}
@@ -549,36 +749,36 @@ export function OrderStatusPage() {
               <div className="mt-4 pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
                 <a href={`https://search.google.com/local/writereview?placeid=${encodeURIComponent(googlePlaceId)}`}
                   target="_blank" rel="noopener noreferrer" data-testid="google-review-link"
-                  className="inline-flex items-center gap-2 text-sm font-medium" style={{ color: 'var(--brand-primary)' }}>
+                  className="inline-flex items-center gap-2 min-h-11 text-sm font-medium rounded-[var(--brand-radius-sm)] transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2" style={{ color: 'var(--brand-primary)' }}>
                   <i className="ti ti-brand-google" aria-hidden="true" /> {t('client.leave_google_review', 'Leave a review on Google')}
                 </a>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
 
         {/* Nutrition snapshot */}
         {order.kcal_total != null && (
-          <div className="bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4">
+          <motion.div className="rounded-[var(--brand-radius)] p-4" style={cardStyle} {...enter}>
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-sm font-semibold">≈ Nutrition</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--brand-surface)', color: 'var(--brand-text-muted)' }}>estimate only</span>
+              <span className="text-sm font-semibold text-[var(--brand-text)]">≈ {t('client.nutrition', 'Nutrition')}</span>
+              <span className="text-step-2xs px-1.5 py-0.5 rounded-[var(--brand-radius-sm)]" style={{ background: 'var(--brand-surface)', color: 'var(--brand-text-muted)' }}>{t('client.nutrition_estimate', 'estimate only')}</span>
             </div>
             <div className="grid grid-cols-4 gap-2 text-center">
               {[
-                { label: 'Calories', value: order.kcal_total, unit: 'kcal' },
-                { label: 'Protein', value: order.protein_mg_total, unit: 'g' },
-                { label: 'Fat', value: order.fat_mg_total, unit: 'g' },
-                { label: 'Carbs', value: order.carb_mg_total, unit: 'g' },
+                { label: t('client.nutrition_calories', 'Calories'), value: order.kcal_total, unit: 'kcal' },
+                { label: t('client.nutrition_protein', 'Protein'), value: order.protein_mg_total, unit: 'g' },
+                { label: t('client.nutrition_fat', 'Fat'), value: order.fat_mg_total, unit: 'g' },
+                { label: t('client.nutrition_carbs', 'Carbs'), value: order.carb_mg_total, unit: 'g' },
               ].map(n => (
-                <div key={n.label} className="p-2 rounded-lg" style={{ background: 'var(--brand-surface)' }}>
-                  <div className="text-lg font-bold" style={{ color: 'var(--brand-primary)' }}>{n.value || '—'}</div>
-                  <div className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{n.label}</div>
-                  <div className="text-[9px] opacity-50">{n.unit}</div>
+                <div key={n.label} className="p-2 rounded-[var(--brand-radius-sm)] min-w-0" style={{ background: 'var(--brand-surface)' }}>
+                  <div className="text-lg font-bold tabular-nums" style={{ color: 'var(--brand-primary)' }}>{n.value || '—'}</div>
+                  <div className="text-step-2xs truncate" style={{ color: 'var(--brand-text-muted)' }}>{n.label}</div>
+                  <div className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{n.unit}</div>
                 </div>
               ))}
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* CR-8: Message Thread */}

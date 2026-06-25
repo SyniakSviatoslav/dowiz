@@ -1,8 +1,14 @@
+import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState } from 'react';
 import { Button, Input, useI18n, LanguageSwitcher } from '@deliveryos/ui';
 import { apiClient } from '../../lib/apiClient.js';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
+
+// Google OAuth sign-in is hidden by default (temporarily disabled). Re-enable by building with
+// VITE_GOOGLE_OAUTH_ENABLED=true. The backend /api/auth/google route stays live, so this is a
+// one-flag flip with no server change. Email/password + Telegram login are unaffected.
+const GOOGLE_OAUTH_ENABLED = import.meta.env.VITE_GOOGLE_OAUTH_ENABLED === 'true';
 
 const AuthLoginResponse = z.object({
   access_token: z.string(),
@@ -44,8 +50,8 @@ export function LoginPage() {
           const p = await apiClient<any>(`/auth/telegram/poll?token=${token}`);
           if (p.status === 'authenticated' && p.access_token) {
             sessionStorage.setItem('dos_access_token', p.access_token);
-            localStorage.setItem('dos_access_token', p.access_token);
-            if (p.refresh_token) localStorage.setItem('dos_refresh_token', p.refresh_token);
+            safeStorage.set('dos_access_token', p.access_token);
+            if (p.refresh_token) safeStorage.set('dos_refresh_token', p.refresh_token);
             navigate('/admin');
             return;
           }
@@ -73,7 +79,8 @@ export function LoginPage() {
         schema: AuthLoginResponse,
       });
       sessionStorage.setItem('dos_access_token', res.access_token);
-      localStorage.setItem('dos_access_token', res.access_token);
+      safeStorage.set('dos_access_token', res.access_token);
+      if ((res as any).refresh_token) safeStorage.set('dos_refresh_token', (res as any).refresh_token);
       navigate('/admin');
     } catch (err: any) {
       setError(err.status === 401
@@ -88,7 +95,7 @@ export function LoginPage() {
     try {
       const res = await apiClient<typeof DevMockAuthResponse>('/dev/mock-auth', { method: 'POST', schema: DevMockAuthResponse });
       sessionStorage.setItem('dos_access_token', res.access_token);
-      localStorage.setItem('dos_access_token', res.access_token);
+      safeStorage.set('dos_access_token', res.access_token);
       navigate('/admin');
     } catch (err: any) {
       setError(t('admin.error_login_failed', 'Login failed.'));
@@ -96,11 +103,11 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--brand-bg)' }}>
+    <div className="min-h-screen flex items-center justify-center p-4 text-[var(--brand-text)]" style={{ background: 'var(--brand-bg)' }}>
       <div className="w-full max-w-sm">
         {/* Brand accent bar */}
         <div className="h-1 w-16 mx-auto mb-6 rounded-full" style={{ background: 'linear-gradient(90deg, var(--brand-primary), var(--brand-primary-hover))' }} />
-        
+
         <div className="card-base p-8 space-y-6">
           <div className="text-center space-y-1.5">
             <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>DeliveryOS</h1>
@@ -146,20 +153,22 @@ export function LoginPage() {
           </div>
 
           <div className="space-y-3">
-            <a 
-              href="/api/auth/google" 
-              className="flex items-center justify-center gap-3 w-full px-4 py-2.5 rounded-lg transition-all duration-200 active:scale-[0.98]"
-              style={{ border: '1px solid var(--brand-border)', background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
-            >
-              <i className="ti ti-brand-google" />
-              <span className="text-sm font-medium">{t('admin.sign_in_google', 'Sign in with Google')}</span>
-            </a>
+            {GOOGLE_OAUTH_ENABLED && (
+              <a
+                href="/api/auth/google"
+                className="flex items-center justify-center gap-3 w-full px-4 py-2.5 rounded-lg transition-[background-color,transform,opacity] duration-200 active:scale-[0.98]"
+                style={{ border: '1px solid var(--brand-border)', background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
+              >
+                <i className="ti ti-brand-google" />
+                <span className="text-sm font-medium">{t('admin.sign_in_google', 'Sign in with Google')}</span>
+              </a>
+            )}
 
             <button
               type="button"
               onClick={handleTelegramLogin}
               disabled={tgWaiting}
-              className="flex items-center justify-center gap-3 w-full px-4 py-2.5 rounded-lg transition-all duration-200 active:scale-[0.98] disabled:opacity-60"
+              className="flex items-center justify-center gap-3 w-full px-4 py-2.5 rounded-lg transition-[background-color,transform,opacity] duration-200 active:scale-[0.98] disabled:opacity-60"
               style={{ background: 'var(--brand-telegram, #229ED9)', color: '#fff' }}
             >
               <i className="ti ti-brand-telegram" />

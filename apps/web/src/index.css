@@ -31,6 +31,12 @@ button, a, [role="button"], input, select, textarea, label {
 input, select, textarea {
   font-size: max(16px, 1rem);
 }
+/* Error state is driven by explicit border-color in components, never the
+   browser's native :invalid styling (Firefox flags every required field with a
+   red glow before the user has even typed — read as a false "error ring"). */
+input:invalid, select:invalid, textarea:invalid {
+  box-shadow: none;
+}
 .scroll-area, .sheet-content {
   overscroll-behavior: contain;
 }
@@ -94,6 +100,16 @@ input, select, textarea {
 
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+/* Alias — some components use no-scrollbar; keep both working. */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Horizontal-scroll cue: fade the right edge so a clipped chip/tab row reads as "scroll for more"
+   rather than "truncated". Pair with overflow-x-auto + hide-scrollbar on chip/tab/KPI strips. */
+.scroll-fade-x {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+          mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+}
 
 /* ── Brand-aware card with elevation ── */
 .card-base {

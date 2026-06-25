@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { loadSupplies } from './SupplyLibraryPage.js';
-import { useI18n } from '@deliveryos/ui';
+import { useI18n, SearchInput } from '@deliveryos/ui';
 
 const KIND_ICONS: Record<string, string> = {
   food_ingredient: 'ti ti-meat',
@@ -123,30 +123,32 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.recipe_bom', 'Recipe (BOM) — per serving')}</label>
-        <button type="button" onClick={() => setShowPicker(!showPicker)}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors hover:bg-[var(--brand-surface-raised)] active:scale-95"
+        <label className="text-xs font-medium min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.recipe_bom', 'Recipe (BOM) — per serving')}</label>
+        <button type="button" onClick={() => setShowPicker(!showPicker)} aria-expanded={showPicker}
+          className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-md text-step-2xs font-medium transition-[background,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] [@media(hover:hover)]:hover:bg-[var(--brand-surface-raised)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
           style={{ color: 'var(--brand-primary)', border: '1px solid var(--brand-primary)' }}>
           <i className="ti ti-plus" style={{ fontSize: '0.7rem' }} /> {t('admin.add_supply', 'Add supply')}
         </button>
       </div>
 
       {showPicker && (
-        <div className="p-2 rounded-lg border" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)' }}>
-          <div className="flex gap-1 mb-2">
-            {kinds.map(k => (
-              <button key={k} type="button" onClick={() => { setActiveKind(k); setSearch(''); }}
-                className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-all ${activeKind === k ? 'text-white' : 'text-[var(--brand-text-muted)]'}`}
-                style={{ background: activeKind === k ? 'var(--brand-primary)' : 'var(--brand-surface)' }}>
+        <div className="p-2 rounded-lg border slide-in-up" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)' }}>
+          <div className="flex gap-1 mb-2 overflow-x-auto hide-scrollbar -mx-2 px-2">
+            {kinds.map(k => {
+              const tabActive = activeKind === k;
+              return (
+              <button key={k} type="button" aria-pressed={tabActive} onClick={() => { setActiveKind(k); setSearch(''); }}
+                className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded text-step-2xs font-medium transition-[background,color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${tabActive ? 'text-white' : 'text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:bg-[var(--brand-surface)]'}`}
+                style={{ background: tabActive ? 'var(--brand-primary)' : 'var(--brand-surface)' }}>
                 <i className={KIND_ICONS[k] || 'ti ti-circle'} style={{ fontSize: '0.65rem' }} />
                 {k === 'food_ingredient' ? t('supply.food') : k === 'condiment' ? t('supply.sauces') : k === 'packaging' ? t('supply.packaging') : t('supply.utensils')}
               </button>
-            ))}
+              );
+            })}
           </div>
           {/* eslint-disable jsx-a11y/no-autofocus */}
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search')}
-            autoFocus className="w-full h-8 px-2 mb-1 rounded text-xs outline-none border"
-            style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+          <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search')}
+            autoFocus containerClassName="w-full mb-1" />
           {/* eslint-enable jsx-a11y/no-autofocus */}
           <div className="max-h-36 overflow-y-auto space-y-0.5 mb-1">
             {filteredSupplies.map(s => {
@@ -154,29 +156,40 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
               const isAlready = lines.some(l => l.supplyId === s.id);
               return (
                 <button key={s.id} type="button" onClick={() => { if (!isAlready) toggleSelect(s.id); }}
-                  disabled={isAlready}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-left transition-colors hover:bg-[var(--brand-surface)] disabled:opacity-30"
+                  disabled={isAlready} aria-pressed={isSelected}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-left transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] [@media(hover:hover)]:hover:bg-[var(--brand-surface)] disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
                   style={{ color: 'var(--brand-text)', background: isSelected ? 'var(--brand-primary-light)' : 'transparent' }}>
-                  <input type="checkbox" checked={isSelected || isAlready} readOnly className="w-3 h-3 accent-[var(--brand-primary)]" />
-                  <span className="flex-1 truncate">{s.name}</span>
-                  <span className="text-[10px] opacity-40">{s.baseUnit}</span>
-                  {s.kcalPer100 != null && <span className="text-[10px] opacity-30">{s.kcalPer100}kcal</span>}
+                  <input type="checkbox" checked={isSelected || isAlready} readOnly tabIndex={-1} className="w-3 h-3 shrink-0 accent-[var(--brand-primary)]" />
+                  <span className="flex-1 min-w-0 truncate">{s.name}</span>
+                  <span className="shrink-0 text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{s.baseUnit}</span>
+                  {s.kcalPer100 != null && <span className="shrink-0 text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{s.kcalPer100}kcal</span>}
                 </button>
               );
             })}
             {filteredSupplies.length === 0 && (
-              <p className="text-[10px] p-2 text-center" style={{ color: 'var(--brand-text-muted)' }}>
-                {search ? t('admin.no_matches', 'No matches.') : t('admin.no_supplies_add_first', 'No supplies here. Add in Supplies first.')}
-              </p>
+              <div className="flex flex-col items-center gap-1 px-2 py-4 text-center">
+                <i className={`${search ? 'ti ti-search-off' : 'ti ti-package-off'}`} style={{ fontSize: '1.1rem', color: 'var(--brand-text-muted)' }} />
+                <p className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>
+                  {search ? t('admin.no_matches', 'No matches.') : t('admin.no_supplies_add_first', 'No supplies here. Add in Supplies first.')}
+                </p>
+              </div>
             )}
           </div>
           {selectedIds.size > 0 && (
             <button type="button" onClick={addSelectedSupplies}
-              className="w-full py-1.5 rounded text-[11px] font-medium text-white active:scale-95 transition-transform"
+              className="w-full py-1.5 rounded text-step-2xs font-medium text-white active:scale-95 transition-transform duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
               style={{ background: 'var(--brand-primary)' }}>
               {t('common.add', 'Add')} {selectedIds.size} {t('common.selected', 'selected')}
             </button>
           )}
+        </div>
+      )}
+
+      {lines.length === 0 && !showPicker && (
+        <div className="flex flex-col items-center gap-1.5 px-4 py-6 rounded-lg border border-dashed text-center" style={{ borderColor: 'var(--brand-border)' }}>
+          <i className="ti ti-bowl-spoon" style={{ fontSize: '1.4rem', color: 'var(--brand-text-muted)' }} />
+          <p className="text-xs font-medium" style={{ color: 'var(--brand-text)' }}>{t('admin.recipe_empty_title', 'No ingredients yet')}</p>
+          <p className="text-step-2xs leading-snug max-w-[36ch]" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.recipe_empty_help', 'Add supplies to auto-calculate nutrition and flag allergens.')}</p>
         </div>
       )}
 
@@ -188,23 +201,23 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
             return (
               <div key={line.supplyId} className="flex items-center gap-2 p-2 rounded-lg slide-in-up"
                 style={{ background: 'var(--brand-surface-raised)', animationDelay: `${i * 50}ms` }}>
-                <i className={KIND_ICONS[line.kind] || 'ti ti-circle'} style={{ fontSize: '0.65rem', color: s && hasNutrition ? 'var(--color-success)' : 'var(--brand-text-muted)' }} />
-                <span className="text-xs flex-1 truncate">{line.supplyName}</span>
+                <i className={`${KIND_ICONS[line.kind] || 'ti ti-circle'} shrink-0`} style={{ fontSize: '0.65rem', color: s && hasNutrition ? 'var(--color-success)' : 'var(--brand-text-muted)' }} />
+                <span className="text-xs flex-1 min-w-0 truncate" style={{ color: 'var(--brand-text)' }}>{line.supplyName}</span>
                 {!hasNutrition && (
-                  <span className="text-[9px] px-1 rounded" style={{ color: 'var(--color-warning)', background: 'var(--color-warning-light)' }}>{t('common.no_data', 'no data')}</span>
+                  <span className="shrink-0 text-step-2xs px-1 rounded" style={{ color: 'var(--color-warning)', background: 'var(--color-warning-light)' }}>{t('common.no_data', 'no data')}</span>
                 )}
-                <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => updateQty(i, line.qty - step(line.unit))}
-                    className="w-5 h-5 rounded flex items-center justify-center text-xs hover:bg-[var(--brand-surface)] transition-colors"
+                <div className="flex items-center gap-1 shrink-0">
+                  <button type="button" aria-label={t('common.decrease_quantity', 'Decrease quantity')} onClick={() => updateQty(i, line.qty - step(line.unit))}
+                    className="w-6 h-6 rounded flex items-center justify-center text-xs transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] [@media(hover:hover)]:hover:bg-[var(--brand-surface)] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
                     style={{ color: 'var(--brand-text-muted)' }}>-</button>
-                  <input type="number" value={line.qty}
+                  <input type="number" value={line.qty} aria-label={`${line.supplyName} ${t('admin.qty', 'quantity')}`}
                     onChange={e => updateQty(i, parseInt(e.target.value) || 0)}
-                    className="w-12 h-5 text-center rounded text-[10px] outline-none border"
+                    className="w-12 h-6 text-center rounded text-step-2xs outline-none border transition-shadow duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
                     style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                  <span className="text-[9px] w-8 text-center" style={{ color: 'var(--brand-text-muted)' }}>{line.unit}</span>
+                  <span className="text-step-2xs w-8 text-center" style={{ color: 'var(--brand-text-muted)' }}>{line.unit}</span>
                 </div>
-                <button type="button" onClick={() => onChange(lines.filter((_, j) => j !== i))}
-                  className="w-5 h-5 rounded flex items-center justify-center hover:bg-[var(--color-danger-light)] transition-colors">
+                <button type="button" aria-label={t('common.remove', 'Remove')} onClick={() => onChange(lines.filter((_, j) => j !== i))}
+                  className="shrink-0 w-6 h-6 rounded flex items-center justify-center transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] [@media(hover:hover)]:hover:bg-[var(--color-danger-light)] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-danger)] focus-visible:ring-offset-1">
                   <i className="ti ti-x" style={{ fontSize: '0.6rem', color: 'var(--brand-text-muted)' }} />
                 </button>
               </div>
@@ -215,12 +228,12 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
 
       {lines.length > 0 && (
         <div className="p-3 rounded-lg border" style={{
-          background: nutrition.complete ? 'rgba(5,150,105,0.05)' : 'var(--brand-surface-raised)',
+          background: nutrition.complete ? 'var(--color-success-light)' : 'var(--brand-surface-raised)',
           borderColor: nutrition.complete ? 'var(--color-success)' : 'var(--brand-border)'
         }}>
           <div className="flex items-center gap-1.5 mb-2">
             <i className="ti ti-chart-donut text-xs" style={{ color: nutrition.complete ? 'var(--color-success)' : 'var(--brand-text-muted)' }} />
-            <span className="text-[10px] font-semibold" style={{ color: nutrition.complete ? 'var(--color-success)' : 'var(--brand-text-muted)' }}>
+            <span className="text-step-2xs font-semibold" style={{ color: nutrition.complete ? 'var(--color-success)' : 'var(--brand-text-muted)' }}>
               {nutrition.complete ? t('admin.nutrition_per_serving', 'Nutrition per serving') : t('admin.incomplete_nutrition', 'Incomplete — some supplies lack nutrition data')}
             </span>
           </div>
@@ -233,16 +246,16 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
             ].map(n => (
               <div key={n.label} className="p-1.5 rounded" style={{ background: 'var(--brand-surface)' }}>
                 <div className="text-sm font-bold" style={{ color: n.color }}>{n.value}</div>
-                <div className="text-[9px]" style={{ color: 'var(--brand-text-muted)' }}>{n.label}</div>
+                <div className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{n.label}</div>
               </div>
             ))}
           </div>
           {nutrition.bomAllergens.length > 0 && (
             <div className="flex items-center gap-1 mt-2 flex-wrap">
-              <span className="text-[9px]" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.bom_label', 'BOM:')}</span>
+              <span className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.bom_label', 'BOM:')}</span>
               {nutrition.bomAllergens.map(a => (
-                <span key={a} className="px-1.5 py-0.5 rounded-full text-[9px] font-medium"
-                  style={{ background: 'rgba(217,119,6,0.1)', color: 'var(--color-warning)' }}>{t(`allergen.${a}`, a)}</span>
+                <span key={a} className="px-1.5 py-0.5 rounded-full text-step-2xs font-medium"
+                  style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)' }}>{t(`allergen.${a}`, a)}</span>
               ))}
             </div>
           )}

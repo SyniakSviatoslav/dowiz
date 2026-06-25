@@ -29,11 +29,18 @@ export function registerNotifySubscriptions(messageBus: MessageBus, queueBoss: P
 
   messageBus.subscribe(BUS_CHANNELS.COURIER_STALE_HEARTBEAT, async (payload: any) => {
     try {
+      // Throttle recurring aging reminders: at most one per order per hour. Without
+      // this, every stale-heartbeat tick re-queued a pending_aging job, which is how
+      // a 3-day deploy outage piled up ~1800 undrained jobs (incident 2026-06-21).
+      // No infinite reminders — and once the order-timeout worker cancels the stale
+      // order, the source stops entirely.
+      const dedupKey = `order.pending_aging:${payload.orderId || ''}:${payload.locationId}`;
       await queueBoss.send(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, {
         event: 'order.pending_aging',
         entity_id: payload.orderId,
-        location_id: payload.locationId
-      });
+        location_id: payload.locationId,
+        dedupKey,
+      }, { singletonKey: dedupKey, singletonSeconds: 3600 });
     } catch (err) {
       console.error('[Notify] Failed to send courier.stale_heartbeat telegram job', err);
     }

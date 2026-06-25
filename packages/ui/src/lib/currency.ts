@@ -1,9 +1,10 @@
+import { safeStorage } from '../utils/safeStorage.js';
 import type { CurrencyCode } from '@deliveryos/shared-types';
 
 const STORAGE_KEY = 'dos_currency';
 
 let currentCurrency: CurrencyCode = (typeof window !== 'undefined'
-  ? (localStorage.getItem(STORAGE_KEY) as CurrencyCode) || 'ALL'
+  ? (safeStorage.get(STORAGE_KEY) as CurrencyCode) || 'ALL'
   : 'ALL') as CurrencyCode;
 
 const listeners = new Set<() => void>();
@@ -15,7 +16,7 @@ export function getCurrency(): CurrencyCode {
 export function setCurrency(code: CurrencyCode) {
   currentCurrency = code;
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, code);
+    safeStorage.set(STORAGE_KEY, code);
   }
   listeners.forEach(fn => fn());
 }

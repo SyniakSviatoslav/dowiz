@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 const BASE = 'https://dowiz.fly.dev';
-const BOT_SECRET = 'Ihatenuclearwar';
-const BOT_TOKEN = '8996764379:AAHkuc5mgYQdkWG5rLZEjHc8a8k5MQsHDIk';
+const BOT_SECRET = process.env.***REDACTED***;
+const BOT_TOKEN = process.env.***REDACTED***;
 const CHAT_ID = 999999;
 
 function uuid() {

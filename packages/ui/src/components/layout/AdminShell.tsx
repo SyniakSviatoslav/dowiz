@@ -53,7 +53,7 @@ export function AdminShell({ children, activeKey }: AdminShellProps) {
             onClick={() => setMobileNavOpen(false)}
             className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-200 ${
               activeKey === item.key
-                ? 'bg-brand-primary text-white'
+                ? 'bg-brand-primary text-[var(--brand-bg)]'
                 : 'text-brand-text-muted hover:bg-brand-surface-raised hover:text-brand-text'
             }`}
           >

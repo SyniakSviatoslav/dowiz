@@ -6,9 +6,10 @@ import { createOperationalPool } from '@deliveryos/db';
 import { RedisMessageBus, PgBossQueueProvider } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, ALL_QUEUES, CUSTOMER_PUSH_EVENTS, orderChannel, dashboardChannel } from './lib/registry.js';
 import { assertSchemaCurrent } from './lib/schema-guard.js';
+import { SYNTHETIC_COURIER_EMAIL_HASH } from './lib/synthetic-courier.js';
 import Redis from 'ioredis';
 import pg from 'pg';
-import type { ZodTypeAny } from 'zod';
+import { z, type ZodTypeAny } from 'zod';
 import healthRoutes from './routes/health.js';
 import authRoutes from './routes/auth.js';
 import courierRoutes from './routes/couriers.js';
@@ -16,6 +17,7 @@ import orderRoutes from './routes/orders.js';
 import categoryRoutes from './routes/owner/categories.js';
 import productRoutes from './routes/owner/products.js';
 import modifierGroupRoutes from './routes/owner/modifier-groups.js';
+import menuAvailabilityRoutes from './routes/owner/menu-availability.js';
 import locationRoutes from './routes/owner/locations.js';
 import publicMenuRoutes from './routes/public/menu.js';
 import ssrRoutes from './routes/public/ssr.js';
@@ -25,6 +27,9 @@ import clientFlowRoutes from './routes/public/client-flow.js';
 import pwaRoutes from './routes/public/pwa.js';
 import vapidRoutes from './routes/public/vapid.js';
 import telemetryRoutes from './routes/public/telemetry.js';
+import accessRequestRoutes from './routes/public/access-requests.js';
+import { AccessRequestNotifyWorker } from './workers/access-request-notify.js';
+import { AccessRequestRetentionWorker, assertAccessRequestSchedules } from './workers/access-request-retention.js';
 import ownerThemeRoutes from './routes/owner/themes.js';
 import publicThemeRoutes from './routes/public/theme.js';
 import ownerNotificationRoutes from './routes/owner/notifications.js';
@@ -60,7 +65,7 @@ import securityHeadersPlugin from './lib/security/headers.js';
 // Safe __dirname fallback for dual ESM/CJS bundling
 const dirName = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath((import.meta as any).url));
 import authPlugin from './plugins/auth.js';
-import { isDevPath, isDevRequestAuthorized, devLoginAllowed } from './plugins/dev-guard.js';
+import { isDevPath, isDevRequestAuthorized } from './plugins/dev-guard.js';
 import multipart from '@fastify/multipart';
 import { setupWebSocket } from './websocket.js';
 import { setupShutdown } from './shutdown.js';
@@ -71,7 +76,6 @@ import { R2StorageProvider } from './lib/r2-storage.js';
 import { LibreTranslateProvider } from './lib/libretranslate-provider.js';
 import { TelegramAdapter } from './notifications/adapters/telegram.js';
 import { WebPushAdapter } from './notifications/adapters/webpush.js';
-import { WhatsAppAdapter } from './notifications/channels/whatsapp.js';
 import { NotificationDispatcher } from './notifications/provider.js';
 import { RetryPolicy } from './notifications/retry.js';
 import { NotificationWorker } from './notifications/workers/index.js';
@@ -331,11 +335,8 @@ async function main() {
   const telegramAdapter = new TelegramAdapter(env.***REDACTED*** || '');
   const notifyDispatcher = new NotificationDispatcher();
   notifyDispatcher.register('telegram', telegramAdapter);
-
-  if (process.env.WHATSAPP_ENABLED === 'true') {
-    notifyDispatcher.register('whatsapp', new WhatsAppAdapter());
-    console.log('[API] WhatsApp notification channel registered');
-  }
+  // P0-2 (ADR-p0-privacy-hardening): WhatsApp/Baileys channel removed — it streamed
+  // customer PII to Meta via an unofficial client. Telegram + push + email remain.
 
   if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
     const subject = env.VAPID_SUBJECT ? (env.VAPID_SUBJECT.startsWith('mailto:') ? env.VAPID_SUBJECT : `mailto:${env.VAPID_SUBJECT}`) : 'mailto:admin@deliveryos.local';
@@ -349,6 +350,16 @@ const retryPolicy = new RetryPolicy();
    // Register pg-boss workers
    // NOTE: queue.work() wraps pg-boss v10 array-of-jobs callback, extracting job.data per job
    // Direct queue.boss.work() would receive [job] not job
+   //
+   // BOOT RESILIENCE (incident 2026-06-21): a pg-boss createQueue permission error
+   // wedged boot BEFORE fastify.listen, taking the whole storefront down. Bound the
+   // ENTIRE worker/queue startup in a budget: if it hangs past WORKER_BOOT_BUDGET_MS
+   // or throws, log and proceed to listen anyway — the menu must serve even with
+   // degraded background workers. Workers keep starting in the background.
+   let heartbeats: any[] = [];
+   const WORKER_BOOT_BUDGET_MS = 25_000;
+   await Promise.race([
+    (async () => {
    await queue.work(QUEUE_NAMES.NOTIFY_DISPATCH, async (data: any) => notifyWorker.handleDispatch({ data }));
    await queue.work(QUEUE_NAMES.NOTIFY_CUSTOMER_STATUS, async (data: any) => notifyWorker.handleCustomerStatus({ data }));
    await queue.work(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, async (data: any) => notifyWorker.handleTelegramSend({ data }));
@@ -381,6 +392,15 @@ const retryPolicy = new RetryPolicy();
 
   // Nightly Reconciliation Worker — temporarily removed (esbuild bundle issue). Re-add in separate deploy.
 
+  // Order Timeout Sweep — standalone 1-min reconciliation + detection. Safety net
+  // for the per-order order.timeout handler (apps/worker): recovers overdue PENDING
+  // orders whose per-order job was lost, and counts overdue-but-undrained
+  // order.timeout jobs (the lost-consumer signal). Lives here (not on the removed
+  // ReconciliationWorker) so detection cannot lose its host; apps/api does not auto-stop.
+  const { OrderTimeoutSweepWorker } = await import('./workers/order-timeout-sweep.js');
+  const orderTimeoutSweepWorker = new OrderTimeoutSweepWorker(pool, queue.boss, messageBus);
+  await orderTimeoutSweepWorker.start();
+
   // Lifecycle Handlers (auto-resolve alerts on order transitions)
   const lifecycleHandlers = new LifecycleHandlers(pool, queue.boss, messageBus);
   await lifecycleHandlers.start();
@@ -399,7 +419,7 @@ const retryPolicy = new RetryPolicy();
     { workerId: 'dwell-monitor', jobName: QUEUE_NAMES.DWELL_MONITOR },
     { workerId: 'anonymizer-retention', jobName: QUEUE_NAMES.ANONYMIZER_RETENTION },
   ];
-  const heartbeats = heartbeatConfigs.map(cfg => {
+  heartbeats = heartbeatConfigs.map(cfg => {
     const hb = new WorkerHeartbeat(pool, cfg);
     hb.start();
     return hb;
@@ -417,6 +437,15 @@ const retryPolicy = new RetryPolicy();
   const { RatesRefreshWorker } = await import('./workers/rates-refresh.js');
   const ratesRefreshWorker = new RatesRefreshWorker(pool, queue.boss);
   await ratesRefreshWorker.start();
+
+  // Soft access gate (ADR-soft-access-gate) — notify + retention/reconcile crons. These
+  // run unconditionally (data hygiene): retention auto-erase + notify-gap recovery must
+  // work the moment the public route is enabled. The public POST route itself is gated
+  // separately by ACCESS_GATE_PUBLIC_ENABLED (below).
+  const accessRequestNotifyWorker = new AccessRequestNotifyWorker(pool, queue.boss, messageBus);
+  await accessRequestNotifyWorker.start();
+  const accessRequestRetentionWorker = new AccessRequestRetentionWorker(pool, queue.boss, messageBus);
+  await accessRequestRetentionWorker.start();
 
   // Telegram Poller disabled — webhook handles all updates (messages + callbacks)
   // Poller conflicts with webhook (getUpdates HTTP 409). Keep poller import for type,
@@ -441,6 +470,9 @@ const retryPolicy = new RetryPolicy();
     }
   });
   await queue.boss.schedule(QUEUE_NAMES.FREE_TIER_WATCH, '0 * * * *');
+    })().catch((err: any) => console.error('[API] worker startup error (continuing to listen):', err?.message || err)),
+    new Promise<void>((res) => setTimeout(() => { console.warn(`[API] worker startup exceeded ${WORKER_BOOT_BUDGET_MS}ms — listening anyway; workers continue in background`); res(); }, WORKER_BOOT_BUDGET_MS)),
+  ]);
 
   const redis = new Redis(env.REDIS_URL);
   fastify.decorate('redis', redis);
@@ -484,10 +516,11 @@ const retryPolicy = new RetryPolicy();
     if (request.method === 'OPTIONS') return;
     const url = request.url.split('?')[0];
     // Test-only /dev + /api/dev endpoints (mock-auth, create-assignment, seed-data)
-    // require the shared DEV_AUTH_SECRET. Fails closed: with no secret configured
-    // (production), they 404 as if they do not exist — never leak their presence.
+    // require BOTH the ALLOW_DEV_LOGIN flag AND the shared DEV_AUTH_SECRET (ADR-0003).
+    // Fails closed: in production (flag off), they 404 as if they do not exist — never
+    // leak their presence, and never honor the secret alone if it leaks.
     if (isDevPath(url)) {
-      if (!isDevRequestAuthorized(url, request.headers['x-dev-auth-secret'], env.DEV_AUTH_SECRET)) {
+      if (!isDevRequestAuthorized(url, request.headers['x-dev-auth-secret'], env)) {
         return reply.status(404).send({ error: 'Not found' });
       }
     }
@@ -541,13 +574,18 @@ const retryPolicy = new RetryPolicy();
   // redirect_uri (APP_BASE_URL/api/auth/google/callback). Without the prefix the
   // Google button + callback 404'd.
   fastify.register(authRoutes, { prefix: '/api' });
+  // Real email+password login (argon2) + flag-gated dev bypass, both in routes/auth/local.ts.
+  // Registered here (prefix /api → /api/auth/local/login). Previously this plugin was imported
+  // but never registered; an inline dev-only handler shadowed the route, so DB-password login
+  // was dead code (test@dowiz.com could only 401 on prod). The inline handler is now removed.
   const { default: localAuthRoutes } = await import('./routes/auth/local.js');
-  // localAuthRoutes registered inline below for reliability
+  fastify.register(localAuthRoutes, { prefix: '/api', db: pool });
   fastify.register(courierRoutes);
   fastify.register(orderRoutes, { prefix: '/api', db: pool, messageBus, queue });
   fastify.register(categoryRoutes);
   fastify.register(productRoutes);
   fastify.register(modifierGroupRoutes);
+  fastify.register(menuAvailabilityRoutes);
   fastify.register(locationRoutes);
   fastify.register(publicMenuRoutes);
   fastify.register(ssrRoutes, { db: pool });
@@ -557,6 +595,13 @@ const retryPolicy = new RetryPolicy();
   fastify.register(pwaRoutes, { db: pool });
   fastify.register(vapidRoutes);
   fastify.register(telemetryRoutes, { db: pool });
+  // R3-4 (STOP-1 reachable-surface gate): the access-request capture route is mounted
+  // ONLY when the flag is on. While off, POST /api/access-requests 404s via
+  // setNotFoundHandler — it is NOT publicly POST-able before invite-gating ships. The
+  // migrations (table + 3 queues) still ship; only the route is gated.
+  if (env.ACCESS_GATE_PUBLIC_ENABLED === 'true') {
+    fastify.register(accessRequestRoutes, { db: pool, queue });
+  }
   fastify.register(ownerThemeRoutes, { db: pool, storage });
   fastify.register(publicThemeRoutes, { db: pool });
   fastify.register(ownerNotificationRoutes, { db: pool, queue });
@@ -603,14 +648,44 @@ fastify.register(mockAuthRoutes, { db: pool });
 
   fastify.post('/api/dev/mock-auth', async (request, reply) => {
     const body = (request.body || {}) as Record<string, unknown>;
-    const { signAuthToken } = await import('@deliveryos/platform');
+    // Dev-kid signing (ADR-0003): mock tokens are signed under the dev keypair so a prod
+    // verifier rejects them. This path is already flag-gated by isDevRequestAuthorized.
+    const { signDevToken } = await import('@deliveryos/platform');
 
     // Courier role: simple JWT with real location UUID
     if (body.role === 'courier') {
+      // SYNTHETIC-ONLY RE-DERIVED MINT (constraint #1 / resolution NEW-M1, L1): mint for the ONE
+      // seeded synthetic courier ONLY on an explicit synthetic:true. The id is RE-DERIVED by
+      // SELECTing on the sentinel email_hash — NO caller-supplied courierId is read or echoed, so
+      // even on an open (staging) gate the capability is "impersonate the one synthetic fixture",
+      // never "impersonate any courier" (the dev-login-backdoor class). Any other input keeps the
+      // existing random-uuid behaviour below.
+      if (body.synthetic === true) {
+        const cRes = await pool.query(
+          `SELECT c.id, cl.location_id
+             FROM couriers c
+             JOIN courier_locations cl ON cl.courier_id = c.id
+            WHERE c.email_hash = $1
+            ORDER BY cl.added_at ASC
+            LIMIT 1`,
+          [SYNTHETIC_COURIER_EMAIL_HASH],
+        );
+        if (cRes.rowCount === 0) {
+          return reply.status(409).send({
+            error: 'synthetic courier not seeded — run /dev/seed-visual-state first',
+            code: 'SYNTHETIC_COURIER_MISSING',
+          });
+        }
+        const syntheticId = cRes.rows[0].id as string;
+        const syntheticLocationId = cRes.rows[0].location_id as string;
+        const accessToken = await signDevToken({ role: 'courier', sub: syntheticId, activeLocationId: syntheticLocationId } as any, '1d');
+        return reply.send({ access_token: accessToken, userId: syntheticId, activeLocationId: syntheticLocationId, synthetic: true });
+      }
+
       const courierId = crypto.randomUUID();
       const locRes = await pool.query(`SELECT id FROM locations WHERE slug = 'demo' LIMIT 1`);
       const locationId = locRes.rowCount > 0 ? locRes.rows[0].id : '1f609add-062a-4bb5-89bf-d695f963ede6';
-      const accessToken = await signAuthToken({ role: 'courier', sub: courierId, activeLocationId: locationId } as any, '1d');
+      const accessToken = await signDevToken({ role: 'courier', sub: courierId, activeLocationId: locationId } as any, '1d');
       return reply.send({ access_token: accessToken, userId: courierId, activeLocationId: locationId });
     }
 
@@ -624,7 +699,7 @@ fastify.register(mockAuthRoutes, { db: pool });
         [`fresh-${suffix}@e2e.dowiz`, `mock-fresh-${suffix}`],
       );
       const fUserId = fRes.rows[0].id;
-      const fToken = await signAuthToken({ role: 'owner', userId: fUserId, sub: fUserId } as any, '1d');
+      const fToken = await signDevToken({ role: 'owner', userId: fUserId, sub: fUserId } as any, '1d');
       return reply.send({ access_token: fToken, userId: fUserId, activeLocationId: undefined });
     }
 
@@ -655,7 +730,7 @@ fastify.register(mockAuthRoutes, { db: pool });
     }
 
     const memberRes = await pool.query(
-      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1`, // P-d (ADR-0004)
       [userId]
     );
     let activeLocationId = memberRes.rowCount > 0 ? memberRes.rows[0].location_id : undefined;
@@ -671,8 +746,8 @@ fastify.register(mockAuthRoutes, { db: pool });
       }
     }
 
-    const accessToken = await signAuthToken({ role: 'owner', userId, sub: userId } as any, '1d');
-    
+    const accessToken = await signDevToken({ role: 'owner', userId, sub: userId } as any, '1d');
+
     return reply.send({ access_token: accessToken, userId, activeLocationId });
   });
   fastify.post('/api/dev/create-assignment', async (request, reply) => {
@@ -828,26 +903,16 @@ fastify.register(mockAuthRoutes, { db: pool });
       return reply.status(500).send({ error: 'Seed failed: ' + (e?.message || '') });
     }
   });
-  fastify.post('/api/auth/local/login', async (request, reply) => {
-    const { email, password } = request.body as any || {};
-    if (!email || !password) return reply.status(400).send({ error: 'Missing email or password' });
-    // Dev-only password login. Active ONLY when DEV_AUTH_SECRET is configured
-    // (local / e2e). In production the secret is unset and the seeded test
-    // account has no usable password_hash, so this always rejects.
-    if (devLoginAllowed(env.DEV_AUTH_SECRET) && email === 'test@dowiz.com' && password === 'test123456') {
-      const res = await pool.query(`SELECT id FROM users WHERE email = $1`, [email.toLowerCase()]);
-      if (res.rowCount === 0) return reply.status(401).send({ error: 'User not found' });
-      const userId = res.rows[0].id;
-      const memRes = await pool.query(`SELECT location_id FROM memberships WHERE user_id = $1 LIMIT 1`, [userId]);
-      const { signAuthToken } = await import('@deliveryos/platform');
-      const token = await signAuthToken({ role: 'owner', userId, sub: userId } as any, '1d');
-      return reply.send({ access_token: token, userId, activeLocationId: memRes.rows[0]?.location_id || null });
-    }
-    return reply.status(401).send({ error: 'Invalid credentials' });
-  });
+  // (Local email+password login — real argon2 + flag-gated dev bypass — is served by the
+  //  registered routes/auth/local.ts plugin above, not an inline handler.)
 
   // SPA proxy — maps React SPA URL patterns to real backend routes
   fastify.register(spaProxyRoutes, { db: pool, storage });
+  // Owner rich-media CRUD (cinematic product-media seam, ADR-0002). Dark behind
+  // MEDIA_RICH_ENABLED at the storefront; the owner endpoints are always wired so
+  // an owner can stage media before launch. Operational pool (RLS) via withTenant.
+  const { default: ownerProductMediaRoutes } = await import('./routes/owner/product-media.js');
+  fastify.register(ownerProductMediaRoutes, { prefix: '/api/owner', db: pool, storage });
   // P32 — Backup admin routes
   const { default: backupAdminRoutes } = await import('./routes/admin/backups.js');
   fastify.register(backupAdminRoutes, { prefix: '/api/admin', db: pool, queue });
@@ -858,7 +923,7 @@ fastify.register(mockAuthRoutes, { db: pool });
   fastify.register(notificationAuditRoutes, { prefix: '/api/admin', db: pool });
 
   // SPA Fallback: Serve index.html for unknown GET requests matching SPA route patterns
-  const SPA_ROUTES = ['/admin', '/courier', '/dashboard', '/s/', '/login', '/branding-preview'];
+  const SPA_ROUTES = ['/admin', '/courier', '/dashboard', '/s/', '/login', '/branding-preview', '/privacy'];
   fastify.setNotFoundHandler((request, reply) => {
     if (
       request.method === 'GET' &&
@@ -895,6 +960,9 @@ fastify.register(mockAuthRoutes, { db: pool });
     const port = env.PORT || 8080;
     await fastify.listen({ port, host: '0.0.0.0' });
     console.log(`[API] Server listening on port ${port}`);
+    // R3-1 fail-fast: verify both access-request cron schedules landed; a miss is a
+    // VISIBLE deploy failure in prod (process.exit 1), not a silent HTTP-dead zombie.
+    await assertAccessRequestSchedules(pool);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

@@ -6,11 +6,14 @@ import { extractToken } from './support/helpers';
 setup('authenticate owner & courier', async ({ browser, request }) => {
   fs.mkdirSync(env.authDir, { recursive: true });
 
+  let ownerLocationId = '';
   for (const role of ['owner', 'courier'] as const) {
     const context = await browser.newContext();
     const page = await context.newPage();
 
-    const mockData = role === 'courier' ? { role: 'courier' } : {};
+    // Align the courier to the OWNER's location (mock-auth otherwise defaults the courier
+    // to a different hardcoded location, so it would never see the owner's order).
+    const mockData = role === 'courier' ? { role: 'courier', locationId: ownerLocationId } : {};
     const res = await request.post(`${env.adminBaseURL}${env.devLoginPath}`, { data: mockData });
     expect(res.ok(), `[e2e] mock-auth failed for ${role} (${res.status()})`).toBeTruthy();
     const body = await res.json();
@@ -19,6 +22,7 @@ setup('authenticate owner & courier', async ({ browser, request }) => {
     expect(body.activeLocationId).toBeTruthy();
 
     if (role === 'owner') {
+      ownerLocationId = body.activeLocationId;
       fs.writeFileSync(`${env.authDir}/locationId`, body.activeLocationId, 'utf8');
     } else {
       fs.writeFileSync(`${env.authDir}/courierId`, body.userId, 'utf8');

@@ -14,6 +14,7 @@
 - **Don't over-tool**: If the answer is already known or the task is trivial, respond directly without calling tools.
 - **Investigate before escalating**: Use search/read tools exhaustively before asking the user for information they didn't volunteer. Only ask when the information genuinely can't be found.
 - **Parallel when truly independent**: Batch tool calls only when they have zero ordering dependency. If B depends on A's result, run sequentially.
+- **Spawn parallel subagents for independent work (speed-first)**: when a task decomposes into 2+ independent, collision-free units (different files/dirs/surfaces, no shared mutable state, no ordering dependency), dispatch them as **concurrent subagents in a single message** (multiple Agent tool-uses in one turn) rather than doing them sequentially. Partition into collision-free lanes; keep any shared integration point (one hot file, registration, final wiring) for the lead to do after the fan-out. Default to fanning out for: multi-file builds, broad searches/audits, per-item transforms, and scaffolding. Reserve solo/sequential for a single hot file, a strict dependency chain, or trivial edits. Bias toward parallelism to minimize wall-clock; never fan out work that mutates the same file concurrently.
 
 ### Planning
 - **Think before critical actions**: Pause before git commits, deployments, schema changes, or declaring a task complete. State what you're about to do and why.
@@ -53,6 +54,34 @@ Lazy senior dev mode — the best code is the code never written.
 - **`/ponytail-debt`** — Harvest all `ponytail:` shortcut comments into a debt ledger.
 
 These are defined in `AGENTS.md` at the project root. Any agent reading AGENTS.md applies them automatically.
+
+## Ship Discipline (standing rule — user directive 2026-06-21)
+
+> Every change or fix follows this loop to completion. Don't stop at "code written."
+
+1. **Commit** — a contextual commit (intent + decisions), on a feature branch (never commit straight to `main`). Pre-commit hook (lint→typecheck→build) must pass.
+2. **Deploy** — to **staging** (`flyctl deploy -a dowiz-staging --remote-only`). If the change adds migrations, run them on the staging DB FIRST (via `flyctl proxy 5433:5432 -a dowiz-staging-db` → node-pg-migrate) or the boot-guard FATAL-exits. **Prod only on explicit approval / merge to `main`** (CI deploys prod on push to main).
+3. **Validate** — run the relevant **Playwright** E2E against the deployed staging URL (`VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test <spec> --reporter=list`) **plus** the change's unit/integration tests + `pnpm typecheck`. Paste the proof (Mandatory Proof Rule).
+4. Feature-flag anything not ready to launch (default off); deploying dark code to verify is fine, launching it is a separate, explicit act.
+
+This is the default for any non-trivial change. A change is "done" only after commit + staging deploy + validation proof.
+
+## Self-improvement loop (harness — signals inform, guardrails decide)
+
+> Monotonic ratchet: improvements lock in, never roll back. Memory/reflection/doubt are
+> **advisory signals**; deterministic artifacts (guardrails/tests/gates/human) are **authority**.
+> Stores (never inline here): `docs/regressions/` (ledger), `docs/lessons/` (+ INDEX),
+> `docs/reflections/` (INBOX/ARCHIVE/RETRO).
+
+1. A fix is not **done** without a deterministic **guardrail** (regression test / `tools/eslint-plugin-local` rule / hook) proven **red→green** + a `docs/regressions/REGRESSION-LEDGER.md` row. Never weaken an existing gate; never cheat green (skip/.only/inflated-timeout/expect(true)/commented assertion).
+2. The `pre-edit-lessons` PreToolUse hook injects the relevant distilled lesson (ACTION+LINK) by `TRIGGER` before an edit — **advisory**; enforcement is always the gate, never the lesson.
+3. The `librarian` agent curates **triggered** (after a fix / stage close): distill → challenge → promote (lesson→guardrail, red→green) → prune. It never writes here, never weakens a gate.
+4. After a **qualified** fix/failure (threshold below) the worker writes a reflection with a causal **WHY** (not just WHERE) to `docs/reflections/INBOX/`; the worker does not enact systemic changes itself.
+5. On a big change / hard fix, the **Council** retro (cause-critic + pattern-critic + ratchet-critic) synthesises reflections → ratchet artifacts (executor = `librarian`); each retro line → artifact **or** explicit no-op.
+6. **Doubt** triggers on **observable** signals (not introspection): a loop (N=3 failures on the same target/signature → mandatory escalation), irreversibility/red-line, ≥2 surviving interpretations, evidence conflict, novelty, result-vs-expectation. On a trigger run the `doubt-escalation` ladder within budget **K=2** (self-divergence → specialist/research subagent → stronger model → council → human). Reversible → act (low bar); irreversible/red-line → gate + human.
+7. A resolved doubt → a candidate reflection; a **recurrent** doubt/bug → promote to a guardrail / tighten the spec so it stops recurring.
+
+**Thresholds:** *qualified/big change* = touched ≥3 files **OR** ≥3 iterations/retries **OR** closed a stage **OR** touched a 🔴 red-line. *Red-line globs* = auth / money / RLS / `packages/db/migrations/` / bulk-edit. *Budgets* = doubt K=2 escalations/task, loop N=3 (override `DOUBT_LOOP_N`).
 
 <!-- REPOWISE:START — Do not edit below this line. Auto-generated by Repowise. -->
 ## IMPORTANT: Codebase Intelligence Instructions for dowiz
@@ -164,3 +193,26 @@ This repo has the Repowise MCP server configured. The tools below answer questio
 - Typecheck: `pnpm typecheck`
 
 <!-- REPOWISE:END -->
+
+## Task-Exit Rule (universal — every agent, every task, every change, no exception)
+
+Before executing ANY task — independent of spec completeness or clarifications — in this order:
+
+1. **Enrich conditions.** Derive the full definition of "done", not just the literal task text.
+   Enrich by fixed dimensions: states (loading/empty/error/success); error matrix
+   (401/403/404/422/429/5xx/network); rare/edge states; regression radius (what this could break);
+   design system/tokens; i18n (al/en); security (no cookie/secret/PII, Zod-parse); api/ws contract
+   parity. A non-applicable dimension → mark `N/A — why`, never skip silently.
+2. **Author task-exit.** Write a checkable exit checklist for *this* change — one item per enriched
+   condition, each with the proof that confirms it (file:line / test name / command output / artifact).
+   **Write it BEFORE touching code.**
+
+Then make the change. Then:
+
+3. **Verify against the pre-written exit.** Walk each item → PASS/FAIL with proof. "Looks fine" = FAIL.
+   No item is credited by intent — only by observed proof.
+
+Don't declare a task done until every item is green or raised as an explicit flag. Flag class:
+**inline-fix** (cosmetic/states/tokens — fix now) vs **escalate** (contract / price-status business
+logic / security — don't touch, raise separately). **No size exemption:** the smaller the change, the
+likelier a missed detail. Full spec: docs/operating-model/task-exit-rule.md.

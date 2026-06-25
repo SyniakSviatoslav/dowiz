@@ -161,3 +161,45 @@ export function isEventAllowedDuringQuietHours(event: string): boolean {
   if (!entry) return false;
   return entry.quietHours === 'always';
 }
+
+// ── Notification categories (TG_CATEGORY_GATING) ─────────────────────────────
+// Maps each event to one of three categories. Per the recorded ETHICAL invariant
+// (docs/design/telegram-notifications-actions/ethical-decisions.md):
+//   category = REVERSIBILITY OF CONSEQUENCE, not loudness of the alert.
+// Anything irreversible within a quiet window stays `transactional` — always sent,
+// non-mutable, never gated by prefs or quiet-hours. `operational` / `quality` are the
+// ONLY toggleable categories. Unlisted events default to `transactional` (fail-safe:
+// when in doubt, the owner still gets it). order.timeout_cancelled, cash.reconcile_*,
+// delivery.flag_raised, substitution_needs_human and order.pending_aging are therefore
+// transactional even though an earlier draft grouped some under operational.
+export type NotificationCategory = 'transactional' | 'operational' | 'quality';
+
+const OPERATIONAL_EVENTS = new Set<string>(['shift.started', 'shift.closed', 'shift.close_reminder']);
+const QUALITY_EVENTS = new Set<string>(['rating.low_received']);
+
+export function getEventCategory(event: string): NotificationCategory {
+  if (OPERATIONAL_EVENTS.has(event)) return 'operational';
+  if (QUALITY_EVENTS.has(event)) return 'quality';
+  return 'transactional';
+}
+
+// Category defaults mirror the prefs backfill (migration 1790000000052):
+// operational ON, quality OFF. transactional is never read from prefs.
+const CATEGORY_DEFAULT_ON: Record<NotificationCategory, boolean> = {
+  transactional: true,
+  operational: true,
+  quality: false,
+};
+
+/**
+ * TG_CATEGORY_GATING decision. Returns true to SUPPRESS the event for a target with
+ * these prefs (caller then writes audit 'prefs_disabled'). Transactional → never
+ * suppressed. Operational/quality → governed by prefs[category] with the defaults above.
+ */
+export function isSuppressedByCategory(event: string, prefs: Record<string, unknown> | null | undefined): boolean {
+  const cat = getEventCategory(event);
+  if (cat === 'transactional') return false;
+  const val = prefs?.[cat];
+  const enabled = val === undefined || val === null ? CATEGORY_DEFAULT_ON[cat] : val === true;
+  return !enabled;
+}

@@ -13,15 +13,56 @@ const EnvSchema = z.object({
   JWT_KID: z.string().min(1),
   ***REDACTED***: z.string().min(1),
   ***REDACTED***: z.string().min(1),
+  // Google OAuth is launch-gated OFF by default: when 'false' BOTH the FE button
+  // (VITE_GOOGLE_OAUTH_ENABLED) and the backend /api/auth/google routes are closed, so
+  // "hidden" actually means "disabled" (not just a hidden-but-reachable auth path).
+  GOOGLE_OAUTH_ENABLED: z.enum(['true', 'false']).default('false'),
   // Shared secret gating the /dev and /api/dev test-only endpoints (mock-auth, etc).
   // When unset/empty, those endpoints are fully disabled (404) — the safe prod default.
   DEV_AUTH_SECRET: z.string().optional(),
+  // ── Dev-login hardening (ADR-0003) ──
+  // Master runtime gate for ALL dev/test auth bypasses (the /auth/local dev branch AND
+  // the /dev/* mock-auth minters). The secret alone is NOT enough — both this flag AND
+  // DEV_AUTH_SECRET must be set for any bypass to activate. Default false → prod fails
+  // closed even if DEV_AUTH_SECRET leaks again (the root cause of the live incident).
+  // loadEnv() below FATAL-throws if this (or the secret / dev kid) is set on a prod box.
+  ALLOW_DEV_LOGIN: z.enum(['true', 'false']).default('false'),
+  // The dev-login account credentials, sourced from env so no credential literal ships
+  // in code (ADR-0003 #7). Inert unless ALLOW_DEV_LOGIN+DEV_AUTH_SECRET are also set.
+  // Set on staging/CI/local only (e.g. test@dowiz.com / test123456); absent on prod.
+  DEV_LOGIN_EMAIL: z.string().optional(),
+  DEV_LOGIN_PASSWORD: z.string().optional(),
+  // Dev-token kid segregation: dev/mock tokens are signed under JWT_DEV_KID with the dev
+  // keypair so a prod verifier (which has neither the dev keypair nor accepts the dev kid)
+  // cryptographically rejects them. Present on staging/CI/local only — NEVER on prod.
+  JWT_DEV_KID: z.string().optional(),
+  JWT_DEV_PRIVATE_KEY: z.string().optional(),
+  JWT_DEV_PUBLIC_KEY: z.string().optional(),
   ***REDACTED***: z.string().optional(),
   ***REDACTED***: z.string().optional(),
   TELEGRAM_BOT_USERNAME: z.string().optional(),
-  // WhatsApp (Baileys) notification channel
-  WHATSAPP_ENABLED: z.enum(['true', 'false']).default('false'),
+  // WhatsApp/Baileys channel removed (P0-2, ADR-p0-privacy-hardening).
+  // Phone OTP verification — globally disabled until a real SMS gateway is wired
+  // (current OTP send is a console.log scaffold). Flip to 'true' to re-enable;
+  // per-location `require_phone_otp` only takes effect when this is 'true'.
+  OTP_ENABLED: z.enum(['true', 'false']).default('false'),
+  // Rich product media (ADR-0002 cinematic-product-media seam) — global kill-switch,
+  // default OFF. Phase 1 ships only the inert schema; while this is 'false' the storefront
+  // is byte-identical to today and product_media / primary_media_id are unread. The lazy
+  // media endpoint + renderers (Phase 2) gate on this AND locations.plan='business'.
+  MEDIA_RICH_ENABLED: z.enum(['true', 'false']).default('false'),
+  // Menu-import LLM (ai-ocr-parser). OpenRouter is OpenAI-wire compatible; when its key is
+  // set it serves PDF/image menu extraction. Without any provider the parser falls back to a
+  // zero-dependency heuristic structurer. All optional — read via process.env in the parser.
   ***REDACTED***: z.string().optional(),
+  OPENROUTER_MODEL: z.string().optional(), // default 'openai/gpt-4o-mini'
+  OPENROUTER_ENDPOINT: z.string().optional(),
+  // OpenCode Zen — OpenAI-wire compatible gateway with free models. Preferred over OpenRouter
+  // when its key is set (OpenRouter account ran out of credits). Free-model fallback chain lives
+  // in the parser; all optional, read via process.env there.
+  OPENCODE_ZEN_API_KEY: z.string().optional(),
+  OPENCODE_ZEN_MODEL: z.string().optional(), // default 'deepseek-v4-flash-free'
+  OPENCODE_ZEN_ENDPOINT: z.string().optional(),
   // Backup Configuration
   BACKUP_ENCRYPTION_KEY: z.string().optional(), // 32 bytes base64 (required if BACKUP_ENABLED=true)
   R2_ACCESS_KEY_ID: z.string().optional(),
@@ -29,6 +70,11 @@ const EnvSchema = z.object({
   R2_ENDPOINT: z.string().optional(),
   R2_BUCKET: z.string().optional(),
   R2_PUBLIC_URL: z.string().optional(),
+  // Operational (hot-path) pool size per API instance. Runs through Supavisor's transaction
+  // pooler (:6543), which multiplexes, so this can safely exceed the old hardcoded 8. Raised
+  // to give public-storefront bursts headroom over owner/courier/order writes (see the menu
+  // pool-starvation fix). Tune per Supabase plan / instance count via env.
+  OPERATIONAL_POOL_SIZE: z.coerce.number().int().positive().default(20),
   BACKUP_ENABLED: z.enum(['true', 'false']).default('false'),
   BACKUP_POOL_SIZE: z.coerce.number().int().positive().default(2),
   BACKUP_HOURLY_CRON: z.string().default('0 * * * *'),
@@ -111,6 +157,29 @@ const EnvSchema = z.object({
   ROUTING_PROVIDER: z.enum(['ors', 'self', 'haversine']).default('ors'),
   ROUTING_BASE_URL: z.string().url().default('https://api.openrouteservice.org'),
   ROUTING_API_KEY: z.string().optional(),
+
+  // ── Soft access gate (ADR-soft-access-gate) ──
+  // STOP-1 enforcer: gates BACKEND route registration (POST /api/access-requests 404s
+  // while off) AND frontend CTA render. Default false → feature is dark until the
+  // owner-onboarding-invite-gating prerequisite ships and this is flipped (R3-4).
+  ACCESS_GATE_PUBLIC_ENABLED: z.enum(['true', 'false']).default('false'),
+  // Companion flag for the CI banned-strings test: scarcity copy is only permitted once
+  // invite-gating has shipped and this is set (R2-10).
+  ACCESS_GATE_INVITE_GATING_SHIPPED: z.enum(['true', 'false']).default('false'),
+  // Operator notification for new access requests (best-effort, via Resend).
+  RESEND_API_KEY: z.string().optional(),
+  WAITLIST_NOTIFY_EMAIL: z.string().optional(),
+  // Privacy notice version stamped on every consented row; the CI content-hash test
+  // (R2-6) fails the build if the /privacy prose changes without bumping this.
+  PRIVACY_NOTICE_VERSION: z.string().default('2026-06-20'),
+  // 12-month retention auto-erase (STOP-2). Window must equal the number stated in /privacy.
+  ACCESS_REQUEST_RETENTION: z.string().default('12 months'),
+  ACCESS_REQUEST_RETENTION_CRON: z.string().default('0 3 * * *'),
+  // Notify-gap reconciliation sweep cadence (B3 / R2-4).
+  ACCESS_REQUEST_RECONCILE_CRON: z.string().default('*/15 * * * *'),
+  // Bounded reconcile re-feed guard (R2-9): rows past this many cumulative notify
+  // attempts stop being re-enqueued and surface in the aggregated alert.
+  ACCESS_REQUEST_NOTIFY_MAX_ATTEMPTS: z.coerce.number().int().positive().default(10),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -123,5 +192,30 @@ export function loadEnv(): Env {
       .join('\n');
     throw new Error(`Invalid environment variables:\n${issues}`);
   }
-  return result.data;
+  const env = result.data;
+  assertDevAuthDisabledInProd(env);
+  return env;
+}
+
+/**
+ * Boot-guard D (ADR-0003) — fail-fast so a production box can NEVER carry a dev-auth
+ * surface. A dev bypass on prod was a live CRITICAL; this turns the next misconfig into
+ * an aborted boot instead of a silent backdoor. Fires only on the DANGEROUS direction
+ * (NODE_ENV=production with any dev-auth knob set); the inverse (prod NODE_ENV not
+ * 'production') is caught pre-traffic by the release_command guard, not here.
+ */
+export function assertDevAuthDisabledInProd(env: Env): void {
+  if (env.NODE_ENV !== 'production') return;
+  const offenders: string[] = [];
+  if (env.ALLOW_DEV_LOGIN === 'true') offenders.push('ALLOW_DEV_LOGIN');
+  if (env.DEV_AUTH_SECRET) offenders.push('DEV_AUTH_SECRET');
+  if (env.JWT_DEV_KID) offenders.push('JWT_DEV_KID');
+  if (env.JWT_DEV_PRIVATE_KEY) offenders.push('JWT_DEV_PRIVATE_KEY');
+  if (env.JWT_DEV_PUBLIC_KEY) offenders.push('JWT_DEV_PUBLIC_KEY');
+  if (offenders.length > 0) {
+    throw new Error(
+      `FATAL: dev-auth surface present on a production box (NODE_ENV=production): ` +
+        `${offenders.join(', ')} must be unset in production. Refusing to boot.`,
+    );
+  }
 }

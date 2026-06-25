@@ -1,0 +1,19 @@
+{
+  "id": "client-edge-zone",
+  "role": "client",
+  "goals": [
+    "order to an address on the delivery-zone boundary"
+  ],
+  "traits": {
+    "patience": "med",
+    "tech_savvy": "med",
+    "careful_or_sloppy": "careful"
+  },
+  "device": "mobile",
+  "viewport": 390,
+  "locale": "en",
+  "network_profile": "4g",
+  "constraints": [
+    "address may be out of range"
+  ]
+}

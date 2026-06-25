@@ -42,8 +42,12 @@ API_PORT="${API_PORT:-3055}"
 SUPERUSER_URL="${SUPERUSER_URL:-postgresql://${MIGRATOR_ROLE}:${MIGRATOR_PW}@${PGHOST}:${PGPORT}/postgres}"
 SUPERUSER_DB_URL="${SUPERUSER_URL%/*}/${DBNAME}"
 
-MIGRATOR_URL="postgresql://${MIGRATOR_ROLE}:${MIGRATOR_PW}@${PGHOST}:${PGPORT}/${DBNAME}"
-APP_URL="postgresql://${APP_ROLE}:${APP_PW}@${PGHOST}:${PGPORT}/${DBNAME}"
+# sslmode=disable: the CI/local Postgres is plain TCP (no TLS). The shared db
+# pool (packages/db) forces ssl:{rejectUnauthorized:false} UNLESS the URL carries
+# sslmode=disable — without it, seed/api-boot throw "server does not support SSL
+# connections" against bare Postgres. The prod-guard above still blocks supabase.com.
+MIGRATOR_URL="postgresql://${MIGRATOR_ROLE}:${MIGRATOR_PW}@${PGHOST}:${PGPORT}/${DBNAME}?sslmode=disable"
+APP_URL="postgresql://${APP_ROLE}:${APP_PW}@${PGHOST}:${PGPORT}/${DBNAME}?sslmode=disable"
 
 # ── Prod guard ──────────────────────────────────────────────────────────────
 case "$PGHOST$SUPERUSER_URL$MIGRATOR_URL$APP_URL" in
@@ -62,7 +66,13 @@ psql "$SUPERUSER_DB_URL" -v ON_ERROR_STOP=1 -c \
   "GRANT ALL ON SCHEMA public TO ${APP_ROLE};
    ALTER DEFAULT PRIVILEGES FOR ROLE ${MIGRATOR_ROLE} IN SCHEMA public GRANT ALL ON TABLES TO ${APP_ROLE};
    ALTER DEFAULT PRIVILEGES FOR ROLE ${MIGRATOR_ROLE} IN SCHEMA public GRANT ALL ON SEQUENCES TO ${APP_ROLE};
-   ALTER DEFAULT PRIVILEGES FOR ROLE ${MIGRATOR_ROLE} IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO ${APP_ROLE};" \
+   ALTER DEFAULT PRIVILEGES FOR ROLE ${MIGRATOR_ROLE} IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO ${APP_ROLE};
+   -- pg-boss v10 creates its queue partition tables at RUNTIME under schema 'pgboss', so the
+   -- app role must own (or have CREATE on) that schema. On Supabase the schema pre-exists and
+   -- migration 047 grants CREATE to deliveryos_api_user; a bare PG has neither, so pg-boss
+   -- bootstrap fails (missing pgboss.schedule rows). Mirror prod's end state: pre-create the
+   -- schema owned by the runtime role so boss.start()/createQueue can DDL there.
+   CREATE SCHEMA IF NOT EXISTS pgboss AUTHORIZATION ${APP_ROLE};" \
   >/dev/null || fail "grant defaults"
 
 # Export the DB/Redis/port env. These are EXPORTED so they take precedence over

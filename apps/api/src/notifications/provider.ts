@@ -1,6 +1,6 @@
 export interface NotificationTarget {
   id: string; // the target id from owner_notification_targets
-  channel: 'telegram' | 'push' | 'whatsapp';
+  channel: 'telegram' | 'push';
   address: string;
   locationId: string;
   locale?: string;
@@ -60,6 +60,8 @@ export interface NotificationData {
   rating?: number;
   message?: string; // for 'test'
   locale?: string;
+  // P0-4: per-location Telegram body detail. Render defaults to 'area' when unset.
+  alertDetail?: 'full' | 'area' | 'minimal';
 }
 
 export interface NotifyResult {

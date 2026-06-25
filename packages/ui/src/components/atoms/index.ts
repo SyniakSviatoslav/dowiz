@@ -1,6 +1,11 @@
 export { Button } from './Button.js';
 export type { ButtonProps } from './Button.js';
 export { Input } from './Input.js';
+export { Select } from './Select.js';
+export { SearchInput } from './SearchInput.js';
+export { Textarea } from './Textarea.js';
+export { SegmentedControl } from './SegmentedControl.js';
+export type { SegmentOption } from './SegmentedControl.js';
 export { StatusBadge } from './StatusBadge.js';
 export { Skeleton, SkeletonCard } from './Skeleton.js';
 export { PriceDisplay } from './PriceDisplay.js';

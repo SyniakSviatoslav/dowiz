@@ -1,6 +1,8 @@
-import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Button, BottomSheet, useI18n, PriceDisplay } from '../../index.js';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { Button, useI18n, PriceDisplay } from '../../index.js';
+import { ease, duration } from '../../lib/motion.js';
 
 export interface CartItem {
   id: string;
@@ -23,77 +25,132 @@ interface CartDrawerProps {
   checkoutLabel?: string;
   clearLabel?: string;
 }
+
 export function CartDrawer({ isOpen, onClose, items, onUpdateQuantity, onCheckout, title, emptyText, totalLabel, checkoutLabel }: CartDrawerProps) {
   const { t } = useI18n();
+  const reduce = useReducedMotion();
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  return (
-    <BottomSheet isOpen={isOpen} onClose={onClose} title={title || t('cart.title', 'Cart')}>
-      <div className="flex flex-col h-[60vh] max-h-[500px]">
-        <div className="flex-1 overflow-y-auto pb-4">
-          {items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-3" style={{ color: 'var(--brand-text-muted)' }}>
-              <i className="ti ti-shopping-cart text-3xl opacity-30" />
-              <span className="text-sm">{emptyText || t('cart.empty', 'Cart is empty')}</span>
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [isOpen, onClose]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-modal-backdrop" role="dialog" aria-modal="true" aria-label={title || t('cart.title', 'Cart')}>
+          <motion.div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            role="button"
+            tabIndex={0}
+            aria-label={t('common.close', 'Close')}
+            onClick={onClose}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: duration.fast, ease: ease.soft }}
+          />
+          <motion.div
+            className="absolute bottom-0 left-0 right-0 max-h-[85vh] flex flex-col bg-[var(--brand-surface)] rounded-t-2xl"
+            style={{ boxShadow: 'var(--elev-4)', paddingBottom: 'var(--safe-bottom)' }}
+            initial={reduce ? { opacity: 0 } : { transform: 'translateY(100%)' }}
+            animate={reduce ? { opacity: 1 } : { transform: 'translateY(0%)' }}
+            exit={reduce ? { opacity: 0 } : { transform: 'translateY(100%)', transition: { duration: 0.22, ease: ease.soft } }}
+            transition={reduce ? { duration: duration.fast } : { duration: 0.32, ease: ease.out }}
+          >
+            <div className="flex items-center justify-center pt-2 pb-1 shrink-0">
+              <div className="w-10 h-1 rounded-full bg-[var(--brand-border)]" />
             </div>
-          ) : (
-            <div className="space-y-3">
-              <AnimatePresence initial={false}>
-                {items.map((item, idx) => (
-                  <motion.div
-                    key={item.id}
-                    layout
-                    initial={{ opacity: 0, x: -16, scale: 0.96 }}
-                    animate={{ opacity: 1, x: 0, scale: 1, transition: { duration: 0.22, delay: idx * 0.04 } }}
-                    exit={{ opacity: 0, x: 20, scale: 0.94, transition: { duration: 0.18 } }}
-                    className="flex items-center justify-between py-1"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[var(--brand-text)] font-medium truncate">{item.name}</div>
-                      <div className="text-[var(--brand-text-muted)] text-sm"><PriceDisplay amount={item.price} size="sm" /></div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <motion.button
-                        type="button"
-                        onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
-                        className="min-w-[40px] min-h-[40px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] flex items-center justify-center"
-                        whileTap={{ scale: 0.82 }}
-                        whileHover={{ backgroundColor: 'var(--brand-border)' }}
-                      >-</motion.button>
-                      <motion.span
-                        key={item.quantity}
-                        initial={{ scale: 1.3 }}
-                        animate={{ scale: 1 }}
-                        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                        className="text-[var(--brand-text)] font-bold w-5 text-center"
-                      >{item.quantity}</motion.span>
-                      <motion.button
-                        type="button"
-                        onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                        className="min-w-[40px] min-h-[40px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] flex items-center justify-center"
-                        whileTap={{ scale: 0.82 }}
-                        whileHover={{ backgroundColor: 'var(--brand-border)' }}
-                      >+</motion.button>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+            <div className="flex items-center justify-between px-5 pt-2 pb-3 shrink-0">
+              <h2 className="text-lg font-heading font-semibold text-[var(--brand-text)] truncate">{title || t('cart.title', 'Cart')}</h2>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label={t('common.close', 'Close')}
+                className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full text-[var(--brand-text-muted)] transition-colors duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none hover:bg-[var(--brand-surface-raised)] hover:text-[var(--brand-text)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+              >
+                <i className="ti ti-x" />
+              </button>
             </div>
-          )}
+
+            <div className="flex-1 min-h-0 overflow-y-auto px-5">
+              {items.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-center py-16 gap-3">
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center bg-[var(--brand-surface-raised)]" style={{ boxShadow: 'var(--elev-1)' }}>
+                    <i className="ti ti-shopping-cart text-2xl text-[var(--brand-text-muted)]" />
+                  </div>
+                  <div className="text-[var(--brand-text)] font-medium">{emptyText || t('cart.empty', 'Your cart is empty')}</div>
+                  <p className="text-sm text-[var(--brand-text-muted)] max-w-[240px]">{t('cart.empty_hint', 'Add a few tasty items to get started.')}</p>
+                </div>
+              ) : (
+                <ul className="space-y-2 py-1">
+                  <AnimatePresence initial={false}>
+                    {items.map((item, idx) => (
+                      <motion.li
+                        key={item.id}
+                        layout={!reduce}
+                        initial={reduce ? { opacity: 0 } : { opacity: 0, x: -12 }}
+                        animate={reduce ? { opacity: 1 } : { opacity: 1, x: 0, transition: { duration: 0.22, ease: ease.out, delay: Math.min(idx, 6) * 0.03 } }}
+                        exit={reduce ? { opacity: 0 } : { opacity: 0, x: 16, height: 0, marginTop: 0, transition: { duration: duration.fast, ease: ease.soft } }}
+                        className="flex items-center justify-between gap-3 py-2"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[var(--brand-text)] font-medium truncate">{item.name}</div>
+                          <div className="text-[var(--brand-text-muted)] text-sm tabular-nums"><PriceDisplay amount={item.price} size="sm" /></div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            aria-label={t('cart.decrease', 'Decrease quantity')}
+                            onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
+                            className="w-10 h-10 rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] flex items-center justify-center text-lg transition-[transform,background-color] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none hover:bg-[var(--brand-border)] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+                          >&minus;</button>
+                          <motion.span
+                            key={item.quantity}
+                            initial={reduce ? false : { scale: 1.25 }}
+                            animate={{ scale: 1 }}
+                            transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 18 }}
+                            className="text-[var(--brand-text)] font-bold w-6 text-center tabular-nums"
+                          >{item.quantity}</motion.span>
+                          <button
+                            type="button"
+                            aria-label={t('cart.increase', 'Increase quantity')}
+                            onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                            className="w-10 h-10 rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] flex items-center justify-center text-lg transition-[transform,background-color] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none hover:bg-[var(--brand-border)] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+                          >+</button>
+                        </div>
+                      </motion.li>
+                    ))}
+                  </AnimatePresence>
+                </ul>
+              )}
+            </div>
+
+            {items.length > 0 && (
+              <div className="shrink-0 px-5 pt-3 pb-5 bg-[var(--brand-surface)]" style={{ boxShadow: '0 -8px 24px rgba(0,0,0,.06)' }}>
+                <div className="flex items-center justify-between gap-3 font-bold text-lg mb-3 text-[var(--brand-text)]">
+                  <span className="min-w-0 truncate">{totalLabel || t('cart.total', 'Total')}</span>
+                  <span className="shrink-0 tabular-nums"><PriceDisplay amount={total} size="lg" /></span>
+                </div>
+                <Button data-testid="cart-checkout" className="w-full min-w-0" size="lg" onClick={onCheckout}>
+                  <span className="truncate">{checkoutLabel || t('checkout.place_order', 'Checkout')}</span>
+                </Button>
+              </div>
+            )}
+          </motion.div>
         </div>
-        
-        {items.length > 0 && (
-          <div className="pt-4 border-t border-[var(--brand-border)]">
-            <div className="flex justify-between font-bold text-lg mb-4 text-[var(--brand-text)]">
-              <span>{totalLabel || t('cart.total', 'Total')}</span>
-              <PriceDisplay amount={total} size="lg" />
-            </div>
-            <Button data-testid="cart-checkout" className="w-full" size="lg" onClick={onCheckout}>
-              {checkoutLabel || t('checkout.place_order', 'Checkout')}
-            </Button>
-          </div>
-        )}
-      </div>
-    </BottomSheet>
+      )}
+    </AnimatePresence>,
+    document.body,
   );
 }

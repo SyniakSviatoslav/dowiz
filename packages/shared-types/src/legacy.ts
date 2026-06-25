@@ -147,6 +147,14 @@ export const CustomerOrderStatusResponse = z.object({
   }).nullable(),
   deliveryLat: z.number().nullable(),
   deliveryLng: z.number().nullable(),
+  // ORDER-TRACKING: per-transition timestamps (ISO strings), nullable until the
+  // step is reached. Optional keeps older payloads valid under .strict().
+  confirmedAt: z.string().nullable().optional(),
+  preparingAt: z.string().nullable().optional(),
+  readyAt: z.string().nullable().optional(),
+  inDeliveryAt: z.string().nullable().optional(),
+  deliveredAt: z.string().nullable().optional(),
+  pickedUpAt: z.string().nullable().optional(),
 }).strict();
 export type CustomerOrderStatusResponse = z.infer<typeof CustomerOrderStatusResponse>;
 

@@ -1,22 +1,13 @@
 import type { FastifyInstance } from 'fastify';
-import { jwtVerify } from 'jose';
-import { loadEnv } from '@deliveryos/config';
 import crypto from 'crypto';
-import { withTenant } from '@deliveryos/platform';
+import { withTenant, verifyAuthToken } from '@deliveryos/platform';
 import { getImageUrl } from '../lib/image-url.js';
+import { extractFromWebsite, extractLogoColor, normalizeHex } from '../lib/brand-extractor.js';
 import { maskStr } from '../lib/pii-mask.js';
 import { decryptPII } from '../lib/pii-cipher.js';
 import { z } from 'zod';
 
-const env = loadEnv();
-
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
-
-function getPublicKey(): crypto.KeyObject {
-  const raw = env.***REDACTED***;
-  if (!raw) throw new Error('***REDACTED*** missing');
-  return crypto.createPublicKey(raw.replace(/\\n/g, '\n'));
-}
 
 function validateImageKey(val: unknown): string | null | undefined {
   if (val === undefined || val === null) return val;
@@ -71,7 +62,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     if (!auth?.startsWith('Bearer ')) return null;
     try {
       const token = auth.slice(7);
-      const { payload } = await jwtVerify(token, getPublicKey(), { algorithms: ['RS256'] });
+      const payload = await verifyAuthToken(token);
       const claims = payload as any;
       if (claims.role !== 'owner') return null;
       // Prefer activeLocationId from JWT (new auth system)
@@ -80,7 +71,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       const uid = claims.userId || claims.sub;
       if (uid) {
         const res = await db.query(
-          `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+          `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1`, // P-d (ADR-0004)
           [uid]
         );
         if (res.rows.length > 0) return res.rows[0].location_id;
@@ -99,7 +90,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const auth = request.headers.authorization;
     if (!auth?.startsWith('Bearer ')) return false;
     try {
-      const { payload } = await jwtVerify(auth.slice(7), getPublicKey(), { algorithms: ['RS256'] });
+      const payload = await verifyAuthToken(auth.slice(7));
       return (payload as any).role === 'owner';
     } catch {
       return false;
@@ -112,7 +103,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const auth = request.headers.authorization;
     if (!auth?.startsWith('Bearer ')) return null;
     try {
-      const { payload } = await jwtVerify(auth.slice(7), getPublicKey(), { algorithms: ['RS256'] });
+      const payload = await verifyAuthToken(auth.slice(7));
       const claims = payload as any;
       if (claims.role !== 'owner') return null;
       return claims.userId || claims.sub || null;
@@ -126,7 +117,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     if (!auth?.startsWith('Bearer ')) return null;
     try {
       const token = auth.slice(7);
-      const { payload } = await jwtVerify(token, getPublicKey(), { algorithms: ['RS256'] });
+      const payload = await verifyAuthToken(token);
       const claims = payload as any;
       if (claims.role !== 'owner') return null;
       const uid = claims.userId || claims.sub;
@@ -135,7 +126,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       if (claims.activeLocationId) return { locId: claims.activeLocationId, userId: uid };
       // Fall back to memberships lookup (legacy auth)
       const res = await db.query(
-        `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+        `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1`, // P-d (ADR-0004)
         [uid]
       );
       if (res.rows.length > 0) return { locId: res.rows[0].location_id, userId: uid };
@@ -168,6 +159,38 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     } catch (err: any) {
       console.warn('[spa-proxy] image fetch failed:', err?.message);
       return reply.status(404).send({ error: 'Image not found' });
+    }
+  });
+
+  // GET /media/* — serve a rich-media object (image/video/spin frame) by R2 key.
+  // Mirrors /images/* (same traversal guard + storage.get), but content-addressed
+  // keys are immutable so we serve a 1-year immutable cache. Content-Type is
+  // derived from the extension since these keys carry varied media types.
+  fastify.get('/media/*', async (request, reply) => {
+    const raw = (request.params as any)['*'] as string;
+    const key = raw.startsWith('/') ? raw.slice(1) : raw;
+    // SECURITY: same rationale as /images/* — Fastify decodes %2f in the wildcard,
+    // so reject traversal here before touching storage or an encoded '..%2f' could
+    // escape the prefix and read arbitrary bucket objects.
+    if (!key || key.includes('..') || key.includes('\0') || key.includes('\\')) {
+      return reply.status(400).send({ error: 'Invalid media key' });
+    }
+    const ext = key.slice(key.lastIndexOf('.') + 1).toLowerCase();
+    const contentType =
+      ext === 'webp' ? 'image/webp'
+      : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
+      : ext === 'png' ? 'image/png'
+      : ext === 'mp4' ? 'video/mp4'
+      : 'application/octet-stream';
+    try {
+      const buf = await storage.get(key);
+      if (!buf) return reply.status(404).send({ error: 'Media not found' });
+      reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+      reply.header('Content-Type', contentType);
+      return reply.send(buf);
+    } catch (err: any) {
+      console.warn('[spa-proxy] media fetch failed:', err?.message);
+      return reply.status(404).send({ error: 'Media not found' });
     }
   });
 
@@ -554,6 +577,56 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       googlePlaceId: t.google_place_id ?? null,
       socialInstagram: t.social_instagram ?? null,
       socialFacebook: t.social_facebook ?? null,
+    });
+  });
+
+  // POST /api/owner/brand/generate — derive seed colours from an existing
+  // website and/or the brand logo. Returns SUGGESTIONS only (not persisted); the
+  // owner reviews them in the live preview and saves via PUT /api/owner/brand.
+  // The client expands these three seeds into a full coherent palette.
+  fastify.post('/api/owner/brand/generate', async (request, reply) => {
+    const ctx = await getOwnerContext(request);
+    if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+    const body = (request.body || {}) as { website?: string; logoDataUrl?: string };
+
+    let primary: string | undefined, bg: string | undefined, text: string | undefined;
+    let logoUrl: string | undefined, name: string | undefined;
+    const sources: string[] = [];
+
+    if (typeof body.website === 'string' && body.website.trim()) {
+      try {
+        const sig = await extractFromWebsite(body.website.trim());
+        primary = sig.primary; bg = sig.bg; text = sig.text; logoUrl = sig.logoUrl; name = sig.name;
+        sources.push(...sig.sources);
+      } catch (e: any) {
+        (request as any).log?.warn?.({ err: e?.message }, '[brand/generate] website extract failed');
+      }
+    }
+
+    // A logo accent fills a missing primary. Sent as a data URL so the server
+    // never fetches an arbitrary image (no SSRF surface); capped at ~3MB.
+    if (!primary && typeof body.logoDataUrl === 'string' && body.logoDataUrl.startsWith('data:image/')) {
+      try {
+        const b64 = body.logoDataUrl.slice(body.logoDataUrl.indexOf(',') + 1);
+        if (b64.length < 4_000_000) {
+          const color = await extractLogoColor(Buffer.from(b64, 'base64'));
+          if (color) { primary = color; sources.push('logo'); }
+        }
+      } catch (e: any) {
+        (request as any).log?.warn?.({ err: e?.message }, '[brand/generate] logo extract failed');
+      }
+    }
+
+    if (!primary && !bg && !text) {
+      return reply.status(422).send({ error: 'no_signal', message: 'Could not detect brand colours from the website or logo.' });
+    }
+    return reply.send({
+      primaryColor: normalizeHex(primary) || null,
+      bgColor: normalizeHex(bg) || null,
+      textColor: normalizeHex(text) || null,
+      logoUrl: logoUrl || null,
+      name: name || null,
+      sources,
     });
   });
 

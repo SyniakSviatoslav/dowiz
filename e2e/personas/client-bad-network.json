@@ -1,0 +1,19 @@
+{
+  "id": "client-bad-network",
+  "role": "client",
+  "goals": [
+    "complete checkout despite a flaky connection"
+  ],
+  "traits": {
+    "patience": "low",
+    "tech_savvy": "med",
+    "careful_or_sloppy": "careful"
+  },
+  "device": "mobile",
+  "viewport": 390,
+  "locale": "en",
+  "network_profile": "offline-mid-checkout",
+  "constraints": [
+    "drops to offline during payment step"
+  ]
+}

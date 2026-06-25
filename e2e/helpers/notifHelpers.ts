@@ -4,8 +4,8 @@ import { test, expect } from '@playwright/test';
 const BASE_URL = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
 // Telegram bot credentials (should be set in environment variables for security)
-const BOT_TOKEN = process.env.***REDACTED*** || '8996764379:AAHkuc5mgYQdkWG5rLZEjHc8a8k5MQsHDIk';
-const BOT_SECRET = process.env.***REDACTED*** || 'Ihatenuclearwar';
+const BOT_TOKEN = process.env.***REDACTED***;
+const BOT_SECRET = process.env.***REDACTED***;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID ? parseInt(process.env.TELEGRAM_CHAT_ID, 10) : 999999;
 
 // Helper to generate UUIDs

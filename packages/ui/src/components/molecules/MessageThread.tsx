@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../../lib/I18nProvider.js';
+import { ease, duration } from '../../lib/motion.js';
 import type { MessageSender, OrderStatusForMsg } from '@deliveryos/shared-types';
 
 interface MessageData {
@@ -84,6 +86,7 @@ const TERMINAL: ReadonlySet<string> = new Set(['DELIVERED', 'REJECTED', 'CANCELL
 
 export function MessageThread({ orderId, role, currentStatus, messages, onSend, onMarkRead }: MessageThreadProps) {
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
   const [selectedPreset, setSelectedPreset] = useState<PresetOption | null>(null);
   const [paramValue, setParamValue] = useState<string | number>('');
   const threadEndRef = useRef<HTMLDivElement>(null);
@@ -128,25 +131,38 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
       {/* Message list */}
       <div className="px-4 space-y-2 max-h-64 overflow-y-auto">
         {messages.length === 0 && (
-          <p className="text-[var(--brand-text-muted)] text-xs py-2">{t('message.empty', 'No messages')}</p>
+          <div className="flex flex-col items-center text-center gap-1 py-8">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="opacity-60" style={{ color: 'var(--brand-text-muted)' }}>
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <p className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>{t('message.empty', 'No messages yet')}</p>
+            <p className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('message.empty_hint', 'Tap a quick reply below to start the conversation.')}</p>
+          </div>
         )}
         {messages.map((msg) => {
           const isMine = msg.sender === myRole;
           return (
-            <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+            <motion.div
+              key={msg.id}
+              className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
+              initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: duration.base, ease: ease.out }}
+            >
               <div
-                className={`max-w-[75%] px-3 py-2 rounded-lg text-sm ${
+                className={`max-w-[78%] min-w-0 px-3 py-2 text-sm break-words [overflow-wrap:anywhere] rounded-[var(--brand-radius)] ${
                   isMine
-                    ? 'bg-[var(--brand-primary)] text-white rounded-br-sm'
-                    : 'bg-[var(--brand-surface)] text-[var(--brand-text)] border border-[var(--brand-border)] rounded-bl-sm'
+                    ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] rounded-br-[var(--brand-radius-sm)]'
+                    : 'bg-[var(--brand-surface)] text-[var(--brand-text)] border border-[var(--brand-border)] rounded-bl-[var(--brand-radius-sm)]'
                 }`}
+                style={{ boxShadow: 'var(--elev-1)' }}
               >
                 <p>{t(msg.preset_key as any, msg.preset_key, msg.params as any)}</p>
-                <p className={`text-[10px] mt-1 ${isMine ? 'text-white/70' : 'text-[var(--brand-text-muted)]'}`}>
+                <p className={`text-step-2xs mt-1 tabular-nums ${isMine ? 'text-white/80' : 'text-[var(--brand-text-muted)]'}`}>
                   {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
-            </div>
+            </motion.div>
           );
         })}
         <div ref={threadEndRef} />
@@ -160,15 +176,19 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
               {availablePresets.map((preset) => (
                 <button
                   key={preset.key}
+                  type="button"
                   onClick={() => {
                     setSelectedPreset(preset);
                     if (!preset.paramType) {
                       onSend(preset.key, {});
                     }
                   }}
-                  className="px-3 py-1.5 text-xs rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-text)] hover:bg-[var(--brand-primary)] hover:text-white hover:border-[var(--brand-primary)] transition-colors"
+                  className="px-3 py-1.5 min-h-[36px] text-xs rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-text)] transition-[background-color,color,border-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:bg-[var(--brand-primary)] hover:text-white hover:border-[var(--brand-primary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
                 >
-                  {t(preset.label as any, preset.key)}
+                  {/* Chip is a category trigger shown BEFORE the param is picked, so the raw
+                      label still carries `{{minutes}}`/`{{amount}}` placeholders — strip them to
+                      an ellipsis (the value is chosen on the next step) instead of leaking mustache. */}
+                  {t(preset.label as any, preset.key).replace(/\{\{\w+\}\}/g, '…')}
                 </button>
               ))}
             </div>
@@ -179,11 +199,13 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
                   {selectedPreset.paramOptions?.map((opt) => (
                     <button
                       key={String(opt)}
+                      type="button"
+                      aria-pressed={paramValue === opt}
                       onClick={() => setParamValue(opt)}
-                      className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                      className={`px-3 py-1.5 min-h-[36px] text-xs rounded-full border transition-[background-color,color,border-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 ${
                         paramValue === opt
-                          ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
-                          : 'border-[var(--brand-border)] text-[var(--brand-text-muted)] hover:border-[var(--brand-primary)]'
+                          ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] border-[var(--brand-primary)]'
+                          : 'border-[var(--brand-border)] text-[var(--brand-text)] hover:border-[var(--brand-primary)]'
                       }`}
                     >
                       {selectedPreset.paramType === 'location'
@@ -197,15 +219,17 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
               )}
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={handleSend}
                   disabled={selectedPreset.paramType ? !paramValue : false}
-                  className="flex-1 px-3 py-2 text-sm rounded-lg bg-[var(--brand-primary)] text-white font-medium disabled:opacity-50"
+                  className="flex-1 min-h-[44px] px-3 py-2 text-sm rounded-[var(--brand-radius)] bg-[var(--brand-primary)] text-[var(--brand-bg)] font-medium transition-[opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:active:scale-100"
                 >
                   {t('message.send', 'Send')}
                 </button>
                 <button
+                  type="button"
                   onClick={() => { setSelectedPreset(null); setParamValue(''); }}
-                  className="px-3 py-2 text-sm rounded-lg border border-[var(--brand-border)] text-[var(--brand-text-muted)]"
+                  className="min-h-[44px] px-3 py-2 text-sm rounded-[var(--brand-radius)] border border-[var(--brand-border)] text-[var(--brand-text)] transition-[background-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:bg-[var(--brand-surface)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
                 >
                   {t('common.cancel', 'Cancel')}
                 </button>
