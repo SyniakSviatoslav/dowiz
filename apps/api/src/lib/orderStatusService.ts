@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import { assertTransition, type OrderStatus } from '@deliveryos/domain';
 import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, orderChannel, dashboardChannel } from './registry.js';
+import { synthesizeAndPersistEtaWindow } from './etaGather.js';
 
 // ORDER-TRACKING: per-transition timestamp column for each status the machine
 // stamps. Additive instrumentation only \u2014 the transition/guard logic in
@@ -136,6 +137,18 @@ export async function updateOrderStatus(
   } catch {
     // Audit trail is advisory; the canonical state lives on orders.status.
     try { await client.query('ROLLBACK TO SAVEPOINT order_status_history_ins'); } catch { /* no tx */ }
+  }
+
+  // SENSOR-BUS §1.1 (ESTOP-1): synthesise the frozen promised_window (set once at CONFIRMED) + the
+  // mutable live_eta (recomputed every stage, width-floor + cap-last). Best-effort in a SAVEPOINT —
+  // a synthesis failure must NEVER fail the (already-applied) status transition (observe-don't-control,
+  // brief §0.1). The helper degrades reads to fallbacks internally; this guards a real write/RLS error.
+  try {
+    await client.query('SAVEPOINT eta_window_synthesis');
+    await synthesizeAndPersistEtaWindow(client, orderId, newStatus);
+    await client.query('RELEASE SAVEPOINT eta_window_synthesis');
+  } catch {
+    try { await client.query('ROLLBACK TO SAVEPOINT eta_window_synthesis'); } catch { /* no tx */ }
   }
 
   // 4. Broadcast via MessageBus
