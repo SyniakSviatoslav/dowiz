@@ -209,7 +209,7 @@ export function OrderProgress(props: OrderProgressProps) {
               {time && (
                 <span
                   data-dynamic
-                  className="text-[9px] text-[var(--brand-text-muted)] tabular-nums"
+                  className="text-step-2xs text-[var(--brand-text-muted)] tabular-nums"
                   data-testid={`order-step-${step.key.toLowerCase()}-time`}
                 >
                   {time}

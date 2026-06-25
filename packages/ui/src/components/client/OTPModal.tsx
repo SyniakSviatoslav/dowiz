@@ -100,7 +100,7 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
           <span className="font-semibold" style={{ color: 'var(--brand-text)' }}>{phone}</span>.
         </p>
 
-        <label htmlFor="otp-code" className="text-[13px] font-bold block" style={{ color: 'var(--brand-text)' }}>
+        <label htmlFor="otp-code" className="text-step-sm font-bold block" style={{ color: 'var(--brand-text)' }}>
           {t('otp.code_label', 'Verification code')}
         </label>
         <motion.input

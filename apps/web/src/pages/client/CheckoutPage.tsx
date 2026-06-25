@@ -154,7 +154,7 @@ function NutritionRing({ kcal, protein, fat, carbs }: { kcal: number; protein: n
             >
               {Math.round(kcal)}
             </motion.span>
-            <span className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>kcal</span>
+            <span className="text-step-2xs uppercase tracking-widest mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>kcal</span>
           </div>
         </div>
         <div className="flex-1 space-y-2.5">
@@ -168,7 +168,7 @@ function NutritionRing({ kcal, protein, fat, carbs }: { kcal: number; protein: n
             >
               <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: m.color }} />
               <span className="text-step-xs flex-1" style={{ color: 'var(--brand-text-muted)' }}>{m.label}</span>
-              <span className="text-[13px] font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{Math.round(m.grams)}g</span>
+              <span className="text-step-sm font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{Math.round(m.grams)}g</span>
             </motion.div>
           )) : (
             <motion.p className="text-step-xs" style={{ color: 'var(--brand-text-muted)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
@@ -615,7 +615,7 @@ export function CheckoutPage() {
         <motion.button onClick={() => navigate(-1)} whileTap={{ scale: 0.95 }} aria-label={t('common.back', 'Go back')} className="w-11 h-11 shrink-0 rounded-full flex items-center justify-center border transition-[transform,box-shadow,background-color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-95 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
           <i className="ti ti-arrow-left" aria-hidden="true" />
         </motion.button>
-        <h1 className="text-[24px] font-bold min-w-0 truncate" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.title')}</h1>
+        <h1 className="text-step-2xl font-bold min-w-0 truncate" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.title')}</h1>
       </div>
 
       <form id="checkout-form" onSubmit={handlePlaceOrder} className="space-y-6">
@@ -625,17 +625,17 @@ export function CheckoutPage() {
           viewport={{ once: true, margin: '-40px' }}
           transition={{ duration: 0.25, ease: ease.out }}
           className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
-          <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.contact_info', 'Contact Info')}</h2>
+          <h2 className="text-step-xl font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.contact_info', 'Contact Info')}</h2>
           <div className="space-y-3">
             <div>
-              <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.name', 'Name')}</label>
+              <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.name', 'Name')}</label>
               <div className="relative">
                 <i className="ti ti-user absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
                 <input required value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t('checkout.name_placeholder', 'Your name')} autoComplete="name" className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
               </div>
             </div>
             <div>
-              <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.phone', 'Phone')}</label>
+              <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.phone', 'Phone')}</label>
               <div className="relative">
                 <i className="ti ti-phone absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
                 <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} onBlur={() => setPhone(p => normalizeAlbanianPhone(p))} placeholder="+355 6X XXX XXXX" title="+355 followed by 7-14 digits" type="tel" inputMode="tel" autoComplete="tel" data-testid="checkout-phone" className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
@@ -644,7 +644,7 @@ export function CheckoutPage() {
             </div>
             {/* UX-2: optional messenger so the courier can text instead of call */}
             <div>
-              <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.messenger', 'Messenger (optional)')}</label>
+              <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.messenger', 'Messenger (optional)')}</label>
               <div className="flex gap-2">
                 <select value={messengerKind} onChange={e => setMessengerKind(e.target.value)} data-testid="checkout-messenger-kind"
                   className="h-[48px] px-2 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
@@ -662,7 +662,7 @@ export function CheckoutPage() {
             {/* UX-3: optional entrance photo (delivery only) — camera or gallery */}
             {deliveryType !== 'pickup' && (
               <div>
-                <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entry_photo', 'Entrance photo (optional)')}</label>
+                <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entry_photo', 'Entrance photo (optional)')}</label>
                 <div className="flex items-center gap-3">
                   <button type="button" onClick={() => entryFileRef.current?.click()} disabled={photoUploading}
                     className="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 border rounded-[var(--brand-radius-sm)] cursor-pointer text-sm transition-[background-color,box-shadow,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 disabled:opacity-60"
@@ -687,21 +687,21 @@ export function CheckoutPage() {
           viewport={{ once: true, margin: '-40px' }}
           transition={{ duration: 0.25, ease: ease.out, delay: 0.05 }}
           className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
-          <h2 className="text-[20px] font-semibold mb-6" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.delivery_address')}</h2>
+          <h2 className="text-step-xl font-semibold mb-6" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.delivery_address')}</h2>
           <div className="flex p-1 rounded-[var(--brand-radius-sm)] mb-6 gap-0.5" role="tablist" aria-label={t('checkout.delivery_type', 'Delivery type')} style={{ background: 'var(--brand-surface)' }}>
-            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'delivery'} onClick={() => setDeliveryType('delivery')} className="flex-1 min-h-[44px] py-2 text-[13px] rounded-[var(--brand-radius-sm)] transition-[background-color,color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1" style={btnStyle('delivery')}>{t('courier.deliver')}</motion.button>
-            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'pickup'} onClick={() => setDeliveryType('pickup')} className="flex-1 min-h-[44px] py-2 text-[13px] rounded-[var(--brand-radius-sm)] transition-[background-color,color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1" style={btnStyle('pickup')}>{t('courier.pickup')}</motion.button>
+            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'delivery'} onClick={() => setDeliveryType('delivery')} className="flex-1 min-h-[44px] py-2 text-step-sm rounded-[var(--brand-radius-sm)] transition-[background-color,color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1" style={btnStyle('delivery')}>{t('courier.deliver')}</motion.button>
+            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'pickup'} onClick={() => setDeliveryType('pickup')} className="flex-1 min-h-[44px] py-2 text-step-sm rounded-[var(--brand-radius-sm)] transition-[background-color,color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1" style={btnStyle('pickup')}>{t('courier.pickup')}</motion.button>
             {/* Scheduled is scaffold (not yet implemented end-to-end) — hidden until supported. */}
           </div>
 
           {deliveryType === 'delivery' && (
             <div className="space-y-4">
               <div>
-                <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.pin_on_map', 'Drag the pin to your location')}</label>
+                <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.pin_on_map', 'Drag the pin to your location')}</label>
                 <MapWithPin className="h-48 w-full rounded-[var(--brand-radius-sm)]" initialCenter={locationCenter} onPinChange={setPinLocation} confirmLabel={t('common.confirm')} placeholder={t('checkout.pin_on_map', 'Drag the pin to your location')} />
               </div>
               <div>
-                <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.street_address', 'Street address')}</label>
+                <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.street_address', 'Street address')}</label>
                 <div className="relative">
                   <i className="ti ti-map-pin absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
                   <input required value={address} onChange={e => setAddress(e.target.value)} placeholder={t('checkout.street_address', 'Street address')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
@@ -709,7 +709,7 @@ export function CheckoutPage() {
               </div>
               <div className="space-y-4">
                 <div>
-                  <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entrance')}</label>
+                  <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entrance')}</label>
                   <div className="relative">
                     <i className="ti ti-door-open absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
                     <input required value={entrance} onChange={e => setEntrance(e.target.value)} data-testid="checkout-entrance" placeholder={t('checkout.entrance_placeholder', 'Entrance number or name')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
@@ -717,7 +717,7 @@ export function CheckoutPage() {
                   {entranceError && <p role="alert" className="text-step-xs mt-1" style={{ color: 'var(--color-danger)' }}>{entranceError}</p>}
                 </div>
                 <div>
-                  <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.apartment')}</label>
+                  <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.apartment')}</label>
                   <div className="relative">
                     <i className="ti ti-apartment absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
                     <input required value={apartment} onChange={e => setApartment(e.target.value)} data-testid="checkout-apartment" placeholder={t('checkout.apartment_placeholder', 'Apartment or unit number')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
@@ -726,7 +726,7 @@ export function CheckoutPage() {
                 </div>
               </div>
               <div>
-                <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>
+                <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>
                   {t('checkout.notes', 'How to find you')} <span style={{ color: 'var(--color-danger)' }}>*</span>
                 </label>
                 <div className="relative">
@@ -743,7 +743,7 @@ export function CheckoutPage() {
                 </div>
               </div>
               <div>
-                <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.dropoff_instructions', 'Dropoff instructions')}</label>
+                <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.dropoff_instructions', 'Dropoff instructions')}</label>
                 <div className="flex flex-wrap gap-2 mb-2" role="group" aria-label={t('checkout.dropoff_instructions', 'Dropoff instructions')}>
                   {[
                     { key: 'checkout.dropoff_door', val: 'Leave at door' },
@@ -770,7 +770,7 @@ export function CheckoutPage() {
                 {instructionOption && (
                   <div className="relative">
                     <i className="ti ti-edit absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                    <input value={instructionCustom} onChange={e => setInstructionCustom(e.target.value)} placeholder={t('checkout.extra_notes', 'Extra notes...')} className="w-full h-[44px] pl-10 pr-3 outline-none text-[13px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                    <input value={instructionCustom} onChange={e => setInstructionCustom(e.target.value)} placeholder={t('checkout.extra_notes', 'Extra notes...')} className="w-full h-[44px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                   </div>
                 )}
               </div>
@@ -792,7 +792,7 @@ export function CheckoutPage() {
               </div>
               <div className="flex items-center gap-3 p-3 rounded-[var(--brand-radius-sm)] border" style={{ background: 'var(--color-info-light)', borderColor: 'var(--color-info)', color: 'var(--color-info)' }}>
                 <i className="ti ti-info-circle" aria-hidden="true" />
-                <p className="text-[13px] font-medium">{t('checkout.phone_hint')}</p>
+                <p className="text-step-sm font-medium">{t('checkout.phone_hint')}</p>
               </div>
             </div>
           )}
@@ -800,7 +800,7 @@ export function CheckoutPage() {
           {deliveryType === 'scheduled' && (
             <div className="flex items-center gap-3 p-4 rounded-[var(--brand-radius)] border" style={{ background: 'var(--color-warning-light)', borderColor: 'var(--color-warning)' }}>
               <i className="ti ti-clock text-lg shrink-0" aria-hidden="true" style={{ color: 'var(--color-warning)' }} />
-              <p className="text-[13px] font-medium" style={{ color: 'var(--brand-text)' }}>
+              <p className="text-step-sm font-medium" style={{ color: 'var(--brand-text)' }}>
                 {t('checkout.scheduled_coming_soon', 'Scheduled delivery coming soon. Please select Delivery or Pickup.')}
               </p>
             </div>
@@ -813,7 +813,7 @@ export function CheckoutPage() {
           viewport={{ once: true, margin: '-40px' }}
           transition={{ duration: 0.25, ease: ease.out, delay: 0.1 }}
           className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
-          <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.payment_method')}</h2>
+          <h2 className="text-step-xl font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.payment_method')}</h2>
           <div className="border rounded-[var(--brand-radius-sm)] p-3 mb-3" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-primary)' }}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -865,7 +865,7 @@ export function CheckoutPage() {
                 <p className="text-step-xs mt-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_hint', 'Goes entirely to your courier, in cash on delivery.')}</p>
               </div>
               {cashAmount > 0 && (
-                <div className="flex justify-between text-[13px] mt-2 px-1">
+                <div className="flex justify-between text-step-sm mt-2 px-1">
                   {cashAmount >= total ? (
                     <>
                       <span style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.change', 'Change')}</span>
@@ -890,7 +890,7 @@ export function CheckoutPage() {
               <span className="text-xl shrink-0 mt-0.5">🌍</span>
               <div>
                 <p className="text-step-2xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.did_you_know', 'Did you know?')}</p>
-                <p className="text-[13px] leading-relaxed" style={{ color: 'var(--brand-text)' }}>{cityFact}</p>
+                <p className="text-step-sm leading-relaxed" style={{ color: 'var(--brand-text)' }}>{cityFact}</p>
               </div>
             </div>
           </motion.div>
@@ -911,7 +911,7 @@ export function CheckoutPage() {
           viewport={{ once: true, margin: '-40px' }}
           transition={{ duration: 0.25, ease: ease.out, delay: 0.15 }}
           className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
-          <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('order.title')}</h2>
+          <h2 className="text-step-xl font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('order.title')}</h2>
           <div className="space-y-3 mb-4">
             <div className="flex justify-between items-baseline gap-3 text-step-sm">
               <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.subtotal')}</span>
@@ -950,7 +950,7 @@ export function CheckoutPage() {
             </motion.span>
           </div>
           {tipAmount > 0 && (
-            <div className="flex justify-between items-center gap-3 text-[13px] mt-2" style={{ color: 'var(--brand-text-muted)' }} data-testid="checkout-cash-due">
+            <div className="flex justify-between items-center gap-3 text-step-sm mt-2" style={{ color: 'var(--brand-text-muted)' }} data-testid="checkout-cash-due">
               <span className="min-w-0 truncate">{t('checkout.cash_to_courier', 'Cash to courier (incl. tip)')}</span>
               <span className="shrink-0 tabular-nums"><PriceDisplay amount={total + tipAmount} /></span>
             </div>

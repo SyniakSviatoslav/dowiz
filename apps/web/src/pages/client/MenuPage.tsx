@@ -587,7 +587,7 @@ export function MenuPage() {
               </>
             )}
           </motion.div>
-          <h1 className="text-step-xl md:text-[26px] font-bold leading-tight" style={{ color: '#ffffff', fontFamily: 'var(--brand-font-heading)', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>
+          <h1 className="text-step-xl md:text-step-2xl font-bold leading-tight" style={{ color: '#ffffff', fontFamily: 'var(--brand-font-heading)', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>
             {menu?.location_name || t('client.menu', 'Menu')}
           </h1>
           {venueStatus && (
@@ -1072,7 +1072,7 @@ export function MenuPage() {
                         <div key={n.key} className="flex flex-col items-center gap-1">
                           <i className={n.icon} style={{ fontSize: '1rem', color: 'var(--brand-text-muted)' }} />
                           <span className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{n.value}</span>
-                          <span className="text-[9px] font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t(n.key)}</span>
+                          <span className="text-step-2xs font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t(n.key)}</span>
                         </div>
                       ))}
                   </div>
@@ -1135,7 +1135,7 @@ export function MenuPage() {
                         />
                         <span className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{group.name}</span>
                         {group.required && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ background: 'rgba(220,38,38,0.08)', color: 'var(--color-danger)' }}>
+                          <span className="text-step-2xs px-1.5 py-0.5 rounded font-medium" style={{ background: 'rgba(220,38,38,0.08)', color: 'var(--color-danger)' }}>
                             {t('client.required', 'Required')}
                           </span>
                         )}
@@ -1156,7 +1156,7 @@ export function MenuPage() {
                               onClick={() => toggleModifier(group.id, mod.id, group)}
                               whileTap={prefersReduced ? undefined : { scale: 0.97 }}
                               aria-pressed={isSelected}
-                              className={`px-3.5 py-2 text-[13px] font-medium active:scale-[0.97] border min-h-11 outline-none transition-[background-color,color,border-color,transform] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)] ${
+                              className={`px-3.5 py-2 text-step-sm font-medium active:scale-[0.97] border min-h-11 outline-none transition-[background-color,color,border-color,transform] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)] ${
                                 isSelected ? 'border-2' : ''
                               }`}
                               style={{

@@ -773,7 +773,7 @@ export function OrderStatusPage() {
                 <div key={n.label} className="p-2 rounded-[var(--brand-radius-sm)] min-w-0" style={{ background: 'var(--brand-surface)' }}>
                   <div className="text-lg font-bold tabular-nums" style={{ color: 'var(--brand-primary)' }}>{n.value || '—'}</div>
                   <div className="text-step-2xs truncate" style={{ color: 'var(--brand-text-muted)' }}>{n.label}</div>
-                  <div className="text-[9px]" style={{ color: 'var(--brand-text-muted)' }}>{n.unit}</div>
+                  <div className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{n.unit}</div>
                 </div>
               ))}
             </div>

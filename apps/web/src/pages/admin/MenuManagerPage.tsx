@@ -803,7 +803,7 @@ export function MenuManagerPage() {
                           {getProductAllergens(product).map(a => {
                             const s = getAllergenStyle(a);
                             return (
-                              <span key={a} className="text-[8px] font-semibold px-1 py-0.5 rounded-full leading-tight"
+                              <span key={a} className="text-step-2xs font-semibold px-1 py-0.5 rounded-full leading-tight"
                                 style={{ background: s.bg, color: s.text }}>
                                 {t(`allergen.${a.toLowerCase()}`, a)}
                               </span>
@@ -938,7 +938,7 @@ export function MenuManagerPage() {
                 <label className="flex flex-col items-center justify-center w-20 h-20 rounded-lg border-2 border-dashed cursor-pointer hover:border-[var(--brand-primary)] transition-colors shrink-0"
                   style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)' }}>
                   {formImage ? <img src={formImage} alt="" className="w-full h-full object-cover rounded-lg" />
-                    : <div className="text-center"><i className="ti ti-camera text-lg" style={{ color: 'var(--brand-text-muted)' }} /><span className="text-[9px] block">JPG/PNG</span></div>}
+                    : <div className="text-center"><i className="ti ti-camera text-lg" style={{ color: 'var(--brand-text-muted)' }} /><span className="text-step-2xs block">JPG/PNG</span></div>}
                   <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageSelect} className="hidden" />
                 </label>
                 <div className="text-xs space-y-1" style={{ color: 'var(--brand-text-muted)' }}>
