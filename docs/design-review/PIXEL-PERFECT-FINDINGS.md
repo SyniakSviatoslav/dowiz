@@ -27,6 +27,30 @@ correct; the storefront loading/error states are good and branded.)
 
 **The real issue this exposes (A5 below) is genuine and worth fixing.**
 
+## Verification log (what survived code/compute checks)
+
+Each visual finding was checked against code or computed values before any fix. The screenshot pass
+had a **high false-positive rate** — most "broken-looking" items are real components degraded by the
+capture, or visual estimates that compute fine. **Verified real** issues are few; fix only those.
+
+| Finding | Verdict | Evidence |
+|---|---|---|
+| Empty icons / ghost-circle media / "stepper has no ±" / "glyph noise" | ❌ **Artifact** | Tabler webfont didn't paint in the Playwright sandbox (CDN font); icons render for real users. |
+| Storefront loading skeleton "missing" / error "dark" | ❌ **Artifact** | Both are branded & well-built — wrong-slug capture; re-validated (`state-client-menu-*`). |
+| Supplies "unconfirmed" badge is green (inverted) | ❌ **False** | Already `--color-warning` (amber); the green was the ingredient-type icon. `SupplyLibraryPage.tsx:415`. |
+| Courier map status defaults phone-less → online | ❌ **False** | Status is normalized upstream (`:179`); `:213` is correct (typecheck rejected the "fix"). |
+| Muted text fails AA on dark cards | ❌ **False** | Computed `#959a93`: 4.57–6.21:1 on all default surfaces (≥4.5 AA). Passes (thin on raised). |
+| CSP `font-src` omits jsdelivr → blank icons | ⚠️ **Harmless** | The jsdelivr-less CSP (`headers.ts`) doesn't apply to icon pages; storefront uses the correct CSP. |
+| Two elevation systems (legacy `--elevation-*`) | ✅ **Real — FIXED** | 32 usages; aliased to `--elev-*`. |
+| Icons = unpinned third-party CDN, no fallback | ✅ **Real — partial fix** | `@latest` pinned to `@3.31.0`; self-host pending (needs install). |
+| Type scale bypassed by arbitrary `text-[Npx]` | ✅ **Real — pending** | grep-confirmed; needs a visually-validated migration (layout-break risk). |
+| Font drift: DESIGN.md (DM) vs tokens.css (Inter) | ✅ **Real — pending** | `tokens.css:54-55`. Reconcile contract ↔ code. |
+| Button hierarchy fragmentation | 🔶 **Likely real — re-confirm** | Estimate confounded by missing icons; re-judge on an icon-rendering capture before consolidating. |
+
+**Takeaway:** the UI is in materially better shape than the raw screenshot pass implied. The genuine
+backlog is small: self-host icons, the type-scale migration, the font-drift reconcile, and a
+re-confirmation of the button/segmented-control consolidation on a clean (icon-rendering) capture.
+
 ## A. Systemic design-system breaks (code-grounded — the root causes)
 
 These are whole-system inconsistencies confirmed by grep across `apps/web/src` + `packages/ui/src`.
