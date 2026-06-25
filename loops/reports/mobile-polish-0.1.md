@@ -43,5 +43,14 @@ couriers "60 online" semantics, delivery-fee sourcing.
 ## Verdict
 Iterations 1–2 addressed every verify-real mobile finding; the rubric PASSES or is materially improved
 on all 8 items. Remaining deferrals are documented low-value/UX decisions, not defects. Loop is effective
-in practice. **Certification (M1–M11 via loop-architect) is offered as a separate step to move 0.1
-DRAFT → CERTIFIED.**
+in practice.
+
+## Certification (loop-architect, 2026-06-25)
+**M1–M11: all PASS → CERTIFIED.** Promoted 0.1 DRAFT → 1.0 CERTIFIED in `loops/mobile-polish.yaml` +
+`loops/registry.md`. Anti-cheat: VERIFY (vision-grade vs Mobile Rubric on a real 390px staging screenshot)
+rejects fake-green — a CSS edit that fails to fix the bug still renders the bug in the post-fix shot.
+Distinctive `verify-before-fix` principle honoured (M5): ~50% of raw findings rejected as
+artifact/false-positive (icon-font, fullPage-capture "sticky overlap", row tap-target misreads).
+Skills battle-tested (M6): capture-harness `e2e/tests/capture-states.spec.ts` (tag `m`=390×844), commits
+`fe37616f`/`3f6f2204` touch the exact claimed FE files, staging deploy ran this session. `STOP-DIAGNOSE-FALSE-POSITIVE`
+gate (M7) guards the loop's primary failure mode and demonstrably fired.

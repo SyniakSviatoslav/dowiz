@@ -1,6 +1,6 @@
 id: mobile-polish
-version: 0.1
-status: DRAFT
+version: 1.0
+status: CERTIFIED
 intent: "довести мобільний UX (390px) кожної поверхні до PASS за Mobile Rubric — кожен екран з артефактом"
 problem_signature: "мобільні ергономіки не вилизані: chrome ховає контент, tap-targets <44px, overflow, density, thumb-zone, safe-area"
 trigger: "/mobile-polish [scope]"
