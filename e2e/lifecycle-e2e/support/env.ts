@@ -22,9 +22,16 @@ export const env = {
   authStorageKey: 'dos_access_token',
   useUiLogin: process.env.USE_UI_LOGIN === '1',
 
-  // Tirana defaults
-  restaurantGeo: { latitude: 41.3275, longitude: 19.8187 },
-  customerGeo: { latitude: 41.3302, longitude: 19.8149 },
+  // Geo must sit inside the test venue's delivery tiers, or order-create returns NOT_DELIVERABLE.
+  // Defaults target the demo venue (Dubin & Sushi, Durrës ≈ 41.3153, 19.4450); override per venue.
+  restaurantGeo: {
+    latitude: Number(process.env.E2E_RESTAURANT_LAT ?? '41.315347'),
+    longitude: Number(process.env.E2E_RESTAURANT_LNG ?? '19.4449964'),
+  },
+  customerGeo: {
+    latitude: Number(process.env.E2E_CUSTOMER_LAT ?? '41.316200'),
+    longitude: Number(process.env.E2E_CUSTOMER_LNG ?? '19.446500'),
+  },
 
   authDir: '.auth',
 } as const;

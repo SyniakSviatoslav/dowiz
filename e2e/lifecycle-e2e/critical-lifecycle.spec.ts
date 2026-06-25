@@ -105,13 +105,25 @@ test('main flow: customer → owner(live) → courier(geo) → deliver → cash 
       delivery_instructions: 'E2E lifecycle test',
     };
 
-    const orderResp = await customer.request.fetch(`${env.customerBaseURL}/api/orders`, {
+    const postOrder = (payload: typeof orderPayload) => customer.request.fetch(`${env.customerBaseURL}/api/orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      data: orderPayload,
+      data: payload,
     });
-    expect(orderResp.ok(), `Order placement failed: ${orderResp.status()}`).toBeTruthy();
-    const orderBody = await orderResp.json();
+    let orderResp = await postOrder(orderPayload);
+    let raw = await orderResp.text();
+    let orderBody = JSON.parse(raw);
+    // Soft-confirm flow (e.g. ip/phone velocity under repeated test traffic): a real client re-submits
+    // acknowledging the soft codes. Not a hard block — the order still runs the real lifecycle.
+    if (orderBody?.outcome === 'soft_confirm' && Array.isArray(orderBody.reasons)) {
+      const codes = orderBody.reasons.map((r: any) => r.code).filter(Boolean);
+      orderResp = await postOrder({ ...orderPayload, acknowledged_codes: codes });
+      raw = await orderResp.text();
+      expect(orderResp.ok(), `Order re-confirm failed: ${orderResp.status()} ${raw}`).toBeTruthy();
+      orderBody = JSON.parse(raw);
+    } else {
+      expect(orderResp.ok(), `Order placement failed: ${orderResp.status()} ${raw}`).toBeTruthy();
+    }
     const orderId = extractOrderId(orderBody);
     expect(orderId).toBeTruthy();
 
