@@ -42,7 +42,7 @@ capture, or visual estimates that compute fine. **Verified real** issues are few
 | Muted text fails AA on dark cards | ❌ **False** | Computed `#959a93`: 4.57–6.21:1 on all default surfaces (≥4.5 AA). Passes (thin on raised). |
 | CSP `font-src` omits jsdelivr → blank icons | ⚠️ **Harmless** | The jsdelivr-less CSP (`headers.ts`) doesn't apply to icon pages; storefront uses the correct CSP. |
 | Two elevation systems (legacy `--elevation-*`) | ✅ **Real — FIXED** | 32 usages; aliased to `--elev-*`. |
-| Icons = unpinned third-party CDN, no fallback | ✅ **Real — partial fix** | `@latest` pinned to `@3.31.0`; self-host pending (needs install). |
+| Icons = unpinned third-party CDN, no fallback | ✅ **SPA SELF-HOSTED + proven** | Vendored + Vite-bundled; staging capture renders icons offline. SSR/static pages = follow-up. |
 | Type scale bypassed by arbitrary `text-[Npx]` | ✅ **DONE (221/221) + guardrailed** | Fully migrated to `text-step-*` + `--text-2xs`; error-level ESLint rail (red→green); validated on staging. |
 | Font drift: DESIGN.md (DM) vs tokens.css (Inter) | ✅ **Real — FIXED** | Coherent as-shipped (Inter base + serif via preset); DESIGN.md §2/§8 reconciled. |
 | Button hierarchy fragmentation | 🔶 **Likely real — re-confirm** | Estimate confounded by missing icons; re-judge on an icon-rendering capture before consolidating. |
@@ -89,7 +89,17 @@ written by hand → drift risk.
 → **Fix:** replace product-UI hex with `var(--brand-*)`/`var(--color-*)`; scope illustration palettes
 to a documented constants module.
 
-### A5 — Icons depend on a third-party CDN with no fallback (several pinned to `@latest`) · **High**
+### A5 — Icons depend on a third-party CDN with no fallback · ✅ **SPA SELF-HOSTED + proven**
+**Fixed for the SPA** (`c9635d07`): `@tabler/icons-webfont@3.31.0` vendored as a dependency, imported in
+`main.tsx` → Vite bundles the woff2 same-origin; CDN `<link>` removed from `index.html` (spa-shell.ts
+serves it → covers the human storefront + admin SPA). **Proven end-to-end:** a staging capture from the
+sandbox (which *cannot* reach jsdelivr) now renders every icon — cutlery placeholder glyph, FAB `+`,
+search/clock/cart/taste glyphs — confirming both the fix AND that the whole "empty icon / ghost-circle /
+glyph-noise" finding cluster was this CDN artifact. **Remaining (follow-up):** the SSR client renderer +
+~13 static admin HTML pages load `/dist/tailwind.css` (not the SPA bundle) — keep the pinned CDN until
+vendored to a `/vendor/tabler/` static route. Also flagged: the full icon CSS inlines ~40KB gzip — a
+subset/separate-chunk pass is worthwhile. Original note:
+
 All Tabler icons load from `cdn.jsdelivr.net/npm/@tabler/icons-webfont` — the SPA (`apps/web/index.html`),
 the SSR client/admin shells (`ssr-client-renderer.ts`, `ssr-renderer.ts`), and ~13 static admin pages.
 No local/vendored copy → if jsdelivr is slow, blocked, or down, **real users see the exact blank-icon
