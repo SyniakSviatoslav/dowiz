@@ -1,0 +1,33 @@
+id: mobile-polish
+version: 0.1
+status: DRAFT
+intent: "довести мобільний UX (390px) кожної поверхні до PASS за Mobile Rubric — кожен екран з артефактом"
+problem_signature: "мобільні ергономіки не вилизані: chrome ховає контент, tap-targets <44px, overflow, density, thumb-zone, safe-area"
+trigger: "/mobile-polish [scope]"
+role_mindset: "mobile-first аудитор-полісувальник: PASS лише з 390px-скріншотом; verify-before-fix (артефакт ≠ баг); косметику фіксиш inline, логіку — flag-only"
+preconditions:
+  - "staging задеплоєний з поточним кодом (інакше SENSE бачить старе)"
+  - "shared-шар винесений (Button/Input/Select/SegmentedControl/SearchInput) — фіксиш токенами, не ad-hoc"
+  - "capture-харнес доступний (e2e/tests/capture-states.spec.ts), іконки рендеряться (self-host)"
+execution_skills: [mobile-capture-390, vision-grade-vs-rubric, verify-before-fix, inline-fix-cosmetic, flag-only-logic, collision-free-fanout, staging-validate]
+goal: "усі поверхні (storefront/admin/courier) PASS Mobile Rubric на 390×844; нуль горизонтального overflow; tap-target аудит чистий"
+verification: >
+  Mobile Rubric (PASS кожне з 390px-доказом): (1) tap-targets ≥44px + thumb-reachable primary;
+  (2) нуль горизонтального overflow / критичних truncation; (3) chrome ≤ content (хоч 1 контент над згином —
+  банери згортаються, KPI-grid → compact scroll strip); (4) inputs ≥16px (нема iOS zoom), правильний inputMode,
+  full-width; (5) safe-area: sticky/bottom bars не перекривають контент; (6) density на type-scale, статус-кольори
+  семантичні (0-KPI нейтральний, не amber); (7) loading-skeleton дублює лейаут, empty/error брендовані;
+  (8) shared-компоненти + чіткий active у bottom-tab.
+iron_principles: [proof-by-artifact-not-words, verify-before-fix, inline-fix-cosmetic-only, flag-only-for-logic-contract-security, single-design-system, live-capture-not-code-reading, no-fake-green]
+loop_body: [SENSE, DIAGNOSE, ACT, VERIFY, REPEAT]
+exit_conditions: "ВСІ: кожна поверхня PASS Mobile Rubric з 390px-артефактом; 0 горизонтального overflow; tap-target аудит чистий; typecheck+build зелені; задеплоєно+валідовано на staging; flag-only винесено окремо"
+gates: [STOP-DIAGNOSE-FALSE-POSITIVE, STOP-VERDICT]
+proof_artifacts: [per-surface-390px-before-after, MOBILE-POLISH.md-findings-table, flag-only-list, typecheck-build-green]
+out_of_scope:
+  - "desktop-лейаут (окремий концерн: courier desktop dead-void тощо)"
+  - "сервер/контракти/бізнес-логіка (delivery-fee, courier-status, reseed) — flag-only"
+  - "форсити bespoke-кнопки (sticky CTA, qty-stepper, icon-only) на <Button>"
+escalation: "знахідка логіки/контракту/безпеки → flag-only список (не фікс); серйозне → /council"
+skills_required: [playwright-mobile-capture, image-read-vision, repo-access, fly-staging-deploy]
+memory_file: loops/memory/mobile-polish.md
+verification_report: loops/reports/mobile-polish-0.1.md
