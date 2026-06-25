@@ -3811,4 +3811,20 @@ export const catalog: Record<string, CatalogEntry> = {
   'admin.courier_status_active': { en: 'Active', sq: 'Aktiv', uk: 'Активний' },
   'admin.courier_status_suspended': { en: 'Suspended', sq: 'Pezulluar', uk: 'Призупинено' },
   'admin.courier_status_inactive': { en: 'Inactive', sq: 'Joaktiv', uk: 'Неактивний' },
+  'checkout.fee_at_checkout': {
+    en: 'Calculated at checkout',
+    sq: 'Llogaritet në arkë',
+    uk: 'Розрахунок при оформленні',
+  },
+  'cart.tax': { en: 'Tax', sq: 'TVSH', uk: 'Податок' },
+  'checkout.plus_delivery_fee': {
+    en: '+ delivery fee, calculated at checkout',
+    sq: '+ tarifa e dorëzimit, llogaritet në arkë',
+    uk: '+ плата за доставку, розрахунок при оформленні',
+  },
+  'checkout.cash_too_low_error': {
+    en: 'The cash amount is below the final total (including the delivery fee). Please increase it and try again.',
+    sq: 'Shuma në para është nën totalin final (përfshirë tarifën e dorëzimit). Ju lutemi rriteni dhe provoni përsëri.',
+    uk: 'Сума готівки нижча за підсумок (включно з доставкою). Будь ласка, збільште її та спробуйте ще раз.',
+  },
 };

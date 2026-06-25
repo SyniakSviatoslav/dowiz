@@ -181,6 +181,13 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
     const res = await server.db.query(
       `SELECT l.id, l.name, l.slug, l.currency_code, l.currency_minor_unit, l.default_locale,
               l.lat, l.lng, l.delivery_paused, l.hours_json, l.address, l.kitchen_busy_until,
+              l.delivery_fee_flat, l.free_delivery_threshold, l.min_order_value,
+              l.tax_rate, l.price_includes_tax,
+              -- mirrors the server fee ladder (orders.ts): the distance-tiered path is taken iff
+              -- tiers exist AND lat/lng are set; otherwise the server falls through to the flat fee.
+              -- The pool role is BYPASSRLS (migration 1780421100065) so this EXISTS sees tiers.
+              (EXISTS (SELECT 1 FROM delivery_tiers dt WHERE dt.location_id = l.id)
+                 AND l.lat IS NOT NULL AND l.lng IS NOT NULL) AS has_distance_tiers,
               lt.google_rating, lt.google_review_count, lt.google_maps_url,
               lt.google_place_id, lt.social_instagram, lt.social_facebook
        FROM locations l
@@ -266,6 +273,14 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
         id: r.id, name: r.name, slug: r.slug,
         currency_code: r.currency_code, currency_minor_unit: r.currency_minor_unit,
         default_locale: r.default_locale,
+        // Delivery-fee inputs so the storefront can MIRROR the server order total to the cent
+        // (ADR-0005, Approach M). Integers in minor units; tax_rate is a config number, not money.
+        deliveryFeeFlat: r.delivery_fee_flat != null ? Number(r.delivery_fee_flat) : null,
+        freeDeliveryThreshold: r.free_delivery_threshold != null ? Number(r.free_delivery_threshold) : null,
+        minOrderValue: r.min_order_value != null ? Number(r.min_order_value) : null,
+        taxRate: r.tax_rate != null ? Number(r.tax_rate) : 0,
+        priceIncludesTax: r.price_includes_tax === true,
+        hasDistanceTiers: r.has_distance_tiers === true,
         lat: r.lat != null ? Number(r.lat) : null,
         lng: r.lng != null ? Number(r.lng) : null,
         address: r.address ?? null,

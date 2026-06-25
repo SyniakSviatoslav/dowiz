@@ -11,6 +11,7 @@ export * from './components/Overlays.js';
 export * from './components/Status.js';
 export * from './components/molecules/index.js';
 export * from './lib/motion.js';
+export * from './lib/money.js';
 
 export * from './constants/allergenColors.js';
 export * from './lib/i18n.js';
