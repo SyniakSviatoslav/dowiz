@@ -27,7 +27,7 @@ export function SegmentedControl<T extends string = string>({
 }: SegmentedControlProps<T>) {
   const pad = size === 'sm' ? 'px-3 py-1.5 text-step-2xs' : 'px-3.5 py-2 text-step-xs';
   return (
-    <div role="group" aria-label={aria['aria-label']} className={`flex gap-1.5 overflow-x-auto no-scrollbar snap-x ${className}`}>
+    <div role="group" aria-label={aria['aria-label']} className={`flex gap-1.5 overflow-x-auto no-scrollbar scroll-fade-x snap-x ${className}`}>
       {options.map(opt => {
         const active = opt.value === value;
         return (

@@ -602,7 +602,7 @@ export function MenuPage() {
       <div ref={stickyRef} className="sticky top-0 z-40" style={{ background: 'var(--brand-bg)' }}>
         {/* Category nav */}
         <div className="relative border-b" style={{ borderColor: 'var(--brand-border)' }}>
-          <nav className="h-11 overflow-x-auto hide-scrollbar flex items-center gap-0.5 px-3 pr-8" aria-label={t('client.categories', 'Categories')}>
+          <nav className="h-11 overflow-x-auto hide-scrollbar scroll-fade-x flex items-center gap-0.5 px-3 pr-8" aria-label={t('client.categories', 'Categories')}>
             {loading ? (
               <div className="flex gap-4 px-2 h-full items-center">
                 <div className="w-14 h-3.5 skeleton-block" />
@@ -644,7 +644,7 @@ export function MenuPage() {
         {/* Search + Sort + Allergen — single compact scrollable row */}
         {!loading && categories.length > 0 && (
           <div className="relative border-b" style={{ borderColor: 'var(--brand-border)' }}>
-          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-3 py-2 pr-8">
+          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar scroll-fade-x px-3 py-2 pr-8">
             {/* Compact search pill */}
             <div className="shrink-0" style={{ width: searchQuery ? 140 : 100, transition: 'width var(--motion-base) var(--ease-soft)', minWidth: 100 }}>
               <SearchInput
