@@ -8,6 +8,13 @@ else
   echo "No JS/TS staged files to lint."
 fi
 
+echo "1.5: i18n parity (no missing/TODO translations)..."
+if git diff --cached --name-only --diff-filter=ACM | grep -qE 'packages/ui/src/lib/i18n(-catalog)?\.ts$'; then
+  pnpm exec tsx scripts/i18n-parity.ts || exit 1
+else
+  echo "No i18n changes staged."
+fi
+
 echo "2/4: Typechecking code..."
 pnpm -r typecheck || exit 1
 

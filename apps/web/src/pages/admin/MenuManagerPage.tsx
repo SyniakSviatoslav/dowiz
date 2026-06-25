@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Button, Input, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle, useToast } from '@deliveryos/ui';
+import { Button, Input, Select, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle, useToast, staggerChildren, cardEntry, SearchInput } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 import { useMenuData, type Product, type Category } from '../../hooks/useMenuData.js';
@@ -20,6 +20,12 @@ const MenuImportCommitResponse = z.object({
   }).optional(),
 }).passthrough();
 import { RecipeEditor } from './RecipeEditor.js';
+import { MediaManager } from '../../components/admin/MediaManager.js';
+
+// Rich-media (cinematic product-media, ADR-0002) is DARK by default. The admin
+// manager renders only when the build flag is on; the server independently gates
+// on business tier, so this is a hint, not the authority.
+const MEDIA_RICH_ENABLED = import.meta.env?.VITE_MEDIA_RICH_ENABLED === 'true';
 
 function getProductAllergens(product: Product): string[] {
   const set = new Set<string>();
@@ -40,6 +46,165 @@ function getProductAllergens(product: Product): string[] {
 }
 
 
+// MENU-AVAILABILITY (additive) · owner schedule + busy editor. Self-contained,
+// collapsed by default, zero impact on existing flows. Reads the location id from
+// /owner/settings; writes go to the FORCE-RLS menu_schedules table via the owner API.
+interface ScheduleRow {
+  id: string; productId: string | null; categoryId: string | null;
+  mode: 'daily' | 'recurring' | 'period';
+  startMinute: number | null; endMinute: number | null;
+}
+// MENU-AVAILABILITY · owner toggle for venue `busy` mode (kitchen_busy_until). Completes the
+// busy feature: the storefront already SHOWS busy; this is how the owner SETS it. Honest initial
+// state read from the public /info; PATCH sets a 30-min window or clears it.
+function KitchenBusyToggle() {
+  const { t } = useI18n();
+  const [locationId, setLocationId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    apiClient<any>('/owner/settings').then((r: any) => {
+      if (r?.id) setLocationId(r.id);
+      if (r?.slug) {
+        fetch(`/public/locations/${r.slug}/info`).then(x => (x.ok ? x.json() : null))
+          .then(d => { if (d?.status === 'busy') setBusy(true); }).catch(() => {});
+      }
+    }).catch(() => {});
+  }, []);
+  const toggle = async () => {
+    if (!locationId || loading) return;
+    setLoading(true);
+    const next = !busy;
+    try {
+      const busy_until = next ? new Date(Date.now() + 30 * 60 * 1000).toISOString() : null;
+      const r = await apiClient<any>(`/owner/locations/${locationId}/kitchen-busy`, { method: 'PATCH', body: { busy_until } });
+      setBusy(!!r?.kitchenBusyUntil && new Date(r.kitchenBusyUntil) > new Date());
+    } catch { /* keep prior state */ } finally { setLoading(false); }
+  };
+  return (
+    <button
+      type="button"
+      data-testid="kitchen-busy-toggle"
+      data-busy={busy}
+      onClick={toggle}
+      disabled={loading || !locationId}
+      className="w-full rounded-xl border p-3 text-sm font-semibold transition-colors disabled:opacity-50"
+      style={busy
+        ? { background: 'var(--status-pending-bg)', color: 'var(--status-pending)', borderColor: 'var(--status-pending)' }
+        : { background: 'var(--brand-surface)', color: 'var(--brand-text)', borderColor: 'var(--brand-border)' }}
+    >
+      <i className={`ti ${busy ? 'ti-flame' : 'ti-flame-off'} mr-1.5`} />
+      {busy ? t('admin.kitchen_busy_on', 'Kitchen busy — tap to clear') : t('admin.kitchen_busy_off', 'Mark kitchen busy (raised ETA)')}
+    </button>
+  );
+}
+
+function MenuScheduleEditor({ categories }: { categories: Category[] }) {
+  const { t } = useI18n();
+  const { showToast } = useToast();
+  const [locationId, setLocationId] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
+  const [targetCategory, setTargetCategory] = useState('');
+  const [startHHMM, setStartHHMM] = useState('07:00');
+  const [endHHMM, setEndHHMM] = useState('11:00');
+
+  useEffect(() => {
+    apiClient<any>('/owner/settings').then((r: any) => { if (r?.id) setLocationId(r.id); }).catch(() => {});
+  }, []);
+
+  const load = async (locId: string) => {
+    try {
+      const r = await apiClient<any>(`/owner/locations/${locId}/menu-schedules`);
+      setSchedules(r?.data ?? []);
+    } catch { /* best-effort */ }
+  };
+  useEffect(() => { if (open && locationId) load(locationId); }, [open, locationId]);
+
+  const toMinutes = (hhmm: string) => {
+    const [h, m] = hhmm.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  const addSchedule = async () => {
+    if (!locationId || !targetCategory) return;
+    try {
+      await apiClient(`/owner/locations/${locationId}/menu-schedules`, {
+        method: 'POST',
+        body: { category_id: targetCategory, mode: 'daily', start_minute: toMinutes(startHHMM), end_minute: toMinutes(endHHMM), available: true },
+      });
+      showToast(t('admin.schedule_saved', 'Availability window saved'), 'success');
+      await load(locationId);
+    } catch {
+      showToast(t('common.error_save', 'Failed to save.'), 'error');
+    }
+  };
+
+  const removeSchedule = async (id: string) => {
+    if (!locationId) return;
+    try {
+      await apiClient(`/owner/locations/${locationId}/menu-schedules/${id}`, { method: 'DELETE' });
+      setSchedules(prev => prev.filter(s => s.id !== id));
+    } catch { /* ignore */ }
+  };
+
+  const fmt = (min: number | null) => min == null ? '—' : `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+  const catName = (id: string | null) => categories.find(c => c.id === id)?.name ?? (id ?? '');
+
+  return (
+    <div data-testid="schedule-editor" className="rounded-xl border p-4" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between text-left">
+        <span className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--brand-text)' }}>
+          <i className="ti ti-calendar-time" style={{ color: 'var(--brand-primary)' }} />
+          {t('admin.menu_schedules', 'Availability schedules (mealtimes)')}
+        </span>
+        <i className={`ti ${open ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ color: 'var(--brand-text-muted)' }} />
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <p className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>
+            {t('admin.menu_schedules_hint', 'Restrict a category to a daily window (e.g. breakfast 07:00–11:00). Items with no schedule stay always-available.')}
+          </p>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-step-2xs flex flex-col gap-1" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('admin.category', 'Category')}
+              <Select value={targetCategory} onChange={e => setTargetCategory(e.target.value)} aria-label={t('admin.category', 'Category')}>
+                <option value="">{t('admin.select_category', 'Select…')}</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </Select>
+            </label>
+            <label className="text-step-2xs flex flex-col gap-1" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('admin.from', 'From')}
+              <input type="time" value={startHHMM} onChange={e => setStartHHMM(e.target.value)}
+                className="h-9 rounded-lg px-2 text-sm border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+            </label>
+            <label className="text-step-2xs flex flex-col gap-1" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('admin.to', 'To')}
+              <input type="time" value={endHHMM} onChange={e => setEndHHMM(e.target.value)}
+                className="h-9 rounded-lg px-2 text-sm border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+            </label>
+            <Button onClick={addSchedule} size="sm" disabled={!targetCategory}>
+              <i className="ti ti-plus" /> {t('admin.add_window', 'Add window')}
+            </Button>
+          </div>
+          {schedules.length > 0 && (
+            <ul className="space-y-1.5">
+              {schedules.map(s => (
+                <li key={s.id} className="flex items-center justify-between text-sm rounded-lg px-3 py-2 border" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                  <span><strong>{catName(s.categoryId)}</strong> · {fmt(s.startMinute)}–{fmt(s.endMinute)}</span>
+                  <button onClick={() => removeSchedule(s.id)} aria-label={t('common.delete', 'Delete')} style={{ color: 'var(--color-danger)' }}>
+                    <i className="ti ti-trash" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MenuManagerPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
@@ -59,9 +224,20 @@ export function MenuManagerPage() {
   const [formAvailable, setFormAvailable] = useState(true);
   const [formImage, setFormImage] = useState<string | null>(null);
   const [formStock, setFormStock] = useState('');
+  const [formPrepTime, setFormPrepTime] = useState('15');
 
   const [saving, setSaving] = useState(false);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+
+  // Owner location slug — needed by MediaManager's public lazy-media list. Only
+  // fetched when the rich-media flag is on (otherwise the manager never renders).
+  const [locationSlug, setLocationSlug] = useState<string | null>(null);
+  useEffect(() => {
+    if (!MEDIA_RICH_ENABLED) return;
+    apiClient<any>('/owner/settings').then((res: any) => {
+      if (res?.slug) setLocationSlug(res.slug);
+    }).catch(() => {});
+  }, []);
 
   // Import state
   const [showImport, setShowImport] = useState(false);
@@ -106,6 +282,7 @@ export function MenuManagerPage() {
     setFormAvailable(true);
     setFormImage(null);
     setFormStock('');
+    setFormPrepTime('15');
 
     setFormTaste({});
     setExpandedCat(categoryId);
@@ -120,6 +297,7 @@ export function MenuManagerPage() {
     setFormAvailable(product.available);
     setFormImage(product.imageUrl || null);
     setFormStock(product.stockCount != null ? String(product.stockCount) : '');
+    setFormPrepTime((product as any).prepTimeMinutes != null ? String((product as any).prepTimeMinutes) : '15');
 
     setFormTaste(product.taste || {});
     setFormRecipeLines(product.recipeLines || []);
@@ -129,7 +307,7 @@ export function MenuManagerPage() {
     setShowForm(false);
     setEditingProduct(null);
     setFormName(''); setFormPrice(''); setFormDesc('');
-    setFormImage(null); setFormStock(''); setPendingImageFile(null);
+    setFormImage(null); setFormStock(''); setFormPrepTime('15'); setPendingImageFile(null);
     setSaving(false);
   };
 
@@ -137,6 +315,8 @@ export function MenuManagerPage() {
     if (!formName.trim() || !formPrice || !expandedCat) return;
     const price = parseInt(formPrice);
     if (isNaN(price) || price <= 0) return;
+    const prepTime = parseInt(formPrepTime);
+    if (isNaN(prepTime) || prepTime < 1 || prepTime > 1440) return;
     const stock = formStock ? parseInt(formStock) : undefined;
     if (stock !== undefined && (isNaN(stock) || stock < 0)) return;
 
@@ -145,6 +325,7 @@ export function MenuManagerPage() {
     const hasRecipeLines = formRecipeLines.length > 0;
     const product: Record<string, any> = {
       name: formName.trim(), price,
+      prep_time_minutes: prepTime,
       description: formDesc || undefined,
       available: formAvailable,
       categoryId: expandedCat,
@@ -268,7 +449,7 @@ export function MenuManagerPage() {
       setImportPreview(res);
       setImportStep('preview');
     } catch (err: any) {
-      setImportError(err.message || 'Failed to analyze menu. Make sure the file is a PDF or image.');
+      setImportError(err.message || t('admin.menu_import_error', 'Failed to analyze menu. Make sure the file is a PDF or image.'));
     } finally {
       setImportLoading(false);
     }
@@ -289,7 +470,7 @@ export function MenuManagerPage() {
       showToast(t('admin.import_success', 'Menu imported'), 'success');
       await fetchCategories();
     } catch (err: any) {
-      setImportError(err.message || 'Failed to import menu.');
+      setImportError(err.message || t('admin.import_commit_error', 'Failed to import menu.'));
     } finally {
       setImportLoading(false);
     }
@@ -335,11 +516,13 @@ export function MenuManagerPage() {
     return result;
   };
 
-  // Stock summary
+  // Availability summary — count what customers can actually order: products toggled
+  // available and not explicitly out of stock (stockCount is null when inventory isn't
+  // tracked, which is the common case — those are orderable).
   const totalDishes = useMemo(() => {
     let count = 0;
     categories.forEach(c => {
-      if (c.products) count += c.products.filter(p => p.stockCount != null && p.stockCount > 0).length;
+      if (c.products) count += c.products.filter(p => p.available && (p.stockCount == null || p.stockCount > 0)).length;
     });
     return count;
   }, [categories]);
@@ -351,35 +534,39 @@ export function MenuManagerPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.menu_manager', 'Menu Manager')}</h2>
-          <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>
-            {categories.length} {t('admin.categories', 'categories')} &middot; {totalDishes} {t('admin.dishes_in_stock', 'dishes in stock')}
-          </p>
+          {!error && (
+            <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>
+              {categories.length} {t('admin.categories', 'categories')} &middot; {totalDishes} {t('admin.dishes_available', 'available')}
+            </p>
+          )}
         </div>
         <Button onClick={() => setShowImport(true)} variant="ghost" size="sm">
           <i className="ti ti-file-import" /> {t('admin.import_pdf', 'Import PDF')}
         </Button>
       </div>
 
+      {/* MENU-AVAILABILITY · schedule / mealtime editor (additive, collapsed by default) */}
+      <KitchenBusyToggle />
+      <MenuScheduleEditor categories={categories} />
+
       {error && (
         <div className="p-3 rounded-lg text-sm flex items-center justify-between" style={{ background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>
-          {error}
+          {/* Localize the load-error title so it doesn't sit in mixed language next to
+              the Albanian Retry label (the raw string comes from the data hook). */}
+          {t('admin.menu_load_error', 'Failed to load menu')}
           <motion.button onClick={fetchCategories} whileTap={{ scale: 0.97 }} className="underline ml-3 shrink-0">{t('common.retry', 'Retry')}</motion.button>
         </div>
       )}
 
       {/* Toolbar: search, filter, sort, add category */}
       <div className="flex flex-wrap gap-2">
-        <div className="relative flex-1 min-w-[200px]">
-          <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--brand-text-muted)' }} />
-          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder={t('admin.search_products', 'Search products...')}
-            className="w-full pl-9 pr-4 py-2 rounded-lg border text-sm outline-none"
-            style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-        </div>
+        <SearchInput value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder={t('admin.search_products', 'Search products...')}
+          containerClassName="flex-1 min-w-[200px]" />
 
         {/* Sort */}
         <div className="relative">
-          <motion.button onClick={() => setSortOpen(true)} whileTap={{ scale: 0.97 }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none"
+          <motion.button onClick={() => setSortOpen(true)} whileTap={{ scale: 0.97 }} aria-label={t('admin.sort_products', 'Sort products')}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
             <i className="ti ti-arrows-sort text-base" />
             <span className="hidden sm:inline text-xs">{sortBy === 'name' ? t('admin.name_az', 'Name A-Z') : sortBy === 'price-asc' ? t('admin.price_asc', 'Price asc') : t('admin.price_desc', 'Price desc')}</span>
@@ -391,8 +578,8 @@ export function MenuManagerPage() {
               title={t('admin.sort_products', 'Sort products')}
               options={[
                 { value: 'name', label: t('admin.name_az', 'Name A-Z'), icon: 'ti ti-sort-az' },
-                { value: 'price-asc', label: t('admin.price_asc', 'Price ArrowUp'), icon: 'ti ti-sort-ascending' },
-                { value: 'price-desc', label: t('admin.price_desc', 'Price ArrowDown'), icon: 'ti ti-sort-descending' },
+                { value: 'price-asc', label: t('admin.price_asc', 'Price asc'), icon: 'ti ti-sort-ascending' },
+                { value: 'price-desc', label: t('admin.price_desc', 'Price desc'), icon: 'ti ti-sort-descending' },
               ]}
               selectedValue={sortBy}
               onSelect={(opt) => { setSortBy(opt.value as any); setSortOpen(false); }}
@@ -404,8 +591,8 @@ export function MenuManagerPage() {
               <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[140px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
                 {[
                   { value: 'name', label: t('admin.name_az', 'Name A-Z'), icon: 'ti ti-sort-az' },
-                  { value: 'price-asc', label: t('admin.price_asc', 'Price ArrowUp'), icon: 'ti ti-sort-ascending' },
-                  { value: 'price-desc', label: t('admin.price_desc', 'Price ArrowDown'), icon: 'ti ti-sort-descending' },
+                  { value: 'price-asc', label: t('admin.price_asc', 'Price asc'), icon: 'ti ti-sort-ascending' },
+                  { value: 'price-desc', label: t('admin.price_desc', 'Price desc'), icon: 'ti ti-sort-descending' },
                 ].map(opt => (
                   <motion.button key={opt.value} onClick={() => { setSortBy(opt.value as any); setSortOpen(false); }} whileTap={{ scale: 0.97 }}
                     className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${sortBy === opt.value ? 'font-semibold' : ''}`}
@@ -422,8 +609,8 @@ export function MenuManagerPage() {
 
         {/* Availability filter */}
         <div className="relative">
-          <motion.button onClick={() => setAvailOpen(true)} whileTap={{ scale: 0.97 }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none"
+          <motion.button onClick={() => setAvailOpen(true)} whileTap={{ scale: 0.97 }} aria-label={t('admin.filter_availability', 'Filter by availability')}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: filterAvailable !== 'all' ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
             <i className="ti ti-filter text-base" />
           </motion.button>
@@ -467,10 +654,11 @@ export function MenuManagerPage() {
           <input value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
             placeholder={t('admin.new_category', 'New category...')}
-            className="w-32 sm:w-40 h-10 px-3 rounded-lg border text-sm outline-none"
+            aria-label={t('admin.new_category', 'New category...')}
+            className="w-32 sm:w-40 h-10 px-3 rounded-lg border text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
             style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-          <motion.button onClick={handleAddCategory} whileTap={{ scale: 0.97 }}
-            className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium shrink-0 border border-[var(--brand-primary)]"
+          <motion.button onClick={handleAddCategory} whileTap={{ scale: 0.97 }} aria-label={t('admin.add_category', 'Add category')}
+            className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium shrink-0 border border-[var(--brand-primary)] outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 active:scale-[0.98]"
             style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-text)' }}>
             <i className="ti ti-plus text-sm" />
           </motion.button>
@@ -479,15 +667,15 @@ export function MenuManagerPage() {
 
       {/* Category tabs */}
       {!loading && categories.length > 0 && (
-        <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory sticky top-0 z-10" style={{ background: 'var(--brand-bg)' }}>
-          <motion.button onClick={() => setSelectedCategory(null)} whileTap={{ scale: 0.97 }}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${selectedCategory === null ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}>
+        <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory sticky top-0 z-10" style={{ background: 'var(--brand-bg)', WebkitMaskImage: 'linear-gradient(to right, #000 92%, transparent)', maskImage: 'linear-gradient(to right, #000 92%, transparent)' }}>
+          <motion.button onClick={() => setSelectedCategory(null)} whileTap={{ scale: 0.97 }} aria-pressed={selectedCategory === null}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md outline-none transition-[color,background-color,box-shadow] duration-150 [transition-timing-function:var(--ease-soft)] snap-start shrink-0 whitespace-nowrap focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${selectedCategory === null ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)] border border-transparent'}`}>
             {t('common.all', 'All')}
           </motion.button>
           {categories.map(cat => (
-            <motion.button key={cat.id} onClick={async () => { setSelectedCategory(cat.id); await toggleExpand(cat.id); }} whileTap={{ scale: 0.97 }}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all snap-start shrink-0 whitespace-nowrap ${selectedCategory === cat.id ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}>
-              {cat.name} <span className="text-[10px] opacity-70">({cat.productCount ?? cat.products?.length ?? 0})</span>
+            <motion.button key={cat.id} onClick={async () => { setSelectedCategory(cat.id); await toggleExpand(cat.id); }} whileTap={{ scale: 0.97 }} aria-pressed={selectedCategory === cat.id}
+              className={`max-w-[11rem] px-3 py-1.5 text-xs font-medium rounded-md outline-none transition-[color,background-color,box-shadow] duration-150 [transition-timing-function:var(--ease-soft)] snap-start shrink-0 whitespace-nowrap focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${selectedCategory === cat.id ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)] border border-transparent'}`}>
+              <span className="inline-flex items-center gap-1 max-w-full align-bottom"><span className="truncate">{cat.name}</span> <span className="text-step-2xs opacity-70 shrink-0">({cat.productCount ?? cat.products?.length ?? 0})</span></span>
             </motion.button>
           ))}
         </div>
@@ -495,7 +683,25 @@ export function MenuManagerPage() {
 
       {/* Products grid */}
       {loading ? (
-        <div className="space-y-3">{ [1,2,3].map(i => <div key={i} className="h-12 shimmer rounded-lg" />) }</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" aria-busy="true" aria-label={t('common.loading', 'Loading')}>
+          {[0, 1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="p-3 rounded-xl border shadow-elevation-1" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+              <div className="flex items-start gap-3">
+                <div className="w-14 h-14 rounded-lg shimmer shrink-0" />
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div className="h-3.5 w-3/4 shimmer rounded" />
+                  <div className="h-2.5 w-1/2 shimmer rounded" />
+                  <div className="h-3 w-2/5 shimmer rounded-full mt-1" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : error ? (
+        // Load failed: the error+retry banner above is the only truth. Never show the
+        // "0 categories / add one to start" empty-state — it falsely tells the owner
+        // their menu is empty when it actually just failed to load.
+        null
       ) : categories.length === 0 ? (
         <EmptyState title={t('admin.no_categories', 'No categories')} description={t('admin.add_category_desc', 'Add a category above to start.')} />
       ) : (
@@ -512,20 +718,30 @@ export function MenuManagerPage() {
             </p>
             {selectedCategory && (
               <motion.button onClick={() => openAddForm(selectedCategory)} whileTap={{ scale: 0.97 }}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--brand-primary)]"
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--brand-primary)] outline-none transition-shadow active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
                 style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-text)' }}>
                 <i className="ti ti-plus text-xs" /> {t('common.add', 'Add')}
               </motion.button>
             )}
           </div>
           {productsLoading && selectedCategory ? (
-            <div className="col-span-full flex justify-center py-8">
-              <i className="ti ti-loader animate-spin text-xl" style={{ color: 'var(--brand-primary)' }} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" aria-busy="true" aria-label={t('common.loading', 'Loading')}>
+              {[0, 1, 2].map(i => (
+                <div key={i} className="p-3 rounded-xl border shadow-elevation-1" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
+                  <div className="flex items-start gap-3">
+                    <div className="w-14 h-14 rounded-lg shimmer shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="h-3.5 w-3/4 shimmer rounded" />
+                      <div className="h-2.5 w-1/2 shimmer rounded" />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
           <motion.div
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
-            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.03, delayChildren: 0.05 } } }}
+            variants={staggerChildren}
             initial="hidden"
             animate="visible"
           >
@@ -535,18 +751,22 @@ export function MenuManagerPage() {
               if (products.length === 0 && searchQuery) return null;
               return products.map((product) => (
                 <motion.div key={product.id}
-                  variants={{ hidden: { opacity: 0, y: 12, scale: 0.97 }, visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 260, damping: 24 } } }}
-                  whileTap={{ scale: 0.97 }}
-                  className="p-3 rounded-xl border transition-all hover:bg-[var(--brand-surface-raised)] cursor-pointer fade-in"
+                  variants={cardEntry}
+                  whileTap={{ scale: 0.98 }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={product.name}
+                  className="group p-3 rounded-xl border cursor-pointer outline-none shadow-elevation-1 transition-[transform,box-shadow,background-color] duration-150 [transition-timing-function:var(--ease-soft)] [@media(hover:hover)]:hover:-translate-y-0.5 [@media(hover:hover)]:hover:shadow-elevation-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
                   style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}
-                  onClick={() => setPreviewProduct(product)}>
+                  onClick={() => setPreviewProduct(product)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPreviewProduct(product); } }}>
                   <div className="flex items-start gap-3">
                     <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 flex items-center justify-center"
                       style={{ background: 'var(--brand-primary-light)' }}>
                       {product.imageUrl
                         ? <img src={product.imageUrl} alt="" className="w-full h-full object-cover" loading="lazy"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<i class=\\"ti ti-photo\\"></i>'; }} />
-                        : <i className="ti ti-photo" style={{ color: 'var(--brand-primary)' }} />
+                            onError={(e) => { const img = e.currentTarget; img.style.display = 'none'; const p = img.parentElement; if (p && !p.querySelector('i.ti-photo')) { const ic = document.createElement('i'); ic.className = 'ti ti-photo'; ic.style.cssText = 'color: var(--brand-primary); font-size: 1.5rem'; p.appendChild(ic); } }} />
+                        : <i className="ti ti-photo" style={{ color: 'var(--brand-primary)', fontSize: '1.5rem' }} />
                       }
                     </div>
                     <div className="flex-1 min-w-0">
@@ -554,19 +774,20 @@ export function MenuManagerPage() {
                         <span className="font-medium text-sm truncate" style={{ color: 'var(--brand-text)' }}>{product.name}</span>
                         <span className="text-sm font-bold shrink-0" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={product.price} /></span>
                       </div>
-                      {product.description && <div className="text-[11px] truncate mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{product.description}</div>}
+                      {product.description && <div className="text-step-2xs truncate mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{product.description}</div>}
                       <div className="flex items-center gap-2 mt-1.5">
                         <motion.button onClick={(e) => { e.stopPropagation(); handleToggleAvailable(cat.id, product); }} whileTap={{ scale: 0.97 }}
-                          className={`relative w-8 h-4 rounded-full transition-colors duration-200 ${product.available ? 'bg-[var(--brand-primary)]' : 'bg-[var(--brand-border)]'}`}
+                          className={`relative w-8 h-4 rounded-full outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 ${product.available ? 'bg-[var(--brand-primary)]' : 'bg-[var(--brand-border)]'}`}
                           title={product.available ? t('menu.available', 'Available') : t('menu.stop_listed', 'Stop-listed')}
+                          aria-label={product.available ? t('menu.available', 'Available') : t('menu.stop_listed', 'Stop-listed')}
                           role="switch" aria-checked={product.available}>
                           <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform duration-200 shadow-sm ${product.available ? 'left-[18px]' : 'left-0.5'}`} />
                         </motion.button>
-                        <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
+                        <span className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>
                           {product.available ? t('menu.available', 'Available') : t('menu.stop_listed', 'Stop-listed')}
                         </span>
                         {product.stockCount != null && (
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${product.stockCount > 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'}`}
+                          <span className={`text-step-2xs font-medium px-1.5 py-0.5 rounded-full ${product.stockCount > 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'}`}
                             style={{ background: product.stockCount > 0 ? 'var(--color-success-light)' : 'var(--color-danger-light)' }}>
                             {product.stockCount}
                           </span>
@@ -577,7 +798,7 @@ export function MenuManagerPage() {
                           {getProductAllergens(product).map(a => {
                             const s = getAllergenStyle(a);
                             return (
-                              <span key={a} className="text-[8px] font-semibold px-1 py-0.5 rounded-full leading-tight"
+                              <span key={a} className="text-step-2xs font-semibold px-1 py-0.5 rounded-full leading-tight"
                                 style={{ background: s.bg, color: s.text }}>
                                 {t(`allergen.${a.toLowerCase()}`, a)}
                               </span>
@@ -589,13 +810,13 @@ export function MenuManagerPage() {
                   </div>
                   <div className="flex items-center justify-end gap-1 mt-2 pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
                     <motion.button onClick={(e) => { e.stopPropagation(); openEditForm(product); }} whileTap={{ scale: 0.97 }}
-                      className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface)] transition-colors"
-                      title={t('common.edit', 'Edit')}>
-                      <i className="ti ti-edit" style={{ fontSize: '0.75rem', color: 'var(--brand-text-muted)' }} />
+                      className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-md outline-none hover:bg-[var(--brand-surface-raised)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
+                      title={t('common.edit', 'Edit')} aria-label={t('common.edit', 'Edit')}>
+                      <i className="ti ti-edit" style={{ fontSize: '0.85rem', color: 'var(--brand-text-muted)' }} />
                     </motion.button>
                     <motion.button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(cat.id, product.id); }} whileTap={{ scale: 0.97 }}
-                      className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--color-danger-light)] transition-colors"
-                      title={t('common.delete', 'Delete')}>
+                      className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-md outline-none hover:bg-[var(--color-danger-light)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-danger)] focus-visible:ring-offset-1"
+                      title={t('common.delete', 'Delete')} aria-label={t('common.delete', 'Delete')}>
                       <i className="ti ti-trash" style={{ fontSize: '0.75rem', color: 'var(--brand-text-muted)' }} />
                     </motion.button>
                   </div>
@@ -607,6 +828,22 @@ export function MenuManagerPage() {
           {selectedCategory === null && categories.every(cat => getAllProducts(cat.id).length === 0) && searchQuery && (
             <EmptyState title={t('admin.no_matching_products', 'No matching products.')} description="" />
           )}
+          {/* Empty category (selected, loaded, no search): composed CTA so the owner
+              never sees a blank screen. With a search active, the search-empty above wins. */}
+          {selectedCategory && !productsLoading && !searchQuery &&
+            (categories.find(c => c.id === selectedCategory)?.products !== undefined) &&
+            getAllProducts(selectedCategory).length === 0 && (
+            <EmptyState
+              icon={<i className="ti ti-salad" />}
+              title={t('admin.empty_category_title', 'No products in this category yet')}
+              description={t('admin.empty_category_desc', 'Add your first dish to start selling.')}
+              action={
+                <Button size="sm" onClick={() => openAddForm(selectedCategory)}>
+                  <i className="ti ti-plus" /> {t('common.add', 'Add')}
+                </Button>
+              }
+            />
+          )}
         </div>
       )}
 
@@ -616,14 +853,14 @@ export function MenuManagerPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center fade-in" onClick={() => setPreviewProduct(null)}>
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
           {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-          <div className="relative w-[320px] bg-[var(--brand-surface)] rounded-2xl overflow-hidden shadow-2xl z-10 scale-in" onClick={e => e.stopPropagation()}>
+          <div className="relative w-[min(20rem,calc(100vw-2rem))] bg-[var(--brand-surface)] rounded-2xl overflow-hidden shadow-elevation-4 z-10 scale-in" onClick={e => e.stopPropagation()}>
             <div className="aspect-[4/3] relative" style={{ background: 'var(--brand-surface-raised)' }}>
               {previewProduct.imageUrl
                 ? <img src={previewProduct.imageUrl} alt="" className="w-full h-full object-cover" loading="lazy"
                     onError={(e) => { const t = e.target as HTMLImageElement; t.style.display = 'none'; const p = t.parentElement; if (p) { const i = document.createElement('i'); i.className = 'ti ti-photo text-4xl'; i.style.cssText = 'color: var(--brand-border)'; p.appendChild(i); } }} />
                 : <div className="w-full h-full flex items-center justify-center"><i className="ti ti-photo text-4xl" style={{ color: 'var(--brand-border)' }} /></div>
               }
-              <motion.button onClick={() => setPreviewProduct(null)} whileTap={{ scale: 0.97 }} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center">
+              <motion.button onClick={() => setPreviewProduct(null)} whileTap={{ scale: 0.97 }} aria-label={t('common.close', 'Close')} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center outline-none transition-colors hover:bg-black/55 focus-visible:ring-2 focus-visible:ring-white/80">
                 <i className="ti ti-x" />
               </motion.button>
               {!previewProduct.available && (
@@ -655,7 +892,7 @@ export function MenuManagerPage() {
                   {getProductAllergens(previewProduct).map(a => {
                     const s = getAllergenStyle(a);
                     return (
-                      <span key={a} className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      <span key={a} className="text-step-2xs font-bold px-2 py-0.5 rounded-full"
                         style={{ background: s.bg, color: s.text }}>
                         {t(`allergen.${a.toLowerCase()}`, a)}
                       </span>
@@ -684,7 +921,7 @@ export function MenuManagerPage() {
           <div className="relative w-full max-w-md bg-[var(--brand-surface)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 z-10 slide-in-up max-h-[85vh] overflow-auto pb-20 sm:pb-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{editingProduct ? t('admin.edit_item', 'Edit Item') : t('admin.add_item', 'Add Item')}</h3>
-              <motion.button onClick={closeForm} whileTap={{ scale: 0.97 }} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface-raised)]">
+              <motion.button onClick={closeForm} whileTap={{ scale: 0.97 }} aria-label={t('common.close', 'Close')} className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-md outline-none transition-colors hover:bg-[var(--brand-surface-raised)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1">
                 <i className="ti ti-x" style={{ color: 'var(--brand-text-muted)' }} />
               </motion.button>
             </div>
@@ -696,7 +933,7 @@ export function MenuManagerPage() {
                 <label className="flex flex-col items-center justify-center w-20 h-20 rounded-lg border-2 border-dashed cursor-pointer hover:border-[var(--brand-primary)] transition-colors shrink-0"
                   style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)' }}>
                   {formImage ? <img src={formImage} alt="" className="w-full h-full object-cover rounded-lg" />
-                    : <div className="text-center"><i className="ti ti-camera text-lg" style={{ color: 'var(--brand-text-muted)' }} /><span className="text-[9px] block">JPG/PNG</span></div>}
+                    : <div className="text-center"><i className="ti ti-camera text-lg" style={{ color: 'var(--brand-text-muted)' }} /><span className="text-step-2xs block">JPG/PNG</span></div>}
                   <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageSelect} className="hidden" />
                 </label>
                 <div className="text-xs space-y-1" style={{ color: 'var(--brand-text-muted)' }}>
@@ -707,6 +944,17 @@ export function MenuManagerPage() {
               </div>
             </div>
 
+            {/* Rich media gallery — only for an existing product (needs a productId),
+                DARK behind MEDIA_RICH_ENABLED + business-tier (server-gated). */}
+            {MEDIA_RICH_ENABLED && editingProduct && (
+              <MediaManager
+                productId={editingProduct.id}
+                enabled={MEDIA_RICH_ENABLED}
+                slug={locationSlug}
+                onPrimaryChange={() => loadProducts(expandedCat || undefined)}
+              />
+            )}
+
             <div>
               <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.name', 'Name')} *</label>
               {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
@@ -716,6 +964,14 @@ export function MenuManagerPage() {
             <div>
               <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.price_all', 'Price (ALL)')} *</label>
               <Input value={formPrice} onChange={e => setFormPrice(e.target.value)} placeholder="600" type="number" />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.prep_time_label', 'Prep time (min)')} *</label>
+              <Input value={formPrepTime} onChange={e => setFormPrepTime(e.target.value)} placeholder="15" type="number" min={1} max={1440} />
+              {(!formPrepTime || isNaN(parseInt(formPrepTime)) || parseInt(formPrepTime) < 1) && (
+                <p className="text-step-2xs mt-1" style={{ color: 'var(--color-danger)' }}>{t('admin.prep_time_required', 'Enter a prep time of at least 1 minute')}</p>
+              )}
             </div>
 
             <div>
@@ -752,8 +1008,8 @@ export function MenuManagerPage() {
                             type="button"
                             whileTap={{ scale: 0.97 }}
                             onClick={() => setFormTaste(prev => prev[axis] === level ? Object.fromEntries(Object.entries(prev).filter(([k]) => k !== axis)) : { ...prev, [axis]: level })}
-                            className={`flex-1 h-6 rounded text-[10px] font-medium transition-all ${
-                              active ? 'text-white scale-105' : 'hover:bg-[var(--brand-surface-raised)]'
+                            className={`flex-1 h-6 rounded text-step-2xs font-medium transition-[background-color,color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] ${
+                              active ? 'text-white scale-105' : '[@media(hover:hover)]:hover:bg-[var(--brand-surface-raised)]'
                             }`}
                             style={{
                               background: active ? `hsl(${axis === 'spicy' ? 10 : axis === 'sweet' ? 35 : axis === 'salty' ? 200 : axis === 'sour' ? 70 : 30}, ${level * 25}%, ${60 - level * 5}%)` : 'var(--brand-surface-raised)',
@@ -783,7 +1039,7 @@ export function MenuManagerPage() {
 
             <div className="flex gap-3 pt-2">
               <Button onClick={closeForm} variant="ghost" className="flex-1">{t('common.cancel', 'Cancel')}</Button>
-              <Button onClick={handleSaveProduct} isLoading={saving} disabled={!formName.trim() || !formPrice} className="flex-1">
+              <Button onClick={handleSaveProduct} isLoading={saving} disabled={!formName.trim() || !formPrice || !formPrepTime || isNaN(parseInt(formPrepTime)) || parseInt(formPrepTime) < 1} className="flex-1">
                 {editingProduct ? t('common.save', 'Save Changes') : t('admin.add_item', 'Add Item')}
               </Button>
             </div>
@@ -794,14 +1050,14 @@ export function MenuManagerPage() {
       {/* PDF Import Modal */}
       {showImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/50 backdrop-blur-sm pointer-events-none" />
-          <div className="w-full max-w-lg rounded-2xl border shadow-xl overflow-hidden relative" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', zIndex: 1 }}>
+          <div className="w-full max-w-lg rounded-2xl border shadow-elevation-4 overflow-hidden relative scale-in" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', zIndex: 1 }}>
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
               <div className="flex items-center gap-2">
                 <i className="ti ti-file-import text-lg" style={{ color: 'var(--brand-primary)' }} />
                 <h3 className="font-bold">{t('admin.import_menu', 'Import Menu from PDF')}</h3>
               </div>
-              <motion.button onClick={resetImport} whileTap={{ scale: 0.97 }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--brand-surface)] transition-colors">
+              <motion.button onClick={resetImport} whileTap={{ scale: 0.97 }} aria-label={t('common.close', 'Close')} className="w-8 h-8 flex items-center justify-center rounded-lg outline-none hover:bg-[var(--brand-surface)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1">
                 <i className="ti ti-x" style={{ color: 'var(--brand-text-muted)' }} />
               </motion.button>
             </div>
@@ -812,7 +1068,7 @@ export function MenuManagerPage() {
                 <>
                   {/* Mode selector */}
                   <div>
-                    <label className="text-[11px] font-medium block mb-1.5" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.import_mode', 'Import Mode')}</label>
+                    <label className="text-step-2xs font-medium block mb-1.5" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.import_mode', 'Import Mode')}</label>
                     <div className="flex gap-2">
                       {[
                         { value: 'merge', label: t('admin.import_merge', 'Merge'), desc: t('admin.import_merge_desc', 'Update existing, add new') },
@@ -823,7 +1079,7 @@ export function MenuManagerPage() {
                           className={`flex-1 p-2 rounded-lg border text-left transition-colors ${importMode === opt.value ? 'ring-2 ring-[var(--brand-primary)]' : ''}`}
                           style={{ background: importMode === opt.value ? 'var(--brand-primary-light)' : 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
                           <div className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>{opt.label}</div>
-                          <div className="text-[10px] mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{opt.desc}</div>
+                          <div className="text-step-2xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{opt.desc}</div>
                         </motion.button>
                       ))}
                     </div>
@@ -869,6 +1125,10 @@ export function MenuManagerPage() {
                     </div>
                   )}
 
+                  <p className="text-step-2xs flex items-start gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
+                    <i className="ti ti-info-circle mt-0.5 shrink-0" aria-hidden="true" />
+                    <span>{t('admin.import_privacy_notice', 'Your file is sent to an AI service to read the menu. Upload only your menu — avoid pages with other people’s personal data (staff lists, invoices, customer details).')}</span>
+                  </p>
                   <Button onClick={handleImportUpload} isLoading={importLoading} disabled={!importFile} className="w-full">
                     <i className="ti ti-brain" /> {t('admin.analyze_menu', 'Analyze with AI')}
                   </Button>
@@ -886,13 +1146,13 @@ export function MenuManagerPage() {
                   <div className="grid grid-cols-3 gap-2">
                     {[
                       { label: t('admin.categories', 'Categories'), value: importPreview.draft_preview?.categories?.length ?? 0, icon: 'ti ti-folder' },
-                      { label: t('admin.products', 'Products'), value: importPreview.draft_preview?.products?.length ?? 0, icon: 'ti ti utensils-crossed' },
+                      { label: t('admin.products', 'Products'), value: importPreview.draft_preview?.products?.length ?? 0, icon: 'ti ti-tools-kitchen-2' },
                       { label: t('admin.issues', 'Issues'), value: importPreview.issues?.length ?? 0, icon: 'ti ti-alert-triangle', danger: (importPreview.issues?.length ?? 0) > 0 },
                     ].map((s, i) => (
                       <div key={i} className="p-3 rounded-lg border text-center" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
                         <i className={`${s.icon} text-lg`} style={{ color: s.danger ? 'var(--color-danger)' : 'var(--brand-primary)' }} />
                         <div className="text-lg font-bold" style={{ color: 'var(--brand-text)' }}>{s.value}</div>
-                        <div className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>{s.label}</div>
+                        <div className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{s.label}</div>
                       </div>
                     ))}
                   </div>
@@ -900,7 +1160,7 @@ export function MenuManagerPage() {
                   {/* Categories preview */}
                   {importPreview.draft_preview?.categories?.length > 0 && (
                     <div className="space-y-1.5">
-                      <div className="text-[11px] font-semibold" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.categories', 'Categories')}</div>
+                      <div className="text-step-2xs font-semibold" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.categories', 'Categories')}</div>
                       {importPreview.draft_preview.categories.map((c: any, i: number) => (
                         <div key={i} className="flex items-center gap-2 text-sm p-2 rounded-lg" style={{ background: 'var(--brand-surface)' }}>
                           <i className="ti ti-folder text-xs" style={{ color: 'var(--brand-primary)' }} />
@@ -913,14 +1173,14 @@ export function MenuManagerPage() {
                   {/* Products preview */}
                   {importPreview.draft_preview?.products?.length > 0 && (
                     <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
-                      <div className="text-[11px] font-semibold" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.products', 'Products')}</div>
+                      <div className="text-step-2xs font-semibold" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.products', 'Products')}</div>
                       {importPreview.draft_preview.products.map((p: any, i: number) => (
                         <div key={i} className="flex items-center justify-between text-sm p-2 rounded-lg" style={{ background: 'var(--brand-surface)' }}>
                           <div className="flex items-center gap-2">
                             <i className="ti ti-package text-xs" style={{ color: 'var(--brand-primary)' }} />
                             <span style={{ color: 'var(--brand-text)' }}>{p.name}</span>
                             {p.categoryKey && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
+                              <span className="text-step-2xs px-1.5 py-0.5 rounded" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
                                 {p.categoryKey}
                               </span>
                             )}
@@ -934,7 +1194,7 @@ export function MenuManagerPage() {
                   {/* Issues */}
                   {importPreview.issues?.length > 0 && (
                     <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
-                      <div className="text-[11px] font-semibold" style={{ color: 'var(--color-danger)' }}>{t('admin.issues', 'Issues')}</div>
+                      <div className="text-step-2xs font-semibold" style={{ color: 'var(--color-danger)' }}>{t('admin.issues', 'Issues')}</div>
                       {importPreview.issues.map((iss: any, i: number) => (
                         <div key={i} className="text-xs p-2 rounded" style={{ background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>
                           {iss.message}

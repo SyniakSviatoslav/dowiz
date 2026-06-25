@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { EmptyState, SkeletonBase, StatusBadge, useI18n, PriceDisplay } from '@deliveryos/ui';
+import { motion, useReducedMotion } from 'framer-motion';
+import { EmptyState, SkeletonBase, StatusBadge, useI18n, PriceDisplay, ease, duration } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 
@@ -35,6 +35,7 @@ export function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { t, locale } = useI18n();
+  const reduceMotion = useReducedMotion();
 
   const LOCALE_MAP: Record<string, string> = { sq: 'sq-AL', en: 'en-GB', uk: 'uk-UA' };
   const dateLocale = LOCALE_MAP[locale] || 'en-GB';
@@ -45,7 +46,7 @@ export function HistoryPage() {
       const data = await apiClient<typeof HistoryListResponse>('/courier/me/history', { schema: HistoryListResponse });
       setDeliveries(Array.isArray(data) ? data : []);
     } catch (err: any) {
-      setError('Failed to fetch delivery history');
+      setError(t('courier.error_fetch_history', 'Failed to fetch delivery history'));
     } finally {
       setLoading(false);
     }
@@ -87,41 +88,63 @@ export function HistoryPage() {
           ))}
         </div>
       ) : error ? (
-        <EmptyState title={t('common.error', 'Error')} description={error} />
+        <EmptyState
+          title={t('common.error', 'Error')}
+          description={error}
+          icon={<i className="ti ti-alert-triangle" aria-hidden="true" />}
+          action={
+            <button
+              type="button"
+              onClick={fetchHistory}
+              className="min-h-[44px] px-5 rounded-[var(--brand-radius-btn)] bg-[var(--brand-primary)] text-[var(--color-on-primary)] font-semibold inline-flex items-center gap-2 transition-[transform,box-shadow,background-color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 hover:hover:shadow-[var(--elev-2)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
+            >
+              <i className="ti ti-refresh" aria-hidden="true" />
+              {t('common.retry', 'Retry')}
+            </button>
+          }
+        />
       ) : deliveries.length === 0 ? (
-        <EmptyState title={t('courier.no_deliveries', 'No deliveries yet')} description={t('courier.no_deliveries_desc', 'Your completed deliveries will appear here.')} />
+        <EmptyState
+          title={t('courier.no_deliveries', 'No deliveries yet')}
+          description={t('courier.no_deliveries_desc', 'Your completed deliveries will appear here.')}
+          icon={<i className="ti ti-package" aria-hidden="true" />}
+        />
       ) : (
         <motion.div
           className="space-y-3"
-          variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.04, delayChildren: 0.05 } } }}
+          variants={{ hidden: {}, visible: { transition: { staggerChildren: reduceMotion ? 0 : 0.04, delayChildren: reduceMotion ? 0 : 0.05 } } }}
           initial="hidden"
           animate="visible"
         >
           {deliveries.map((delivery) => (
             <motion.div
               key={delivery.id}
-              variants={{ hidden: { opacity: 0, y: 12, scale: 0.98 }, visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 260, damping: 24 } } }}
-              className="bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4"
+              tabIndex={0}
+              variants={{
+                hidden: reduceMotion ? { opacity: 0 } : { opacity: 0, y: 12 },
+                visible: { opacity: 1, y: 0, transition: { duration: duration.base, ease: ease.out } },
+              }}
+              className="bg-[var(--brand-surface)] rounded-[var(--brand-radius)] p-4 shadow-[var(--elev-1)] outline-none transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 hover:hover:shadow-[var(--elev-2)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
             >
               <div className="flex items-start justify-between mb-2">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-mono text-[var(--brand-text-muted)]">{delivery.orderId}</span>
+                  <div className="flex items-center gap-2 mb-1 min-w-0">
+                    <span className="text-xs font-mono text-[var(--brand-text-muted)] tabular-nums truncate">{delivery.orderId}</span>
                     <StatusBadge status={delivery.status} />
                   </div>
-                  <div className="text-sm font-medium text-[var(--brand-text)]">{delivery.restaurant}</div>
-                  <div className="text-xs text-[var(--brand-text-muted)]">{delivery.customerAddress}</div>
+                  <div className="text-sm font-medium text-[var(--brand-text)] truncate">{delivery.restaurant}</div>
+                  <div className="text-xs text-[var(--brand-text)] truncate">{delivery.customerAddress}</div>
                 </div>
-                <div className="text-right ml-3">
-                  <div className="text-sm font-bold text-[var(--brand-text)]"><PriceDisplay amount={delivery.amount} /></div>
-                  <div className="text-xs text-[var(--brand-text-muted)]">{formatDate(delivery.date)}</div>
+                <div className="text-right ml-3 shrink-0">
+                  <div className="text-sm font-bold text-[var(--brand-text)] tabular-nums whitespace-nowrap"><PriceDisplay amount={delivery.amount} /></div>
+                  <div className="text-xs text-[var(--brand-text-muted)] tabular-nums whitespace-nowrap">{formatDate(delivery.date)}</div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between border-t border-[var(--brand-border)] pt-2">
-                {renderStars(delivery.rating)}
+              <div className="flex items-center justify-between gap-3 border-t border-[var(--brand-border)] pt-2">
+                <div className="shrink-0">{renderStars(delivery.rating)}</div>
                 {delivery.feedback && (
-                  <div className="text-xs text-[var(--brand-text-muted)] italic truncate max-w-[180px]">
+                  <div className="min-w-0 text-xs text-[var(--brand-text-muted)] italic truncate text-right">
                     &ldquo;{delivery.feedback}&rdquo;
                   </div>
                 )}

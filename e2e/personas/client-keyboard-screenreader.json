@@ -1,0 +1,21 @@
+{
+  "id": "client-keyboard-screenreader",
+  "role": "client",
+  "goals": [
+    "order using only keyboard + screen reader"
+  ],
+  "traits": {
+    "patience": "high",
+    "tech_savvy": "high",
+    "careful_or_sloppy": "careful"
+  },
+  "device": "desktop",
+  "viewport": 1280,
+  "locale": "en",
+  "network_profile": "4g",
+  "constraints": [
+    "no pointer",
+    "SR announces every control",
+    "focus must be visible"
+  ]
+}

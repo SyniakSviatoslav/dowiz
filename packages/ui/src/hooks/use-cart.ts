@@ -1,3 +1,4 @@
+import { safeStorage } from '../utils/safeStorage.js';
 import { useState, useEffect, useCallback } from 'react';
 
 export interface CartItem {
@@ -34,7 +35,7 @@ function getStorageKey(): string {
 function loadCart(): CartState {
   try {
     const key = getStorageKey();
-    const raw = localStorage.getItem(key);
+    const raw = safeStorage.get(key);
     if (!raw) return { items: [], restaurantId: '', menuVersion: 0, embedPrefix: key.replace('dos_cart', '') };
     const parsed: CartPersist = JSON.parse(raw);
     return {
@@ -57,7 +58,7 @@ function persistCart(state: CartState): void {
       menuVersion: state.menuVersion,
       embedPrefix: state.embedPrefix,
     };
-    localStorage.setItem(key, JSON.stringify(persist));
+    safeStorage.set(key, JSON.stringify(persist));
   } catch {
     // Storage full or unavailable — silently fail
     console.debug('[use-cart] localStorage write failed');

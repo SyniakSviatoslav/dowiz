@@ -77,17 +77,26 @@ const llmSchema = z.object({
 // 'heuristic' is the zero-dependency, no-API-key structurer (pure code) used
 // when no LLM provider is configured — so menu import works on a server with
 // nothing wired up (open-source, free). A real LLM, when configured, still wins.
-type LlmProvider = 'ollama' | 'groq' | 'openai' | 'mock' | 'heuristic';
+type LlmProvider = 'ollama' | 'groq' | 'openai' | 'openrouter' | 'zen' | 'mock' | 'heuristic';
 
 function detectProvider(model: string): LlmProvider {
   if (model === 'mock') return 'mock';
   const env = (process.env.LLM_ADAPTER || process.env.LLM_PROVIDER || '').toLowerCase();
   if (env === 'heuristic' || env === 'none' || env === 'offline') return 'heuristic';
+  if (env === 'zen' || env === 'opencode') return 'zen';
   if (env === 'groq') return 'groq';
   if (env === 'openai') return 'openai';
+  if (env === 'openrouter') return 'openrouter';
   if (env === 'ollama') return 'ollama';
+  // OpenCode Zen is preferred when configured: OpenAI-wire compatible, free models, and the
+  // fallback for the OpenRouter account running out of credits. Detected before the others.
+  if (process.env.OPENCODE_ZEN_API_KEY) return 'zen';
   if (process.env.GROQ_API_KEY) return 'groq';
   if (process.env.OPENAI_API_KEY) return 'openai';
+  // OpenRouter is the configured provider in prod (OPENROUTER_API_KEY). It is OpenAI-wire
+  // compatible, so it reuses the chat/completions shape. Without this branch the key was
+  // ignored and import silently degraded to the heuristic structurer.
+  if (process.env.OPENROUTER_API_KEY) return 'openrouter';
   // An explicit ollama endpoint/model means "ollama configured" → honour it
   // (and surface its failure). With nothing configured at all, fall back to the
   // heuristic structurer instead of an ollama endpoint that will never answer.
@@ -157,6 +166,74 @@ async function callLlm(provider: LlmProvider, prompt: string, model: string, tim
       const content = data?.choices?.[0]?.message?.content;
       if (!content) throw new Error('OpenAI returned empty content');
       return content;
+
+    } else if (provider === 'openrouter') {
+      // OpenRouter — OpenAI-wire compatible aggregator. Same chat/completions shape.
+      const apiKey = process.env.OPENROUTER_API_KEY || '';
+      const endpoint = process.env.OPENROUTER_ENDPOINT || 'https://openrouter.ai/api/v1/chat/completions';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          // OpenRouter attribution headers (optional but recommended).
+          'HTTP-Referer': process.env.APP_BASE_URL || 'https://dowiz.fly.dev',
+          'X-Title': 'dowiz menu import',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'You are a menu data extraction assistant. Return ONLY valid JSON matching the requested schema. No markdown, no commentary.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.1,
+          response_format: { type: 'json_object' },
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`OpenRouter ${res.status}: ${errBody.slice(0, 200)}`);
+      }
+      const data = await res.json() as any;
+      const content = data?.choices?.[0]?.message?.content;
+      if (!content) throw new Error('OpenRouter returned empty content');
+      return content;
+
+    } else if (provider === 'zen') {
+      // OpenCode Zen — OpenAI-wire compatible gateway with free models. A free model can have its
+      // free promotion end (returns 4xx), so try the configured model then a chain of other live
+      // free models before failing — import keeps working without a redeploy. All share the
+      // standard chat/completions shape; the local OCR step already produced the text.
+      const apiKey = process.env.OPENCODE_ZEN_API_KEY || '';
+      const endpoint = process.env.OPENCODE_ZEN_ENDPOINT || 'https://opencode.ai/zen/v1/chat/completions';
+      const candidates = [...new Set([model, 'deepseek-v4-flash-free', 'nemotron-3-ultra-free', 'mimo-v2.5-free'])];
+      let lastErr = '';
+      for (const m of candidates) {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: m,
+            messages: [
+              { role: 'system', content: 'You are a menu data extraction assistant. Return ONLY valid JSON matching the requested schema. No markdown, no commentary.' },
+              { role: 'user', content: prompt },
+            ],
+            temperature: 0.1,
+            response_format: { type: 'json_object' },
+          }),
+          signal: controller.signal,
+        });
+        if (!res.ok) { lastErr = `${m} → ${res.status}: ${(await res.text().catch(() => '')).slice(0, 160)}`; continue; }
+        const data = await res.json() as any;
+        const content = data?.choices?.[0]?.message?.content;
+        if (content) return content;
+        lastErr = `${m} → empty content`;
+      }
+      throw new Error(`OpenCode Zen failed (tried ${candidates.join(', ')}): ${lastErr}`);
 
     } else {
       // Ollama
@@ -274,7 +351,15 @@ export class AiOcrParser implements MenuParserProvider {
       ocrMs = Date.now() - t0;
 
       if (!rawText.trim()) {
-        issues.push({ rowNumber: 1, code: 'OCR_LOW_QUALITY' as any, message: 'PDF contained no extractable text.', severity: 'error' });
+        // Image-only / scanned PDF (no text layer). We deliberately don't rasterise+OCR PDFs
+        // server-side (would need a heavy native canvas dep + unbounded per-page render). The
+        // image upload path DOES OCR, so route the user there instead of a dead end.
+        issues.push({
+          rowNumber: 1,
+          code: 'OCR_LOW_QUALITY' as any,
+          message: 'This looks like a scanned (image-only) PDF with no text layer. Upload the menu as a photo or image (JPG/PNG) instead — images are read with OCR.',
+          severity: 'error',
+        });
         return this.fallbackError(issues);
       }
     } else if (input.kind === 'image') {
@@ -327,11 +412,15 @@ export class AiOcrParser implements MenuParserProvider {
       return this.heuristicResult(rawText, input.config, issues, ocrEngineUsed, ocrMs, redactedText);
     }
 
-    const modelForProvider = provider === 'groq'
+    const modelForProvider = provider === 'zen'
+      ? (process.env.OPENCODE_ZEN_MODEL || 'deepseek-v4-flash-free')
+      : provider === 'groq'
       ? (process.env.GROQ_MODEL || 'llama-3.1-8b-instant')
       : provider === 'openai'
         ? (process.env.OPENAI_MODEL || 'gpt-4o-mini')
-        : llmModel;
+        : provider === 'openrouter'
+          ? (process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini')
+          : llmModel;
 
     // Retrieve relevant memories to enhance the OCR prompt
     let memoryExamples = '';
@@ -427,8 +516,11 @@ CRITICAL RULES:
 
       llmResponse = await callLlm(provider, prompt, modelForProvider, 120000);
     } catch (e: any) {
-      issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `LLM Failed (${provider}): ${e.message}`, severity: 'error' });
-      return this.fallbackError(issues);
+      // The configured LLM failed (provider down / out of credits / every free-model promo ended).
+      // Degrade — don't cascade to 0 products: fall back to the zero-dependency heuristic structurer
+      // so the owner still gets a reviewable draft. Surfaced as a warning, not a hard error.
+      issues.push({ rowNumber: 1, code: 'PARSE_ERROR', message: `LLM unavailable (${provider}): ${e.message} — fell back to heuristic extraction`, severity: 'warning' });
+      return this.heuristicResult(rawText, input.config, issues, ocrEngineUsed, ocrMs, redactedText);
     }
     const llmMs = Date.now() - t1;
 

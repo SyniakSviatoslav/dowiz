@@ -224,7 +224,8 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
       );
 
       // Update order status to CANCELLED (canonical path via updateOrderStatus)
-      await updateOrderStatus(client, orderId, locationId, 'CANCELLED', { messageBus });
+      // ORDER-TRACKING: record the no-show reason on order_status_history (additive).
+      await updateOrderStatus(client, orderId, locationId, 'CANCELLED', { messageBus, comment: 'no_show' });
       await client.query(
         `UPDATE orders SET status_notes = 'no_show' WHERE id = $1`,
         [orderId],

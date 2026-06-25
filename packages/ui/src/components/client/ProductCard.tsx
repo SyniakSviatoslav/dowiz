@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useI18n, PriceDisplay, getAllergenStyle } from '../../index.js';
+import { ease, duration } from '../../lib/motion.js';
 
 interface ProductCardProps {
   product: {
     id: string; name: string; description?: string; price: number; image?: string;
+    prepTimeMinutes?: number;
     isAvailable: boolean; tags?: string[];
     taste?: Record<string, number>;
     allergens?: string[];
@@ -21,22 +23,25 @@ interface ProductCardProps {
 
 const TASTE_ICONS: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
 const TASTE_LABELS: Record<string, string> = { spicy: 'Spicy', sweet: 'Sweet', salty: 'Salty', sour: 'Sour', richness: 'Rich' };
-const SPRING_OUT = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
 const cardVariants = {
   rest: { y: 0, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', scale: 1 },
-  hover: { y: -4, boxShadow: '0 12px 32px rgba(0,0,0,0.13)', scale: 1.01, transition: { duration: 0.18, ease: SPRING_OUT } },
-  tap: { scale: 0.975, y: -1, transition: { duration: 0.08 } },
+  hover: { y: -2, boxShadow: '0 8px 22px rgba(0,0,0,0.11)', scale: 1.005, transition: { duration: duration.fast, ease: ease.out } },
+  tap: { scale: 0.98, y: -1, transition: { duration: duration.instant, ease: ease.out } },
 };
 const imgVariants = {
   rest: { scale: 1 },
-  hover: { scale: 1.06, transition: { duration: 0.35, ease: SPRING_OUT } },
+  hover: { scale: 1.04, transition: { duration: duration.slow, ease: ease.out } },
 };
 const addBtnVariants = {
-  rest: { scale: 1, rotate: 0 },
-  hover: { scale: 1.14, rotate: 8, boxShadow: '0 6px 18px rgba(0,0,0,0.22)', transition: { duration: 0.18, ease: SPRING_OUT } },
-  tap: { scale: 0.82, rotate: 0, transition: { duration: 0.08 } },
+  rest: { scale: 1 },
+  hover: { scale: 1.06, boxShadow: '0 4px 12px rgba(0,0,0,0.18)', transition: { duration: duration.fast, ease: ease.out } },
+  tap: { scale: 0.96, transition: { duration: duration.instant } },
 };
+
+// Hover lift is for pointer devices only — on touch the "hover" state sticks after a
+// tap, which reads as a stuck/janky card. Gate the lift behind a hover-capable pointer.
+const canHover = typeof window !== 'undefined' && window.matchMedia?.('(hover: hover)').matches;
 
 export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
   const { t } = useI18n();
@@ -59,7 +64,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
       onClick={onClick}
       variants={product.isAvailable ? cardVariants : undefined}
       initial="rest"
-      whileHover={product.isAvailable ? 'hover' : undefined}
+      whileHover={product.isAvailable && canHover ? 'hover' : undefined}
       whileTap={product.isAvailable && onClick ? 'tap' : undefined}
     >
       <div
@@ -68,6 +73,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
       >
         {product.image && !imgError ? (
           <motion.img
+            layoutId={`product-photo-${product.id}`}
             src={product.image}
             alt={product.name}
             className="w-full h-full object-cover"
@@ -119,29 +125,25 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             {allergens.slice(0, 3).map(a => {
               const s = getAllergenStyle(a);
               return (
-                <span key={a} className="text-[7px] font-semibold px-1 py-0.5 rounded-sm leading-tight" style={{ background: s.bg, color: s.text }}>
+                <span key={a} className="text-step-2xs font-semibold px-1 py-0.5 rounded-sm leading-tight" style={{ background: s.bg, color: s.text }}>
                   {t(`allergen.${a.toLowerCase()}`, a)}
                 </span>
               );
             })}
             {allergens.length > 3 && (
-              <span className="text-[7px] font-semibold px-1 py-0.5 rounded-sm" style={{ background: '#fee2e2', color: '#991b1b' }}>
+              <span className="text-step-2xs font-semibold px-1 py-0.5 rounded-sm" style={{ background: 'color-mix(in srgb, var(--brand-surface) 84%, #000)', color: 'var(--brand-text)' }}>
                 +{allergens.length - 3}
               </span>
             )}
           </div>
         )}
-        {!hasAllergens && product.isAvailable && (
-          <div className="absolute top-1.5 left-1.5 z-10">
-            <span className="text-[8px] font-medium px-1.5 py-0.5 rounded-md flex items-center gap-0.5" style={{ background: 'rgba(5,150,105,0.12)', color: 'var(--color-success)' }}>
-              <i className="ti ti-circle-check" style={{ fontSize: '0.55rem' }} />
-              {t('common.clean', 'Clean')}
-            </span>
-          </div>
-        )}
+        {/* No "Clean/allergen-free" fallback badge: absence of declared allergen
+            data is NOT a safety guarantee. Showing it on every product with no
+            allergen info was both misleading (e.g. a salmon roll reading "Clean")
+            and visual noise. Allergen scent now appears only when real data exists. */}
         {hasNutrition && !isChefPick && (
           <div className="absolute top-1.5 right-1.5 z-10">
-              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-1" style={{ background: 'rgba(0,0,0,0.6)', color: 'var(--color-on-primary)' }}>
+              <span className="text-step-2xs font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-1" style={{ background: 'rgba(0,0,0,0.6)', color: 'var(--color-on-primary)' }}>
               <i className="ti ti-flame" style={{ fontSize: '0.6rem' }} />
               {product.kcal}
             </span>
@@ -150,9 +152,9 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
         {isChefPick && (
           <div className="absolute top-1.5 right-1.5 z-10">
             <motion.span
-              className="text-[8px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
-              style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)', color: '#fff', boxShadow: '0 2px 6px rgba(245,158,11,0.45)' }}
-              initial={{ scale: 0.8, opacity: 0 }}
+              className="text-step-2xs font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
+              style={{ background: 'var(--brand-primary)', color: 'color-mix(in srgb, var(--brand-bg) 88%, #000)', boxShadow: '0 2px 8px color-mix(in srgb, var(--brand-primary) 45%, transparent)' }}
+              initial={{ scale: 0.85, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: 'spring', stiffness: 300, damping: 20 }}
             >
@@ -160,23 +162,15 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             </motion.span>
           </div>
         )}
-        {!product.isAvailable && (
-          <>
-            <div className="absolute inset-0 z-10" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 100%)' }} />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
-              <span className="text-[10px] font-semibold px-2.5 py-1 rounded-md" style={{ background: 'var(--color-danger)', color: 'var(--color-on-primary)' }}>
-                {t('client.unavailable', 'Unavailable')}
-              </span>
-            </div>
-          </>
-        )}
+        {/* No sold-out overlay/chip: read_public_menu only returns is_available=true products,
+            so the storefront hides unavailable items rather than greying them. */}
       </div>
       <div className="p-2.5 flex flex-col flex-1 gap-1 min-h-0">
         <div className="flex items-start justify-between gap-1.5">
-          <h3 className="font-semibold text-[13px] leading-tight line-clamp-2 flex-1" style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
+          <h3 className="font-semibold text-step-sm leading-tight line-clamp-2 flex-1 min-h-[2.5em]" style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
           <motion.button
             data-testid="menu-item-add"
-            className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-white rounded-full mt-0.5 ${
+            className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--brand-bg)] rounded-full mt-0.5 ${
               product.isAvailable ? 'cursor-pointer' : 'opacity-30 cursor-not-allowed'
             }`}
             style={{ background: 'var(--brand-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
@@ -195,7 +189,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
           </motion.button>
         </div>
         {product.description && (
-          <p className="text-[10px] leading-snug line-clamp-2" style={{ color: 'var(--brand-text-muted)' }}>
+          <p className="text-step-2xs leading-snug line-clamp-2" style={{ color: 'var(--brand-text-muted)' }}>
             {product.description}
           </p>
         )}
@@ -203,11 +197,11 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
         {hasIngredients && (
           <div className="flex gap-0.5 flex-wrap">
             {ingredients.slice(0, 4).map((ing, i) => (
-              <span key={i} className="px-1 py-0 rounded text-[9px] leading-tight" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
+              <span key={i} className="px-1 py-0 rounded text-step-2xs leading-tight" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
                 {ing}
               </span>
             ))}
-            {ingredients.length > 4 && <span className="text-[9px]" style={{ color: 'var(--brand-text-muted)' }}>+{ingredients.length - 4}</span>}
+            {ingredients.length > 4 && <span className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>+{ingredients.length - 4}</span>}
           </div>
         )}
 
@@ -218,9 +212,15 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
 
         <div className="flex items-center justify-between mt-auto pt-1">
           <div className="flex items-baseline gap-1">
-            <PriceDisplay amount={product.price} size="sm" />
+            <PriceDisplay amount={product.price} size="md" style={{ color: 'var(--brand-primary)', fontWeight: 800 }} />
+            {product.prepTimeMinutes != null && (
+              <span className="inline-flex items-center gap-0.5 text-step-2xs font-medium whitespace-nowrap" style={{ color: 'var(--brand-text-muted)' }}>
+                <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} aria-hidden="true" />
+                {t('product.prep_minutes', '~{{n}} min', { n: product.prepTimeMinutes })}
+              </span>
+            )}
             {hasNutrition && (
-              <span className="text-[8px]" style={{ color: 'var(--brand-text-muted)' }}>
+              <span className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>
                 {product.kcal}kcal
                 {product.protein != null && <span className="opacity-60"> · P{product.protein}g</span>}
                 {product.fat != null && <span className="opacity-60"> · F{product.fat}g</span>}
@@ -231,10 +231,12 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
 
         {hasTaste && (
           <div className="flex gap-1.5 flex-wrap">
-            {Object.entries(product.taste!).filter(([, v]) => v > 0).map(([axis, level]) => (
-              <span key={axis} className="inline-flex items-center gap-0.5" style={{ color: 'var(--brand-text-muted)' }} title={`${TASTE_LABELS[axis] || axis}`}>
+            {/* Skip axes we have no icon for — a hollow ti-circle fallback reads as an
+                empty/broken glyph, so an unmapped axis is dropped rather than rendered blank. */}
+            {Object.entries(product.taste!).filter(([axis, v]) => v > 0 && TASTE_ICONS[axis]).map(([axis, level]) => (
+              <span key={axis} className="inline-flex items-center gap-0.5" style={{ color: 'color-mix(in srgb, var(--brand-text) 62%, transparent)' }} title={`${TASTE_LABELS[axis] || axis}`}>
                 {Array.from({ length: level }).map((_, i) => (
-                  <i key={i} className={TASTE_ICONS[axis] || 'ti ti-circle'} style={{ fontSize: '0.6rem' }} />
+                  <i key={i} className={TASTE_ICONS[axis]} style={{ fontSize: '0.7rem' }} />
                 ))}
               </span>
             ))}

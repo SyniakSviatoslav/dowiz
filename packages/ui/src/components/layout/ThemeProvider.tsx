@@ -1,3 +1,5 @@
+import { safeStorage } from '../../utils/safeStorage.js';
+import { applySunlight, isSunlightOn } from '../../utils/sunlight.js';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { applyBrandTheme, getPresetConfig, PRESETS, type BrandConfig, type BrandPreset } from '../../theme/index.js';
 
@@ -13,13 +15,13 @@ const STORAGE_KEY = 'dowiz-preset';
 
 function getInitialPreset(fallback: BrandPreset): BrandPreset {
   try {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+    const saved = typeof window !== 'undefined' ? safeStorage.get(STORAGE_KEY) : null;
     if (saved && (saved in PRESETS)) return saved as BrandPreset;
   } catch {}
   if (typeof window !== 'undefined') {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const detected = prefersDark ? 'food-dark' : 'crimson-classic';
-    try { localStorage.setItem(STORAGE_KEY, detected); } catch {}
+    try { safeStorage.set(STORAGE_KEY, detected); } catch {}
     return detected;
   }
   return fallback;
@@ -44,6 +46,9 @@ export function ThemeProvider({
     }
   }, [config, ssrConfig]);
 
+  // Apply Sunlight Mode (high-contrast outdoor theme) from the persisted/OS-derived pref.
+  useEffect(() => { applySunlight(isSunlightOn()); }, []);
+
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -53,7 +58,7 @@ export function ThemeProvider({
       if (cfg) {
         applyBrandTheme(cfg);
         setPresetState(target);
-        try { localStorage.setItem(STORAGE_KEY, target); } catch {}
+        try { safeStorage.set(STORAGE_KEY, target); } catch {}
       }
     };
 
@@ -66,7 +71,7 @@ export function ThemeProvider({
     if (cfg) {
       applyBrandTheme(cfg);
       setPresetState(name);
-      try { localStorage.setItem(STORAGE_KEY, name); } catch {}
+      try { safeStorage.set(STORAGE_KEY, name); } catch {}
     }
   }
 

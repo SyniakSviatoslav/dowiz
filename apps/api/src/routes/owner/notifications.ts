@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import crypto from 'node:crypto';
+import { setCategoryPref, isToggleableCategory } from '../../lib/notificationPrefsService';
 
 export default (async function ownerNotificationRoutes(fastify, opts) {
   const { db, queue } = opts as any;
@@ -132,18 +133,35 @@ export default (async function ownerNotificationRoutes(fastify, opts) {
     
     const client = await db.connect();
     try {
+      const userId = (request as any).user?.sub ?? null;
+
+      // Category prefs (operational/quality) → atomic per-cell write + consent audit
+      // (BR-4 no read-merge-write; BR-16 audit in the same txn). Done FIRST so the read
+      // below reflects them. Remaining (legacy per-event) keys keep the existing path.
+      let nonCategoryPrefs: Record<string, boolean> | undefined;
+      if (prefs) {
+        for (const [key, value] of Object.entries(prefs)) {
+          if (isToggleableCategory(key)) {
+            const r = await setCategoryPref(client, { targetId, locationId, userId, category: key, value, changedVia: 'web' });
+            if (!r.ok) return reply.status(404).send({ error: 'Target not found' });
+          }
+        }
+        const rest = Object.entries(prefs).filter(([k]) => !isToggleableCategory(k));
+        if (rest.length > 0) nonCategoryPrefs = Object.fromEntries(rest);
+      }
+
       const currentRes = await client.query(`SELECT prefs FROM owner_notification_targets WHERE id = $1 AND location_id = $2`, [targetId, locationId]);
       if (currentRes.rows.length === 0) return reply.status(404).send({ error: 'Target not found' });
-      
+
       let currentPrefs = currentRes.rows[0].prefs || {};
-      if (prefs) {
-        currentPrefs = { ...currentPrefs, ...prefs };
+      if (nonCategoryPrefs) {
+        currentPrefs = { ...currentPrefs, ...nonCategoryPrefs };
       }
-      
+
       let setQuery = [];
       let params = [targetId, locationId];
       let pIdx = 3;
-      
+
       if (status) {
         setQuery.push(`status = $${pIdx++}`);
         params.push(status);
@@ -152,8 +170,8 @@ export default (async function ownerNotificationRoutes(fastify, opts) {
           setQuery.push(`disabled_at = NULL`);
         }
       }
-      
-      if (prefs) {
+
+      if (nonCategoryPrefs) {
         setQuery.push(`prefs = $${pIdx++}`);
         params.push(currentPrefs);
       }

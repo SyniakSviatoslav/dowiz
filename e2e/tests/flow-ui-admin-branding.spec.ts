@@ -19,8 +19,13 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'node:url';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+
+// __dirname is undefined under ESM (the suite runs as ESM), which threw at
+// COLLECTION time and killed the whole Playwright run. Derive it from import.meta.url.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Path to the logo file bundled with the project
 const LOGO_PATH = path.resolve(__dirname, '../../dubin-logo.jpg');

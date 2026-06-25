@@ -23,6 +23,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
           name: z.string().min(1),
           description: z.string().optional().nullable(),
           price: z.number().int().nonnegative(),
+          prep_time_minutes: z.number().int().min(1).max(1440),
           available: z.boolean().default(true),
           image_key: z.string().optional().nullable(),
           attributes: z.record(z.any()).optional().nullable(),
@@ -32,15 +33,15 @@ export default async function productRoutes(fastify: FastifyInstance) {
     },
     async (request: any, reply: any) => {
       const { locationId } = request.params;
-      const { category_id, name, description, price, available, image_key, attributes, sort_order } = request.body;
+      const { category_id, name, description, price, prep_time_minutes, available, image_key, attributes, sort_order } = request.body;
       const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(
-          `INSERT INTO products (location_id, category_id, name, description, price, is_available, image_key, attributes, sort_order)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          `INSERT INTO products (location_id, category_id, name, description, price, prep_time_minutes, is_available, image_key, attributes, sort_order)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            RETURNING *`,
-          [locationId, category_id, name, description, price, available, image_key, attributes ?? {}, sort_order]
+          [locationId, category_id, name, description, price, prep_time_minutes, available, image_key, attributes ?? {}, sort_order]
         );
       });
       return reply.status(201).send(res.rows[0]);
@@ -123,6 +124,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
           name: z.string().min(1).optional(),
           description: z.string().optional().nullable(),
           price: z.number().int().nonnegative().optional(),
+          prep_time_minutes: z.number().int().min(1).max(1440).optional(),
           available: z.boolean().optional(),
           image_key: z.string().optional().nullable(),
           attributes: z.record(z.any()).optional().nullable(),
@@ -328,7 +330,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
       const userId = (request.user as any).userId;
       const catId = (request.query as any)?.category_id;
       const res = await withTenant(server.db, userId, async (client) => {
-        let q = `SELECT id, name, price, description, is_available, category_id, image_key, attributes, sort_order, created_at FROM products WHERE location_id = $1`;
+        let q = `SELECT id, name, price, prep_time_minutes, description, is_available, category_id, image_key, attributes, sort_order, created_at FROM products WHERE location_id = $1`;
         const params: any[] = [locId];
         if (catId) { q += ` AND category_id = $2`; params.push(catId); }
         q += ` ORDER BY sort_order`;
@@ -348,6 +350,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
         body: z.object({
           name: z.string().min(1).max(200),
           price: z.number().int().nonnegative(),
+          prep_time_minutes: z.number().int().min(1).max(1440),
           description: z.string().max(2000).optional().nullable(),
           available: z.boolean().optional(),
           category_id: z.string().uuid().optional().nullable(),
@@ -373,9 +376,9 @@ export default async function productRoutes(fastify: FastifyInstance) {
       if (body.attributes) Object.assign(attrs, body.attributes);
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(
-          `INSERT INTO products (location_id, category_id, name, description, price, is_available, image_key, attributes)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-          [locId, catId, body.name, body.description, body.price, body.available ?? true, body.image_key ?? null, attrs]
+          `INSERT INTO products (location_id, category_id, name, description, price, prep_time_minutes, is_available, image_key, attributes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+          [locId, catId, body.name, body.description, body.price, body.prep_time_minutes, body.available ?? true, body.image_key ?? null, attrs]
         );
       });
       return reply.status(201).send(mapProductRow(res.rows[0]));
@@ -391,6 +394,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
         body: z.object({
           name: z.string().min(1).max(200).optional(),
           price: z.number().int().nonnegative().optional(),
+          prep_time_minutes: z.number().int().min(1).max(1440).optional(),
           description: z.string().max(2000).optional().nullable(),
           available: z.boolean().optional(),
           category_id: z.string().uuid().optional().nullable(),
@@ -430,10 +434,11 @@ export default async function productRoutes(fastify: FastifyInstance) {
              is_available = COALESCE($6, is_available),
              category_id = COALESCE($7, category_id),
              image_key = COALESCE($8, image_key),
+             prep_time_minutes = COALESCE($10, prep_time_minutes),
              attributes = $9
            WHERE id = $1 AND location_id = $2
            RETURNING *`,
-          [productId, locId, body.name, body.price, body.description, body.available, catId, body.image_key, attrs]
+          [productId, locId, body.name, body.price, body.description, body.available, catId, body.image_key, attrs, body.prep_time_minutes]
         );
       });
       if (res === null || res.rowCount === 0) return reply.status(404).send({ error: 'Product not found' });

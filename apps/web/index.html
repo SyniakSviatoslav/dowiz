@@ -12,8 +12,13 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=Cormorant+Garamond:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=Cormorant+Garamond:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Yeseva+One&display=swap" rel="stylesheet" />
+    <!-- Tabler icons are now self-hosted (imported in main.tsx → bundled by Vite). No CDN. -->
+    <script>
+      // Sunlight Mode pre-paint: set html[data-sunlight] before first paint to avoid a
+      // flash. Guarded — localStorage throws in sandboxed/blocked contexts.
+      try { var s = localStorage.getItem('dowiz-sunlight'); if (s === 'on' || (s !== 'off' && window.matchMedia && matchMedia('(prefers-contrast: more)').matches)) document.documentElement.setAttribute('data-sunlight', 'on'); } catch (e) {}
+    </script>
     <script>
       // Register the service worker so the PWA installs and order push
       // notifications persist. sw.js is non-caching (skipWaiting + clients.claim),

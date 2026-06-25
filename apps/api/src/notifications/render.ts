@@ -7,11 +7,29 @@ function fmtPrice(v: number | undefined, currency: string | undefined): string {
   return formatMoney(v, (currency || 'ALL') as any);
 }
 
+// P0-4: coarsen a free-text address to district/street WITHOUT a house number. Albanian
+// addresses are unstructured, so this is conservative & FAIL-CLOSED: cut at the first
+// digit (house/building numbers), strip trailing separators; if what's left is too short
+// to be a meaningful street (or nothing), return undefined → the body shows no address
+// (degrades to 'minimal'), never a partial leak. Honest "area" per HD-2.
+export function coarsenAddress(addr: string | undefined): string | undefined {
+  if (!addr) return undefined;
+  const cut = (addr.split(/\d/, 1)[0] ?? '').replace(/[\s,.;:\-/]+$/, '').trim();
+  return cut.length >= 3 ? cut : undefined;
+}
+
 function toVars(data: NotificationData): MessageVars {
   const orderTypeLabel =
     data.orderType === 'pickup' ? 'Pickup'
     : data.orderType === 'delivery' ? 'Delivery'
     : undefined;
+  // P0-4 detail level (default 'area' — privacy-preserving even if a path forgets to set it).
+  const level = data.alertDetail ?? 'area';
+  const customerPhone = level === 'full' ? data.customerPhone : undefined;
+  const deliveryAddress =
+    level === 'full' ? data.deliveryAddress
+    : level === 'area' ? coarsenAddress(data.deliveryAddress)
+    : undefined; // 'minimal'
   return {
     shortOrderId: data.shortOrderId,
     totalFmt: fmtPrice(data.total, data.currency),
@@ -22,8 +40,8 @@ function toVars(data: NotificationData): MessageVars {
     cashPayWithFmt: fmtPrice(data.cashPayWith, data.currency),
     currency: data.currency,
     customerName: data.customerName,
-    customerPhone: data.customerPhone,
-    deliveryAddress: data.deliveryAddress,
+    customerPhone,
+    deliveryAddress,
     deliveryInstructions: data.deliveryInstructions,
     orderTypeLabel,
     items: data.items?.map(i => ({ name: i.name, price: i.price, quantity: i.quantity })),
@@ -37,38 +55,8 @@ function toVars(data: NotificationData): MessageVars {
   };
 }
 
-/**
- * Render a notification for WhatsApp. WhatsApp messages are plain text (with its
- * own *bold* / _italic_ markup), so we reuse the same localized message bodies as
- * Telegram but strip HTML tags and append a deep link as plain text instead of an
- * inline keyboard. Action buttons (Confirm/Reject) are not available on WhatsApp
- * via Baileys, so the owner acts in-app via the link.
- */
-export function renderWhatsAppMessage(event: NotificationEvent, data: NotificationData, locale: Locale = 'sq'): string {
-  const vars = toVars(data);
-  const raw = getMessage(locale, event.type, vars);
-
-  // Strip Telegram HTML markup → plain text. Convert <b>/<strong> to WhatsApp *bold*.
-  const text = raw
-    .replace(/<\/?(b|strong)>/gi, '*')
-    .replace(/<\/?(i|em)>/gi, '_')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .trim();
-
-  const baseUrl = 'https://app.dowiz.org';
-  let link: string | undefined;
-  if (data.orderId && data.locationId) {
-    link = `${baseUrl}/admin/locations/${data.locationId}/orders/${data.orderId}`;
-  } else if (data.locationId && (event.type === 'shift.started' || event.type === 'shift.closed' || event.type === 'shift.close_reminder')) {
-    link = `${baseUrl}/admin/locations/${data.locationId}/shifts`;
-  }
-
-  return link ? `${text}\n\n🔗 ${link}` : text;
-}
+// P0-2 (ADR-p0-privacy-hardening): renderWhatsAppMessage removed with the WhatsApp/
+// Baileys channel. Telegram (below) + push + email remain.
 
 export function renderTelegramMessage(event: NotificationEvent, data: NotificationData, locale: Locale = 'sq'): { text: string, reply_markup?: any } {
   const vars = toVars(data);
@@ -103,7 +91,7 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
       return {
         text,
         reply_markup: locationUrl ? {
-          inline_keyboard: [[{ text: '🔗 Open in app', url: locationUrl }]]
+          inline_keyboard: [[{ text: locale === 'sq' ? '🔗 Hap në aplikacion' : locale === 'uk' ? '🔗 Відкрити в додатку' : '🔗 Open in app', url: locationUrl }]]
         } : undefined,
       };
 
@@ -112,8 +100,8 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
         text,
         reply_markup: data.orderId ? {
           inline_keyboard: [[
-            { text: '✅ Confirm', callback_data: `order.confirm:${data.orderId}` },
-            { text: '❌ Reject', callback_data: `order.reject_choose:${data.orderId}` },
+            { text: locale === 'sq' ? '✅ Konfirmo' : locale === 'uk' ? '✅ Підтвердити' : '✅ Confirm', callback_data: `order.confirm:${data.orderId}` },
+            { text: locale === 'sq' ? '❌ Refuzo' : locale === 'uk' ? '❌ Відхилити' : '❌ Reject', callback_data: `order.reject_choose:${data.orderId}` },
           ]]
         } : undefined,
       };
@@ -122,7 +110,7 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
       return {
         text,
         reply_markup: data.orderId && locationUrl ? {
-          inline_keyboard: [[{ text: '👀 Track', url: locationUrl }]]
+          inline_keyboard: [[{ text: locale === 'sq' ? '👀 Ndiq' : locale === 'uk' ? '👀 Відстежити' : '👀 Track', url: locationUrl }]]
         } : undefined,
       };
 
@@ -132,7 +120,7 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
       return {
         text,
         reply_markup: data.locationId ? {
-          inline_keyboard: [[{ text: '🔗 Close shift', url: `${baseUrl}/admin/locations/${data.locationId}/shifts` }]]
+          inline_keyboard: [[{ text: locale === 'sq' ? '🔗 Mbyll ndërrimin' : locale === 'uk' ? '🔗 Закрити зміну' : '🔗 Close shift', url: `${baseUrl}/admin/locations/${data.locationId}/shifts` }]]
         } : undefined,
       };
 

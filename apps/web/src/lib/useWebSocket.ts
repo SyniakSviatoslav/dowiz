@@ -1,3 +1,4 @@
+import { safeStorage } from './safeStorage.js';
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -44,7 +45,7 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
     setStatus(reconnectAttempts.current > 0 ? 'reconnecting' : 'connecting');
 
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('dos_access_token') : null;
+      const token = typeof window !== 'undefined' ? safeStorage.get('dos_access_token') : null;
       const url = new URL(WS_BASE_URL);
       if (token) url.searchParams.set('token', token);
 
@@ -55,7 +56,7 @@ export function useWebSocket({ room, onMessage, onReconnect, enabled = true }: U
         if (!mountedRef.current) { ws.close(1000); return; }
         setStatus('connected');
 
-        const token = typeof window !== 'undefined' ? localStorage.getItem('dos_access_token') : null;
+        const token = typeof window !== 'undefined' ? safeStorage.get('dos_access_token') : null;
         if (token) {
           ws.send(JSON.stringify({ type: 'auth', token }));
         } else if (room) {

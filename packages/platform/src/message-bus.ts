@@ -45,7 +45,10 @@ export class PgMessageBus implements MessageBus {
       console.log('[PgMessageBus] Connected successfully, setting up notification handler');
       
       this.listenerClient.on('notification', (msg) => {
-        console.log('[PgMessageBus] ✓ Received notification on:', msg.channel, 'payload:', msg.payload);
+        // P0-3: never log the raw payload verbatim (defense-in-depth — payloads are
+        // claim-check/non-PII by design, but the log must not be the leak). Channel +
+        // byte length only.
+        console.log('[PgMessageBus] ✓ notification on:', msg.channel, `(${msg.payload?.length ?? 0}b)`);
         const channelHandlers = this.handlers.get(msg.channel);
         if (channelHandlers && msg.payload) {
           let parsed;

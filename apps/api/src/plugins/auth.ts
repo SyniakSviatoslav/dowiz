@@ -62,8 +62,8 @@ export const verifyAuth = async (request: FastifyRequest, reply: FastifyReply) =
   if (user && user.role === 'courier') {
     if (!user.jti) {
       // Real courier logins always carry a session jti; a courier token without
-      // one can only originate from the DEV_AUTH_SECRET-gated mock endpoint.
-      if (!devLoginAllowed(env.DEV_AUTH_SECRET)) {
+      // one can only originate from the dev-login-gated mock endpoint (ADR-0003).
+      if (!devLoginAllowed(env)) {
         return reply.status(401).send({ error: 'Token expired or invalid' });
       }
       return;
@@ -143,8 +143,10 @@ export const requireLocationAccess = async (request: FastifyRequest, reply: Fast
   if (!pool) throw new Error('Database pool not attached to fastify');
 
   try {
+    // P-d (ADR-0004): require an ACTIVE owner membership — a removed/downgraded owner holding a
+    // valid ≤24h token is denied per-request (status='active' is index-backed, migration-free).
     const res = await pool.query(
-      `SELECT 1 FROM memberships WHERE location_id = $1 AND user_id = $2 AND role = 'owner'`,
+      `SELECT 1 FROM memberships WHERE location_id = $1 AND user_id = $2 AND role = 'owner' AND status = 'active'`,
       [locationId, user.userId]
     );
     if (res.rowCount === 0) {
