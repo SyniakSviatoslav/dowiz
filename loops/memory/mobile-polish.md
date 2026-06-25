@@ -70,5 +70,14 @@ Per-run learnings for the mobile (390px) polish loop. Append one block per run.
     state/CTA mismatch, missing map). **Documented as a capture limitation; not built.**
   - WHAT DID get captured/verified: the delivery NOT-FOUND state — now centered + iconed (iter-3 fix holds
     on this surface too). To enable the live view later: enhance the seed to UPSERT an encrypted courier +
-    courier_shift + courier_assignment for the seeded order, and let `/dev/mock-auth` impersonate it
-    (accept `body.courierId`).
+    courier_shift + courier_assignment for the seeded order, and let `/dev/mock-auth` impersonate it.
+
+### iteration 3b → RESOLVED 2026-06-25 (via Triadic Council "fee-courier-seed", Item 3, commit d619ea5f)
+- The "build the encrypted courier seed" follow-up was taken through the council (it touched money/contract/
+  state-machine alongside two other changes) and built HARDENED: synthetic-only RE-DERIVED mock-auth mint
+  (NOT arbitrary courierId — that was the dev-login-backdoor shape), idempotent seed, namespaced sentinel
+  email-hash, `.test`-TLD reject, synthetic excluded from owner counts. See docs/design/fee-courier-seed/.
+- The LIVE active-delivery view now renders at 390px (audit/item3-verify/m-courier-delivery.png): destination
+  + "~15 min" ETA + Telefono + "Shënoni si të Marrë" CTA. **The iter-3b capture limitation is closed.**
+- **Lesson:** a "hard infra limit" can become tractable when it's worth routing through the proper gate —
+  the council turned a risky `body.courierId` impersonation into a safe synthetic-only fixture.
