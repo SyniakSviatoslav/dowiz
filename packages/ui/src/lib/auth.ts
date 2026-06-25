@@ -1,3 +1,4 @@
+import { safeStorage } from '../utils/safeStorage.js';
 import { useState, useEffect } from 'react';
 import type { BrandPreset } from '../theme/index.js';
 
@@ -125,7 +126,7 @@ class AuthService {
 
   async restore(): Promise<void> {
     const token = sessionStorage.getItem('dos_token');
-    const refreshToken = localStorage.getItem('dos_refresh_token');
+    const refreshToken = safeStorage.get('dos_refresh_token');
     if (!token) return;
     const payload = decodeJwt(token);
     if (!payload || isExpired(payload)) {
@@ -144,7 +145,7 @@ class AuthService {
     const payload = decodeJwt(token);
     if (!payload) return;
     sessionStorage.setItem('dos_token', token);
-    if (refreshToken) localStorage.setItem('dos_refresh_token', refreshToken);
+    if (refreshToken) safeStorage.set('dos_refresh_token', refreshToken);
     this.setState({
       token,
       refreshToken,
@@ -163,7 +164,7 @@ class AuthService {
 
   private clearTokens(): void {
     sessionStorage.removeItem('dos_token');
-    localStorage.removeItem('dos_refresh_token');
+    safeStorage.remove('dos_refresh_token');
     this.setState({
       token: null,
       refreshToken: null,

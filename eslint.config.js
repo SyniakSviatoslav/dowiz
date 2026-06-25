@@ -35,6 +35,11 @@ export default tseslint.config(
       'local/no-mock-in-prod': 'warn',
       'local/no-permissive-status-assertion': 'warn',
       'local/no-hardcoded-string': 'warn',
+      'local/no-insecure-random': 'warn',
+      'local/no-direct-websocket': 'warn',
+      'local/no-arbitrary-tailwind': 'warn',
+      // Phase-B type-scale: error-level (zero violations after migration → locks the win).
+      'local/no-arbitrary-font-size': 'error',
 
       // --- Karpathy P2: Simplicity rules (warn-only, no CI block) ---
       'max-depth': ['warn', 4],
@@ -60,6 +65,22 @@ export default tseslint.config(
     files: ['apps/api/src/routes/owner/**', 'apps/api/src/routes/courier/**'],
     rules: {
       'local/require-auth-hook': 'warn',
+    },
+  },
+  {
+    // The API-served standalone widgets (checkout/active-delivery/etc.) ship their own CDN
+    // Tailwind WITHOUT the project's text-step-* scale, so arbitrary text-[Npx] is legitimate there.
+    files: ['apps/api/src/client/**', 'apps/api/src/public/**', 'tools/eslint-plugin-local/**'],
+    rules: {
+      'local/no-arbitrary-font-size': 'off',
+    },
+  },
+  {
+    // React app must use the shared <Select>/<Textarea>, not native form controls. Error-level here
+    // only — the packages/ui atoms wrap the native elements, and apps/api widgets are out of scope.
+    files: ['apps/web/src/**/*.tsx'],
+    rules: {
+      'local/no-raw-form-control': 'error',
     },
   },
   {

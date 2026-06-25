@@ -16,8 +16,17 @@ export const ALLERGEN_COLORS: Record<string, { bg: string; text: string }> = {
   sesame: { bg: '#f3e8ff', text: '#6b21a8' },      // purple — 6.8:1
 };
 
-export function getAllergenStyle(allergen: string) {
-  const key = allergen.toLowerCase();
-  // Fallback: slate chip, dark ink — 8.6:1 on its own background.
-  return ALLERGEN_COLORS[key] || { bg: '#e2e8f0', text: '#334155' };
+export function getAllergenStyle(_allergen: string) {
+  // Unified, theme-cohesive allergen chip. The previous per-allergen pastel
+  // rainbow (kept in ALLERGEN_COLORS above for reference) read as light "stickers"
+  // stuck on the dark storefront — the single biggest "templated" tell. This one
+  // chip derives from the active theme: an opaque, slightly-deepened surface with
+  // brand text. Opaque → still readable over a product photo on ProductCard;
+  // theme-driven → cohesive on any palette (light or dark). The allergen NAME
+  // still carries the meaning; colour-coding is redundant with the labelled
+  // allergen section in the detail modal.
+  return {
+    bg: 'color-mix(in srgb, var(--brand-surface) 84%, #000)',
+    text: 'var(--brand-text)',
+  };
 }

@@ -5,14 +5,16 @@ import crypto from 'crypto';
 import { ParseModeEnum } from '@deliveryos/shared-types';
 import { withTenant } from '@deliveryos/platform';
 import { BUS_CHANNELS } from '../../lib/registry.js';
+import { extractFromWebsite } from '../../lib/brand-extractor.js';
 
 export default (async function menuImportRoutes(fastify: any, opts: any) {
   const { db, messageBus, parsers, storage } = opts as any;
 
   async function getLocationId(user: any): Promise<string | null> {
     if (!user?.userId) return null;
+    // P-d (ADR-0004): active owner membership only — a removed owner can't import into the tenant.
     const res = await db.query(
-      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1`,
       [user.userId]
     );
     return res.rows.length > 0 ? res.rows[0].location_id : null;
@@ -232,7 +234,10 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
       body: z.object({
         import_session_id: z.string().uuid(),
         commit_token: z.string().uuid().optional(),
-        force: z.boolean().optional()
+        force: z.boolean().optional(),
+        // Optional: the venue's existing website. When given, the commit also
+        // derives a coherent starter theme from it (task: auto-branded page).
+        website: z.string().url().optional()
       }).strict()
     }
   }, async (request: any, reply: any) => {
@@ -240,8 +245,9 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
     const locationId = await getLocationId(user);
     if (!locationId) return reply.status(401).send({ error: 'Unauthorized' });
 
-    const { import_session_id, commit_token, force } = request.body as any;
+    const { import_session_id, commit_token, force, website } = request.body as any;
     const finalCommitToken = commit_token || crypto.randomUUID();
+    let restaurantName: string | undefined;
 
     try {
       const commitRes = await withTenant(db, user.userId, async (client) => {
@@ -483,6 +489,7 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
         // never clobber owner-edited values). The owner reviewed the draft before
         // committing, so this is human-approved. Phone also helps the publish gate.
         const rmeta = (draft as any)._restaurant;
+        if (rmeta?.name) restaurantName = String(rmeta.name).slice(0, 120);
         if (rmeta && (rmeta.address || rmeta.phone)) {
           await client.query(
             `UPDATE locations
@@ -523,7 +530,45 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
         counts: commitRes.response?.counts
       });
 
-      return reply.status(200).send(commitRes.response);
+      // Auto-brand (best-effort, outside the tx so a slow site fetch never holds
+      // a DB lock): name the storefront from the menu document, and when the
+      // owner supplied their existing website derive a coherent starter theme.
+      // COALESCE(existing, …) means owner-set values are never overwritten.
+      let brandingGenerated = false;
+      try {
+        let seeds: { primary?: string; bg?: string; text?: string; logoUrl?: string } = {};
+        if (website && String(website).trim()) {
+          const sig = await extractFromWebsite(String(website).trim());
+          seeds = { primary: sig.primary, bg: sig.bg, text: sig.text, logoUrl: sig.logoUrl };
+        }
+        if (restaurantName || seeds.primary || seeds.bg || seeds.text || seeds.logoUrl) {
+          await withTenant(db, user.userId, async (client) => {
+            if (restaurantName) {
+              await client.query(
+                `UPDATE locations SET name = CASE WHEN COALESCE(NULLIF(btrim(name), ''), '') = '' THEN $2 ELSE name END WHERE id = $1`,
+                [locationId, restaurantName]
+              );
+            }
+            if (seeds.primary || seeds.bg || seeds.text || seeds.logoUrl) {
+              await client.query(
+                `INSERT INTO location_themes (location_id, primary_color, bg_color, text_color, logo_url)
+                 VALUES ($1, $2, $3, $4, $5)
+                 ON CONFLICT (location_id) DO UPDATE SET
+                   primary_color = COALESCE(location_themes.primary_color, EXCLUDED.primary_color),
+                   bg_color      = COALESCE(location_themes.bg_color, EXCLUDED.bg_color),
+                   text_color    = COALESCE(location_themes.text_color, EXCLUDED.text_color),
+                   logo_url      = COALESCE(location_themes.logo_url, EXCLUDED.logo_url)`,
+                [locationId, seeds.primary || null, seeds.bg || null, seeds.text || null, seeds.logoUrl || null]
+              );
+              brandingGenerated = true;
+            }
+          });
+        }
+      } catch (e: any) {
+        request.log.warn({ err: e?.message }, '[menu-import] auto-branding skipped');
+      }
+
+      return reply.status(200).send({ ...commitRes.response, branding_generated: brandingGenerated });
 
     } catch (err: any) {
       if (err.code === '23505') {

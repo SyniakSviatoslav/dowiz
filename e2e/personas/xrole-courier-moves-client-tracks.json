@@ -1,0 +1,18 @@
+{
+  "id": "xrole-courier-moves-client-tracks",
+  "role": "cross",
+  "goals": "courier moves ↔ client sees live position",
+  "traits": {
+    "patience": "med",
+    "tech_savvy": "high",
+    "careful_or_sloppy": "careful"
+  },
+  "device": "mobile",
+  "viewport": 390,
+  "locale": "en",
+  "network_profile": "4g",
+  "constraints": [
+    "two roles",
+    "geo stream"
+  ]
+}

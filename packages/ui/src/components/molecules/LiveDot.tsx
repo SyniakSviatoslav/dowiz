@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
+import { ease } from '../../lib/motion.js';
 
 interface LiveDotProps {
   color?: string;
@@ -8,6 +9,7 @@ interface LiveDotProps {
 }
 
 export function LiveDot({ color, size = 8, pulse = true }: LiveDotProps) {
+  const prefersReducedMotion = useReducedMotion();
   const [isVisible, setIsVisible] = useState(true);
   const [isPageVisible, setIsPageVisible] = useState(true);
   const ref = useRef<HTMLDivElement>(null);
@@ -33,33 +35,38 @@ export function LiveDot({ color, size = 8, pulse = true }: LiveDotProps) {
     return () => document.removeEventListener('visibilitychange', handle);
   }, [pulse]);
 
-  const shouldAnimate = pulse && isVisible && isPageVisible;
+  const dotColor = color || 'var(--color-success)';
+  const shouldAnimate = pulse && isVisible && isPageVisible && !prefersReducedMotion;
 
+  // Static fallback: reduced-motion, off-screen, hidden tab, or pulse disabled.
+  // A faint ring keeps the "live" semantic legible without any motion.
   if (!shouldAnimate) {
     return (
-      <div ref={ref} className="inline-flex items-center justify-center">
+      <div ref={ref} className="relative inline-flex items-center justify-center">
         <span
           className="rounded-full"
-          style={{ width: size, height: size, backgroundColor: color || 'var(--color-success)' }}
+          style={{ width: size, height: size, backgroundColor: dotColor }}
         />
       </div>
     );
   }
 
   return (
-    <div ref={ref} className="inline-flex items-center justify-center">
+    <div ref={ref} className="relative inline-flex items-center justify-center">
+      {/* Expanding halo — the gentle "breathing" ring behind the solid core. */}
       <motion.span
-        className="rounded-full"
-        style={{ width: size, height: size, backgroundColor: color || 'var(--color-success)' }}
-        animate={{
-          scale: [1, 1.3, 1],
-          opacity: [1, 0.6, 1],
-        }}
-        transition={{
-          duration: 2,
-          repeat: Infinity,
-          ease: 'easeInOut',
-        }}
+        aria-hidden
+        className="absolute rounded-full"
+        style={{ width: size, height: size, backgroundColor: dotColor }}
+        animate={{ scale: [1, 2.2], opacity: [0.45, 0] }}
+        transition={{ duration: 1.8, repeat: Infinity, ease: ease.soft, repeatDelay: 0.2 }}
+      />
+      {/* Solid core — a soft scale/opacity breath, no harsh blink. */}
+      <motion.span
+        className="relative rounded-full"
+        style={{ width: size, height: size, backgroundColor: dotColor }}
+        animate={{ scale: [1, 1.12, 1], opacity: [1, 0.82, 1] }}
+        transition={{ duration: 1.8, repeat: Infinity, ease: ease.soft, repeatDelay: 0.2 }}
       />
     </div>
   );

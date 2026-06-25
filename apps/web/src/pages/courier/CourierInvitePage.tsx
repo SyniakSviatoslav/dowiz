@@ -1,3 +1,4 @@
+import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PHONE_E164_PATTERN } from '@deliveryos/shared-types';
@@ -94,7 +95,7 @@ export function CourierInvitePage() {
       });
 
       if (data?.jwt) {
-        localStorage.setItem('dos_access_token', data.jwt);
+        safeStorage.set('dos_access_token', data.jwt);
         navigate('/courier');
       } else {
         setSubmitError(t('common.invalid_response', 'Invalid response from server'));

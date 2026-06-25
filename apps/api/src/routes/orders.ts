@@ -13,6 +13,9 @@ import type { Pool } from 'pg';
 import crypto from 'crypto';
 
 const env = loadEnv();
+// OTP globally disabled until a real SMS gateway exists; per-location
+// require_phone_otp only applies when OTP_ENABLED is 'true'. See packages/config.
+const OTP_ENABLED = env.OTP_ENABLED === 'true';
 import { applyTax, assertNonNegative, computeLineTotal } from '../lib/money.js';
 import { distanceKm } from '../lib/geo.js';
 
@@ -100,6 +103,13 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
     try {
       await client.query('BEGIN');
+      // Bound the write-transaction hold so a wedged write self-aborts as a fast
+      // 5xx instead of holding 1 of max:8 operational connections to exhaustion
+      // (the live pool-wedge failure mode). 4.5s sits just inside
+      // connectionTimeoutMillis=5000 (packages/db/src/index.ts) with margin; a
+      // legitimate worst-case cart (~60 inserts × ~50ms ≈ 3s under a latency spike)
+      // still completes inside it. This aborts a stuck write, not a slow-but-progressing one.
+      await client.query("SET LOCAL statement_timeout = 4500");
 
       // 1. Location config (FOR UPDATE lock optionally, but standard read is fine if config updates are rare, wait we should lock locations? No need to lock config, just read it).
       const locRes = await client.query(
@@ -132,7 +142,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         const otpCol = await client.query(
           `SELECT require_phone_otp FROM locations WHERE id = $1`, [locationId]
         );
-        requireOtp = otpCol.rows[0]?.require_phone_otp || false;
+        requireOtp = OTP_ENABLED && (otpCol.rows[0]?.require_phone_otp || false);
       } catch (err: any) {
         console.debug('[orders] require_phone_otp column check failed:', err?.message);
       }
@@ -267,7 +277,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
       // 4c. Server-side OTP verification (authority — does NOT trust client input)
       let otpServerVerified = otpVerified; // from P26 header check
-      if (location.require_phone_otp && input.otp_code && phoneForSignals) {
+      if (OTP_ENABLED && location.require_phone_otp && input.otp_code && phoneForSignals) {
         try {
           const { verifyOtpCode } = await import('../lib/otp.js');
           const otpRes = await client.query(
@@ -301,7 +311,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         noShowCount: 0,
         noShowAgeDays: null as number | null,
         completedCount: 0,
-        otpRequired: location.require_phone_otp,
+        otpRequired: OTP_ENABLED && location.require_phone_otp,
         otpVerified: otpServerVerified,
       };
       for (const s of signals) {
@@ -370,7 +380,10 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         await client.query(`DELETE FROM idempotency_keys WHERE key = $1 AND location_id = $2`, [idempotency_key, locationId]);
       }
 
-      // 6. Verify Products (FOR UPDATE for pricing — authoritative lock)
+      // 6. Verify Products. Price authority is the in-transaction MVCC snapshot
+      // (NOT a row lock — there is no FOR UPDATE here): the price read and the
+      // order INSERT share one snapshot, so the snapshotted price is coherent.
+      // is_available is re-checked on the same snapshot below.
       productIds = items.map(i => i.product_id);
       const productsRes = await client.query(
         `SELECT id, name, price, is_available
@@ -416,22 +429,40 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         }
       }
 
+      // 6b. Batch-fetch modifier groups for ALL products in one set-based query
+      // (was one round-trip per line-item — the only N-fan-out left inside the held
+      // transaction). Same in-tx MVCC snapshot, so the price/availability coherence
+      // is unchanged; this only cuts round-trips, flattening the connection-hold so
+      // it no longer scales with cart size. Partitioned by product_id into a Map
+      // that every line-item RE-READS (broadcast, never consumed-once) — so two
+      // line-items of the same product are each validated against the full group set.
+      const groupsByProduct = new Map<string, any[]>();
+      {
+        const groupRes = await client.query(
+          `SELECT pmg.product_id, mg.id, mg.min_select, mg.max_select, mg.required
+           FROM modifier_groups mg
+           JOIN product_modifier_groups pmg ON pmg.group_id = mg.id
+           WHERE pmg.product_id = ANY($1::uuid[])`,
+          [productIds]
+        );
+        for (const row of groupRes.rows) {
+          const list = groupsByProduct.get(row.product_id);
+          if (list) list.push(row);
+          else groupsByProduct.set(row.product_id, [row]);
+        }
+      }
+
       // 7. Calculate Pricing & Validate Modifier Groups
       let subtotal = 0;
       const orderItemRows: Array<any> = [];
 
       for (const item of items) {
         const product = productMap.get(item.product_id)!;
-        
-        // Group logic validation
-        const groupRes = await client.query(
-          `SELECT mg.id, mg.min_select, mg.max_select, mg.required
-           FROM modifier_groups mg
-           JOIN product_modifier_groups pmg ON pmg.group_id = mg.id
-           WHERE pmg.product_id = $1`,
-          [item.product_id]
-        );
-        
+
+        // Group logic validation — re-read this product's groups from the batched
+        // partition (broadcast: read once per line-item, never drained).
+        const groupRows = groupsByProduct.get(item.product_id) || [];
+
         const groupCounts = new Map<string, number>();
         const modifierPrices: number[] = [];
         const itemModifiersRows: Array<any> = [];
@@ -460,7 +491,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         }
 
         // Validate min/max select
-        for (const gRow of groupRes.rows) {
+        for (const gRow of groupRows) {
           const count = groupCounts.get(gRow.id) || 0;
           if (gRow.required && count < gRow.min_select) {
             await client.query('ROLLBACK');
@@ -687,21 +718,22 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           timestamp: new Date().toISOString(),
         });
         const shortId = '#' + order.id.substring(0, 4).toUpperCase();
-        const itemsSummary = orderItemRows.map((i: any) => `${i.quantity}\u00d7${i.nameSnapshot}`).join(', ');
+        // P0-3 claim-check: the bus carries ZERO customer PII. Item names
+        // (dietary/medical-adjacent), customer name and phone are NOT published \u2014
+        // the dashboard pulls them from the authenticated, RLS-scoped /owner/orders
+        // endpoint. Only non-PII status fields ride the bus (Upstash out of the PII
+        // perimeter). location_id is included so subscribers can scope.
         await messageBus.publish(dashboardChannel(locationId), {
           type: 'order.created',
           data: {
             orderId: order.id,
+            locationId,
             status: 'PENDING',
             total,
             currency: location.currency_code,
             createdAt: order.created_at,
             shortId,
             itemCount: items.length,
-            itemsSummary,
-            courierName: null,
-            customerNameMasked: cust?.name ? cust.name.replace(/(?<=.).(?=.*@)/g, '*') : '***',
-            customerPhoneMasked: cust?.phone ? cust.phone.slice(0, -4).replace(/\d/g, '*') + cust.phone.slice(-4) : '***',
           },
         });
       } catch (err) {
@@ -747,6 +779,14 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
       if (error?.code === '23505') { // Unique violation
         return reply.status(409).send({ error: 'Idempotency key conflict', code: 'IDEMPOTENCY_CONFLICT' });
+      }
+      // Transient DB contention under load (serialization / deadlock / statement-timeout from the
+      // bounded write-hold / connection drop) — the order is safe to retry, so surface a graceful
+      // 503 the client can show as "try again" instead of a scary 500 (matches the db.connect()
+      // 503 guard above and the login-503 hardening).
+      const TRANSIENT_PG = new Set(['40001', '40P01', '57014', '53300', '08006', '08003', '08000']);
+      if (typeof error?.code === 'string' && TRANSIENT_PG.has(error.code)) {
+        return reply.status(503).send({ code: 503, error: 'Service temporarily unavailable, please try again' });
       }
       return reply.status(500).send({ error: 'Internal server error' });
     } finally {
@@ -848,7 +888,13 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
     preHandler: [(fastify as any).verifyAuth, (fastify as any).requireRole(['owner'])],
   }, async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
-    const { status: newStatus } = StatusUpdateInput.parse(request.body);
+    // safeParse → typed 400 (a bad `status` enum is client input, not a 500). A bare .parse()
+    // threw a ZodError that the global handler didn't normalize → raw 500. Matches the create route.
+    const parsed = StatusUpdateInput.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ code: 400, error: parsed.error.issues?.map((i: any) => i.message).join('; ') || 'Invalid status' });
+    }
+    const { status: newStatus } = parsed.data;
     const user = request.user!;
     if (user.role !== 'owner') {
       return reply.status(403).send({ error: 'Forbidden' });

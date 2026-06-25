@@ -39,10 +39,10 @@ export function StickyActionBar({ children, className = '', embedSticky = true }
     <div
       ref={barRef}
       data-fixed={embed ? 'true' : undefined}
-      className={`${baseClass} bg-[var(--brand-surface)] border-t border-[var(--brand-border)] ${className}`}
-      style={style}
+      className={`${baseClass} bg-[var(--brand-surface)] ${className}`}
+      style={{ ...style, boxShadow: '0 -8px 24px rgba(0,0,0,.07), 0 -2px 6px rgba(0,0,0,.05)' }}
     >
-      <div className="px-4 py-3" style={{ paddingBottom: `calc(0.75rem + var(--safe-bottom))` }}>
+      <div className="flex min-w-0 flex-col px-4 py-3" style={{ paddingBottom: `calc(0.75rem + var(--safe-bottom))` }}>
         {children}
       </div>
     </div>

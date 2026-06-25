@@ -5,7 +5,7 @@
    keyboard-a11y for the card is tracked separately. */
 import React, { memo, useState } from 'react';
 import { Button, useI18n, MessageThread, PriceDisplay } from '../../index.js';
-import type { AdminOrder } from './types.js';
+import { type AdminOrder, isOrderDetailsPending } from './types.js';
 
 interface OrderCardProps {
   order: AdminOrder;
@@ -35,10 +35,12 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
   const getStatusColor = (s: string) => {
     switch (s) {
       case 'PENDING': return 'bg-[var(--status-pending-bg)] text-[var(--status-pending)] border-[var(--status-pending-border)]';
+      case 'CONFIRMED': return 'bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed)] border-[var(--status-confirmed-border)]';
       case 'PREPARING': return 'bg-[var(--status-preparing-bg)] text-[var(--status-preparing)] border-[var(--status-preparing-border)]';
       case 'READY': return 'bg-[var(--status-ready-bg)] text-[var(--status-ready)] border-[var(--status-ready-border)]';
       case 'IN_DELIVERY': return 'bg-[var(--status-in-delivery-bg)] text-[var(--status-in-delivery)] border-[var(--status-in-delivery-border)]';
       case 'DELIVERED': return 'bg-[var(--status-delivered-bg)] text-[var(--status-delivered)] border-[var(--status-delivered-border)]';
+      case 'REJECTED': return 'bg-[var(--status-rejected-bg)] text-[var(--status-rejected)] border-[var(--status-rejected-border)]';
       case 'CANCELLED': return 'bg-[var(--status-cancelled-bg)] text-[var(--status-cancelled)] border-[var(--status-cancelled-border)]';
       default: return 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] border-[var(--brand-border)]';
     }
@@ -47,14 +49,25 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
   const getStatusIcon = (s: string) => {
     switch (s) {
       case 'PENDING': return 'ti ti-clock';
+      case 'CONFIRMED': return 'ti ti-circle-check';
       case 'PREPARING': return 'ti ti-chef-hat';
       case 'READY': return 'ti ti-check';
       case 'IN_DELIVERY': return 'ti ti-truck-delivery';
       case 'DELIVERED': return 'ti ti-package';
+      case 'REJECTED': return 'ti ti-ban';
       case 'CANCELLED': return 'ti ti-x';
       default: return 'ti ti-help';
     }
   };
+
+  // Localized status label — the raw uppercase enum ("REJECTED") leaked into the
+  // otherwise-Albanian owner UI. Reuses the canonical order.* label catalog.
+  const STATUS_LABEL_KEYS: Record<string, string> = {
+    PENDING: 'order.pending', CONFIRMED: 'order.confirmed', PREPARING: 'order.preparing',
+    READY: 'order.ready', IN_DELIVERY: 'order.in_delivery', DELIVERED: 'order.delivered',
+    REJECTED: 'order.rejected', CANCELLED: 'order.cancelled',
+  };
+  const statusLabel = (s: string) => t(STATUS_LABEL_KEYS[s] || '', s.replace(/_/g, ' '));
 
   const getDeltaMin = (start?: string, end?: string) => {
     if (!start || !end) return null;
@@ -68,6 +81,10 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
   const prepDelta = getDeltaMin(order.confirmedAt, order.readyAt);
   const deliveryDelta = getDeltaMin(order.readyAt, order.deliveredAt);
 
+  // F7: hollow-card guard — see isOrderDetailsPending. Placeholder while the authed
+  // backfill (name/items) is still in flight, instead of a nameless / "0 items" card.
+  const detailsPending = isOrderDetailsPending(order);
+
   return (
     <div className={`bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4 flex flex-col gap-4 ${isLoading ? 'opacity-50 pointer-events-none' : 'cursor-pointer hover:bg-[var(--brand-surface-raised)]'}`} onClick={() => onViewDetail?.(order.id)}>
 
@@ -75,19 +92,19 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
       <div className="flex justify-between items-start">
         <div>
           <div className="font-bold text-lg text-[var(--brand-text)]">{order.shortId || '#' + order.id.substring(0, 4).toUpperCase()}</div>
-          <div className="text-[var(--brand-text-muted)] text-sm flex items-center gap-2">
+          <div data-dynamic className="text-[var(--brand-text-muted)] text-sm flex items-center gap-2">
             {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>
         <div role="status" className={`px-2.5 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 transition-colors duration-200 ${getStatusColor(order.status)}`}>
           <i className={getStatusIcon(order.status)} style={{ fontSize: '0.75rem' }} />
-          {order.status}
+          {statusLabel(order.status)}
         </div>
       </div>
 
       {/* Timeline Deltas */}
       {(confirmDelta != null || prepDelta != null || deliveryDelta != null) && (
-        <div className="flex items-center gap-2 text-[11px] font-medium mt-1">
+        <div className="flex items-center gap-2 text-step-2xs font-medium mt-1">
           {confirmDelta != null && (
             <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--status-pending-light)] text-[var(--status-pending)]" title={t('admin.confirm_time', 'Confirmation Time')}>
               <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} />
@@ -114,7 +131,7 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
         {order.signals?.otpVerified ? (
           <span className="flex items-center gap-1 bg-[var(--status-delivered-light)] text-[var(--status-delivered)] px-2 py-1 rounded-lg">
             <i className="ti ti-shield-check" style={{ fontSize: '0.7rem' }} />
-            OTP
+            {t('admin.otp', 'OTP')}
           </span>
         ) : (
           <span className="flex items-center gap-1 bg-[var(--status-pending-light)] text-[var(--status-pending)] px-2 py-1 rounded-lg">
@@ -130,10 +147,21 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
 
       {/* Details */}
       <div className="text-sm space-y-1 text-[var(--brand-text)]">
-        {order.customerName && order.customerName !== 'Unknown' && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.client', 'Client:')}</span> {order.customerName}</div>}
-        {order.customerPhone && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('common.phone', 'Phone:')}</span> {maskPhone(order.customerPhone)}</div>}
-        {order.deliveryAddress && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.to', 'To:')}</span> {order.deliveryAddress}</div>}
-        <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.items', 'Items:')}</span> {order.items?.length || 0} {t('admin.items_lower', 'items')} (<PriceDisplay amount={order.total} />)</div>
+        {detailsPending ? (
+          <div className="space-y-1.5 py-0.5" data-testid="order-details-pending" aria-label={t('admin.loading_details', 'Loading order details…')}>
+            <div className="h-4 w-2/3 rounded shimmer" />
+            <div className="h-3 w-2/5 rounded shimmer" />
+          </div>
+        ) : (
+          <>
+            {order.customerName && order.customerName !== 'Unknown' && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.client', 'Client:')}</span> {order.customerName}</div>}
+            {order.customerPhone && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('common.phone', 'Phone:')}</span> {maskPhone(order.customerPhone)}</div>}
+            {order.deliveryAddress && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.to', 'To:')}</span> {order.deliveryAddress}</div>}
+          </>
+        )}
+        {(() => { const n = order.items?.length || order.itemCount || 0; return (
+        <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.items', 'Items:')}</span> {n} {n === 1 ? t('admin.item_lower', 'item') : t('admin.items_lower', 'items')} (<PriceDisplay amount={order.total} />)</div>
+        ); })()}
         {order.items && order.items.length > 0 && (
           <div className="ml-16 text-xs space-y-0.5" style={{ color: 'var(--brand-text-muted)' }}>
             {order.items.map((item: any, i: number) => (
@@ -157,7 +185,7 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
           </div>
         )}
         {order.elapsedSeconds !== undefined && order.elapsedSeconds > 1800 && (
-        <span className="text-[var(--color-danger)] font-bold ml-2">{t('admin.overdue', 'Overdue!')} ({Math.floor(order.elapsedSeconds / 60)} min)</span>
+        <span data-dynamic className="text-[var(--color-danger)] font-bold ml-2">{t('admin.overdue', 'Overdue!')} ({Math.floor(order.elapsedSeconds / 60)} min)</span>
         )}
       </div>
 

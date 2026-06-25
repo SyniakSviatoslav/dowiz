@@ -1,0 +1,19 @@
+{
+  "id": "owner-branding-setup",
+  "role": "owner",
+  "goals": [
+    "pick a preset, preview, check WCAG, copy embed code"
+  ],
+  "traits": {
+    "patience": "high",
+    "tech_savvy": "high",
+    "careful_or_sloppy": "careful"
+  },
+  "device": "desktop",
+  "viewport": 1280,
+  "locale": "en",
+  "network_profile": "wifi",
+  "constraints": [
+    "cares about brand fidelity + contrast"
+  ]
+}

@@ -12,6 +12,7 @@ export function mapProductRow(r: Record<string, any>): Record<string, any> {
     id: r.id,
     name: r.name,
     price: r.price,
+    prepTimeMinutes: r.prep_time_minutes ?? null,
     description: r.description,
     available: r.is_available,
     categoryId: r.category_id,

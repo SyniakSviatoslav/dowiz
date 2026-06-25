@@ -21,25 +21,27 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
           name: z.string().min(1),
           min_select: z.number().int().nonnegative().default(0),
           max_select: z.number().int().nonnegative().default(1),
-          required: z.boolean().default(false)
+          required: z.boolean().default(false),
+          // MENU-AVAILABILITY (additive) · optional explicit render control.
+          display_type: z.enum(['radio', 'checkbox', 'select', 'quantity']).nullish()
         }).strict()
       }
     },
     async (request: any, reply: any) => {
       const { locationId } = request.params;
-      const { name, min_select, max_select, required } = request.body;
+      const { name, min_select, max_select, required, display_type } = request.body;
       const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(
-          `INSERT INTO modifier_groups (location_id, name, min_select, max_select, required)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO modifier_groups (location_id, name, min_select, max_select, required, display_type)
+           VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING *`,
-          [locationId, name, min_select, max_select, required]
+          [locationId, name, min_select, max_select, required, display_type ?? null]
         );
       });
       const r = res.rows[0];
-      return reply.status(201).send({ id: r.id, name: r.name, minSelect: r.min_select, maxSelect: r.max_select, required: r.required, modifierCount: 0 });
+      return reply.status(201).send({ id: r.id, name: r.name, minSelect: r.min_select, maxSelect: r.max_select, required: r.required, displayType: r.display_type, modifierCount: 0 });
     }
   );
 
@@ -64,7 +66,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
           [locationId]
         );
       });
-      return reply.send({ data: res.rows.map((r: any) => ({ id: r.id, name: r.name, minSelect: r.min_select, maxSelect: r.max_select, required: r.required, modifierCount: r.modifier_count ?? 0 })) });
+      return reply.send({ data: res.rows.map((r: any) => ({ id: r.id, name: r.name, minSelect: r.min_select, maxSelect: r.max_select, required: r.required, displayType: r.display_type ?? null, modifierCount: r.modifier_count ?? 0 })) });
     }
   );
 
@@ -78,7 +80,9 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
           name: z.string().min(1).optional(),
           min_select: z.number().int().nonnegative().optional(),
           max_select: z.number().int().nonnegative().optional(),
-          required: z.boolean().optional()
+          required: z.boolean().optional(),
+          // MENU-AVAILABILITY (additive) · null clears it (back to inference).
+          display_type: z.enum(['radio', 'checkbox', 'select', 'quantity']).nullable().optional()
         }).strict()
       }
     },
@@ -106,7 +110,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
       });
       if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
       const r = res.rows[0];
-      return reply.send({ id: r.id, name: r.name, minSelect: r.min_select, maxSelect: r.max_select, required: r.required, modifierCount: 0 });
+      return reply.send({ id: r.id, name: r.name, minSelect: r.min_select, maxSelect: r.max_select, required: r.required, displayType: r.display_type, modifierCount: 0 });
     }
   );
 

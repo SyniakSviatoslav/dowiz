@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { useI18n } from '../../lib/I18nProvider.js';
 
 function getCSSVar(name: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback;
@@ -51,6 +52,7 @@ export function MapLibreBase({
   const maplibreRef = useRef<any>(null);
   const markerRefs = useRef<any[]>([]);
   const courierMarkerRef = useRef<any>(null);
+  const { t } = useI18n();
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -307,10 +309,12 @@ export function MapLibreBase({
   }
 
   return (
-    <div ref={containerRef} className={`relative ${className}`}>
+    // data-dynamic: live map tiles + courier marker positions vary run-to-run —
+    // masked from the visual-regression net (all maps render through this base).
+    <div ref={containerRef} data-dynamic className={`relative ${className}`}>
       {!loaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[var(--brand-surface)] text-[var(--brand-text-muted)] text-sm z-10">
-          Loading map...
+        <div className="absolute inset-0 flex items-center justify-center bg-[var(--brand-surface)] text-[var(--brand-text-muted)] text-sm z-20">
+          {t('map.loading', 'Loading map…')}
         </div>
       )}
       {children}

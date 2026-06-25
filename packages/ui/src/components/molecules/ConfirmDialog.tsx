@@ -65,7 +65,7 @@ export function ConfirmDialog({
   return createPortal(
     <div className="fixed inset-0 z-modal-backdrop flex items-center justify-center p-4">
       <div
-        className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${
+        className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-[var(--motion-base)] ease-[var(--ease-soft)] ${
           visible ? 'opacity-100' : 'opacity-0'
         }`}
         role="button"
@@ -75,36 +75,37 @@ export function ConfirmDialog({
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}
       />
       <div
-        className={`relative z-modal bg-[var(--brand-surface)] rounded-xl shadow-elevation-4 max-w-sm w-full p-6 transition-all duration-300 ${
-          visible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
+        className={`relative z-modal bg-[var(--brand-surface)] rounded-[var(--brand-radius)] max-w-sm w-full p-6 transform-gpu transition-[transform,opacity] duration-[var(--motion-base)] ease-[var(--ease-out)] motion-reduce:transition-opacity ${
+          visible ? 'scale-100 opacity-100' : 'scale-95 opacity-0 motion-reduce:scale-100'
         }`}
         role="alertdialog"
         aria-modal="true"
         aria-label={title}
+        style={{ boxShadow: 'var(--elev-4)' }}
       >
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] transition-colors"
+          className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
           aria-label={t('common.close', 'Close')}
         >
           &#x2715;
         </button>
         <h3 className="text-lg font-heading font-semibold text-[var(--brand-text)] mb-2 pr-8">{title}</h3>
-        <p className="text-sm text-[var(--brand-text-muted)] mb-6">{message}</p>
+        <p className="text-sm text-[var(--brand-text)] mb-6 leading-relaxed">{message}</p>
         <div className="flex gap-3 justify-end">
           <button
             onClick={onClose}
-            className="px-5 py-2 text-sm font-semibold text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] rounded-full hover:bg-[var(--brand-surface-raised)] transition-colors"
+            className="px-5 py-2 text-sm font-semibold text-[var(--brand-text)] rounded-full border border-[var(--brand-border)] hover:bg-[var(--brand-surface-raised)] transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
           >
             {resolvedCancel}
           </button>
           <button
             onClick={handleConfirm}
             disabled={loading}
-            className={`px-5 py-2 text-sm font-semibold text-white rounded-full transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={`px-5 py-2 text-sm font-semibold text-white rounded-full transition-[background-color,transform,opacity] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)] ${
               variant === 'danger'
-                ? 'hover:opacity-90'
-                : 'bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)]'
+                ? 'hover:opacity-90 focus-visible:ring-[var(--color-danger)]'
+                : 'bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] focus-visible:ring-[var(--brand-primary)]'
             }`}
             style={variant === 'danger' ? { background: 'var(--color-danger)' } : undefined}
           >

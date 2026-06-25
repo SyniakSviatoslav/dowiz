@@ -12,11 +12,20 @@ export default async function ownerPromotionRoutes(fastify: FastifyInstance) {
 
   // Resolve owner's location from DB (not from JWT — JWT may not carry activeLocationId)
   const getLocationId = async (request: any, db: any): Promise<string> => {
-    const jwtId = (request.user as any).activeLocationId;
-    if (jwtId) return jwtId;
     const userId = (request.user as any).userId;
+    const jwtId = (request.user as any).activeLocationId;
+    // P-d (ADR-0004): verify the baked activeLocationId against a LIVE active owner membership —
+    // never trust the JWT alone (a removed/downgraded owner holds a valid ≤24h token).
+    if (jwtId) {
+      const ok = await db.query(
+        `SELECT 1 FROM memberships WHERE user_id = $1 AND location_id = $2 AND role = 'owner' AND status = 'active' LIMIT 1`,
+        [userId, jwtId]
+      );
+      if ((ok.rowCount ?? 0) > 0) return jwtId;
+      throw new Error('No active owner membership for this location');
+    }
     const res = await db.query(
-      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' LIMIT 1`,
+      `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1`,
       [userId]
     );
     if (res.rowCount === 0) throw new Error('No location found for this user');

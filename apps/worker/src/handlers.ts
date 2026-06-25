@@ -54,6 +54,24 @@ export function registerHandlers(queue: QueueProvider, pool: Pool, messageBus: M
         await messageBus.publish(dashboardChannel(locationId), {
           type: 'order.status', data: { orderId, status: 'CANCELLED', statusUpdatedAt: ts },
         });
+
+        // Close the notification gap: tell the owner the order auto-cancelled.
+        // Mirrors the order.created transactional-outbox emit (orders.ts:660). The
+        // order.timeout_cancelled event is fully wired downstream (event-registry,
+        // render, locales) — only this emit was missing. Keyed on the order id so
+        // both this per-order handler and the reconciliation sweep dedupe to one
+        // owner message via the NotificationWorker's in-process set + singletonKey.
+        const dedupKey = `order.timeout_cancelled:${orderId}:${locationId}`;
+        try {
+          await queue.enqueue(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, {
+            event: 'order.timeout_cancelled',
+            entity_id: orderId,
+            location_id: locationId,
+            dedupKey,
+          }, { singletonKey: dedupKey });
+        } catch (e) {
+          console.error(`[Worker] order.timeout_cancelled notify enqueue failed for ${orderId}:`, e);
+        }
       } else {
         console.log(`[Worker] Order ${orderId} already transitioned, timeout no-op`);
       }

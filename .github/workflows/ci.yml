@@ -40,6 +40,9 @@ jobs:
       - name: Verify no secrets in repo
         run: pnpm verify:secrets
 
+      - name: Compliance gate (privacy-invariants)
+        run: pnpm compliance:gate
+
   # From-scratch provisioning smoke: a BRAND-NEW Postgres must migrate -> seed ->
   # boot the API -> serve /health 200 -> serve a published menu. Closes the gap
   # that verify:migrations (ordering/idempotency only) left, which let the
@@ -156,22 +159,26 @@ jobs:
         run: npx playwright test e2e/tests/deploy-validation.spec.ts --project=desktop --reporter=list
         env:
           VITE_BASE_URL: "https://dowiz.fly.dev"
+          DEV_AUTH_SECRET: ${{ secrets.DEV_AUTH_SECRET }}
         timeout-minutes: 5
 
       - name: Post-deploy E2E regression (core lifecycles)
         run: npx playwright test e2e/tests/flow-core-lifecycles.spec.ts --project=desktop --reporter=list
         env:
           VITE_BASE_URL: "https://dowiz.fly.dev"
+          DEV_AUTH_SECRET: ${{ secrets.DEV_AUTH_SECRET }}
         timeout-minutes: 5
 
       - name: Post-deploy E2E Telegram webhook
         run: npx playwright test e2e/tests/telegram-webhook.spec.ts --project=desktop --reporter=list
         env:
           VITE_BASE_URL: "https://dowiz.fly.dev"
+          DEV_AUTH_SECRET: ${{ secrets.DEV_AUTH_SECRET }}
         timeout-minutes: 3
 
       - name: Post-deploy E2E Telegram full-flow
         run: npx playwright test e2e/tests/telegram-full-flow.spec.ts --project=desktop --reporter=list
         env:
           VITE_BASE_URL: "https://dowiz.fly.dev"
+          DEV_AUTH_SECRET: ${{ secrets.DEV_AUTH_SECRET }}
         timeout-minutes: 10

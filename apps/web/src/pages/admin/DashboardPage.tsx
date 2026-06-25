@@ -1,6 +1,7 @@
+import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay } from '@deliveryos/ui';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { OrderCard, EmptyState, CourierLiveMap, HintCard, useI18n, MobilePicker, useIsMobile, AnimatedNumber, LiveDot, WSStatusDot, useToast, useConfirm, useHaptics, useSoundPrefs, ResponsiveDialog, PriceDisplay, ease, duration, SearchInput } from '@deliveryos/ui';
 import type { AdminOrder, CourierOnMap, LngLatLike, PickerOption } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
@@ -30,17 +31,23 @@ export function DashboardPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'highest'>('newest');
   const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
-  const [showHint, setShowHint] = useState(() => localStorage.getItem('dos_dash_hint_dismissed') !== '1');
+  const [showHint, setShowHint] = useState(() => safeStorage.get('dos_dash_hint_dismissed') !== '1');
   const { t } = useI18n();
   const isMobile = useIsMobile();
+  const prefersReducedMotion = useReducedMotion();
   const [clientSlug, setClientSlug] = useState('');
   const [sortPickerOpen, setSortPickerOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [readiness, setReadiness] = useState<{ menu: boolean; phone: boolean; address: boolean; couriers: boolean; branding: boolean; placeOrder: boolean; telegram: boolean }>({ menu: false, phone: false, address: false, couriers: false, branding: false, placeOrder: false, telegram: false });
 
-  const { play: playPing } = useSound('/sounds/ping.mp3');
+  const { start: startPing, stop: stopPing, unlock: unlockSound, armed: soundArmed } = useSound('/sounds/ping.mp3');
   const { trigger: haptic } = useHaptics();
-  const { alertSoundEnabled } = useSoundPrefs();
+  const { alertSoundEnabled, toggleAlertSound } = useSoundPrefs();
+  // A new PENDING order is "unacknowledged" until the owner accepts/rejects it
+  // (any status change off PENDING) or taps the dismiss affordance. While the
+  // set is non-empty we keep the alert alive: looping ping if armed, or — the
+  // honest fallback — a persistent on-screen banner if audio is blocked/muted.
+  const [unackOrders, setUnackOrders] = useState<Set<string>>(new Set());
   const [tenantId, setTenantId] = useState('');
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
   const [messagesByOrder, setMessagesByOrder] = useState<Record<string, any[]>>({});
@@ -53,7 +60,7 @@ export function DashboardPage() {
       setOrders(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setOrders([]);
-      setError('Failed to load orders');
+      setError(t('admin.orders_load_failed', "Couldn't load orders"));
     } finally {
       setLoading(false);
     }
@@ -115,6 +122,16 @@ export function DashboardPage() {
   }, [tenantId, t]);
 
   const isFirstConnect = useRef(true);
+  // P0-3: the realtime bus carries NO customer name / phone / item names (claim-check).
+  // mergeDelta gives an instant non-PII card (status/total/itemCount); a debounced,
+  // authenticated /owner/orders refetch then fills in name + items (RLS-scoped) so the
+  // card and the live search stay complete without any PII on the bus (R11).
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleAuthedRefresh = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => { fetchOrders(); }, 800);
+  }, []);
+
   const { status: connectionStatus } = useWebSocket({
     room: `location:${tenantId}:dashboard`,
     enabled: true,
@@ -123,7 +140,10 @@ export function DashboardPage() {
       const payload = envelope.data || envelope;
       if (envelope.type === 'order.created') {
         setOrders(prev => mergeDelta(prev, payload, true));
-        if (alertSoundEnabled) playPing();
+        scheduleAuthedRefresh(); // pull name/items from the authenticated endpoint
+        // Mark this order unacknowledged; the effect below drives the persistent
+        // ping (or banner fallback). No fire-and-forget .play() here.
+        if (payload?.id) setUnackOrders(prev => new Set(prev).add(payload.id));
         haptic('tap');
       }
       else if (envelope.type === 'order.status') {
@@ -160,6 +180,53 @@ export function DashboardPage() {
       }
     },
   });
+
+  // Drop any order from the unacknowledged set once it is no longer PENDING
+  // (the owner accepted/rejected it elsewhere, or an authed refetch corrected
+  // it). This is the natural acknowledge path beside the explicit dismiss.
+  useEffect(() => {
+    setUnackOrders(prev => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of prev) {
+        const o = orders.find(ord => ord.id === id);
+        if (!o || o.status !== 'PENDING') { next.delete(id); changed = true; }
+      }
+      return changed ? next : prev;
+    });
+  }, [orders]);
+
+  // Persistent audible alert: loop the ping while there is an unacknowledged
+  // PENDING order AND sound is both enabled (pref) and armed (unlocked). When
+  // any of those is false we stop audio — the visible banner below carries the
+  // alert instead, so a missed order is impossible even with no sound.
+  const hasUnack = unackOrders.size > 0;
+  useEffect(() => {
+    if (hasUnack && alertSoundEnabled && soundArmed) {
+      startPing();
+    } else {
+      stopPing();
+    }
+    return () => stopPing();
+  }, [hasUnack, alertSoundEnabled, soundArmed, startPing, stopPing]);
+
+  const acknowledgeOrders = useCallback(() => {
+    setUnackOrders(new Set());
+    stopPing();
+  }, [stopPing]);
+
+  // One-tap "Enable sound": runs the unlock inside this gesture, then ARMs.
+  const handleEnableSound = useCallback(async () => {
+    if (!alertSoundEnabled) toggleAlertSound();
+    await unlockSound();
+  }, [alertSoundEnabled, toggleAlertSound, unlockSound]);
+
+  // Honest alert state for the indicator. ARMED only when sound is on AND the
+  // audio context is genuinely unlocked; otherwise BLOCKED/MUTED — never a
+  // silent false promise.
+  const alertState: 'armed' | 'muted' | 'blocked' =
+    !alertSoundEnabled ? 'muted' : soundArmed ? 'armed' : 'blocked';
 
   const fetchMessages = async (orderId: string) => {
     if (messagesByOrder[orderId]) return;
@@ -222,6 +289,9 @@ export function DashboardPage() {
       }
     } catch (err) {
       console.error('[DashboardPage] update status failed:', err);
+      // Reconcile to server truth (the optimistic flip snaps back) AND tell the owner why —
+      // a silent revert during the rush reads as "did I mis-tap?".
+      showToast(t('admin.order_update_failed', "Couldn't update the order — it's been refreshed. Please try again."), 'error');
       fetchOrders();
     }
   };
@@ -293,18 +363,46 @@ export function DashboardPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4" role="region" aria-live="polite" aria-label={t('admin.live_orders', 'Live orders')}>
+      {/* Persistent new-order banner — the honest fallback. Shown whenever an
+          order is unacknowledged AND audio cannot carry the alert (sound off,
+          or not yet unlocked/blocked). Guarantees a missed order is impossible
+          even with no sound. Tapping it views orders + acknowledges. */}
+      {hasUnack && alertState !== 'armed' && (
+        <button
+          type="button"
+          data-testid="owner-new-order-banner"
+          onClick={() => { setViewMode('live'); setStatusFilter('PENDING'); acknowledgeOrders(); }}
+          className="w-full flex items-center gap-3 p-4 rounded-[var(--brand-radius,12px)] border text-left animate-pulse motion-reduce:animate-none transition-[transform,box-shadow,opacity] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+          style={{ background: 'var(--brand-primary-light)', borderColor: 'var(--brand-primary)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}
+        >
+          <i className="ti ti-bell-ringing text-xl shrink-0" style={{ color: 'var(--brand-primary)' }} />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold">
+              {unackOrders.size > 1
+                ? t('admin.new_orders_count', '{count} new orders').replace('{count}', String(unackOrders.size))
+                : t('admin.new_order_alert', 'New order')}
+            </div>
+            <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>
+              {t('admin.new_order_tap_view', 'Tap to view')}
+            </div>
+          </div>
+          <i className="ti ti-chevron-right text-lg shrink-0" style={{ color: 'var(--brand-primary)' }} />
+        </button>
+      )}
+
       {/* Welcome Hint */}
       {showHint && (
         <HintCard
           title={t('admin.welcome_dashboard', 'Welcome to your Dashboard')}
           description={t('admin.dashboard_hint', 'Here you can manage incoming orders, track couriers, and monitor your store readiness. Use the sidebar to navigate between sections.')}
           icon="ti ti-info-circle"
-          onDismiss={() => { setShowHint(false); localStorage.setItem('dos_dash_hint_dismissed', '1'); }}
+          onDismiss={() => { setShowHint(false); safeStorage.set('dos_dash_hint_dismissed', '1'); }}
         />
       )}
 
-      {/* Quick Stats Row */}
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 stagger-children">
+      {/* Quick Stats Row — single horizontal-scroll strip on mobile (1 row, not 2) so a real order
+          stays near the fold; a 5-col grid on ≥sm. */}
+      <div className="flex sm:grid sm:grid-cols-5 gap-3 stagger-children overflow-x-auto no-scrollbar scroll-fade-x sm:[mask-image:none] -mx-4 px-4 sm:mx-0 sm:px-0">
         {[
           { label: t('order.pending', 'Pending'), value: stats.pending, color: 'var(--status-pending)', isCurrency: false, tooltip: t('tooltip.pending_orders', 'Orders awaiting confirmation') },
           { label: t('order.preparing', 'Preparing'), value: stats.inProgress, color: 'var(--status-preparing)', isCurrency: false, tooltip: t('tooltip.active_orders', 'Orders being prepared') },
@@ -315,16 +413,17 @@ export function DashboardPage() {
           <div
             key={stat.label}
             title={stat.tooltip || undefined}
-            className="text-center p-3 rounded-xl fade-in card-base" style={{ animationDelay: `${i * 40}ms` }}
+            className="text-center p-3 rounded-[var(--brand-radius,12px)] fade-in card-base shrink-0 min-w-[88px] sm:min-w-0 transition-[transform,box-shadow] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0" style={{ animationDelay: `${i * 40}ms` }}
           >
-            <div className="text-2xl font-bold mb-0.5" style={{ color: stat.color }}>
+            {/* A zero count is not an alert — render it neutral; reserve the status colour for >0. */}
+            <div className="text-2xl font-bold mb-0.5" style={{ color: (!stat.isCurrency && stat.value === 0) ? 'var(--brand-text-muted)' : stat.color }}>
               {stat.isCurrency ? (
                 <><AnimatedNumber value={Math.round(stats.revenue / 1000)} />k</>
               ) : (
                 <AnimatedNumber value={stat.value} />
               )}
             </div>
-            <div className="text-[10px] font-medium" style={{ color: 'var(--brand-text-muted)' }}>{stat.label}</div>
+            <div className="text-step-2xs font-medium" style={{ color: 'var(--brand-text-muted)' }}>{stat.label}</div>
           </div>
         ))}
       </div>
@@ -338,17 +437,50 @@ export function DashboardPage() {
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{viewMode === 'live' ? t('admin.live_orders', 'Live Orders') : t('courier.history', 'Order History')}</h2>
                   <div data-testid="ws-status-dot" data-connected={connectionStatus === 'connected' ? 'true' : 'false'}><WSStatusDot status={connectionStatus === 'disabled' ? 'disconnected' : connectionStatus} /></div>
+                  {/* Honest alert-state indicator. ARMED = audio unlocked + sound on
+                      (new orders will ping). Otherwise an actionable "Enable sound"
+                      affordance that performs the unlock inside the gesture. Never
+                      claims an alert it cannot deliver. */}
+                  {alertState === 'armed' ? (
+                    <span
+                      data-testid="owner-alert-status"
+                      data-state="armed"
+                      title={t('admin.alert_armed', 'Sound alerts on')}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-step-2xs font-medium border"
+                      style={{ background: 'var(--brand-primary-light)', borderColor: 'var(--brand-primary)', color: 'var(--brand-primary)' }}
+                    >
+                      <i className="ti ti-bell-ringing text-step-2xs" />
+                      {t('admin.alert_armed_short', 'Alerts on')}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      data-testid="owner-alert-enable"
+                      data-state={alertState}
+                      onClick={handleEnableSound}
+                      title={t('admin.alert_enable_hint', 'New-order sound is off — tap to enable')}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-step-2xs font-medium border transition-opacity hover:opacity-90"
+                      style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)', minHeight: 'var(--tap-min-sm, 1.5rem)' }}
+                    >
+                      <i className="ti ti-bell-off text-step-2xs" />
+                      {t('admin.alert_enable', 'Enable sound')}
+                    </button>
+                  )}
                 </div>
-                <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>{filteredOrders.length}</p>
+                <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>
+                  {filteredOrders.length === 1
+                    ? t('admin.order_count_one', '1 order')
+                    : t('admin.order_count_other', '{count} orders').replace('{count}', String(filteredOrders.length))}
+                </p>
               </div>
               <div className="flex bg-[var(--brand-surface)] border rounded-lg overflow-hidden p-0.5 shrink-0" role="tablist" aria-label={t('admin.view_mode', 'View mode')} style={{ borderColor: 'var(--brand-border)' }}>
                 <motion.button role="tab" whileTap={{ scale: 0.97 }} aria-selected={viewMode === 'live'}
                   onClick={() => { setViewMode('live'); setStatusFilter('all'); }}
-                  className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors text-center ${viewMode === 'live' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}
+                  className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${viewMode === 'live' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)] border border-transparent'}`}
                 >{t('admin.live', 'Live')}</motion.button>
                 <motion.button role="tab" whileTap={{ scale: 0.97 }} aria-selected={viewMode === 'history'}
                   onClick={() => { setViewMode('history'); setStatusFilter('all'); }}
-                  className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors text-center ${viewMode === 'history' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}
+                  className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${viewMode === 'history' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)] border border-transparent'}`}
                 >{t('courier.history', 'History')}</motion.button>
               </div>
               {clientSlug && (
@@ -361,7 +493,7 @@ export function DashboardPage() {
                       setCopiedLink(true);
                       setTimeout(() => setCopiedLink(false), 2000);
                     }}
-                    className="text-[var(--brand-primary)] hover:underline font-medium shrink-0"
+                    className="text-[var(--brand-primary)] [@media(hover:hover)]:hover:underline font-medium shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
                   >
                     {copiedLink ? t('common.copied', 'Copied!') : t('common.copy', 'Copy')}
                   </button>
@@ -370,18 +502,14 @@ export function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="relative flex-1 sm:flex-none">
-                <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--brand-text-muted)' }} />
-                <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder={t('common.search', 'Search...')}
-                  aria-label="Search orders by name or ID"
-                  className="pl-9 pr-4 py-2 rounded-lg border text-sm outline-none transition-all duration-200 focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary-light)] w-full sm:w-48"
-                  style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
-                />
-              </div>
-              <motion.button onClick={() => exportCSV(filteredOrders, 'orders.csv')} whileTap={{ scale: 0.97 }} title={t('tooltip.export_csv', 'Export as CSV')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97] shrink-0" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
+              <SearchInput
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={t('common.search', 'Search...')}
+                aria-label="Search orders by name or ID"
+                containerClassName="flex-1 sm:flex-none sm:w-48"
+              />
+              <motion.button onClick={() => exportCSV(filteredOrders, 'orders.csv')} whileTap={{ scale: 0.97 }} title={t('tooltip.export_csv', 'Export as CSV')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-[transform,box-shadow,background-color] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:bg-[var(--brand-surface)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 shrink-0" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}>
                 <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
               </motion.button>
             </div>
@@ -389,7 +517,7 @@ export function DashboardPage() {
 
           {/* Filters row: statuses + sort — stacked on mobile, side-by-side on desktop */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-            <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory flex-1 w-full sm:w-auto" role="group" aria-label={t('admin.status_filter', 'Order status filter')}>
+            <div className="flex overflow-x-auto hide-scrollbar scroll-fade-x gap-1 pb-1 snap-x snap-mandatory flex-1 w-full sm:w-auto" role="group" aria-label={t('admin.status_filter', 'Order status filter')}>
               {STATUSES.map(s => (
                   <motion.button
                   key={s}
@@ -397,7 +525,7 @@ export function DashboardPage() {
                   whileTap={{ scale: 0.97 }}
                   aria-pressed={statusFilter === s}
                   title={t('tooltip.filter_status', 'Filter by status')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 capitalize snap-start shrink-0 whitespace-nowrap ${statusFilter === s ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] hover:text-[var(--brand-text)] border border-transparent'}`}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-[transform,box-shadow,background-color,color] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] capitalize snap-start shrink-0 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${statusFilter === s ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)] border border-transparent'}`}
                   style={{ minHeight: 'var(--tap-min)' }}
                 >
                   {s === 'all' ? t('common.all', 'All') : t(`order.${s.toLowerCase()}`, s.replace('_', ' ').toLowerCase())}
@@ -408,7 +536,10 @@ export function DashboardPage() {
               <motion.button
                 onClick={() => setSortPickerOpen(true)}
                 whileTap={{ scale: 0.97 }}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium shrink-0"
+                aria-haspopup="listbox"
+                aria-expanded={sortPickerOpen}
+                title={t('admin.sort_orders', 'Sort orders')}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium shrink-0 transition-[transform,box-shadow,background-color] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:bg-[var(--brand-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
                 style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}
               >
                 <i className="ti ti-arrows-sort text-sm" />
@@ -430,7 +561,7 @@ export function DashboardPage() {
               ) : (
                 sortPickerOpen && (
                   <>
-                    <div className="fixed inset-0 z-40" role="button" tabIndex={-1} aria-label="Close sort picker" onClick={() => setSortPickerOpen(false)} onKeyDown={e => e.key === 'Escape' && setSortPickerOpen(false)} />
+                    <div className="fixed inset-0 z-40" role="button" tabIndex={-1} aria-label={t('common.close_sort', 'Close sort picker')} onClick={() => setSortPickerOpen(false)} onKeyDown={e => e.key === 'Escape' && setSortPickerOpen(false)} />
                     <div className="absolute right-0 bottom-full mb-2 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[150px] max-h-[60vh] overflow-y-auto scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
                       {[
                         { value: 'newest', label: t('admin.newest_first', 'Newest first'), icon: 'ti ti-sort-descending' },
@@ -455,44 +586,101 @@ export function DashboardPage() {
 
       {/* Orders grid */}
       {error ? (
-        <EmptyState title={t('common.error', 'Error')} description={error} />
+        <EmptyState
+          title={t('common.error', 'Error')}
+          description={error}
+          icon={<i className="ti ti-alert-triangle text-4xl" style={{ color: 'var(--color-warning, #D97706)' }} />}
+          action={
+            <button
+              type="button"
+              onClick={() => { setError(''); fetchOrders(); }}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-[var(--brand-radius-btn,9999px)] border transition-[transform,box-shadow,background-color] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+              style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}
+            >
+              <i className="ti ti-refresh" /> {t('common.retry', 'Try again')}
+            </button>
+          }
+        />
       ) : loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" aria-busy="true" aria-label={t('admin.loading_orders', 'Loading orders')}>
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-36 rounded-xl shimmer" />
+            <div key={i} className="rounded-[var(--brand-radius,12px)] p-4 card-base flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="h-4 w-24 rounded-md shimmer" />
+                <div className="h-5 w-16 rounded-full shimmer" />
+              </div>
+              <div className="h-3 w-3/4 rounded-md shimmer" />
+              <div className="h-3 w-1/2 rounded-md shimmer" />
+              <div className="mt-1 flex items-center justify-between gap-3">
+                <div className="h-4 w-16 rounded-md shimmer" />
+                <div className="h-8 w-24 rounded-[var(--brand-radius-btn,9999px)] shimmer" />
+              </div>
+            </div>
           ))}
         </div>
       ) : filteredOrders.length === 0 ? (
         <EmptyState
-          title={t('admin.no_orders_yet', 'No orders yet')}
-          description={t('admin.no_orders_hint', 'Share your menu link with customers to start receiving orders.')}
+          title={
+            statusFilter !== 'all' || search
+              ? t('admin.no_matching_orders', 'No matching orders')
+              : viewMode === 'history'
+                ? t('admin.no_past_orders', 'No past orders')
+                : t('admin.no_active_orders', 'No active orders')
+          }
+          description={
+            statusFilter !== 'all' || search
+              ? t('admin.no_matching_orders_hint', 'Try clearing the filter or search to see more.')
+              : viewMode === 'history'
+                ? t('admin.no_past_orders_hint', 'Completed and cancelled orders will appear here.')
+                : t('admin.no_orders_hint', 'Share your menu link with customers to start receiving orders.')
+          }
           icon={<i className="ti ti-inbox text-4xl" style={{ color: 'var(--brand-text-muted)', opacity: 0.4 }} />}
+          action={
+            (statusFilter !== 'all' || search) ? (
+              <button
+                type="button"
+                onClick={() => { setStatusFilter('all'); setSearch(''); }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-[var(--brand-radius-btn,9999px)] border transition-[transform,box-shadow,background-color] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}
+              >
+                <i className="ti ti-filter-off" /> {t('admin.clear_filters', 'Clear filters')}
+              </button>
+            ) : undefined
+          }
         />
       ) : (
         <motion.div
           className="grid grid-cols-1 md:grid-cols-2 gap-4"
-          variants={{ visible: { transition: { staggerChildren: 0.025 } } }}
+          variants={{ visible: { transition: { staggerChildren: prefersReducedMotion ? 0 : 0.025 } } }}
           initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: '-40px' }}
-          aria-live="polite" aria-atomic="true"
+          animate="visible"
+          aria-live="polite" aria-atomic="false"
         >
-          {filteredOrders.map(order => (
-            <motion.div
-              key={order.id}
-              variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } } }}
-              className="order-card-container" data-testid={`order-card-${order.id}`} data-status={order.status}>
-              <OrderCard
-                order={order}
-                onUpdateStatus={handleUpdateStatus}
-                showMessages={expandedMessages.has(order.id)}
-                onToggleMessages={handleToggleMessages}
-                messages={messagesByOrder[order.id]}
-                onSendMessage={handleSendMessage}
-                onViewDetail={(id) => setDetailOrder(orders.find(o => o.id === id) || null)}
-              />
-            </motion.div>
-          ))}
+          <AnimatePresence initial={false} mode="popLayout">
+            {filteredOrders.map(order => (
+              <motion.div
+                key={order.id}
+                layout={!prefersReducedMotion}
+                variants={{
+                  hidden: { opacity: 0, y: prefersReducedMotion ? 0 : 10 },
+                  visible: { opacity: 1, y: 0, transition: { duration: prefersReducedMotion ? 0 : duration.base, ease: ease.out } },
+                }}
+                initial="hidden"
+                animate="visible"
+                exit={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.97, transition: { duration: prefersReducedMotion ? 0 : duration.fast } }}
+                className="order-card-container" data-testid={`order-card-${order.id}`} data-status={order.status}>
+                <OrderCard
+                  order={order}
+                  onUpdateStatus={handleUpdateStatus}
+                  showMessages={expandedMessages.has(order.id)}
+                  onToggleMessages={handleToggleMessages}
+                  messages={messagesByOrder[order.id]}
+                  onSendMessage={handleSendMessage}
+                  onViewDetail={(id) => setDetailOrder(orders.find(o => o.id === id) || null)}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </motion.div>
       )}
 
@@ -521,8 +709,8 @@ export function DashboardPage() {
             </div>
             <a
               href="/admin/settings"
-              className="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-full text-white transition-all hover:opacity-90"
-              style={{ background: 'var(--brand-primary)' }}
+              className="shrink-0 inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-[var(--brand-radius-btn,9999px)] text-white transition-[transform,box-shadow,opacity] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+              style={{ background: 'var(--brand-primary)', minHeight: 'var(--tap-min-sm, 2rem)' }}
             >
               <i className="ti ti-brand-telegram mr-1" />
               {t('admin.tg_connect', 'Connect')}
@@ -553,7 +741,7 @@ export function DashboardPage() {
           {readinessItems.map(item => (
             <div
               key={item.label}
-              className="flex items-center gap-2.5 p-2.5 rounded-lg transition-all duration-200"
+              className="flex items-center gap-2.5 p-2.5 rounded-lg transition-colors duration-[var(--motion-base,240ms)] ease-[var(--ease-soft,ease)]"
               style={{ background: item.done ? 'color-mix(in srgb, var(--color-success) 5%, transparent)' : 'var(--brand-surface-raised)' }}
             >
               <i

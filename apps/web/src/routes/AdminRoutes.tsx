@@ -1,7 +1,8 @@
+import { safeStorage } from '../lib/safeStorage.js';
 import React, { useState, useEffect, Suspense } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { apiClient } from '../lib/index.js';
-import { ToastProvider, LanguageSwitcher, useI18n, BottomTabBar, ResponsiveDialog, CurrencySwitcher } from '@deliveryos/ui';
+import { ToastProvider, LanguageSwitcher, useI18n, BottomTabBar, ResponsiveDialog, CurrencySwitcher, SunlightToggle, paperSkinAttr } from '@deliveryos/ui';
 import type { TabItem } from '@deliveryos/ui';
 import { DashboardPage } from '../pages/admin/DashboardPage.js';
 import { MenuManagerPage } from '../pages/admin/MenuManagerPage.js';
@@ -59,7 +60,7 @@ function AdminLayout() {
 
   // Auth guard: unauthenticated users must not reach the owner dashboard shell.
   // Dev mode (?dev=true) uses mocked APIs with no real token, so it is exempt.
-  const isAuthed = typeof window !== 'undefined' && !!localStorage.getItem('dos_access_token');
+  const isAuthed = typeof window !== 'undefined' && !!safeStorage.get('dos_access_token');
   useEffect(() => {
     if (!isAuthed && !isDev) navigate('/login', { replace: true });
   }, [isAuthed, isDev, navigate]);
@@ -101,11 +102,11 @@ function AdminLayout() {
           title={collapsed ? t(item.key) : undefined}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--brand-radius-sm)] text-sm transition-all duration-200 ${
             isActive(item.href)
-              ? 'bg-[var(--brand-primary)] text-white font-medium shadow-sm'
+              ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] font-semibold shadow-sm'
               : 'text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)] hover:text-[var(--brand-text)]'
           }`}
         >
-          <i className={`${item.icon} text-[18px] shrink-0 ${collapsed ? 'mx-auto' : ''}`} />
+          <i className={`${item.icon} text-step-lg shrink-0 ${collapsed ? 'mx-auto' : ''}`} />
           {!collapsed && <span className="truncate">{t(item.key)}</span>}
         </button>
       ))}
@@ -117,7 +118,7 @@ function AdminLayout() {
   if (!isAuthed && !isDev) return null;
 
   return (
-    <div className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] overflow-hidden lg:flex-row">
+    <div {...paperSkinAttr()} className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] overflow-hidden lg:flex-row">
       {/* Desktop sidebar */}
       <aside className={`hidden lg:flex flex-col shrink-0 bg-[var(--brand-surface)] border-r border-[var(--brand-border)] sidebar-transition ${collapsed ? 'w-[56px]' : 'w-56'}`}>
         <div className={`flex items-center border-b border-[var(--brand-border)] ${collapsed ? 'justify-center p-3' : 'justify-between p-4'}`}>
@@ -140,12 +141,12 @@ function AdminLayout() {
           {!collapsed && <div className="px-1 space-y-1"><CurrencySwitcher /><LanguageSwitcher variant="full" /></div>}
           <button
             onClick={() => {
-              localStorage.removeItem('dos_access_token');
+              safeStorage.remove('dos_access_token');
               navigate('/login');
             }}
             className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm text-[var(--brand-text-muted)] hover:bg-[var(--brand-surface-raised)] hover:text-[var(--brand-text)] transition-colors ${collapsed ? 'justify-center' : ''}`}
           >
-            <i className="ti ti-logout text-[18px]" />
+            <i className="ti ti-logout text-step-lg" />
             {!collapsed && t('auth.logout', 'Exit')}
           </button>
         </div>
@@ -158,6 +159,7 @@ function AdminLayout() {
           <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>Dowiz</h2>
         </div>
         <div className="flex items-center gap-1">
+          <SunlightToggle />
           <CurrencySwitcher />
           <LanguageSwitcher variant="full" />
         </div>
@@ -227,10 +229,16 @@ function AdminHome() {
     (async () => {
       try {
         const s = await apiClient<any>('/owner/settings');
-        if (!s?.id) { if (alive) setDest('/admin/onboarding'); return; } // brand-new owner → create a storefront
+        // Only treat as a brand-new owner on a DEFINITIVE ok-but-empty response: a real
+        // settings object that genuinely has no location/id. An error-shaped payload
+        // (e.g. `{ error: ... }`) or anything non-object is a transient failure — fall
+        // through to the dashboard rather than kicking an existing owner into onboarding.
+        const isSettingsShape = s && typeof s === 'object' && !('error' in s);
+        if (isSettingsShape && !s.id) { if (alive) setDest('/admin/onboarding'); return; } // brand-new owner → create a storefront
+        if (!s?.id) { if (alive) setDest(null); return; } // suspicious payload, no id → dashboard, never onboarding
         const st = await apiClient<any>(`/owner/activation/${s.id}/status`);
         if (alive) setDest(st?.published ? null : '/admin/activation'); // draft → activation tool
-      } catch { if (alive) setDest(null); }
+      } catch { if (alive) setDest(null); } // network/HTTP error → dashboard, never onboarding
     })();
     return () => { alive = false; };
   }, []);
@@ -242,6 +250,7 @@ export function AdminRoutes() {
   return (
     <ToastProvider>
       <Routes>
+        <Route path="login" element={<Navigate to="/login" replace />} />
         <Route path="/" element={<AdminLayout />}>
           <Route index element={<AdminHome />} />
           <Route path="orders" element={<DashboardPage />} />
@@ -259,6 +268,7 @@ export function AdminRoutes() {
             <Route path="_flow-test" element={<Suspense fallback={null}><FlowTestPage /></Suspense>} />
           )}
         </Route>
+        <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     </ToastProvider>
   );

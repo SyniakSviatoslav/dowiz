@@ -3,6 +3,10 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import { BUS_CHANNELS } from '../../lib/registry.js';
+import { loadEnv } from '@deliveryos/config';
+
+// OTP globally disabled until a real SMS gateway is wired (see packages/config).
+const OTP_ENABLED = loadEnv().OTP_ENABLED === 'true';
 
 const sendOtpSchema = z.object({
   phone: z.string().regex(/^\+[1-9]\d{6,14}$/, 'Must be E.164 format'),
@@ -42,8 +46,8 @@ export default (async function customerOtpRoutes(fastify: any, opts: any) {
     if (locRes.rowCount === 0) return reply.status(404).send({ error: 'Location not found' });
     const location = locRes.rows[0];
 
-    // 2. Check OTP toggle
-    if (!location.require_phone_otp) {
+    // 2. Check OTP toggle (globally off until SMS gateway exists)
+    if (!OTP_ENABLED || !location.require_phone_otp) {
       return reply.status(400).send({ error: 'OTP_NOT_REQUIRED', message: 'Phone verification is not required for this location' });
     }
 
@@ -119,6 +123,11 @@ export default (async function customerOtpRoutes(fastify: any, opts: any) {
     );
     if (locRes.rowCount === 0) return reply.status(404).send({ error: 'Location not found' });
     const location = locRes.rows[0];
+
+    // 1b. OTP globally disabled → nothing to verify
+    if (!OTP_ENABLED) {
+      return reply.status(400).send({ error: 'OTP_NOT_REQUIRED', message: 'Phone verification is not required for this location' });
+    }
 
     // 2. Find OTP session
     const { hashPhone, verifyOtpCode, generateOpaqueToken, hashOrderIntent } = await import('../../lib/otp.js');
