@@ -131,7 +131,7 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
         {order.signals?.otpVerified ? (
           <span className="flex items-center gap-1 bg-[var(--status-delivered-light)] text-[var(--status-delivered)] px-2 py-1 rounded-lg">
             <i className="ti ti-shield-check" style={{ fontSize: '0.7rem' }} />
-            OTP
+            {t('admin.otp', 'OTP')}
           </span>
         ) : (
           <span className="flex items-center gap-1 bg-[var(--status-pending-light)] text-[var(--status-pending)] px-2 py-1 rounded-lg">
@@ -159,7 +159,9 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
             {order.deliveryAddress && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.to', 'To:')}</span> {order.deliveryAddress}</div>}
           </>
         )}
-        <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.items', 'Items:')}</span> {order.items?.length || order.itemCount || 0} {t('admin.items_lower', 'items')} (<PriceDisplay amount={order.total} />)</div>
+        {(() => { const n = order.items?.length || order.itemCount || 0; return (
+        <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.items', 'Items:')}</span> {n} {n === 1 ? t('admin.item_lower', 'item') : t('admin.items_lower', 'items')} (<PriceDisplay amount={order.total} />)</div>
+        ); })()}
         {order.items && order.items.length > 0 && (
           <div className="ml-16 text-xs space-y-0.5" style={{ color: 'var(--brand-text-muted)' }}>
             {order.items.map((item: any, i: number) => (

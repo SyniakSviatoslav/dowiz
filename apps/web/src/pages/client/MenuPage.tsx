@@ -1169,7 +1169,7 @@ export function MenuPage() {
                               {mod.name}
                                   {mod.price_delta > 0 && (
                                 <span className="ml-1 text-[11px]" style={{ color: isSelected ? 'var(--brand-primary)' : 'var(--brand-text-muted)' }}>
-                                  +<PriceDisplay amount={mod.price_delta} currency="ALL" />
+                                  +&nbsp;<PriceDisplay amount={mod.price_delta} />
                                 </span>
                               )}
                             </motion.button>

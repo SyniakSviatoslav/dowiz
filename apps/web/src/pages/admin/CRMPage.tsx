@@ -312,7 +312,7 @@ export function CRMPage() {
                     <div className="text-sm truncate tabular-nums" style={{ color: 'var(--brand-text-muted)' }}>{revealed[c.id] || c.phone}</div>
                     <div className="mt-2 flex items-center gap-3 text-xs flex-wrap" style={{ color: 'var(--brand-text-muted)' }}>
                       <span className="inline-flex items-center gap-1 tabular-nums">
-                        <i className="ti ti-shopping-bag" /> {c.orders} {t('admin.orders_lower', 'orders')}
+                        <i className="ti ti-shopping-bag" /> {c.orders} {c.orders === 1 ? t('admin.order_lower', 'order') : t('admin.orders_lower', 'orders')}
                       </span>
                       <span className="inline-flex items-center gap-1 tabular-nums" style={{ color: 'var(--brand-text)' }}>
                         <PriceDisplay amount={c.ltv} />

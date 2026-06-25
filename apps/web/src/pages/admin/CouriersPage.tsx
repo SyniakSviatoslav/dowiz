@@ -215,7 +215,11 @@ export function CouriersPage() {
     });
   }, [filtered, courierPositions, mapCenter, t]);
 
-  const onlineCount = couriers.filter((c) => c.status !== 'offline').length;
+  // The badge is labelled "online", so count only genuinely-online couriers — not 'busy'
+  // (mid-delivery) ones. Counting `!== 'offline'` inflated the figure and read as a false
+  // "fleet is live" metric. (Separate flag: line ~213 maps unknown/pending status → 'online',
+  // which is why phone-less seed couriers show online — that's a data/mapping fix, raised apart.)
+  const onlineCount = couriers.filter((c) => c.status === 'online').length;
 
   return (
     <div className="p-4 space-y-6 max-w-4xl mx-auto">
