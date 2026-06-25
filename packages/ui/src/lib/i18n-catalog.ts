@@ -3807,4 +3807,8 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Filtro sipas llojit',
     uk: 'Фільтрувати за типом',
   },
+  'admin.active_lower': { en: 'active', sq: 'aktivë', uk: 'активні' },
+  'admin.courier_status_active': { en: 'Active', sq: 'Aktiv', uk: 'Активний' },
+  'admin.courier_status_suspended': { en: 'Suspended', sq: 'Pezulluar', uk: 'Призупинено' },
+  'admin.courier_status_inactive': { en: 'Inactive', sq: 'Joaktiv', uk: 'Неактивний' },
 };
