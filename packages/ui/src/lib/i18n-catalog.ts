@@ -3802,4 +3802,9 @@ export const catalog: Record<string, CatalogEntry> = {
   },
   'admin.item_lower': { en: 'item', sq: 'artikull', uk: 'товар' },
   'admin.order_lower': { en: 'order', sq: 'porosi', uk: 'замовлення' },
+  'admin.filter_by_kind': {
+    en: 'Filter by kind',
+    sq: 'Filtro sipas llojit',
+    uk: 'Фільтрувати за типом',
+  },
 };

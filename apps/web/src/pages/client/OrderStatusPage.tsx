@@ -2,7 +2,7 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay, ease, duration } from '@deliveryos/ui';
+import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay, ease, duration, Textarea } from '@deliveryos/ui';
 import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { messengerLink } from '../../lib/messenger.js';
@@ -738,9 +738,8 @@ export function OrderStatusPage() {
                     </button>
                   ))}
                 </div>
-                <textarea value={ratingComment} onChange={e => setRatingComment(e.target.value)} maxLength={1000} rows={2}
-                  placeholder={t('client.feedback_placeholder', 'Add a comment (optional)')}
-                  className="w-full text-sm rounded-[var(--brand-radius)] p-2 bg-[var(--brand-surface)] border border-[var(--brand-border)] text-[var(--brand-text)] transition-shadow duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1" />
+                <Textarea value={ratingComment} onChange={e => setRatingComment(e.target.value)} maxLength={1000} rows={2}
+                  placeholder={t('client.feedback_placeholder', 'Add a comment (optional)')} />
               </div>
             )}
             {/* Google review invite — shown to everyone (anti-gating), no incentive, no pre-fill. */}

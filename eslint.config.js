@@ -76,6 +76,14 @@ export default tseslint.config(
     },
   },
   {
+    // React app must use the shared <Select>/<Textarea>, not native form controls. Error-level here
+    // only — the packages/ui atoms wrap the native elements, and apps/api widgets are out of scope.
+    files: ['apps/web/src/**/*.tsx'],
+    rules: {
+      'local/no-raw-form-control': 'error',
+    },
+  },
+  {
     ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'src/**', '.opencode/**', '**/build-client.js', '**/churn-report.cjs', '.agents/skills/**', '.claude/skills/**', 'apps/api/public/assets/**', 'apps/api/public/dist/**'],
   },
   {

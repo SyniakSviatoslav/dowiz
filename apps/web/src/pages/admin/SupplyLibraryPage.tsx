@@ -1,6 +1,6 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import { useState, useEffect, useMemo } from 'react';
-import { Button, EmptyState, SkeletonBase, HintCard, useI18n, useConfirm, MobilePicker, useIsMobile } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, HintCard, useI18n, useConfirm, MobilePicker, useIsMobile, Select, SegmentedControl } from '@deliveryos/ui';
 import { EU_ALLERGENS } from '@deliveryos/shared-types';
 
 type SupplyKind = 'food_ingredient' | 'condiment' | 'packaging' | 'utensil';
@@ -158,9 +158,9 @@ const SupplyForm = ({
         ))}
         <div className="w-full sm:w-auto sm:ml-2">
           <label className="text-step-2xs block mb-0.5" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.unit', 'Unit')}</label>
-          <select value={baseUnit} onChange={e => setBaseUnit(e.target.value)} aria-label={t('admin.unit', 'Unit')} className="h-8 px-2 rounded-md border text-step-2xs outline-none focus:border-[var(--brand-primary)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-surface)] transition-[border-color,box-shadow] duration-150" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+          <Select value={baseUnit} onChange={e => setBaseUnit(e.target.value)} aria-label={t('admin.unit', 'Unit')}>
             <option value="g">g</option><option value="ml">ml</option><option value="unit">unit</option>
-          </select>
+          </Select>
         </div>
       </div>
       {isFood && (
@@ -349,16 +349,14 @@ export function SupplyLibraryPage() {
             </>
           )}
         </div>
-        {/* Horizontal-scroll chip strip with a right-edge fade cue so the last chip
-            isn't clipped without affordance (matches the storefront/menu category nav). */}
-        <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory flex-1" style={{ background: 'var(--brand-bg)', WebkitMaskImage: 'linear-gradient(to right, #000 92%, transparent)', maskImage: 'linear-gradient(to right, #000 92%, transparent)' }}>
-          {KINDS.map(k => (
-            <button key={k.key} onClick={() => setKindFilter(k.key)} aria-pressed={kindFilter === k.key}
-              className={`flex items-center gap-1 px-3 py-1.5 text-step-2xs font-medium rounded-md transition-[background-color,color,box-shadow,transform] duration-150 snap-start shrink-0 whitespace-nowrap outline-none active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)] ${kindFilter === k.key ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] shadow-sm' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)]'}`}>
-              <i className={kindIcons[k.key]} style={{ fontSize: '0.8rem' }} />{k.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          className="flex-1"
+          size="sm"
+          aria-label={t('admin.filter_by_kind', 'Filter by kind')}
+          value={kindFilter}
+          onChange={setKindFilter}
+          options={KINDS.map(k => ({ value: k.key, label: k.label, icon: kindIcons[k.key] }))}
+        />
       </div>
 
       {loading ? (
