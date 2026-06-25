@@ -41,6 +41,10 @@ test('capture all states', async ({ page, request }) => {
 
   const shot = async (name: string) => {
     await page.waitForTimeout(1400);
+    // Wait for the (CDN) Tabler icon webfont to actually paint — otherwise icons screenshot blank
+    // and read as "broken/empty" when they render fine for real users. See findings A5.
+    await page.evaluate(() => (document as any).fonts?.ready).catch(() => {});
+    await page.waitForTimeout(300);
     await page.screenshot({ path: `${DIR}/${name}.png`, fullPage: true }).catch(() => {});
     captured.push(name);
   };
