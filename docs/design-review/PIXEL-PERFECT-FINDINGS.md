@@ -44,7 +44,7 @@ capture, or visual estimates that compute fine. **Verified real** issues are few
 | Two elevation systems (legacy `--elevation-*`) | ✅ **Real — FIXED** | 32 usages; aliased to `--elev-*`. |
 | Icons = unpinned third-party CDN, no fallback | ✅ **Real — partial fix** | `@latest` pinned to `@3.31.0`; self-host pending (needs install). |
 | Type scale bypassed by arbitrary `text-[Npx]` | ✅ **Real — pending** | grep-confirmed; needs a visually-validated migration (layout-break risk). |
-| Font drift: DESIGN.md (DM) vs tokens.css (Inter) | ✅ **Real — pending** | `tokens.css:54-55`. Reconcile contract ↔ code. |
+| Font drift: DESIGN.md (DM) vs tokens.css (Inter) | ✅ **Real — FIXED** | Coherent as-shipped (Inter base + serif via preset); DESIGN.md §2/§8 reconciled. |
 | Button hierarchy fragmentation | 🔶 **Likely real — re-confirm** | Estimate confounded by missing icons; re-judge on an icon-rendering capture before consolidating. |
 
 **Takeaway:** the UI is in materially better shape than the raw screenshot pass implied. The genuine
@@ -92,12 +92,12 @@ drift / unreviewed updates). **Partial fix shipped:** all `@latest` refs pinned 
 SPA. **Proper fix (needs a network install, do in CI):** `pnpm add @tabler/icons-webfont@3.31.0`, import
 the CSS in the app entry, drop the CDN `<link>`s → self-hosted, offline-safe, single pinned version.
 
-### A4 — Font drift: spec vs reality · **Med**
-`tokens.css` sets `--brand-font-heading` AND `--brand-font-body` to **Inter**, but `DESIGN.md`
-(the brand contract) specifies **DM Serif Display** headings / **DM Sans** body. The product ships
-Inter everywhere; headings rely on size/weight alone, losing the intended editorial warmth on the
-customer storefront. Decide: update DESIGN.md to match reality, or restore the DM display face on
-client headings. Either way, contract and code must agree.
+### A4 — Font drift: spec vs reality · ✅ **RESOLVED**
+The "drift" was only in the contract: the system is coherent — `:root` ships **Inter** (admin/courier/
+base, a deliberate dense-UI choice) and **client/branded surfaces apply a serif display heading via the
+active theme preset** (DM Serif Display / Cormorant / Playfair / Fraunces), which is why the storefront
+headings render serif. DESIGN.md §2 + §8 updated to describe this as-shipped model. No code change
+needed (changing the live admin font app-wide would be risky and worse).
 
 ---
 
