@@ -125,13 +125,13 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             {allergens.slice(0, 3).map(a => {
               const s = getAllergenStyle(a);
               return (
-                <span key={a} className="text-[7px] font-semibold px-1 py-0.5 rounded-sm leading-tight" style={{ background: s.bg, color: s.text }}>
+                <span key={a} className="text-step-2xs font-semibold px-1 py-0.5 rounded-sm leading-tight" style={{ background: s.bg, color: s.text }}>
                   {t(`allergen.${a.toLowerCase()}`, a)}
                 </span>
               );
             })}
             {allergens.length > 3 && (
-              <span className="text-[7px] font-semibold px-1 py-0.5 rounded-sm" style={{ background: 'color-mix(in srgb, var(--brand-surface) 84%, #000)', color: 'var(--brand-text)' }}>
+              <span className="text-step-2xs font-semibold px-1 py-0.5 rounded-sm" style={{ background: 'color-mix(in srgb, var(--brand-surface) 84%, #000)', color: 'var(--brand-text)' }}>
                 +{allergens.length - 3}
               </span>
             )}
@@ -143,7 +143,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             and visual noise. Allergen scent now appears only when real data exists. */}
         {hasNutrition && !isChefPick && (
           <div className="absolute top-1.5 right-1.5 z-10">
-              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-1" style={{ background: 'rgba(0,0,0,0.6)', color: 'var(--color-on-primary)' }}>
+              <span className="text-step-2xs font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-1" style={{ background: 'rgba(0,0,0,0.6)', color: 'var(--color-on-primary)' }}>
               <i className="ti ti-flame" style={{ fontSize: '0.6rem' }} />
               {product.kcal}
             </span>
@@ -152,7 +152,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
         {isChefPick && (
           <div className="absolute top-1.5 right-1.5 z-10">
             <motion.span
-              className="text-[8px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
+              className="text-step-2xs font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
               style={{ background: 'var(--brand-primary)', color: 'color-mix(in srgb, var(--brand-bg) 88%, #000)', boxShadow: '0 2px 8px color-mix(in srgb, var(--brand-primary) 45%, transparent)' }}
               initial={{ scale: 0.85, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -197,11 +197,11 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
         {hasIngredients && (
           <div className="flex gap-0.5 flex-wrap">
             {ingredients.slice(0, 4).map((ing, i) => (
-              <span key={i} className="px-1 py-0 rounded text-[9px] leading-tight" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
+              <span key={i} className="px-1 py-0 rounded text-step-2xs leading-tight" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
                 {ing}
               </span>
             ))}
-            {ingredients.length > 4 && <span className="text-[9px]" style={{ color: 'var(--brand-text-muted)' }}>+{ingredients.length - 4}</span>}
+            {ingredients.length > 4 && <span className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>+{ingredients.length - 4}</span>}
           </div>
         )}
 
@@ -220,7 +220,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
               </span>
             )}
             {hasNutrition && (
-              <span className="text-[8px]" style={{ color: 'var(--brand-text-muted)' }}>
+              <span className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>
                 {product.kcal}kcal
                 {product.protein != null && <span className="opacity-60"> · P{product.protein}g</span>}
                 {product.fat != null && <span className="opacity-60"> · F{product.fat}g</span>}

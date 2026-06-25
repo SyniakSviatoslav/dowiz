@@ -205,7 +205,7 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
                 <i className={`${KIND_ICONS[line.kind] || 'ti ti-circle'} shrink-0`} style={{ fontSize: '0.65rem', color: s && hasNutrition ? 'var(--color-success)' : 'var(--brand-text-muted)' }} />
                 <span className="text-xs flex-1 min-w-0 truncate" style={{ color: 'var(--brand-text)' }}>{line.supplyName}</span>
                 {!hasNutrition && (
-                  <span className="shrink-0 text-[9px] px-1 rounded" style={{ color: 'var(--color-warning)', background: 'var(--color-warning-light)' }}>{t('common.no_data', 'no data')}</span>
+                  <span className="shrink-0 text-step-2xs px-1 rounded" style={{ color: 'var(--color-warning)', background: 'var(--color-warning-light)' }}>{t('common.no_data', 'no data')}</span>
                 )}
                 <div className="flex items-center gap-1 shrink-0">
                   <button type="button" aria-label={t('common.decrease_quantity', 'Decrease quantity')} onClick={() => updateQty(i, line.qty - step(line.unit))}
@@ -215,7 +215,7 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
                     onChange={e => updateQty(i, parseInt(e.target.value) || 0)}
                     className="w-12 h-6 text-center rounded text-step-2xs outline-none border transition-shadow duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
                     style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                  <span className="text-[9px] w-8 text-center" style={{ color: 'var(--brand-text-muted)' }}>{line.unit}</span>
+                  <span className="text-step-2xs w-8 text-center" style={{ color: 'var(--brand-text-muted)' }}>{line.unit}</span>
                 </div>
                 <button type="button" aria-label={t('common.remove', 'Remove')} onClick={() => onChange(lines.filter((_, j) => j !== i))}
                   className="shrink-0 w-6 h-6 rounded flex items-center justify-center transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] [@media(hover:hover)]:hover:bg-[var(--color-danger-light)] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-danger)] focus-visible:ring-offset-1">
@@ -247,15 +247,15 @@ export function RecipeEditor({ lines, onChange, onBomAllergensChange }: RecipeEd
             ].map(n => (
               <div key={n.label} className="p-1.5 rounded" style={{ background: 'var(--brand-surface)' }}>
                 <div className="text-sm font-bold" style={{ color: n.color }}>{n.value}</div>
-                <div className="text-[9px]" style={{ color: 'var(--brand-text-muted)' }}>{n.label}</div>
+                <div className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{n.label}</div>
               </div>
             ))}
           </div>
           {nutrition.bomAllergens.length > 0 && (
             <div className="flex items-center gap-1 mt-2 flex-wrap">
-              <span className="text-[9px]" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.bom_label', 'BOM:')}</span>
+              <span className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.bom_label', 'BOM:')}</span>
               {nutrition.bomAllergens.map(a => (
-                <span key={a} className="px-1.5 py-0.5 rounded-full text-[9px] font-medium"
+                <span key={a} className="px-1.5 py-0.5 rounded-full text-step-2xs font-medium"
                   style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)' }}>{t(`allergen.${a}`, a)}</span>
               ))}
             </div>

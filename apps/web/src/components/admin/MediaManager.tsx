@@ -293,7 +293,7 @@ export function MediaManager({ productId, enabled, slug, onPrimaryChange }: Medi
                     <i className={badge.icon} style={{ color: 'var(--brand-primary)', fontSize: '0.7rem' }} />
                     <span className="text-xs font-medium" style={{ color: 'var(--brand-text)' }}>{badge.label}</span>
                     {index === 0 && (
-                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full"
+                      <span className="text-step-2xs font-semibold px-1.5 py-0.5 rounded-full"
                         style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
                         {t('admin.media_hero', 'Hero')}
                       </span>
