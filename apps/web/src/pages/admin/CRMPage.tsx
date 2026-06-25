@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Button, EmptyState, SkeletonBase, Select, useI18n, PriceDisplay, ease, duration } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, Select, useI18n, PriceDisplay, ease, duration, SearchInput } from '@deliveryos/ui';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/index.js';
@@ -171,16 +171,12 @@ export function CRMPage() {
           <p className="text-sm tabular-nums" style={{ color: 'var(--brand-text)' }}>{filtered.length} {t('admin.customers_lower', 'customers')}</p>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
-          <div className="relative flex-1 sm:flex-none min-w-0">
-            <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none" style={{ color: 'var(--brand-text-muted)' }} />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={t('admin.search_customers', 'Search customers...')}
-              className="pl-9 pr-4 py-2 rounded-[var(--brand-radius)] border text-sm outline-none w-full sm:w-48 transition-[box-shadow,border-color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
-              style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
-            />
-          </div>
+          <SearchInput
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={t('admin.search_customers', 'Search customers...')}
+            containerClassName="flex-1 sm:flex-none min-w-0 sm:w-48"
+          />
           <Select
             value={sortKey}
             onChange={e => setSortKey(e.target.value as any)}
