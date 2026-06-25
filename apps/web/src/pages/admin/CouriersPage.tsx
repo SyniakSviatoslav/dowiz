@@ -23,7 +23,9 @@ interface Courier {
   id: string;
   name: string;
   phone: string;
-  status: 'online' | 'busy' | 'offline';
+  // ACCOUNT status (couriers.status), NOT presence — the list never claims a courier is "online
+   // now" because the owner endpoint doesn't surface real presence (onlineStatus is null). ADR-0006.
+  status: 'active' | 'suspended' | 'inactive';
   deliveriesCompleted: number;
   rating: number;
 }
@@ -42,9 +44,9 @@ interface CourierDetails {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  online: 'var(--color-success)',
-  busy: 'var(--color-warning)',
-  offline: 'var(--brand-text-muted)',
+  active: 'var(--color-success)',
+  suspended: 'var(--color-warning)',
+  inactive: 'var(--brand-text-muted)',
 };
 
 // Derive a human label even when the courier name is unresolved: prefer the
@@ -176,7 +178,7 @@ export function CouriersPage() {
           id: c.id,
           name: (c.full_name || c.name || '').trim(),
           phone: c.masked_phone || c.maskedPhone || '',
-          status: c.status === 'active' || c.status === 'available' ? 'online' : c.status === 'on_delivery' ? 'busy' : 'offline',
+          status: c.status === 'active' || c.status === 'available' ? 'active' : c.status === 'suspended' ? 'suspended' : 'inactive',
           deliveriesCompleted: c.deliveries_completed || c.ordersToday || 0,
           rating: c.rating || 0,
         })));
@@ -210,16 +212,15 @@ export function CouriersPage() {
       name: label,
       initials: initialsOf(label),
       lngLat: courierPositions[c.id] || mapCenter || [19.817, 41.331],
-      status: c.status === 'offline' ? 'offline' : c.status === 'busy' ? 'busy' : 'online',
+      // No real presence feed (onlineStatus is null) → never paint a green "online" marker we can't
+      // prove. All map markers are the neutral 'offline' (location dot, no presence claim). ADR-0006.
+      status: 'offline' as const,
     };
     });
   }, [filtered, courierPositions, mapCenter, t]);
 
-  // The badge is labelled "online", so count only genuinely-online couriers — not 'busy'
-  // (mid-delivery) ones. Counting `!== 'offline'` inflated the figure and read as a false
-  // "fleet is live" metric. (Separate flag: line ~213 maps unknown/pending status → 'online',
-  // which is why phone-less seed couriers show online — that's a data/mapping fix, raised apart.)
-  const onlineCount = couriers.filter((c) => c.status === 'online').length;
+  // Count enabled ACCOUNTS, not presence — labelled "active" (never "online", which we can't prove). ADR-0006.
+  const activeCount = couriers.filter((c) => c.status === 'active').length;
 
   return (
     <div className="p-4 space-y-6 max-w-4xl mx-auto">
@@ -232,7 +233,7 @@ export function CouriersPage() {
         </h2>
         <div className="flex items-center gap-3">
           <div className="bg-[var(--brand-surface-raised)] px-3 py-1 rounded-full text-sm font-medium">
-            {onlineCount} {t('admin.online', 'online')}
+            {activeCount} {t('admin.active_lower', 'active')}
           </div>
           <Button variant="secondary" size="sm" onClick={() => exportCSV(filtered, 'couriers.csv')}>
             <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
@@ -383,9 +384,9 @@ export function CouriersPage() {
                       className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
                       style={{
                         backgroundColor:
-                          c.status === 'offline'
-                            ? 'var(--brand-text-muted)'
-                            : 'var(--brand-primary)',
+                          c.status === 'active'
+                            ? 'var(--brand-primary)'
+                            : 'var(--brand-text-muted)',
                       }}
                     >
                       {initialsOf(displayName(c))}
