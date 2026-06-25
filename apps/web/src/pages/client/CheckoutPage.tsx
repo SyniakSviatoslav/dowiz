@@ -112,7 +112,7 @@ function NutritionRing({ kcal, protein, fat, carbs }: { kcal: number; protein: n
       className="rounded-[var(--brand-radius)] p-4 border"
       style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--brand-text-muted)' }}>
+      <p className="text-step-2xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--brand-text-muted)' }}>
         <i className="ti ti-flame mr-1" aria-hidden="true" />{t('checkout.order_nutrition', 'Order Nutrition')}
       </p>
       <div className="flex items-center gap-5">
@@ -146,7 +146,7 @@ function NutritionRing({ kcal, protein, fat, carbs }: { kcal: number; protein: n
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             <motion.span
-              className="text-[18px] font-bold leading-none"
+              className="text-step-lg font-bold leading-none"
               style={{ color: 'var(--brand-text)' }}
               initial={{ opacity: 0, scale: 0.7 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -167,11 +167,11 @@ function NutritionRing({ kcal, protein, fat, carbs }: { kcal: number; protein: n
               transition={{ delay: 0.35 + i * 0.1 }}
             >
               <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: m.color }} />
-              <span className="text-[12px] flex-1" style={{ color: 'var(--brand-text-muted)' }}>{m.label}</span>
+              <span className="text-step-xs flex-1" style={{ color: 'var(--brand-text-muted)' }}>{m.label}</span>
               <span className="text-[13px] font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{Math.round(m.grams)}g</span>
             </motion.div>
           )) : (
-            <motion.p className="text-[12px]" style={{ color: 'var(--brand-text-muted)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
+            <motion.p className="text-step-xs" style={{ color: 'var(--brand-text-muted)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
               ~{Math.round(kcal)} kcal total
             </motion.p>
           )}
@@ -631,15 +631,15 @@ export function CheckoutPage() {
               <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.name', 'Name')}</label>
               <div className="relative">
                 <i className="ti ti-user absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                <input required value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t('checkout.name_placeholder', 'Your name')} autoComplete="name" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                <input required value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t('checkout.name_placeholder', 'Your name')} autoComplete="name" className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
               </div>
             </div>
             <div>
               <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.phone', 'Phone')}</label>
               <div className="relative">
                 <i className="ti ti-phone absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} onBlur={() => setPhone(p => normalizeAlbanianPhone(p))} placeholder="+355 6X XXX XXXX" title="+355 followed by 7-14 digits" type="tel" inputMode="tel" autoComplete="tel" data-testid="checkout-phone" className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                {phoneError && <p role="alert" className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{phoneError}</p>}
+                <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} onBlur={() => setPhone(p => normalizeAlbanianPhone(p))} placeholder="+355 6X XXX XXXX" title="+355 followed by 7-14 digits" type="tel" inputMode="tel" autoComplete="tel" data-testid="checkout-phone" className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                {phoneError && <p role="alert" className="text-step-xs mt-1" style={{ color: 'var(--color-danger)' }}>{phoneError}</p>}
               </div>
             </div>
             {/* UX-2: optional messenger so the courier can text instead of call */}
@@ -647,7 +647,7 @@ export function CheckoutPage() {
               <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.messenger', 'Messenger (optional)')}</label>
               <div className="flex gap-2">
                 <select value={messengerKind} onChange={e => setMessengerKind(e.target.value)} data-testid="checkout-messenger-kind"
-                  className="h-[48px] px-2 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+                  className="h-[48px] px-2 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
                   <option value="">{t('checkout.messenger_none', '—')}</option>
                   <option value="telegram">Telegram</option>
                   <option value="whatsapp">WhatsApp</option>
@@ -656,7 +656,7 @@ export function CheckoutPage() {
                 <input value={messengerHandle} onChange={e => setMessengerHandle(e.target.value)} disabled={!messengerKind}
                   required={!!messengerKind}
                   placeholder={messengerKind === 'telegram' ? '@username' : '+355 6X XXX XXXX'} data-testid="checkout-messenger-handle"
-                  className="flex-1 min-w-0 h-[48px] px-3 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)] disabled:opacity-50" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                  className="flex-1 min-w-0 h-[48px] px-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)] disabled:opacity-50" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
               </div>
             </div>
             {/* UX-3: optional entrance photo (delivery only) — camera or gallery */}
@@ -676,7 +676,7 @@ export function CheckoutPage() {
                     <img src={entryPhotoPreview} alt={t('checkout.entry_photo', 'Entrance photo')} data-testid="entry-photo-preview" className="h-12 w-12 object-cover rounded-[var(--brand-radius-sm)] border" style={{ borderColor: 'var(--brand-border)' }} />
                   )}
                 </div>
-                <p className="text-[12px] mt-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.entry_photo_hint', 'Helps the courier find your entrance.')}</p>
+                <p className="text-step-xs mt-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.entry_photo_hint', 'Helps the courier find your entrance.')}</p>
               </div>
             )}
           </div>
@@ -704,7 +704,7 @@ export function CheckoutPage() {
                 <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.street_address', 'Street address')}</label>
                 <div className="relative">
                   <i className="ti ti-map-pin absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                  <input required value={address} onChange={e => setAddress(e.target.value)} placeholder={t('checkout.street_address', 'Street address')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                  <input required value={address} onChange={e => setAddress(e.target.value)} placeholder={t('checkout.street_address', 'Street address')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                 </div>
               </div>
               <div className="space-y-4">
@@ -712,17 +712,17 @@ export function CheckoutPage() {
                   <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entrance')}</label>
                   <div className="relative">
                     <i className="ti ti-door-open absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                    <input required value={entrance} onChange={e => setEntrance(e.target.value)} data-testid="checkout-entrance" placeholder={t('checkout.entrance_placeholder', 'Entrance number or name')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                    <input required value={entrance} onChange={e => setEntrance(e.target.value)} data-testid="checkout-entrance" placeholder={t('checkout.entrance_placeholder', 'Entrance number or name')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                   </div>
-                  {entranceError && <p role="alert" className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{entranceError}</p>}
+                  {entranceError && <p role="alert" className="text-step-xs mt-1" style={{ color: 'var(--color-danger)' }}>{entranceError}</p>}
                 </div>
                 <div>
                   <label className="text-[13px] font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.apartment')}</label>
                   <div className="relative">
                     <i className="ti ti-apartment absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                    <input required value={apartment} onChange={e => setApartment(e.target.value)} data-testid="checkout-apartment" placeholder={t('checkout.apartment_placeholder', 'Apartment or unit number')} className="w-full h-[48px] pl-10 pr-3 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                    <input required value={apartment} onChange={e => setApartment(e.target.value)} data-testid="checkout-apartment" placeholder={t('checkout.apartment_placeholder', 'Apartment or unit number')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                   </div>
-                  {apartmentError && <p role="alert" className="text-[12px] mt-1" style={{ color: 'var(--color-danger)' }}>{apartmentError}</p>}
+                  {apartmentError && <p role="alert" className="text-step-xs mt-1" style={{ color: 'var(--color-danger)' }}>{apartmentError}</p>}
                 </div>
               </div>
               <div>
@@ -737,7 +737,7 @@ export function CheckoutPage() {
                     onChange={e => setNotes(e.target.value)}
                     rows={3}
                     placeholder={t('checkout.notes_placeholder', 'Describe how to find the exact place: floor, building color, nearby landmark, gate code...')}
-                    className="w-full pl-10 pr-3 pt-2.5 pb-2 outline-none text-[14px] border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)] resize-none"
+                    className="w-full pl-10 pr-3 pt-2.5 pb-2 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)] resize-none"
                     style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
                   />
                 </div>
@@ -758,7 +758,7 @@ export function CheckoutPage() {
                       whileTap={{ scale: 0.95 }}
                       aria-pressed={instructionOption === opt.val}
                       onClick={() => setInstructionOption(instructionOption === opt.val ? '' : opt.val)}
-                      className="px-3 py-1.5 text-[12px] rounded-[var(--brand-radius-btn)] border transition-[background-color,border-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
+                      className="px-3 py-1.5 text-step-xs rounded-[var(--brand-radius-btn)] border transition-[background-color,border-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
                       style={{
                         background: instructionOption === opt.val ? 'var(--brand-primary-light)' : 'var(--brand-surface-raised)',
                         borderColor: instructionOption === opt.val ? 'var(--brand-primary)' : 'var(--brand-border)',
@@ -780,8 +780,8 @@ export function CheckoutPage() {
           {deliveryType === 'pickup' && (
             <div className="space-y-4">
               <div className="border rounded-[var(--brand-radius)] p-4" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
-                <h3 className="text-[14px] font-bold mb-1" style={{ color: 'var(--brand-text)' }}>{t('courier.pickup')}</h3>
-                <p className="text-[14px] mb-4" style={{ color: 'var(--brand-text-muted)' }}>
+                <h3 className="text-step-sm font-bold mb-1" style={{ color: 'var(--brand-text)' }}>{t('courier.pickup')}</h3>
+                <p className="text-step-sm mb-4" style={{ color: 'var(--brand-text-muted)' }}>
                   {pickupName && <span className="block font-semibold" style={{ color: 'var(--brand-text)' }}>{pickupName}</span>}
                   {pickupAddress || t('checkout.pickup_addr_tbd', 'Address shown after the restaurant confirms.')}
                 </p>
@@ -819,17 +819,17 @@ export function CheckoutPage() {
               <div className="flex items-center gap-3">
                 <i className="ti ti-cash text-xl" aria-hidden="true" style={{ color: 'var(--brand-primary)' }} />
                 <div>
-                  <div className="text-[14px] font-bold" style={{ color: 'var(--brand-text)' }}>{t('checkout.cash')}</div>
-                  <div className="text-[12px]" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.place_order')}</div>
+                  <div className="text-step-sm font-bold" style={{ color: 'var(--brand-text)' }}>{t('checkout.cash')}</div>
+                  <div className="text-step-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.place_order')}</div>
                 </div>
               </div>
               <i className="ti ti-check" aria-hidden="true" style={{ color: 'var(--brand-primary)' }} />
             </div>
             <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-              <label htmlFor="cash-amount" className="text-[12px] font-semibold mb-1.5 block" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.cash_amount', 'Cash amount')}</label>
+              <label htmlFor="cash-amount" className="text-step-xs font-semibold mb-1.5 block" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.cash_amount', 'Cash amount')}</label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-bold" style={{ color: 'var(--brand-text-muted)' }}>{currencySymbol}</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-step-sm font-bold" style={{ color: 'var(--brand-text-muted)' }}>{currencySymbol}</span>
                   <input
                     id="cash-amount"
                     type="number"
@@ -837,7 +837,7 @@ export function CheckoutPage() {
                     min={total}
                     value={cashAmount || ''}
                     onChange={e => setCashAmount(parseInt(e.target.value) || 0)}
-                    className="w-full h-[44px] pl-11 pr-3 outline-none text-[14px] font-bold border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]"
+                    className="w-full h-[44px] pl-11 pr-3 outline-none text-step-sm font-bold border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]"
                     style={{ background: 'var(--brand-surface)', borderColor: cashAmount > 0 && cashAmount < total ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }}
                     placeholder={String(total)}
                   />
@@ -845,9 +845,9 @@ export function CheckoutPage() {
               </div>
               {/* UX-4: optional courier tip (single amount, replaces %-badges) */}
               <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-                <label htmlFor="tip-amount" className="text-[12px] font-semibold mb-1.5 block" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_amount', 'Tip for courier (optional)')}</label>
+                <label htmlFor="tip-amount" className="text-step-xs font-semibold mb-1.5 block" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_amount', 'Tip for courier (optional)')}</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-bold" style={{ color: 'var(--brand-text-muted)' }}>{currencySymbol}</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-step-sm font-bold" style={{ color: 'var(--brand-text-muted)' }}>{currencySymbol}</span>
                   <input
                     id="tip-amount"
                     type="number"
@@ -857,12 +857,12 @@ export function CheckoutPage() {
                     value={tipAmount || ''}
                     data-testid="checkout-tip"
                     onChange={e => setTipAmount(Math.min(1000000, Math.max(0, parseInt(e.target.value) || 0)))}
-                    className="w-full h-[44px] pl-11 pr-3 outline-none text-[14px] font-bold border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]"
+                    className="w-full h-[44px] pl-11 pr-3 outline-none text-step-sm font-bold border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]"
                     style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
                     placeholder="0"
                   />
                 </div>
-                <p className="text-[12px] mt-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_hint', 'Goes entirely to your courier, in cash on delivery.')}</p>
+                <p className="text-step-xs mt-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_hint', 'Goes entirely to your courier, in cash on delivery.')}</p>
               </div>
               {cashAmount > 0 && (
                 <div className="flex justify-between text-[13px] mt-2 px-1">
@@ -889,7 +889,7 @@ export function CheckoutPage() {
             <div className="flex items-start gap-3">
               <span className="text-xl shrink-0 mt-0.5">🌍</span>
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.did_you_know', 'Did you know?')}</p>
+                <p className="text-step-2xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.did_you_know', 'Did you know?')}</p>
                 <p className="text-[13px] leading-relaxed" style={{ color: 'var(--brand-text)' }}>{cityFact}</p>
               </div>
             </div>
@@ -913,31 +913,31 @@ export function CheckoutPage() {
           className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
           <h2 className="text-[20px] font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('order.title')}</h2>
           <div className="space-y-3 mb-4">
-            <div className="flex justify-between items-baseline gap-3 text-[14px]">
+            <div className="flex justify-between items-baseline gap-3 text-step-sm">
               <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.subtotal')}</span>
               <span className="shrink-0 tabular-nums"><PriceDisplay amount={subtotal} /></span>
             </div>
             {deliveryType === 'delivery' && (
-              <div className="flex justify-between items-baseline gap-3 text-[14px]">
+              <div className="flex justify-between items-baseline gap-3 text-step-sm">
                 <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.delivery_fee')}</span>
                 <span className="shrink-0 tabular-nums"><PriceDisplay amount={deliveryFee} /></span>
               </div>
             )}
             {tipAmount > 0 && (
-              <div className="flex justify-between items-baseline gap-3 text-[14px]" data-testid="checkout-tip-line">
+              <div className="flex justify-between items-baseline gap-3 text-step-sm" data-testid="checkout-tip-line">
                 <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_for_courier', 'Tip for courier (cash)')}</span>
                 <span className="shrink-0 tabular-nums"><PriceDisplay amount={tipAmount} /></span>
               </div>
             )}
             {hasNutrition && (
-              <div className="flex justify-between items-baseline gap-3 text-[12px]">
+              <div className="flex justify-between items-baseline gap-3 text-step-xs">
                 <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>≈ {t('menu.nutrition')}</span>
                 <span className="shrink-0 font-medium tabular-nums" style={{ color: 'var(--brand-text-muted)' }}>~{nutritionTotal.kcal} kcal</span>
               </div>
             )}
           </div>
           <div className="pt-4 border-t flex justify-between items-center gap-3" style={{ borderColor: 'var(--brand-border)' }}>
-            <span className="text-[16px] font-bold min-w-0 truncate" style={{ color: 'var(--brand-text)' }}>{t('cart.total')}</span>
+            <span className="text-step-base font-bold min-w-0 truncate" style={{ color: 'var(--brand-text)' }}>{t('cart.total')}</span>
             <motion.span
               key={total}
               data-testid="checkout-total"
@@ -962,10 +962,10 @@ export function CheckoutPage() {
             <div className="mt-4 pt-4 border-t flex items-start gap-2.5" style={{ borderColor: 'var(--brand-border)' }} data-testid="checkout-eta-estimate">
               <i className="ti ti-clock text-lg shrink-0 mt-0.5" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
               <div className="min-w-0">
-                <div className="text-[14px] font-semibold tabular-nums" style={{ color: 'var(--brand-text)' }}>
+                <div className="text-step-sm font-semibold tabular-nums" style={{ color: 'var(--brand-text)' }}>
                   {t('order.eta_range', '{{low}}–{{high}} min', { low: 25, high: 45 })}
                 </div>
-                <p className="text-[12px] leading-snug" style={{ color: 'var(--brand-text-muted)' }}>
+                <p className="text-step-xs leading-snug" style={{ color: 'var(--brand-text-muted)' }}>
                   {t('checkout.eta_estimate', 'Estimated time — refines after you place the order')}
                 </p>
               </div>

@@ -36,7 +36,7 @@ export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStat
               type="button"
               aria-pressed={active}
               onClick={() => onStatusChange(s)}
-              className={`flex-1 min-w-0 truncate py-1.5 text-[10px] font-medium rounded-md transition-[background,color,box-shadow,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${
+              className={`flex-1 min-w-0 truncate py-1.5 text-step-2xs font-medium rounded-md transition-[background,color,box-shadow,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${
                 active ? 'shadow-sm' : '[@media(hover:hover)]:hover:bg-[var(--brand-surface)]'
               }`}
               style={{
@@ -52,13 +52,13 @@ export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStat
 
       {/* Status message */}
       {status === 'unset' && (
-        <div className="flex items-start gap-2 p-2 rounded-lg text-[11px] leading-snug" style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)' }}>
+        <div className="flex items-start gap-2 p-2 rounded-lg text-step-2xs leading-snug" style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)' }}>
           <i className="ti ti-alert-triangle shrink-0 mt-px" />
           <span className="min-w-0">{t('admin.allergen_unset_msg', 'Product cannot be published until allergens are declared.')}</span>
         </div>
       )}
       {status === 'none' && (
-        <div className="flex items-start gap-2 p-2 rounded-lg text-[11px] leading-snug" style={{ background: 'var(--color-success-light)', color: 'var(--color-success)' }}>
+        <div className="flex items-start gap-2 p-2 rounded-lg text-step-2xs leading-snug" style={{ background: 'var(--color-success-light)', color: 'var(--color-success)' }}>
           <i className="ti ti-shield-check shrink-0 mt-px" />
           <span className="min-w-0">{t('admin.allergen_none_msg', 'Confirmed: this product contains no allergens.')}</span>
         </div>
@@ -76,7 +76,7 @@ export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStat
                   type="button"
                   aria-pressed={active}
                   onClick={() => toggleAllergen(a)}
-                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition-[background,color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-step-2xs font-medium transition-[background,color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${
                     active ? 'ring-1 ring-[var(--color-warning)]' : '[@media(hover:hover)]:hover:bg-[var(--brand-surface-raised)]'
                   }`}
                   style={{
@@ -97,7 +97,7 @@ export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStat
       {bomAllergens && bomAllergens.length > 0 && status !== 'unset' && (
         <div className="flex flex-wrap items-start gap-1">
           {bomAllergens.filter(a => !declaredAllergens.includes(a)).length > 0 && (
-            <div className="flex items-start gap-1.5 p-2 rounded-lg text-[10px] w-full leading-snug" style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)', border: '1px dashed var(--status-pending-border)' }}>
+            <div className="flex items-start gap-1.5 p-2 rounded-lg text-step-2xs w-full leading-snug" style={{ background: 'var(--color-warning-light)', color: 'var(--color-warning)', border: '1px dashed var(--status-pending-border)' }}>
               <i className="ti ti-info-circle shrink-0 mt-px" />
               <span className="min-w-0">
                 {t('admin.undeclared_allergens', 'Recipe contains undeclared allergens:')}{' '}
@@ -134,13 +134,13 @@ export function ReadinessIndicator({
         <span className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>
           {isReady ? t('admin.ready_to_publish', 'Ready to publish') : `${total - passed} ${t('admin.items_remaining', 'items remaining')}`}
         </span>
-        <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
+        <span className="ml-auto text-step-2xs font-mono px-1.5 py-0.5 rounded" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
           {passed}/{total}
         </span>
       </div>
       <div className="space-y-1">
         {checks.map((c, i) => (
-          <div key={i} className="flex items-center gap-2 text-[11px]" style={{ color: c.pass ? 'var(--color-success)' : 'var(--brand-text)' }}>
+          <div key={i} className="flex items-center gap-2 text-step-2xs" style={{ color: c.pass ? 'var(--color-success)' : 'var(--brand-text)' }}>
             <i className={`${c.pass ? 'ti ti-check' : 'ti ti-circle-dashed'} shrink-0`} style={{ fontSize: '0.7rem', color: c.pass ? 'var(--color-success)' : 'var(--brand-text-muted)' }} />
             <span className="flex-1 min-w-0 truncate">{c.label}</span>
             {!c.pass && c.action && (

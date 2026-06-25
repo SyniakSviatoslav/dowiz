@@ -81,7 +81,7 @@ export function StateChip({ state, scope = 'venue', detail, className = '', ...r
     <span
       data-testid={testId}
       data-state={state}
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap border ${className}`}
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-step-2xs font-semibold whitespace-nowrap border ${className}`}
       style={{ color: tone.fg, background: tone.bg, borderColor: tone.border }}
     >
       <i className={`ti ${ICON[state]}`} style={{ fontSize: '0.8em', lineHeight: 1 }} aria-hidden="true" />

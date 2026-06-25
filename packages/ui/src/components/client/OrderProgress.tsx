@@ -203,7 +203,7 @@ export function OrderProgress(props: OrderProgressProps) {
                   )}
                 </motion.span>
               </span>
-              <span className={`text-[10px] mt-1 text-center leading-tight break-words ${isFilled ? 'text-[var(--brand-text)] font-semibold' : 'text-[var(--brand-text-muted)]'}`}>
+              <span className={`text-step-2xs mt-1 text-center leading-tight break-words ${isFilled ? 'text-[var(--brand-text)] font-semibold' : 'text-[var(--brand-text-muted)]'}`}>
                 {step.label}
               </span>
               {time && (

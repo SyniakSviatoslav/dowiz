@@ -564,7 +564,7 @@ export function MenuPage() {
           transition={{ duration: 0.45, ease: ease.out }}
         >
           <motion.div
-            className="flex items-center gap-1.5 text-[12px] font-medium mb-1.5"
+            className="flex items-center gap-1.5 text-step-xs font-medium mb-1.5"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.4, delay: 0.15 }}
@@ -587,7 +587,7 @@ export function MenuPage() {
               </>
             )}
           </motion.div>
-          <h1 className="text-[22px] md:text-[26px] font-bold leading-tight" style={{ color: '#ffffff', fontFamily: 'var(--brand-font-heading)', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>
+          <h1 className="text-step-xl md:text-[26px] font-bold leading-tight" style={{ color: '#ffffff', fontFamily: 'var(--brand-font-heading)', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>
             {menu?.location_name || t('client.menu', 'Menu')}
           </h1>
           {venueStatus && (
@@ -623,7 +623,7 @@ export function MenuPage() {
                     onClick={() => handleScrollTo(cat.id)}
                     role="tab"
                     aria-selected={activeTab === cat.id}
-                    className="h-11 flex items-center gap-1 px-3 whitespace-nowrap text-[12px] font-medium border-b-2 shrink-0 outline-none transition-colors duration-150 ease-out rounded-t-md focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
+                    className="h-11 flex items-center gap-1 px-3 whitespace-nowrap text-step-xs font-medium border-b-2 shrink-0 outline-none transition-colors duration-150 ease-out rounded-t-md focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
                     style={{
                       color: activeTab === cat.id ? (isChefCat ? 'var(--brand-primary)' : 'var(--brand-text)') : 'var(--brand-text-muted)',
                       borderColor: activeTab === cat.id ? (isChefCat ? 'var(--brand-primary)' : 'var(--brand-primary)') : 'transparent',
@@ -631,7 +631,7 @@ export function MenuPage() {
                   >
                     {isChefCat && <span style={{ fontSize: '0.7rem' }}>✦</span>}
                     {cat.name}
-                    <span className="text-[10px] opacity-40">({count})</span>
+                    <span className="text-step-2xs opacity-40">({count})</span>
                   </motion.button>
                 );
               })
@@ -647,17 +647,17 @@ export function MenuPage() {
           <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-3 py-2 pr-8">
             {/* Compact search pill */}
             <div className="relative shrink-0" style={{ width: searchQuery ? 140 : 100, transition: 'width var(--motion-base) var(--ease-soft)', minWidth: 100 }}>
-              <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] pointer-events-none" style={{ color: 'var(--brand-text-muted)' }} />
+              <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-step-2xs pointer-events-none" style={{ color: 'var(--brand-text-muted)' }} />
               <input
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder={t('common.search', 'Search')}
-                className="w-full pl-7 pr-7 h-9 rounded-full text-[12px] outline-none transition-shadow duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)]"
+                className="w-full pl-7 pr-7 h-9 rounded-full text-step-xs outline-none transition-shadow duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)]"
                 style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}
               />
               {searchQuery && (
                 <button onClick={() => setSearchQuery('')} aria-label={t('common.clear', 'Clear')} className="absolute right-0.5 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]">
-                  <i className="ti ti-x text-[11px]" style={{ color: 'var(--brand-text-muted)' }} />
+                  <i className="ti ti-x text-step-2xs" style={{ color: 'var(--brand-text-muted)' }} />
                 </button>
               )}
             </div>
@@ -666,7 +666,7 @@ export function MenuPage() {
               <motion.button key={mode} onClick={() => setSortBy(mode)} whileTap={prefersReduced ? undefined : { scale: 0.95 }}
                 aria-label={t(`sort.${mode}`, mode)}
                 aria-pressed={sortBy === mode}
-                className="px-3 h-9 min-w-9 rounded-full text-[11px] font-medium whitespace-nowrap shrink-0 flex items-center justify-center outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)]"
+                className="px-3 h-9 min-w-9 rounded-full text-step-2xs font-medium whitespace-nowrap shrink-0 flex items-center justify-center outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)]"
                 style={{
                   background: sortBy === mode ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
                   color: sortBy === mode ? 'color-mix(in srgb, var(--brand-bg) 86%, #000)' : 'var(--brand-text-muted)',
@@ -682,7 +682,7 @@ export function MenuPage() {
               return (
                 <motion.button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)} whileTap={prefersReduced ? undefined : { scale: 0.95 }}
                   aria-pressed={filterAllergen === a}
-                  className="px-3 h-9 rounded-full text-[10px] font-semibold uppercase whitespace-nowrap shrink-0 flex items-center border outline-none transition-[background-color,color,opacity,border-color] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)]"
+                  className="px-3 h-9 rounded-full text-step-2xs font-semibold uppercase whitespace-nowrap shrink-0 flex items-center border outline-none transition-[background-color,color,opacity,border-color] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)]"
                   style={{
                     background: filterAllergen === a ? 'var(--brand-primary)' : s.bg,
                     color: filterAllergen === a ? 'color-mix(in srgb, var(--brand-bg) 86%, #000)' : s.text,
@@ -969,7 +969,7 @@ export function MenuPage() {
               </motion.button>
               {detailProduct.available && bomToNutrition(detailProduct).kcal > 0 && (
                 <div className="absolute bottom-3 left-3 z-10">
-                  <span className="text-[10px] font-medium px-2 py-1 rounded-md flex items-center gap-1.5" style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)', color: 'var(--color-on-primary)' }}>
+                  <span className="text-step-2xs font-medium px-2 py-1 rounded-md flex items-center gap-1.5" style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)', color: 'var(--color-on-primary)' }}>
                     <i className="ti ti-flame" style={{ fontSize: '0.7rem' }} />
                     {bomToNutrition(detailProduct).kcal} {t('nutrition.calories', 'kcal')}
                     {bomToNutrition(detailProduct).protein > 0 && <span className="opacity-70">· {t('nutrition.protein', 'P')}{bomToNutrition(detailProduct).protein}g</span>}
@@ -993,7 +993,7 @@ export function MenuPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1.5">
                       {detailProduct.attributes?.chef_pick && (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1" style={{ background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)', color: 'var(--brand-primary)' }}>
+                        <span className="text-step-2xs font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1" style={{ background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)', color: 'var(--brand-primary)' }}>
                           <i className="ti ti-flame" style={{ fontSize: '0.6rem' }} />
                           {t('client.popular', 'Popular')}
                         </span>
@@ -1001,7 +1001,7 @@ export function MenuPage() {
                     </div>
                     <h2 className="text-xl font-bold leading-tight" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{detailProduct.name}</h2>
                     {!detailProduct.available && (
-                      <span className="inline-block mt-1.5 text-[10px] font-semibold px-2 py-0.5 rounded" style={{ background: 'rgba(220,38,38,0.1)', color: 'var(--color-danger)' }}>
+                      <span className="inline-block mt-1.5 text-step-2xs font-semibold px-2 py-0.5 rounded" style={{ background: 'rgba(220,38,38,0.1)', color: 'var(--color-danger)' }}>
                         {t('client.unavailable', 'Unavailable')}
                       </span>
                     )}
@@ -1016,7 +1016,7 @@ export function MenuPage() {
                       <PriceDisplay amount={detailProduct.price + calcModifierDelta()} />
                     </div>
                     {detailProduct.prep_time_minutes != null && (
-                      <span className="inline-flex items-center gap-0.5 text-[11px] font-medium whitespace-nowrap mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>
+                      <span className="inline-flex items-center gap-0.5 text-step-2xs font-medium whitespace-nowrap mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>
                         <i className="ti ti-clock" style={{ fontSize: '0.75rem' }} aria-hidden="true" />
                         {t('product.prep_minutes', '~{{n}} min', { n: detailProduct.prep_time_minutes })}
                       </span>
@@ -1088,7 +1088,7 @@ export function MenuPage() {
                     {bomToNutrition(detailProduct).allergens.map(a => {
                       const s = getAllergenStyle(a);
                       return (
-                        <span key={a} className="px-2 py-0.5 rounded font-semibold text-[10px] uppercase" style={{ background: s.bg, color: s.text }}>
+                        <span key={a} className="px-2 py-0.5 rounded font-semibold text-step-2xs uppercase" style={{ background: s.bg, color: s.text }}>
                           {t(`allergen.${a.toLowerCase()}`, a)}
                         </span>
                       );
@@ -1104,7 +1104,7 @@ export function MenuPage() {
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
                     {bomToNutrition(detailProduct).ingredients.map((ing, i) => (
-                      <span key={i} className="text-[11px] px-2 py-0.5 rounded-md" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}>
+                      <span key={i} className="text-step-2xs px-2 py-0.5 rounded-md" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}>
                         {ing}
                       </span>
                     ))}
@@ -1140,7 +1140,7 @@ export function MenuPage() {
                           </span>
                         )}
                         {group.max_select > 1 && (
-                          <span className="text-[10px]" style={{ color: 'var(--brand-text-muted)' }}>
+                          <span className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>
                             {t('client.up_to', 'up to')} {group.max_select}
                           </span>
                         )}
@@ -1168,7 +1168,7 @@ export function MenuPage() {
                             >
                               {mod.name}
                                   {mod.price_delta > 0 && (
-                                <span className="ml-1 text-[11px]" style={{ color: isSelected ? 'var(--brand-primary)' : 'var(--brand-text-muted)' }}>
+                                <span className="ml-1 text-step-2xs" style={{ color: isSelected ? 'var(--brand-primary)' : 'var(--brand-text-muted)' }}>
                                   +&nbsp;<PriceDisplay amount={mod.price_delta} />
                                 </span>
                               )}
@@ -1184,7 +1184,7 @@ export function MenuPage() {
 
               {/* Modifier Summary */}
               {Object.values(modifierGroupSelection).some(s => s.length > 0) && (
-                <div className="text-[11px] leading-relaxed px-1" style={{ color: 'var(--brand-text-muted)' }}>
+                <div className="text-step-2xs leading-relaxed px-1" style={{ color: 'var(--brand-text-muted)' }}>
                   <span className="font-medium" style={{ color: 'var(--brand-text)' }}>{t('menu.selected', 'Selected:')}</span>{' '}
                   {Object.entries(modifierGroupSelection).map(([gid, selectedIds]) => {
                     const group = (detailProduct.modifier_groups || []).find(g => g.id === gid);
@@ -1223,7 +1223,7 @@ export function MenuPage() {
                   onClick={handleAddDetail}
                   disabled={!canAdd()}
                   whileTap={prefersReduced || !canAdd() ? undefined : { scale: 0.97 }}
-                  className="w-full sm:flex-1 min-w-0 h-[48px] text-[var(--brand-bg)] font-bold text-[14px] outline-none transition-[transform,opacity] duration-150 ease-out disabled:opacity-40 flex items-center justify-between gap-2 px-4 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
+                  className="w-full sm:flex-1 min-w-0 h-[48px] text-[var(--brand-bg)] font-bold text-step-sm outline-none transition-[transform,opacity] duration-150 ease-out disabled:opacity-40 flex items-center justify-between gap-2 px-4 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
                   style={{ background: detailProduct.available ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
                   {detailProduct.available ? (

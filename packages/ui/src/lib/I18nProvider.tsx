@@ -110,7 +110,7 @@ export function LanguageSwitcher({ variant = 'compact', allowed }: { variant?: '
                 className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${locale === l.code ? 'font-semibold' : ''}`}
                 style={{ color: locale === l.code ? 'var(--brand-primary)' : 'var(--brand-text)' }}
               >
-                <span className="text-[10px] font-mono font-bold w-7 text-center rounded-sm px-0.5 py-px" style={{
+                <span className="text-step-2xs font-mono font-bold w-7 text-center rounded-sm px-0.5 py-px" style={{
                   background: locale === l.code ? 'var(--brand-primary-light)' : 'var(--brand-surface-raised)',
                   color: locale === l.code ? 'var(--brand-primary)' : 'var(--brand-text-muted)',
                 }}>{l.displayCode}</span>

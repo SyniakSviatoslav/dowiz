@@ -268,7 +268,7 @@ export function FlowTestPage() {
       {/* Config */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-xl border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
         <div>
-          <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('flow_test.location', 'Location')}</label>
+          <label className="text-step-2xs font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('flow_test.location', 'Location')}</label>
           <select value={locationId} onChange={e => setLocationId(e.target.value)}
             className="w-full text-sm rounded-lg px-3 py-2 border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
             {locations.length === 0 && <option value="">{t('common.loading', 'Loading...')}</option>}
@@ -276,7 +276,7 @@ export function FlowTestPage() {
           </select>
         </div>
         <div>
-          <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('flow_test.product', 'Product')}</label>
+          <label className="text-step-2xs font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('flow_test.product', 'Product')}</label>
           <select value={productId} onChange={e => setProductId(e.target.value)}
             className="w-full text-sm rounded-lg px-3 py-2 border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
             {products.length === 0 && <option value="">{t('common.loading', 'Loading...')}</option>}
@@ -284,7 +284,7 @@ export function FlowTestPage() {
           </select>
         </div>
         <div>
-          <label className="text-[11px] font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('flow_test.courier', 'Courier')}</label>
+          <label className="text-step-2xs font-medium block mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('flow_test.courier', 'Courier')}</label>
           <select value={courierId} onChange={e => setCourierId(e.target.value)}
             className="w-full text-sm rounded-lg px-3 py-2 border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
             {couriers.length === 0 && <option value="">{t('flow_test.none_available', 'None available')}</option>}
@@ -313,7 +313,7 @@ export function FlowTestPage() {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">{i + 1}. {step.label}</span>
                 {step.status === 'done' && step.result && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
+                  <span className="text-step-2xs px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
                     {typeof step.result === 'string' ? step.result.slice(0, 12) : 'OK'}
                   </span>
                 )}

@@ -340,7 +340,7 @@ export function DeliveryPage() {
           {position && (
             <div className="flex items-center gap-1">
               <LiveDot size={6} pulse={true} color="var(--color-info)" />
-              <span className="text-[10px] font-medium text-[var(--brand-text-muted)]">GPS</span>
+              <span className="text-step-2xs font-medium text-[var(--brand-text-muted)]">GPS</span>
             </div>
           )}
         </div>
