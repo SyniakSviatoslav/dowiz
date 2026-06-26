@@ -10,7 +10,10 @@ test.describe('Error contract A1 — envelope + correlationId', () => {
   // endpoint (track/exchange) is per-route rate-limited at 10/min/IP, so 6 requests × 5
   // projects on a shared egress IP trips the limit and the validation path returns 429
   // instead of 400 (flaky-by-design). One project keeps it deterministic and under the limit.
-  test.beforeEach((_fixtures, testInfo) => {
+  // Playwright requires the first arg to be an object-destructuring pattern; eslint's
+  // no-empty-pattern forbids `{}` — disable it for this one line (we only need testInfo).
+  // eslint-disable-next-line no-empty-pattern
+  test.beforeEach(({}, testInfo) => {
     test.skip(
       testInfo.project.name !== 'desktop',
       'API contract proof runs on a single project (shared-IP per-route rate limit)',
