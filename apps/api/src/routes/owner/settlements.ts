@@ -86,7 +86,7 @@ export default (async function ownerSettlementRoutes(fastify: any, opts: any) {
       WHERE p.id = $1 AND p.location_id = $2
     `, [id, locationId]);
 
-    if (payoutRes.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+    if (payoutRes.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
 
     const itemsRes = await db.query(`
       SELECT si.assignment_id, ca.order_id, ca.delivered_at, si.amount, si.currency_code
@@ -127,7 +127,7 @@ export default (async function ownerSettlementRoutes(fastify: any, opts: any) {
 
       if (pRes.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(409).send({ error: 'Payout not found or not pending' });
+        return reply.sendError(409, 'CONFLICT', 'Payout not found or not pending');
       }
 
       await client.query(`
@@ -183,7 +183,7 @@ export default (async function ownerSettlementRoutes(fastify: any, opts: any) {
 
       if (pRes.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(409).send({ error: 'Payout not found or not approved' });
+        return reply.sendError(409, 'CONFLICT', 'Payout not found or not approved');
       }
 
       await client.query(`
@@ -227,7 +227,7 @@ export default (async function ownerSettlementRoutes(fastify: any, opts: any) {
 
       if (pRes.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(409).send({ error: 'ALREADY_DISPUTED or invalid status' });
+        return reply.sendError(409, 'CONFLICT', 'ALREADY_DISPUTED or invalid status');
       }
 
       await client.query(`
@@ -278,7 +278,7 @@ export default (async function ownerSettlementRoutes(fastify: any, opts: any) {
 
       if (pRes.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(409).send({ error: 'Payout not disputed' });
+        return reply.sendError(409, 'CONFLICT', 'Payout not disputed');
       }
 
       await client.query(`

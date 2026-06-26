@@ -143,7 +143,7 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
       [user.userId, signalId, locationId],
     ));
 
-    if (res.rowCount === 0) return reply.status(404).send({ error: 'Signal not found or already resolved' });
+    if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Signal not found or already resolved');
 
     // Shift last_no_show_at by -7 days (forgive)
     if (res.rows[0].kind === 'no_show_recent') {
@@ -184,7 +184,7 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
       [user.userId, JSON.stringify({ dismissReason: body.reason || null, dismissedBy: user.userId }), signalId, locationId],
     ));
 
-    if (res.rowCount === 0) return reply.status(404).send({ error: 'Signal not found or already dismissed' });
+    if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Signal not found or already dismissed');
 
     await messageBus.publish(dashboardChannel(locationId), {
       type: 'preflight.signal_dismissed',
@@ -239,8 +239,8 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
 
       return { customer_id };
     }).catch((err: any) => {
-      if (err.statusCode === 404) return reply.status(404).send({ error: err.message });
-      if (err.statusCode === 400) return reply.status(400).send({ error: err.message });
+      if (err.statusCode === 404) return reply.sendError(404, 'NOT_FOUND', err.message);
+      if (err.statusCode === 400) return reply.sendError(400, 'VALIDATION_FAILED', err.message);
       throw err;
     }) as any;
 

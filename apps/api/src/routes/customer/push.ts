@@ -24,7 +24,7 @@ export default (async function customerPushRoutes(fastify: any, opts: any) {
   }, async (request: any, reply: any) => {
     const user = request.user as any;
     if (!user || user.role !== 'customer') {
-      return reply.status(401).send({ error: 'Customer authentication required' });
+      return reply.sendError(401, 'UNAUTHORIZED', 'Customer authentication required');
     }
 
     const { subscription, opted_in } = request.body;
@@ -65,7 +65,7 @@ export default (async function customerPushRoutes(fastify: any, opts: any) {
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
   }, async (request: any, reply: any) => {
     const user = request.user as any;
-    if (!user || user.role !== 'customer') return reply.status(401).send({ error: 'Unauthorized' });
+    if (!user || user.role !== 'customer') return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
 
     const client = await db.connect();
     try {

@@ -143,7 +143,7 @@ export default (async function ownerNotificationRoutes(fastify, opts) {
         for (const [key, value] of Object.entries(prefs)) {
           if (isToggleableCategory(key)) {
             const r = await setCategoryPref(client, { targetId, locationId, userId, category: key, value, changedVia: 'web' });
-            if (!r.ok) return reply.status(404).send({ error: 'Target not found' });
+            if (!r.ok) return reply.sendError(404, 'NOT_FOUND', 'Target not found');
           }
         }
         const rest = Object.entries(prefs).filter(([k]) => !isToggleableCategory(k));
@@ -151,7 +151,7 @@ export default (async function ownerNotificationRoutes(fastify, opts) {
       }
 
       const currentRes = await client.query(`SELECT prefs FROM owner_notification_targets WHERE id = $1 AND location_id = $2`, [targetId, locationId]);
-      if (currentRes.rows.length === 0) return reply.status(404).send({ error: 'Target not found' });
+      if (currentRes.rows.length === 0) return reply.sendError(404, 'NOT_FOUND', 'Target not found');
 
       let currentPrefs = currentRes.rows[0].prefs || {};
       if (nonCategoryPrefs) {

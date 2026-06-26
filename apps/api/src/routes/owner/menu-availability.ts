@@ -40,7 +40,7 @@ export default async function menuAvailabilityRoutes(fastify: FastifyInstance) {
           [locationId, busy_until],
         );
       });
-      if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
       return reply.send({ id: res.rows[0].id, kitchenBusyUntil: res.rows[0].kitchen_busy_until });
     },
   );
@@ -107,7 +107,7 @@ export default async function menuAvailabilityRoutes(fastify: FastifyInstance) {
       const hasProduct = !!b.product_id;
       const hasCategory = !!b.category_id;
       if (hasProduct === hasCategory) {
-        return reply.status(400).send({ error: 'Provide exactly one of product_id or category_id' });
+        return reply.sendError(400, 'VALIDATION_FAILED', 'Provide exactly one of product_id or category_id');
       }
 
       const res = await withTenant(server.db, userId, async (client) =>
@@ -137,7 +137,7 @@ export default async function menuAvailabilityRoutes(fastify: FastifyInstance) {
       const res = await withTenant(server.db, userId, async (client) =>
         client.query(`DELETE FROM menu_schedules WHERE location_id = $1 AND id = $2 RETURNING id`, [locationId, id]),
       );
-      if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
       return reply.status(204).send();
     },
   );

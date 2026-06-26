@@ -148,17 +148,17 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     // before touching storage — or an encoded '..%2f..%2f' escapes the prefix
     // and reads arbitrary bucket/filesystem objects.
     if (!key || key.includes('..') || key.includes('\0') || key.includes('\\')) {
-      return reply.status(400).send({ error: 'Invalid image key' });
+      return reply.sendError(400, 'INVALID_KEY', 'Invalid image key');
     }
     try {
       const buf = await storage.get(key);
-      if (!buf) return reply.status(404).send({ error: 'Image not found' });
+      if (!buf) return reply.sendError(404, 'NOT_FOUND', 'Image not found');
       reply.header('Cache-Control', 'public, max-age=31536000, immutable');
       reply.header('Content-Type', 'image/webp');
       return reply.send(buf);
     } catch (err: any) {
       console.warn('[spa-proxy] image fetch failed:', err?.message);
-      return reply.status(404).send({ error: 'Image not found' });
+      return reply.sendError(404, 'NOT_FOUND', 'Image not found');
     }
   });
 
@@ -173,7 +173,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     // so reject traversal here before touching storage or an encoded '..%2f' could
     // escape the prefix and read arbitrary bucket objects.
     if (!key || key.includes('..') || key.includes('\0') || key.includes('\\')) {
-      return reply.status(400).send({ error: 'Invalid media key' });
+      return reply.sendError(400, 'INVALID_KEY', 'Invalid media key');
     }
     const ext = key.slice(key.lastIndexOf('.') + 1).toLowerCase();
     const contentType =
@@ -184,23 +184,23 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       : 'application/octet-stream';
     try {
       const buf = await storage.get(key);
-      if (!buf) return reply.status(404).send({ error: 'Media not found' });
+      if (!buf) return reply.sendError(404, 'NOT_FOUND', 'Media not found');
       reply.header('Cache-Control', 'public, max-age=31536000, immutable');
       reply.header('Content-Type', contentType);
       return reply.send(buf);
     } catch (err: any) {
       console.warn('[spa-proxy] media fetch failed:', err?.message);
-      return reply.status(404).send({ error: 'Media not found' });
+      return reply.sendError(404, 'NOT_FOUND', 'Media not found');
     }
   });
 
   // POST /api/owner/menu/products/:productId/image — upload product image
   fastify.post('/api/owner/menu/products/:productId/image', async (request, reply) => {
     const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!locId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
     const pid = (request.params as any).productId;
     const data = await request.file();
-    if (!data) return reply.status(400).send({ error: 'No file uploaded' });
+    if (!data) return reply.sendError(400, 'VALIDATION_FAILED', 'No file uploaded');
     const buffer = await data.toBuffer();
     let processed: Buffer;
     try {
@@ -254,10 +254,10 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     config: { rateLimit: { max: 8, timeWindow: '1 minute' } },
   }, async (request, reply) => {
     const data = await request.file({ limits: { fileSize: 8 * 1024 * 1024 } });
-    if (!data) return reply.status(400).send({ error: 'No file uploaded' });
-    if (data.fieldname !== 'file') return reply.status(400).send({ error: 'Image must be sent as the "file" field' });
-    if ((data as any).file?.truncated) return reply.status(413).send({ error: 'File exceeds maximum size' });
-    if (!String(data.mimetype || '').startsWith('image/')) return reply.status(400).send({ error: 'Must be an image' });
+    if (!data) return reply.sendError(400, 'VALIDATION_FAILED', 'No file uploaded');
+    if (data.fieldname !== 'file') return reply.sendError(400, 'VALIDATION_FAILED', 'Image must be sent as the "file" field');
+    if ((data as any).file?.truncated) return reply.sendError(413, 'FILE_TOO_LARGE', 'File exceeds maximum size');
+    if (!String(data.mimetype || '').startsWith('image/')) return reply.sendError(400, 'VALIDATION_FAILED', 'Must be an image');
     const buffer = await data.toBuffer();
     let processed: Buffer;
     try {
@@ -265,7 +265,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       processed = await sharp(buffer).rotate().resize({ width: 1024, height: 1024, fit: 'inside' }).webp({ quality: 78 }).toBuffer();
     } catch {
       // Don't leak sharp/libvips internals to the client.
-      return reply.status(400).send({ error: 'Invalid image file' });
+      return reply.sendError(400, 'VALIDATION_FAILED', 'Invalid image file');
     }
     const crypto = await import('node:crypto');
     const key = `entry-photos/${crypto.randomUUID()}.webp`;
@@ -280,7 +280,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // GET /api/owner/analytics
   fastify.get('/api/owner/analytics', async (request, reply) => {
     const ctx = await getOwnerContext(request);
-    if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!ctx) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
     const locId = ctx.locId;
     // withTenant: RLS tenant scoping (set app.user_id) as defense-in-depth on top of
     // the explicit WHERE location_id binding below.
@@ -359,9 +359,9 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // GET /api/owner/analytics/product-orders
   fastify.get('/api/owner/analytics/product-orders', async (request, reply) => {
     const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!locId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
     const name = (request.query as any).name;
-    if (!name) return reply.status(400).send({ error: 'Missing product name' });
+    if (!name) return reply.sendError(400, 'VALIDATION_FAILED', 'Missing product name');
     const { rows } = await db.query(
       `SELECT o.id, o.total, o.currency_code, o.created_at, o.status,
               c.name AS customer_name, oi.quantity, oi.price_snapshot AS price
@@ -377,7 +377,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // GET /api/owner/orders
   fastify.get('/api/owner/orders', async (request, reply) => {
     const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!locId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
     const statusFilter = (request.query as any)?.status;
     let statusClause = '';
     const params: any[] = [locId];
@@ -436,7 +436,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // GET /api/owner/couriers
   fastify.get('/api/owner/couriers', async (request, reply) => {
     const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!locId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
     const client = await db.connect();
     try {
       await client.query('BEGIN');
@@ -491,7 +491,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   fastify.get('/api/public/theme/:slug', async (request, reply) => {
     const slug = (request.params as any).slug;
     const locRes = await db.query(`SELECT id, name, supported_locales FROM locations WHERE slug = $1`, [slug]);
-    if (locRes.rows.length === 0) return reply.status(404).send({ error: 'Not found' });
+    if (locRes.rows.length === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
     const locId = locRes.rows[0].id;
     const locName = locRes.rows[0].name;
     const themeRes = await db.query(
@@ -509,7 +509,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // GET /api/owner/brand
   fastify.get('/api/owner/brand', async (request, reply) => {
     const ctx = await getOwnerContext(request);
-    if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!ctx) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
     const res = await withTenant(db, ctx.userId, async (client) =>
       client.query(
         `SELECT primary_color, bg_color, text_color, logo_url, frame_ancestors,
@@ -540,7 +540,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // PUT /api/owner/brand — update theme
   fastify.put('/api/owner/brand', async (request, reply) => {
     const ctx = await getOwnerContext(request);
-    if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!ctx) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
     const parsed = brandSchema.parse(request.body);
     const logoUrl = parsed.logoUrl ? validateImageKey(parsed.logoUrl) : null;
     const res = await withTenant(db, ctx.userId, async (client) => {
@@ -586,7 +586,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // The client expands these three seeds into a full coherent palette.
   fastify.post('/api/owner/brand/generate', async (request, reply) => {
     const ctx = await getOwnerContext(request);
-    if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!ctx) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
     const body = (request.body || {}) as { website?: string; logoDataUrl?: string };
 
     let primary: string | undefined, bg: string | undefined, text: string | undefined;
@@ -639,14 +639,14 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       // apiClient treat first-run as "session expired" and bounce to /login (O1).
       // Hand back a benign empty profile so AdminHome routes to /admin/onboarding.
       if (await isValidOwnerToken(request)) return reply.send({ id: null });
-      return reply.status(401).send({ error: 'Unauthorized' });
+      return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
     }
     const res = await db.query(
       `SELECT id, name, slug, phone, delivery_fee_flat, min_order_value, free_delivery_threshold, delivery_radius_km, currency_code, tax_rate, lat, lng, address, hours_json, delivery_paused
        FROM locations WHERE id = $1`,
       [locId]
     );
-    if (!res.rows[0]) return reply.status(404).send({ error: 'Not found' });
+    if (!res.rows[0]) return reply.sendError(404, 'NOT_FOUND', 'Not found');
     const r = res.rows[0];
     return reply.send({
       id: r.id, slug: r.slug, locationName: r.name, phone: r.phone || '',
@@ -667,7 +667,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // PUT /api/owner/settings
   fastify.put('/api/owner/settings', async (request, reply) => {
     const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!locId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
     const parsed = settingsSchema.parse(request.body);
     const res = await db.query(
       `UPDATE locations SET
@@ -689,7 +689,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
        parsed.deliveryPaused ?? null]
     );
     const r = res.rows[0];
-    if (!r) return reply.status(404).send({ error: 'Location not found' });
+    if (!r) return reply.sendError(404, 'NOT_FOUND', 'Location not found');
     return reply.send({
       id: r.id, slug: r.slug, locationName: r.name, phone: r.phone || '',
       deliveryFee: Number(r.delivery_fee_flat) || 0,
@@ -714,7 +714,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       // Fresh owner mid-wizard (no location yet) — return a placeholder invite
       // instead of 401, which the client would turn into a logout, ejecting the
       // owner from onboarding. Real courier setup happens after the storefront exists.
-      if (!(await isValidOwnerToken(request))) return reply.status(401).send({ error: 'Unauthorized' });
+      if (!(await isValidOwnerToken(request))) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
       return reply.send({ link: `https://app.dowiz.org/courier/join?code=${code}`, code, phone: phone || null, pending: true });
     }
     const link = `https://${locId}.dowiz.org/courier/join?code=${code}`;
@@ -735,10 +735,10 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       // then continue with menu/theme below. The location starts as a DRAFT
       // (published_at NULL) — going order-capable happens via the activation gate.
       const userId = await getOwnerUserId(request);
-      if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
-      if (!name || !phone || !slug) return reply.status(400).send({ error: 'name, phone and slug are required' });
+      if (!userId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
+      if (!name || !phone || !slug) return reply.sendError(400, 'VALIDATION_FAILED', 'name, phone and slug are required');
       const taken = await db.query(`SELECT 1 FROM locations WHERE slug = $1`, [slug]);
-      if (taken.rowCount > 0) return reply.status(409).send({ error: 'Slug already taken', code: 'SLUG_TAKEN' });
+      if (taken.rowCount > 0) return reply.sendError(409, 'SLUG_TAKEN', 'Slug already taken');
       const orgRes = await db.query(`SELECT id FROM organizations WHERE owner_id = $1 LIMIT 1`, [userId]);
       let orgId = orgRes.rows[0]?.id;
       if (!orgId) {
@@ -800,7 +800,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // GET /api/owner/customers
   fastify.get('/api/owner/customers', async (request, reply) => {
     const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!locId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
     const res = await db.query(
       `SELECT c.id, c.name, c.phone, COUNT(o.id)::int as orders,
               COALESCE(SUM(o.total), 0)::int as ltv, MAX(o.created_at) as last_order_at
@@ -818,7 +818,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
   // GET /api/owner/customers/:id/analytics
   fastify.get('/api/owner/customers/:id/analytics', async (request, reply) => {
     const locId = await getLocationId(request);
-    if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!locId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
     const cid = (request.params as any).id;
     const ordersRes = await db.query(
       `SELECT o.id, o.status, o.total, o.created_at, o.delivery_address,

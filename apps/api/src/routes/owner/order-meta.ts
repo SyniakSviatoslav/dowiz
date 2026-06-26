@@ -32,7 +32,7 @@ export default (async function ownerOrderMetaRoutes(fastify: any, opts: any) {
        RETURNING id`,
       [JSON.stringify(test_order), orderId, locationId],
     );
-    if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+    if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
     return reply.send({ ok: true });
   });
 });

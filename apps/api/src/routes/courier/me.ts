@@ -47,7 +47,7 @@ export default (async function courierMeRoutes(fastify: any, opts: any) {
     );
 
     if (res.rowCount === 0) {
-      return reply.status(404).send({ error: 'Not found' });
+      return reply.sendError(404, 'NOT_FOUND', 'Not found');
     }
 
     const row = res.rows[0];
@@ -129,13 +129,13 @@ export default (async function courierMeRoutes(fastify: any, opts: any) {
     try {
       const courierRes = await client.query(`SELECT password_hash FROM couriers WHERE id = $1`, [courierId]);
       if (courierRes.rowCount === 0) {
-        return reply.status(404).send({ error: 'Courier not found' });
+        return reply.sendError(404, 'NOT_FOUND', 'Courier not found');
       }
 
       const courier = courierRes.rows[0];
       const valid = await argon2.verify(courier.password_hash, current_password);
       if (!valid) {
-        return reply.status(400).send({ error: 'Invalid current password' });
+        return reply.sendError(400, 'VALIDATION_FAILED', 'Invalid current password');
       }
 
       const hashOptions = {

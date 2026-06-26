@@ -79,7 +79,7 @@ export default (async function customerTrackRoutes(fastify: any, opts: any) {
       });
     } catch (err) {
       request.log.error({ err }, 'track/exchange: failed to issue customer token');
-      return reply.status(500).send({ error: 'Internal server error' });
+      return reply.sendError(500, 'INTERNAL', 'Internal server error');
     }
 
     return reply.send({ token });

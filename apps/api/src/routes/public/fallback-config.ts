@@ -19,7 +19,7 @@ export default (async function publicFallbackConfigRoutes(fastify: any, opts: an
       [slug],
     );
 
-    if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+    if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
 
     const row = res.rows[0];
     const config = row.fallback_config || {};

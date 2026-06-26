@@ -24,7 +24,7 @@ export default (async function ownerThemeRoutes(fastify, opts) {
     try {
       const res = await client.query(`SELECT * FROM location_themes WHERE location_id = $1`, [locationId]);
       const theme = res.rows[0];
-      if (!theme) return reply.status(404).send({ error: 'Not found' });
+      if (!theme) return reply.sendError(404, 'NOT_FOUND', 'Not found');
 
       const versionRes = await client.query(
         `SELECT css_hash, version FROM theme_versions WHERE location_id = $1 ORDER BY version DESC LIMIT 1`,
@@ -119,7 +119,7 @@ export default (async function ownerThemeRoutes(fastify, opts) {
   fastify.post('/api/owner/locations/:locationId/theme/logo', async (request, reply) => {
     const { locationId } = request.params as any;
     const data = await request.file();
-    if (!data) return reply.status(400).send({ error: 'No file uploaded' });
+    if (!data) return reply.sendError(400, 'VALIDATION_FAILED', 'No file uploaded');
 
     const buffer = await data.toBuffer();
     

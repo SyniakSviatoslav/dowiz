@@ -32,7 +32,7 @@ export default (async function ownerDwellSettingsRoutes(fastify: any, opts: any)
         [locationId],
       ),
     );
-    if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+    if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
     const thresholds = res.rows[0]?.dwell_thresholds || DEFAULT_DWELL_THRESHOLDS;
     return reply.send({ dwellThresholds: thresholds });
   });
@@ -55,7 +55,7 @@ export default (async function ownerDwellSettingsRoutes(fastify: any, opts: any)
         [JSON.stringify(stored), locationId],
       ),
     );
-    if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+    if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
     return reply.send({ dwellThresholds: stored });
   });
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;
