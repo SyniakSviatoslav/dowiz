@@ -488,7 +488,7 @@ export function OrderStatusPage() {
     <div className="max-w-md mx-auto min-h-screen bg-[var(--brand-surface)] pb-10" role="region" aria-live="polite" aria-label={t('order.status_updates', 'Order status updates')}>
       {/* WS Disconnect Banner — own the failure, give a human a way to reach the restaurant */}
       {isDisconnected && (
-        <div className="sticky top-0 z-50 px-4 py-2 text-xs font-semibold flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5" style={{ background: 'var(--color-warning)', color: '#fff' }} data-testid="offline-banner">
+        <div className="sticky top-0 z-50 px-4 py-2 text-xs font-semibold flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5" style={{ background: 'var(--color-warning)', color: 'var(--color-on-primary)' }} data-testid="offline-banner">
           <span className="inline-flex items-center gap-2">
             <i className="ti ti-wifi-off" aria-hidden="true" />
             {t('order.live_paused', 'Live updates paused. Refreshing automatically.')}
@@ -499,7 +499,7 @@ export function OrderStatusPage() {
               data-testid="offline-call-restaurant"
               title={t('order.call_restaurant', 'Call the restaurant')}
               className="inline-flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 px-3 py-1.5 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1"
-              style={{ color: '#fff' }}
+              style={{ color: 'var(--color-on-primary)' }}
             >
               <i className="ti ti-phone" aria-hidden="true" />
               <span>{t('order.call_restaurant', 'Call the restaurant')}</span>
@@ -749,7 +749,7 @@ export function OrderStatusPage() {
               <div className="mt-4 pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
                 <a href={`https://search.google.com/local/writereview?placeid=${encodeURIComponent(googlePlaceId)}`}
                   target="_blank" rel="noopener noreferrer" data-testid="google-review-link"
-                  className="inline-flex items-center gap-2 min-h-11 text-sm font-medium rounded-[var(--brand-radius-sm)] transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2" style={{ color: 'var(--brand-primary)' }}>
+                  className="inline-flex items-center gap-2 min-h-11 text-sm font-medium rounded-[var(--brand-radius-sm)] transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2" style={{ color: 'var(--brand-primary-readable)' }}>
                   <i className="ti ti-brand-google" aria-hidden="true" /> {t('client.leave_google_review', 'Leave a review on Google')}
                 </a>
               </div>
@@ -772,7 +772,7 @@ export function OrderStatusPage() {
                 { label: t('client.nutrition_carbs', 'Carbs'), value: order.carb_mg_total, unit: 'g' },
               ].map(n => (
                 <div key={n.label} className="p-2 rounded-[var(--brand-radius-sm)] min-w-0" style={{ background: 'var(--brand-surface)' }}>
-                  <div className="text-lg font-bold tabular-nums" style={{ color: 'var(--brand-primary)' }}>{n.value || '—'}</div>
+                  <div className="text-lg font-bold tabular-nums" style={{ color: 'var(--brand-primary-readable)' }}>{n.value || '—'}</div>
                   <div className="text-step-2xs truncate" style={{ color: 'var(--brand-text-muted)' }}>{n.label}</div>
                   <div className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{n.unit}</div>
                 </div>

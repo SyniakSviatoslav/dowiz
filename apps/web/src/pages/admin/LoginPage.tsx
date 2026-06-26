@@ -179,7 +179,7 @@ export function LoginPage() {
             {tgWaiting && tgLink && (
               <p className="text-xs text-center" style={{ color: 'var(--brand-text-muted)' }}>
                 {t('admin.tg_open_hint', "Didn't open?")}{' '}
-                <a href={tgLink} target="_blank" rel="noreferrer" style={{ color: 'var(--brand-primary)' }}>{t('admin.tg_open_link', 'Open Telegram')}</a>
+                <a href={tgLink} target="_blank" rel="noreferrer" style={{ color: 'var(--brand-primary-readable)' }}>{t('admin.tg_open_link', 'Open Telegram')}</a>
               </p>
             )}
 

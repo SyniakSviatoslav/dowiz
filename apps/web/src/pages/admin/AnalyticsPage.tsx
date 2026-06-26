@@ -273,7 +273,7 @@ export function AnalyticsPage() {
         <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
           <h3 className="text-sm font-semibold shrink-0" style={{ color: 'var(--brand-text)' }}>{t('admin.revenue_trend', 'Revenue Trend')}</h3>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-step-2xs px-2 py-0.5 rounded-full tabular-nums whitespace-nowrap" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
+            <span className="text-step-2xs px-2 py-0.5 rounded-full tabular-nums whitespace-nowrap" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary-readable)' }}>
               {t('admin.total', 'Total:')} <PriceDisplay amount={data.chart.reduce((s, c) => s + c.revenue, 0)} />
             </span>
             <span className="text-step-2xs px-2 py-0.5 rounded-full tabular-nums whitespace-nowrap" style={{ background: 'var(--color-success-light)', color: 'var(--color-success)' }}>
@@ -330,7 +330,7 @@ export function AnalyticsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <div className="text-sm font-medium truncate">{p.name}</div>
-                        {i === 0 && <span className="text-step-2xs px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>#1</span>}
+                        {i === 0 && <span className="text-step-2xs px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary-readable)' }}>#1</span>}
                       </div>
                       <div className="h-1 rounded-full" style={{ background: 'var(--brand-border)' }}>
                         <div className="h-full rounded-full progress-animate" style={{ width: `${barPct}%`, background: 'var(--brand-primary)', opacity: 0.3 + (barPct / 100) * 0.7 }} />
@@ -340,7 +340,7 @@ export function AnalyticsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <div className="text-sm font-semibold text-right" style={{ color: 'var(--brand-primary)' }}>
+                      <div className="text-sm font-semibold text-right" style={{ color: 'var(--brand-primary-readable)' }}>
                         <PriceDisplay amount={p.revenue} />
                       </div>
                       <i className={`ti ${isExpanded ? 'ti-chevron-up' : 'ti-chevron-down'} text-xs text-[var(--brand-text-muted)]`} />
@@ -424,7 +424,7 @@ export function AnalyticsPage() {
           <button
             onClick={handleCopyReorder}
             className="flex items-center gap-1.5 mt-2 px-3 py-1.5 text-step-2xs font-medium rounded-lg border transition-[background-color,transform,box-shadow] duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
-            style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-primary)' }}
+            style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-primary-readable)' }}
           >
             {copied ? (
               <><i className="ti ti-check" /> {t('common.copied', 'Copied!')}</>

@@ -626,7 +626,7 @@ export function MenuPage() {
                     aria-current={activeTab === cat.id ? 'true' : undefined}
                     className="h-11 flex items-center gap-1 px-3 whitespace-nowrap text-step-xs font-medium border-b-2 shrink-0 outline-none transition-colors duration-150 ease-out rounded-t-md focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
                     style={{
-                      color: activeTab === cat.id ? (isChefCat ? 'var(--brand-primary)' : 'var(--brand-text)') : 'var(--brand-text-muted)',
+                      color: activeTab === cat.id ? (isChefCat ? 'var(--brand-primary-readable)' : 'var(--brand-text)') : 'var(--brand-text-muted)',
                       borderColor: activeTab === cat.id ? (isChefCat ? 'var(--brand-primary)' : 'var(--brand-primary)') : 'transparent',
                     }}
                   >
@@ -989,7 +989,7 @@ export function MenuPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1.5">
                       {detailProduct.attributes?.chef_pick && (
-                        <span className="text-step-2xs font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1" style={{ background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)', color: 'var(--brand-primary)' }}>
+                        <span className="text-step-2xs font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1" style={{ background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)', color: 'var(--brand-primary-readable)' }}>
                           <i className="ti ti-flame" style={{ fontSize: '0.6rem' }} />
                           {t('client.popular', 'Popular')}
                         </span>
@@ -1159,12 +1159,12 @@ export function MenuPage() {
                                 borderRadius: 'var(--brand-radius-sm)',
                                 background: isSelected ? 'var(--brand-primary-light, var(--brand-surface-raised))' : 'var(--brand-surface)',
                                 borderColor: isSelected ? 'var(--brand-primary)' : 'var(--brand-border)',
-                                color: isSelected ? 'var(--brand-primary)' : 'var(--brand-text)',
+                                color: isSelected ? 'var(--brand-primary-readable)' : 'var(--brand-text)',
                               }}
                             >
                               {mod.name}
                                   {mod.price_delta > 0 && (
-                                <span className="ml-1 text-step-2xs" style={{ color: isSelected ? 'var(--brand-primary)' : 'var(--brand-text-muted)' }}>
+                                <span className="ml-1 text-step-2xs" style={{ color: isSelected ? 'var(--brand-primary-readable)' : 'var(--brand-text-muted)' }}>
                                   +&nbsp;<PriceDisplay amount={mod.price_delta} />
                                 </span>
                               )}

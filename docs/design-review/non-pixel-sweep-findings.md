@@ -84,7 +84,7 @@ couriers/crm/branding, courier history, public landing//start/login/privacy/404.
 | storefront | CSP `connect-src` blocks SW/preload prefetch of Google Fonts CSS | real-ish; fonts still render via `<link>`; SW prefetch noisy. Consider self-hosting fonts (privacy + removes 3rd-party) |
 | checkout | WebGL "GPU stall" perf warnings (paper/3D scene) | mostly benign; watch on low-end mobile |
 | owner dashboard/orders | WS "closed before connection established" (+ JWT in `ws?token=` URL) | navigation-timing; **token-in-URL** worth review |
-| owner dashboard/orders/settings | "Expected value to be of type number, but found null" ×many | shared number formatter / AnimatedNumber fed null — real, minor |
+| owner dashboard/orders/settings | "Expected value to be of type number, but found null" ×many | **CORRECTED**: NOT our formatter — it's MapLibre evaluating the third-party openfreemap basemap style over null tile props (our addLayer paint is static literals). Benign third-party noise → allowlisted in console-guard; root fix = self-host a clean tile style. Our AnimatedNumber/formatMoney call sites are guarded. |
 
 ## Harness accuracy fix (this run)
 

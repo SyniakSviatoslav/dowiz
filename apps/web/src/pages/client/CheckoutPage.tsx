@@ -685,7 +685,7 @@ export function CheckoutPage() {
             <div>
               <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.messenger', 'Messenger (optional)')}</label>
               <div className="flex gap-2">
-                <Select value={messengerKind} onChange={e => setMessengerKind(e.target.value)} data-testid="checkout-messenger-kind">
+                <Select value={messengerKind} onChange={e => setMessengerKind(e.target.value)} aria-label={t('checkout.messenger', 'Messenger (optional)')} data-testid="checkout-messenger-kind">
                   <option value="">{t('checkout.messenger_none', '—')}</option>
                   <option value="telegram">Telegram</option>
                   <option value="whatsapp">WhatsApp</option>
@@ -693,6 +693,7 @@ export function CheckoutPage() {
                 </Select>
                 <input value={messengerHandle} onChange={e => setMessengerHandle(e.target.value)} disabled={!messengerKind}
                   required={!!messengerKind}
+                  aria-label={t('checkout.messenger_handle_label', 'Your messenger handle')}
                   placeholder={messengerKind === 'telegram' ? '@username' : '+355 6X XXX XXXX'} data-testid="checkout-messenger-handle"
                   className="flex-1 min-w-0 h-[48px] px-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)] disabled:opacity-50" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
               </div>
