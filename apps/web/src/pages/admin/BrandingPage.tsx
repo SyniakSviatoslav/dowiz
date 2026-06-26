@@ -346,6 +346,7 @@ export function BrandingPage() {
                   <img
                     src={logoPreview}
                     alt={t('admin.logo_preview_alt', 'Logo preview')}
+                    data-testid="logo-preview"
                     className="max-w-full max-h-full object-contain"
                     onError={() => setLogoBroken(true)}
                   />

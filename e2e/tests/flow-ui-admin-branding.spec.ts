@@ -247,12 +247,15 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
     await fileInput.waitFor({ state: 'attached', timeout: 10000 });
     await fileInput.setInputFiles(LOGO_PATH);
 
-    // After selecting a file, the preview <img> should appear in the form
-    // BrandingPage renders it when logoDataUrl is set
-    const previewImg = page.locator('img[alt="Logo preview"]');
+    // After selecting a file, the preview <img> should appear in the form.
+    // Locate by data-testid (locale-proof — the alt is i18n'd, sq by default).
+    const previewImg = page.locator('[data-testid="logo-preview"]');
     await previewImg.waitFor({ state: 'visible', timeout: 8000 });
+    // The src is the instant FileReader data: URL on pick, OR — once the upload
+    // succeeds (apiClient refreshes the token) — the persisted server URL it
+    // switches to. Both are valid previews; assert a real, non-broken src.
     const src = await previewImg.getAttribute('src');
-    expect(src, 'Logo preview src must be a data URL after file selection').toMatch(/^data:image\//);
+    expect(src, 'Logo preview must have a data: or http(s) src').toMatch(/^(data:image\/|https?:\/\/)/);
 
     const critical = jsErrors.filter(e =>
       !e.includes('favicon') && !e.includes('ResizeObserver') && !e.includes('Non-Error')
