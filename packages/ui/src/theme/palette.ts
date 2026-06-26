@@ -126,6 +126,13 @@ export function derivePalette(input: PaletteInput): ThemeConfig {
   const primaryHover = mix(primary, light ? BLACK : WHITE, 0.18);
   const primaryLight = `rgba(${Math.round(primary.r)}, ${Math.round(primary.g)}, ${Math.round(primary.b)}, 0.12)`;
 
+  // Primary-as-TEXT: the brand primary is chosen as a fill colour and is often
+  // too low-contrast to read as text on a surface (e.g. rose #e11d48 on a light
+  // pink surface = 4.0). This is the same hue nudged toward the readable pole
+  // until it clears AA on the surface — use it for primary-coloured text/prices,
+  // keep raw --brand-primary for fills.
+  const primaryReadable = ensureContrast(primary, surface, 4.5);
+
   // Accent: neutral chip/section tint, slightly stronger than the raised surface.
   const accent = parseColor(input.accent)
     ? toHex(parseColor(input.accent)!)
@@ -134,6 +141,7 @@ export function derivePalette(input: PaletteInput): ThemeConfig {
   return {
     primary: toHex(primary),
     primaryHover: toHex(primaryHover),
+    primaryReadable: toHex(primaryReadable),
     primaryLight,
     accent,
     bg: toHex(bg),
