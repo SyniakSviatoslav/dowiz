@@ -1,0 +1,38 @@
+{
+  "name": "pizza-roma",
+  "_note": "Golden = hand-authored from the source menu. actual = current parser output for it; regenerate after a model swap. Baseline: actual matches golden → passes.",
+  "expected": {
+    "categories": [{ "externalKey": "pizza", "name": "Pizza" }],
+    "products": [
+      { "externalKey": "p1", "categoryKey": "pizza", "name": "Margherita", "price": 800, "currency": "ALL", "available": true },
+      { "externalKey": "p2", "categoryKey": "pizza", "name": "Pepperoni", "price": 1200, "currency": "ALL", "available": true },
+      { "externalKey": "p3", "categoryKey": "pizza", "name": "Quattro Formaggi", "price": 1350, "currency": "ALL", "available": true }
+    ],
+    "modifierGroups": [
+      { "externalKey": "size", "name": "Size", "minSelect": 1, "maxSelect": 1, "required": true }
+    ],
+    "modifiers": [
+      { "externalKey": "m_s", "groupKey": "size", "name": "Small", "priceDelta": 0, "available": true },
+      { "externalKey": "m_l", "groupKey": "size", "name": "Large", "priceDelta": 300, "available": true }
+    ],
+    "links": [{ "productKey": "p1", "groupKey": "size", "sortOrder": 0 }],
+    "translations": []
+  },
+  "actual": {
+    "categories": [{ "externalKey": "c1", "name": "Pizza" }],
+    "products": [
+      { "externalKey": "x1", "categoryKey": "c1", "name": "Margherita", "price": 800, "currency": "ALL", "available": true },
+      { "externalKey": "x2", "categoryKey": "c1", "name": "Pepperoni", "price": 1200, "currency": "ALL", "available": true },
+      { "externalKey": "x3", "categoryKey": "c1", "name": "Quattro Formaggi", "price": 1350, "currency": "ALL", "available": true }
+    ],
+    "modifierGroups": [
+      { "externalKey": "g1", "name": "Size", "minSelect": 1, "maxSelect": 1, "required": true }
+    ],
+    "modifiers": [
+      { "externalKey": "g1m1", "groupKey": "g1", "name": "Small", "priceDelta": 0, "available": true },
+      { "externalKey": "g1m2", "groupKey": "g1", "name": "Large", "priceDelta": 300, "available": true }
+    ],
+    "links": [{ "productKey": "x1", "groupKey": "g1", "sortOrder": 0 }],
+    "translations": []
+  }
+}
