@@ -1046,7 +1046,9 @@ fastify.register(mockAuthRoutes, { db: pool });
     ) {
       return reply.sendFile('index.html');
     }
-    reply.status(404).send({ error: 'Not found', path: request.url });
+    // A2 (ADR-0010): unmatched API routes emit the one envelope too (NOT_FOUND + correlationId);
+    // the missed `path` is in the access log + correlationId trace, no longer in the body.
+    reply.sendError(404, 'NOT_FOUND', 'Not found');
   });
 
   fastify.ready(err => {
