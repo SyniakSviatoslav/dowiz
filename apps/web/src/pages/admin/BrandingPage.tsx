@@ -330,6 +330,7 @@ export function BrandingPage() {
               <div className="flex-1 min-w-0 space-y-3">
                 <FormField label={t(logoUploading ? 'admin.uploading' : 'admin.upload_logo', logoUploading ? 'Uploading…' : 'Upload Logo File')}>
                   <input type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={handleLogoUpload} disabled={logoUploading}
+                    aria-label={t('admin.upload_logo', 'Upload Logo File')}
                     className="w-full text-sm rounded-[var(--brand-radius-sm)] transition-shadow duration-150 ease-[var(--ease-soft)]
                       file:mr-3 file:py-2 file:px-4 file:rounded-[var(--brand-radius-sm)] file:border-0 file:text-sm file:font-medium file:bg-[var(--brand-primary)] file:text-white file:transition-opacity file:duration-150 hover:file:opacity-90 disabled:opacity-50
                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]" />

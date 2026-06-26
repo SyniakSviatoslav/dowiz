@@ -180,6 +180,7 @@ export function CRMPage() {
           <Select
             value={sortKey}
             onChange={e => setSortKey(e.target.value as any)}
+            aria-label={t('admin.sort_by', 'Sort by')}
           >
             <option value="orders">{t('admin.most_orders', 'Most orders')}</option>
             <option value="ltv">{t('admin.highest_ltv', 'Highest LTV')}</option>
@@ -231,10 +232,6 @@ export function CRMPage() {
                 <React.Fragment key={c.id}>
                   <motion.tr
                     onClick={() => toggleExpand(c.id)}
-                    role="button"
-                    tabIndex={0}
-                    aria-expanded={expandedCustomer === c.id}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(c.id); } }}
                     initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={reduceMotion ? { duration: 0 } : { duration: duration.base, ease: ease.out, delay: Math.min(i, 12) * 0.03 }}
@@ -294,11 +291,13 @@ export function CRMPage() {
                 className="rounded-[var(--brand-radius)] overflow-hidden"
                 style={{ boxShadow: 'var(--elev-1)', background: 'var(--brand-surface)' }}
               >
-                <button
-                  type="button"
+                {/* Not a <button>: it wraps the Reveal <Button> (nested-interactive
+                    ×50). Expand-on-click is a mouse convenience; Reveal stays the
+                    keyboard-reachable action and the row data is visible unexpanded. */}
+                <motion.div
                   onClick={() => toggleExpand(c.id)}
-                  aria-expanded={expanded}
-                  className="w-full text-left p-4 flex items-start gap-3 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.99] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--brand-primary)]"
+                  whileTap={reduceMotion ? undefined : { scale: 0.99 }}
+                  className="w-full text-left p-4 flex items-start gap-3 cursor-pointer transition-colors duration-[var(--motion-fast)] ease-[var(--ease-soft)]"
                 >
                   <i className={`ti ti-chevron-${expanded ? 'down' : 'right'} text-[var(--brand-text-muted)] text-sm mt-0.5 shrink-0`} />
                   <div className="min-w-0 flex-1">
@@ -322,7 +321,7 @@ export function CRMPage() {
                       {revealed[c.id] ? '' : ` ${t('admin.reveal', 'Reveal')}`}
                     </Button>
                   </span>
-                </button>
+                </motion.div>
                 {expanded && (
                   <div className="px-4 pb-4 border-t pt-4" style={{ borderColor: 'var(--brand-border)' }}>
                     <CustomerDetail t={t} loading={loadingAnalytics === c.id} data={analyticsCache[c.id]} reduceMotion={reduceMotion} />

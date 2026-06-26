@@ -322,6 +322,7 @@
 [data-surface="dark"] {
   --status-pending: #FBBF24;
   --status-confirmed: #60A5FA;
+  --status-info: #60A5FA;
   --status-preparing: #FBBF24;
   --status-ready: #2DD4BF;
   --status-in-delivery: #93C5FD;
