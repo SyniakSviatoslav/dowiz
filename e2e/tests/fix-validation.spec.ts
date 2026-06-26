@@ -35,7 +35,7 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
     expect(response?.status()).toBe(200);
 
     // SSR product cards render
-    const cards = page.locator('article.product-card');
+    const cards = page.locator('[data-testid="menu-item"]');
     await expect(cards.first()).toBeVisible({ timeout: 15000 });
   });
 

@@ -6,8 +6,8 @@ test.describe('Embed Mode', () => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
     await page.goto('/s/test-slug?dev=true&embed=true');
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
-    await page.locator('article.product-card button[aria-label="Add"]').first().click();
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
+    await page.locator('[data-testid="menu-item-add"]').first().click();
     await expect(page.locator('#cartFabBtn')).toBeVisible({ timeout: 5000 });
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
     const body = await page.textContent('body');
@@ -47,9 +47,9 @@ test.describe('Embed Mode', () => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
     await page.goto('/s/test-slug?dev=true&embed=true');
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
-    const cards = await page.locator('article.product-card').count();
+    const cards = await page.locator('[data-testid="menu-item"]').count();
     expect(cards).toBeGreaterThan(0);
     const cookies = await page.context().cookies();
     expect(cookies).toEqual([]);

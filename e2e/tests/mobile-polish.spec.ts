@@ -54,7 +54,7 @@ test.describe('Mobile polish — client storefront (/s/demo)', () => {
     await page.screenshot({ path: `${SHOTS}/client-storefront.png`, fullPage: true });
 
     // Open the first product (cinematic modal) — capture for polish review.
-    const card = page.locator('[data-testid^="product-card"], [class*="product"]').first();
+    const card = page.locator('[data-testid="menu-item"]').first();
     if (await card.isVisible({ timeout: 5000 }).catch(() => false)) {
       await card.click();
       await page.waitForTimeout(800);

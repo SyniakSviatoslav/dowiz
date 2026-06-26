@@ -33,8 +33,8 @@ test.describe('Error Handling', () => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
-    await page.locator('article.product-card button[aria-label="Add"]').first().click();
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
+    await page.locator('[data-testid="menu-item-add"]').first().click();
     await expect(page.locator('#cartFabBtn')).toBeVisible({ timeout: 5000 });
     await page.locator('#cartFabBtn').click();
     const checkoutBtn = page.locator('button:has-text("Checkout")');
@@ -52,8 +52,8 @@ test.describe('Error Handling', () => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
-    await page.locator('article.product-card button[aria-label="Add"]').first().click();
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
+    await page.locator('[data-testid="menu-item-add"]').first().click();
     await expect(page.locator('#cartFabBtn')).toBeVisible({ timeout: 5000 });
     await page.locator('#cartFabBtn').click();
     const checkoutBtn = page.locator('button:has-text("Checkout")');

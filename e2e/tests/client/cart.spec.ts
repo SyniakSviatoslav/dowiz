@@ -4,11 +4,11 @@ test.describe('Client Cart', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
   });
 
   async function addItemsToCart(page: any, count: number = 2) {
-    const addButtons = page.locator('article.product-card button[aria-label="Add"]');
+    const addButtons = page.locator('[data-testid="menu-item-add"]');
     for (let i = 0; i < count; i++) {
       await addButtons.nth(i).click();
     }
@@ -90,7 +90,7 @@ test.describe('Client Cart', () => {
     // Navigate away and back
     await page.goto('/');
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
 
     // FAB should still show
     const fab = page.locator('#cartFabBtn');

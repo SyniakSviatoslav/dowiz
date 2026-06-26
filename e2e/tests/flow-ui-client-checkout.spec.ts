@@ -65,8 +65,8 @@ test.describe('UI: Client Checkout — Full Flow', () => {
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
     // Wait for React hydration (SSR renders cards first, then React hydrates add buttons)
-    await page.waitForSelector('button[aria-label="Add to cart"], button[aria-label="Add"]', { timeout: 15000 });
-    const addBtn = page.locator('button[aria-label="Add to cart"], button[aria-label="Add"]').first();
+    await page.waitForSelector('[data-testid="menu-item-add"]', { timeout: 15000 });
+    const addBtn = page.locator('[data-testid="menu-item-add"]').first();
     await expect(addBtn).toBeVisible({ timeout: 3000 });
     await addBtn.click();
 
@@ -102,7 +102,7 @@ test.describe('UI: Client Checkout — Full Flow', () => {
     await page.goto(`${BASE}/s/${locationSlug}`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const addBtn = page.locator('button[aria-label="Add to cart"], button[aria-label="Add"]').first();
+    const addBtn = page.locator('[data-testid="menu-item-add"]').first();
     await expect(addBtn).toBeVisible({ timeout: 10000 });
     await addBtn.click();
 

@@ -4,8 +4,8 @@ test.describe('Client Checkout', () => {
 
   async function addItemAndGoToCheckout(page: any) {
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
-    await page.locator('article.product-card button[aria-label="Add"]').first().click();
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
+    await page.locator('[data-testid="menu-item-add"]').first().click();
     await page.waitForTimeout(500);
     await expect(page.locator('#cartFabBtn')).toBeVisible({ timeout: 5000 });
     await page.locator('#cartFabBtn').click();
@@ -36,7 +36,7 @@ test.describe('Client Checkout', () => {
     expect(backCount).toBeGreaterThanOrEqual(1);
     await backBtns.first().click();
     await page.waitForTimeout(1000);
-    await expect(page.locator('article.product-card').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="menu-item"]').first()).toBeVisible({ timeout: 5000 });
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
 

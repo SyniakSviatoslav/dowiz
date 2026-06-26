@@ -164,7 +164,7 @@ test.describe('Comprehensive E2E Flow Proofs — Lifecycle & Detail', () => {
     expect(errors, `JS errors on load: ${errors.join('; ')}`).toEqual([]);
 
     // Product cards rendered
-    const cards = page.locator('article.product-card');
+    const cards = page.locator('[data-testid="menu-item"]');
     await expect(cards.first()).toBeVisible({ timeout: 10000 });
     const cardCount = await cards.count();
     expect(cardCount).toBeGreaterThan(0);
@@ -307,7 +307,7 @@ test.describe('Comprehensive E2E Flow Proofs — Lifecycle & Detail', () => {
     }
 
     // [CART] Add a product to cart via the add button
-    const addBtn = page.locator('button[aria-label="Add to cart"]').first();
+    const addBtn = page.locator('[data-testid="menu-item-add"]').first();
     await expect(addBtn).toBeVisible({ timeout: 5000 });
     await addBtn.click();
     await page.waitForTimeout(1000);

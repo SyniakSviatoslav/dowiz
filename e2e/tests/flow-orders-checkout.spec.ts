@@ -194,10 +194,10 @@ test.describe('Flow: Orders & Checkout — Full Lifecycle', () => {
     await page.goto(`${BASE}/s/${locationSlug}`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const cards = page.locator('article.product-card');
+    const cards = page.locator('[data-testid="menu-item"]');
     await expect(cards.first()).toBeVisible({ timeout: 10000 });
 
-    const addBtn = page.locator('button[aria-label="Add to cart"]').first();
+    const addBtn = page.locator('[data-testid="menu-item-add"]').first();
     await addBtn.click();
     await expect(page.locator('#cartFabBtn')).toBeVisible({ timeout: 5000 });
 
@@ -347,7 +347,7 @@ test.describe('Flow: Orders & Checkout — Full Lifecycle', () => {
     await page.goto(`${BASE}/s/${locationSlug}`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const cards = page.locator('article.product-card');
+    const cards = page.locator('[data-testid="menu-item"]');
     await expect(cards.first()).toBeVisible({ timeout: 10000 });
 
     // [REFRESH]
