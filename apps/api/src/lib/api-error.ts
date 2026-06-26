@@ -42,6 +42,35 @@ export function isContractCode(code: unknown): code is string {
   return typeof code === 'string' && /^[A-Z][A-Z0-9_]*$/.test(code);
 }
 
+export interface ErrorEnvelopeOpts {
+  fields?: { path: string; code: string }[]; // 422 — field PATHS only, never values (B4)
+  retryAfterMs?: number; // 429
+}
+
+/**
+ * The ONE error-envelope shape (ADR-0010). Built here so `setErrorHandler` (thrown errors) and
+ * `reply.sendError` (A2 sweep — return-based ad-hoc sites) emit byte-identical bodies: a single
+ * source for the contract, no drift. `code` is the SCREAMING_SNAKE machine code; `error` is the
+ * retained legacy string the un-migrated FE still reads (B1 code-preserving).
+ */
+export function buildErrorEnvelope(
+  status: number,
+  code: string,
+  message: string,
+  correlationId: string,
+  opts?: ErrorEnvelopeOpts,
+) {
+  return {
+    code,
+    message,
+    fields: opts?.fields,
+    correlationId,
+    retryAfterMs: opts?.retryAfterMs,
+    status, // numeric status (legacy lived in `code` pre-A1)
+    error: message, // legacy string the un-migrated FE still reads
+  };
+}
+
 /**
  * A3 (ADR-0010): the rate-limit error for @fastify/rate-limit. The plugin THROWS the
  * `errorResponseBuilder` return value (index.js:333) — so it must be a throwable ApiError,

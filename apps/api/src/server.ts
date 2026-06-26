@@ -58,7 +58,7 @@ import fastifyCors from '@fastify/cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getFastifyLoggerConfig, correlationStore } from './lib/logger.js';
-import { ApiError, isContractCode, rateLimitError } from './lib/api-error.js';
+import { ApiError, isContractCode, rateLimitError, buildErrorEnvelope } from './lib/api-error.js';
 import { initSentry, getSentry } from './lib/sentry.js';
 import { WorkerHeartbeat } from './lib/worker/heartbeat.js';
 import { LivenessChecker } from './workers/liveness-checker.js';
@@ -113,6 +113,20 @@ declare module 'fastify' {
     redis: any;
     wss: any;
     memory: import('./lib/memory.js').MemoryService;
+  }
+  interface FastifyReply {
+    /**
+     * A2 (ADR-0010): emit the structured error envelope for a RETURN-based ad-hoc site (the
+     * drop-in for `reply.status(n).send({ error })`). Same envelope as setErrorHandler (shared
+     * builder), incl. server correlationId + x-correlation-id echo. `code` must be SCREAMING_SNAKE.
+     * Use this for sites that return mid-handler; THROW `new ApiError(...)` where a throw is cleaner.
+     */
+    sendError(
+      status: number,
+      code: string,
+      message: string,
+      opts?: import('./lib/api-error.js').ErrorEnvelopeOpts,
+    ): FastifyReply;
   }
 }
 
@@ -565,6 +579,20 @@ const retryPolicy = new RetryPolicy();
     }
   });
 
+  // A2 (ADR-0010): `reply.sendError` — the return-based drop-in for ad-hoc `reply.status(n)
+  // .send({ error })` sites. Emits the SAME envelope as setErrorHandler (shared builder) with
+  // the server correlationId + x-correlation-id echo, so a migrated site is byte-compatible plus
+  // a machine `code` the FE can branch on.
+  fastify.decorateReply(
+    'sendError',
+    function (this: any, status: number, code: string, message: string, opts?: any) {
+      const correlationId = String(this.request.id);
+      this.header('x-correlation-id', correlationId);
+      if (opts?.retryAfterMs) this.header('retry-after', Math.ceil(opts.retryAfterMs / 1000));
+      return this.status(status).send(buildErrorEnvelope(status, code, message, correlationId, opts));
+    },
+  );
+
   // P1-6 / FX-6 / ADR-0010 A1: ONE structured error envelope — never leak internals.
   // Shape: { code:<SCREAMING_SNAKE string>, message, fields?, correlationId, retryAfterMs?,
   //          status:<number,legacy>, error:<string,legacy> }
@@ -609,14 +637,10 @@ const retryPolicy = new RetryPolicy();
               code: String(i.code || 'INVALID').toUpperCase(),
             }))
           : [];
-      return reply.status(400).send({
-        code: 'VALIDATION_FAILED',
-        message: 'Invalid request',
-        fields,
-        correlationId,
-        status: 400,
-        error: 'Invalid request', // legacy (generic — raw validation dump no longer leaked)
-      });
+      // generic message (raw validation dump no longer leaked); fields = paths only (B4)
+      return reply.status(400).send(
+        buildErrorEnvelope(400, 'VALIDATION_FAILED', 'Invalid request', correlationId, { fields }),
+      );
     }
 
     const apiErr = error instanceof ApiError ? error : null;
@@ -649,15 +673,9 @@ const retryPolicy = new RetryPolicy();
 
     if (retryAfterMs) reply.header('retry-after', Math.ceil(retryAfterMs / 1000));
 
-    reply.status(status).send({
-      code,
-      message,
-      fields,
-      correlationId,
-      retryAfterMs,
-      status, // legacy numeric (was `code` pre-A1)
-      error: message, // legacy string the un-migrated FE still reads
-    });
+    reply
+      .status(status)
+      .send(buildErrorEnvelope(status, code, message, correlationId, { fields, retryAfterMs }));
   });
 
   // P1-7 / FX-7: Body limit — Fastify constructor sets 10MB default (above).
