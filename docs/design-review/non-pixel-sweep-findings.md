@@ -10,12 +10,30 @@ Live video per role journey under `e2e/artifacts/test-results/**`.
 | Finding | Impact | Where | Root (one fix → N surfaces) | Status |
 |---|---|---|---|---|
 | `aria-required-parent` ×15 | critical | storefront | menu category `role="tab"` w/o tablist | ✅ FIXED (976a1029, 15→0 verified) |
-| `button-name` ×4 | critical | **every** owner page (dashboard/menu/orders/analytics/settings) | shared admin icon-button(s) missing aria-label | ▶ next |
-| `color-contrast` | serious | **all roles** (storefront ×7, checkout ×2, dash ×5, menu ×2, orders ×5, analytics ×4, settings, courier ×2) | brand rose `#e11d48` as text + muted text vs light surface (palette derivation) | ▶ F2 (readable-primary token) |
+| `button-name` ×4 | critical | **every** owner page (dashboard/menu/orders/analytics/settings) | icon-only admin BottomTabBar (label '') → no accessible name | ✅ FIXED (db7d3223, 4→0 verified) |
+| `color-contrast` | serious | **all roles** (storefront ×7, checkout ×2, dash ×5, menu ×2, orders ×5, analytics ×4, settings, courier ×2) | **3 distinct roots** (see below) | ▶ F2 (dedicated pass) |
 | `nested-interactive` ×49 | serious | owner/menu | MenuManager — interactive nested in interactive | ▶ |
 | `aria-required-attr` ×3, `label` ×1, `aria-toggle-field-name` | critical/serious | owner/settings | settings form controls/toggles unlabeled | ▶ |
 | `select-name` ×1 | critical | client/checkout | a `<select>` without accessible name | ▶ |
 | `scrollable-region-focusable` ×1 | serious | owner dashboard, orders | scroll container not keyboard-focusable | ▶ |
+
+### F2 · color-contrast has THREE roots (a naive "readable-primary token" fixes only A)
+
+- **A — storefront price/accent.** Brand rose `--brand-primary` `#e11d48` used as TEXT
+  on light surface `#f5eaf0` = 4.0 (need 4.5); primary button text `#fdf2f8` on
+  `#e11d48` = 4.3. Fix: derive `--brand-primary-readable = ensureContrast(primary,
+  surface, 4.5)` in `packages/ui/src/theme/palette.ts` + emit it in
+  `apps/api/src/routes/public/theme.ts`; point primary-coloured TEXT at it (keep
+  rose for fills). On-primary button text → nudge white to 4.5 on the button bg.
+- **B — admin status badges.** `--status-info` `#2563eb` on `#18354f` = 2.44;
+  `--status-warning` `#d97706` on `#293125` = 4.22. The status token *pairs*
+  (fg + tinted bg) aren't contrast-checked. Fix: contrast-ensure each status
+  fg against its `*-light` bg in the token derivation.
+- **C — opacity-on-muted anti-pattern (systemic).** `opacity-70` / `opacity-40`
+  applied to `--brand-text-muted` (which palette already tunes to *exactly* 4.5)
+  drops it below AA — e.g. `#727b76` = 2.99 on `(0)` count spans. Fix: remove
+  opacity on text-muted; **candidate guardrail** = ESLint `no-opacity-on-text`
+  (tools/eslint-plugin-local) so it can't recur.
 
 ## Console / runtime (Sense 2)
 
