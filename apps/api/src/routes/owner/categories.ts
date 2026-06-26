@@ -104,7 +104,7 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
         );
       });
 
-      if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
       return reply.send(toCategoryApiShape(res.rows[0]));
     }
   );
@@ -127,7 +127,7 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
       const userId = (request.user as any).userId;
 
       if (Object.keys(updates).length === 0) {
-        return reply.status(400).send({ error: 'No updates provided' });
+        return reply.sendError(400, 'NO_UPDATES', 'No updates provided');
       }
 
       const res = await withTenant(server.db, userId, async (client) => {
@@ -141,7 +141,7 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
         return client.query(query, [locationId, id, updates.name ?? null, updates.sort_order ?? null]);
       });
 
-      if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
       return reply.send(toCategoryApiShape(res.rows[0]));
     }
   );
@@ -175,10 +175,10 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
       });
 
       if (res === null) {
-        return reply.status(409).send({ error: 'Category contains products' });
+        return reply.sendError(409, 'CATEGORY_NOT_EMPTY', 'Category contains products');
       }
 
-      if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
       return reply.status(204).send();
     }
   );
@@ -190,7 +190,7 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
     { preValidation: [server.verifyAuth, server.requireRole(['owner'])] },
     async (request: any, reply: any) => {
       const locId = await getOwnerLocationId(request, server.db);
-      if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+      if (!locId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
       const userId = (request.user as any).userId;
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(
@@ -215,7 +215,7 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
     },
     async (request: any, reply: any) => {
       const locId = await getOwnerLocationId(request, server.db);
-      if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+      if (!locId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
       const userId = (request.user as any).userId;
       const { name } = request.body;
       const res = await withTenant(server.db, userId, async (client) => {
@@ -237,7 +237,7 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
     },
     async (request: any, reply: any) => {
       const locId = await getOwnerLocationId(request, server.db);
-      if (!locId) return reply.status(401).send({ error: 'Unauthorized' });
+      if (!locId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
       const userId = (request.user as any).userId;
       const { id } = request.params;
       const res = await withTenant(server.db, userId, async (client) => {
@@ -250,8 +250,8 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
           [id, locId]
         );
       });
-      if (res === null) return reply.status(409).send({ error: 'Category contains products. Move or delete them first.' });
-      if (res.rowCount === 0) return reply.status(404).send({ error: 'Category not found' });
+      if (res === null) return reply.sendError(409, 'CATEGORY_NOT_EMPTY', 'Category contains products. Move or delete them first.');
+      if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Category not found');
       return reply.status(204).send();
     }
   );
