@@ -58,7 +58,7 @@ import fastifyCors from '@fastify/cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getFastifyLoggerConfig, correlationStore } from './lib/logger.js';
-import { ApiError, isContractCode } from './lib/api-error.js';
+import { ApiError, isContractCode, rateLimitEnvelope } from './lib/api-error.js';
 import { initSentry, getSentry } from './lib/sentry.js';
 import { WorkerHeartbeat } from './lib/worker/heartbeat.js';
 import { LivenessChecker } from './workers/liveness-checker.js';
@@ -507,7 +507,15 @@ const retryPolicy = new RetryPolicy();
 
   await fastify.register(fastifyRateLimit, {
     max: 100,
-    timeWindow: '1 minute'
+    timeWindow: '1 minute',
+    // A3 (ADR-0010): @fastify/rate-limit builds its OWN 429 body — it never enters
+    // setErrorHandler — so the envelope must be emitted here too. `code:'RATE_LIMIT'`
+    // (SCREAMING_SNAKE contract) + `retryAfterMs` lets the FE show a humane "try again in Ns".
+    // The plugin still sets `Retry-After` itself (no global hook → no double header). Legacy
+    // `error`/`message`/`status` kept so an un-migrated reader keeps working (B1 code-preserving).
+    // `context.ttl` is ms until the window resets; `request.id` is the server-authoritative
+    // correlationId (matches setErrorHandler). The plugin still sets `Retry-After` itself.
+    errorResponseBuilder: (request, context) => rateLimitEnvelope(String(request.id), context.ttl),
   });
 
   // Allow POST with Content-Type: application/json but empty body

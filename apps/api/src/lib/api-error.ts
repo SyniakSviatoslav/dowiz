@@ -31,3 +31,20 @@ export class ApiError extends Error {
 export function isContractCode(code: unknown): code is string {
   return typeof code === 'string' && /^[A-Z][A-Z0-9_]*$/.test(code);
 }
+
+/**
+ * A3 (ADR-0010): the 429 envelope for @fastify/rate-limit. The plugin builds its OWN body
+ * and never enters `setErrorHandler`, so the envelope is reconstructed here to match. Pure
+ * function (testable in isolation). `code:'RATE_LIMIT'` is the SCREAMING_SNAKE contract; the
+ * plugin sets `Retry-After` itself. Legacy `error`/`status` kept (B1 code-preserving).
+ */
+export function rateLimitEnvelope(correlationId: string, ttlMs: number) {
+  return {
+    code: 'RATE_LIMIT',
+    message: `Too many requests. Try again in ${Math.ceil(ttlMs / 1000)}s.`,
+    correlationId,
+    retryAfterMs: ttlMs,
+    status: 429,
+    error: 'Too many requests', // legacy string the un-migrated FE still reads
+  };
+}
