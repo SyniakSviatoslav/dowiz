@@ -5,11 +5,13 @@ import { test, expect } from '@playwright/test';
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
 test.describe('Error contract A1 — envelope + correlationId', () => {
-  // A request that fails Fastify schema validation routes through setErrorHandler.
-  // (POST /api/orders with a junk body → validation error.)
+  // A request that fails Fastify(Zod) SCHEMA validation routes through setErrorHandler.
+  // track/exchange has `schema: { body: exchangeSchema }` (a real Fastify schema, not an
+  // ad-hoc in-handler Zod parse), is public, and is not order-rate-limited — so it's the
+  // deterministic A1 error path. (POST /api/orders validates ad-hoc + is velocity-gated → A2.)
   const fireValidationError = (request: any, headers?: Record<string, string>) =>
-    request.post(`${BASE}/api/orders`, {
-      data: { invalid: true },
+    request.post(`${BASE}/api/customer/track/exchange`, {
+      data: {}, // missing required `code` → schema validation error
       headers: { 'Content-Type': 'application/json', ...(headers || {}) },
       failOnStatusCode: false,
     });

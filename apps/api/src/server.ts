@@ -577,21 +577,39 @@ const retryPolicy = new RetryPolicy();
     // and A1 is a code-preserving rollout — moving validation to 422 is a separate, deliberate
     // breaking change with FE+test lockstep (A2), not this step. `fields` carries PATHS +
     // keyword only — never the submitted value (B4: no PII/secret echo).
-    if ((error as any).validation) {
-      const fields = (error as any).validation.map((v: any) => ({
-        path: v.instancePath || v.dataPath || '',
-        code: String(v.keyword || 'INVALID').toUpperCase(),
-      }));
-      const vIssues = (error as any).validation
-        .map((v: any) => v.message || `${v.instancePath || v.dataPath} ${v.keyword}`)
-        .join('; ');
+    // Two validation mechanisms reach here: AJV (`error.validation` is an ARRAY) and our Zod
+    // compiler (setValidatorCompiler returns {error: ZodError} → `error.validation` is a ZodError
+    // OBJECT with `.issues`, `error.code`==='FST_ERR_VALIDATION'). Handle both. `fields` carries
+    // PATHS + a code only — never the submitted value (B4); the message is generic (the raw
+    // Zod/AJV dump is not serialized).
+    const ajvIssues = Array.isArray((error as any).validation) ? (error as any).validation : null;
+    const zodIssues = (error as any).validation?.issues ?? (error as any).issues ?? null;
+    if (ajvIssues || zodIssues || (error as any).code === 'FST_ERR_VALIDATION') {
+      const fields = ajvIssues
+        ? ajvIssues.map((v: any) => ({
+            path: v.instancePath || v.dataPath || '',
+            code: String(v.keyword || 'INVALID').toUpperCase(),
+          }))
+        : Array.isArray(zodIssues)
+          ? zodIssues.map((i: any) => ({
+              // field PATH/NAME only (the API contract — not a submitted value, B4-safe);
+              // unrecognized_keys carries the rejected key in `i.keys`, not `i.path`.
+              path:
+                Array.isArray(i.path) && i.path.length
+                  ? i.path.join('.')
+                  : Array.isArray(i.keys)
+                    ? i.keys.join(',')
+                    : String(i.path ?? ''),
+              code: String(i.code || 'INVALID').toUpperCase(),
+            }))
+          : [];
       return reply.status(400).send({
         code: 'VALIDATION_FAILED',
         message: 'Invalid request',
         fields,
         correlationId,
         status: 400,
-        error: vIssues || 'Validation error', // legacy string (unchanged from pre-A1)
+        error: 'Invalid request', // legacy (generic — raw validation dump no longer leaked)
       });
     }
 
