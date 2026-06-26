@@ -17,7 +17,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     let baseStyles = 'inline-flex items-center justify-center font-medium transition-all duration-200 focus-visible:outline-2 focus-visible:outline-[var(--brand-primary)] disabled:opacity-50 disabled:pointer-events-none rounded-[var(--brand-radius-btn)] active:scale-[0.98]';
     
     const variants = {
-      primary: 'bg-[var(--brand-primary)] text-[var(--brand-bg)] hover:bg-[var(--brand-primary-hover)]',
+      // primary-strong (primary darkened ~15%) so light --brand-bg text clears
+      // WCAG AA even when the tenant primary is a mid-tone (e.g. rose #e11d48,
+      // where white text on raw primary = 4.3). Documented AA-button pattern.
+      primary: 'bg-[var(--brand-primary-strong)] text-[var(--brand-bg)] hover:bg-[var(--brand-primary)]',
       secondary: 'bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)]',
       outline: 'border border-[var(--brand-border)] text-[var(--brand-text)] hover:bg-[var(--brand-surface-raised)]',
       ghost: 'text-[var(--brand-text)] hover:bg-[var(--brand-surface-raised)]',
