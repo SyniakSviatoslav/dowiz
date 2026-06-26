@@ -87,22 +87,22 @@ export default async function ownerProductMediaRoutes(
     },
     async (request: any, reply: any) => {
       const ctx = await getOwnerLocation(request);
-      if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+      if (!ctx) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
       const productId = request.params.productId as string;
       if (!(await productInLocation(productId, ctx.locId))) {
-        return reply.status(404).send({ error: 'Product not found' });
+        return reply.sendError(404, 'NOT_FOUND', 'Product not found');
       }
 
       const body = (request.body || {}) as { kind?: string; items?: PresignItem[] };
       const kind = body.kind as ProductMediaKind;
-      if (!KINDS.includes(kind)) return reply.status(400).send({ error: 'Invalid media kind' });
+      if (!KINDS.includes(kind)) return reply.sendError(400, 'INVALID_MEDIA', 'Invalid media kind');
       const items = Array.isArray(body.items) ? body.items : [];
-      if (items.length === 0) return reply.status(400).send({ error: 'No items' });
+      if (items.length === 0) return reply.sendError(400, 'VALIDATION_FAILED', 'No items');
 
       // Spin frame-count bounds (each item is a frame).
       if (kind === 'spin') {
         const fc = checkFrameCount(items.length);
-        if (!fc.ok) return reply.status(400).send({ error: fc.reason });
+        if (!fc.ok) return reply.sendError(400, 'INVALID_MEDIA', fc.reason);
       }
 
       // Per-item: mime allow-list + per-file size ceiling. Poster items are
@@ -111,12 +111,12 @@ export default async function ownerProductMediaRoutes(
         const mime = String(it.mimeType || '');
         const bytes = Number(it.bytes || 0);
         const sha = String(it.sha256 || '');
-        if (!/^[0-9a-f]{64}$/i.test(sha)) return reply.status(400).send({ error: 'Invalid sha256' });
+        if (!/^[0-9a-f]{64}$/i.test(sha)) return reply.sendError(400, 'INVALID_MEDIA', 'Invalid sha256');
         const allowed = it.poster ? isAllowedPosterMime(mime) : isAllowedMime(mime);
-        if (!allowed) return reply.status(400).send({ error: `Disallowed mime: ${mime}` });
-        if (!(bytes > 0)) return reply.status(400).send({ error: 'Invalid bytes' });
+        if (!allowed) return reply.sendError(400, 'INVALID_MEDIA', `Disallowed mime: ${mime}`);
+        if (!(bytes > 0)) return reply.sendError(400, 'INVALID_MEDIA', 'Invalid bytes');
         if (bytes > maxBytesForMime(mime)) {
-          return reply.status(413).send({ error: `File exceeds size limit for ${mime}` });
+          return reply.sendError(413, 'FILE_TOO_LARGE', `File exceeds size limit for ${mime}`);
         }
       }
 
@@ -136,7 +136,7 @@ export default async function ownerProductMediaRoutes(
       const bucket = process.env.R2_BUCKET;
       const endpoint = process.env.R2_ENDPOINT;
       if (!bucket || !endpoint) {
-        return reply.status(503).send({ error: 'Object storage not configured' });
+        return reply.sendError(503, 'SERVICE_UNAVAILABLE', 'Object storage not configured');
       }
 
       let getSignedUrl: any, S3Client: any, PutObjectCommand: any;
@@ -145,7 +145,7 @@ export default async function ownerProductMediaRoutes(
         ({ S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3'));
       } catch (e: any) {
         request.log?.error?.({ err: e?.message }, '[product-media] presigner import failed');
-        return reply.status(503).send({ error: 'Presign unavailable' });
+        return reply.sendError(503, 'SERVICE_UNAVAILABLE', 'Presign unavailable');
       }
 
       const client = new S3Client({
@@ -180,10 +180,10 @@ export default async function ownerProductMediaRoutes(
     { preHandler: [fastify.verifyAuth, fastify.requireRole(['owner'])] },
     async (request: any, reply: any) => {
       const ctx = await getOwnerLocation(request);
-      if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+      if (!ctx) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
       const productId = request.params.productId as string;
       if (!(await productInLocation(productId, ctx.locId))) {
-        return reply.status(404).send({ error: 'Product not found' });
+        return reply.sendError(404, 'NOT_FOUND', 'Product not found');
       }
 
       const body = (request.body || {}) as {
@@ -199,22 +199,22 @@ export default async function ownerProductMediaRoutes(
         frameKeys?: string[];
       };
       const kind = body.kind as ProductMediaKind;
-      if (!KINDS.includes(kind)) return reply.status(400).send({ error: 'Invalid media kind' });
+      if (!KINDS.includes(kind)) return reply.sendError(400, 'INVALID_MEDIA', 'Invalid media kind');
       const storageKey = String(body.storageKey || '');
       const mimeType = String(body.mimeType || '');
-      if (!storageKey) return reply.status(400).send({ error: 'Missing storageKey' });
-      if (!isAllowedMime(mimeType)) return reply.status(400).send({ error: `Disallowed mime: ${mimeType}` });
+      if (!storageKey) return reply.sendError(400, 'VALIDATION_FAILED', 'Missing storageKey');
+      if (!isAllowedMime(mimeType)) return reply.sendError(400, 'INVALID_MEDIA', `Disallowed mime: ${mimeType}`);
 
       // The key must live under this tenant's product prefix — reject anything else.
       if (!storageKey.startsWith(`${ctx.locId}/${productId}/`)) {
-        return reply.status(400).send({ error: 'Key outside tenant prefix' });
+        return reply.sendError(400, 'VALIDATION_FAILED', 'Key outside tenant prefix');
       }
 
       // Spin frame-count.
       const frameKeys = Array.isArray(body.frameKeys) ? body.frameKeys : [];
       if (kind === 'spin') {
         const fc = checkFrameCount(frameKeys.length);
-        if (!fc.ok) return reply.status(400).send({ error: fc.reason });
+        if (!fc.ok) return reply.sendError(400, 'INVALID_MEDIA', fc.reason);
       }
 
       // Re-validate the stored bytes by sniffing the magic number. R2 is absent on
@@ -225,7 +225,7 @@ export default async function ownerProductMediaRoutes(
         try {
           const buf = await storage.get(storageKey);
           if (buf && sniffMime(buf) !== mimeType) {
-            return reply.status(400).send({ error: 'Stored bytes do not match declared type' });
+            return reply.sendError(400, 'INVALID_MEDIA', 'Stored bytes do not match declared type');
           }
         } catch (e: any) {
           request.log?.warn?.({ err: e?.message }, '[product-media] magic-byte recheck failed');
@@ -273,7 +273,7 @@ export default async function ownerProductMediaRoutes(
     { preHandler: [fastify.verifyAuth, fastify.requireRole(['owner'])] },
     async (request: any, reply: any) => {
       const ctx = await getOwnerLocation(request);
-      if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+      if (!ctx) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
       const { productId, mediaId } = request.params as { productId: string; mediaId: string };
 
       const result = await withTenant(db, ctx.userId, async (client) => {
@@ -293,7 +293,7 @@ export default async function ownerProductMediaRoutes(
         return { status: 200 as const, changed: true };
       });
 
-      if (result.status === 404) return reply.status(404).send({ error: 'Not found' });
+      if (result.status === 404) return reply.sendError(404, 'NOT_FOUND', 'Not found');
       return reply.send({ ok: true, changed: result.changed });
     },
   );
@@ -305,11 +305,11 @@ export default async function ownerProductMediaRoutes(
     { preHandler: [fastify.verifyAuth, fastify.requireRole(['owner'])] },
     async (request: any, reply: any) => {
       const ctx = await getOwnerLocation(request);
-      if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+      if (!ctx) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
       const productId = request.params.productId as string;
       const order = (request.body as any)?.order;
       if (!Array.isArray(order) || order.some((x) => typeof x !== 'string')) {
-        return reply.status(400).send({ error: 'order must be an array of media ids' });
+        return reply.sendError(400, 'VALIDATION_FAILED', 'order must be an array of media ids');
       }
 
       await withTenant(db, ctx.userId, async (client) => {
@@ -332,11 +332,11 @@ export default async function ownerProductMediaRoutes(
     { preHandler: [fastify.verifyAuth, fastify.requireRole(['owner'])] },
     async (request: any, reply: any) => {
       const ctx = await getOwnerLocation(request);
-      if (!ctx) return reply.status(401).send({ error: 'Unauthorized' });
+      if (!ctx) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
       const { productId, mediaId } = request.params as { productId: string; mediaId: string };
       const available = (request.body as any)?.available;
       if (typeof available !== 'boolean') {
-        return reply.status(400).send({ error: 'available must be a boolean' });
+        return reply.sendError(400, 'VALIDATION_FAILED', 'available must be a boolean');
       }
 
       const updated = await withTenant(db, ctx.userId, async (client) => {
@@ -349,7 +349,7 @@ export default async function ownerProductMediaRoutes(
         return res.rows[0];
       });
 
-      if (!updated) return reply.status(404).send({ error: 'Not found' });
+      if (!updated) return reply.sendError(404, 'NOT_FOUND', 'Not found');
       return reply.send({ id: updated.id, available: updated.available });
     },
   );

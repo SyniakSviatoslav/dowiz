@@ -59,7 +59,7 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
 
       if (inviteRes.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(410).send({ error: 'Invite invalid, expired, or already used', code: 'INVITE_INVALID' });
+        return reply.sendError(410, 'INVITE_INVALID', 'Invite invalid, expired, or already used');
       }
 
       const invite = inviteRes.rows[0];
@@ -68,7 +68,7 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
       const validCode = await argon2.verify(invite.code_hash, code);
       if (!validCode) {
         await client.query('ROLLBACK');
-        return reply.status(401).send({ error: 'Invalid code', code: 'INVALID_CODE' });
+        return reply.sendError(401, 'INVALID_CODE', 'Invalid code');
       }
 
       // Hash password
@@ -193,7 +193,7 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
 
       if (res.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(404).send({ error: 'Invite not found' });
+        return reply.sendError(404, 'NOT_FOUND', 'Invite not found');
       }
 
       const invite = res.rows[0];
@@ -253,7 +253,7 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
       if (courierRes.rowCount === 0) {
         // Dummy verify to prevent timing attacks
         await argon2.verify(await argon2.hash('dummy', hashOptions), password);
-        return reply.status(401).send({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
+        return reply.sendError(401, 'INVALID_CREDENTIALS', 'Invalid credentials');
       }
 
       const courier = courierRes.rows[0];
@@ -271,11 +271,11 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
            VALUES ($1, $2, 'login.failed', 'courier', $1, $3, $4)`,
           [courier.id, failLocationId, ipHash, uaHash]
         );
-        return reply.status(401).send({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
+        return reply.sendError(401, 'INVALID_CREDENTIALS', 'Invalid credentials');
       }
 
       if (courier.status === 'deactivated') {
-        return reply.status(403).send({ error: 'Courier deactivated', code: 'COURIER_DEACTIVATED' });
+        return reply.sendError(403, 'COURIER_DEACTIVATED', 'Courier deactivated');
       }
 
       // Resolve location: use provided or default to first assigned
@@ -288,7 +288,7 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
           [courier.id, effectiveLocationId]
         );
         if (membershipRes.rowCount === 0) {
-          return reply.status(403).send({ error: 'Not authorized for this location', code: 'NOT_AUTHORIZED_FOR_LOCATION' });
+          return reply.sendError(403, 'NOT_AUTHORIZED_FOR_LOCATION', 'Not authorized for this location');
         }
         role = membershipRes.rows[0].role;
       } else {
@@ -297,7 +297,7 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
           [courier.id]
         );
         if (firstLocRes.rowCount === 0) {
-          return reply.status(403).send({ error: 'No location assigned', code: 'NO_LOCATION_ASSIGNED' });
+          return reply.sendError(403, 'NO_LOCATION_ASSIGNED', 'No location assigned');
         }
         effectiveLocationId = firstLocRes.rows[0].location_id;
         role = firstLocRes.rows[0].role;
@@ -391,7 +391,7 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
       const parts = refresh_token.split('.');
       if (parts.length !== 2) {
         await client.query('ROLLBACK');
-        return reply.status(401).send({ error: 'Invalid refresh token format', code: 'INVALID_REFRESH_TOKEN' });
+        return reply.sendError(401, 'INVALID_REFRESH_TOKEN', 'Invalid refresh token format');
       }
 
       const sessionId = parts[0];
@@ -404,7 +404,7 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
 
       if (sessionRes.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(401).send({ error: 'Session not found', code: 'SESSION_NOT_FOUND' });
+        return reply.sendError(401, 'SESSION_NOT_FOUND', 'Session not found');
       }
 
       const session = sessionRes.rows[0] as any;
@@ -412,7 +412,7 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
       const validToken = await argon2.verify(session.token_hash, tokenPlain);
       if (!validToken) {
         await client.query('ROLLBACK');
-        return reply.status(401).send({ error: 'Invalid refresh token', code: 'INVALID_REFRESH_TOKEN' });
+        return reply.sendError(401, 'INVALID_REFRESH_TOKEN', 'Invalid refresh token');
       }
 
       if (session.revoked_at) {
@@ -424,19 +424,19 @@ export default (async function courierAuthRoutes(fastify: any, opts: any) {
           [session.courier_id, session.active_location_id, ipHash, uaHash]
         );
         await client.query('COMMIT');
-        return reply.status(401).send({ error: 'Refresh token reused', code: 'REFRESH_REUSED' });
+        return reply.sendError(401, 'REFRESH_REUSED', 'Refresh token reused');
       }
 
       if (new Date() > new Date(session.expires_at)) {
         await client.query('ROLLBACK');
-        return reply.status(401).send({ error: 'Refresh token expired', code: 'REFRESH_EXPIRED' });
+        return reply.sendError(401, 'REFRESH_EXPIRED', 'Refresh token expired');
       }
 
       // Check courier status
       const courierRes = await client.query(`SELECT status FROM couriers WHERE id = $1`, [session.courier_id]);
       if (courierRes.rows[0].status !== 'active') {
         await client.query('ROLLBACK');
-        return reply.status(401).send({ error: 'Courier deactivated', code: 'COURIER_DEACTIVATED' });
+        return reply.sendError(401, 'COURIER_DEACTIVATED', 'Courier deactivated');
       }
 
       // Rotate session
