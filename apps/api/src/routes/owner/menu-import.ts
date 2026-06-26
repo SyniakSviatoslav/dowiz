@@ -32,15 +32,15 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
   }, async (request: any, reply: any) => {
     const user = request.user as any;
     const locationId = await getLocationId(user);
-    if (!locationId) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!locationId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
     
     const data = await request.file({ limits: { fileSize: 10 * 1024 * 1024 } });
     if (!data) {
-      return reply.status(400).send({ error: 'Missing file' });
+      return reply.sendError(400, 'VALIDATION_FAILED', 'Missing file');
     }
 
     if (data.file.truncated) {
-      return reply.status(413).send({ error: 'File exceeds maximum size of 10MB' });
+      return reply.sendError(413, 'FILE_TOO_LARGE', 'File exceeds maximum size of 10MB');
     }
 
     const buffer = await data.toBuffer();
@@ -59,7 +59,7 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
       try {
         config = JSON.parse(String(data.fields.config.value));
       } catch (e) {
-        return reply.status(400).send({ error: 'Invalid config JSON' });
+        return reply.sendError(400, 'VALIDATION_FAILED', 'Invalid config JSON');
       }
     }
 
@@ -76,7 +76,7 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
     });
 
     if (!locOk) {
-      return reply.status(404).send({ error: 'Location not found' });
+      return reply.sendError(404, 'NOT_FOUND', 'Location not found');
     }
 
     let source = 'csv';
@@ -94,7 +94,7 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
 
     const parser = parsers[source];
     if (!parser) {
-      return reply.status(400).send({ error: `Unsupported source: ${source}` });
+      return reply.sendError(400, 'UNSUPPORTED_SOURCE', `Unsupported source: ${source}`);
     }
 
     // Parse data
@@ -174,21 +174,21 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
   }, async (request: any, reply: any) => {
     const redis = (fastify as any).redis;
-    if (!redis) return reply.status(503).send({ error: 'Anonymous import unavailable' });
+    if (!redis) return reply.sendError(503, 'SERVICE_UNAVAILABLE', 'Anonymous import unavailable');
 
     const data = await request.file({ limits: { fileSize: 10 * 1024 * 1024 } });
-    if (!data) return reply.status(400).send({ error: 'Missing file' });
-    if (data.file.truncated) return reply.status(413).send({ error: 'File exceeds maximum size of 10MB' });
+    if (!data) return reply.sendError(400, 'VALIDATION_FAILED', 'Missing file');
+    if (data.file.truncated) return reply.sendError(413, 'FILE_TOO_LARGE', 'File exceeds maximum size of 10MB');
 
     const mime = data.mimetype as string;
     let kind: string;
     if (mime === 'application/pdf') kind = 'pdf';
     else if (mime.startsWith('image/')) kind = 'image';
-    else return reply.status(400).send({ error: 'Upload a PDF or image of your menu', code: 'UNSUPPORTED_TYPE' });
+    else return reply.sendError(400, 'UNSUPPORTED_TYPE', 'Upload a PDF or image of your menu');
 
     const buffer = await data.toBuffer();
     const parser = parsers['ai-ocr'];
-    if (!parser) return reply.status(503).send({ error: 'Parser unavailable' });
+    if (!parser) return reply.sendError(503, 'SERVICE_UNAVAILABLE', 'Parser unavailable');
 
     // No location yet — parse against the onboarding defaults (ALL / minor unit 0,
     // matching POST /onboarding/start). The owner reviews every item before claim.
@@ -243,7 +243,7 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
   }, async (request: any, reply: any) => {
     const user = request.user as any;
     const locationId = await getLocationId(user);
-    if (!locationId) return reply.status(401).send({ error: 'Unauthorized' });
+    if (!locationId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
 
     const { import_session_id, commit_token, force, website } = request.body as any;
     const finalCommitToken = commit_token || crypto.randomUUID();
@@ -572,16 +572,16 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
 
     } catch (err: any) {
       if (err.code === '23505') {
-        return reply.status(409).send({ error: 'Duplicate external_key found', code: 'DUPLICATE_KEY', details: err.detail });
+        return reply.sendError(409, 'DUPLICATE_KEY', 'Duplicate external_key found');
       }
       if (err.code === '23503') {
-        return reply.status(409).send({ error: 'Referenced entity not found', code: 'FK_VIOLATION', details: err.detail });
+        return reply.sendError(409, 'FK_VIOLATION', 'Referenced entity not found');
       }
       if (err.code === '23502') {
-        return reply.status(400).send({ error: 'Missing required field', code: 'NOT_NULL', details: err.detail });
+        return reply.sendError(400, 'NOT_NULL', 'Missing required field');
       }
       if (err.code === '42703') {
-        return reply.status(500).send({ error: 'Database migration missing — column not found', code: 'MISSING_COLUMN', details: err.message });
+        return reply.sendError(500, 'MISSING_COLUMN', 'Database migration missing — column not found');
       }
       request.log.error(err);
       return reply.status(500).send({ error: 'Import failed', code: err.code || 'UNKNOWN', message: err.message });

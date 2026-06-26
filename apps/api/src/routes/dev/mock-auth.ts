@@ -122,7 +122,7 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
   fastify.post('/dev/create-assignment', async (request: any, reply: any) => {
     const { orderId, courierId, locationId } = request.body as Record<string, string>;
     if (!orderId || !courierId || !locationId) {
-      return reply.status(400).send({ error: 'orderId, courierId, locationId required' });
+      return reply.sendError(400, 'VALIDATION_FAILED', 'orderId, courierId, locationId required');
     }
 
     const ownerRes = await (fastify as any).db.query(
@@ -185,7 +185,7 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
     const locationId = body.locationId as string;
     const userId = (body.userId as string) || null;
     const address = (body.address as string) || `test-chat-${crypto.randomUUID().slice(0, 8)}`;
-    if (!locationId) return reply.status(400).send({ error: 'locationId required' });
+    if (!locationId) return reply.sendError(400, 'VALIDATION_FAILED', 'locationId required');
 
     const res = await (fastify as any).db.query(
       `INSERT INTO owner_notification_targets (location_id, channel, address, status, user_id)
@@ -207,7 +207,7 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
     const db = (fastify as any).db;
 
     const u = await db.query(`SELECT id FROM users WHERE email = $1`, [email]);
-    if (u.rowCount === 0) return reply.status(404).send({ error: `user ${email} not found` });
+    if (u.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', `user ${email} not found`);
     const userId = u.rows[0].id;
     // Resolve by explicit locationId if given, else by slug (NO status filter — the demo
     // location's status is not 'active' yet it is the live storefront).
@@ -218,7 +218,7 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
       locName = l.rowCount > 0 ? l.rows[0].name : null;
     } else {
       const loc = await db.query(`SELECT id, name FROM locations WHERE slug = $1 LIMIT 1`, [slug]);
-      if (loc.rowCount === 0) return reply.status(404).send({ error: `location '${slug}' not found` });
+      if (loc.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', `location '${slug}' not found`);
       locationId = loc.rows[0].id; locName = loc.rows[0].name;
     }
 
