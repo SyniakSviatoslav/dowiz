@@ -313,6 +313,25 @@
   --brand-radius-btn: 32px;
 }
 
+/* ── Status text on a DARK surface (opt-in) ──
+   The :root status colours are tuned for a light surface; on the dark admin/
+   courier shells the mid-tone hues fail AA on their own faded tints (e.g.
+   confirmed #2563EB = 2.44). This lightens ONLY the status TEXT (badge tints
+   unchanged) to Tailwind-400 shades that clear AA on the dark tints. Opt-in via
+   data-surface="dark" on the shell so the light storefront is untouched. */
+[data-surface="dark"] {
+  --status-pending: #FBBF24;
+  --status-confirmed: #60A5FA;
+  --status-preparing: #FBBF24;
+  --status-ready: #2DD4BF;
+  --status-in-delivery: #93C5FD;
+  --status-delivered: #34D399;
+  --status-rejected: #F87171;
+  --status-cancelled: #F87171;
+  --status-scheduled: #A78BFA;
+  --status-picked-up: #2DD4BF;
+}
+
 /* ── Dark mode: weaker shadows, depth via borders ── */
 @media (prefers-color-scheme: dark) {
   :root {
