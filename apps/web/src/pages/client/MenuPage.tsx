@@ -632,7 +632,7 @@ export function MenuPage() {
                   >
                     {isChefCat && <span style={{ fontSize: '0.7rem' }}>✦</span>}
                     {cat.name}
-                    <span className="text-step-2xs opacity-40">({count})</span>
+                    <span className="text-step-2xs text-[var(--brand-text-muted)]">({count})</span>
                   </motion.button>
                 );
               })
@@ -1008,7 +1008,7 @@ export function MenuPage() {
                     animate={{ scale: 1, opacity: 1 }}
                     transition={prefersReduced ? { duration: 0 } : { delay: 0.2, duration: 0.28, ease: ease.out }}
                   >
-                    <div className="text-xl font-black whitespace-nowrap" style={{ color: 'var(--brand-primary)' }}>
+                    <div className="text-xl font-black whitespace-nowrap" style={{ color: 'var(--brand-primary-readable, var(--brand-text))' }}>
                       <PriceDisplay amount={detailProduct.price + calcModifierDelta()} />
                     </div>
                     {detailProduct.prep_time_minutes != null && (

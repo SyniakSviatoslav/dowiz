@@ -3,6 +3,12 @@ import React, { createContext, useContext, useEffect } from 'react';
 export interface ThemeConfig {
   primary: string;
   primaryHover: string;
+  /**
+   * Brand primary nudged to AA on the surface — for primary-coloured TEXT.
+   * Optional: derivePalette always supplies it, but hand-built ThemeConfig
+   * literals may omit it (consumers fall back via the CSS var default).
+   */
+  primaryReadable?: string;
   primaryLight: string;
   accent: string;
   bg: string;
@@ -32,6 +38,7 @@ export function ThemeProvider({
     const vars = [
       '--brand-primary',
       '--brand-primary-hover',
+      '--brand-primary-readable',
       '--brand-primary-light',
       '--brand-accent',
       '--brand-bg',
@@ -55,6 +62,7 @@ export function ThemeProvider({
     if (theme) {
       applyVar('--brand-primary', theme.primary);
       applyVar('--brand-primary-hover', theme.primaryHover);
+      applyVar('--brand-primary-readable', theme.primaryReadable);
       applyVar('--brand-primary-light', theme.primaryLight);
       applyVar('--brand-accent', theme.accent);
       applyVar('--brand-bg', theme.bg);

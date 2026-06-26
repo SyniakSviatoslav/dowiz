@@ -212,7 +212,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
 
         <div className="flex items-center justify-between mt-auto pt-1">
           <div className="flex items-baseline gap-1">
-            <PriceDisplay amount={product.price} size="md" style={{ color: 'var(--brand-primary)', fontWeight: 800 }} />
+            <PriceDisplay amount={product.price} size="md" style={{ color: 'var(--brand-primary-readable, var(--brand-text))', fontWeight: 800 }} />
             {product.prepTimeMinutes != null && (
               <span className="inline-flex items-center gap-0.5 text-step-2xs font-medium whitespace-nowrap" style={{ color: 'var(--brand-text-muted)' }}>
                 <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} aria-hidden="true" />

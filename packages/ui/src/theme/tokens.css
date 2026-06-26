@@ -44,6 +44,10 @@
      color-mix re-resolves against the active preset's --brand-primary on :root,
      so every theme gets an AA-safe button background without per-theme tuning. */
   --brand-primary-strong: color-mix(in srgb, var(--brand-primary) 85%, #000000);
+  /* Primary-as-TEXT, AA-safe on the surface. The dark default reads primary
+     directly (gold-on-dark clears AA); derivePalette overrides it per-tenant
+     with a luminance-aware value (e.g. rose darkened for a light surface). */
+  --brand-primary-readable: var(--brand-primary);
   --brand-accent: #213433;
   --brand-bg: #061b1a;
   --brand-surface: #152928;
