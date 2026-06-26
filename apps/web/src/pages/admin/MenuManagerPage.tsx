@@ -750,16 +750,17 @@ export function MenuManagerPage() {
               const products = getAllProducts(cat.id);
               if (products.length === 0 && searchQuery) return null;
               return products.map((product) => (
+                // Not a button: the card contains its own toggle/edit/delete
+                // buttons (a role="button" wrapping focusable children = axe
+                // nested-interactive ×49). Card click is a mouse convenience that
+                // opens the read-only preview; every action stays keyboard-reachable
+                // via the explicit buttons inside, and "view" is covered by Edit.
                 <motion.div key={product.id}
                   variants={cardEntry}
                   whileTap={{ scale: 0.98 }}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={product.name}
-                  className="group p-3 rounded-xl border cursor-pointer outline-none shadow-elevation-1 transition-[transform,box-shadow,background-color] duration-150 [transition-timing-function:var(--ease-soft)] [@media(hover:hover)]:hover:-translate-y-0.5 [@media(hover:hover)]:hover:shadow-elevation-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+                  className="group p-3 rounded-xl border cursor-pointer outline-none shadow-elevation-1 transition-[transform,box-shadow,background-color] duration-150 [transition-timing-function:var(--ease-soft)] [@media(hover:hover)]:hover:-translate-y-0.5 [@media(hover:hover)]:hover:shadow-elevation-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                   style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}
-                  onClick={() => setPreviewProduct(product)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPreviewProduct(product); } }}>
+                  onClick={() => setPreviewProduct(product)}>
                   <div className="flex items-start gap-3">
                     <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 flex items-center justify-center"
                       style={{ background: 'var(--brand-primary-light)' }}>
