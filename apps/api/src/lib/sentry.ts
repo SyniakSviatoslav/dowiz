@@ -82,7 +82,7 @@ export function initSentry(dsn: string, gitSha?: string): void {
         (event as any).extra = redactSentryData(event.extra as Record<string, unknown>);
       }
       if (event.tags) {
-        const allowlist = new Set(['role', 'location_id', 'order_id', 'worker', 'db', 'error_code']);
+        const allowlist = new Set(['role', 'location_id', 'order_id', 'worker', 'db', 'error_code', 'correlationId']);
         event.tags = Object.fromEntries(
           Object.entries(event.tags).filter(([k]) => allowlist.has(k))
         );
