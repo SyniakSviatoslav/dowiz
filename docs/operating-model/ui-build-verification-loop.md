@@ -16,7 +16,7 @@ the agent can emit (author-time rails), and **shift verification down** from the
 |---|---|---|
 | `lint:gates` / `post-edit-gates` / `require-classification` | mechanical floor | **runs** them as the floor, never reimplements |
 | Task-Exit Rule | enrich→exit→verify per change | this loop = the **UI specialisation of VERIFY** |
-| **This loop** | per-component visual + states + a11y, with eyes | inline-fixes cosmetics/states/tokens; **routes** the rest |
+| **This loop** | per-component visual + states, with eyes (a11y is **not** vision's — owned by Sense 1 axe / `expectNoA11y`, reads the computed a11y-tree, per the Non-Pixel Verification Net) | inline-fixes cosmetics/states/tokens; **routes** the rest |
 | Convergence-Playwright loop | full E2E flows, live backend | this loop **hands off** multi-step/cross-role/live-WS bugs |
 | `Frontend-Audit-Polish-Gate` | phase-wide adversarial GO/NO-GO | this loop **feeds** it (fewer defects arrive) + **escalates** systemic drift; never issues a phase verdict |
 | backend/contract | server handlers/schemas | **never touched** — `MISSING`/`BLOCKED-contract`, escalate |
@@ -49,15 +49,16 @@ the agent can emit (author-time rails), and **shift verification down** from the
 > Always leave a **proof artifact** (screenshot/diff/vision-verdict) so the receiving loop doesn't restart.
 
 ## Definition of Done (per change)
-🟢 FLOOR green · 🟢 every affected state renders · 🟢 visual diff clean (or new diffs consciously approved) · 🟢 vision verdict has no unresolved A–F FAIL · 🟢 every finding either inline-fixed (before/after) or routed with proof. Nothing silently skipped or weakened.
+🟢 FLOOR green · 🟢 every affected state renders · 🟢 visual diff clean (or new diffs consciously approved) · 🟢 vision verdict has no unresolved FAIL on A, B, D, E, F or match_to_spec (a11y is **excluded** from the vision verdict — owned by Sense 1 axe / `expectNoA11y`) · 🟢 every finding either inline-fixed (before/after) or routed with proof. Nothing silently skipped or weakened.
 
 ## Out of scope
 ❌ phase GO/NO-GO · ❌ owning E2E journeys · ❌ changing server contracts/price-status/security · ❌ reimplementing mechanical gates · ❌ weakening a threshold / masking a real bug · ❌ design-to-code generation · ❌ vision as the final gate (it's triage; regressions confirmed by pixel diff; baselines approved consciously).
 
 ## Appendix · vision prompt skeleton (agent-as-eye)
 Per affected component/state, give the model the screenshot + tokens/spec and request JSON only:
-`{ A_design_system, B_states, C_a11y, D_responsive, E_i18n, F_semantic, match_to_spec, findings:[{what,severity,route}] }`
+`{ A_design_system, B_states, D_responsive, E_i18n, F_semantic, match_to_spec, findings:[{what,severity,route}] }`
 with each dimension `{verdict:"PASS|FAIL", issue, evidence}`. FAIL + route → routing matrix.
+> **Vision no longer scores a11y (no `C_a11y`).** A screenshot can't yield contrast ratios, focus order, or ARIA state, so a vision a11y verdict is false confidence. A11y is owned exclusively by **Sense 1** (axe / `@axe-core/playwright` via `expectNoA11y` in `e2e/helpers/a11y.ts` + the per-flow axe specs), which reads the real computed a11y-tree — per the Non-Pixel Verification Net. Vision stays on semantics (`F_semantic`: clipped / overlapped / shifted / off-rhythm) + `match_to_spec`.
 
 ## Environment status (this sandbox, 2026-06-24)
 - ✅ Layer 1 rails: `no-arbitrary-tailwind` shipped; jsx-a11y + colour rules present. FLOOR runner = `scripts/ui-verify-floor.sh`.

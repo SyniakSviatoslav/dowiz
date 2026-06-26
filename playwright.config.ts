@@ -51,6 +51,19 @@ export default defineConfig({
         isMobile: false,
       },
     },
+    // Sense 3 · WebKit-smoke (functional only — NEVER visual baselines). Matches
+    // *.smoke.spec.ts. Catches Safari-engine layout breaks the Chromium baseline
+    // is blind to. Keep toHaveScreenshot out of these projects.
+    {
+      name: 'webkit-smoke',
+      testMatch: /.*\.smoke\.spec\.ts/,
+      use: { ...devices['Desktop Safari'] },
+    },
+    {
+      name: 'webkit-mobile-smoke',
+      testMatch: /.*\.smoke\.spec\.ts/,
+      use: { ...devices['iPhone 14'] }, // WebKit engine + iOS viewport (NOT a real device)
+    },
   ],
 
   webServer: process.env.CI || process.env.VITE_BASE_URL ? [] : [

@@ -64,10 +64,14 @@
     "verify:privacy": "tsx --env-file=.env apps/api/tests/pii-leak-detector.test.ts",
     "check:core": "RUN_ID=dev node metric-core/run-checks.mjs",
     "check:core:ci": "CI=true RUN_ID=$RUN_ID node metric-core/run-checks.mjs",
+    "size:check": "size-limit",
+    "lhci": "lhci autorun",
+    "storefront:guard": "node scripts/storefront-graph-guard.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
+    "@lhci/cli": "^0.14.0",
     "@langfuse/otel": "^5.4.1",
     "@opencode-ai/plugin": "1.15.11",
     "@opentelemetry/api": "^1.9.1",
@@ -87,6 +91,8 @@
     "husky": "^9.1.7",
     "lint-staged": "^15.2.10",
     "node-pg-migrate": "^8.0.4",
+    "@size-limit/file": "^11.2.0",
+    "size-limit": "^11.2.0",
     "prettier": "^3.3.3",
     "tsx": "^4.19.0",
     "typescript": "^5.6.2",

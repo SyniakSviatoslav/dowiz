@@ -1,4 +1,28 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+
+/**
+ * Sense 1 · Accessibility tree gate (Non-Pixel Verification Net).
+ *
+ * 🔴 axe reads the COMPUTED a11y-tree (what a screen-reader gets) — never a
+ * pixel. This is the authority for a11y verdicts; the vision layer no longer
+ * scores C_a11y (see docs/operating-model/ui-build-verification-loop.md).
+ *
+ * Hard gate: zero WCAG 2.0/2.1 A+AA violations. `disableRules` is permitted
+ * ONLY when a rule is genuinely wrong for the context — document why at the
+ * call-site. Scan AFTER interactions too (open modal/drawer, hover, dark-mode):
+ * the default scan misses interactive-state contrast/focus.
+ */
+export async function expectNoA11y(page: Page, disableRules: string[] = []): Promise<void> {
+  const AxeBuilder = (await import('@axe-core/playwright')).default;
+  const r = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .disableRules(disableRules)
+    .analyze();
+  const summary = r.violations.map(
+    (v) => `${v.id} (${v.impact}, ${v.nodes.length}×): ${v.help}`,
+  );
+  expect(r.violations, `axe violations:\n${summary.join('\n')}`).toEqual([]);
+}
 
 export interface A11yIssue {
   id: string;

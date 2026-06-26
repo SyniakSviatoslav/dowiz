@@ -54,9 +54,46 @@ export async function setLocale(page: Page, locale: 'al' | 'en'): Promise<void> 
   await page.addInitScript((c) => { try { localStorage.setItem('dos_locale', c as string); } catch { /* */ } }, code);
 }
 
-/** The single dynamic-zone mask. Components that vary run-to-run carry data-dynamic (see masking audit). */
+/**
+ * Seed-PII mask (Non-Pixel Verification Net, Correction #2).
+ *
+ * Screenshots from this net can reach an OpenRouter-hosted vision model (agent-as-eye / vision QA).
+ * Even though the state is SEED/synthetic (never production), seed records still carry name/phone/
+ * address-shaped strings, so we cover those pixels before any screenshot can egress to a vision
+ * subprocessor. Documented in compliance/subprocessors.md (OpenRouter row + "Vision/axe QA hard rule").
+ *
+ * Convention: the app marks seed-PII surfaces with `data-pii` — that is the stable, preferred hook.
+ * The extra selectors below are BEST-EFFORT fallbacks for surfaces that don't yet carry `data-pii`.
+ *
+ * NOTE — app-side hooks still needed (do NOT add from this net; raise to app owners):
+ *   - apps/web/src/pages/client/CheckoutPage.tsx → "Your name" input has no test-id (only
+ *     autoComplete="name"); add data-pii (or data-testid="checkout-name").
+ *   - apps/web/src/pages/client/OrderStatusPage.tsx → customer/courier contact + delivery-address
+ *     block (e.g. order.deliveryAddress, courier_phone display) carry no PII hook; add data-pii.
+ *   - apps/web/src/pages/admin/CRMPage.tsx → customer name <td>/<span> and phone <span> (the
+ *     /owner/customers table) carry no PII hook; add data-pii to those cells (or data-testid="crm-row").
+ * Until those land, CRM + order-status PII rely on the `[data-pii]` convention being present; the
+ * checkout fields below are covered today via their existing test-ids.
+ */
+export function maskPII(page: Page): Locator[] {
+  return [
+    page.locator('[data-pii]'), // preferred convention (app-side hook)
+    // Checkout contact + address fields (seed eater name/phone/entrance/apartment/messenger).
+    page.locator('[data-testid="checkout-phone"]'),
+    page.locator('[data-testid="checkout-entrance"]'),
+    page.locator('[data-testid="checkout-apartment"]'),
+    page.locator('[data-testid="checkout-messenger-handle"]'),
+    page.locator('input[autocomplete="name"]'), // checkout "Your name" field (no test-id yet — see NOTE)
+  ];
+}
+
+/**
+ * The standard snapshot mask. Components that vary run-to-run carry data-dynamic (see masking audit);
+ * seed-PII surfaces are folded in via maskPII so every snapshot is both deterministic AND PII-safe
+ * before any screenshot can reach a vision model.
+ */
 export function MASK(page: Page): Locator[] {
-  return [page.locator('[data-dynamic]')];
+  return [page.locator('[data-dynamic]'), ...maskPII(page)];
 }
 
 /** Standard pre-snapshot settle: wait for network idle + fonts, then a short paint settle. */
