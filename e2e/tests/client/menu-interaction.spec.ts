@@ -73,7 +73,7 @@ test.describe('Client Menu — Interaction Tests', () => {
     await page.waitForTimeout(4000);
 
     // Find plus buttons (add to cart) on product cards
-    const addBtns = page.locator('button[aria-label="Add to cart"]');
+    const addBtns = page.locator('[data-testid="menu-item-add"]');
     const count = await addBtns.count();
     if (count > 0) {
       // Click first add button
@@ -91,10 +91,10 @@ test.describe('Client Menu — Interaction Tests', () => {
     await page.goto('/s/demo', { waitUntil: 'networkidle' });
     await page.waitForTimeout(6000);
 
-    const productCards = page.locator('article.product-card').first();
+    const productCards = page.locator('[data-testid="menu-item"]').first();
     await expect(productCards).toBeVisible({ timeout: 15000 });
 
-    const count = await page.locator('article.product-card').count();
+    const count = await page.locator('[data-testid="menu-item"]').count();
     expect(count).toBeGreaterThanOrEqual(1);
 
     // Each card should have a price displayed

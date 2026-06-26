@@ -93,12 +93,12 @@ test.describe(`Client: Full order flow on /branding-preview/${SLUG}`, () => {
     }
 
     // Get initial product count (cards or list items)
-    const productsBefore = await page.locator('[data-testid="product-card"], [class*="product"]').count();
+    const productsBefore = await page.locator('[data-testid="menu-item"]').count();
 
     await searchInput.fill('zzz_no_match_query_xyz');
     await page.waitForTimeout(800);
 
-    const productsAfter = await page.locator('[data-testid="product-card"], [class*="product"]').count();
+    const productsAfter = await page.locator('[data-testid="menu-item"]').count();
     // Either fewer results OR "no results" text appears
     const noResultsText = await page.textContent('body').then(t => t?.includes('no result') || t?.includes('No result') || t?.includes('empty'));
     console.log('Search results — before:', productsBefore, '| after:', productsAfter, '| noResults:', noResultsText);
@@ -106,7 +106,7 @@ test.describe(`Client: Full order flow on /branding-preview/${SLUG}`, () => {
     // Clear search
     await searchInput.clear();
     await page.waitForTimeout(500);
-    const productsRestored = await page.locator('[data-testid="product-card"], [class*="product"]').count();
+    const productsRestored = await page.locator('[data-testid="menu-item"]').count();
     console.log('Step 3 PASS — products after clear:', productsRestored);
   });
 

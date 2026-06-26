@@ -20,12 +20,19 @@ test.describe('Real API — Public Endpoints', () => {
   });
 
   test('GET /s/:slug SSR returns Albanian locale', async ({ request }) => {
-    const resp = await request.get(`${BASE}/s/demo`);
+    // Full SSR (the hand-templated menu) is served only to crawlers — real
+    // browsers get the SPA shell and hydrate. Send a bot UA to exercise the SSR
+    // path this test is named for. (data-text-sq is gone: the SSR renderer now
+    // resolves locale text server-side and emits final strings, so we assert the
+    // server-rendered menu markup directly.)
+    const resp = await request.get(`${BASE}/s/demo`, {
+      headers: { 'user-agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
+    });
     expect(resp.status()).toBe(200);
     const html = await resp.text();
     expect(html).toContain('lang="sq"');
-    expect(html).toContain('data-text-sq');
     expect(html).toContain('product-card');
+    expect(html).toContain('product-name');
   });
 
   test('GET /s/:slug?embed=1 returns embed mode', async ({ request }) => {

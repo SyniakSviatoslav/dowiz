@@ -3,7 +3,7 @@ import { checkAxe, checkTouchTargets, checkFormLabels, checkAriaLive } from '../
 
 // Live storefront smoke against the demo tenant (slug: demo).
 // NOTE: the storefront is a client-rendered SPA (post SSR→SPA migration) — product
-// cards render as [data-testid="menu-item"], not server-side <article.product-card>.
+// cards render as [data-testid="menu-item"], not server-side <[data-testid="menu-item"]>.
 const CARD = '[data-testid="menu-item"]';
 
 test.describe('Live Deployment Smoke — demo tenant', () => {

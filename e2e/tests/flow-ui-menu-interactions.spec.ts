@@ -12,7 +12,7 @@ test.describe('UI: Client Menu — Detail Modal, Modifiers, Search, Filter', () 
     await page.goto(`${BASE}/s/${locationSlug}`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const cards = page.locator('article.product-card');
+    const cards = page.locator('[data-testid="menu-item"]');
     const cardCount = await cards.count();
     test.skip(cardCount === 0, 'No product cards');
 
@@ -107,7 +107,7 @@ test.describe('UI: Client Menu — Detail Modal, Modifiers, Search, Filter', () 
     await page.goto(`${BASE}/s/${locationSlug}`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const addBtns = page.locator('button[aria-label="Add to cart"], button[aria-label="Add"]');
+    const addBtns = page.locator('[data-testid="menu-item-add"]');
     const count = await addBtns.count();
     test.skip(count === 0, 'No add buttons');
 
@@ -164,7 +164,7 @@ test.describe('UI: Client Menu — Detail Modal, Modifiers, Search, Filter', () 
       await tabs.first().click();
     }
 
-    const addBtn = page.locator('button[aria-label="Add to cart"]').first();
+    const addBtn = page.locator('[data-testid="menu-item-add"]').first();
     if (await addBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await addBtn.click();
     }

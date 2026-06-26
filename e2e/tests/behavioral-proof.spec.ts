@@ -16,7 +16,7 @@ test.describe('Hot-path sanity (Rule 14.4)', () => {
   test('SSR menu renders ≥1 product card', async ({ page }) => {
     const response = await page.goto(`${BASE}/s/demo`);
     expect(response?.status()).toBe(200);
-    const cards = page.locator('.product-card, article.product-card');
+    const cards = page.locator('[data-testid="menu-item"]');
     await expect(cards.first()).toBeVisible({ timeout: 15000 });
     const count = await cards.count();
     expect(count).toBeGreaterThanOrEqual(1);

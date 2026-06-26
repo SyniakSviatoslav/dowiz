@@ -5,7 +5,7 @@ test.describe('Map Components', () => {
   test('checkout page shows map with pin component', async ({ page }) => {
     // Add item to cart first, then go to checkout
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
 
     // Add item and go to checkout
     await page.getByRole('button', { name: /add|shto/i }).first().click();

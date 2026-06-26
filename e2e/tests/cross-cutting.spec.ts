@@ -6,7 +6,7 @@ test.describe('Cross-Cutting', () => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
     await page.evaluate(() => {
       const root = document.getElementById('root');
       if (root) {
@@ -33,10 +33,10 @@ test.describe('Cross-Cutting', () => {
         document.documentElement.style.setProperty('--brand-primary', '#C1121F');
         document.documentElement.style.setProperty('--brand-bg', '#FFFFFF');
       });
-      await expect(page.locator('article.product-card').first()).toBeVisible({ timeout: 5000 });
+      await expect(page.locator('[data-testid="menu-item"]').first()).toBeVisible({ timeout: 5000 });
     }
     expect(errors, `JS errors after theme cycling: ${errors.join('; ')}`).toEqual([]);
-    const cards = await page.locator('article.product-card').count();
+    const cards = await page.locator('[data-testid="menu-item"]').count();
     expect(cards).toBeGreaterThan(0);
   });
 

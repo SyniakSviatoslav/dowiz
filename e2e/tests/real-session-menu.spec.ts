@@ -29,11 +29,11 @@ test.describe('Real Session — Menu Rebuild Verification', () => {
 
   test('Client menu page shows products with Tabler icons', async ({ page }) => {
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
     await page.waitForTimeout(1000);
 
     // Product cards rendered
-    const cards = page.locator('article.product-card');
+    const cards = page.locator('[data-testid="menu-item"]');
     const count = await cards.count();
     expect(count).toBeGreaterThan(0);
 
@@ -44,7 +44,7 @@ test.describe('Real Session — Menu Rebuild Verification', () => {
 
     // Cart FAB should use Tabler icon
     // Add item first
-    const addBtn = page.locator('article.product-card button[aria-label="Add"]').first();
+    const addBtn = page.locator('[data-testid="menu-item-add"]').first();
     if (await addBtn.isVisible().catch(() => false)) {
       await addBtn.click();
       await page.waitForTimeout(500);
@@ -60,7 +60,7 @@ test.describe('Real Session — Menu Rebuild Verification', () => {
 
   test('Language switcher visible on client header', async ({ page }) => {
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
     await page.waitForTimeout(1000);
 
     // Language switcher button should be in the header

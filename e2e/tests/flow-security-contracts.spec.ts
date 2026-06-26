@@ -260,7 +260,7 @@ test.describe('Flow: Security & Contracts — Auth, CSP, Cookies, Rate Limits, V
       const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(scrollWidth, `${vp.label}: no horizontal overflow`).toBeLessThanOrEqual(vp.width + 5);
 
-      const cards = page.locator('article.product-card');
+      const cards = page.locator('[data-testid="menu-item"]');
       const cardCount = await cards.count().catch(() => 0);
       if (cardCount > 0) {
         await expect(cards.first()).toBeVisible({ timeout: 5000 });

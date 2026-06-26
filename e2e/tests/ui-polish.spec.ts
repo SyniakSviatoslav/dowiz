@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const SCREENS = {
-  'menu-client':     { url: '/s/test-slug?dev=true',      readySelector: 'article.product-card', label: 'Client Menu' },
+  'menu-client':     { url: '/s/test-slug?dev=true',      readySelector: '[data-testid="menu-item"]', label: 'Client Menu' },
   'admin-dashboard': { url: '/admin?dev=true',              readySelector: 'h2',                  label: 'Admin Dashboard' },
   'admin-orders':    { url: '/admin/orders?dev=true',       readySelector: 'h2',                  label: 'Admin Orders' },
   'analytics':       { url: '/admin/analytics?dev=true',    readySelector: 'h2',                  label: 'Analytics' },
@@ -245,7 +245,7 @@ test.describe('Skeleton Loading States', () => {
       return els.length;
     });
     // After load, skeletons disappear
-    await page.waitForSelector('article.product-card', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 20000 });
     const skeletonsAfterLoad = await page.locator('.skeleton-block').count();
     console.log(`Skeletons during DOMContentLoaded: ${skeletonExists}, after load: ${skeletonsAfterLoad}`);
   });
@@ -293,7 +293,7 @@ test.describe('Empty States', () => {
 
   test('empty cart drawer shows empty message', async ({ page }) => {
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 20000 });
 
     // Trigger cart with localStorage hack (add then immediately clear)
     await page.evaluate(() => {
@@ -303,7 +303,7 @@ test.describe('Empty States', () => {
       }));
     });
     await page.reload();
-    await page.waitForSelector('article.product-card', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 20000 });
 
     // Open FAB (should appear with 1 item from localStorage)
     const fab = page.locator('#cartFabBtn');
@@ -322,10 +322,10 @@ test.describe('Accessibility', () => {
 
   test('interactive elements have accessible names on client menu', async ({ page }) => {
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 20000 });
 
     // Product add buttons should have aria-label
-    const addButtons = page.locator('button[aria-label="Add"]');
+    const addButtons = page.locator('[data-testid="menu-item-add"]');
     const count = await addButtons.count();
     expect(count).toBeGreaterThanOrEqual(0);
 
@@ -424,7 +424,7 @@ test.describe('CartFAB', () => {
 
   test('CartFAB hidden when cart is empty', async ({ page }) => {
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 20000 });
 
     const fab = page.locator('#cartFabBtn');
     await expect(fab).not.toBeVisible({ timeout: 3000 });
@@ -432,9 +432,9 @@ test.describe('CartFAB', () => {
 
   test('CartFAB appears with count after adding item', async ({ page }) => {
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 20000 });
 
-    const addBtn = page.locator('article.product-card button[aria-label="Add"]').first();
+    const addBtn = page.locator('[data-testid="menu-item-add"]').first();
     await addBtn.click();
     await page.waitForTimeout(500);
 
@@ -445,10 +445,10 @@ test.describe('CartFAB', () => {
 
   test('CartFAB bounce animation class applied after add', async ({ page }) => {
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 20000 });
 
     // Add item
-    await page.locator('article.product-card button[aria-label="Add"]').first().click();
+    await page.locator('[data-testid="menu-item-add"]').first().click();
     await page.waitForTimeout(200);
 
     const fab = page.locator('#cartFabBtn');
@@ -477,9 +477,9 @@ test.describe('CartFAB', () => {
 
   test('CartFAB count increments with multiple adds', async ({ page }) => {
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 20000 });
 
-    const addButtons = page.locator('article.product-card button[aria-label="Add"]');
+    const addButtons = page.locator('[data-testid="menu-item-add"]');
     const availableCount = await addButtons.count();
 
     if (availableCount >= 2) {
@@ -497,10 +497,10 @@ test.describe('CartFAB', () => {
 
   test('CartFAB opens cart drawer on click', async ({ page }) => {
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 20000 });
 
     // Add an item
-    await page.locator('article.product-card button[aria-label="Add"]').first().click();
+    await page.locator('[data-testid="menu-item-add"]').first().click();
     await page.waitForTimeout(500);
 
     const fab = page.locator('#cartFabBtn');
@@ -583,7 +583,7 @@ test.describe('Responsive Layout', () => {
     // Mobile: 2 columns
     await page.setViewportSize(VIEWPORTS.mobile);
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 20000 });
 
     const mobileGridCols = await page.evaluate(() => {
       const grid = document.querySelector('.grid');
@@ -594,7 +594,7 @@ test.describe('Responsive Layout', () => {
     // Desktop: should have more columns
     await page.setViewportSize(VIEWPORTS.desktop);
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 20000 });
 
     const desktopGridCols = await page.evaluate(() => {
       const grid = document.querySelector('.grid');

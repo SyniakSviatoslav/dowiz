@@ -4,7 +4,7 @@ test.describe('Client Menu Page', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
   });
 
   test('renders hero section with restaurant info', async ({ page }) => {
@@ -36,18 +36,18 @@ test.describe('Client Menu Page', () => {
   });
 
   test('renders product cards with name, price, and add button', async ({ page }) => {
-    const cards = page.locator('article.product-card');
+    const cards = page.locator('[data-testid="menu-item"]');
     const count = await cards.count();
     expect(count).toBeGreaterThan(0);
 
     const firstCard = cards.first();
     await expect(firstCard.locator('h3')).toBeVisible();
-    await expect(firstCard.locator('button[aria-label="Add"]')).toBeVisible();
+    await expect(firstCard.locator('[data-testid="menu-item-add"]')).toBeVisible();
   });
 
   test('unavailable products show overlay', async ({ page }) => {
-    // Find a product card that is unavailable (opacity-60)
-    const unavailableCards = page.locator('article.product-card.opacity-60');
+    // Find a product card that is unavailable (opacity-55)
+    const unavailableCards = page.locator('[data-testid="menu-item"].opacity-55');
     const count = await unavailableCards.count();
 
     if (count > 0) {
@@ -61,7 +61,7 @@ test.describe('Client Menu Page', () => {
     await expect(page.locator('#cartFabBtn')).not.toBeVisible();
 
     // Click add on first product
-    const addBtn = page.locator('article.product-card button[aria-label="Add"]').first();
+    const addBtn = page.locator('[data-testid="menu-item-add"]').first();
     await addBtn.click();
     await page.waitForTimeout(500);
 
@@ -72,7 +72,7 @@ test.describe('Client Menu Page', () => {
   });
 
   test('add multiple items increments FAB count', async ({ page }) => {
-    const addButtons = page.locator('article.product-card button[aria-label="Add"]');
+    const addButtons = page.locator('[data-testid="menu-item-add"]');
 
     await addButtons.first().click();
     await addButtons.nth(1).click();
@@ -84,7 +84,7 @@ test.describe('Client Menu Page', () => {
 
   test('cart FAB click opens cart drawer', async ({ page }) => {
     // Add an item first
-    await page.locator('article.product-card button[aria-label="Add"]').first().click();
+    await page.locator('[data-testid="menu-item-add"]').first().click();
     await expect(page.locator('#cartFabBtn')).toBeVisible({ timeout: 3000 });
 
     // Click FAB
@@ -121,7 +121,7 @@ test.describe('Client Menu Page', () => {
 
   test('embed mode hides fixed elements', async ({ page }) => {
     await page.goto('/s/test-slug?dev=true&embed=true');
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
 
     // In embed mode, fixed elements should be hidden
     // CartFAB has class embed-hidden, but FAB only shows with items

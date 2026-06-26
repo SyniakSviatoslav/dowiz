@@ -29,13 +29,13 @@ test.describe('Smoke Tests — App Loads', () => {
   test('Menu page loads with mock data', async ({ page }) => {
     await page.goto('/s/test-slug?dev=true');
 
-    // Wait for product cards to render (uses class `product-card`)
-    await page.waitForSelector('article.product-card', {
+    // Wait for product cards to render (data-testid="menu-item")
+    await page.waitForSelector('[data-testid="menu-item"]', {
       timeout: 20000,
     });
 
     // Verify products are visible
-    const cards = page.locator('article.product-card');
+    const cards = page.locator('[data-testid="menu-item"]');
     const count = await cards.count();
     expect(count).toBeGreaterThan(0);
 
@@ -48,7 +48,7 @@ test.describe('Smoke Tests — App Loads', () => {
     await page.goto('/s/test-slug?dev=true');
 
     // Wait for page to load
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
 
     // Cart FAB should NOT be visible when cart is empty (0 items)
     const fab = page.locator('#cartFabBtn');
@@ -57,10 +57,10 @@ test.describe('Smoke Tests — App Loads', () => {
 
   test('Add to cart shows CartFAB', async ({ page }) => {
     await page.goto('/s/test-slug?dev=true');
-    await page.waitForSelector('article.product-card', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
 
     // Click the "+" button on first available product
-    const addBtn = page.locator('article.product-card button[aria-label="Add"]').first();
+    const addBtn = page.locator('[data-testid="menu-item-add"]').first();
     await addBtn.click();
 
     // Cart FAB should appear with count
