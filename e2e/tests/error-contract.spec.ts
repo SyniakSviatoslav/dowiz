@@ -81,4 +81,18 @@ test.describe('Error contract A1 — envelope + correlationId', () => {
     expect(body.detail).toBeUndefined();
     expect(body.stack).toBeUndefined();
   });
+
+  test('unmatched API route returns the NOT_FOUND envelope (A2 notFound handler)', async ({ request }) => {
+    const res = await request.get(`${BASE}/api/this-route-does-not-exist-xyz`, {
+      headers: { Accept: 'application/json' },
+      failOnStatusCode: false,
+    });
+    expect(res.status()).toBe(404);
+    const body = await res.json();
+    expect(body.code).toBe('NOT_FOUND'); // was an ad-hoc {error,path} before A2
+    expect(body.status).toBe(404);
+    expect(typeof body.correlationId).toBe('string');
+    expect(body.correlationId.length).toBeGreaterThan(0);
+    expect(body.path).toBeUndefined(); // path no longer leaked in the body
+  });
 });
