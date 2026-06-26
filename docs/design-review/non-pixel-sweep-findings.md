@@ -54,6 +54,28 @@ variant (systemic), F2-B status-badge tokens (theme-dependent), `nested-interact
   opacity on text-muted; **candidate guardrail** = ESLint `no-opacity-on-text`
   (tools/eslint-plugin-local) so it can't recur.
 
+## Round 2 — previously-unexamined surfaces (sweep expanded)
+
+Examined the 12 surfaces round 1 skipped: owner activation/supplies/promotions/
+couriers/crm/branding, courier history, public landing//start/login/privacy/404.
+
+- ✅ Clean: promotions, courier/history, privacy, 404, **landing `/` + `/start`**
+  (h1 "Filloni me menunë tuaj" — the round-1 `dom=false` was a sweep selector-timing
+  artifact, not a bug).
+- ✅ Fixed this pass: **CRM `nested-interactive ×50`** (mobile card was a `<button>`
+  wrapping the Reveal `<Button>` → `motion.div` + onClick, same pattern as MenuManager;
+  desktop `<tr>` de-roled) · **CRM `select-name`** (sort Select aria-label) ·
+  **branding `label`** (logo file-input aria-label) · **`--status-info`** added to the
+  `[data-surface="dark"]` block (the dashboard/orders residual blue badge).
+- ⚠️ **`--color-*` text on dark (residual, documented)** — activation ×2, supplies ×5,
+  couriers ×8, dashboard/orders ×2, login ×1 are `text-[var(--color-danger|warning|
+  success|info)]` on the dark shells (e.g. the "Vonesë!/Delay" label `#dc2626` = 3.15).
+  These tokens are ALSO used as **button/banner fills with light text** (`Base.tsx`
+  danger Button, `Status.tsx` banners, courier delivery banner) — so they CANNOT be
+  blanket-lightened on dark (would break white-on-fill). Correct fix = dedicated
+  dark-readable TEXT tokens (`--color-danger-text` etc.) applied only to the text
+  usages. Scoped follow-up, not shipped (avoids regressing danger/warning buttons).
+
 ## Console / runtime (Sense 2)
 
 | Surface | Signal | Verdict |
