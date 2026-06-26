@@ -110,6 +110,13 @@ test.describe('Non-Pixel Sweep (3 roles, mobile-first)', () => {
       ['orders', '/admin/orders'],
       ['analytics', '/admin/analytics'],
       ['settings', '/admin/settings'],
+      // round 2 — previously unexamined owner surfaces
+      ['activation', '/admin/activation'],
+      ['supplies', '/admin/supplies'],
+      ['promotions', '/admin/promotions'],
+      ['couriers', '/admin/couriers'],
+      ['crm', '/admin/crm'],
+      ['branding', '/admin/branding'],
     ] as const) {
       await probe(page, 'owner', surface, path);
     }
@@ -122,8 +129,22 @@ test.describe('Non-Pixel Sweep (3 roles, mobile-first)', () => {
       ['tasks', '/courier'],
       ['shift', '/courier/shift'],
       ['earnings', '/courier/earnings'],
+      ['history', '/courier/history'], // round 2
     ] as const) {
       await probe(page, 'courier', surface, path);
+    }
+  });
+
+  test('public journey', async ({ page }) => {
+    // round 2 — public/unauthenticated surfaces (no token)
+    for (const [surface, path] of [
+      ['landing', '/'],
+      ['start', '/start'],
+      ['login', '/login'],
+      ['privacy', '/privacy'],
+      ['not-found', '/this-route-does-not-exist'],
+    ] as const) {
+      await probe(page, 'public', surface, path);
     }
   });
 

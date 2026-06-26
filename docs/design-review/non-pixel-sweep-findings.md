@@ -67,14 +67,14 @@ couriers/crm/branding, courier history, public landing//start/login/privacy/404.
   desktop `<tr>` de-roled) · **CRM `select-name`** (sort Select aria-label) ·
   **branding `label`** (logo file-input aria-label) · **`--status-info`** added to the
   `[data-surface="dark"]` block (the dashboard/orders residual blue badge).
-- ⚠️ **`--color-*` text on dark (residual, documented)** — activation ×2, supplies ×5,
-  couriers ×8, dashboard/orders ×2, login ×1 are `text-[var(--color-danger|warning|
+- ✅ **`--color-*` text on dark — FIXED via token-split.** activation ×2, supplies ×5,
+  couriers ×8, dashboard/orders ×2, login ×1 were `text-[var(--color-danger|warning|
   success|info)]` on the dark shells (e.g. the "Vonesë!/Delay" label `#dc2626` = 3.15).
-  These tokens are ALSO used as **button/banner fills with light text** (`Base.tsx`
-  danger Button, `Status.tsx` banners, courier delivery banner) — so they CANNOT be
-  blanket-lightened on dark (would break white-on-fill). Correct fix = dedicated
-  dark-readable TEXT tokens (`--color-danger-text` etc.) applied only to the text
-  usages. Scoped follow-up, not shipped (avoids regressing danger/warning buttons).
+  Fix: the base `--color-*` tokens now LIGHTEN on `[data-surface="dark"]` (fixing all
+  ~81 text usages at once), and the 9 coloured FILLS with light text (danger Button,
+  status banners, notification badges, swipe-to-complete) were migrated to new
+  `--color-*-strong` tokens (always the saturated hue) so white-on-fill stays AA on
+  both surfaces. Dots (no text) keep the lightened value for visibility.
 
 ## Console / runtime (Sense 2)
 
