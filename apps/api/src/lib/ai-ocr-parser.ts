@@ -2,6 +2,7 @@ import type { MenuParserProvider, ParserInputType } from '../ports.js';
 // @ts-ignore — legacy types removed from shared-types, used by OCR parser at runtime
 import type { CanonicalMenuDraft, ParseIssue, ParseResult } from '@deliveryos/shared-types';
 import { PiiRedactor } from './pii-redactor.js';
+import { collectOcrPriceMinors, computeGrounding, extractTrailingPriceMinor } from './menu-grounding.js';
 import Tesseract from 'tesseract.js';
 import crypto from 'crypto';
 import { z } from 'zod';
@@ -563,13 +564,36 @@ CRITICAL RULES:
       issues.push({ rowNumber: 1, code: 'POTENTIALLY_UNSAFE_VALUE' as any, message: 'Low confidence in extraction', severity: 'warning' });
     }
 
+    // B2 hallucination grounding (ADR-0011) — FLAG-GATED DARK (MENU_GROUNDING_ENABLED, default off)
+    // behind the B5/B12 RLS gate (import_sessions FORCE + strengthened verify:rls). A parsed price
+    // with no normalizer-matching token in the OCR text is a likely hallucination → a warning for the
+    // owner draft-review. NEVER auto-publishes — the existing draft → owner-publish gate stands.
+    // Grounds against redactedText (prices survive redaction; the redactor strips only phone/email/
+    // card/iban/url) so no raw PII is reintroduced.
+    let grounding: { grounded: number; ungrounded: number } | undefined;
+    if (process.env.MENU_GROUNDING_ENABLED === 'true') {
+      const minorUnit = typeof (input.config as any).currencyMinorUnit === 'number' ? (input.config as any).currencyMinorUnit : 0;
+      const ocrMinors = collectOcrPriceMinors(redactedText, minorUnit);
+      const g = computeGrounding(canonicalDraft.products as any, ocrMinors);
+      grounding = { grounded: g.groundedCount, ungrounded: g.ungrounded.length };
+      for (const u of g.ungrounded) {
+        issues.push({
+          rowNumber: 1,
+          code: 'PRICE_NOT_GROUNDED' as any,
+          message: `Price ${u.price} for "${u.name ?? u.externalKey ?? 'item'}" was not found in the source text — verify before publishing`,
+          severity: 'warning',
+        });
+      }
+    }
+
     const provenance = {
       source: 'ai-ocr',
       raw_text_hash: crypto.createHash('sha256').update(redactedText).digest('hex'),
       model_id: llmModel,
       ocr_engine: ocrEngineUsed,
       ocr_ms: ocrMs,
-      llm_ms: llmMs
+      llm_ms: llmMs,
+      ...(grounding ? { grounding } : {}),
     };
 
     // Note: since provenance isn't in CanonicalMenuDraft interface directly,
@@ -738,28 +762,9 @@ CRITICAL RULES:
    * units (e.g. "8.50" with minorUnit 2 → 850, "800 Lek" with minorUnit 0 → 800).
    */
   private priceOf(line: string, minorUnit: number): { minor: number; index: number; raw: string } | null {
-    // Currency-tagged or trailing number: "... 8.50 EUR", "... 800 Lek", "... €12", "... 1.200".
-    const re = /(?:€|£|\$|lek|all|eur|usd|gbp)?\s*([0-9][0-9.,\s]*[0-9]|[0-9])\s*(?:€|£|\$|lek|all|eur|usd|gbp)?\s*$/i;
-    const m = line.match(re);
-    if (!m || !m[1]) return null;
-    const raw = m[1];
-    let num = raw.replace(/\s/g, '');
-    // Normalise decimal separator: both '.' and ',' present → '.'=thousands? assume
-    // last separator is decimal. Single ',' → decimal. '.' as thousands if 3 trailing.
-    if (num.includes('.') && num.includes(',')) {
-      num = num.lastIndexOf(',') > num.lastIndexOf('.')
-        ? num.replace(/\./g, '').replace(',', '.')
-        : num.replace(/,/g, '');
-    } else if (num.includes(',')) {
-      num = /,\d{3}$/.test(num) ? num.replace(/,/g, '') : num.replace(',', '.');
-    } else if (/\.\d{3}$/.test(num)) {
-      num = num.replace(/\./g, ''); // "1.200" → 1200 (thousands)
-    }
-    const value = Number(num);
-    if (!isFinite(value) || value <= 0 || value > 1_000_000) return null;
-    const minor = Math.round(value * Math.pow(10, minorUnit));
-    if (minor <= 0) return null;
-    return { minor, index: m.index ?? line.lastIndexOf(raw), raw: m[0] };
+    // B7: single source of price normalization — shared with menu-grounding so the grounding check
+    // compares against EXACTLY what the parser extracts (no substring drift).
+    return extractTrailingPriceMinor(line, minorUnit);
   }
 
   private fallbackError(issues: ParseIssue[]): ParseResult {
