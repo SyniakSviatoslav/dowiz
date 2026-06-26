@@ -11,7 +11,8 @@
 import { test, expect } from '../../fixtures/console-guard';
 import { expectNoA11y } from '../../helpers/a11y';
 
-const SLUG = process.env.DEMO_SLUG || 'sushi-durres';
+// /s/demo = the live demo (Dubin & Sushi). 'sushi-durres' is a dead shell.
+const SLUG = process.env.DEMO_SLUG || 'demo';
 const LOCALES = ['sq', 'en', 'uk'] as const;
 
 for (const lang of LOCALES) {

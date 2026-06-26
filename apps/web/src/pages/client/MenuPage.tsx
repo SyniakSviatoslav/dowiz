@@ -602,7 +602,7 @@ export function MenuPage() {
       <div ref={stickyRef} className="sticky top-0 z-40" style={{ background: 'var(--brand-bg)' }}>
         {/* Category nav */}
         <div className="relative border-b" style={{ borderColor: 'var(--brand-border)' }}>
-          <nav className="h-11 overflow-x-auto hide-scrollbar scroll-fade-x flex items-center gap-0.5 px-3 pr-8" aria-label={t('client.categories', 'Categories')}>
+          <nav data-testid="category-nav" className="h-11 overflow-x-auto hide-scrollbar scroll-fade-x flex items-center gap-0.5 px-3 pr-8" aria-label={t('client.categories', 'Categories')}>
             {loading ? (
               <div className="flex gap-4 px-2 h-full items-center">
                 <div className="w-14 h-3.5 skeleton-block" />
@@ -621,8 +621,9 @@ export function MenuPage() {
                     key={cat.id}
                     whileTap={prefersReduced ? undefined : { scale: 0.97 }}
                     onClick={() => handleScrollTo(cat.id)}
-                    role="tab"
-                    aria-selected={activeTab === cat.id}
+                    // In-page scroll nav, not a tab widget (no tabpanels) — use
+                    // aria-current, not role="tab" (axe: aria-required-parent).
+                    aria-current={activeTab === cat.id ? 'true' : undefined}
                     className="h-11 flex items-center gap-1 px-3 whitespace-nowrap text-step-xs font-medium border-b-2 shrink-0 outline-none transition-colors duration-150 ease-out rounded-t-md focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
                     style={{
                       color: activeTab === cat.id ? (isChefCat ? 'var(--brand-primary)' : 'var(--brand-text)') : 'var(--brand-text-muted)',

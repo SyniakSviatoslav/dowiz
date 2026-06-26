@@ -63,17 +63,18 @@ test.describe(`Client: Full order flow on /branding-preview/${SLUG}`, () => {
     await page.goto(`${BASE}/branding-preview/${SLUG}`, { waitUntil: 'networkidle', timeout: 40000 });
     await page.waitForTimeout(3000);
 
-    const tabs = page.locator('[role="tab"]');
+    // Category nav is in-page scroll navigation (aria-current), not a tab widget.
+    const tabs = page.locator('[data-testid="category-nav"] button, [role="tab"]');
     const tabCount = await tabs.count();
     console.log('Category tabs found:', tabCount);
 
     if (tabCount >= 2) {
-      // Click second tab
+      // Click second category → it becomes the current in-page section
       await tabs.nth(1).click();
       await page.waitForTimeout(500);
-      const selected = await tabs.nth(1).getAttribute('aria-selected');
-      expect(selected, 'Second tab should become selected').toBe('true');
-      console.log('Step 2 PASS — tabs clickable, second tab selected');
+      const current = await tabs.nth(1).getAttribute('aria-current');
+      expect(current, 'Second category should become aria-current').toBe('true');
+      console.log('Step 2 PASS — categories clickable, second becomes current');
     } else {
       console.log('Step 2 PASS (trivial) — fewer than 2 category tabs, skipping click check');
     }
