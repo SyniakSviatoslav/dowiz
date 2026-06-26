@@ -392,10 +392,14 @@ export class AiOcrParser implements MenuParserProvider {
       throw new Error(`AiOcrParser does not support kind: ${input.kind}`);
     }
 
-    // PII note (Z1): the menu document is fed to the model un-redacted so the
-    // venue's OWN contact (name/address/phone/hours) can be extracted for
-    // onboarding. A menu contains no customer PII. The redacted copy is kept only
-    // for the provenance hash below.
+    // PRIVACY (ADR-0011 / ETHICAL-STOP-1, redact-by-default — BINDING): the OCR text is
+    // redacted with piiRedactor BEFORE it enters the LLM prompt. A menu PHOTO can carry
+    // incidental THIRD-PARTY PII (staff name/phone, handwritten note) the owner's consent
+    // does not cover — that must never egress to an external model (OpenRouter / Zen). The
+    // redacted copy feeds both the prompt (line ~515) and the provenance hash. Accepted
+    // tradeoff: the redactor may also strip the venue's OWN phone, weakening onboarding
+    // pre-fill; the remedy is a SEPARATE consented venue-contact path, never raw PII to the
+    // model (docs/.../ethical-decisions.md, gate CLOSED 2026-06-26).
     const { text: redactedText } = this.piiRedactor.redact(rawText);
 
     const t1 = Date.now();
@@ -512,7 +516,7 @@ CRITICAL RULES:
 3. DESCRIPTION: Include the product description if present. Combine ingredient list into a description if no separate description exists.
 4. TYPES: "price" must be a NUMBER, "available" must be BOOLEAN, "externalKey"/"categoryKey" must be STRINGS.
 5. FORMAT: Output ONLY the JSON object. No markdown fences, no commentary.
-6. RESTAURANT: From the header/footer, extract the venue "name", full street "address", contact "phone", and opening-"hoursText" if present. Use "" for any field not found. Do NOT invent these. This is the venue's OWN business contact — never any customer's details.\n\n${rawText}`;
+6. RESTAURANT: From the header/footer, extract the venue "name", full street "address", contact "phone", and opening-"hoursText" if present. Use "" for any field not found. Do NOT invent these. This is the venue's OWN business contact — never any customer's details.\n\n${redactedText}`;
 
       llmResponse = await callLlm(provider, prompt, modelForProvider, 120000);
     } catch (e: any) {
