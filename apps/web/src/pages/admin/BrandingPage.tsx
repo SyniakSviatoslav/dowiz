@@ -1,4 +1,3 @@
-import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Button, Input, ColorInput, FormField, SkeletonBase, useI18n, useToast, ease, duration, contrastRatio, parseColor } from '@deliveryos/ui';
@@ -83,15 +82,10 @@ export function BrandingPage() {
     try {
       const form = new FormData();
       form.append('logo', file);
-      const res = await fetch(`/api/owner/locations/${locationId}/theme/logo`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${safeStorage.get('dos_access_token') || ''}` },
-        body: form,
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.logo_url) { setLogoUrl(data.logo_url); setLogoDataUrl(''); }
-      }
+      // Via apiClient: transparent 401→refresh→retry + error mapping (was a raw
+      // fetch with a hand-rolled Bearer header that silently failed on token expiry).
+      const data = await apiClient<any>(`/owner/locations/${locationId}/theme/logo`, { method: 'POST', body: form });
+      if (data?.logo_url) { setLogoUrl(data.logo_url); setLogoDataUrl(''); }
     } catch {
       // Preview still shows; logo not persisted until next save
     } finally {
