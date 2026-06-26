@@ -528,7 +528,7 @@ export function CouriersPage() {
               <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>
                 {t('admin.order_details', 'Order Details')} #{selectedOrderDetail.order_id.slice(0, 8)}
               </h3>
-              <motion.button onClick={() => setSelectedOrderDetail(null)} whileTap={{ scale: 0.97 }} className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface-raised)]">
+              <motion.button onClick={() => setSelectedOrderDetail(null)} whileTap={{ scale: 0.97 }} aria-label={t('common.close', 'Close')} className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface-raised)]">
                 <i className="ti ti-x" style={{ color: 'var(--brand-text-muted)' }} />
               </motion.button>
             </div>

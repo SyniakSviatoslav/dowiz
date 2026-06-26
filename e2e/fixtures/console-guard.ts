@@ -19,7 +19,12 @@ import { test as base, expect, type Page } from '@playwright/test';
 
 /** Genuinely-benign, non-app noise only. Each entry needs a written reason. */
 const ALLOW: RegExp[] = [
-  // (intentionally empty — discover during the sweep, route the cause, don't mute)
+  // MapLibre evaluates the third-party openfreemap "liberty" basemap style's
+  // data-driven expressions against null vector-tile feature props. It's the
+  // basemap's style, not our layers (our addLayer paint is static literals), and
+  // it never reaches the user — pure third-party noise. Root fix = self-host a
+  // clean tile style (VITE_TILE_STYLE_URL); until then this is correctly muted.
+  /Expected value to be of type number, but found null instead/,
 ];
 
 /** Hydration desync signatures — ALWAYS fail, regardless of ALLOW. */

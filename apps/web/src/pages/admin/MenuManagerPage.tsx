@@ -596,7 +596,7 @@ export function MenuManagerPage() {
                 ].map(opt => (
                   <motion.button key={opt.value} onClick={() => { setSortBy(opt.value as any); setSortOpen(false); }} whileTap={{ scale: 0.97 }}
                     className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${sortBy === opt.value ? 'font-semibold' : ''}`}
-                    style={{ color: sortBy === opt.value ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
+                    style={{ color: sortBy === opt.value ? 'var(--brand-primary-readable)' : 'var(--brand-text)' }}>
                     <i className={opt.icon} style={{ fontSize: '0.8rem' }} />
                     <span className="flex-1">{opt.label}</span>
                     {sortBy === opt.value && <i className="ti ti-check" style={{ color: 'var(--brand-primary)', fontSize: '0.7rem' }} />}
@@ -639,7 +639,7 @@ export function MenuManagerPage() {
                 ].map(opt => (
                   <motion.button key={opt.value} onClick={() => { setFilterAvailable(opt.value as any); setAvailOpen(false); }} whileTap={{ scale: 0.97 }}
                     className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${filterAvailable === opt.value ? 'font-semibold' : ''}`}
-                    style={{ color: filterAvailable === opt.value ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
+                    style={{ color: filterAvailable === opt.value ? 'var(--brand-primary-readable)' : 'var(--brand-text)' }}>
                     <i className={opt.icon} style={{ fontSize: '0.8rem' }} />
                     <span className="flex-1">{opt.label}</span>
                     {filterAvailable === opt.value && <i className="ti ti-check" style={{ color: 'var(--brand-primary)', fontSize: '0.7rem' }} />}
@@ -773,7 +773,7 @@ export function MenuManagerPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1">
                         <span className="font-medium text-sm truncate" style={{ color: 'var(--brand-text)' }}>{product.name}</span>
-                        <span className="text-sm font-bold shrink-0" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={product.price} /></span>
+                        <span className="text-sm font-bold shrink-0" style={{ color: 'var(--brand-primary-readable)' }}><PriceDisplay amount={product.price} /></span>
                       </div>
                       {product.description && <div className="text-step-2xs truncate mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{product.description}</div>}
                       <div className="flex items-center gap-2 mt-1.5">
@@ -876,7 +876,7 @@ export function MenuManagerPage() {
                   <h3 className="text-lg font-bold">{previewProduct.name}</h3>
                   {previewProduct.description && <p className="text-sm mt-1" style={{ color: 'var(--brand-text-muted)' }}>{previewProduct.description}</p>}
                 </div>
-                <span className="text-xl font-black shrink-0" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={previewProduct.price} /></span>
+                <span className="text-xl font-black shrink-0" style={{ color: 'var(--brand-primary-readable)' }}><PriceDisplay amount={previewProduct.price} /></span>
               </div>
 
               {previewProduct.stockCount != null && (
@@ -1186,7 +1186,7 @@ export function MenuManagerPage() {
                               </span>
                             )}
                           </div>
-                          <span className="font-semibold text-xs" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={p.price} /></span>
+                          <span className="font-semibold text-xs" style={{ color: 'var(--brand-primary-readable)' }}><PriceDisplay amount={p.price} /></span>
                         </div>
                       ))}
                     </div>
