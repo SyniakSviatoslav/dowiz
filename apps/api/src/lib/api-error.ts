@@ -25,6 +25,16 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
   }
+
+  /**
+   * Fastify's default error handler (and any thrower that bypasses our setErrorHandler)
+   * reads `statusCode`; mirror `status` onto it so a THROWN ApiError carries the right HTTP
+   * status everywhere. @fastify/rate-limit throws the `errorResponseBuilder` return value
+   * (index.js:333) — without this it would land as a 500.
+   */
+  get statusCode(): number {
+    return this.status;
+  }
 }
 
 /** A machine code is contract-shaped iff SCREAMING_SNAKE (stable, FE-branchable). */
@@ -33,18 +43,20 @@ export function isContractCode(code: unknown): code is string {
 }
 
 /**
- * A3 (ADR-0010): the 429 envelope for @fastify/rate-limit. The plugin builds its OWN body
- * and never enters `setErrorHandler`, so the envelope is reconstructed here to match. Pure
- * function (testable in isolation). `code:'RATE_LIMIT'` is the SCREAMING_SNAKE contract; the
- * plugin sets `Retry-After` itself. Legacy `error`/`status` kept (B1 code-preserving).
+ * A3 (ADR-0010): the rate-limit error for @fastify/rate-limit. The plugin THROWS the
+ * `errorResponseBuilder` return value (index.js:333) — so it must be a throwable ApiError,
+ * NOT a plain body. Returning a plain object made `setErrorHandler` read `.statusCode` as
+ * undefined → 500. Throwing an ApiError routes the 429 through the ONE envelope source
+ * (setErrorHandler), which renders `{code:'RATE_LIMIT', message, retryAfterMs, correlationId,
+ * status:429, error}`. The plugin sets `Retry-After`/`x-ratelimit-*` headers before the throw.
+ * `statusCode` here is the plugin's context status (429, or 403 on ban).
  */
-export function rateLimitEnvelope(correlationId: string, ttlMs: number) {
-  return {
-    code: 'RATE_LIMIT',
-    message: `Too many requests. Try again in ${Math.ceil(ttlMs / 1000)}s.`,
-    correlationId,
-    retryAfterMs: ttlMs,
-    status: 429,
-    error: 'Too many requests', // legacy string the un-migrated FE still reads
-  };
+export function rateLimitError(statusCode: number, ttlMs: number): ApiError {
+  return new ApiError(
+    statusCode,
+    'RATE_LIMIT',
+    `Too many requests. Try again in ${Math.ceil(ttlMs / 1000)}s.`,
+    undefined,
+    ttlMs,
+  );
 }
