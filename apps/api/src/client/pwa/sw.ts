@@ -4,6 +4,14 @@
 const CACHE_PREFIX = 'dowiz-shell-v';
 let currentCacheName = CACHE_PREFIX + '1'; // Default, will be updated dynamically
 
+// Best-effort cache write. A failed open/put must NOT reject the fetch handler,
+// so the promise is sunk here (kept at module scope to avoid deep callback nesting).
+function cachePut(cacheName: string, request: Request, response: Response): void {
+  caches.open(cacheName)
+    .then((cache) => cache.put(request, response))
+    .catch(() => {}); // ignore: caching is non-critical
+}
+
 self.addEventListener('install', (event: any) => {
   event.waitUntil(self.skipWaiting());
 });
@@ -51,9 +59,7 @@ self.addEventListener('fetch', (event: any) => {
 
           // Clone before caching
           const responseToCache = networkResponse.clone();
-          caches.open(currentCacheName).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+          cachePut(currentCacheName, event.request, responseToCache);
 
           return networkResponse;
         });

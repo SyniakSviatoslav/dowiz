@@ -480,7 +480,7 @@ export function DeliveryPage() {
                   type="number"
                   inputMode="decimal"
                   value={cashCollected ?? task.cashPayWith}
-                  onChange={e => setCashCollected(e.target.value ? parseFloat(e.target.value) : null)}
+                  onChange={e => setCashCollected(e.target.value ? parseInt(e.target.value, 10) : null)}
                   min={0}
                   className="w-full h-12 px-4 outline-none text-base font-bold border rounded-[var(--brand-radius)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
                   style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
