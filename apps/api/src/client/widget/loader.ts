@@ -113,7 +113,10 @@
     if (!iframeMounted) {
       const container = overlay.querySelector('.dowiz-iframe-container');
       const iframe = document.createElement('iframe');
-      iframe.src = `${host}/s/${slug}?embed=1&widget=1`;
+      // embed=true (not =1): the server iframe-CSP (server.ts), ClientLayout's
+      // embed-mode class, and MenuPage all gate on the literal `embed=true`, so the
+      // legacy `embed=1` left the widget frame-blocked and unstyled.
+      iframe.src = `${host}/s/${slug}?embed=true&widget=1`;
       iframe.allow = "geolocation 'self' https://dowiz.org";
       container?.appendChild(iframe);
       iframeMounted = true;
