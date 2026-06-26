@@ -5,6 +5,19 @@ Source: `e2e/tests/non-pixel-sweep.spec.ts` (Sense 1 axe + Sense 2 console), mob
 Run after the dev-auth cross-origin header strip (phantom CORS removed → true signal).
 Live video per role journey under `e2e/artifacts/test-results/**`.
 
+## Shipped + validated on staging (this pass)
+1. F1 storefront category nav `role=tab`→`aria-current` — `aria-required-parent` 15→0.
+2. `button-name` admin bottom-nav — 4→0 across all owner pages.
+3. F2-A `--brand-primary-readable` token + F2-C opacity-on-muted — storefront `color-contrast` 7→**0**, admin/menu 2→0.
+4. on-primary language chip → `--brand-primary-strong` — storefront's last contrast node → 0.
+5. Toggle/range a11y — settings `aria-required-attr`/`aria-toggle-field-name`/`label` → 0.
+
+**Storefront is now fully a11y-green (aria + contrast). Courier was already clean.**
+
+Remaining = 3 structural/visual passes (need screenshot validation): on-primary `Button`
+variant (systemic), F2-B status-badge tokens (theme-dependent), `nested-interactive ×49`
+(MenuManager card pattern).
+
 ## A11y (Sense 1) — by impact, with the systemic root
 
 | Finding | Impact | Where | Root (one fix → N surfaces) | Status |
@@ -13,8 +26,8 @@ Live video per role journey under `e2e/artifacts/test-results/**`.
 | `button-name` ×4 | critical | **every** owner page (dashboard/menu/orders/analytics/settings) | icon-only admin BottomTabBar (label '') → no accessible name | ✅ FIXED (db7d3223, 4→0 verified) |
 | `color-contrast` | serious | **all roles** (storefront ×7, checkout ×2, dash ×5, menu ×2, orders ×5, analytics ×4, settings, courier ×2) | **3 distinct roots** (see below) | ▶ F2 (dedicated pass) |
 | `nested-interactive` ×49 | serious | owner/menu | MenuManager — interactive nested in interactive | ▶ |
-| `aria-required-attr` ×3, `label` ×1, `aria-toggle-field-name` | critical/serious | owner/settings | settings form controls/toggles unlabeled | ▶ |
-| `select-name` ×1 | critical | client/checkout | a `<select>` without accessible name | ▶ |
+| `aria-required-attr` ×3, `label` ×1, `aria-toggle-field-name` | critical/serious | owner/settings | shared Toggle (role=switch) dropped aria-checked on non-bool + unnamed; MapWithRadius range unlabeled | ✅ FIXED (9230fde8, all→0 verified) |
+| `select-name` ×1 | critical | client/checkout | transient (state-dependent select); not reproduced in re-sweep | ◦ watch |
 | `scrollable-region-focusable` ×1 | serious | owner dashboard, orders | scroll container not keyboard-focusable | ▶ |
 
 ### F2 status (validated on staging)
