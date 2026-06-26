@@ -22,6 +22,8 @@ run-history.jsonl
 eval-layer/deepeval-result.json
 .repowise/
 .repowise/
+# ccc (ADR-0012 C1) dev-only AST index — never committed, never in dist
+.ccc/
 
 # graphify cache
 graphify-out/
