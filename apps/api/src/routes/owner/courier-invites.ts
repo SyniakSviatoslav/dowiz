@@ -25,7 +25,7 @@ export default (async function ownerCourierInvitesRoutes(fastify: any, opts: any
     const { locationId } = request.params as any;
     const body = request.body as any;
     if (!body?.role || !body?.email) {
-      return reply.status(400).send({ error: 'role and email are required' });
+      return reply.sendError(400, 'VALIDATION_FAILED', 'role and email are required');
     }
     const role = body.role;
     const email = String(body.email).toLowerCase().trim();

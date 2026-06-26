@@ -35,7 +35,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } }
   }, async (request: any, reply: any) => {
     // Launch-gated OFF: closed at the server, not just hidden in the FE.
-    if (env.GOOGLE_OAUTH_ENABLED !== 'true') return reply.status(404).send({ error: 'Not found' });
+    if (env.GOOGLE_OAUTH_ENABLED !== 'true') return reply.sendError(404, 'NOT_FOUND', 'Not found');
     const state = crypto.randomUUID();
     const nonce = crypto.randomUUID();
 
@@ -62,19 +62,19 @@ export default async function authRoutes(fastify: FastifyInstance) {
   fastify.get('/auth/google/callback', {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } }
   }, async (request: any, reply: any) => {
-    if (env.GOOGLE_OAUTH_ENABLED !== 'true') return reply.status(404).send({ error: 'Not found' });
+    if (env.GOOGLE_OAUTH_ENABLED !== 'true') return reply.sendError(404, 'NOT_FOUND', 'Not found');
     const querySchema = z.object({
       code: z.string(),
       state: z.string()
     });
 
     const parsed = querySchema.safeParse(request.query);
-    if (!parsed.success) return reply.status(400).send({ error: 'Invalid query params' });
+    if (!parsed.success) return reply.sendError(400, 'VALIDATION_FAILED', 'Invalid query params');
     const { code, state } = parsed.data;
 
     // Validate state from Redis
     const stateDataRaw = await (fastify as any).redis.get(`auth:state:${state}`);
-    if (!stateDataRaw) return reply.status(400).send({ error: 'Invalid or expired state' });
+    if (!stateDataRaw) return reply.sendError(400, 'VALIDATION_FAILED', 'Invalid or expired state');
     await (fastify as any).redis.del(`auth:state:${state}`);
 
     const { codeVerifier, nonce } = JSON.parse(stateDataRaw);
@@ -96,7 +96,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     if (!tokenRes.ok) {
       (request as any).log.error(await tokenRes.text());
-      return reply.status(400).send({ error: 'Failed to exchange token' });
+      return reply.sendError(400, 'VALIDATION_FAILED', 'Failed to exchange token');
     }
 
     const tokens = await tokenRes.json();
@@ -107,7 +107,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const idTokenPayload = decodeJwt(tokens.id_token);
 
     if (idTokenPayload.nonce !== nonce) {
-      return reply.status(400).send({ error: 'Nonce mismatch' });
+      return reply.sendError(400, 'VALIDATION_FAILED', 'Nonce mismatch');
     }
 
     const googleSub = idTokenPayload.sub;
@@ -115,7 +115,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const name = idTokenPayload.name as string;
 
     if (!googleSub || !email) {
-      return reply.status(400).send({ error: 'Missing required profile info' });
+      return reply.sendError(400, 'VALIDATION_FAILED', 'Missing required profile info');
     }
 
     // Upsert User
@@ -178,7 +178,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
   }, async (request: any, reply: any) => {
     const { code } = request.body as any;
     const dataRaw = await (fastify as any).redis.get(`auth:code:${code}`);
-    if (!dataRaw) return reply.status(400).send({ error: 'Invalid or expired code' });
+    if (!dataRaw) return reply.sendError(400, 'VALIDATION_FAILED', 'Invalid or expired code');
 
     await (fastify as any).redis.del(`auth:code:${code}`);
     return JSON.parse(dataRaw);
@@ -248,11 +248,11 @@ export default async function authRoutes(fastify: FastifyInstance) {
       [tokenHash]
     );
 
-    if (res.rowCount === 0) return reply.status(401).send({ error: 'Invalid refresh token' });
+    if (res.rowCount === 0) return reply.sendError(401, 'UNAUTHORIZED', 'Invalid refresh token');
     const tokenRecord = res.rows[0];
 
     if (tokenRecord.expires_at < new Date()) {
-      return reply.status(401).send({ error: 'Refresh token expired' });
+      return reply.sendError(401, 'UNAUTHORIZED', 'Refresh token expired');
     }
 
     // Atomically claim the token: the guarded UPDATE flips used=false→true and only ONE
@@ -282,7 +282,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       }
       // No recent rotation → genuine reuse of a stale token. Compromised family — revoke all.
       await (fastify as any).db.query(`DELETE FROM auth_refresh_tokens WHERE family_id = $1`, [tokenRecord.family_id]);
-      return reply.status(401).send({ error: 'Token reuse detected. Family revoked.' });
+      return reply.sendError(401, 'UNAUTHORIZED', 'Token reuse detected. Family revoked.');
     }
 
     // P-c (ADR-0004): re-derive authority from LIVE memberships on every refresh. This endpoint
@@ -297,7 +297,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       [tokenRecord.user_id]
     );
     if (ownerMemberships.rowCount === 0) {
-      return reply.status(401).send({ error: 'No active owner membership', code: 'OWNER_REVOKED' });
+      return reply.sendError(401, 'OWNER_REVOKED', 'No active owner membership');
     }
     // Preserve the caller's working tenant (R2-2): keep the requested activeLocationId iff it is
     // still one of their active owner memberships; else a STABLE deterministic pick (no flap).
@@ -327,7 +327,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
   }, async (request: any, reply: any) => {
     const userId = request.user?.userId;
-    if (!userId) return reply.status(401).send({ error: 'Authentication required' });
+    if (!userId) return reply.sendError(401, 'UNAUTHORIZED', 'Authentication required');
     await (fastify as any).db.query(`DELETE FROM auth_refresh_tokens WHERE user_id = $1`, [userId]);
     return reply.status(204).send();
   });
@@ -414,7 +414,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     } catch (err: any) {
       await client.query('ROLLBACK');
       (request as any).log.error(err);
-      return reply.status(400).send({ error: err.message || 'Activation failed' });
+      return reply.sendError(400, 'VALIDATION_FAILED', err.message || 'Activation failed');
     } finally {
       client.release();
     }

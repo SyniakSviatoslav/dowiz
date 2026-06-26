@@ -88,11 +88,11 @@ export default (async function ownerGdprRoutes(fastify: any, opts: any) {
     });
 
     if (result.alreadyActive) {
-      return reply.status(409).send({ error: 'An erasure request for this customer is already pending or in progress' });
+      return reply.sendError(409, 'CONFLICT', 'An erasure request for this customer is already pending or in progress');
     }
 
     if (result.tooSoon) {
-      return reply.status(429).send({ error: 'A request for this customer was already completed in the last 24 hours' });
+      return reply.sendError(429, 'RATE_LIMIT', 'A request for this customer was already completed in the last 24 hours');
     }
 
     if (queue) {
@@ -196,7 +196,7 @@ export default (async function ownerGdprRoutes(fastify: any, opts: any) {
       return { row, auditRows };
     });
 
-    if (!data) return reply.status(404).send({ error: 'Not found' });
+    if (!data) return reply.sendError(404, 'NOT_FOUND', 'Not found');
 
     const { row, auditRows } = data;
     return reply.send({
@@ -231,7 +231,7 @@ export default (async function ownerGdprRoutes(fastify: any, opts: any) {
     const res = await withTenant(db, user.userId, async (client) =>
       client.query(`SELECT retention_days FROM locations WHERE id = $1`, [locationId]),
     );
-    if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+    if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
     return reply.send({ retentionDays: res.rows[0].retention_days ?? 365 });
   });
 
@@ -249,7 +249,7 @@ export default (async function ownerGdprRoutes(fastify: any, opts: any) {
       `UPDATE locations SET retention_days = $1 WHERE id = $2 RETURNING retention_days`,
       [retentionDays, locationId],
     ));
-    if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+    if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
     return reply.send({ retentionDays: res.rows[0].retention_days });
   });
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;
