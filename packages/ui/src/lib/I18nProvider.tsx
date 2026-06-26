@@ -74,7 +74,7 @@ export function LanguageSwitcher({ variant = 'compact', allowed }: { variant?: '
             className={`px-3 min-h-11 inline-flex items-center text-xs font-medium transition-all duration-200 ${
               locale === l.code ? 'text-[var(--brand-bg)] font-semibold' : 'text-[var(--brand-text)] hover:text-[var(--brand-text)]'
             }`}
-            style={locale === l.code ? { background: 'var(--brand-primary)' } : {}}
+            style={locale === l.code ? { background: 'var(--brand-primary-strong, var(--brand-primary))' } : {}}
           >
             {l.displayCode}
           </button>

@@ -17,7 +17,13 @@ Live video per role journey under `e2e/artifacts/test-results/**`.
 | `select-name` ×1 | critical | client/checkout | a `<select>` without accessible name | ▶ |
 | `scrollable-region-focusable` ×1 | serious | owner dashboard, orders | scroll container not keyboard-focusable | ▶ |
 
-### F2 · color-contrast has THREE roots (a naive "readable-primary token" fixes only A)
+### F2 status (validated on staging)
+- **A — DONE.** `--brand-primary-readable` (derivePalette `ensureContrast`, runtime-applied; computes e.g. `#c21b40` for the rose tenant). Storefront `color-contrast` 4→1 nodes; prices fixed. Modal + product-card prices consume it.
+- **C — DONE.** opacity-on-muted removed on storefront + menu-manager counts. Admin/menu `color-contrast` 2→0.
+- **A′ (on-primary, NEW systemic) — partially done.** Light text (`text-[var(--brand-bg)]`) on RAW `--brand-primary` fill = 4.3 for a mid-tone tenant primary. Root is the `Button` primary variant (`packages/ui/src/components/Base.tsx:20`) + ~18 sites. The one confirmed-visible node (LanguageSwitcher active chip, `I18nProvider.tsx`) fixed via the existing `--brand-primary-strong` (darker fill, documented AA pattern). The broad fix (Button variant → `--brand-primary-strong`, OR a derived `--color-on-primary`) is a design-system change needing cross-app screenshot validation — paired with B below.
+- **B — deferred** (theme-dependent status-badge token pairs).
+
+### F2 · color-contrast original roots
 
 - **A — storefront price/accent.** Brand rose `--brand-primary` `#e11d48` used as TEXT
   on light surface `#f5eaf0` = 4.0 (need 4.5); primary button text `#fdf2f8` on
