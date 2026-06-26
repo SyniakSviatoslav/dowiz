@@ -61,7 +61,7 @@ export default (async function activationRoutes(fastify: any, opts: any) {
   }, async (request: any, reply: any) => {
     const { locationId } = request.params;
     const res = await db.query(GATE_SQL, [locationId]);
-    if (res.rowCount === 0) return reply.status(404).send({ error: 'Location not found' });
+    if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Location not found');
     return reply.send(buildGate(res.rows[0]));
   });
 
@@ -79,7 +79,7 @@ export default (async function activationRoutes(fastify: any, opts: any) {
     const { locationId } = request.params;
     const { enabled } = request.body;
     const upd = await db.query(`UPDATE locations SET pickup_enabled = $2 WHERE id = $1`, [locationId, enabled]);
-    if (upd.rowCount === 0) return reply.status(404).send({ error: 'Location not found' });
+    if (upd.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Location not found');
     // Return the refreshed gate so the checklist re-renders without a second call.
     const res = await db.query(GATE_SQL, [locationId]);
     return reply.send(buildGate(res.rows[0]));
@@ -95,7 +95,7 @@ export default (async function activationRoutes(fastify: any, opts: any) {
     try {
       await client.query('BEGIN');
       const res = await client.query(GATE_SQL, [locationId]); // publish is idempotent (COALESCE)
-      if (res.rowCount === 0) { await client.query('ROLLBACK'); return reply.status(404).send({ error: 'Location not found' }); }
+      if (res.rowCount === 0) { await client.query('ROLLBACK'); return reply.sendError(404, 'NOT_FOUND', 'Location not found'); }
       const gate = buildGate(res.rows[0]);
       if (!gate.canPublish) {
         await client.query('ROLLBACK');
@@ -139,7 +139,7 @@ export default (async function activationRoutes(fastify: any, opts: any) {
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});
       request.log.error(err);
-      return reply.status(500).send({ error: 'Internal server error' });
+      return reply.sendError(500, 'INTERNAL', 'Internal server error');
     } finally {
       client.release();
     }

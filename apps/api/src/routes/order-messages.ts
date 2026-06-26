@@ -36,18 +36,18 @@ export default async function orderMessageRoutes(fastify: any, opts: any) {
 
     const parsed = SendMessageRequest.safeParse({ ...body, order_id: orderId });
     if (!parsed.success) {
-      return reply.status(400).send({ error: parsed.error.issues[0]?.message || 'Invalid request' });
+      return reply.sendError(400, 'VALIDATION_FAILED', parsed.error.issues[0]?.message || 'Invalid request');
     }
 
     const { preset_key, params } = parsed.data;
 
     // Look up preset
     const preset = PRESET_REGISTRY[preset_key];
-    if (!preset) return reply.status(400).send({ error: `Unknown preset: ${preset_key}` });
+    if (!preset) return reply.sendError(400, 'UNKNOWN_PRESET', `Unknown preset: ${preset_key}`);
 
     // Get order
     const order = await getOrder(request, orderId);
-    if (!order) return reply.status(404).send({ error: 'Order not found' });
+    if (!order) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
 
     // Check tenant isolation
     const role = request.user.role;
@@ -57,9 +57,9 @@ export default async function orderMessageRoutes(fastify: any, opts: any) {
         `SELECT 1 FROM memberships WHERE user_id = $1 AND location_id = $2 AND status = 'active'`,
         [userId, order.location_id]
       );
-      if (memCheck.rows.length === 0) return reply.status(404).send({ error: 'Order not found' });
+      if (memCheck.rows.length === 0) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
     } else if (role === 'customer') {
-      if (order.customer_id !== userId) return reply.status(404).send({ error: 'Order not found' });
+      if (order.customer_id !== userId) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
     }
 
     // Validate preset allowed for this role + status
@@ -69,27 +69,27 @@ export default async function orderMessageRoutes(fastify: any, opts: any) {
     // Courier check: cu_*/cc_* require courier assigned
     if (preset.requiresCourier !== false && (preset_key.startsWith('cu_') || preset_key.startsWith('cc_'))) {
       const courierOk = await hasCourier(orderId);
-      if (!courierOk) return reply.status(409).send({ error: 'No courier assigned to this order' });
+      if (!courierOk) return reply.sendError(409, 'NO_COURIER_ASSIGNED', 'No courier assigned to this order');
     }
 
     // Conditional checks
     if (preset.requiresDropoff) {
       const instructions = order.delivery_instructions || '';
       if (!instructions.toLowerCase().includes('leave')) {
-        return reply.status(409).send({ error: 'Order does not have leave-at-door delivery' });
+        return reply.sendError(409, 'NOT_LEAVE_AT_DOOR', 'Order does not have leave-at-door delivery');
       }
     }
 
     if (preset.requiresCash) {
       if (order.payment_method !== 'cash' || !order.cash_pay_with) {
-        return reply.status(409).send({ error: 'Order is not a cash payment' });
+        return reply.sendError(409, 'NOT_CASH_PAYMENT', 'Order is not a cash payment');
       }
     }
 
     // Validate params against preset schema
     const paramsCheck = preset.paramsSchema.safeParse(params || {});
     if (!paramsCheck.success) {
-      return reply.status(400).send({ error: paramsCheck.error.issues[0]?.message || 'Invalid params' });
+      return reply.sendError(400, 'VALIDATION_FAILED', paramsCheck.error.issues[0]?.message || 'Invalid params');
     }
 
     // Insert message
@@ -121,16 +121,16 @@ export default async function orderMessageRoutes(fastify: any, opts: any) {
 
     // Get order for tenant check
     const order = await getOrder(request, orderId);
-    if (!order) return reply.status(404).send({ error: 'Order not found' });
+    if (!order) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
 
     if (role === 'owner' || role === 'courier') {
       const memCheck = await db.query(
         `SELECT 1 FROM memberships WHERE user_id = $1 AND location_id = $2 AND status = 'active'`,
         [request.user.sub, order.location_id]
       );
-      if (memCheck.rows.length === 0) return reply.status(404).send({ error: 'Order not found' });
+      if (memCheck.rows.length === 0) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
     } else if (role === 'customer') {
-      if (order.customer_id !== request.user.sub) return reply.status(404).send({ error: 'Order not found' });
+      if (order.customer_id !== request.user.sub) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
     }
 
     const { rows } = await db.query(`
@@ -152,16 +152,16 @@ export default async function orderMessageRoutes(fastify: any, opts: any) {
     const role = request.user.role;
 
     const order = await getOrder(request, orderId);
-    if (!order) return reply.status(404).send({ error: 'Order not found' });
+    if (!order) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
 
     if (role === 'owner' || role === 'courier') {
       const memCheck = await db.query(
         `SELECT 1 FROM memberships WHERE user_id = $1 AND location_id = $2 AND status = 'active'`,
         [request.user.sub, order.location_id]
       );
-      if (memCheck.rows.length === 0) return reply.status(404).send({ error: 'Order not found' });
+      if (memCheck.rows.length === 0) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
     } else if (role === 'customer') {
-      if (order.customer_id !== request.user.sub) return reply.status(404).send({ error: 'Order not found' });
+      if (order.customer_id !== request.user.sub) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
     }
 
     await db.query(`
