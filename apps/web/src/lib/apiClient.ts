@@ -79,6 +79,21 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
   }
+
+  /**
+   * Stable SCREAMING_SNAKE machine code from the A1 error envelope (ADR-0010), e.g.
+   * MIN_ORDER_NOT_MET / CASH_AMOUNT_TOO_LOW. Undefined for legacy/non-JSON responses.
+   * (The A2 `mapApiError` matrix will branch on this; do not branch on `message`.)
+   */
+  get code(): string | undefined {
+    return typeof this.data?.code === 'string' ? this.data.code : undefined;
+  }
+
+  /** Server-generated correlation id — show as the on-screen "support code" so an
+   *  operator can grep it straight to Pino/Sentry. */
+  get correlationId(): string | undefined {
+    return typeof this.data?.correlationId === 'string' ? this.data.correlationId : undefined;
+  }
 }
 
 interface ApiClientOptions<T extends z.ZodType> {
@@ -192,7 +207,8 @@ export const apiClient = async <T extends z.ZodType>(
           }
       }
 
-      throw new ApiError(response.status, errorData?.error || response.statusText, errorData);
+      // Prefer the A1 envelope `message`; fall back to legacy `error`, then statusText.
+      throw new ApiError(response.status, errorData?.message || errorData?.error || response.statusText, errorData);
     }
 
     if (response.status === 204) {

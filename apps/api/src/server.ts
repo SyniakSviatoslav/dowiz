@@ -57,7 +57,8 @@ import fastifyStatic from '@fastify/static';
 import fastifyCors from '@fastify/cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getFastifyLoggerConfig, generateCorrelationId, correlationStore } from './lib/logger.js';
+import { getFastifyLoggerConfig, correlationStore } from './lib/logger.js';
+import { ApiError, isContractCode } from './lib/api-error.js';
 import { initSentry, getSentry } from './lib/sentry.js';
 import { WorkerHeartbeat } from './lib/worker/heartbeat.js';
 import { LivenessChecker } from './workers/liveness-checker.js';
@@ -144,6 +145,15 @@ async function main() {
     logger: getFastifyLoggerConfig(),
     maxHeaderSize: 32768,
     bodyLimit: 10 * 1024 * 1024, // 10 MB (multipart uploads need it)
+    // ADR-0010 (A1/B6): the correlation id is SERVER-AUTHORITATIVE — always generated
+    // with crypto.randomUUID (governance), never read from an inbound header (that would
+    // let a client forge a victim's "support code" / poison logs). `requestIdHeader` is
+    // intentionally NOT set to a header name so Fastify cannot trust inbound; the inbound
+    // x-correlation-id is captured separately as a sanitized, identity-free clientTraceId
+    // in the onRequest hook below.
+    genReqId: () => crypto.randomUUID(),
+    requestIdHeader: false,
+    requestIdLogLabel: 'correlationId',
   });
 
   // Custom validator/serializer compilers for Zod v3 compat.
@@ -239,9 +249,21 @@ async function main() {
     }
   });
 
-  // P31 — Correlation ID for structured logging
+  // P31 — Correlation ID for structured logging (ADR-0010 A1/B6).
+  // The id is the SERVER-generated request id (crypto.randomUUID via genReqId) — never the
+  // inbound header. The inbound x-correlation-id is demoted to a sanitized, identity-free
+  // `clientTraceId` (widget/WS stitching only): bounded charset + length so it can't inject
+  // newlines/control chars into Pino, and never used as req.id, the user-facing code, or
+  // joined to user identity.
   fastify.addHook('onRequest', async (request) => {
-    const correlationId = (request.headers['x-correlation-id'] as string) || generateCorrelationId();
+    const correlationId = String(request.id); // server-authoritative
+    const rawInbound = request.headers['x-correlation-id'];
+    const clientTraceId =
+      typeof rawInbound === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(rawInbound)
+        ? rawInbound
+        : undefined;
+    (request as any).clientTraceId = clientTraceId;
+    // Overwrite the inbound header so nothing downstream can raw-trust it as the id.
     request.headers['x-correlation-id'] = correlationId;
     correlationStore.enterWith(correlationId);
   });
@@ -537,34 +559,80 @@ const retryPolicy = new RetryPolicy();
     }
   });
 
-  // P1-6 / FX-6: Custom error handler — never leak internals
+  // P1-6 / FX-6 / ADR-0010 A1: ONE structured error envelope — never leak internals.
+  // Shape: { code:<SCREAMING_SNAKE string>, message, fields?, correlationId, retryAfterMs?,
+  //          status:<number,legacy>, error:<string,legacy> }
+  // `code` is the STRING machine code (preserved verbatim from a thrown ApiError or an
+  // error carrying a contract-shaped string code — B1, never normalize/drop); the numeric
+  // HTTP status lives in `status`. `error` (legacy string) is retained so the not-yet-
+  // migrated FE keeps working (code-preserving rollout). Business outcomes (soft_confirm/
+  // hard_block `{outcome,reasons}`) never reach here — they are reply.send success-path
+  // payloads, not thrown errors (regression trap / B2).
   fastify.setErrorHandler((error, request, reply) => {
-    // Zod validation errors → 400
-    if (error.validation) {
-      const issues = error.validation.map((v: any) => v.message || `${v.instancePath || v.dataPath} ${v.keyword}`).join('; ');
+    const correlationId = String(request.id); // server-authoritative; echoed for support
+    reply.header('x-correlation-id', correlationId);
+
+    // Fastify/AJV validation → VALIDATION_FAILED. Status is PRESERVED at 400 (the pre-A1
+    // behavior): ~10 e2e contract tests + a FE branch (MediaManager.tsx:128) assert 400 here,
+    // and A1 is a code-preserving rollout — moving validation to 422 is a separate, deliberate
+    // breaking change with FE+test lockstep (A2), not this step. `fields` carries PATHS +
+    // keyword only — never the submitted value (B4: no PII/secret echo).
+    if ((error as any).validation) {
+      const fields = (error as any).validation.map((v: any) => ({
+        path: v.instancePath || v.dataPath || '',
+        code: String(v.keyword || 'INVALID').toUpperCase(),
+      }));
+      const vIssues = (error as any).validation
+        .map((v: any) => v.message || `${v.instancePath || v.dataPath} ${v.keyword}`)
+        .join('; ');
       return reply.status(400).send({
-        code: 400,
-        error: issues || 'Validation error',
+        code: 'VALIDATION_FAILED',
+        message: 'Invalid request',
+        fields,
+        correlationId,
+        status: 400,
+        error: vIssues || 'Validation error', // legacy string (unchanged from pre-A1)
       });
     }
 
-    const statusCode = error.statusCode || 500;
-    const correlationId = (request.headers['x-correlation-id'] as string) || 'unknown';
+    const apiErr = error instanceof ApiError ? error : null;
+    const status = apiErr?.status ?? (error as any).statusCode ?? 500;
 
-    // Log full error server-side with correlation ID
-    if (statusCode >= 500) {
-      request.log.error({ err: error, correlationId }, 'Internal server error');
+    // Preserve a contract-shaped string `code` verbatim (B1). A PG/driver code like '23505'
+    // is NOT contract-shaped → never surfaced (B4 leak guard); derive a generic code instead.
+    const code =
+      apiErr?.code ??
+      (isContractCode((error as any).code) ? (error as any).code : undefined) ??
+      (status >= 500 ? 'INTERNAL' : 'ERROR');
+
+    // 5xx → generic message; no stack, no err.detail / PG internals ever serialized (B4).
+    const message =
+      status >= 500 ? 'Internal server error' : apiErr?.message || error.message || 'Request failed';
+    const retryAfterMs = apiErr?.retryAfterMs;
+    const fields = apiErr?.fields;
+
+    if (status >= 500) {
+      request.log.error({ err: error, correlationId, code }, 'request_failed');
+      // Tag the captured event so an on-screen support code greps straight to the trace.
+      // (correlationId must be in the Sentry tag allowlist — sentry.ts — or it is dropped.)
+      const sentry = getSentry();
+      sentry?.withScope?.((scope: any) => {
+        scope.setTag('correlationId', correlationId);
+        scope.setTag('error_code', code);
+        sentry.captureException(error);
+      });
     }
 
-    // Never serialize stack traces or internal details to client
-    const safeMessage = statusCode >= 500
-      ? 'Internal server error'
-      : error.message || 'Request failed';
+    if (retryAfterMs) reply.header('retry-after', Math.ceil(retryAfterMs / 1000));
 
-    reply.status(statusCode).send({
-      code: statusCode,
-      error: safeMessage,
-      correlationId: statusCode >= 500 ? correlationId : undefined,
+    reply.status(status).send({
+      code,
+      message,
+      fields,
+      correlationId,
+      retryAfterMs,
+      status, // legacy numeric (was `code` pre-A1)
+      error: message, // legacy string the un-migrated FE still reads
     });
   });
 
