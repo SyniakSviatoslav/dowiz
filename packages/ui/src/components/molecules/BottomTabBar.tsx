@@ -4,6 +4,8 @@ import { useEmbed } from '../../hooks/use-embed.js';
 export interface TabItem {
   key: string;
   label: string;
+  /** Accessible name for icon-only tabs (label === ''). Required when label is empty. */
+  ariaLabel?: string;
   icon?: string;
   badge?: number;
   href: string;
@@ -35,6 +37,8 @@ export function BottomTabBar({ tabs, activeKey, onTabClick, className = '' }: Bo
               role="tab"
               aria-selected={isActive}
               aria-current={isActive ? 'page' : undefined}
+              // Icon-only tabs (label === '') carry no text node → give them a name.
+              aria-label={tab.label ? undefined : tab.ariaLabel}
               className="relative flex flex-col items-center justify-center flex-1 h-full min-w-0 transition-colors"
               style={{ minHeight: '48px' }}
             >

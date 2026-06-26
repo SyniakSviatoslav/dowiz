@@ -174,7 +174,8 @@ function AdminLayout() {
       <div className="lg:hidden">
         <BottomTabBar
           tabs={[
-            ...PRIMARY_TABS,
+            // PRIMARY_TABS are icon-only (label '') → supply an accessible name.
+            ...PRIMARY_TABS.map(tab => ({ ...tab, ariaLabel: t(tab.key) })),
             {
               key: 'more',
               label: t('admin.more', 'More'),
