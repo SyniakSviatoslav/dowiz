@@ -13,8 +13,12 @@ export function Toggle({ checked, onChange, label, disabled = false, 'aria-label
       <span className="relative inline-flex h-11 min-w-11 items-center justify-center">
         <span
           role="switch"
-          aria-checked={checked}
-          aria-label={ariaLabel}
+          // Coerce to a real boolean so aria-checked is never omitted (a
+          // non-boolean caller value drops the attr → axe aria-required-attr).
+          aria-checked={!!checked}
+          // A <label> wrapper does NOT name a role="switch" span — fall back to
+          // the visible label text so the switch always has an accessible name.
+          aria-label={ariaLabel ?? label}
           aria-disabled={disabled || undefined}
           tabIndex={disabled ? -1 : 0}
           onClick={toggle}
