@@ -1,14 +1,16 @@
 import { test, expect } from '@playwright/test';
 
 const BASE = process.env.VITE_BASE_URL || 'http://localhost:3000';
+// WS host tracks BASE — a token minted on one env can't auth against another's WS.
+const WS_BASE = BASE.replace(/^http/, 'ws');
 
 // ── Helper: get real auth token ──
-async function getOwnerToken(request: any): Promise<string> {
+async function getOwnerToken(request: any): Promise<{ token: string; activeLocationId: string }> {
   const res = await request.post(`${BASE}/api/dev/mock-auth`);
   expect(res.status()).toBe(200);
   const body = await res.json();
   expect(body.access_token).toBeTruthy();
-  return body.access_token as string;
+  return { token: body.access_token as string, activeLocationId: body.activeLocationId as string };
 }
 
 test.describe('Hot-path sanity (Rule 14.4)', () => {
@@ -40,15 +42,19 @@ test.describe('Hot-path sanity (Rule 14.4)', () => {
   test('Subdomain still serves public menu at /s/:slug', async ({ page }) => {
     const response = await page.goto(`${BASE}/s/demo`);
     expect(response?.status()).toBe(200);
+    // The shell now injects a per-tenant <title> for SEO/link-unfurls (spa-shell.ts),
+    // e.g. "Dubin & Sushi — Order Online | Dowiz" — the bare "Dowiz" default is only
+    // the un-resolved fallback. Assert the branded storefront title served.
     const title = await page.title();
-    expect(title).toBe('Dowiz');
+    expect(title).toContain('Dowiz');
+    expect(title.length).toBeGreaterThan('Dowiz'.length);
   });
 });
 
 test.describe('Auth-first admin actions (Rule 14.2)', () => {
 
   test('GET /api/owner/couriers — no duplicates, offline for inactive', async ({ request }) => {
-    const token = await getOwnerToken(request);
+    const { token } = await getOwnerToken(request);
     const res = await request.get(`${BASE}/api/owner/couriers`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -68,7 +74,7 @@ test.describe('Auth-first admin actions (Rule 14.2)', () => {
   });
 
   test('PUT /api/owner/settings → GET preserves data round-trip', async ({ request }) => {
-    const token = await getOwnerToken(request);
+    const { token } = await getOwnerToken(request);
 
     // Step 1: GET current settings
     const getRes = await request.get(`${BASE}/api/owner/settings`, {
@@ -110,11 +116,11 @@ test.describe('Auth-first admin actions (Rule 14.2)', () => {
   });
 
   test('WebSocket auth with real token', async ({ page }) => {
-    const token = await getOwnerToken(await page.request);
+    const { token, activeLocationId } = await getOwnerToken(await page.request);
+    const room = `location:${activeLocationId}:dashboard`;
 
-    const result = await page.evaluate(async (t: string) => {
-      const protocol = 'wss:';
-      const ws = new WebSocket(`${protocol}//dowiz.fly.dev/ws?token=${t}`);
+    const result = await page.evaluate(async ({ t, wsBase, room }: { t: string; wsBase: string; room: string }) => {
+      const ws = new WebSocket(`${wsBase}/ws?token=${t}`);
       return new Promise<string[]>((resolve) => {
         const events: string[] = [];
         const timer = setTimeout(() => { ws.close(); resolve([...events, 'timeout']); }, 8000);
@@ -124,14 +130,14 @@ test.describe('Auth-first admin actions (Rule 14.2)', () => {
             const data = JSON.parse(e.data);
             events.push(`msg:${data.type}`);
             if (data.type === 'auth_success') {
-              ws.send(JSON.stringify({ type: 'subscribe', room: 'location:test:dashboard' }));
+              ws.send(JSON.stringify({ type: 'subscribe', room }));
             }
             if (data.type === 'subscribed') { clearTimeout(timer); ws.close(); resolve(events); }
           } catch { events.push('parse_error'); }
         };
         ws.onclose = (e) => { events.push(`close:${e.code}`); clearTimeout(timer); resolve(events); };
       });
-    }, token);
+    }, { t: token, wsBase: WS_BASE, room });
 
     // Rule 14.2: verify the auth flow actually worked
     expect(result).toContain('msg:auth_success');

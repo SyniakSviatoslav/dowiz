@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+// WS host must track BASE — a staging-signed token sent to the prod WS can't be
+// validated (different signing key), so the hardcoded prod URL never auth_success'd.
+const WS_BASE = BASE.replace(/^http/, 'ws');
 
 // ── Helper: get real auth token from mock-auth endpoint ──
 async function getOwnerToken(request: any): Promise<{ access_token: string; userId: string; activeLocationId: string }> {
@@ -43,11 +46,13 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
   // P0: WebSocket auth — REAL TOKEN PROOF
   // ═══════════════════════════════════════════════════════
   test('P0-3: WS with real token gets auth_success + subscribes', async ({ request, page }) => {
-    const { access_token } = await getOwnerToken(request);
+    const { access_token, activeLocationId } = await getOwnerToken(request);
+    // Subscribe to the owner's OWN dashboard room — the server's ownerCanAccessRoom
+    // gate rejects a foreign/placeholder location ("location:test:..." → Forbidden).
+    const room = `location:${activeLocationId}:dashboard`;
 
-    const result = await page.evaluate(async (token) => {
-      const protocol = 'wss:';
-      const wsUrl = `${protocol}//dowiz.fly.dev/ws?token=${token}`;
+    const result = await page.evaluate(async ({ token, wsBase, room }) => {
+      const wsUrl = `${wsBase}/ws?token=${token}`;
 
       return new Promise<any>((resolve, reject) => {
         const events: string[] = [];
@@ -67,7 +72,7 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
 
             if (data.type === 'auth_success') {
               // Now send subscribe
-              ws.send(JSON.stringify({ type: 'subscribe', room: 'location:test:dashboard' }));
+              ws.send(JSON.stringify({ type: 'subscribe', room }));
             }
             if (data.type === 'subscribed') {
               clearTimeout(timer);
@@ -85,7 +90,7 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
           resolve({ connected: false, events });
         };
       });
-    }, access_token);
+    }, { token: access_token, wsBase: WS_BASE, room });
 
     console.log(`P0-3: WS result:`, JSON.stringify(result.events));
 
@@ -99,10 +104,10 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
     // BEFORE: server would 1008-close on first non-auth message (subscribe sent immediately)
     // AFTER: server reads ?token= from URL, buffers messages until auth resolves, or waits for auth timeout
 
-    const result = await page.evaluate(async () => {
+    const result = await page.evaluate(async (wsBase) => {
       const events: string[] = [];
       return new Promise<{ events: string[] }>((resolve) => {
-        const ws = new WebSocket('wss://dowiz.fly.dev/ws?token=bogus');
+        const ws = new WebSocket(`${wsBase}/ws?token=bogus`);
         const timer = setTimeout(() => {
           ws.close();
           resolve({ events: [...events, 'timeout'] });
@@ -119,7 +124,7 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
           resolve({ events });
         };
       });
-    });
+    }, WS_BASE);
 
     // PROOF: Server did NOT immediately close with 1008 (would happen before fix)
     // The connection either times out (auth timeout = 5s) or closes with 1008 from auth timeout
@@ -136,9 +141,9 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
   test('P0-5: Frontend sends auth message + reset on auth_success only', async ({ page }) => {
     const { access_token } = await getOwnerToken(await page.request);
 
-    const behavior = await page.evaluate(async (token) => {
+    const behavior = await page.evaluate(async ({ token, wsBase }) => {
       const events: string[] = [];
-      const ws = new WebSocket(`wss://dowiz.fly.dev/ws`);
+      const ws = new WebSocket(`${wsBase}/ws`);
 
       await new Promise<void>((resolve) => {
         ws.onopen = () => {
@@ -160,7 +165,7 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
       });
 
       return events;
-    }, access_token);
+    }, { token: access_token, wsBase: WS_BASE });
 
     console.log(`P0-5: Auth message flow:`, JSON.stringify(behavior));
     expect(behavior).toContain('auth_success');
@@ -346,7 +351,9 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
     // i18n keys are statically defined in the source file. Some may be tree-shaken from JS bundles
     // depending on whether Vite determines they're needed. The real proof is they exist in source.
     const fs = await import('fs');
-    const i18nSource = fs.readFileSync('packages/ui/src/lib/i18n.ts', 'utf-8');
+    // i18n is now a key-major catalog (single source of truth); i18n.ts only derives
+    // `messages` from it, so the literal keys live in i18n-catalog.ts.
+    const i18nSource = fs.readFileSync('packages/ui/src/lib/i18n-catalog.ts', 'utf-8');
 
     const keysFound = ['allergen.gluten', 'allergen.shellfish', 'allergen.eggs',
       'allergen.peanuts', 'allergen.soy', 'allergen.milk', 'allergen.nuts',

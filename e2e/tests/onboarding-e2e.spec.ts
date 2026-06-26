@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
 test.describe('E2E: Login → Onboarding → Reliability', () => {
 

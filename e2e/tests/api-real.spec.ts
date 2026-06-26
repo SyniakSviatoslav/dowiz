@@ -7,7 +7,7 @@ function uuid() {
   });
 }
 
-const BASE = 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
 test.describe('Real API — Public Endpoints', () => {
 
@@ -35,25 +35,29 @@ test.describe('Real API — Public Endpoints', () => {
     expect(html).toContain('product-name');
   });
 
-  test('GET /s/:slug?embed=1 returns embed mode', async ({ request }) => {
-    const resp = await request.get(`${BASE}/s/demo?embed=1`);
-    expect(resp.status()).toBe(200);
-    const html = await resp.text();
-    expect(html).toContain('embed-mode');
+  test('GET /s/:slug?embed=true enters embed mode', async ({ page }) => {
+    // embed-mode is a client-applied body class (ClientLayout), so a no-JS request
+    // can't see it — drive a browser. Canonical flag is `embed=true` (the server
+    // iframe-CSP and ClientLayout both gate on it; `embed=1` is not honoured).
+    const resp = await page.goto(`${BASE}/s/demo?embed=true`, { waitUntil: 'networkidle' });
+    expect(resp?.status()).toBe(200);
+    await expect(page.locator('body.embed-mode')).toBeAttached({ timeout: 15000 });
   });
 
-  test('GET /s/:slug/cart returns cart shell', async ({ request }) => {
+  test('GET /s/:slug/cart returns the SPA shell', async ({ request }) => {
     const resp = await request.get(`${BASE}/s/demo/cart`);
     expect(resp.status()).toBe(200);
+    // The storefront is a hydrated SPA — the shell serves the React mount, not a
+    // server-rendered "Loading..." string (that moved into the client skeleton).
     const html = await resp.text();
-    expect(html).toContain('Loading...');
+    expect(html).toContain('id="root"');
   });
 
-  test('GET /s/:slug/checkout returns checkout shell', async ({ request }) => {
+  test('GET /s/:slug/checkout returns the SPA shell', async ({ request }) => {
     const resp = await request.get(`${BASE}/s/demo/checkout`);
     expect(resp.status()).toBe(200);
     const html = await resp.text();
-    expect(html).toContain('Loading...');
+    expect(html).toContain('id="root"');
   });
 
   test('GET /public/locations/:slug/menu returns JSON', async ({ request }) => {
@@ -76,7 +80,10 @@ test.describe('Real API — Public Endpoints', () => {
     const resp = await request.get(`${BASE}/s/demo/manifest.webmanifest`);
     expect(resp.status()).toBe(200);
     const body = await resp.json();
-    expect(body.name).toBe('demo');
+    // name is the tenant display name ("Dubin & Sushi"), not the slug; assert a real
+    // per-tenant manifest: a non-empty name, the slug-scoped start_url, and icons.
+    expect(body.name).toBeTruthy();
+    expect(body.start_url).toContain('/s/demo');
     expect(body.icons.length).toBeGreaterThan(0);
   });
 
@@ -94,11 +101,14 @@ test.describe('Real API — Public Endpoints', () => {
     expect(resp.status()).toBe(202);
   });
 
-  test('GET /auth/google redirects to Google OAuth', async ({ request }) => {
-    const resp = await request.get(`${BASE}/auth/google`, { maxRedirects: 0 });
-    expect(resp.status()).toBe(302);
-    const location = resp.headers()['location'];
-    expect(location).toContain('accounts.google.com');
+  test('GET /api/auth/google honours the OAuth gate', async ({ request }) => {
+    // The route is mounted under /api and is flag-gated: 302→Google when
+    // GOOGLE_OAUTH_ENABLED=true, else a deliberate 404 (off by default, e.g. staging).
+    const resp = await request.get(`${BASE}/api/auth/google`, { maxRedirects: 0 });
+    expect([302, 404]).toContain(resp.status());
+    if (resp.status() === 302) {
+      expect(resp.headers()['location']).toContain('accounts.google.com');
+    }
   });
 
   test('GET /robots.txt returns robots', async ({ request }) => {
@@ -128,6 +138,34 @@ test.describe('Real API — Auth-Required Endpoints', () => {
 });
 
 test.describe('Real API — Idempotency & Order Flow', () => {
+  // Source real IDs from the live demo menu — hardcoded UUIDs drift (the old
+  // locationId 404'd as "Location not found").
+  let LOCATION_ID: string;
+  let PRODUCT_ID: string;
+  let PIN: { lat: number; lng: number };
+  test.beforeAll(async ({ request }) => {
+    const menu = await (await request.get(`${BASE}/public/locations/demo/menu`)).json();
+    LOCATION_ID = menu.location_id;
+    PRODUCT_ID = (menu.categories || []).flatMap((c: any) => c.products || c.items || [])[0]?.id;
+    // Deliver to the venue's own coordinates so the pin is always inside the
+    // delivery zone (a hardcoded Tirana pin was out-of-range for the Durrës demo).
+    const info = await (await request.get(`${BASE}/public/locations/demo/info`)).json();
+    PIN = { lat: info.lat, lng: info.lng };
+    expect(LOCATION_ID, 'demo location_id from menu').toBeTruthy();
+    expect(PRODUCT_ID, 'a demo product_id from menu').toBeTruthy();
+    expect(PIN.lat && PIN.lng, 'demo venue coordinates from info').toBeTruthy();
+  });
+
+  // The storefront order endpoint has a short per-IP rate-limit; an idempotent
+  // replay isn't a new order, so wait out a 429 and retry rather than flake.
+  async function postOrder(request: any, data: any) {
+    let resp = await request.post(`${BASE}/api/orders`, { data, headers: { 'Content-Type': 'application/json' } });
+    if (resp.status() === 429) {
+      await new Promise(r => setTimeout(r, 8000));
+      resp = await request.post(`${BASE}/api/orders`, { data, headers: { 'Content-Type': 'application/json' } });
+    }
+    return resp;
+  }
 
   test('POST /api/orders validates input schema', async ({ request }) => {
     const resp = await request.post(`${BASE}/api/orders`, {
@@ -140,19 +178,16 @@ test.describe('Real API — Idempotency & Order Flow', () => {
   test('POST /api/orders creates order with valid data', async ({ request }) => {
     const idemKey = uuid();
     const validOrder = {
-      locationId: '1f609add-062a-4bb5-89bf-d695f963ede6',
+      locationId: LOCATION_ID,
       type: 'delivery',
-      items: [{ product_id: '1b4e1275-3f37-47e5-8652-1ebd6c8de04a', quantity: 1 }],
+      items: [{ product_id: PRODUCT_ID, quantity: 1 }],
       customer: { phone: '+355600000001', name: 'Test' },
-      delivery: { pin: { lat: 41.3275, lng: 19.8187 }, address_text: 'Test Street' },
+      delivery: { pin: PIN, address_text: 'Test Street' },
       payment: { method: 'cash' },
       idempotency_key: idemKey,
     };
 
-    const resp = await request.post(`${BASE}/api/orders`, {
-      data: validOrder,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    const resp = await postOrder(request, validOrder);
     const body = await resp.json();
     expect(resp.status()).toBe(201);
     expect(body.id).toBeDefined();
@@ -162,25 +197,19 @@ test.describe('Real API — Idempotency & Order Flow', () => {
   test('POST /api/orders rejects duplicate idempotency key', async ({ request }) => {
     const idemKey = uuid();
     const validOrder = {
-      locationId: '1f609add-062a-4bb5-89bf-d695f963ede6',
+      locationId: LOCATION_ID,
       type: 'delivery',
-      items: [{ product_id: '1b4e1275-3f37-47e5-8652-1ebd6c8de04a', quantity: 1 }],
+      items: [{ product_id: PRODUCT_ID, quantity: 1 }],
       customer: { phone: '+355600000002', name: 'Test2' },
-      delivery: { pin: { lat: 41.3275, lng: 19.8187 }, address_text: 'Test Street 2' },
+      delivery: { pin: PIN, address_text: 'Test Street 2' },
       payment: { method: 'cash' },
       idempotency_key: idemKey,
     };
 
-    const resp1 = await request.post(`${BASE}/api/orders`, {
-      data: validOrder,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    const resp1 = await postOrder(request, validOrder);
     expect(resp1.status()).toBe(201);
 
-    const resp2 = await request.post(`${BASE}/api/orders`, {
-      data: validOrder,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    const resp2 = await postOrder(request, validOrder);
     expect(resp2.status()).toBe(200);
     const body2 = await resp2.json();
     const body1 = await resp1.json();
@@ -220,8 +249,10 @@ test.describe('Real API — Security', () => {
 
 test.describe('Real API — Caching', () => {
 
-  test('menu_version header present on SSR', async ({ request }) => {
-    const resp = await request.get(`${BASE}/s/demo`);
+  test('menu_version header present on the public menu', async ({ request }) => {
+    // X-Menu-Version is emitted by the cached public-menu endpoint (the FE polls it
+    // for invalidation), not by the SPA shell at /s/:slug.
+    const resp = await request.get(`${BASE}/public/locations/demo/menu`);
     expect(resp.headers()['x-menu-version']).toBeDefined();
   });
 
