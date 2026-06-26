@@ -3827,4 +3827,10 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Shuma në para është nën totalin final (përfshirë tarifën e dorëzimit). Ju lutemi rriteni dhe provoni përsëri.',
     uk: 'Сума готівки нижча за підсумок (включно з доставкою). Будь ласка, збільште її та спробуйте ще раз.',
   },
+  'checkout.messenger_handle_label': {
+    en: 'Your messenger handle',
+    sq: 'Emri juaj në mesazher',
+    uk: 'Ваш нік у месенджері',
+  },
+  'admin.sort_by': { en: 'Sort by', sq: 'Rendit sipas', uk: 'Сортувати за' },
 };
