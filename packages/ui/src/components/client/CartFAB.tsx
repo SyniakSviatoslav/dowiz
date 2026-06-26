@@ -38,7 +38,7 @@ export function CartFAB({ itemsCount, total, onClick, isBouncing = false }: { it
                   animate={reduce ? { opacity: 1 } : { transform: 'scale(1)', opacity: 1 }}
                   exit={reduce ? { opacity: 0 } : { transform: 'scale(0.6)', opacity: 0 }}
                   transition={reduce ? { duration: 0.1 } : { type: 'spring', stiffness: 500, damping: 22 }}
-                  className="absolute -top-2 -right-2 min-w-[18px] h-[18px] rounded-full bg-[var(--color-danger)] text-white text-step-2xs font-bold flex items-center justify-center leading-none px-1 tabular-nums"
+                  className="absolute -top-2 -right-2 min-w-[18px] h-[18px] rounded-full bg-[var(--color-danger-strong)] text-white text-step-2xs font-bold flex items-center justify-center leading-none px-1 tabular-nums"
                   style={{ boxShadow: 'var(--elev-2)' }}
                 >
                   {itemsCount > 99 ? '99+' : itemsCount}

@@ -66,6 +66,13 @@
   --color-warning: #D97706;
   --color-danger: #DC2626;
   --color-info: #2563EB;
+  /* FILL variants (always the saturated/dark hue) — for coloured backgrounds with
+     light text. The base --color-* tokens lighten on a dark surface (for TEXT), so
+     fills must use these to keep white/light text AA on dark shells. */
+  --color-success-strong: #059669;
+  --color-warning-strong: #D97706;
+  --color-danger-strong: #DC2626;
+  --color-info-strong: #2563EB;
   --color-success-light: rgba(5, 150, 105, 0.08);
   --color-warning-light: rgba(217, 119, 6, 0.08);
   --color-danger-light: rgba(220, 38, 38, 0.08);
@@ -331,6 +338,13 @@
   --status-cancelled: #F87171;
   --status-scheduled: #A78BFA;
   --status-picked-up: #2DD4BF;
+  /* Semantic colours as TEXT (e.g. the "Vonesë!/Delay" label) — lightened to clear
+     AA on the dark surface. Coloured FILLS use --color-*-strong, so this doesn't
+     touch danger buttons / status banners / notification badges. */
+  --color-danger: #F87171;
+  --color-warning: #FBBF24;
+  --color-success: #34D399;
+  --color-info: #60A5FA;
 }
 
 /* ── Dark mode: weaker shadows, depth via borders ── */

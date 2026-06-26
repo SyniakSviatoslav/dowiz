@@ -144,7 +144,7 @@ function ClientLayoutInner() {
                       initial={{ scale: 1.4 }}
                       animate={{ scale: 1 }}
                       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                      className="absolute -top-2 -right-2 min-w-[18px] h-[18px] rounded-full bg-[var(--color-danger)] text-white text-step-2xs font-bold flex items-center justify-center leading-none px-1 shadow-md"
+                      className="absolute -top-2 -right-2 min-w-[18px] h-[18px] rounded-full bg-[var(--color-danger-strong)] text-white text-step-2xs font-bold flex items-center justify-center leading-none px-1 shadow-md"
                     >
                       {itemsCount > 99 ? '99+' : itemsCount}
                     </motion.span>

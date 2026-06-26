@@ -35,7 +35,7 @@ export function CourierShell({ children, currentPath, onNavigate, tasksCount = 0
               <span className="relative inline-flex text-xl mb-1">
                 {tab.icon}
                 {tab.label === 'Tasks' && tasksCount > 0 && (
-                  <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] rounded-full bg-[var(--color-danger)] text-white text-step-2xs font-bold flex items-center justify-center leading-none px-1 shadow-md">
+                  <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] rounded-full bg-[var(--color-danger-strong)] text-white text-step-2xs font-bold flex items-center justify-center leading-none px-1 shadow-md">
                     {tasksCount > 99 ? '99+' : tasksCount}
                   </span>
                 )}

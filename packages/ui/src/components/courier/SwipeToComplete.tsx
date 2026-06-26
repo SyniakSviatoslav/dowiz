@@ -102,7 +102,7 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
         initial={reduceMotion ? false : { scale: 0.97, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: duration.base, ease: ease.out }}
-        className="h-14 rounded-full bg-[var(--color-success)] flex items-center justify-center gap-2 font-bold text-[var(--color-on-success)] shadow-[var(--elevation-2)]"
+        className="h-14 rounded-full bg-[var(--color-success-strong)] flex items-center justify-center gap-2 font-bold text-[var(--color-on-success)] shadow-[var(--elevation-2)]"
       >
         {t('order.delivered', 'Delivered')}
         <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">

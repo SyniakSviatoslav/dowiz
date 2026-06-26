@@ -319,7 +319,7 @@ export function DeliveryPage() {
         />
 
         {geoError && (
-          <div role="status" aria-live="polite" className="absolute left-1/2 -translate-x-1/2 bg-[var(--color-danger)] text-[var(--color-on-danger)] px-4 py-2 rounded-[var(--brand-radius-sm)] text-sm text-center max-w-[18rem] z-10" style={{ top: 'max(1rem, env(safe-area-inset-top))', boxShadow: 'var(--elev-2)' }}>
+          <div role="status" aria-live="polite" className="absolute left-1/2 -translate-x-1/2 bg-[var(--color-danger-strong)] text-[var(--color-on-danger)] px-4 py-2 rounded-[var(--brand-radius-sm)] text-sm text-center max-w-[18rem] z-10" style={{ top: 'max(1rem, env(safe-area-inset-top))', boxShadow: 'var(--elev-2)' }}>
             {t('courier.gps_unavailable', 'Location unavailable — turn on GPS to track the route.')}
           </div>
         )}

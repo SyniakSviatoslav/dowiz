@@ -55,7 +55,7 @@ export function BottomTabBar({ tabs, activeKey, onTabClick, className = '' }: Bo
                 {tab.label}
               </span>
               {tab.badge !== undefined && tab.badge > 0 && (
-                <span className="absolute -top-0.5 right-1/4 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-[var(--color-danger)] text-white text-step-2xs font-bold px-1 leading-none">
+                <span className="absolute -top-0.5 right-1/4 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-[var(--color-danger-strong)] text-white text-step-2xs font-bold px-1 leading-none">
                   {tab.badge > 99 ? '99+' : tab.badge}
                 </span>
               )}
