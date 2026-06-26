@@ -40,6 +40,36 @@ export interface ConsoleGuard {
 }
 
 /**
+ * Strip the dev-auth secret from CROSS-ORIGIN requests.
+ *
+ * playwright.config sets `extraHTTPHeaders: { x-dev-auth-secret }` globally, which
+ * the browser also attaches to third-party resource loads (Google Fonts, map
+ * tiles). A custom header forces those into a CORS preflight the third party
+ * rejects → console errors NO real user (who never sends the header) would ever
+ * see. Sense 2 must not flag harness-induced phantoms, so we remove the header
+ * for any request whose origin isn't the app's baseURL. Registered on the
+ * context (lower priority than a test's page.route mocks, so it never clobbers
+ * them). Same-origin requests pass through untouched.
+ */
+export async function stripCrossOriginAuth(page: Page): Promise<void> {
+  let baseOrigin = '';
+  try {
+    baseOrigin = new URL(process.env.VITE_BASE_URL || 'http://localhost:3000').origin;
+  } catch {
+    return; // no usable base → leave requests untouched
+  }
+  await page.context().route('**/*', async (route) => {
+    const req = route.request();
+    const headers = req.headers();
+    if (headers['x-dev-auth-secret'] && !req.url().startsWith(baseOrigin)) {
+      const { 'x-dev-auth-secret': _omit, ...rest } = headers;
+      return route.continue({ headers: rest });
+    }
+    return route.fallback();
+  });
+}
+
+/**
  * Attach console/runtime listeners to a page and return the live error buffer.
  * Standalone so red-proof specs can assert detection without self-failing.
  */
@@ -65,6 +95,7 @@ export function attachConsoleGuard(page: Page): ConsoleGuard {
 export const test = base.extend<{ consoleGuard: ConsoleGuard }>({
   consoleGuard: [
     async ({ page }, use) => {
+      await stripCrossOriginAuth(page);
       const guard = attachConsoleGuard(page);
       await use(guard);
       guard.assertClean();
