@@ -85,7 +85,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       input = CreateOrderInput.parse(request.body);
     } catch (err: any) {
       const issues = err?.issues?.map((i: any) => i.message).join('; ');
-      return reply.status(400).send({ code: 400, error: issues || 'Validation error' });
+      return reply.sendError(400, 'VALIDATION_FAILED', issues || 'Validation error');
     }
     const { locationId, items, customer: cust, delivery, idempotency_key, cash_pay_with: cashPayWith, delivery_instructions: rawInstructions } = input;
     // Pickup orders carry no delivery pin/address and incur no delivery fee.
@@ -98,7 +98,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       client = await db.connect();
     } catch (err: unknown) {
       request.log.error({ err }, 'Failed to acquire DB connection');
-      return reply.status(503).send({ code: 503, error: 'Service temporarily unavailable' });
+      return reply.sendError(503, 'SERVICE_UNAVAILABLE', 'Service temporarily unavailable');
     }
 
     try {
@@ -123,7 +123,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
       if (locRes.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(404).send({ error: 'Location not found' });
+        return reply.sendError(404, 'NOT_FOUND', 'Location not found');
       }
 
       const location = locRes.rows[0];
@@ -132,7 +132,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       // real orders. Existing live locations were backfilled with published_at.
       if (location.published_at == null) {
         await client.query('ROLLBACK');
-        return reply.status(409).send({ error: 'Storefront is not published yet', code: 'NOT_PUBLISHED' });
+        return reply.sendError(409, 'NOT_PUBLISHED', 'Storefront is not published yet');
       }
 
       // OTP verification (if column exists)
@@ -395,7 +395,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         const row = existingKey.rows[0];
         if (row.request_hash !== requestHash) {
           await client.query('ROLLBACK');
-          return reply.status(422).send({ error: 'Idempotency key reused with different request', code: 'IDEMPOTENCY_KEY_REUSED' });
+          return reply.sendError(422, 'IDEMPOTENCY_KEY_REUSED', 'Idempotency key reused with different request');
         }
         const existingOrder = await client.query(`SELECT id, status, subtotal, total, created_at::text, timeout_at::text FROM orders WHERE id = $1`, [row.order_id]);
         if (existingOrder.rowCount && existingOrder.rowCount > 0) {
@@ -420,7 +420,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       for (const row of productsRes.rows) {
         if (!row.is_available) {
           await client.query('ROLLBACK');
-          return reply.status(422).send({ error: `Product ${row.name} is unavailable`, code: 'PRODUCT_UNAVAILABLE' });
+          return reply.sendError(422, 'PRODUCT_UNAVAILABLE', `Product ${row.name} is unavailable`);
         }
         productMap.set(row.id, row);
       }
@@ -428,7 +428,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       for (const item of items) {
         if (!productMap.has(item.product_id)) {
           await client.query('ROLLBACK');
-          return reply.status(422).send({ error: `Product ${item.product_id} not found`, code: 'PRODUCT_NOT_FOUND' });
+          return reply.sendError(422, 'PRODUCT_NOT_FOUND', `Product ${item.product_id} not found`);
         }
       }
 
@@ -496,14 +496,14 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         const uniqueModIdsInItem = new Set(item.modifier_ids || []);
         if (uniqueModIdsInItem.size !== (item.modifier_ids || []).length) {
           await client.query('ROLLBACK');
-          return reply.status(422).send({ error: 'Duplicate modifier', code: 'DUPLICATE_MODIFIER' });
+          return reply.sendError(422, 'DUPLICATE_MODIFIER', 'Duplicate modifier');
         }
 
         for (const mid of (item.modifier_ids || [])) {
           const modInfo = modMap.get(`${item.product_id}_${mid}`);
           if (!modInfo) {
             await client.query('ROLLBACK');
-            return reply.status(422).send({ error: `Modifier ${mid} unavailable or invalid for product`, code: 'MODIFIER_UNAVAILABLE' });
+            return reply.sendError(422, 'MODIFIER_UNAVAILABLE', `Modifier ${mid} unavailable or invalid for product`);
           }
           const groupId = modInfo.group_id;
           groupCounts.set(groupId, (groupCounts.get(groupId) || 0) + 1);
@@ -520,11 +520,11 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           const count = groupCounts.get(gRow.id) || 0;
           if (gRow.required && count < gRow.min_select) {
             await client.query('ROLLBACK');
-            return reply.status(422).send({ error: `Modifier group ${gRow.id} min select not met`, code: 'MODIFIER_MIN_NOT_MET' });
+            return reply.sendError(422, 'MODIFIER_MIN_NOT_MET', `Modifier group ${gRow.id} min select not met`);
           }
           if (count > gRow.max_select) {
             await client.query('ROLLBACK');
-            return reply.status(422).send({ error: `Modifier group ${gRow.id} max select exceeded`, code: 'MODIFIER_MAX_EXCEEDED' });
+            return reply.sendError(422, 'MODIFIER_MAX_EXCEEDED', `Modifier group ${gRow.id} max select exceeded`);
           }
         }
 
@@ -573,13 +573,13 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           }
           if (!foundTier) {
             await client.query('ROLLBACK');
-            return reply.status(422).send({ error: 'Location out of delivery range', code: 'NOT_DELIVERABLE' });
+            return reply.sendError(422, 'NOT_DELIVERABLE', 'Location out of delivery range');
           }
         } else if (location.delivery_fee_flat !== null) {
           deliveryFee = location.delivery_fee_flat;
         } else {
           await client.query('ROLLBACK');
-          return reply.status(422).send({ error: 'Delivery not configured', code: 'DELIVERY_NOT_CONFIGURED' });
+          return reply.sendError(422, 'DELIVERY_NOT_CONFIGURED', 'Delivery not configured');
         }
       }
       } // end if (!isPickup) — pickup orders pay no delivery fee
@@ -592,7 +592,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
       if (cashPayWith !== undefined && cashPayWith < total) {
         await client.query('ROLLBACK');
-        return reply.status(422).send({ code: 'CASH_AMOUNT_TOO_LOW', error: `Cash amount must be at least ${total}` });
+        return reply.sendError(422, 'CASH_AMOUNT_TOO_LOW', `Cash amount must be at least ${total}`);
       }
 
       // 10. Upsert Customer (if requested, otherwise anonymous logic)
@@ -803,7 +803,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       request.log.error(error);
 
       if (error?.code === '23505') { // Unique violation
-        return reply.status(409).send({ error: 'Idempotency key conflict', code: 'IDEMPOTENCY_CONFLICT' });
+        return reply.sendError(409, 'IDEMPOTENCY_CONFLICT', 'Idempotency key conflict');
       }
       // Transient DB contention under load (serialization / deadlock / statement-timeout from the
       // bounded write-hold / connection drop) — the order is safe to retry, so surface a graceful
@@ -811,9 +811,9 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       // 503 guard above and the login-503 hardening).
       const TRANSIENT_PG = new Set(['40001', '40P01', '57014', '53300', '08006', '08003', '08000']);
       if (typeof error?.code === 'string' && TRANSIENT_PG.has(error.code)) {
-        return reply.status(503).send({ code: 503, error: 'Service temporarily unavailable, please try again' });
+        return reply.sendError(503, 'SERVICE_UNAVAILABLE', 'Service temporarily unavailable, please try again');
       }
-      return reply.status(500).send({ error: 'Internal server error' });
+      return reply.sendError(500, 'INTERNAL', 'Internal server error');
     } finally {
       if (client) client.release();
     }
@@ -825,7 +825,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
   }, async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
     if (!isValidUUID(id)) {
-      return reply.status(400).send({ error: 'Invalid order ID format' });
+      return reply.sendError(400, 'VALIDATION_FAILED', 'Invalid order ID format');
     }
     const user = request.user;
     let locationId: string | null = null;
@@ -838,13 +838,13 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
     if (user?.role === 'customer') {
       locationId = user.locationId;
       if (user.orderId !== id) {
-        return reply.status(404).send({ error: 'Not found' });
+        return reply.sendError(404, 'NOT_FOUND', 'Not found');
       }
     } else if (user?.role === 'owner' || user?.role === 'courier') {
       // Owner/courier — tenant isolation via withTenant
     } else {
       // Anonymous or unrecognized role — no access without a scoping credential.
-      return reply.status(401).send({ error: 'Authentication required' });
+      return reply.sendError(401, 'UNAUTHORIZED', 'Authentication required');
     }
 
     try {
@@ -885,7 +885,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         const o = await db.query(query, params);
 
         if (!o.rowCount || o.rowCount === 0) {
-          return reply.status(404).send({ error: 'Not found' });
+          return reply.sendError(404, 'NOT_FOUND', 'Not found');
         }
 
         const items = await db.query(
@@ -898,13 +898,13 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       }
 
       if (!result) {
-        return reply.status(404).send({ error: 'Not found' });
+        return reply.sendError(404, 'NOT_FOUND', 'Not found');
       }
 
       return reply.status(200).send(result);
     } catch (err) {
       request.log.error(err);
-      return reply.status(500).send({ error: 'Internal server error' });
+      return reply.sendError(500, 'INTERNAL', 'Internal server error');
     }
   });
 
@@ -917,12 +917,12 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
     // threw a ZodError that the global handler didn't normalize → raw 500. Matches the create route.
     const parsed = StatusUpdateInput.safeParse(request.body);
     if (!parsed.success) {
-      return reply.status(400).send({ code: 400, error: parsed.error.issues?.map((i: any) => i.message).join('; ') || 'Invalid status' });
+      return reply.sendError(400, 'VALIDATION_FAILED', parsed.error.issues?.map((i: any) => i.message).join('; ') || 'Invalid status');
     }
     const { status: newStatus } = parsed.data;
     const user = request.user!;
     if (user.role !== 'owner') {
-      return reply.status(403).send({ error: 'Forbidden' });
+      return reply.sendError(403, 'FORBIDDEN', 'Forbidden');
     }
 
      try {
@@ -992,7 +992,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         return reply.status(error.statusCode as number).send({ error: error.error as string, code: error.code as string });
       }
       request.log.error(error);
-      return reply.status(500).send({ error: 'Internal server error' });
+      return reply.sendError(500, 'INTERNAL', 'Internal server error');
     }
   });
 }

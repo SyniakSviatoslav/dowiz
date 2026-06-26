@@ -46,7 +46,7 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
   }, async (request: any, reply: any) => {
     const { email, password } = request.body as { email: string; password: string };
     const db = (opts as any)?.db || (fastify as any).db;
-    if (!db) return reply.status(500).send({ error: 'DB not configured' });
+    if (!db) return reply.sendError(500, 'INTERNAL', 'DB not configured');
 
     // ---- Path 1: flag-gated dev bypass (inert on prod) -------------------------------
     const devEmail = env.DEV_LOGIN_EMAIL;
@@ -58,7 +58,7 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
       timingSafeStrEqual(password, devPassword)
     ) {
       const ures = await db.query(`SELECT id FROM users WHERE email = $1`, [email.toLowerCase()]);
-      if (ures.rowCount === 0) return reply.status(401).send({ error: 'Invalid credentials' });
+      if (ures.rowCount === 0) return reply.sendError(401, 'INVALID_CREDENTIALS', 'Invalid credentials');
       const uid = ures.rows[0].id;
       const memRes = await db.query(
         `SELECT location_id FROM memberships WHERE user_id = $1 AND status = 'active'
@@ -80,7 +80,7 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
       client = await db.connect();
     } catch (err) {
       request.log.error({ err }, '[auth] failed to acquire DB connection');
-      return reply.status(503).send({ error: 'Service temporarily unavailable, please try again' });
+      return reply.sendError(503, 'SERVICE_UNAVAILABLE', 'Service temporarily unavailable, please try again');
     }
     try {
       const res = await client.query(
@@ -88,12 +88,12 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
         [email.toLowerCase()]
       );
       if (res.rowCount === 0) {
-        return reply.status(401).send({ error: 'Invalid email or password' });
+        return reply.sendError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
       }
       const user = res.rows[0];
 
       if (!user.password_hash) {
-        return reply.status(401).send({ error: 'Account uses another sign-in method' });
+        return reply.sendError(401, 'WRONG_AUTH_METHOD', 'Account uses another sign-in method');
       }
       let valid = false;
       try {
@@ -101,10 +101,10 @@ export default (async function localAuthRoutes(fastify: any, opts: any) {
         valid = await argon2.default.verify(user.password_hash, password);
       } catch (err: any) {
         request.log.error({ err }, '[auth] argon2 verify failed');
-        return reply.status(500).send({ error: 'Authentication unavailable' });
+        return reply.sendError(500, 'INTERNAL', 'Authentication unavailable');
       }
       if (!valid) {
-        return reply.status(401).send({ error: 'Invalid email or password' });
+        return reply.sendError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
       }
 
       // Resolve role + active location. A membership carries the location directly (owner
