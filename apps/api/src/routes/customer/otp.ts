@@ -43,12 +43,12 @@ export default (async function customerOtpRoutes(fastify: any, opts: any) {
       `SELECT id, require_phone_otp FROM locations WHERE slug = $1`,
       [slug],
     );
-    if (locRes.rowCount === 0) return reply.status(404).send({ error: 'Location not found' });
+    if (locRes.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Location not found');
     const location = locRes.rows[0];
 
     // 2. Check OTP toggle (globally off until SMS gateway exists)
     if (!OTP_ENABLED || !location.require_phone_otp) {
-      return reply.status(400).send({ error: 'OTP_NOT_REQUIRED', message: 'Phone verification is not required for this location' });
+      return reply.sendError(400, 'OTP_NOT_REQUIRED', 'Phone verification is not required for this location');
     }
 
     // 3. Rate-limit check (per 15min per phone per location)
@@ -59,7 +59,7 @@ export default (async function customerOtpRoutes(fastify: any, opts: any) {
       [location.id, phone],
     );
     if (sendRes.rows[0].cnt >= 3) {
-      return reply.status(429).send({ error: 'OTP_RATE_LIMIT', message: 'Too many OTP requests. Try again later.' });
+      return reply.sendError(429, 'OTP_RATE_LIMIT', 'Too many OTP requests. Try again later.');
     }
 
     // 4. Generate code and hash
@@ -121,12 +121,12 @@ export default (async function customerOtpRoutes(fastify: any, opts: any) {
       `SELECT id, require_phone_otp FROM locations WHERE slug = $1`,
       [slug],
     );
-    if (locRes.rowCount === 0) return reply.status(404).send({ error: 'Location not found' });
+    if (locRes.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Location not found');
     const location = locRes.rows[0];
 
     // 1b. OTP globally disabled → nothing to verify
     if (!OTP_ENABLED) {
-      return reply.status(400).send({ error: 'OTP_NOT_REQUIRED', message: 'Phone verification is not required for this location' });
+      return reply.sendError(400, 'OTP_NOT_REQUIRED', 'Phone verification is not required for this location');
     }
 
     // 2. Find OTP session
@@ -144,13 +144,13 @@ export default (async function customerOtpRoutes(fastify: any, opts: any) {
       [location.id, phone],
     );
     if (otpRes.rowCount === 0) {
-      return reply.status(410).send({ error: 'OTP_EXPIRED', message: 'No valid OTP found. Request a new one.' });
+      return reply.sendError(410, 'OTP_EXPIRED', 'No valid OTP found. Request a new one.');
     }
     const otpRow = otpRes.rows[0];
 
     // 4. Check attempts
     if (otpRow.attempts >= 5) {
-      return reply.status(429).send({ error: 'OTP_LOCKOUT', message: 'Too many failed attempts. Try again later.', retryAfterMs: 3600000 });
+      return reply.sendError(429, 'OTP_LOCKOUT', 'Too many failed attempts. Try again later.', { retryAfterMs: 3600000 });
     }
 
     // 5. Find otp session token
@@ -161,7 +161,7 @@ export default (async function customerOtpRoutes(fastify: any, opts: any) {
       [tokenHash],
     );
     if (sessionRes.rowCount === 0) {
-      return reply.status(401).send({ error: 'INVALID_TOKEN', message: 'OTP session not found or expired.' });
+      return reply.sendError(401, 'INVALID_TOKEN', 'OTP session not found or expired.');
     }
 
     // 6. Verify code
@@ -171,7 +171,7 @@ export default (async function customerOtpRoutes(fastify: any, opts: any) {
 
       if (otpRow.attempts + 1 >= 5) {
         await db.query(`UPDATE phone_otp SET consumed_at = now() WHERE id = $1`, [otpRow.id]);
-        return reply.status(429).send({ error: 'OTP_LOCKOUT', message: 'Too many failed attempts. OTP invalidated.', retryAfterMs: 3600000 });
+        return reply.sendError(429, 'OTP_LOCKOUT', 'Too many failed attempts. OTP invalidated.', { retryAfterMs: 3600000 });
       }
 
       return reply.status(401).send({ error: 'INVALID_CODE', message: 'Invalid verification code.', remainingAttempts: 5 - otpRow.attempts - 1 });

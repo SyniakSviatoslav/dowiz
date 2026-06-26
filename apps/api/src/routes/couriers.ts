@@ -16,7 +16,7 @@ export default async function courierRoutes(fastify: FastifyInstance) {
     const { locationId } = request.body as any;
     const user = (request as any).user!;
     if (user.role !== 'owner') {
-      return reply.status(403).send({ error: 'Forbidden' });
+      return reply.sendError(403, 'FORBIDDEN', 'Forbidden');
     }
 
     try {
@@ -24,7 +24,7 @@ export default async function courierRoutes(fastify: FastifyInstance) {
         // Double check location exists and is visible to the owner (due to RLS)
         const locRes = await client.query(`SELECT 1 FROM locations WHERE id = $1`, [locationId]);
         if (locRes.rowCount === 0) {
-          return reply.status(404).send({ error: 'Location not found' });
+          return reply.sendError(404, 'NOT_FOUND', 'Location not found');
         }
 
         const code = crypto.randomBytes(4).toString('hex').slice(0, 6).toUpperCase();
@@ -40,7 +40,7 @@ export default async function courierRoutes(fastify: FastifyInstance) {
       });
     } catch (err) {
       request.log.error(err);
-      return reply.status(500).send({ error: 'Internal server error' });
+      return reply.sendError(500, 'INTERNAL', 'Internal server error');
     }
   });
 }

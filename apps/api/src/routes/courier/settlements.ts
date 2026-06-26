@@ -68,7 +68,7 @@ export default (async function courierSettlementRoutes(fastify: any, opts: any) 
       WHERE p.id = $1 AND p.courier_id = $2
     `, [id, courierId]);
 
-    if (payoutRes.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+    if (payoutRes.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
 
     // Set RLS context for items query too
     if (activeLocationId) {

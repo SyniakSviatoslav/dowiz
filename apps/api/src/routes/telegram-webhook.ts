@@ -52,7 +52,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
           received: secretToken,
           expectedLength: telegramBotSecret.length
         }, 'Invalid Telegram webhook secret token — mismatched value');
-        return reply.status(401).send({ error: 'Unauthorized' });
+        return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
       }
       if (!secretToken) {
         request.log.warn({}, 'Telegram webhook secret token header missing — set secret_token on setWebhook');
@@ -71,7 +71,7 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
       }
     } catch (err) {
       request.log.error({ err }, 'Failed to parse Telegram webhook body');
-      return reply.status(400).send({ error: 'Bad Request' });
+      return reply.sendError(400, 'VALIDATION_FAILED', 'Bad Request');
     }
 
     // Handle the update

@@ -167,7 +167,7 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
       }
 
       if (!menu) {
-        return reply.status(404).send({ error: 'Location not found' });
+        return reply.sendError(404, 'NOT_FOUND', 'Location not found');
       }
 
       reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
@@ -233,10 +233,10 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
           r = stale.row;
         } else {
           // No usable cache → a typed 503 (not a raw 500) so the FE can show "couldn't load".
-          return reply.status(503).send({ error: 'Temporarily unavailable' });
+          return reply.sendError(503, 'SERVICE_UNAVAILABLE', 'Temporarily unavailable');
         }
       }
-      if (!r) return reply.status(404).send({ error: 'Not found' });
+      if (!r) return reply.sendError(404, 'NOT_FOUND', 'Not found');
 
       // Compute isOpen from hours_json + delivery_paused
       let isOpen = !(r.delivery_paused ?? false);

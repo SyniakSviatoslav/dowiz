@@ -28,7 +28,7 @@ export default (async function ownerFallbackRoutes(fastify: any, opts: any) {
       `SELECT fallback_config FROM locations WHERE id = $1`,
       [locationId],
     );
-    if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+    if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
     const config = res.rows[0]?.fallback_config || {};
     return reply.send({
       phone: config.phone || null,
@@ -60,7 +60,7 @@ export default (async function ownerFallbackRoutes(fastify: any, opts: any) {
       `UPDATE locations SET fallback_config = $1 WHERE id = $2 RETURNING id`,
       [JSON.stringify(config), locationId],
     );
-    if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+    if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
     return reply.send({ success: true, config });
   });
 
@@ -84,7 +84,7 @@ export default (async function ownerFallbackRoutes(fastify: any, opts: any) {
       ),
     ]);
 
-    if (fbRes.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+    if (fbRes.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
 
     const config = fbRes.rows[0].fallback_config || {};
     const channels = notifRes.rows;

@@ -242,7 +242,7 @@ export default async function ownerPromotionRoutes(fastify: FastifyInstance) {
       });
 
       if (res.rowCount === 0) {
-        return reply.status(404).send({ error: 'Promotion not found' });
+        return reply.sendError(404, 'NOT_FOUND', 'Promotion not found');
       }
 
       return reply.send(res.rows[0]);
@@ -304,7 +304,7 @@ export default async function ownerPromotionRoutes(fastify: FastifyInstance) {
       }
 
       if (sets.length === 0) {
-        return reply.status(400).send({ error: 'No fields to update' });
+        return reply.sendError(400, 'VALIDATION_FAILED', 'No fields to update');
       }
 
       params.push(id);
@@ -318,7 +318,7 @@ export default async function ownerPromotionRoutes(fastify: FastifyInstance) {
       });
 
       if (res.rowCount === 0) {
-        return reply.status(404).send({ error: 'Promotion not found' });
+        return reply.sendError(404, 'NOT_FOUND', 'Promotion not found');
       }
 
       return reply.send(res.rows[0]);

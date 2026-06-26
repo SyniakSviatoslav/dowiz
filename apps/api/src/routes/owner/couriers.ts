@@ -92,7 +92,7 @@ export default (async function ownerCourierRoutes(fastify: any, opts: any) {
       );
       if (memberRes.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(404).send({ error: 'Courier not found in location' });
+        return reply.sendError(404, 'NOT_FOUND', 'Courier not found in location');
       }
 
       if (status) {
@@ -217,7 +217,7 @@ export default (async function ownerCourierRoutes(fastify: any, opts: any) {
       );
       if (asg.rowCount === 0) {
         await client.query('COMMIT');
-        return reply.status(404).send({ error: 'No assignment for this order' });
+        return reply.sendError(404, 'NOT_FOUND', 'No assignment for this order');
       }
 
       const { courier_id, start_at, end_at } = asg.rows[0];

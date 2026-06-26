@@ -36,12 +36,12 @@ export default async function locationRoutes(fastify: FastifyInstance) {
       const updates = request.body;
       const userId = (request.user as any).userId;
 
-      if (Object.keys(updates).length === 0) return reply.status(400).send({ error: 'No updates provided' });
+      if (Object.keys(updates).length === 0) return reply.sendError(400, 'VALIDATION_FAILED', 'No updates provided');
 
       // If we change default_locale, it must be in supported_locales
       if (updates.default_locale && updates.supported_locales) {
         if (!updates.supported_locales.includes(updates.default_locale)) {
-          return reply.status(400).send({ error: 'default_locale must be in supported_locales' });
+          return reply.sendError(400, 'VALIDATION_FAILED', 'default_locale must be in supported_locales');
         }
       }
 
@@ -60,7 +60,7 @@ export default async function locationRoutes(fastify: FastifyInstance) {
         return client.query(`UPDATE locations SET ${setClauses.join(', ')} WHERE id = $1 RETURNING *`, values);
         /* eslint-enable local/no-raw-sql */
       });
-      if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
       return reply.send(res.rows[0]);
     }
   );

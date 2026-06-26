@@ -54,10 +54,10 @@ export default (async function ownerRevealContactRoutes(fastify: any, opts: any)
       return { orderRes, order };
     });
 
-    if (orderRes.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+    if (orderRes.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
 
     if (!order.customer_id) {
-      return reply.status(404).send({ error: 'Customer not found' });
+      return reply.sendError(404, 'NOT_FOUND', 'Customer not found');
     }
 
     // Emit event (PII-free)

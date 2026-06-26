@@ -43,7 +43,7 @@ export default (async function ratesRoutes(fastify, opts) {
       };
     } catch (err) {
       console.error('[Rates] Error:', err);
-      return reply.status(500).send({ error: 'internal_error' });
+      return reply.sendError(500, 'INTERNAL', 'internal_error');
     }
   });
 } as FastifyPluginAsync);

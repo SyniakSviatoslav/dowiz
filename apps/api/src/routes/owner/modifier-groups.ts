@@ -91,7 +91,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
       const updates = request.body;
       const userId = (request.user as any).userId;
       
-      if (Object.keys(updates).length === 0) return reply.status(400).send({ error: 'No updates provided' });
+      if (Object.keys(updates).length === 0) return reply.sendError(400, 'VALIDATION_FAILED', 'No updates provided');
 
       const res = await withTenant(server.db, userId, async (client) => {
         const setClauses: string[] = [];
@@ -108,7 +108,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
         return client.query(`UPDATE modifier_groups SET ${setClauses.join(', ')} WHERE location_id = $1 AND id = $2 RETURNING *`, values);
         /* eslint-enable local/no-raw-sql */
       });
-      if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
       const r = res.rows[0];
       return reply.send({ id: r.id, name: r.name, minSelect: r.min_select, maxSelect: r.max_select, required: r.required, displayType: r.display_type, modifierCount: 0 });
     }
@@ -127,7 +127,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(`DELETE FROM modifier_groups WHERE location_id = $1 AND id = $2 RETURNING id`, [locationId, id]);
       });
-      if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
       return reply.status(204).send();
     }
   );
@@ -184,7 +184,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
       const updates = request.body;
       const userId = (request.user as any).userId;
       
-      if (Object.keys(updates).length === 0) return reply.status(400).send({ error: 'No updates provided' });
+      if (Object.keys(updates).length === 0) return reply.sendError(400, 'VALIDATION_FAILED', 'No updates provided');
 
       const res = await withTenant(server.db, userId, async (client) => {
         const setClauses: string[] = [];
@@ -201,7 +201,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
         return client.query(`UPDATE modifiers SET ${setClauses.join(', ')} WHERE location_id = $1 AND id = $2 RETURNING *`, values);
         /* eslint-enable local/no-raw-sql */
       });
-      if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
       const r = res.rows[0];
       return reply.send({ id: r.id, groupId: r.group_id, name: r.name, priceDelta: r.price_delta, available: r.available, sortOrder: r.sort_order });
     }
@@ -220,7 +220,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(`DELETE FROM modifiers WHERE location_id = $1 AND id = $2 RETURNING id`, [locationId, id]);
       });
-      if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
       return reply.status(204).send();
     }
   );
