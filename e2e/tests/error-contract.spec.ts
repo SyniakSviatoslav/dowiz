@@ -5,6 +5,18 @@ import { test, expect } from '@playwright/test';
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
 test.describe('Error contract A1 — envelope + correlationId', () => {
+  // This is an API contract proof — viewport/browser are irrelevant. Pin it to ONE project:
+  // the suite runs across 5 projects (mobile/tablet/desktop/webkit×2) and the validation
+  // endpoint (track/exchange) is per-route rate-limited at 10/min/IP, so 6 requests × 5
+  // projects on a shared egress IP trips the limit and the validation path returns 429
+  // instead of 400 (flaky-by-design). One project keeps it deterministic and under the limit.
+  test.beforeEach((_fixtures, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'desktop',
+      'API contract proof runs on a single project (shared-IP per-route rate limit)',
+    );
+  });
+
   // A request that fails Fastify(Zod) SCHEMA validation routes through setErrorHandler.
   // track/exchange has `schema: { body: exchangeSchema }` (a real Fastify schema, not an
   // ad-hoc in-handler Zod parse), is public, and is not order-rate-limited — so it's the

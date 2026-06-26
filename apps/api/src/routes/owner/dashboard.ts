@@ -39,7 +39,13 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
     if (cursor) {
       try {
         const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString());
-        if (decoded.createdAt) {
+        if (decoded.createdAt && decoded.id) {
+          // Strict composite keyset (B3): page by (created_at, id) so a tie on created_at is
+          // broken by id — same-millisecond burst orders are never silently dropped.
+          cursorClause = ` AND (o.created_at, o.id) < ($${queryParams.length + 1}, $${queryParams.length + 2})`;
+          queryParams.push(decoded.createdAt, decoded.id);
+        } else if (decoded.createdAt) {
+          // Backward-compat: a legacy single-column cursor still in flight during rollout.
           cursorClause = ` AND o.created_at < $${queryParams.length + 1}`;
           queryParams.push(decoded.createdAt);
         }
@@ -61,7 +67,7 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
       FROM orders o
       LEFT JOIN customers c ON c.id = o.customer_id
       WHERE o.location_id = $1${statusFilter}${cursorClause}
-      ORDER BY o.created_at DESC
+      ORDER BY o.created_at DESC, o.id DESC
       LIMIT $${limitIdx}
     `;
 
@@ -150,7 +156,7 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
     });
 
     const nextCursor = hasMore && orders.length > 0
-      ? Buffer.from(JSON.stringify({ createdAt: orders.at(-1)!.createdAt })).toString('base64url')
+      ? Buffer.from(JSON.stringify({ createdAt: orders.at(-1)!.createdAt, id: orders.at(-1)!.orderId })).toString('base64url')
       : null;
 
     // Count active dwell alerts + signals for this location

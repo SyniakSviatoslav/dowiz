@@ -51,7 +51,13 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
     if (cursor) {
       try {
         const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString());
-        if (decoded.raisedAt) {
+        if (decoded.raisedAt && decoded.id) {
+          // Strict composite keyset (B3): page by (raised_at, id) so same-timestamp burst
+          // signals are never silently dropped between pages.
+          params.push(decoded.raisedAt, decoded.id);
+          clauses += ` AND (cs.raised_at, cs.id) < ($${params.length - 1}, $${params.length})`;
+        } else if (decoded.raisedAt) {
+          // Backward-compat: a legacy single-column cursor still in flight during rollout.
           params.push(decoded.raisedAt);
           clauses += ` AND cs.raised_at < $${params.length}`;
         }
@@ -70,7 +76,7 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
       FROM customer_signals cs
       LEFT JOIN customers c ON c.id = cs.customer_id
       ${clauses}
-      ORDER BY cs.raised_at DESC
+      ORDER BY cs.raised_at DESC, cs.id DESC
       LIMIT $${limitIdx}
     `, params));
 
@@ -89,7 +95,7 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
     }));
 
     const nextCursor = hasMore && signals.length > 0
-      ? Buffer.from(JSON.stringify({ raisedAt: signals.at(-1)!.raisedAt })).toString('base64url')
+      ? Buffer.from(JSON.stringify({ raisedAt: signals.at(-1)!.raisedAt, id: signals.at(-1)!.id })).toString('base64url')
       : null;
 
     return reply.send({ signals, nextCursor });

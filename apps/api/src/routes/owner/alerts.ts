@@ -45,7 +45,13 @@ export default (async function ownerAlertRoutes(fastify: any, opts: any) {
     if (cursor) {
       try {
         const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString());
-        if (decoded.createdAt) {
+        if (decoded.createdAt && decoded.id) {
+          // Strict composite keyset (B13): page by (created_at, id) so same-timestamp burst
+          // alerts are never dropped — a missed escalation alert is an SLA miss.
+          params.push(decoded.createdAt, decoded.id);
+          clauses += ` AND (la.created_at, la.id) < ($${params.length - 1}, $${params.length})`;
+        } else if (decoded.createdAt) {
+          // Backward-compat: a legacy single-column cursor still in flight during rollout.
           params.push(decoded.createdAt);
           clauses += ` AND la.created_at < $${params.length}`;
         }
@@ -67,7 +73,7 @@ export default (async function ownerAlertRoutes(fastify: any, opts: any) {
       JOIN orders o ON o.id = la.order_id
       LEFT JOIN customers c ON c.id = o.customer_id
       ${clauses}
-      ORDER BY la.created_at DESC
+      ORDER BY la.created_at DESC, la.id DESC
       LIMIT $${limitIdx}
     `, params));
 
@@ -90,7 +96,7 @@ export default (async function ownerAlertRoutes(fastify: any, opts: any) {
     }));
 
     const nextCursor = hasMore && alerts.length > 0
-      ? Buffer.from(JSON.stringify({ createdAt: alerts.at(-1)!.createdAt })).toString('base64url')
+      ? Buffer.from(JSON.stringify({ createdAt: alerts.at(-1)!.createdAt, id: alerts.at(-1)!.id })).toString('base64url')
       : null;
 
     return reply.send({ alerts, nextCursor });
