@@ -5,9 +5,12 @@
 module.exports = {
   ci: {
     collect: {
+      // /s/demo is the live, data-bearing demo (Dubin & Sushi, Durrës). The
+      // slug 'sushi-durres' renders an empty fallback shell (info/menu 404) —
+      // do NOT audit it (the Non-Pixel net caught this on its first sweep).
       url: [
-        'https://dowiz-staging.fly.dev/s/sushi-durres',
-        'https://dowiz-staging.fly.dev/s/sushi-durres/checkout',
+        'https://dowiz-staging.fly.dev/s/demo',
+        'https://dowiz-staging.fly.dev/s/demo/checkout',
       ],
       numberOfRuns: 3,
       settings: {

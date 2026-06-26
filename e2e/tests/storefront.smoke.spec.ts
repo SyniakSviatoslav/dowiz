@@ -12,7 +12,8 @@
 import { test, expect } from '../fixtures/console-guard';
 import { checkTouchTargets } from '../helpers/a11y';
 
-const SLUG = process.env.DEMO_SLUG || 'sushi-durres';
+// /s/demo = the live demo (Dubin & Sushi). 'sushi-durres' is a dead shell.
+const SLUG = process.env.DEMO_SLUG || 'demo';
 
 async function assertNoHorizontalOverflow(page: import('@playwright/test').Page, where: string) {
   const { sw, cw } = await page.evaluate(() => ({
