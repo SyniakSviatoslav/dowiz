@@ -49,7 +49,7 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
       `, [orderId, userId]);
 
       if (orderRes.rowCount === 0) {
-        return reply.status(404).send({ error: 'Not found' });
+        return reply.sendError(404, 'NOT_FOUND', 'Not found');
       }
 
       const row = orderRes.rows[0];
@@ -200,7 +200,7 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
       });
     } catch (err) {
       request.log.error(err);
-      return reply.status(500).send({ error: 'Internal server error' });
+      return reply.sendError(500, 'INTERNAL', 'Internal server error');
     }
   });
 
@@ -226,13 +226,13 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
         LEFT JOIN courier_assignments ca ON ca.order_id = o.id AND ca.status = 'delivered'
         WHERE o.id = $1 AND o.customer_id = $2
       `, [orderId, userId]);
-      if (o.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (o.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
       const row = o.rows[0];
       if (row.status !== 'DELIVERED') {
-        return reply.status(409).send({ error: 'Order not delivered yet', code: 'NOT_DELIVERED' });
+        return reply.sendError(409, 'NOT_DELIVERED', 'Order not delivered yet');
       }
       if (row.delivered_at && Date.now() - new Date(row.delivered_at).getTime() > 24 * 60 * 60 * 1000) {
-        return reply.status(409).send({ error: 'Rating window has closed', code: 'RATING_WINDOW_CLOSED' });
+        return reply.sendError(409, 'RATING_WINDOW_CLOSED', 'Rating window has closed');
       }
       await db.query(`
         INSERT INTO order_ratings (order_id, location_id, courier_id, customer_id, rating, feedback)
@@ -243,7 +243,7 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
       return reply.status(200).send({ success: true, rating, feedback: feedback ?? null });
     } catch (err) {
       request.log.error(err);
-      return reply.status(500).send({ error: 'Internal server error' });
+      return reply.sendError(500, 'INTERNAL', 'Internal server error');
     }
   });
 
@@ -278,14 +278,14 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
 
       if (orderRes.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(403).send({ error: 'Not your order' });
+        return reply.sendError(403, 'FORBIDDEN', 'Not your order');
       }
 
       const order = orderRes.rows[0];
 
       if (order.status !== 'IN_DELIVERY') {
         await client.query('ROLLBACK');
-        return reply.status(409).send({ error: 'CANCEL_NOT_ALLOWED_STATUS' });
+        return reply.sendError(409, 'CANCEL_NOT_ALLOWED_STATUS', 'CANCEL_NOT_ALLOWED_STATUS');
       }
 
       const outForDeliveryAt = new Date(order.picked_up_at).getTime();
@@ -293,7 +293,7 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
 
       if (now - outForDeliveryAt > cancelWindowMs) {
         await client.query('ROLLBACK');
-        return reply.status(410).send({ error: 'CANCEL_WINDOW_EXPIRED' });
+        return reply.sendError(410, 'CANCEL_WINDOW_EXPIRED', 'CANCEL_WINDOW_EXPIRED');
       }
 
       // 2. Cancel order

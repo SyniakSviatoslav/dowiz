@@ -214,7 +214,7 @@ export default (async function menuTranslateRoutes(fastify: any, opts: any) {
 
     } catch (err: any) {
       request.log.error(err);
-      return reply.status(500).send({ error: 'Internal Server Error' });
+      return reply.sendError(500, 'INTERNAL', 'Internal Server Error');
     }
   });
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;

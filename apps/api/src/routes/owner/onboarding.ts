@@ -56,7 +56,7 @@ export default (async function onboardingRoutes(fastify: any, opts: any) {
     try {
       const slugCheck = await client.query(`SELECT id FROM locations WHERE slug = $1`, [body.slug]);
       if (slugCheck.rowCount > 0) {
-        return reply.status(409).send({ error: 'Slug already taken', code: 'SLUG_TAKEN' });
+        return reply.sendError(409, 'SLUG_TAKEN', 'Slug already taken');
       }
 
       // 2. Find or create org for this owner
@@ -177,7 +177,7 @@ export default (async function onboardingRoutes(fastify: any, opts: any) {
        FROM locations WHERE id = $1`,
       [locationId],
     );
-    if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+    if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
 
     const loc = res.rows[0];
     const state = parseState(loc.onboarding_state);
@@ -212,7 +212,7 @@ export default (async function onboardingRoutes(fastify: any, opts: any) {
         `SELECT id, onboarding_state FROM locations WHERE id = $1`,
         [locationId],
       );
-      if (locRes.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (locRes.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
 
       const state = parseState(locRes.rows[0].onboarding_state);
 
@@ -290,12 +290,12 @@ export default (async function onboardingRoutes(fastify: any, opts: any) {
         `SELECT id, onboarding_state FROM locations WHERE id = $1`,
         [locationId],
       );
-      if (locRes.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+      if (locRes.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
 
       const state = parseState(locRes.rows[0].onboarding_state);
 
       if (state.completedSteps.includes(stepNum)) {
-        return reply.status(400).send({ error: `Step ${stepNum} already completed` });
+        return reply.sendError(400, 'STEP_ALREADY_COMPLETED', `Step ${stepNum} already completed`);
       }
 
       state.skippedSteps.push(stepNum);
@@ -345,9 +345,9 @@ export default (async function onboardingRoutes(fastify: any, opts: any) {
       `SELECT id, slug, onboarding_completed_at FROM locations WHERE id = $1`,
       [locationId],
     );
-    if (res.rowCount === 0) return reply.status(404).send({ error: 'Not found' });
+    if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
     if (!res.rows[0].onboarding_completed_at) {
-      return reply.status(400).send({ error: 'Onboarding not yet completed' });
+      return reply.sendError(400, 'ONBOARDING_INCOMPLETE', 'Onboarding not yet completed');
     }
     return reply.send({ slug: res.rows[0].slug, dashboardUrl: `/admin/dashboard.html` });
   });

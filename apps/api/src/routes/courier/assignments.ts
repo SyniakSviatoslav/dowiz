@@ -112,7 +112,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
         `WHERE ca.id = $1 AND ca.courier_id = $2`,
         [id, courierId]
       );
-      if (res.rowCount === 0) return reply.status(404).send({ error: 'Assignment not found' });
+      if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Assignment not found');
       return reply.send(toTaskShape(res.rows[0]));
     } finally {
       client.release();
@@ -177,7 +177,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
 
       if (res.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(404).send({ error: 'ASSIGNMENT_NOT_FOUND_OR_NOT_ASSIGNED' });
+        return reply.sendError(404, 'ASSIGNMENT_NOT_FOUND_OR_NOT_ASSIGNED', 'ASSIGNMENT_NOT_FOUND_OR_NOT_ASSIGNED');
       }
 
       const { order_id, shift_id } = res.rows[0];
@@ -238,7 +238,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
 
       if (res.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(404).send({ error: 'ASSIGNMENT_NOT_FOUND_OR_NOT_ACCEPTED' });
+        return reply.sendError(404, 'ASSIGNMENT_NOT_FOUND_OR_NOT_ACCEPTED', 'ASSIGNMENT_NOT_FOUND_OR_NOT_ACCEPTED');
       }
 
       const { order_id } = res.rows[0];
@@ -300,7 +300,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
 
       if (res.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(404).send({ error: 'ASSIGNMENT_NOT_FOUND_OR_NOT_PICKED_UP' });
+        return reply.sendError(404, 'ASSIGNMENT_NOT_FOUND_OR_NOT_PICKED_UP', 'ASSIGNMENT_NOT_FOUND_OR_NOT_PICKED_UP');
       }
 
       const { order_id, shift_id, total } = res.rows[0];
@@ -414,7 +414,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
 
       if (res.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(404).send({ error: 'ASSIGNMENT_NOT_FOUND_OR_INVALID_STATUS' });
+        return reply.sendError(404, 'ASSIGNMENT_NOT_FOUND_OR_INVALID_STATUS', 'ASSIGNMENT_NOT_FOUND_OR_INVALID_STATUS');
       }
 
       const { order_id, shift_id, assigned_at } = res.rows[0];
@@ -422,7 +422,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
 
       if (elapsedMs > cancelWindowMs) {
         await client.query('ROLLBACK');
-        return reply.status(410).send({ error: 'CANCEL_WINDOW_EXPIRED' });
+        return reply.sendError(410, 'CANCEL_WINDOW_EXPIRED', 'CANCEL_WINDOW_EXPIRED');
       }
 
       await client.query(`

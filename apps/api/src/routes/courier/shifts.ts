@@ -139,7 +139,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
 
       if (activeRes.rowCount > 0) {
         await client.query('ROLLBACK');
-        return reply.status(409).send({ error: 'ACTIVE_DELIVERY_EXISTS' });
+        return reply.sendError(409, 'ACTIVE_DELIVERY_EXISTS', 'ACTIVE_DELIVERY_EXISTS');
       }
 
       await client.query(`
@@ -211,7 +211,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
       if (to === 'offline') {
         if (currentStatus === 'on_delivery') {
           await client.query('ROLLBACK');
-          return reply.status(409).send({ error: 'CANNOT_GO_OFFLINE_WITH_ACTIVE_ORDER' });
+          return reply.sendError(409, 'CANNOT_GO_OFFLINE_WITH_ACTIVE_ORDER', 'CANNOT_GO_OFFLINE_WITH_ACTIVE_ORDER');
         }
 
         // Validate any active assignments (belt and braces)
@@ -222,7 +222,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
 
         if (activeRes.rowCount > 0) {
           await client.query('ROLLBACK');
-          return reply.status(409).send({ error: 'ACTIVE_DELIVERY_EXISTS' });
+          return reply.sendError(409, 'ACTIVE_DELIVERY_EXISTS', 'ACTIVE_DELIVERY_EXISTS');
         }
 
         // Transition to offline
@@ -250,12 +250,12 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
       } else if (to === 'available') {
         if (currentStatus === 'on_delivery') {
           await client.query('ROLLBACK');
-          return reply.status(409).send({ error: 'INVALID_TRANSITION' }); // Must be via delivered
+          return reply.sendError(409, 'INVALID_TRANSITION', 'INVALID_TRANSITION'); // Must be via delivered
         }
 
         if (lat === undefined || lng === undefined) {
           await client.query('ROLLBACK');
-          return reply.status(400).send({ error: 'GPS_REQUIRED' });
+          return reply.sendError(400, 'GPS_REQUIRED', 'GPS_REQUIRED');
         }
 
         let newShiftId = shiftId;
@@ -346,7 +346,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
         const maxDist = parseFloat((env as any).COURIER_GPS_MAX_DIST_KM || '50');
         if (!isWithinGeofence(lat, lng, venueCenter.lat, venueCenter.lng, maxDist)) {
           await client.query('ROLLBACK');
-          return reply.status(400).send({ error: 'GPS_OUT_OF_RANGE' });
+          return reply.sendError(400, 'GPS_OUT_OF_RANGE', 'GPS_OUT_OF_RANGE');
         }
       }
 
@@ -357,7 +357,7 @@ export default (async function courierShiftsRoutes(fastify: any, opts: any) {
 
       if (shiftRes.rowCount === 0) {
         await client.query('ROLLBACK');
-        return reply.status(409).send({ error: 'NO_ACTIVE_SHIFT' });
+        return reply.sendError(409, 'NO_ACTIVE_SHIFT', 'NO_ACTIVE_SHIFT');
       }
 
       const shiftId = shiftRes.rows[0].id;
