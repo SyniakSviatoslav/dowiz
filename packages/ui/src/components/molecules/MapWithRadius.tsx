@@ -58,6 +58,8 @@ export function MapWithRadius({
           step={0.5}
           value={radiusKm}
           onChange={handleRadiusChange}
+          aria-label="Delivery radius in kilometres"
+          aria-valuetext={`${radiusKm} km`}
           className="flex-1 h-2 rounded-full appearance-none cursor-pointer"
           style={{
             background: `linear-gradient(to right, var(--brand-primary) ${((radiusKm - minRadius) / (maxRadius - minRadius)) * 100}%, var(--brand-border) ${((radiusKm - minRadius) / (maxRadius - minRadius)) * 100}%)`,
