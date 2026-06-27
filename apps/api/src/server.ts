@@ -59,6 +59,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getFastifyLoggerConfig, correlationStore } from './lib/logger.js';
 import { ApiError, isContractCode, rateLimitError, buildErrorEnvelope } from './lib/api-error.js';
+import { registerReplySendError } from './lib/reply-send-error.js';
 import { initSentry, getSentry } from './lib/sentry.js';
 import { WorkerHeartbeat } from './lib/worker/heartbeat.js';
 import { LivenessChecker } from './workers/liveness-checker.js';
@@ -580,18 +581,9 @@ const retryPolicy = new RetryPolicy();
   });
 
   // A2 (ADR-0010): `reply.sendError` — the return-based drop-in for ad-hoc `reply.status(n)
-  // .send({ error })` sites. Emits the SAME envelope as setErrorHandler (shared builder) with
-  // the server correlationId + x-correlation-id echo, so a migrated site is byte-compatible plus
-  // a machine `code` the FE can branch on.
-  fastify.decorateReply(
-    'sendError',
-    function (this: any, status: number, code: string, message: string, opts?: any) {
-      const correlationId = String(this.request.id);
-      this.header('x-correlation-id', correlationId);
-      if (opts?.retryAfterMs) this.header('retry-after', Math.ceil(opts.retryAfterMs / 1000));
-      return this.status(status).send(buildErrorEnvelope(status, code, message, correlationId, opts));
-    },
-  );
+  // .send({ error })`. Extracted to a shared helper so route-unit tests register the same decorator
+  // (an unregistered decorator → a migrated route throws 500; the A2-sweep regression guard).
+  registerReplySendError(fastify);
 
   // P1-6 / FX-6 / ADR-0010 A1: ONE structured error envelope — never leak internals.
   // Shape: { code:<SCREAMING_SNAKE string>, message, fields?, correlationId, retryAfterMs?,
