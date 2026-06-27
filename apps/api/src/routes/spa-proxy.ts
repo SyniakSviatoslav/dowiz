@@ -2,21 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { withTenant, verifyAuthToken } from '@deliveryos/platform';
 import { getImageUrl } from '../lib/image-url.js';
+import { validateImageKey } from '../lib/image-key.js';
 import { extractFromWebsite, extractLogoColor, normalizeHex } from '../lib/brand-extractor.js';
 import { maskStr } from '../lib/pii-mask.js';
 import { decryptPII } from '../lib/pii-cipher.js';
 import { z } from 'zod';
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
-
-function validateImageKey(val: unknown): string | null | undefined {
-  if (val === undefined || val === null) return val;
-  const s = String(val);
-  if (s.startsWith('data:') || s.startsWith('blob:')) {
-    throw new Error('Image must be uploaded via the image upload endpoint, not sent as a data URL');
-  }
-  return s;
-}
 
 const brandSchema = z.object({
   primaryColor: z.string().regex(HEX_COLOR).optional().nullable(),
