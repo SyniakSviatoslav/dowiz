@@ -1,0 +1,31 @@
+# Cross-tenant, multi-role, real-time ordering QA/validation loop.
+# Runs against the REAL, non-mocked staged service (real auth, DB, WS).
+id: cross-tenant-realtime-qa
+goal: >
+  Validate the live ordering path end-to-end across all three roles + real-time +
+  tenant isolation, from the real staged UI service — no mocks.
+scope_class: A            # read/validate only; places real demo orders, no code mutation
+trigger_tags: [qa, e2e, realtime, ordering, cross-tenant, isolation, lifecycle, ws, staging]
+security_carveout: [auth, rls, tenant-isolation]   # asserts these hold; never mutates them
+
+spec: e2e/tests/cross-tenant-realtime-qa.spec.ts
+run: >
+  VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test
+  e2e/tests/cross-tenant-realtime-qa.spec.ts --project=desktop --reporter=list
+
+dimensions:
+  customer: storefront UI (menu→cart→checkout) + a real order placed against the service + the real tracking UI
+  owner:    real login (test@dowiz.com); sees the order; drives PENDING→…→DELIVERED via the real owner API
+  courier:  server-side dispatch on IN_DELIVERY via the couriers channel (UI login gated on staging → bus-asserted)
+  realtime: an owner WS client (location:<id>:dashboard) must receive live deltas as state changes
+  isolation: ownerCanAccessRoom WS guard (foreign tenant room → no data) + unauth 401 + customer-token cannot PATCH status
+
+harness:
+  always_emit_report: true     # standing RULE — every run prints its full report
+  artifacts: audit/qa-realtime/*.png
+
+notes: >
+  Places real demo orders each run (adds to staging demo data — known cleanup backlog).
+  Courier "unassigned" is a valid real outcome when no courier is online. Cross-tenant
+  uses the demo tenant + isolation assertions (a 2nd live tenant isn't provisioned on staging).
+build_status: BUILT+RUN+GREEN (6/6 on staging, 2026-06-27)
