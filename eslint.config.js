@@ -35,6 +35,8 @@ export default tseslint.config(
       'local/no-mock-in-prod': 'warn',
       'local/no-permissive-status-assertion': 'warn',
       'local/no-tautological-assertion': 'warn',
+      'local/no-swallowed-catch': 'warn',
+      'local/no-truthy-on-identifier': 'warn',
       'local/no-hardcoded-string': 'warn',
       'local/no-insecure-random': 'warn',
       'local/no-direct-websocket': 'warn',

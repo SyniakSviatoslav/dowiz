@@ -376,6 +376,60 @@ export default {
         };
       },
     },
+    // Test-Integrity (sweep 2026-06-27): a swallowed promise rejection makes a failure
+    // vanish — `.catch(() => {})` / `.catch(async () => {})` with an empty body. The
+    // promise sibling of no-empty-catch. Everywhere (a swallowed error is a smell in
+    // product code too).
+    'no-swallowed-catch': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'disallow .catch(() => {}) — an empty rejection handler swallows the failure' },
+        schema: [],
+      },
+      create(context) {
+        return {
+          CallExpression(node) {
+            const c = node.callee;
+            if (c.type !== 'MemberExpression' || c.property.type !== 'Identifier' || c.property.name !== 'catch') return;
+            const fn = node.arguments[0];
+            if (!fn || (fn.type !== 'ArrowFunctionExpression' && fn.type !== 'FunctionExpression')) return;
+            if (fn.body.type === 'BlockStatement' && fn.body.body.length === 0) {
+              context.report({ node, message: '.catch() with an empty body swallows the failure — log it or add a comment why it is safe to ignore' });
+            }
+          },
+        };
+      },
+    },
+    // Test-Integrity (sweep 2026-06-27): `.toBeTruthy()`/`.toBeDefined()` on a token/id/
+    // url accepts ''/'null'/error-strings — assert the SHAPE (JWT 3-segment, UUID) or an
+    // exact value. Test files only.
+    'no-truthy-on-identifier': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'disallow .toBeTruthy()/.toBeDefined() on token/id/url values — assert shape (JWT/UUID) or exact' },
+        schema: [],
+      },
+      create(context) {
+        const isTestFile = /\.(spec|test)\.(ts|js|tsx|jsx)$/.test(context.getFilename());
+        if (!isTestFile) return {};
+        const NAME = /(^|_)(id|token|jwt|url|secret)$|(Id|Token|Jwt|Url)$|token|jwt/i;
+        const nameOf = (n) => (n.type === 'Identifier' ? n.name : n.type === 'MemberExpression' && n.property.type === 'Identifier' ? n.property.name : '');
+        return {
+          CallExpression(node) {
+            const c = node.callee;
+            if (c.type !== 'MemberExpression' || c.property.type !== 'Identifier') return;
+            if (c.property.name !== 'toBeTruthy' && c.property.name !== 'toBeDefined') return;
+            const expectCall = c.object;
+            if (expectCall.type !== 'CallExpression' || expectCall.callee.type !== 'Identifier' || expectCall.callee.name !== 'expect') return;
+            const arg = expectCall.arguments[0];
+            if (!arg) return;
+            if (NAME.test(nameOf(arg))) {
+              context.report({ node, message: `truthy assertion on an identifier-like value — assert its SHAPE (expectJwt/expectUuid) or an exact value, not toBeTruthy()` });
+            }
+          },
+        };
+      },
+    },
     'no-mock-in-prod': {
       meta: {
         type: "problem",
