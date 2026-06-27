@@ -61,7 +61,7 @@ export interface GitMemBlock {
   ctx_util_pct?: number; compactions?: number; rss_peak_mb?: number; oom?: boolean;
 }
 export interface TokensBlock {
-  in?: number; out?: number; cache_read?: number;
+  in?: number; out?: number; cache_read?: number; cache_write?: number;
   by_model?: Record<string, number>; per_resolved?: number;
   read_edit_ratio?: number; cost_usd?: number;
 }
@@ -126,6 +126,7 @@ export interface AggregateTelemetry {
   tokens_in: number;
   tokens_out: number;
   cache_read: number;
+  cache_write: number;
   cost_usd: number;
   per_resolved: number | null;
   eco: EcoBlock;

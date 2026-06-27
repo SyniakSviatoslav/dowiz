@@ -12,10 +12,12 @@
 
 import fs from 'node:fs';
 import type { RunRecord, AggregateTelemetry, IterationTelemetry, RunOutcome, BreakerReason } from './types.js';
-import { collectGitMem, collectSessionTelemetry } from './collect.js';
+import { collectGitMem, collectSessionTelemetry, collectWorkflowTelemetry, mergeTelemetry } from './collect.js';
 import { computeEco } from './eco.js';
 import { renderReport, computeHistory } from './report.js';
+import { buildPropagation, renderPropagation } from './propagate.js';
 import { nextRunIndex, writeRunRecord, appendIter, appendMetricsLine, readMetrics } from './storage.js';
+import path from 'node:path';
 
 interface FinalizeInput {
   loop: string;
@@ -40,10 +42,14 @@ function arg(flag: string, fallback?: string): string | undefined {
   return i >= 0 ? process.argv[i + 1] : fallback;
 }
 
-export function buildRecord(input: FinalizeInput, baseDir: string, opts: { session?: string; repo: string; since?: string }): RunRecord {
+export function buildRecord(input: FinalizeInput, baseDir: string, opts: { session?: string; repo: string; since?: string; workflow?: string }): RunRecord {
   const run_index = nextRunIndex(baseDir, input.loop);
   const git = collectGitMem(opts.repo, opts.since);
-  const sess = opts.session ? collectSessionTelemetry(opts.session, input.t_start, input.t_end) : null;
+  // Merge the main-session telemetry with any background-Workflow subagent transcripts
+  // (a workflow loop's agents live in separate transcripts the session JSONL can't see).
+  const sessRaw = opts.session ? collectSessionTelemetry(opts.session, input.t_start, input.t_end) : null;
+  const wf = opts.workflow ? collectWorkflowTelemetry(opts.workflow) : null;
+  const sess = (sessRaw || wf) ? mergeTelemetry(sessRaw, wf) : null;
   const eco = computeEco(sess?.tokensByModel ?? {});
 
   const c = input.code ?? {};
@@ -61,7 +67,8 @@ export function buildRecord(input: FinalizeInput, baseDir: string, opts: { sessi
     agents: sess?.agents ?? {},
     skills_used: { ...(sess?.skills_used ?? {}), ...(input.skills_used ?? {}) },
     skills_ghost: [],
-    tokens_in: sess?.tokens.in ?? 0, tokens_out: sess?.tokens.out ?? 0, cache_read: sess?.tokens.cache_read ?? 0,
+    tokens_in: sess?.tokens.in ?? 0, tokens_out: sess?.tokens.out ?? 0,
+    cache_read: sess?.tokens.cache_read ?? 0, cache_write: sess?.tokens.cache_write ?? 0,
     cost_usd: sess?.tokens.cost_usd ?? 0,
     per_resolved: resolved > 0 ? Math.round(tokensTotal / resolved) : null,
     eco,
@@ -83,17 +90,29 @@ export function buildRecord(input: FinalizeInput, baseDir: string, opts: { sessi
 
 function main(): void {
   if (process.argv[2] !== 'finalize') {
-    console.error('usage: cli.ts finalize --record <json> --base <dir> [--session <jsonl>] [--since <ref>] [--repo <dir>]');
+    console.error('usage: cli.ts finalize --record <json> --base <dir> [--session <jsonl>] [--workflow <transcriptDir>] [--since <ref>] [--repo <dir>]');
     process.exit(2);
   }
   const recordPath = arg('--record');
   const baseDir = arg('--base', 'loops/runs')!;
   if (!recordPath) { console.error('--record required'); process.exit(2); }
   const input: FinalizeInput = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
-  const record = buildRecord(input, baseDir, { session: arg('--session'), repo: arg('--repo', '.')!, since: arg('--since') });
+  const repo = arg('--repo', '.')!;
+  const record = buildRecord(input, baseDir, { session: arg('--session'), repo, since: arg('--since'), workflow: arg('--workflow') });
 
   // §5 — ALWAYS print the full report.
   console.log(renderReport(record));
+
+  // §8 — ALWAYS emit loop-end propagation (memory + reflection + cross-surface directives).
+  const prop = buildPropagation(record);
+  console.log('\n' + renderPropagation(prop));
+  try {
+    const inbox = path.join(repo, 'docs/reflections/INBOX');
+    fs.mkdirSync(inbox, { recursive: true });
+    const rf = path.join(inbox, `${input.loop}-${record.run_index}.md`);
+    fs.writeFileSync(rf, prop.reflection + '\n');
+    console.error(`[propagation] reflection → ${rf}`);
+  } catch (err) { console.error('[propagation] reflection write skipped:', (err as Error).message); }
 
   // §7 — persist permanently + losslessly.
   for (const it of input.iters ?? []) appendIter(baseDir, input.loop, record.run_index, it);

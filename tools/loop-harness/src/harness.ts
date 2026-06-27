@@ -32,7 +32,7 @@ function aggregate(iters: IterationTelemetry[], initialMetric: number): Aggregat
     iterations: iters.length,
     tests_fail_start: 0, tests_fail_end: 0, edits: 0, loc_add: 0, loc_del: 0,
     slop_min: null, fake_green_caught: 0, commits: 0, conflicts: 0, prs: 0, rss_peak_mb: 0,
-    agents: {}, skills_used: {}, skills_ghost: [], tokens_in: 0, tokens_out: 0, cache_read: 0,
+    agents: {}, skills_used: {}, skills_ghost: [], tokens_in: 0, tokens_out: 0, cache_read: 0, cache_write: 0,
     cost_usd: 0, per_resolved: null, eco: { kwh: 0, gco2: 0, water_ml: 0, method: 'deferred', estimate: true },
   };
   agg.tests_fail_start = initialMetric;

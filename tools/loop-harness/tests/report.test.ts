@@ -14,7 +14,7 @@ const base: RunRecord = {
     iterations: 7, tests_fail_start: 11, tests_fail_end: 0, edits: 9, loc_add: 86, loc_del: 31,
     slop_min: 92, fake_green_caught: 1, commits: 1, conflicts: 0, prs: 1, rss_peak_mb: 5600,
     agents: { generator: 6, reviewer: 7 }, skills_used: { 'playwright-mcp': 22 }, skills_ghost: ['unused-skill-x'],
-    tokens_in: 312000, tokens_out: 61000, cache_read: 198000, cost_usd: 2.74, per_resolved: 19100,
+    tokens_in: 312000, tokens_out: 61000, cache_read: 198000, cache_write: 44000, cost_usd: 2.74, per_resolved: 19100,
     eco: { kwh: 0.081, gco2: 23.6, water_ml: 96, method: 'ecologits', estimate: true },
   },
   carry_forward: { guards: ['[active] checkout-cash assertion'], watch: ['429 retry-after'] },
