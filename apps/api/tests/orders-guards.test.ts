@@ -31,7 +31,9 @@ function ensureEnv() {
 async function buildApp(clientQuery: (sql: string) => any) {
   ensureEnv();
   const { default: orderRoutes } = await import('../src/routes/orders.js');
+  const { registerReplySendError } = await import('../src/lib/reply-send-error.js');
   const fastify = Fastify();
+  registerReplySendError(fastify); // A2: orders.ts uses reply.sendError — register it like server.ts
   fastify.decorate('verifyAuth', async () => {});
   fastify.decorate('softVerifyAuth', async () => {});
   fastify.decorate('requireRole', () => async () => {});
