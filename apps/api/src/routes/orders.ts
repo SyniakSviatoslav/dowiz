@@ -18,6 +18,7 @@ const env = loadEnv();
 const OTP_ENABLED = env.OTP_ENABLED === 'true';
 import { applyTax, assertNonNegative } from '../lib/money.js';
 import { computeOrderPricing, resolveDeliveryFee } from '../lib/order-pricing.js';
+import { buildRequestHash, buildSignalState } from '../lib/order-canonical.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isValidUUID(id: string): boolean {
@@ -180,28 +181,18 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       );
       const menuVersion = mvRes.rowCount && mvRes.rows[0] ? mvRes.rows[0].version : '0';
 
-      // 3. Request Hash
-      const canonicalItems = items.map(i => ({
-        product_id: i.product_id,
-        quantity: i.quantity,
-        modifier_ids: [...(i.modifier_ids || [])].sort()
-      }));
-      const lat_rounded_5 = pin ? Math.round(pin.lat * 100000) / 100000 : null;
-      const lng_rounded_5 = pin ? Math.round(pin.lng * 100000) / 100000 : null;
-      const customerId = request.user?.role === 'customer' ? request.user.userId : 'anonymous';
-
-      const canonicalBody = JSON.stringify({
+      // 3. Request Hash (idempotency fingerprint) — pure (lib/order-canonical.ts).
+      const requestHash = buildRequestHash({
         locationId,
         type: input.type,
-        items: canonicalItems,
-        pin: pin ? { lat: lat_rounded_5, lng: lng_rounded_5 } : null,
-        address_text: deliveryAddressText,
-        cash_pay_with: cashPayWith || null,
-        currency_code: location.currency_code,
-        menu_version: menuVersion,
-        customer_id: customerId
+        items,
+        pin,
+        addressText: deliveryAddressText,
+        cashPayWith,
+        currencyCode: location.currency_code,
+        menuVersion,
+        customerId: request.user?.role === 'customer' ? request.user.userId : 'anonymous',
       });
-      const requestHash = crypto.createHash('sha256').update(canonicalBody).digest('hex');
 
       // 4. Preflight (E27) — check menu availability + signals + OTP before idempotency.
       // Statically imported (fail-loud): a missing module must break the build, never
@@ -329,29 +320,12 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         }
       }
 
-      // 4d. Build signal state for preflight
-      const sigState = {
-        velocityPhoneCount: 0,
-        velocityIpCount: 0,
-        noShowCount: 0,
-        noShowAgeDays: null as number | null,
-        completedCount: 0,
+      // 4d. Build signal state for preflight — pure (lib/order-canonical.ts).
+      const sigState = buildSignalState({
+        signals,
         otpRequired: OTP_ENABLED && location.require_phone_otp,
         otpVerified: otpServerVerified,
-      };
-      for (const s of signals) {
-        if (s.kind === 'velocity_rapid' || s.kind === 'velocity_high_volume') {
-          sigState.velocityPhoneCount = Math.max(sigState.velocityPhoneCount, s.evidence.count || 0);
-        }
-        if (s.kind === 'ip_velocity_rapid' || s.kind === 'ip_velocity_high_volume') {
-          sigState.velocityIpCount = Math.max(sigState.velocityIpCount, s.evidence.count || 0);
-        }
-        if (s.kind === 'no_show_recent') {
-          sigState.noShowCount = s.evidence.count || 0;
-          sigState.noShowAgeDays = s.evidence.ageDays ?? null;
-          sigState.completedCount = s.evidence.completedCount || 0;
-        }
-      }
+      });
 
       // 4e. Evaluate preflight
       const preflight = evaluatePreflight({
