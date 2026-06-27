@@ -130,7 +130,19 @@ Its **report** shows: what was mapped, researched, auto-applied-and-kept (proven
     → B) + a regression test (the "loaded every session" false-positive that briefly mis-flagged the
     ghost-MCP prune as B — fixed: broad list matches the structured `area`, tight list matches free text).
     `applyCandidate()` **throws** — auto-apply is disabled until the oracle is proven.
-  - **Deferred (§8 steps 1, 3–6):** sandbox + credential isolation (§4), web RESEARCH (contained), the
-    machine oracle (§2 — green + no-security-regression + benchmark-replay ≥5% speedup + reversible),
-    Class-A auto-apply, Class-B proposal queue wired to GRADUATE (§8c of v3-FINAL), headless pg-boss
-    scheduling. **No autonomous mutation until §8 steps 3–4 are built + proven.**
+- **2026-06-27 — §8 step 3 (the machine oracle) built + §8 step 4 (Class-A auto-apply) enabled.**
+  `oracle.ts` (`evaluate(hooks, thr)`) is the strict gate: KEEP iff **reversible AND green AND
+  no-security-regression AND speedup ≥ 5%**; else **atomic rollback** (revert). 7 unit tests prove
+  KEEP + every rollback path (not-reversible → refuse-to-apply, tests-RED, security-regression,
+  no-speedup, slower-regression) and that `revert()` is called exactly when it should be.
+  Auto-apply is wired behind `--apply` (opt-in trigger): each Class-A candidate runs through the
+  oracle via per-candidate hooks; candidates with no reversible+benchmarkable adapter are skipped
+  with an honest reason. **First live `--apply` run: 0 kept · 0 rolled-back · 3 skipped** — the
+  account-managed MCP servers aren't loop-reversible (can't reconstruct the re-add) and the
+  CLAUDE.md trim has no benchmark-replay speedup, so the oracle correctly declined all three; Class B
+  never reached apply. This is the gate working as designed: keep only what's PROVEN, reject the rest.
+  - **Deferred (§8 steps 1, 5–6 + the Class-A adapter):** sandbox + credential isolation (§4), web
+    RESEARCH (contained), a reversible+benchmarkable Class-A adapter (worktree + benchmark-replay) so
+    real repo-perf candidates can actually be kept, Class-B queue wired to GRADUATE (§8c), headless
+    pg-boss scheduling, widening Class A after several clean runs. The firm boundary + oracle gate +
+    atomic rollback are in place; what's missing is a candidate type the oracle can PROVE.

@@ -136,38 +136,93 @@ export function applyCandidate(_c: Candidate): never {
   throw new Error('AUTOUPGRADE: auto-apply is DISABLED (report-only, spec §8 step 2). Enable Class-A apply only after the oracle (§2) + atomic rollback are proven on a few candidates.');
 }
 
-// ─── Runner — report-only pass on the harness ───
+// ─── Oracle-gated Class-A auto-apply (§2/§4) ───
+
+import { evaluate, type OracleHooks, type OracleVerdict, DEFAULT_THRESHOLDS } from './oracle.js';
+
+export interface ApplyOutcome {
+  id: string;
+  decision: 'kept' | 'rolled_back' | 'skipped' | 'report-only';
+  reason: string;
+  speedup_pct?: number | null;
+}
+
+/**
+ * Build the oracle hooks for a Class-A candidate, or skip it with an honest
+ * reason. A candidate is only auto-applicable if this loop can apply it in
+ * isolation, run green+security, MEASURE a benchmark-replay speedup, AND revert
+ * it. Config/prefix-size changes (MCP, CLAUDE.md) are intentionally NOT
+ * auto-applied here: account-managed MCP isn't loop-reversible, and a prefix-size
+ * win isn't a runnable benchmark — so the oracle would (correctly) reject them.
+ * Returns hooks only for candidate types with a real, reversible, benchmarkable
+ * adapter — none yet, by design (§8 step 4: widen only after proven).
+ */
+export function buildHooks(c: Candidate): { hooks: OracleHooks } | { skip: string } {
+  if (c.id.startsWith('ghost-mcp:')) {
+    return { skip: 'account-managed MCP (claude.ai connector) — not removable/re-addable via the local mcp CLI, so NOT loop-reversible. Prune manually if desired; the loop will not apply what it cannot atomically revert.' };
+  }
+  if (c.id.startsWith('config-bloat:')) {
+    return { skip: 'operating-doctrine/config edit — protect-paths-gated + the prefix-size win is not a benchmark-replayable speedup. Human review (Class-A-shaped but no oracle adapter).' };
+  }
+  return { skip: 'no reversible+benchmarkable auto-apply adapter for this candidate type yet (§8 step 4 — widen Class A only after the oracle is proven).' };
+}
+
+async function evaluateClassA(classA: Candidate[], apply: boolean): Promise<ApplyOutcome[]> {
+  const out: ApplyOutcome[] = [];
+  for (const c of classA) {
+    if (!apply) { out.push({ id: c.id, decision: 'report-only', reason: 'auto-apply not requested (run with --apply)' }); continue; }
+    const built = buildHooks(c);
+    if ('skip' in built) { out.push({ id: c.id, decision: 'skipped', reason: built.skip }); continue; }
+    const v: OracleVerdict = await evaluate(built.hooks, DEFAULT_THRESHOLDS);
+    out.push({ id: c.id, decision: v.decision, reason: v.reason, speedup_pct: v.speedup_pct });
+  }
+  return out;
+}
+
+// ─── Runner — MAP → CLASSIFY → (oracle-gated apply) → §5 report ───
 
 import type { RunRecord } from './types.js';
 import { buildRecord } from './cli.js';
 import { renderReport } from './report.js';
 import { writeRunRecord, appendMetricsLine } from './storage.js';
 
-export function runAutoupgrade(opts: { repoDir: string; baseDir: string; tStart: string; tEnd: string }): RunRecord {
+export async function runAutoupgrade(opts: { repoDir: string; baseDir: string; tStart: string; tEnd: string; apply: boolean }): Promise<RunRecord> {
   const candidates = mapCandidates(opts.repoDir).map((c) => ({ c, k: classify(c) }));
   const classA = candidates.filter((x) => x.k.class === 'A');
   const classB = candidates.filter((x) => x.k.class === 'B');
+  const outcomes = await evaluateClassA(classA.map((x) => x.c), opts.apply);
+  const kept = outcomes.filter((o) => o.decision === 'kept');
+  const rolledBack = outcomes.filter((o) => o.decision === 'rolled_back');
+  const skipped = outcomes.filter((o) => o.decision === 'skipped');
 
+  const mode = opts.apply ? 'ORACLE-GATED AUTO-APPLY (Class A only)' : 'report-only';
   const input = {
     loop: 'autoupgrade',
-    goal: 'Find changes that PROVABLY haste iteration with fewer resources. Report-only pass (oracle + auto-apply not yet enabled — spec §8 steps 2/4).',
+    goal: 'Find changes that PROVABLY haste iteration with fewer resources. Oracle-gated (green + no-security-regression + ≥5% benchmark speedup + reversible); Class B never auto-applied.',
     outcome: 'natural_stop' as const,
     t_start: opts.tStart,
     t_end: opts.tEnd,
     iter_from: 1,
     iter_to: Math.max(1, candidates.length),
-    what_done: `MAP grounded in real telemetry (codeburn + fs scan) → ${candidates.length} candidate(s); CLASSIFY fail-safe (firm boundary → B). NO apply this pass — deterministic report-only.`,
-    issues: classB.map((x) => `Class B (propose-only, human/DB-owner): ${x.c.pattern} — ${x.k.reason}. Action: ${x.c.action}`),
-    patterns: [
-      `Class A (auto-eligible once oracle proven): ${classA.length} — ${classA.map((x) => x.c.id).join(', ') || '(none)'}`,
-      'Firm boundary holding: auth/RLS/secrets/payments/PII/schema/architecture never classed A.',
+    what_done: `MAP (codeburn + fs scan) → ${candidates.length} candidate(s); CLASSIFY fail-safe (firm boundary → B). Mode: ${mode}. Oracle verdicts: ${kept.length} kept · ${rolledBack.length} rolled back · ${skipped.length} skipped.`,
+    issues: [
+      ...classB.map((x) => `Class B (propose-only, human/DB-owner): ${x.c.pattern} — ${x.k.reason}. Action: ${x.c.action}`),
+      ...rolledBack.map((o) => `Rolled back (oracle): ${o.id} — ${o.reason}`),
+      ...skipped.map((o) => `Skipped (not safely auto-applicable): ${o.id} — ${o.reason}`),
     ],
-    code: { tests_fail_start: candidates.length, tests_fail_end: 0, edits: 0, slop_min: null, fake_green_caught: 0 },
+    patterns: [
+      `Oracle: kept ${kept.length}${kept.length ? ` (${kept.map((o) => `${o.id} ${o.speedup_pct}% faster`).join(', ')})` : ''} · rolled-back ${rolledBack.length} · skipped ${skipped.length}.`,
+      'Firm boundary holding: auth/RLS/secrets/payments/PII/schema/architecture never classed A, never auto-applied.',
+    ],
+    code: { tests_fail_start: candidates.length, tests_fail_end: classB.length + rolledBack.length + skipped.length, edits: kept.length, slop_min: null, fake_green_caught: 0 },
     carry_forward: {
-      guards: ['[code] applyCandidate() throws — auto-apply disabled until oracle proven'],
+      guards: [
+        '[oracle] KEEP iff green + no-security-regression + ≥5% benchmark speedup + reversible; else atomic rollback.',
+        '[code] firm boundary: Class B (auth/RLS/secrets/payments/PII/schema/arch) never reaches apply.',
+      ],
       watch: [
-        ...classA.map((x) => `Class-A queued (needs oracle: green+security+≥5% speedup+revert): ${x.c.action}`),
-        'NEXT (§8 step 3): build the machine oracle + fixed benchmark-replay speed check, then enable Class-A apply (step 4).',
+        ...kept.map((o) => `APPLIED+KEPT (revert recorded): ${o.id}`),
+        'NEXT (§8 step 4/6): add a reversible+benchmarkable Class-A adapter (worktree + benchmark-replay) so real repo-perf candidates can be auto-applied; widen only after several clean runs.',
       ],
     },
   };
@@ -177,12 +232,14 @@ export function runAutoupgrade(opts: { repoDir: string; baseDir: string; tStart:
   return buildRecord(input, opts.baseDir, { repo: opts.repoDir });
 }
 
-function main(): void {
-  const repoDir = process.argv[3] ?? process.cwd();
-  const baseDir = process.argv[4] ?? path.join(repoDir, 'loops', 'runs');
+async function main(): Promise<void> {
+  const apply = process.argv.includes('--apply');
+  const positional = process.argv.slice(3).filter((a) => !a.startsWith('--'));
+  const repoDir = positional[0] ?? process.cwd();
+  const baseDir = positional[1] ?? path.join(repoDir, 'loops', 'runs');
   const t0 = Date.now();
   const tStart = new Date(t0).toISOString();
-  const record = runAutoupgrade({ repoDir, baseDir, tStart, tEnd: new Date(Date.now()).toISOString() });
+  const record = await runAutoupgrade({ repoDir, baseDir, tStart, tEnd: new Date(Date.now()).toISOString(), apply });
   console.log(renderReport(record));
   writeRunRecord(baseDir, 'autoupgrade', record.run_index, record);
   appendMetricsLine(baseDir, {
@@ -195,4 +252,4 @@ function main(): void {
   console.error(`\n[persisted] ${baseDir}/autoupgrade/${record.run_index}.json.gz`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => { console.error(e); process.exit(1); });
