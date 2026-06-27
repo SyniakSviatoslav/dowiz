@@ -3,6 +3,8 @@
 Джерело істини про наявні петлі. Картки — `loops/<id>.yaml`. Звіти — `loops/reports/`. Пам'ять — `loops/memory/`.
 Статуси: **CERTIFIED** (пройшла M1–M11) · **DRAFT** (будується) · **REJECTED** (впала верифікацію) · **DEPRECATED**.
 
+**Intake (Loop Selection Router).** Над усім — роутер (`tools/loop-harness/src/router.ts`, спец `docs/operating-model/loop-selection-router-v1.md`) вирішує на КОЖНІЙ команді: DIRECT (типове — без петлі) · RUN наявну (`runs/registry.json`) · BUILD нову (loop-builder) · BOUNCE (нема метрики). Routes only — не переписує Class A/B / admissibility / security carve-out. Enforcement = `UserPromptSubmit` hook (`tools/loop-harness/router-hook.sh`, оператор вмикає в .claude) + CLAUDE.md директива.
+
 **Harness (обов'язково для КОЖНОЇ петлі).** Жодної петлі поза харнесом. На фініші (success/stall/abort) петля ЗАВЖДИ емітить §5 LOOP REPORT (повністю в термінал) через `tools/loop-harness` finalize, який міряє git+session-токени+eco і пише незнищенно/lossless у `loops/runs/`. Дизайн — `docs/operating-model/living-loop-system-v3.md`; вузол `harness:` у картці. Телеметрія токенів/агентів/скілів ← session JSONL (те, що читає codeburn). Реалізовано §10 кроки 1–3 + колектори; відкладено §4/§6-recall/§8.
 
 | id | intent (коротко) | version | статус | картка | звіт | пам'ять | тригер |
