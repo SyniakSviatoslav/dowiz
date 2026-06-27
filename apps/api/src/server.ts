@@ -41,11 +41,7 @@ import { AiOcrParser } from './lib/ai-ocr-parser.js';
 import { LocalFsStorageProvider } from './lib/local-storage.js';
 import { R2StorageProvider } from './lib/r2-storage.js';
 import { LibreTranslateProvider } from './lib/libretranslate-provider.js';
-import { TelegramAdapter } from './notifications/adapters/telegram.js';
-import { WebPushAdapter } from './notifications/adapters/webpush.js';
-import { NotificationDispatcher } from './notifications/provider.js';
-import { RetryPolicy } from './notifications/retry.js';
-import { NotificationWorker } from './notifications/workers/index.js';
+import { buildNotifications } from './bootstrap/notifications.js';
 import { TelegramPoller } from './notifications/workers/telegram.poll.js';
 import { DwellMonitorWorker } from './workers/dwell-monitor.js';
 import { LifecycleHandlers } from './workers/lifecycle-handlers.js';
@@ -312,21 +308,13 @@ async function main() {
     : new LocalFsStorageProvider(process.env.STORAGE_DIR || 'tmp/imports');
   const translation = new LibreTranslateProvider();
 
-  // Notification Providers
-  const telegramAdapter = new TelegramAdapter(env.TELEGRAM_BOT_TOKEN || '');
-  const notifyDispatcher = new NotificationDispatcher();
-  notifyDispatcher.register('telegram', telegramAdapter);
-  // P0-2 (ADR-p0-privacy-hardening): WhatsApp/Baileys channel removed — it streamed
-  // customer PII to Meta via an unofficial client. Telegram + push + email remain.
-
-  if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
-    const subject = env.VAPID_SUBJECT ? (env.VAPID_SUBJECT.startsWith('mailto:') ? env.VAPID_SUBJECT : `mailto:${env.VAPID_SUBJECT}`) : 'mailto:admin@deliveryos.local';
-    const webPushAdapter = new WebPushAdapter(env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY, subject);
-    notifyDispatcher.register('push', webPushAdapter);
-  }
-
-const retryPolicy = new RetryPolicy();
-  const notifyWorker = new NotificationWorker(pool, queue.boss, notifyDispatcher, retryPolicy, memoryService);
+  // Notification providers + worker (bootstrap/notifications.ts). Telegram always;
+  // web-push only when VAPID is configured. WhatsApp/Baileys removed (P0-2).
+  const { telegramAdapter, notifyWorker } = buildNotifications(env, {
+    pool,
+    queueBoss: queue.boss,
+    memoryService,
+  });
   
    // Register pg-boss workers
    // NOTE: queue.work() wraps pg-boss v10 array-of-jobs callback, extracting job.data per job
