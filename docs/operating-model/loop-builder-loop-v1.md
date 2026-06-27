@@ -89,6 +89,18 @@ See the authoritative request; the build encodes: born-hardened reuse, per-file 
   - Proven: 7 tests (admissibility matrix incl. refuse + fail-safe; design oracle/carve-out; reuse
     detection; structural validation). Live: "BE polishing" → designed (extend backend-contract-
     convergence); "make the UI prettier" → refused+escalated.
-  - **Deferred (§11 steps 3-tail/4–6):** the SMOKE-test dry-run (§2.3 — instantiate + run the generated
-    loop on a seed; metric must move/terminate/no-churn) + Class-A AUTO-REGISTER + Class-B→proposals
-    queue + headless pg-boss. No loop is registered until the smoke test proves it works.
+- **2026-06-27 — §2.3 SMOKE test + §11 step 4 AUTO-REGISTER built.**
+  - `smoke.ts` `smokeTest(design, seed)` — dry-runs the design's CONTRACT (progressMetric + isTerminal
+    + breaker) through the REAL harness (`runLoop`) on a seeded scenario. Asserts the metric MOVES,
+    TERMINATES (green, not stall/abort), and scope is clean. Catches the real failure modes: a STUCK
+    design (breaker stalls), a breaker too tight for the scenario (doesn't terminate → maxIter), and
+    out-of-scope churn. 5 tests.
+  - `registry.ts` (Router §2) — `runs/registry.json` manifest; `registerLoop` upsert-by-id. 3 tests.
+  - Wired: `runLoopBuilder` now runs the smoke gate; a design is RELEASABLE iff admissible + structural
+    validation + SMOKE pass + Class A + not a duplicate. Behind `--register` (opt-in), a releasable
+    design AUTO-REGISTERS to the registry. Live: "i18n coverage loop" → smoke PASS (green 12 iters) →
+    AUTO-REGISTERED "i18n". "BE polishing" stays propose-extend (reuseOf backend-contract-convergence).
+  - **Deferred (§11 steps 5–6):** Class-B→proposals queue for the builder, headless pg-boss, the
+    heavier AGENT dry-run (running the real iterate's edits — the smoke proves contract soundness;
+    the agent run is the next fidelity step). The Loop Selection Router (separate spec) reads this
+    registry.
