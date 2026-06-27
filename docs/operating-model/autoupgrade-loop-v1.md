@@ -165,8 +165,21 @@ Its **report** shows: what was mapped, researched, auto-applied-and-kept (proven
   → classify A → oracle applies → benchmark 50% faster → **KEPT on disk**; a slower value → atomic
   rollback; absent declaration → [] (no auto-tuning without an operator opt-in). Wired into
   `mapCandidates`. Example: `loops/autoupgrade.tunables.example.json`.
-  - **Still deferred (§8 steps 1, 5–6):** sandbox + credential isolation (§4), web RESEARCH
-    (contained), Class-B queue → GRADUATE (§8c), pg-boss scheduling, more mechanical detectors (the
-    config-tune class is the safe beachhead; any new one must stay mechanical/deterministic per §0),
-    widen Class A after several clean runs. The loop is now end-to-end functional: MAP (incl. real
-    repo-perf candidates) → CLASSIFY → ORACLE → KEEP|ROLLBACK → §5 report.
+- **2026-06-27 — containment (§4) + Class-B GRADUATE queue (§8c) built.**
+  - `containment.ts`: `assertCredentialIsolation(env)` refuses autonomous apply if secret-shaped env
+    vars are present (§4 — a compromised step has nothing to exfiltrate); `evaluateClassA` checks it
+    before any `--apply`. `isTrustedSource` allowlist — only candidates from a TRUSTED mechanical
+    detector (config-tune) may auto-apply; web/LLM-derived candidates are forced propose-only (§0).
+    Wired into `evaluateClassA` (credential gate) + `buildHooks` (trusted-source gate). 6 tests.
+  - `proposals.ts`: the §8c queue — Class B is PROPOSED to `proposals.json` (durable, deduped by id,
+    frequency-weighted count++, human-set status preserved, never auto-deleted), never auto-applied.
+    Each Class-B candidate is queued each run. 5 tests. Live run queued the SECURITY-DEFINER migration
+    (`queued ×1 security`).
+  - **Deliberately NOT done — headless pg-boss scheduling (§6):** running autonomous repo-mutation
+    from the product API server (which serves customers) is the wrong place. It belongs in a SEPARATE
+    scheduled job (cron/CI), not `apps/api`. Left to ops, not wired into the product.
+  - **Still deferred (correctly):** sandbox container + agent-vault key brokering (the runtime side of
+    §4 — the env guard is the code side), web RESEARCH (contained), the worktree concurrency upgrade
+    (only needed at >1 loop concurrency; teamConcurrency 1 today), widen Class A after several clean
+    runs. The loop is end-to-end functional: MAP → CLASSIFY → ORACLE → KEEP|ROLLBACK → §5 report, with
+    containment + a human-gated proposal queue.

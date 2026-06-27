@@ -62,3 +62,18 @@ oracle apply → benchmark 50% faster → KEPT on disk; slower value → atomic 
 [] (safe default, no auto-tuning without opt-in). Wired into mapCandidates. Example:
 `loops/autoupgrade.tunables.example.json`. **The autoupgrade loop is now end-to-end functional:**
 MAP (incl. real repo-perf) → CLASSIFY → ORACLE → KEEP|ROLLBACK → §5 report. Total 56 harness tests.
+
+## 2026-06-27 · containment (§4) + Class-B proposal queue (§8c) — the smaller remaining
+
+- `containment.ts`: `assertCredentialIsolation(env)` — the loop REFUSES `--apply` if secret-shaped
+  env vars (SECRET/PRIVATE_KEY/_TOKEN/PASSWORD/DATABASE_URL/API_KEY/FLY_API…) are present (§4: nothing
+  to exfiltrate). `isTrustedSource` allowlist — ONLY mechanical-detector candidates (config-tune)
+  auto-apply; web/LLM-derived → propose-only (§0). Wired into evaluateClassA + buildHooks.
+- `proposals.ts`: §8c queue — Class B PROPOSED to `proposals.json` (deduped by id, count++,
+  human-set status preserved, never auto-deleted/auto-applied). Live run queued the SECURITY-DEFINER
+  migration (queued ×1). The human reviews/edits status; re-runs don't re-open a decided proposal.
+- **NOT wiring pg-boss into apps/api** (§6): autonomous repo-mutation must not run from the
+  customer-serving server — that's a separate cron/CI job. Deferred to ops.
+- Worktree concurrency upgrade deferred (only needed at >1 loop; teamConcurrency 1).
+Total 67 harness tests. The autoupgrade loop is feature-complete for v1 (the runtime sandbox +
+web-research are the only meaningful remaining, both correctly deferred).
