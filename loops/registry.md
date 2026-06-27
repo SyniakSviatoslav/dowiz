@@ -17,6 +17,7 @@
 | performance | метрика в межі бюджету, без регресії | 0.1 | DRAFT | loops/performance.yaml | loops/reports/performance-0.1.md | loops/memory/performance.md | /perf |
 | build-stage | етап роадмапу до ✅ чекпойнта | 0.1 | DRAFT | loops/build-stage.yaml | loops/reports/build-stage-0.1.md | loops/memory/build-stage.md | /build-stage |
 | autoupgrade | machine-gated self-upgrade (haste iteration, fewer resources); Class A авто/Class B пропозиція | 0.1 | DRAFT (report-only) | loops/autoupgrade.yaml | loops/reports/autoupgrade-0.1.md | loops/memory/autoupgrade.md | /autoupgrade |
+| loop-builder | мета-петля: ціль G → найкраща harness-native петля (oracle-admissibility first, born-hardened) | 0.1 | DRAFT (report-only) | loops/loop-builder.yaml | loops/reports/loop-builder-0.1.md | loops/memory/loop-builder.md | /loop-builder |
 | audit-gate | секції A–F PASS з артефактами | 0.1 | DRAFT | loops/audit-gate.yaml | loops/reports/audit-gate-0.1.md | loops/memory/audit-gate.md | /audit-gate |
 | exit-audit | завершеність фази (змагально) | 0.1 | DRAFT | loops/exit-audit.yaml | loops/reports/exit-audit-0.1.md | loops/memory/exit-audit.md | /exit-audit |
 | mobile-polish | мобільний UX (390px) кожної поверхні → PASS Mobile Rubric | 1.0 | CERTIFIED | loops/mobile-polish.yaml | loops/reports/mobile-polish-0.1.md | loops/memory/mobile-polish.md | /mobile-polish |
