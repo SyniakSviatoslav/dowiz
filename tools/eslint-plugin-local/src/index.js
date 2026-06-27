@@ -342,6 +342,40 @@ export default {
         };
       },
     },
+    // Test-Integrity (sweep 2026-06-27): a tautological assertion can never go red, so
+    // the test is worthless — the #1 CRITICAL class (217 found). Bans expect(<bool literal>)
+    // (any matcher), assert(<truthy const>), assert.ok(<truthy const>). Test files only.
+    'no-tautological-assertion': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'disallow tautological assertions (expect(true), assert.ok(true)) that can never fail' },
+        schema: [],
+      },
+      create(context) {
+        const isTestFile = /\.(spec|test)\.(ts|js|tsx|jsx)$/.test(context.getFilename());
+        if (!isTestFile) return {};
+        const isTruthyConst = (n) =>
+          n && n.type === 'Literal' && (n.value === true || (typeof n.value === 'number' && n.value !== 0) || (typeof n.value === 'string' && n.value.length > 0));
+        const isBoolLiteral = (n) => n && n.type === 'Literal' && typeof n.value === 'boolean';
+        return {
+          CallExpression(node) {
+            const c = node.callee;
+            // expect(<bool literal>) ... — the whole chain is tautological regardless of matcher.
+            if (c.type === 'Identifier' && c.name === 'expect' && isBoolLiteral(node.arguments[0])) {
+              context.report({ node, message: 'tautological assertion: expect() of a boolean literal can never fail — assert a real value' });
+              return;
+            }
+            // assert(<truthy const>) / assert.ok(<truthy const>)
+            const isAssert = c.type === 'Identifier' && c.name === 'assert';
+            const isAssertOk = c.type === 'MemberExpression' && c.object.type === 'Identifier' && c.object.name === 'assert'
+              && c.property.type === 'Identifier' && c.property.name === 'ok';
+            if ((isAssert || isAssertOk) && isTruthyConst(node.arguments[0])) {
+              context.report({ node, message: 'tautological assertion: asserting a truthy constant can never fail — assert a real value' });
+            }
+          },
+        };
+      },
+    },
     'no-mock-in-prod': {
       meta: {
         type: "problem",
