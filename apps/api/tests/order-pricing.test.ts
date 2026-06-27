@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeOrderPricing } from '../src/lib/order-pricing.js';
+import { computeOrderPricing, resolveDeliveryFee } from '../src/lib/order-pricing.js';
 
 // Guardrail for the pure pricing/validation core extracted from POST /orders.
 // Money is integer minor units throughout (RED LINE). Each failure case asserts
@@ -97,4 +97,68 @@ test('computeOrderPricing — optional group at zero passes (not required)', () 
     groupsByProduct: new Map([['p1', [{ id: 'g1', min_select: 1, max_select: 2, required: false }]]]),
   });
   assert.equal(res.ok, true);
+});
+
+const loc = (lat: number | null, lng: number | null, flat: number | null) => ({
+  lat,
+  lng,
+  delivery_fee_flat: flat,
+});
+
+test('resolveDeliveryFee — first tier covering the distance wins (ASC order)', () => {
+  const res = resolveDeliveryFee({
+    location: loc(41.0, 19.0, null),
+    pin: { lat: 41.0, lng: 19.0 }, // ~0 km
+    tiers: [
+      { max_distance_km: 2, fee: 100 },
+      { max_distance_km: 5, fee: 200 },
+    ],
+  });
+  assert.equal(res.ok, true);
+  if (!res.ok) return;
+  assert.equal(res.deliveryFee, 100);
+});
+
+test('resolveDeliveryFee — beyond all tiers → NOT_DELIVERABLE', () => {
+  const res = resolveDeliveryFee({
+    location: loc(41.0, 19.0, null),
+    pin: { lat: 42.0, lng: 20.0 }, // ~140 km away
+    tiers: [{ max_distance_km: 2, fee: 100 }],
+  });
+  assert.equal(res.ok, false);
+  if (res.ok) return;
+  assert.equal(res.error.code, 'NOT_DELIVERABLE');
+});
+
+test('resolveDeliveryFee — no tiers but flat fee configured → flat', () => {
+  const res = resolveDeliveryFee({
+    location: loc(41.0, 19.0, 250),
+    pin: { lat: 41.0, lng: 19.0 },
+    tiers: [],
+  });
+  assert.equal(res.ok, true);
+  if (!res.ok) return;
+  assert.equal(res.deliveryFee, 250);
+});
+
+test('resolveDeliveryFee — no tiers and no flat fee → DELIVERY_NOT_CONFIGURED', () => {
+  const res = resolveDeliveryFee({
+    location: loc(41.0, 19.0, null),
+    pin: { lat: 41.0, lng: 19.0 },
+    tiers: [],
+  });
+  assert.equal(res.ok, false);
+  if (res.ok) return;
+  assert.equal(res.error.code, 'DELIVERY_NOT_CONFIGURED');
+});
+
+test('resolveDeliveryFee — tiers present but location lat/lng null → falls back to flat', () => {
+  const res = resolveDeliveryFee({
+    location: loc(null, null, 300),
+    pin: { lat: 41.0, lng: 19.0 },
+    tiers: [{ max_distance_km: 2, fee: 100 }],
+  });
+  assert.equal(res.ok, true);
+  if (!res.ok) return;
+  assert.equal(res.deliveryFee, 300);
 });

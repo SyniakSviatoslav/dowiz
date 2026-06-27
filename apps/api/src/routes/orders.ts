@@ -17,8 +17,7 @@ const env = loadEnv();
 // require_phone_otp only applies when OTP_ENABLED is 'true'. See packages/config.
 const OTP_ENABLED = env.OTP_ENABLED === 'true';
 import { applyTax, assertNonNegative } from '../lib/money.js';
-import { computeOrderPricing } from '../lib/order-pricing.js';
-import { distanceKm } from '../lib/geo.js';
+import { computeOrderPricing, resolveDeliveryFee } from '../lib/order-pricing.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isValidUUID(id: string): boolean {
@@ -508,28 +507,14 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           `SELECT max_distance_km, fee FROM delivery_tiers WHERE location_id = $1 ORDER BY max_distance_km ASC`,
           [locationId]
         );
-        const tiers = distRes.rows;
-
-        if (tiers.length > 0 && location.lat != null && location.lng != null) {
-          const distKm = distanceKm(pin!.lat, pin!.lng, location.lat, location.lng);
-          let foundTier = false;
-          for (const tier of tiers) {
-            if (distKm <= Number(tier.max_distance_km)) {
-              deliveryFee = tier.fee;
-              foundTier = true;
-              break;
-            }
-          }
-          if (!foundTier) {
-            await client.query('ROLLBACK');
-            return reply.sendError(422, 'NOT_DELIVERABLE', 'Location out of delivery range');
-          }
-        } else if (location.delivery_fee_flat !== null) {
-          deliveryFee = location.delivery_fee_flat;
-        } else {
+        // Pure tier resolution (lib/order-pricing.ts) — same NOT_DELIVERABLE /
+        // DELIVERY_NOT_CONFIGURED 422 codes; ROLLBACK + reply stay here.
+        const feeResult = resolveDeliveryFee({ location, pin, tiers: distRes.rows });
+        if (!feeResult.ok) {
           await client.query('ROLLBACK');
-          return reply.sendError(422, 'DELIVERY_NOT_CONFIGURED', 'Delivery not configured');
+          return reply.sendError(422, feeResult.error.code, feeResult.error.message);
         }
+        deliveryFee = feeResult.deliveryFee;
       }
       } // end if (!isPickup) — pickup orders pay no delivery fee
 

@@ -1,4 +1,5 @@
 import { computeLineTotal } from './money.js';
+import { distanceKm } from './geo.js';
 
 // Pure pricing + modifier-group validation core extracted from the POST /orders
 // hotspot (orders.ts). NO database, NO reply — it consumes the already-fetched
@@ -138,4 +139,46 @@ export function computeOrderPricing(input: ComputeOrderPricingInput): PricingRes
   }
 
   return { ok: true, subtotal, orderItemRows };
+}
+
+interface DeliveryTier {
+  max_distance_km: number | string;
+  fee: number;
+}
+
+export interface ResolveDeliveryFeeInput {
+  location: { lat: number | null; lng: number | null; delivery_fee_flat: number | null };
+  /** Delivery pin (caller guarantees non-null for a delivery order). */
+  pin: { lat: number; lng: number } | null;
+  /** delivery_tiers rows ordered by max_distance_km ASC. */
+  tiers: DeliveryTier[];
+}
+
+export type DeliveryFeeResult =
+  | { ok: true; deliveryFee: number }
+  | { ok: false; error: PricingError };
+
+/**
+ * Pure delivery-fee resolution extracted from POST /orders section 8 (the
+ * non-free-delivery branch). Caller fetches delivery_tiers and handles the
+ * pickup / free-threshold short-circuits; this picks the first tier covering the
+ * distance, falls back to the flat fee, and mirrors the original NOT_DELIVERABLE /
+ * DELIVERY_NOT_CONFIGURED 422 codes.
+ */
+export function resolveDeliveryFee(input: ResolveDeliveryFeeInput): DeliveryFeeResult {
+  const { location, pin, tiers } = input;
+
+  if (tiers.length > 0 && location.lat != null && location.lng != null) {
+    const distKm = distanceKm(pin!.lat, pin!.lng, location.lat, location.lng);
+    for (const tier of tiers) {
+      if (distKm <= Number(tier.max_distance_km)) {
+        return { ok: true, deliveryFee: tier.fee };
+      }
+    }
+    return { ok: false, error: { code: 'NOT_DELIVERABLE', message: 'Location out of delivery range' } };
+  }
+  if (location.delivery_fee_flat !== null) {
+    return { ok: true, deliveryFee: location.delivery_fee_flat };
+  }
+  return { ok: false, error: { code: 'DELIVERY_NOT_CONFIGURED', message: 'Delivery not configured' } };
 }
