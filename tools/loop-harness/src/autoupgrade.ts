@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { makeRepoHooks, type RepoPerfSpec } from './repo-apply.js';
+import { configTuneDetector, loadTunables } from './detectors.js';
 
 export type UpgradeClass = 'A' | 'B';
 export type BlastRadius = 'low' | 'med' | 'high';
@@ -127,7 +128,13 @@ function mapStagedSecurity(repoDir: string): Candidate[] {
 }
 
 export function mapCandidates(repoDir: string): Candidate[] {
-  return [...mapGhostMcp(), ...mapConfigBloat(repoDir), ...mapStagedSecurity(repoDir)];
+  return [
+    ...mapGhostMcp(),
+    ...mapConfigBloat(repoDir),
+    ...mapStagedSecurity(repoDir),
+    // repo-perf candidates from operator-declared tunables (the auto-keepable class)
+    ...configTuneDetector(repoDir, loadTunables(repoDir)),
+  ];
 }
 
 // ─── The oracle (§2) + apply (§4) — SCAFFOLDED + DISABLED this pass ───

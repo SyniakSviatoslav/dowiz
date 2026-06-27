@@ -153,9 +153,20 @@ Its **report** shows: what was mapped, researched, auto-applied-and-kept (proven
   - **ponytail ceiling:** git-checkout isolation mutates the MAIN tree during verify → not
     concurrency-safe. Upgrade = git worktree + node_modules symlink when >1 loop runs (today
     teamConcurrency 1 — adequate).
-  - **Deferred (§8 steps 1, 5–6 + the MAP source):** sandbox + credential isolation (§4), web
-    RESEARCH (contained), **a MAP source that emits `repo-perf:` candidates with a DETERMINISTIC
-    MECHANICAL patch** (slow-query→index, slow-test→cache; NEVER an autonomous LLM patch — §0
-    injection surface), Class-B queue → GRADUATE (§8c), pg-boss scheduling, widen-after-clean-runs.
-    The apply/gate/revert machinery is complete + proven; what remains is a trustworthy *source* of
-    auto-keepable patches.
+- **2026-06-27 — the MAP source (the gap) closed: operator-declared config tuning.** `detectors.ts`
+  — `configTuneDetector` reads operator-declared tunables (`loops/autoupgrade.tunables.json`: a knob
+  `file`+`find` regex, a BOUNDED set of safe candidate `values`, a `benchmark`, optional green/security
+  commands) and emits a `repo-perf:` Candidate per non-current value, each with a `RepoPerfSpec`
+  (mechanical regex value-swap + benchmark + git-revert). The operator bounds the search space
+  (safety); the loop mechanically tries each value, benchmarks it, and the oracle KEEPS only the one
+  that is ≥5% faster (else atomic rollback). This is the ONLY autonomous repo-mutation path, by
+  design: **mechanical + bounded + reversible + benchmarked — never an autonomous LLM patch (§0).**
+  `detectors.test.ts` (5) proves the FULL pipeline end-to-end on a real git repo: a declared tunable
+  → classify A → oracle applies → benchmark 50% faster → **KEPT on disk**; a slower value → atomic
+  rollback; absent declaration → [] (no auto-tuning without an operator opt-in). Wired into
+  `mapCandidates`. Example: `loops/autoupgrade.tunables.example.json`.
+  - **Still deferred (§8 steps 1, 5–6):** sandbox + credential isolation (§4), web RESEARCH
+    (contained), Class-B queue → GRADUATE (§8c), pg-boss scheduling, more mechanical detectors (the
+    config-tune class is the safe beachhead; any new one must stay mechanical/deterministic per §0),
+    widen Class A after several clean runs. The loop is now end-to-end functional: MAP (incl. real
+    repo-perf candidates) → CLASSIFY → ORACLE → KEEP|ROLLBACK → §5 report.
