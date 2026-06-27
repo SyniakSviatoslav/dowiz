@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
 
 test.describe('Simple Auth Test', () => {
   test('should be able to get owner token', async () => {
@@ -10,7 +11,7 @@ test.describe('Simple Auth Test', () => {
     
     expect(authRes.status).toBe(200);
     const authBody = await authRes.json();
-    expect(authBody.access_token).toBeTruthy();
+    expectJwt(authBody.access_token, 'access_token');
     console.log('Successfully got token');
   });
 });

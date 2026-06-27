@@ -38,10 +38,10 @@ test('capture courier delivery + tracking (390px)', async ({ page, request }) =>
 
   const shot = async (name: string, token: string | undefined, path: string) => {
     await page.addInitScript((tk: any) => { if (tk) localStorage.setItem('dos_access_token', tk); else localStorage.removeItem('dos_access_token'); localStorage.setItem('dos_locale', 'sq'); }, token);
-    await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' }).catch(() => {});
-    await page.evaluate(() => (document as any).fonts?.ready).catch(() => {});
+    await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' }).catch((e) => { void e; /* tolerated: capture even when networkidle times out on a slow live page */ });
+    await page.evaluate(() => (document as any).fonts?.ready).catch((e) => { void e; /* tolerated: fonts API may be absent in the runtime */ });
     await page.waitForTimeout(1600);
-    await page.screenshot({ path: `${DIR}/${name}.png`, fullPage: true }).catch(() => {});
+    await page.screenshot({ path: `${DIR}/${name}.png`, fullPage: true }).catch((e) => { void e; /* tolerated: best-effort capture; final existsSync assertion is the real gate */ });
   };
 
   // Courier active delivery (the safety-critical one) — route param is the assignment id.

@@ -42,7 +42,9 @@ for (const lang of LOCALES) {
       )
       .first();
     if (await product.count()) {
-      await product.click({ trial: false }).catch(() => {});
+      await product.click({ trial: false }).catch((e) => {
+        void e; /* tolerated: opportunistic modal-open for the interactive a11y scan — if this product is not clickable the initial-render scan above still gates */
+      });
       await page.waitForTimeout(400); // let dialog mount + focus settle
       await expectNoA11y(page);
     }

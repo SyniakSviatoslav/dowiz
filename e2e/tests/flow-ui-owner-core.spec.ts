@@ -63,7 +63,7 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
     if (productId) {
       await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort teardown cleanup, must not fail the suite */ });
     }
   });
 
@@ -145,13 +145,11 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
       `${BASE}/api/owner/locations/${activeLocationId}/orders/${orderId}/confirm`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    expect([200, 409]).toContain(confirmRes.status());
-    console.log(`Confirm result: ${confirmRes.status()}`);
-
-    if (confirmRes.status() === 200) {
-      const body = await confirmRes.json();
-      expect(body.status).toBe('CONFIRMED');
-    }
+    // Fresh PENDING order → confirm route returns 200 on the valid
+    // PENDING→CONFIRMED transition (dashboard.ts:196 reply.status(200)).
+    expect(confirmRes.status()).toBe(200);
+    const body = await confirmRes.json();
+    expect(body.status).toBe('CONFIRMED');
   });
 
   test('Flow 5: Admin — verify order appears on dashboard after status change', async ({ page }) => {

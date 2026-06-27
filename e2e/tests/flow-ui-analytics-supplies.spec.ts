@@ -138,7 +138,7 @@ test.describe('UI: Analytics + Supplies CRUD', () => {
 
     const select = page.locator('select').first();
     if (await select.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await select.selectOption({ index: 1 }).catch(() => {});
+      await select.selectOption({ index: 1 }).catch((e) => { void e; /* tolerated: select may have <2 options; best-effort interaction, JS-error assertion below is the real check */ });
       await page.waitForTimeout(500);
     }
 

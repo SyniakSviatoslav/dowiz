@@ -156,7 +156,7 @@ test('H7: Integrity under concurrency', async (t) => {
         console.debug('[integrity] CHECK constraint query failed for', row.table_name);
       }
     }
-    assert.ok(true, 'Swept money columns for CHECK constraints');
+    assert.ok(tables.rows.length > 0, 'Expected money columns to sweep for CHECK constraints');
   });
 
   await t.test('R4: Zero orphans after cascade — FK integrity', async () => {
@@ -167,6 +167,7 @@ test('H7: Integrity under concurrency', async (t) => {
       WHERE contype = 'f' AND confrelid::regclass::text IN ('customers', 'orders', 'locations')
     `);
 
+    let totalOrphans = 0;
     for (const fk of fkRelations.rows) {
       try {
         const orphans = await sessionPool.query(
@@ -176,12 +177,13 @@ test('H7: Integrity under concurrency', async (t) => {
         );
         if (orphans.rows[0].cnt > 0) {
           console.log(`  ⚠ ${fk.table_name}: ${orphans.rows[0].cnt} orphan(s) via ${fk.conname}`);
+          totalOrphans += orphans.rows[0].cnt;
         }
       } catch {
         console.debug('[integrity] FK orphan check failed for', fk.conname);
       }
     }
-    assert.ok(true, 'Swept FK orphans');
+    assert.strictEqual(totalOrphans, 0, `Expected zero FK orphans, found ${totalOrphans}`);
   });
 });
 

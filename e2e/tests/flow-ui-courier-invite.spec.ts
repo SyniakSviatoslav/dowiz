@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 const TS = Date.now();
@@ -16,7 +17,7 @@ test.describe('UI: Courier Invite — Create via UI, verify API proof', () => {
     const b = await r.json();
     authToken = b.access_token;
     activeLocationId = b.activeLocationId;
-    expect(authToken).toBeTruthy();
+    expectJwt(authToken);
     expect(activeLocationId).toMatch(/^[0-9a-f-]{36}$/);
   });
 

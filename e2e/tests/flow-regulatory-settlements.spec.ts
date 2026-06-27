@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 let authToken: string;
@@ -68,7 +69,7 @@ test.describe('Flow: Regulatory & Financial — GDPR, Settlements, Signals, Aler
     if (gdprStatus === 201) {
       const body = await gdprRes.json();
       gdprRequestId = body.requestId || body.id;
-      expect(gdprRequestId).toBeTruthy();
+      expectUuid(gdprRequestId, 'gdprRequestId');
       expect(body.status).toBe('pending');
     } else {
       const body = await gdprRes.json().catch(() => ({}));
@@ -160,12 +161,10 @@ test.describe('Flow: Regulatory & Financial — GDPR, Settlements, Signals, Aler
       `${BASE}/api/owner/locations/${activeLocationId}/signals/${signalId}/acknowledge`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    expect([200, 404]).toContain(ackRes.status());
-    if (ackRes.status() === 200) {
-      const body = await ackRes.json();
-      expect(body.id || body.signalId).toBeTruthy();
-      expect(body.acknowledgedAt).toBeTruthy();
-    }
+    expect(ackRes.status()).toBe(200);
+    const body = await ackRes.json();
+    expect(body.id || body.signalId).toBeTruthy();
+    expect(body.acknowledgedAt).toBeTruthy();
   });
 
   test('Flow 9: Owner — dismiss signal', async ({ request }) => {
@@ -174,7 +173,7 @@ test.describe('Flow: Regulatory & Financial — GDPR, Settlements, Signals, Aler
       `${BASE}/api/owner/locations/${activeLocationId}/signals/${signalId}/dismiss`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { reason: 'E2E test dismissal' } }
     );
-    expect([200, 404]).toContain(dismissRes.status());
+    expect(dismissRes.status()).toBe(200);
   });
 
   // ════════════════════════════════════════════════════════════════
@@ -187,12 +186,10 @@ test.describe('Flow: Regulatory & Financial — GDPR, Settlements, Signals, Aler
       `${BASE}/api/owner/locations/${activeLocationId}/alerts/${alertId}/acknowledge`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    expect([200, 404]).toContain(ackRes.status());
-    if (ackRes.status() === 200) {
-      const body = await ackRes.json();
-      expect(body.id || body.alertId).toBeTruthy();
-      expect(body.status || body.acknowledgedAt).toBeTruthy();
-    }
+    expect(ackRes.status()).toBe(200);
+    const body = await ackRes.json();
+    expect(body.id || body.alertId).toBeTruthy();
+    expect(body.status || body.acknowledgedAt).toBeTruthy();
   });
 
   test('Flow 11: Owner — acknowledge all alerts', async ({ request }) => {
@@ -200,11 +197,9 @@ test.describe('Flow: Regulatory & Financial — GDPR, Settlements, Signals, Aler
       `${BASE}/api/owner/locations/${activeLocationId}/alerts/acknowledge-all`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    expect([200, 400, 404]).toContain(ackAllRes.status());
-    if (ackAllRes.status() === 200) {
-      const body = await ackAllRes.json();
-      expect(typeof body.acknowledged).toBe('number');
-    }
+    expect(ackAllRes.status()).toBe(200);
+    const body = await ackAllRes.json();
+    expect(typeof body.acknowledged).toBe('number');
   });
 
   // ════════════════════════════════════════════════════════════════
@@ -218,19 +213,19 @@ test.describe('Flow: Regulatory & Financial — GDPR, Settlements, Signals, Aler
       `${BASE}/api/owner/locations/${activeLocationId}/settlements/${settlementId}/approve`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    expect([200, 409]).toContain(approveRes.status());
+    expect(approveRes.status()).toBe(200);
 
     const disputeRes = await request.post(
       `${BASE}/api/owner/locations/${activeLocationId}/settlements/${settlementId}/dispute`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { reason: 'E2E test dispute' } }
     );
-    expect([200, 409]).toContain(disputeRes.status());
+    expect(disputeRes.status()).toBe(200);
 
     const reopenRes = await request.post(
       `${BASE}/api/owner/locations/${activeLocationId}/settlements/${settlementId}/reopen`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { reason: 'E2E test reopen' } }
     );
-    expect([200, 404, 409]).toContain(reopenRes.status());
+    expect(reopenRes.status()).toBe(200);
   });
 
   // ════════════════════════════════════════════════════════════════
@@ -253,7 +248,7 @@ test.describe('Flow: Regulatory & Financial — GDPR, Settlements, Signals, Aler
         `${BASE}/api/owner/locations/${activeLocationId}/couriers/${c.courierId || c.id}/details`,
         { headers: { Authorization: `Bearer ${authToken}` } }
       );
-      expect([200, 404]).toContain(detailRes.status());
+      expect(detailRes.status()).toBe(200);
     }
   });
 
@@ -272,10 +267,8 @@ test.describe('Flow: Regulatory & Financial — GDPR, Settlements, Signals, Aler
       `${BASE}/api/owner/locations/${activeLocationId}/couriers/${courierId}`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { status: 'active' } }
     );
-    expect([200, 400, 404]).toContain(patchRes.status());
-    if (patchRes.status() === 200) {
-      expect((await patchRes.json()).success).toBe(true);
-    }
+    expect(patchRes.status()).toBe(200);
+    expect((await patchRes.json()).success).toBe(true);
   });
 
   // ════════════════════════════════════════════════════════════════
@@ -287,12 +280,10 @@ test.describe('Flow: Regulatory & Financial — GDPR, Settlements, Signals, Aler
       `${BASE}/api/owner/locations/${activeLocationId}/signals?status=active&limit=5`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    expect([200, 404]).toContain(sigRes.status());
-    if (sigRes.status() === 200) {
-      const body = await sigRes.json();
-      const sigArr = body.signals || body.data || [];
-      expect(Array.isArray(sigArr)).toBe(true);
-    }
+    expect(sigRes.status()).toBe(200);
+    const body = await sigRes.json();
+    const sigArr = body.signals || body.data || [];
+    expect(Array.isArray(sigArr)).toBe(true);
   });
 
   test('Flow 16: Owner — alerts list with status filter', async ({ request }) => {
@@ -300,11 +291,9 @@ test.describe('Flow: Regulatory & Financial — GDPR, Settlements, Signals, Aler
       `${BASE}/api/owner/locations/${activeLocationId}/alerts?status=active&limit=5`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    expect([200, 404]).toContain(altRes.status());
-    if (altRes.status() === 200) {
-      const body = await altRes.json();
-      const alertArr = body.alerts || body.data || [];
-      expect(Array.isArray(alertArr)).toBe(true);
-    }
+    expect(altRes.status()).toBe(200);
+    const body = await altRes.json();
+    const alertArr = body.alerts || body.data || [];
+    expect(Array.isArray(alertArr)).toBe(true);
   });
 });

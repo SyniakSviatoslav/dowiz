@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
 
 test.describe('Quick Order Test', () => {
   test('should attempt to create an order and report error', async () => {
@@ -92,7 +93,7 @@ test.describe('Quick Order Test', () => {
       
       const orderBody = await orderRes.json();
       console.log(`Order created successfully:`, orderBody);
-      expect(orderBody.id).toBeTruthy();
+      expectUuid(orderBody.id);
     } catch (error) {
       console.error(`Error placing order:`, error);
       throw error;

@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 let authToken: string;
@@ -48,13 +49,13 @@ test.describe('Comprehensive E2E Flow Proofs — Lifecycle & Detail', () => {
     if (productId) {
       await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort teardown must not fail the suite */ });
     }
     // Delete test category
     if (categoryId) {
       await request.delete(`${BASE}/api/owner/menu/categories/${categoryId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort teardown must not fail the suite */ });
     }
   });
 
@@ -82,7 +83,7 @@ test.describe('Comprehensive E2E Flow Proofs — Lifecycle & Detail', () => {
     });
     expect(createRes.status()).toBe(201);
     const product = await createRes.json();
-    expect(product.id).toBeTruthy();
+    expectUuid(product.id);
     expect(product.name).toBe(`E2E-Sushi-${TS}`);
     expect(product.price).toBe(750);
     expect(product.available).toBe(true);
@@ -109,7 +110,7 @@ test.describe('Comprehensive E2E Flow Proofs — Lifecycle & Detail', () => {
     expect(imgRes.status()).not.toBe(401);
     if (imgRes.status() === 200) {
       const imgBody = await imgRes.json();
-      expect(imgBody.imageUrl).toBeTruthy();
+      expect(String(imgBody.imageUrl)).toMatch(/^(https?:\/\/|\/|data:)/);
     }
 
     // 1c. Verify via GET: all fields survive round-trip

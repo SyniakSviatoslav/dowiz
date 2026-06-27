@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 const BOT_SECRET = process.env.TELEGRAM_BOT_SECRET;
@@ -96,7 +97,7 @@ test.describe('Real service event notifications → Telegram', () => {
     expect(connectInitRes.status).toBe(200);
     const connectInitBody = await connectInitRes.json();
     const connectToken = connectInitBody.token;
-    expect(connectToken).toBeTruthy();
+    expectUuid(connectToken, 'connectToken');
 
     // 2. Simulate /start <token> from Telegram
     const startStatus = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -154,7 +155,7 @@ test.describe('Real service event notifications → Telegram', () => {
     expect(orderRes.status).toBe(201, await orderRes.text());
     const orderBody = await orderRes.json();
     const orderId = orderBody.id;
-    expect(orderId).toBeTruthy();
+    expectUuid(orderId, 'orderId');
 
     // 5. Wait a moment for event processing
     await new Promise(r => setTimeout(r, 3000));

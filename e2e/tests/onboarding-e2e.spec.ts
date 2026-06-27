@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -23,7 +24,7 @@ test.describe('E2E: Login → Onboarding → Reliability', () => {
     
     // Verify token stored in localStorage (not cookie)
     const token = await page.evaluate(() => localStorage.getItem('dos_access_token'));
-    expect(token).toBeTruthy();
+    expectJwt(token);
     
     // Verify no cookies set
     const cookies = await page.context().cookies();

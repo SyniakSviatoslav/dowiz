@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
 
 /**
  * SENSOR-BUS §1.3 runtime proof (ADR-0009) — the anonymous storefront-funnel ingest.
@@ -16,7 +17,7 @@ async function demoLocationId(request: APIRequestContext): Promise<string> {
   expect(menu.ok(), 'demo menu loads').toBeTruthy();
   const m = await menu.json();
   const id = m.locationId ?? m.location_id;
-  expect(id, 'demo locationId present').toBeTruthy();
+  expectUuid(id, 'demo locationId');
   return id;
 }
 

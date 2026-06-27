@@ -1,4 +1,5 @@
 import { test, expect, request as pwRequest } from '@playwright/test';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
 
 // Regression coverage for the 2026-06 security review fixes.
 //   C1 — /dev endpoints require DEV_AUTH_SECRET (anonymous => 404)
@@ -31,7 +32,7 @@ test.describe('Security regression 2026-06', () => {
   test('C1: harness WITH the secret still mints a token', async ({ request }) => {
     const res = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'owner', locationSlug: 'demo' } });
     expect(res.status()).toBe(200);
-    expect((await res.json()).access_token).toBeTruthy();
+    expectJwt((await res.json()).access_token, 'access_token');
   });
 
   // ── M1: order transitions are tenant-scoped ───────────────────────────────
@@ -56,7 +57,7 @@ test.describe('Security regression 2026-06', () => {
     const auth = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'owner', locationSlug: 'demo' } });
     const body = await auth.json();
     const locationId = body.activeLocationId;
-    expect(locationId, 'mock-auth should resolve the demo location').toBeTruthy();
+    expectUuid(locationId, 'mock-auth demo location');
     const unknownOrder = '00000000-0000-0000-0000-0000000000bb';
 
     const res = await request.post(

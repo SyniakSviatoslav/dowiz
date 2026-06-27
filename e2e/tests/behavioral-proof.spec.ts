@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'http://localhost:3000';
 // WS host tracks BASE — a token minted on one env can't auth against another's WS.
@@ -9,7 +10,7 @@ async function getOwnerToken(request: any): Promise<{ token: string; activeLocat
   const res = await request.post(`${BASE}/api/dev/mock-auth`);
   expect(res.status()).toBe(200);
   const body = await res.json();
-  expect(body.access_token).toBeTruthy();
+  expectJwt(body.access_token, 'access_token');
   return { token: body.access_token as string, activeLocationId: body.activeLocationId as string };
 }
 

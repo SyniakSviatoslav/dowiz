@@ -69,7 +69,7 @@ async function probe(
       .first()
       .isVisible({ timeout: 8000 })
       .catch(() => false);
-    if (interact) await interact(page).catch(() => {});
+    if (interact) await interact(page).catch((e) => { void e; /* tolerated: optional interaction is best-effort discovery; failure is itself a finding, must not abort the probe */ });
     await page.waitForTimeout(500);
   } catch {
     /* navigation issue is itself a finding (reachedDom=false) */
@@ -96,7 +96,7 @@ test.describe('Non-Pixel Sweep (3 roles, mobile-first)', () => {
   test('client journey', async ({ page }) => {
     await probe(page, 'client', 'storefront', `/s/${SLUG}`, async (p) => {
       const item = p.locator('[data-testid="category-nav"] ~ * button, article button, [role="button"]').first();
-      if (await item.count()) await item.click({ timeout: 4000 }).catch(() => {});
+      if (await item.count()) await item.click({ timeout: 4000 }).catch((e) => { void e; /* tolerated: best-effort tap to surface post-interaction a11y/console findings; click miss must not fail the sweep */ });
     });
     await probe(page, 'client', 'checkout', `/s/${SLUG}/checkout`);
   });

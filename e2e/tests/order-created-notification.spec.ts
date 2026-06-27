@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { linkTelegram, placeOrder, waitTelegramMessage, deleteTelegramWebhook, clearTelegramUpdates } from '../helpers/notifHelpers';
+import { expectUuid } from '../helpers/assert-shape';
 
 test.describe('Order Created Notification Flow', () => {
   test('should receive telegram notification for order.created', async () => {
@@ -15,7 +16,7 @@ test.describe('Order Created Notification Flow', () => {
     // Step 4: Place an order
     const order = await placeOrder(locationId);
     const orderId = order.id;
-    expect(orderId).toBeTruthy();
+    expectUuid(orderId, 'orderId');
     
     // Step 5: Wait for order.created telegram notification
     const orderCreatedMessage = await waitTelegramMessage(

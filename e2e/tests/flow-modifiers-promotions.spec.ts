@@ -91,12 +91,12 @@ test.describe('API: Order with Modifiers + Promotions', () => {
     if (promotionId) {
       await request.delete(`${BASE}/api/owner/promotions/${promotionId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort teardown of test fixture; cleanup failure must not fail the suite */ });
     }
     if (productId) {
       await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort teardown of test fixture; cleanup failure must not fail the suite */ });
     }
   });
 
@@ -171,6 +171,8 @@ test.describe('API: Order with Modifiers + Promotions', () => {
       `${BASE}/api/owner/locations/${activeLocationId}/orders/${orderId}/confirm`,
       { headers: { Authorization: `Bearer ${authToken}` } },
     );
-    expect([200, 409]).toContain(confirmRes.status());
+    // Flow 1 creates a PENDING order; confirm route returns 200 on a valid
+    // PENDING→CONFIRMED transition (dashboard.ts:196).
+    expect(confirmRes.status()).toBe(200);
   });
 });

@@ -333,10 +333,13 @@ export default {
             if (expectCall.callee.type !== 'Identifier' || expectCall.callee.name !== 'expect') return;
             const arg = expectCall.arguments[0];
             if (!arg || !isNumericArray(arg)) return;
+            // Only the real smell: an array that ACCEPTS a 4xx/5xx (an error code as "pass").
+            // Pure-success either/ors like [200,201]/[200,204] are legitimate — not flagged.
+            if (!arg.elements.some((e) => e.value >= 400)) return;
             const statuses = arg.elements.map((e) => e.value).join(', ');
             context.report({
               node,
-              message: `Permissive status assertion expect([${statuses}]).toContain(x) — use expect(x).toBe(N) for exact expected status. Each status is a separate test case.`,
+              message: `Permissive status assertion expect([${statuses}]).toContain(x) accepts an error code as pass — assert the EXACT expected status with expect(x).toBe(N).`,
             });
           },
         };
@@ -426,6 +429,28 @@ export default {
             if (NAME.test(nameOf(arg))) {
               context.report({ node, message: `truthy assertion on an identifier-like value — assert its SHAPE (expectJwt/expectUuid) or an exact value, not toBeTruthy()` });
             }
+          },
+        };
+      },
+    },
+    // Test-Integrity (sweep 2026-06-27): a test must never default its BASE to the PROD host
+    // (a mutating run would write to prod). Flag a prod-host literal in a test file — use
+    // VITE_BASE_URL (staging) + requireStaging(). Staging URLs (…-staging…) are fine.
+    'no-prod-base-in-test': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'disallow a prod-host literal in a test file — default BASE to staging via VITE_BASE_URL + requireStaging()' },
+        schema: [],
+      },
+      create(context) {
+        const isTestFile = /\.(spec|test)\.(ts|js|tsx|jsx)$/.test(context.getFilename());
+        if (!isTestFile) return {};
+        const PROD = /dowiz\.(fly\.dev|app|org)/;
+        return {
+          Literal(node) {
+            if (typeof node.value !== 'string') return;
+            if (!PROD.test(node.value) || node.value.includes('staging')) return;
+            context.report({ node, message: 'prod-host URL in a test — default BASE to staging via VITE_BASE_URL and guard with requireStaging() (a mutating run must never hit prod)' });
           },
         };
       },

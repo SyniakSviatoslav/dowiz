@@ -53,7 +53,7 @@ test.describe('UI: Client Checkout — Full Flow', () => {
     if (productId) {
       await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort test-data cleanup must not fail the suite */ });
     }
   });
 

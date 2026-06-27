@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
@@ -28,7 +29,7 @@ test.describe('UI: Notification category preference-centre', () => {
     token = a.access_token;
     locationId = a.activeLocationId;
     userId = a.userId;
-    expect(locationId, 'mock-auth must return an active location').toBeTruthy();
+    expectUuid(locationId, 'mock-auth must return an active location');
 
     // seed-telegram-target lives on the mockAuthRoutes plugin, mounted at /dev (not /api/dev)
     const seed = await request.post(`${BASE}/dev/seed-telegram-target`, { data: { locationId, userId } });

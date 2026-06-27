@@ -19,7 +19,9 @@ test('capture screens', async ({ page, request }) => {
       if (doAuth) localStorage.setItem('dos_access_token', tk);
       localStorage.setItem('dos_locale', lc);
     }, [access_token, locale, auth]);
-    await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' }).catch(() => {});
+    await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' }).catch((e) => {
+      void e; /* tolerated: networkidle may time out on pages with persistent WS; screenshot is still captured below */
+    });
     await page.waitForTimeout(1500);
     await page.screenshot({ path: `${DIR}/${name}.png`, fullPage: true });
   };

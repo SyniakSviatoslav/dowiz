@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
 
 /**
  * Seed bootstrap — Playwright Agents' starting position (Tooling Plan v2, Step 4).
@@ -22,13 +23,13 @@ test.describe('seed: bootstrap to a logged-in, seeded state', () => {
     const owner = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(owner.status(), 'owner mock-auth').toBe(200);
     const ownerBody = (await owner.json()) as MockAuth;
-    expect(ownerBody.access_token, 'owner token').toBeTruthy();
-    expect(ownerBody.activeLocationId, 'owner active location').toBeTruthy();
+    expectJwt(ownerBody.access_token, 'owner token');
+    expectUuid(ownerBody.activeLocationId, 'owner active location');
 
     const courier = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'courier' } });
     expect(courier.status(), 'courier mock-auth').toBe(200);
     const courierBody = (await courier.json()) as MockAuth;
-    expect(courierBody.access_token, 'courier token').toBeTruthy();
+    expectJwt(courierBody.access_token, 'courier token');
   });
 
   test('owner lands on a live /admin surface', async ({ page, request }) => {

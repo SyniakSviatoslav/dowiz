@@ -69,7 +69,7 @@ test.describe('UI: Admin Settings + Promotions via Form', () => {
       await request.put(`${BASE}/api/owner/settings`, {
         data: { name: originalName },
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort restore of original name; cleanup failure must not fail the round-trip assertion above */ });
     }
   });
 

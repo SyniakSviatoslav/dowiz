@@ -29,7 +29,9 @@ test.describe('UI: Form Validation — All Roles', () => {
       data: { phone: 'not-a-phone' },
       headers: { Authorization: `Bearer ${authToken}` },
     });
-    expect([200, 400]).toContain(res.status());
+    // settingsSchema.phone is z.string().max(50) — no format check, so this valid
+    // string is accepted and the location is updated (spa-proxy.ts:660-698).
+    expect(res.status()).toBe(200);
   });
 
   test('Settings: invalid delivery fee returns 400', async ({ request }) => {
@@ -37,7 +39,9 @@ test.describe('UI: Form Validation — All Roles', () => {
       data: { deliveryFee: -100 },
       headers: { Authorization: `Bearer ${authToken}` },
     });
-    expect([200, 400, 422, 500]).toContain(res.status());
+    // deliveryFee is z.number().int().nonnegative() — -100 throws a ZodError, which
+    // setErrorHandler maps to 400 VALIDATION_FAILED (server.ts:435-457).
+    expect(res.status()).toBe(400);
   });
 
   test('Product: negative price returns 400', async ({ request }) => {
@@ -45,7 +49,9 @@ test.describe('UI: Form Validation — All Roles', () => {
       data: { name: 'neg-test', price: -50 },
       headers: { Authorization: `Bearer ${authToken}` },
     });
-    expect([200, 201, 400, 422, 500]).toContain(res.status());
+    // price is nonnegative + prep_time_minutes is required (products.ts:350-353);
+    // both fail schema validation → 400 VALIDATION_FAILED.
+    expect(res.status()).toBe(400);
   });
 
   test('Product: empty name returns 400', async ({ request }) => {
@@ -53,7 +59,9 @@ test.describe('UI: Form Validation — All Roles', () => {
       data: { name: '', price: 100 },
       headers: { Authorization: `Bearer ${authToken}` },
     });
-    expect([200, 201, 400, 422, 500]).toContain(res.status());
+    // name is z.string().min(1) + prep_time_minutes is required (products.ts:350-353);
+    // both fail schema validation → 400 VALIDATION_FAILED.
+    expect(res.status()).toBe(400);
   });
 
   test('Promotion: percentage > 100 returns 400', async ({ request }) => {
@@ -61,14 +69,18 @@ test.describe('UI: Form Validation — All Roles', () => {
       data: { code: 'INVALID', discount: 150, type: 'percentage', validFrom: new Date().toISOString() },
       headers: { Authorization: `Bearer ${authToken}` },
     });
-    expect([400, 422]).toContain(res.status());
+    // Strict schema (promotions.ts:96-108): discount_value is required and `discount`/
+    // `validFrom` are unrecognized keys → 400 VALIDATION_FAILED.
+    expect(res.status()).toBe(400);
   });
 
   test('Order: missing required fields returns 422', async ({ request }) => {
     const res = await request.post(`${BASE}/api/orders`, {
       data: { locationId: 'none', items: [] },
     });
-    expect([400, 422]).toContain(res.status());
+    // CreateOrderInput.parse fails → handler returns 400 VALIDATION_FAILED
+    // (orders.ts:86-90); verified live against the deployed API.
+    expect(res.status()).toBe(400);
   });
 
   test('Promotion: empty code returns 400', async ({ request }) => {
@@ -76,7 +88,9 @@ test.describe('UI: Form Validation — All Roles', () => {
       data: { code: '', discount: 10, type: 'percentage', validFrom: new Date().toISOString() },
       headers: { Authorization: `Bearer ${authToken}` },
     });
-    expect([400, 422]).toContain(res.status());
+    // code is z.string().min(1) + strict schema rejects discount_value-less body
+    // and unrecognized keys (promotions.ts:96-108) → 400 VALIDATION_FAILED.
+    expect(res.status()).toBe(400);
   });
 
   test('Brand: no auth returns 401', async ({ request }) => {

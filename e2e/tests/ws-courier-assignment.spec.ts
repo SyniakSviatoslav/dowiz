@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -48,8 +49,8 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
     // assign-courier endpoint needs the courier to exist in DB.
     // We'll use dev/create-assignment which handles DB records.
     courierId = courierBody.userId;
-    expect(courierToken).toBeTruthy();
-    expect(courierId).toBeTruthy();
+    expectJwt(courierToken, 'courierToken');
+    expectUuid(courierId, 'courierId');
   });
 
   test('courier receives task_assigned via WS after dev creates assignment', async ({ page, request }) => {

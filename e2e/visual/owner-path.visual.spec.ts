@@ -121,8 +121,8 @@ for (const loc of LOCALES) {
     await stubOwnerBackground(page, { orders: mockOrders(['PENDING', 'CONFIRMED']) });
     // Force the realtime socket to fail its upgrade so connectionStatus is not 'connected'.
     await page.route('**/socket.io/**', (route) => route.abort());
-    await page.route('ws://**', (route) => route.abort()).catch(() => {});
-    await page.route('wss://**', (route) => route.abort()).catch(() => {});
+    await page.route('ws://**', (route) => route.abort()).catch((e) => { void e; /* tolerated: ws:// scheme routing unsupported on some Playwright builds; socket.io abort above already forces the dead-channel state */ });
+    await page.route('wss://**', (route) => route.abort()).catch((e) => { void e; /* tolerated: wss:// scheme routing unsupported on some Playwright builds; socket.io abort above already forces the dead-channel state */ });
     await page.goto('/admin/orders');
     await settle(page);
     await expect(page.locator('[data-testid="ws-status-dot"]')).toBeVisible();

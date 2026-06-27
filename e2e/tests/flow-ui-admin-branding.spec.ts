@@ -17,6 +17,7 @@
  * 14. API: Restore original branding (colors + logoUrl)
  */
 import { test, expect } from '@playwright/test';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'node:url';
@@ -47,7 +48,7 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
     expect(r.status()).toBe(200);
     const body = await r.json();
     ownerToken = body.access_token;
-    expect(ownerToken).toBeTruthy();
+    expectJwt(ownerToken, 'access_token');
   });
 
   // ── STEP 1: Read baseline branding ────────────────────────────────────────────
@@ -75,8 +76,8 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
     const settings = await r.json();
     locationSlug = settings.slug;
     locationId = settings.id;
-    expect(locationSlug, 'Settings must include a slug').toBeTruthy();
-    expect(locationId, 'Settings must include a locationId').toBeTruthy();
+    expect(String(locationSlug), 'Settings must include a slug').toMatch(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/);
+    expectUuid(locationId, 'locationId');
     console.log('Location slug:', locationSlug, '| id:', locationId);
   });
 
@@ -362,7 +363,7 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
         logoUrl: baseline.logoUrl ?? null,
       },
     });
-    expect([200, 404]).toContain(r.status());
+    expect(r.status(), 'PUT /owner/brand restore must return 200').toBe(200);
     console.log('Restored brand to baseline primary:', baseline.primaryColor, '| logoUrl:', baseline.logoUrl);
   });
 });

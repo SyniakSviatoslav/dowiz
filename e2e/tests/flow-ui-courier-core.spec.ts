@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -64,7 +65,7 @@ test.describe('UI: Courier Core Flow — Login, Accept, Deliver', () => {
     expect(redeemRes.status()).toBe(200);
     const redeemBody = await redeemRes.json();
     courierId = redeemBody.courier?.id;
-    expect(courierId).toBeTruthy();
+    expectUuid(courierId, 'courierId');
 
     // Login as courier — response only has jwt, refreshToken, activeLocationId, role
     const loginRes = await request.post(`${BASE}/api/courier/auth/login`, {
@@ -73,7 +74,7 @@ test.describe('UI: Courier Core Flow — Login, Accept, Deliver', () => {
     expect(loginRes.status()).toBe(200);
     const loginBody = await loginRes.json();
     courierToken = loginBody.jwt;
-    expect(courierToken).toBeTruthy();
+    expectJwt(courierToken, 'courierToken');
 
     // Start courier shift
     const shiftRes = await request.post(`${BASE}/api/courier/me/shift/start`, {
@@ -110,7 +111,7 @@ test.describe('UI: Courier Core Flow — Login, Accept, Deliver', () => {
     if (productId) {
       await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort teardown cleanup of test product */ });
     }
   });
 
@@ -139,8 +140,8 @@ test.describe('UI: Courier Core Flow — Login, Accept, Deliver', () => {
       { headers: { Authorization: `Bearer ${authToken}` }, data: { courierId } }
     );
 
-    // May be 200 or 409 depending on order state
-    expect([200, 409]).toContain(assignRes.status());
+    // Order was confirmed in beforeAll (CONFIRMED) → assignment succeeds
+    expect(assignRes.status()).toBe(200);
     console.log(`Assign courier result: ${assignRes.status()}`);
   });
 

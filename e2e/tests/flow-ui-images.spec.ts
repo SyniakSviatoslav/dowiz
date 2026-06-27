@@ -32,7 +32,7 @@ test.describe('UI: Image Upload — Product + Brand Logo', () => {
     if (productId) {
       await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort fixture cleanup in afterAll must not fail the suite */ });
     }
   });
 
@@ -76,13 +76,14 @@ test.describe('UI: Image Upload — Product + Brand Logo', () => {
     const before = await getRes.json();
     expect(before.primary_color || before.primaryColor).toBeTruthy();
 
-    // PUT may return 500 (known server bug with brand update)
+    // brandSchema is .strict() with camelCase keys (spa-proxy.ts:13-26); these snake_case
+    // keys are unrecognized → ZodError → setErrorHandler returns 400 VALIDATION_FAILED
+    // (server.ts:434-457), never a 500.
     const putRes = await request.put(`${BASE}/api/owner/brand`, {
       data: { primary_color: '#E53935', secondary_color: '#1E88E5' },
       headers: { Authorization: `Bearer ${authToken}` },
     });
-    console.log(`Brand PUT result: ${putRes.status()}`);
-    expect([200, 500]).toContain(putRes.status());
+    expect(putRes.status()).toBe(400);
   });
 
   test('Flow 5: Public theme CSS loads with CSS variables', async ({ request }) => {

@@ -18,6 +18,7 @@
  * 8. API: GET all products → verify every product has recipeLines
  */
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -185,7 +186,7 @@ test.describe('UI: Product BOM Editor — add recipe lines from descriptions, sa
     const r = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(r.status()).toBe(200);
     ownerToken = (await r.json()).access_token;
-    expect(ownerToken).toBeTruthy();
+    expectJwt(ownerToken, 'mock-auth access_token');
   });
 
   // ── STEP 1: Fetch products, record descriptions ─────────────────────────────
@@ -458,7 +459,7 @@ test.describe('UI: Product BOM Editor — add recipe lines from descriptions, sa
     const firstLine = foodLines[0] || derivedLines[0];
     if (firstLine) {
       const searchInput = modal.locator('input.rounded.text-xs').first();
-      await searchInput.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+      await searchInput.waitFor({ state: 'visible', timeout: 3000 }).catch((e) => { void e; /* tolerated: best-effort wait; the isVisible() guard on the next line decides whether the picker is usable */ });
       if (await searchInput.isVisible().catch(() => false)) {
         await searchInput.fill(firstLine.supplyName);
         await page.waitForTimeout(300);

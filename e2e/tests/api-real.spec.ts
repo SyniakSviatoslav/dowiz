@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
 
 function uuid() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -105,10 +106,9 @@ test.describe('Real API — Public Endpoints', () => {
     // The route is mounted under /api and is flag-gated: 302→Google when
     // GOOGLE_OAUTH_ENABLED=true, else a deliberate 404 (off by default, e.g. staging).
     const resp = await request.get(`${BASE}/api/auth/google`, { maxRedirects: 0 });
-    expect([302, 404]).toContain(resp.status());
-    if (resp.status() === 302) {
-      expect(resp.headers()['location']).toContain('accounts.google.com');
-    }
+    // Gate is OFF by default on the deployed target (env.GOOGLE_OAUTH_ENABLED !== 'true'
+    // → a deliberate 404 in apps/api/src/routes/auth.ts). Assert that exact gated status.
+    expect(resp.status()).toBe(404);
   });
 
   test('GET /robots.txt returns robots', async ({ request }) => {
@@ -151,8 +151,8 @@ test.describe('Real API — Idempotency & Order Flow', () => {
     // delivery zone (a hardcoded Tirana pin was out-of-range for the Durrës demo).
     const info = await (await request.get(`${BASE}/public/locations/demo/info`)).json();
     PIN = { lat: info.lat, lng: info.lng };
-    expect(LOCATION_ID, 'demo location_id from menu').toBeTruthy();
-    expect(PRODUCT_ID, 'a demo product_id from menu').toBeTruthy();
+    expectUuid(LOCATION_ID, 'demo location_id from menu');
+    expectUuid(PRODUCT_ID, 'a demo product_id from menu');
     expect(PIN.lat && PIN.lng, 'demo venue coordinates from info').toBeTruthy();
   });
 
@@ -196,7 +196,7 @@ test.describe('Real API — Idempotency & Order Flow', () => {
     test.skip(resp.status() === 429 || body?.outcome === 'soft_confirm',
       'velocity gate active — cannot create a baseline order from this IP');
     expect(resp.status()).toBe(201);
-    expect(body.id).toBeDefined();
+    expectUuid(body.id, 'created order id');
     expect(body.status).toBe('PENDING');
   });
 

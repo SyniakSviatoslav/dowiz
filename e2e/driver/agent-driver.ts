@@ -82,8 +82,8 @@ export class AgentDriver {
     // Let the SPA hydrate before reading the DOM — otherwise we observe an empty shell and
     // the reasoner (correctly) sees "no actions". Best-effort: network-idle then a real
     // actionable element, both time-boxed so a genuinely empty page still returns fast.
-    await this.page.waitForLoadState('networkidle', { timeout: 6000 }).catch(() => {});
-    await this.page.locator('button,[role="button"],a[href],[data-testid]').first().waitFor({ state: 'visible', timeout: 6000 }).catch(() => {});
+    await this.page.waitForLoadState('networkidle', { timeout: 6000 }).catch((e) => { void e; /* tolerated: time-boxed hydration wait — a genuinely idle/empty page still proceeds */ });
+    await this.page.locator('button,[role="button"],a[href],[data-testid]').first().waitFor({ state: 'visible', timeout: 6000 }).catch((e) => { void e; /* tolerated: time-boxed actionable-element wait — a genuinely empty page still returns fast for observation */ });
     const url = this.page.url();
     const title = await this.page.title().catch(() => '');
     // a11y tree is the primary, cheap observation surface; fall back to a compact DOM

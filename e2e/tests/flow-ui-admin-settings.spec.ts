@@ -16,6 +16,7 @@
  *   → 41.315347, 19.4449964
  */
 import { test, expect } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -47,7 +48,7 @@ test.describe('UI: Admin Settings — name, address, phone, hours, delivery togg
     expect(r.status()).toBe(200);
     const body = await r.json();
     ownerToken = body.access_token;
-    expect(ownerToken).toBeTruthy();
+    expectJwt(ownerToken);
   });
 
   // ─── STEP 1: Record baseline ──────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import crypto from 'node:crypto';
+import { expectUuid } from '../helpers/assert-shape';
 
 /**
  * SENSOR-BUS §1.2 runtime proof (ADR-0009 §4b) — the normalised delivery baseline.
@@ -80,5 +81,5 @@ test('a delivered order writes the §1.2 normalised baseline into delivery_trace
 
   // The §1.2 baseline write rides this DELIVERED txn (route_distance_m + expected_delivery_min into
   // delivery_trace). DB-state value proven out-of-band via psql (recorded in the commit).
-  expect(orderId, 'order reached DELIVERED through the §1.2 write path').toBeTruthy();
+  expectUuid(orderId, 'order reached DELIVERED through the §1.2 write path');
 });

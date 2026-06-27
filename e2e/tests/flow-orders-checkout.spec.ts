@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 let authToken: string;
@@ -67,17 +68,17 @@ test.describe('Flow: Orders & Checkout — Full Lifecycle', () => {
       await request.patch(`${BASE}/api/orders/${orderId}/status`, {
         data: { status: 'CANCELLED' },
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort teardown cleanup, must not fail the suite */ });
     }
     if (productId) {
       await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort teardown cleanup, must not fail the suite */ });
     }
     if (categoryId) {
       await request.delete(`${BASE}/api/owner/menu/categories/${categoryId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort teardown cleanup, must not fail the suite */ });
     }
   });
 
@@ -324,7 +325,7 @@ test.describe('Flow: Orders & Checkout — Full Lifecycle', () => {
     expect(Array.isArray(dash.orders)).toBe(true);
     if (dash.orders.length > 0) {
       const o = dash.orders[0];
-      expect(o.orderId).toBeTruthy();
+      expectUuid(o.orderId, 'orderId');
       expect(o.status).toBeTruthy();
       expect(typeof o.total).toBe('number');
       expect(o.createdAt).toBeTruthy();

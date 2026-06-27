@@ -1,6 +1,7 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
 
 // Proof for the deployed-app owner fixes (session relogin, PDF import via OpenCode Zen,
 // Google OAuth hidden, test-owner → sushi-durres binding). Server changes are real.
@@ -26,7 +27,7 @@ async function login(request: APIRequestContext) {
 test.describe('Owner fixes batch', () => {
   test('session: password login mints a ~7d access token (was 1h → hourly relogin)', async ({ request }) => {
     const body = await login(request);
-    expect(body.access_token, 'access_token present').toBeTruthy();
+    expectJwt(body.access_token, 'access_token');
     const { ttlSeconds } = decodeJwtExpiry(body.access_token);
     // 7 days = 604800s. Assert it's well beyond the old 1h (3600s) — i.e. > 24h.
     expect(ttlSeconds, `access TTL ${ttlSeconds}s should be ~7d, not 1h`).toBeGreaterThan(24 * 3600);
@@ -39,7 +40,7 @@ test.describe('Owner fixes batch', () => {
     const res = await request.post('/api/auth/refresh', { data: { refresh_token: body.refresh_token } });
     expect(res.ok(), `refresh (${res.status()})`).toBeTruthy();
     const refreshed = await res.json();
-    expect(refreshed.access_token, 'new access_token').toBeTruthy();
+    expectJwt(refreshed.access_token, 'new access_token');
     const { ttlSeconds } = decodeJwtExpiry(refreshed.access_token);
     expect(ttlSeconds, `refreshed TTL ${ttlSeconds}s ~7d`).toBeGreaterThan(24 * 3600);
   });
@@ -59,7 +60,7 @@ test.describe('Owner fixes batch', () => {
     });
     expect(res.ok(), `repair-test-owner (${res.status()})`).toBeTruthy();
     const r = await res.json();
-    expect(r.locationId, 'demo location resolved').toBeTruthy();
+    expectUuid(r.locationId, 'demo location');
     const active = (r.membershipsAfter || []).some(
       (m: any) => m.location_id === r.locationId && m.role === 'owner' && m.status === 'active',
     );

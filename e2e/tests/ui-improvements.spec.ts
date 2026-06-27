@@ -1,4 +1,5 @@
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
 
 // MVP UI-improvements proof (the GO subset per docs/research/UI-IMPROVEMENTS-TESTPLAN.md).
 // Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test ui-improvements --reporter=list
@@ -12,7 +13,7 @@ async function ownerToken(request: APIRequestContext): Promise<string> {
   const res = await request.post('/api/auth/local/login', { data: CREDS });
   expect(res.ok(), 'owner login should succeed').toBeTruthy();
   const body = await res.json();
-  expect(body.access_token, 'login returns an access token').toBeTruthy();
+  expectJwt(body.access_token, 'login returns an access token');
   cachedToken = body.access_token as string;
   return cachedToken;
 }
@@ -33,7 +34,7 @@ async function demoMenu(request: APIRequestContext) {
   expect(res.ok(), 'public demo menu should load').toBeTruthy();
   const menu = await res.json();
   const locationId: string = menu.locationId ?? menu.location_id;
-  expect(locationId, 'demo menu carries a locationId').toBeTruthy();
+  expectUuid(locationId, 'demo menu carries a locationId');
   const products: any[] = (menu.categories ?? []).flatMap((c: any) => c.products ?? []);
   return { locationId, products };
 }

@@ -74,9 +74,9 @@ before(async () => {
 after(async () => {
   await app?.close();
   if (pool) {
-    await pool.query('DELETE FROM courier_assignments WHERE order_id=$1', [orderId]).catch(()=>{});
-    await pool.query('DELETE FROM courier_positions WHERE shift_id=$1', [shiftId]).catch(()=>{});
-    await pool.query('DELETE FROM orders WHERE id=$1', [orderId]).catch(()=>{});
+    await pool.query('DELETE FROM courier_assignments WHERE order_id=$1', [orderId]).catch((e) => { void e; /* tolerated: best-effort teardown cleanup */ });
+    await pool.query('DELETE FROM courier_positions WHERE shift_id=$1', [shiftId]).catch((e) => { void e; /* tolerated: best-effort teardown cleanup */ });
+    await pool.query('DELETE FROM orders WHERE id=$1', [orderId]).catch((e) => { void e; /* tolerated: best-effort teardown cleanup */ });
     await pool.end();
   }
 });

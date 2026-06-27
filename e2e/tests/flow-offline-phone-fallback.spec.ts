@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
+import { expectUuid } from '../helpers/assert-shape';
 
 /**
  * Invariant §4 — "fallback-на-телефон живий": when the live channel drops, the
@@ -31,7 +32,7 @@ test.describe('Flow: Offline phone fallback on order status', () => {
     expect(menuRes.status()).toBe(200);
     const menu = await menuRes.json();
     locationId = menu.locationId || menu.location_id;
-    expect(locationId, 'public menu must expose a locationId').toBeTruthy();
+    expectUuid(locationId, 'public menu locationId');
 
     const products = (menu.categories || []).flatMap((c: any) => c.products || []);
     const product =

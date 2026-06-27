@@ -184,14 +184,13 @@ test.describe('Flow: Courier — Invite, Shift, Tasks, Earnings, History', () =>
     expect(revokeRes.status()).toBe(200);
     const result = await revokeRes.json();
     expect(result.success).toBe(true);
-    // Verify invite is now invalid (may return 401 for revoked invites)
+    // Verify invite is now invalid — the route returns 200 with isRevoked flags
+    // for an existing-but-revoked invite (404 only if missing).
     const detailRes = await request.get(`${BASE}/api/courier/auth/invites/${inviteId}`);
-    expect([200, 401]).toContain(detailRes.status());
-    if (detailRes.status() === 200) {
-      const detail = await detailRes.json();
-      expect(detail.isValid).toBe(false);
-      expect(detail.isRevoked).toBe(true);
-    }
+    expect(detailRes.status()).toBe(200);
+    const detail = await detailRes.json();
+    expect(detail.isValid).toBe(false);
+    expect(detail.isRevoked).toBe(true);
   });
 
   // ──────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 import { placeOrder } from '../helpers/notifHelpers';
+import { expectUuid } from '../helpers/assert-shape';
 
 test.describe('Debug Order Creation', () => {
   test('should create an order successfully', async () => {
@@ -43,7 +44,7 @@ test.describe('Debug Order Creation', () => {
     try {
       const order = await placeOrder(locationId);
       console.log(`Order created successfully:`, order);
-      expect(order.id).toBeTruthy();
+      expectUuid(order.id);
     } catch (error) {
       console.error(`Failed to create order:`, error);
       throw error;

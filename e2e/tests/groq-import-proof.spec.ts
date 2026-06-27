@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 let authToken: string;
@@ -9,7 +10,7 @@ test('0 — get owner auth token', async ({ request }) => {
   const res = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
   expect(res.status()).toBe(200);
   const body = await res.json();
-  expect(body.access_token).toBeTruthy();
+  expectJwt(body.access_token, 'access_token');
   authToken = body.access_token;
 });
 
@@ -46,7 +47,7 @@ test('1 — upload menu-sq.pdf via AI import preview (Groq)', async ({ request }
   for (const p of dp.products_to_create.slice(0, 5)) console.log(`  ${p}`);
 
   // Must have import_session_id for commit
-  expect(body.import_session_id).toBeTruthy();
+  expectUuid(body.import_session_id, 'import_session_id');
 });
 
 test('2 — commit the import (optional)', async ({ request }) => {

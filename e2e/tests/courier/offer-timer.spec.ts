@@ -1,5 +1,6 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import crypto from 'node:crypto';
+import { expectUuid } from '../../helpers/assert-shape';
 
 // Courier offer timer + accept/decline proof (testplan §6) against deployed staging.
 // Run: VITE_BASE_URL=https://dowiz-staging.fly.dev DEV_AUTH_SECRET=stg-e2e-secret \
@@ -135,7 +136,7 @@ test('6a: courier-offer-timer renders and ticks down', async ({ page, request })
   const orderId = await ensureOrder(request);
   const courier = await mockCourier(request);
   const assignmentId = await offerTask(request, orderId, courier.courierId, courier.locationId);
-  expect(assignmentId, 'an assignment id was returned').toBeTruthy();
+  expectUuid(assignmentId, 'assignment id');
 
   await openTasksAs(page, courier.token);
 

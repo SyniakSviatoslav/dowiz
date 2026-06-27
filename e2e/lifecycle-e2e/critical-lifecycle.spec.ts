@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { env } from './support/env';
 import { SELECTORS as S, STATES as St } from './support/selectors';
 import { collectWsFrames, driveAlongTrack, extractOrderId } from './support/helpers';
+import { expectUuid } from '../helpers/assert-shape';
 
 /**
  * LAUNCH-GATING SMOKE — the full order lifecycle, live, across all three roles
@@ -87,8 +88,8 @@ test('main flow: customer → owner(live) → courier(geo) → deliver → cash 
     const menuData = await (await customer.request.fetch(`${env.customerBaseURL}/public/locations/${env.restaurantSlug}/menu`)).json();
     const locId = menuData.location_id || menuData.locationId;
     const prodId = menuData.categories?.[0]?.products?.[0]?.id;
-    expect(locId).toBeTruthy();
-    expect(prodId).toBeTruthy();
+    expectUuid(locId, 'locationId');
+    expectUuid(prodId, 'productId');
 
     const testPhone = `+35569${Date.now().toString().slice(-8)}`;
     const orderPayload = {
@@ -125,7 +126,7 @@ test('main flow: customer → owner(live) → courier(geo) → deliver → cash 
       expect(orderResp.ok(), `Order placement failed: ${orderResp.status()} ${raw}`).toBeTruthy();
     }
     const orderId = extractOrderId(orderBody);
-    expect(orderId).toBeTruthy();
+    expectUuid(orderId, 'orderId');
 
     // Store the customer auth token from order response
     if (orderBody.authToken) {
@@ -227,7 +228,7 @@ test('main flow: customer → owner(live) → courier(geo) → deliver → cash 
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ cash_collected: false }),
       });
-    }).catch(() => {});
+    });
 
     // ===== 7. Terminal state propagates to every role =====
     // Refresh customer page to force re-fetch (WS publish may be degraded)

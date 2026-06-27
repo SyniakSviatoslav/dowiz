@@ -29,12 +29,12 @@ test.describe('Flow: Admin — Dashboard, Menu CRUD, Branding, Settings, Signals
     if (productId) {
       await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort cleanup, product may already be gone */ });
     }
     if (categoryId) {
       await request.delete(`${BASE}/api/owner/menu/categories/${categoryId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort cleanup, category may already be gone */ });
     }
   });
 

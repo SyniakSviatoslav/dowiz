@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -68,7 +69,7 @@ test.describe('UI: Courier Invite — Full Registration Flow via Browser', () =>
     });
     expect(loginRes.status()).toBe(200);
     const body = await loginRes.json();
-    expect(body.jwt).toBeTruthy();
+    expectJwt(body.jwt, 'jwt');
   });
 
   test('Courier login with bad credentials returns 401', async ({ request }) => {
@@ -148,7 +149,8 @@ test.describe('UI: Onboarding — Full Wizard Coverage', () => {
       `${BASE}/api/owner/onboarding/${locId}/step/complete`,
       { data: { step: 2 }, headers: { Authorization: `Bearer ${authToken}` } },
     );
-    expect([200, 400]).toContain(stepRes.status());
+    // Fresh location starts at step 1; completing step 2 is "not current" → 400
+    expect(stepRes.status()).toBe(400);
   });
 
   test('Onboarding page renders step form', async ({ page }) => {
