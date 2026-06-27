@@ -4,9 +4,8 @@ import { assertTransition, type OrderStatus } from '@deliveryos/domain';
 import { issueCustomerToken, withTenant } from '@deliveryos/platform';
 import type { QueueProvider, MessageBus } from '@deliveryos/platform';
 import { loadEnv } from '@deliveryos/config';
-import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel } from '../lib/registry.js';
+import { BUS_CHANNELS, orderChannel, dashboardChannel, courierChannel } from '../lib/registry.js';
 import { updateOrderStatus } from '../lib/orderStatusService';
-import { generateOpaqueToken } from '../lib/otp.js';
 import { evaluatePreflight } from '../lib/preflight.js';
 import { computeSignals } from '../lib/signals/compute.js';
 import type { Pool } from 'pg';
@@ -19,6 +18,7 @@ const OTP_ENABLED = env.OTP_ENABLED === 'true';
 import { applyTax, assertNonNegative } from '../lib/money.js';
 import { computeOrderPricing, resolveDeliveryFee } from '../lib/order-pricing.js';
 import { buildRequestHash, buildSignalState } from '../lib/order-canonical.js';
+import { insertOrderWithItems } from '../lib/order-persistence.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isValidUUID(id: string): boolean {
@@ -525,109 +525,38 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       const timeoutMinutes = location.busy_mode ? location.confirm_timeout_min * 2 : location.confirm_timeout_min;
       const timeoutAt = new Date(Date.now() + timeoutMinutes * 60 * 1000);
 
-      // 11. Insert Orders
-      const orderRes = await client.query(
-        `INSERT INTO orders (
-          location_id, customer_id, type, status, 
-          delivery_address, delivery_lat, delivery_lng,
-          subtotal, delivery_fee, tax_total, discount_total, total, 
-          payment_method, cash_pay_with, currency_code, 
-          menu_version, client_menu_version, request_hash, timeout_at,
-          delivery_instructions,
-          metadata,
-          preflight,
-          customer_messenger_kind, customer_messenger_handle,
-          delivery_photo_key, tip_amount
-         )
-         VALUES ($1, $2, $20, 'PENDING', $3, $4, $5, $6, $7, $8, $9, $10, 'cash', $11, $12, $13, $14, $15, $16, $17, $18, $19, $21, $22, $23, $24)
-         RETURNING id, status, subtotal, total, created_at::text, timeout_at::text`,
-        [
-          locationId, resolvedCustomerId, deliveryAddressText, pin?.lat ?? null, pin?.lng ?? null,
-          subtotal, deliveryFee, taxTotal, discountTotal, total,
-          cashPayWith ?? null, location.currency_code,
-          menuVersion, (input as any).client_menu_version || null, requestHash, timeoutAt,
-          rawInstructions || null,
-          JSON.stringify({ otp_verified: otpServerVerified, client_ip_hash: clientIpHash }),
-          preflightMeta,
-          input.type,
-          (cust as any)?.messenger_kind || null, (cust as any)?.messenger_handle || null,
-          (input as any).delivery_photo_key || null,
-          (input as any).tip_amount || 0,
-        ]
-      );
-      const order = orderRes.rows[0];
-
-      // 12b. Record velocity event (for FX-4 throttle + signal computation)
-      if (phoneHash || clientIpHash) {
-        await client.query(
-          `INSERT INTO velocity_events (location_id, phone_hash, client_ip_hash, kind, window_started_at)
-           VALUES ($1, $2, $3, 'order_placed', $4)`,
-          [locationId, phoneHash || null, clientIpHash || null, new Date().toISOString()],
-        );
-      }
-
-      // 13. Insert Order Items & Modifiers
-      for (const row of orderItemRows) {
-        const oiRes = await client.query(
-          `INSERT INTO order_items (order_id, product_id, name_snapshot, price_snapshot, quantity)
-           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-          [order.id, row.productId, row.nameSnapshot, row.priceSnapshot, row.quantity]
-        );
-        const oiId = oiRes.rows[0].id;
-
-        for (const mod of row.modifiers) {
-          await client.query(
-            `INSERT INTO order_item_modifiers (order_item_id, modifier_id, name_snapshot, price_delta_snapshot)
-             VALUES ($1, $2, $3, $4)`,
-            [oiId, mod.modifierId, mod.nameSnapshot, mod.priceDeltaSnapshot]
-          );
-        }
-      }
-
-      // 13. Idempotency Key
-      await client.query(
-        `INSERT INTO idempotency_keys (key, location_id, request_hash, order_id, response_code)
-         VALUES ($1, $2, $3, $4, 201)`,
-        [idempotency_key, locationId, requestHash, order.id]
-      );
-
-      // 13b. Customer track grant — single-use opaque code backing the ?t= tracking
-      // link. Only minted when there's a resolved customer (same condition as the
-      // customer JWT below); anonymous orders have no JWT to reissue at exchange.
-      // Raw code stays in this local var for the post-commit trackUrl; only its
-      // sha256 hash is persisted. 14-day TTL outlives the 7-day JWT comfortably.
-      let trackCode: string | undefined;
-      if (cust?.phone && resolvedCustomerId) {
-        const { token, hash } = generateOpaqueToken();
-        await client.query(
-          `INSERT INTO customer_track_grants (order_id, location_id, token_hash, expires_at)
-           VALUES ($1, $2, $3, now() + interval '14 days')`,
-          [order.id, locationId, hash]
-        );
-        trackCode = token;
-      }
-
-      // 14. Transactional Enqueue
-      await queue.enqueue(QUEUE_NAMES.ORDER_TIMEOUT, { orderId: order.id, locationId }, {
-        singletonKey: order.id,
-        startAfter: new Date(timeoutAt),
-        db: { executeSql: (sql: string, values: any[]) => client.query(sql, values) }
+      // 11-14. Persist order + dependent rows + transactional enqueues
+      // (lib/order-persistence.ts). Transaction control stays here.
+      const { order, trackCode } = await insertOrderWithItems(client, queue, {
+        locationId,
+        resolvedCustomerId,
+        deliveryAddressText,
+        pin,
+        subtotal,
+        deliveryFee,
+        taxTotal,
+        discountTotal,
+        total,
+        cashPayWith,
+        currencyCode: location.currency_code,
+        menuVersion,
+        clientMenuVersion: (input as any).client_menu_version ?? null,
+        requestHash,
+        timeoutAt,
+        rawInstructions,
+        otpServerVerified,
+        clientIpHash,
+        preflightMeta,
+        type: input.type,
+        messengerKind: (cust as any)?.messenger_kind ?? null,
+        messengerHandle: (cust as any)?.messenger_handle ?? null,
+        deliveryPhotoKey: (input as any).delivery_photo_key ?? null,
+        tipAmount: (input as any).tip_amount,
+        orderItemRows,
+        idempotencyKey: idempotency_key,
+        phoneHash,
+        custPhone: cust?.phone,
       });
-
-      // NX-3: Transactional outbox for notification
-      // Enqueue notify job within the same transaction as order INSERT
-      // This ensures durability independent of LISTEN/NOTIFY
-      const dedupKey = `order.created:${order.id}:${locationId}`;
-      await queue.enqueue(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, {
-        event: 'order.created',
-        entity_id: order.id,
-        location_id: locationId,
-        dedupKey,
-      }, {
-        singletonKey: dedupKey,
-        db: { executeSql: (sql: string, values: any[]) => client.query(sql, values) }
-      });
-      console.log(`[ORDERS] NX-3: notify.telegram.send enqueued transactionally for order ${order.id} (key: ${dedupKey})`);
 
       await client.query('COMMIT');
 
