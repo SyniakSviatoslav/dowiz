@@ -141,8 +141,21 @@ Its **report** shows: what was mapped, researched, auto-applied-and-kept (proven
   account-managed MCP servers aren't loop-reversible (can't reconstruct the re-add) and the
   CLAUDE.md trim has no benchmark-replay speedup, so the oracle correctly declined all three; Class B
   never reached apply. This is the gate working as designed: keep only what's PROVEN, reject the rest.
-  - **Deferred (§8 steps 1, 5–6 + the Class-A adapter):** sandbox + credential isolation (§4), web
-    RESEARCH (contained), a reversible+benchmarkable Class-A adapter (worktree + benchmark-replay) so
-    real repo-perf candidates can actually be kept, Class-B queue wired to GRADUATE (§8c), headless
-    pg-boss scheduling, widening Class A after several clean runs. The firm boundary + oracle gate +
-    atomic rollback are in place; what's missing is a candidate type the oracle can PROVE.
+- **2026-06-27 — the reversible+benchmarkable Class-A adapter built + proven end-to-end.**
+  `benchmark.ts` (`runBenchmark` — deterministic parsed metric or median wall-clock, §2.3) +
+  `repo-apply.ts` (`makeRepoHooks` — apply a patch, measure before/after, green+security, and
+  **atomic revert via `git checkout -- <paths>`**; refuses if the tree is dirty so the revert
+  restores exact bytes). `repo-apply.test.ts` (5) proves the FULL auto-apply path on a real throwaway
+  git repo: a 20%-faster change is **KEPT on disk**; a tests-RED / security-regression / no-speedup
+  change is **atomically ROLLED BACK** (git restores the exact original bytes); a dirty tree is
+  refused. The oracle can now genuinely KEEP a real repo change. Wired into the loop's `buildHooks`
+  for `repo-perf:` candidates.
+  - **ponytail ceiling:** git-checkout isolation mutates the MAIN tree during verify → not
+    concurrency-safe. Upgrade = git worktree + node_modules symlink when >1 loop runs (today
+    teamConcurrency 1 — adequate).
+  - **Deferred (§8 steps 1, 5–6 + the MAP source):** sandbox + credential isolation (§4), web
+    RESEARCH (contained), **a MAP source that emits `repo-perf:` candidates with a DETERMINISTIC
+    MECHANICAL patch** (slow-query→index, slow-test→cache; NEVER an autonomous LLM patch — §0
+    injection surface), Class-B queue → GRADUATE (§8c), pg-boss scheduling, widen-after-clean-runs.
+    The apply/gate/revert machinery is complete + proven; what remains is a trustworthy *source* of
+    auto-keepable patches.

@@ -32,3 +32,16 @@ Oracle built (`oracle.ts`, 7 tests: KEEP + every rollback path) and Class-A auto
 reversible by the loop, or no runnable benchmark). The gate works as designed (only keep what's
 proven). **NEXT:** a reversible+benchmarkable Class-A adapter (worktree + benchmark-replay) so real
 repo-perf candidates can be auto-kept; widen only after several clean runs (§8 step 6).
+
+## 2026-06-27 · adapter built (the next step)
+
+`benchmark.ts` + `repo-apply.ts` (`makeRepoHooks`): apply patch → measure benchmark before/after →
+green+security → **atomic revert via `git checkout`** (refuses if tree dirty). `repo-apply.test.ts`
+(5) proves the FULL path end-to-end on a real throwaway git repo: a 20%-faster change is **KEPT on
+disk**; tests-RED / security-regression / no-speedup → **atomically ROLLED BACK** (exact bytes
+restored); dirty-tree → refused. Wired into `buildHooks` for `repo-perf:` candidates. The oracle can
+now genuinely keep a real repo change. ponytail ceiling: git-checkout (not worktree) → not
+concurrency-safe; upgrade to worktree when >1 loop runs. **NEXT:** a MAP source emitting repo-perf
+candidates with DETERMINISTIC MECHANICAL patches (slow-query→index, slow-test→cache) — NEVER
+autonomous LLM patches (§0 injection). The apply/gate/revert is complete+proven; the missing piece is
+a trustworthy SOURCE of patches.

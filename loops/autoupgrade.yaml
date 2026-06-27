@@ -30,6 +30,6 @@ harness:
 
 # Build status (docs/operating-model/autoupgrade-loop-v1.md §8).
 build_status:
-  done: "§8 step 2 (MAP→CLASSIFY→REPORT) + step 3 (machine oracle: green+no-sec-regression+≥5% speedup+reversible, atomic rollback, 7 tests) + step 4 (Class-A auto-apply wired behind --apply). classify() fail-safe + tested."
-  deferred: "§8 steps 1,5-6 + Class-A adapter — sandbox/cred-isolation, contained web-research, reversible+benchmarkable worktree adapter, Class-B queue→GRADUATE, headless pg-boss scheduling, widen-after-clean-runs"
-  boundary: "Class B (auth/RLS/secrets/payments/PII/schema/arch) NEVER reaches apply. Oracle keeps only PROVEN changes — first --apply run kept 0 (all unprovable candidates correctly declined)."
+  done: "§8 step 2 (MAP→CLASSIFY→REPORT) + step 3 (machine oracle, 7 tests) + step 4 (Class-A auto-apply behind --apply) + the reversible+benchmarkable adapter (benchmark.ts + repo-apply.ts: git-checkout atomic revert, 5 end-to-end tests proving KEEP/ROLLBACK on real git). classify() fail-safe + tested."
+  deferred: "§8 steps 1,5-6 + the MAP source — sandbox/cred-isolation, contained web-research, a MAP source emitting repo-perf candidates with DETERMINISTIC MECHANICAL patches (never autonomous LLM patches, §0), Class-B queue→GRADUATE, pg-boss scheduling, widen-after-clean-runs"
+  boundary: "Class B NEVER reaches apply. Oracle keeps only PROVEN changes. Apply machinery complete+proven (a real 20%-faster change is KEPT, a broken/no-speedup one is atomically reverted); what remains is a trustworthy SOURCE of auto-keepable patches."

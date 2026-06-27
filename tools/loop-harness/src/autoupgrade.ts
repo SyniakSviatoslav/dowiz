@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { makeRepoHooks, type RepoPerfSpec } from './repo-apply.js';
 
 export type UpgradeClass = 'A' | 'B';
 export type BlastRadius = 'low' | 'med' | 'high';
@@ -26,6 +27,9 @@ export interface Candidate {
   blast_radius: BlastRadius;
   reversible: boolean;
   action: string;           // the concrete change (a command / edit), NOT executed this pass
+  /** For `repo-perf:` candidates: the reversible+benchmarkable apply spec (deterministic
+   *  mechanical patch only — never an autonomous LLM patch). Not serialized into the record. */
+  perf?: RepoPerfSpec;
 }
 
 export interface Classification {
@@ -154,17 +158,24 @@ export interface ApplyOutcome {
  * it. Config/prefix-size changes (MCP, CLAUDE.md) are intentionally NOT
  * auto-applied here: account-managed MCP isn't loop-reversible, and a prefix-size
  * win isn't a runnable benchmark — so the oracle would (correctly) reject them.
- * Returns hooks only for candidate types with a real, reversible, benchmarkable
- * adapter — none yet, by design (§8 step 4: widen only after proven).
+ * The reversible+benchmarkable adapter now EXISTS (makeRepoHooks + runBenchmark,
+ * git-checkout atomic revert) and is proven end-to-end (repo-apply.test.ts). What
+ * a `repo-perf:` candidate needs is a MAP source that emits it WITH a DETERMINISTIC,
+ * MECHANICAL patch + a benchmark — never an autonomously LLM-written patch (§0:
+ * web-research→self-implement is the injection surface). Config/MCP candidates stay
+ * skipped (not loop-reversible / no runnable benchmark).
  */
 export function buildHooks(c: Candidate): { hooks: OracleHooks } | { skip: string } {
+  if (c.id.startsWith('repo-perf:') && c.perf) {
+    return { hooks: makeRepoHooks(c.perf) }; // reversible + benchmarkable → oracle can KEEP it
+  }
   if (c.id.startsWith('ghost-mcp:')) {
     return { skip: 'account-managed MCP (claude.ai connector) — not removable/re-addable via the local mcp CLI, so NOT loop-reversible. Prune manually if desired; the loop will not apply what it cannot atomically revert.' };
   }
   if (c.id.startsWith('config-bloat:')) {
     return { skip: 'operating-doctrine/config edit — protect-paths-gated + the prefix-size win is not a benchmark-replayable speedup. Human review (Class-A-shaped but no oracle adapter).' };
   }
-  return { skip: 'no reversible+benchmarkable auto-apply adapter for this candidate type yet (§8 step 4 — widen Class A only after the oracle is proven).' };
+  return { skip: 'adapter ready (makeRepoHooks + benchmark, atomic git revert — proven) but no MAP source emits a repo-perf candidate with a deterministic mechanical patch yet (§0: no autonomous LLM patches).' };
 }
 
 async function evaluateClassA(classA: Candidate[], apply: boolean): Promise<ApplyOutcome[]> {
