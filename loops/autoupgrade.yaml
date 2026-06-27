@@ -1,0 +1,35 @@
+id: autoupgrade
+version: 0.1
+status: DRAFT
+intent: "автономно знаходити зміни, що ДОВЕДЕНО прискорюють ітерацію за менші ресурси; безпечний клас застосовувати машинно, ризиковий — лише пропонувати"
+problem_signature: "потрібен machine-gated self-upgrade: знайти→дослідити→класифікувати→(оракул)→застосувати|відкотити, з твердою межею"
+trigger: "/autoupgrade (headless, background)"
+role_mindset: "machine-gated, не ungated: оракул (green+no-sec-regression+доведений speedup+reversible) — гейт; firm boundary auth/RLS/secrets/payments/PII НІКОЛИ автономно"
+preconditions: ["v3-FINAL харнес присутній", "sandbox+credential-isolation (§4)", "телеметрія для grounding (runs/metrics.jsonl, codeburn)"]
+execution_skills: [map-from-telemetry, contained-web-research, classify-firm-boundary, machine-oracle, atomic-rollback]
+goal: "за прогон: змапити кандидатів з реальної телеметрії, класифікувати A/B fail-safe, (коли оракул готовий) застосувати лише доведено-швидші Class A, відкотити решту; §5 звіт"
+verification: "Class A kept лише якщо ОРАКУЛ: повний green + RLS/auth/secret асерції тримають + benchmark-replay ≥5% краще + записаний revert; інакше atomic rollback. Class B — лише в чергу людині"
+iron_principles: [machine-gated-not-ungated, firm-boundary-never-auto, proven-speedup-or-rollback, sandbox-no-prod-secrets, web-is-untrusted-data-never-execute, one-change-at-a-time, no-fake-green]
+loop_body: [MAP, RESEARCH, CLASSIFY, APPLY-VERIFY-or-ROLLBACK, REPORT, FEED]
+exit_conditions: "батч кандидатів оцінено; Class A — kept(доведено)|rolled-back; Class B — у черзі людині; §5 звіт надруковано+збережено"
+gates: [FIRM-BOUNDARY-STOP, ORACLE-GATE]
+proof_artifacts: [candidate-list-with-class, oracle-before-after-metric, rollback-records, class-B-human-queue, §5-report]
+out_of_scope: [auth/RLS/secrets/payments/PII-автозміни, schema/migrations-авто, architecture/topology-авто, major-breaking-deps-авто]
+escalation: "Class B → черга людині (механізм GRADUATE §8c v3-FINAL); сумнів → B; будь-яка межа → STOP"
+skills_required: [repo-access, telemetry-access, sandbox]
+memory_file: loops/memory/autoupgrade.md
+verification_report: loops/reports/autoupgrade-0.1.md
+
+# Living Loop System wiring (docs/operating-model/living-loop-system-v3.md §1/§5).
+harness:
+  runs_dir: loops/runs
+  always_emit_report: true
+  progress_metric: candidates_remaining_in_batch   # ↓=better
+  finalize: "tools/loop-harness/src/autoupgrade.ts (runAutoupgrade → §5 report; report-only this pass)"
+  telemetry_collectors: [git_mem, session_tokens, eco]
+
+# Build status (docs/operating-model/autoupgrade-loop-v1.md §8).
+build_status:
+  done: "§8 step 2 — MAP→CLASSIFY→REPORT, REPORT-ONLY; classify() fail-safe + tested; applyCandidate() throws (auto-apply disabled)"
+  deferred: "§8 steps 1,3-6 — sandbox/cred-isolation, contained web-research, machine oracle + benchmark-replay, Class-A auto-apply, Class-B queue→GRADUATE, headless pg-boss scheduling"
+  boundary: "NO autonomous mutation until the oracle (§2) + atomic rollback are built + proven (§8 steps 3-4)"
