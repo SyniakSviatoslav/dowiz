@@ -64,3 +64,17 @@ Flag `no-trigger` for any comment missing an upgrade path. End: `<N> markers, <M
 ---
 
 Source: [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) — MIT
+
+---
+
+## RULE: every loop run prints its full report (user directive 2026-06-27)
+
+Every loop run — ANY loop (audit-gate, autoupgrade, convergence, triage, future) — MUST emit a
+full **plain-text §5 LOOP REPORT to the terminal, always, every time, no flag, no exception**
+(success, stall, abort, or skip). A loop that runs without printing its report is invisible and
+unauditable.
+
+Run loops THROUGH the harness so it's automatic: `tools/loop-harness` (`finalize` / `runLoop` /
+`runAutoupgrade`) call `renderReport(record)` + print unconditionally. If a run somehow produced no
+harness report, render one from its canonical record (`loops/runs/<loop>/<n>.json.gz`) and print the
+actual §5 block in full — not a summary. Design: `docs/operating-model/living-loop-system-v3.md` §5.

@@ -30,6 +30,6 @@ harness:
 
 # Build status (docs/operating-model/autoupgrade-loop-v1.md §8).
 build_status:
-  done: "§8 step 2 — MAP→CLASSIFY→REPORT, REPORT-ONLY; classify() fail-safe + tested; applyCandidate() throws (auto-apply disabled)"
-  deferred: "§8 steps 1,3-6 — sandbox/cred-isolation, contained web-research, machine oracle + benchmark-replay, Class-A auto-apply, Class-B queue→GRADUATE, headless pg-boss scheduling"
-  boundary: "NO autonomous mutation until the oracle (§2) + atomic rollback are built + proven (§8 steps 3-4)"
+  done: "§8 step 2 (MAP→CLASSIFY→REPORT) + step 3 (machine oracle: green+no-sec-regression+≥5% speedup+reversible, atomic rollback, 7 tests) + step 4 (Class-A auto-apply wired behind --apply). classify() fail-safe + tested."
+  deferred: "§8 steps 1,5-6 + Class-A adapter — sandbox/cred-isolation, contained web-research, reversible+benchmarkable worktree adapter, Class-B queue→GRADUATE, headless pg-boss scheduling, widen-after-clean-runs"
+  boundary: "Class B (auth/RLS/secrets/payments/PII/schema/arch) NEVER reaches apply. Oracle keeps only PROVEN changes — first --apply run kept 0 (all unprovable candidates correctly declined)."
