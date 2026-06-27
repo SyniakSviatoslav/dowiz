@@ -6,6 +6,12 @@
     "node": ">=22"
   },
   "packageManager": "pnpm@9.4.0",
+  "pnpm": {
+    "overrides": {
+      "form-data@<4.0.6": ">=4.0.6",
+      "undici@<6.27.0": ">=6.27.0"
+    }
+  },
   "scripts": {
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
