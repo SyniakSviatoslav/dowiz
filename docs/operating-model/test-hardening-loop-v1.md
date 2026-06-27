@@ -68,3 +68,22 @@ Metric = **count of open HIGH/CRITICAL blind-spots** for the target spec, driven
   real-time vacuous→per-transition-delta on owner+customer rooms; fake-tenant→real cross-order WS
   denial; orphan-order/idempotency fix; positive control; random courier password; error-swallow guard;
   see `docs/design-review/qa-loop-agent-sweep.md`). Workflow fan-out + registry entry next.
+
+## Canonical ATTACK rubric (the 10 false-green classes — keep in sync with AGENTS.md)
+
+The ATTACK scanners check for these (full taxonomy + the 245-file evidence:
+`docs/design-review/test-hardening-findings.md`; the enforceable rule: AGENTS.md "Test Integrity"):
+
+1. tautologies (`expect(true)`, floor-only `>=0`, unawaited `expect`, computed-bool only logged)
+2. `body.length>N` / loose body-text as sole render proof → require a `[data-testid]` + no error-boundary
+3. permissive `[200,400,500]` / `not.toBe(5xx)` → exact status
+4. no positive + negative auth control on protected routes
+5. nil-UUID "IDOR" → a REAL second tenant's id
+6. `?dev=true` / mock-auth bypass + BASE defaulting to PROD → `requireStaging()`
+7. conditional-skip vacuity (`if(count>0)`, silent return, runtime skip; beforeAll must assert 200)
+8. real-time via reload/poll-buffer → live WS DOM change + `wasOpened()`
+9. truthy on tokens/ids/values → `expectJwt`/`expectUuid`/range + read-back PUT/PATCH
+10. swallowed errors (`.catch(()=>{})`) / dead suites (no runner, ≥1 real assertion)
+
+🔴 RED-LINE money/RLS/PII: assert actual DML/value, never `assert.ok(true)` / empty-tenant COUNT /
+key-name-only. A test failing because the PRODUCT is wrong → escalate, never weaken (oracle-integrity).
