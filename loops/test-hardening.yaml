@@ -1,0 +1,12 @@
+# Test-Hardening Loop — adversarially harden an existing test spec (find + close false-greens).
+id: test-hardening
+goal: Drive a spec's open HIGH/CRITICAL blind-spots to 0 by attacking it with 3 decorrelated agents, then strengthening assertions — never weakening.
+scope_class: A
+trigger_tags: [test, hardening, critique, qa, security, false-green, coverage, spec, e2e]
+security_carveout: [no-weakening]   # every edit gated by checkOracleIntegrity (no skip/expect(true)/count-drop)
+spec: docs/operating-model/test-hardening-loop-v1.md
+attack_workflow: tools/loop-harness/workflows/test-hardening-attack.js
+hooks: [ATTACK (3 agents), TRIAGE (fix-now vs defer), HARDEN, VERIFY (re-run green + path-exercised), GATE (oracle-integrity no-weakening)]
+findings_ledger: docs/design-review/test-hardening-findings.md
+notes: High value on integration/e2e/lifecycle/auth-isolation specs; low value on tight pure-unit tests (skip those). A test failing because the PRODUCT is wrong = escalate, never paper over.
+build_status: BUILT (v0 proof = cross-tenant realtime QA v1→v2; workflow + registry wired 2026-06-27)
