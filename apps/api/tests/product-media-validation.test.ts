@@ -8,7 +8,12 @@ import {
   checkBudget,
   checkFrameCount,
   mediaServingAllowed,
+  extForMime,
+  maxBytesForMime,
+  sumIncomingBytes,
   LOCATION_BUDGET_BYTES,
+  MAX_IMAGE_BYTES,
+  MAX_VIDEO_BYTES,
   SPIN_MIN_FRAMES,
   SPIN_MAX_FRAMES,
 } from '../src/lib/product-media-validation.js';
@@ -114,6 +119,37 @@ test('spin frame-count range [12, 72]', async (t) => {
   await t.test('72 → ok', () => assert.equal(checkFrameCount(SPIN_MAX_FRAMES).ok, true));
   await t.test('73 → reject', () => assert.equal(checkFrameCount(SPIN_MAX_FRAMES + 1).ok, false));
   await t.test('non-integer → reject', () => assert.equal(checkFrameCount(12.5).ok, false));
+});
+
+test('extForMime — content-addressed key extension per allowed mime', async (t) => {
+  await t.test('webp → webp', () => assert.equal(extForMime('image/webp'), 'webp'));
+  await t.test('jpeg → jpg', () => assert.equal(extForMime('image/jpeg'), 'jpg'));
+  await t.test('mp4 → mp4', () => assert.equal(extForMime('video/mp4'), 'mp4'));
+  await t.test('svg → null (active-content vector, never keyed)', () =>
+    assert.equal(extForMime('image/svg+xml'), null));
+  await t.test('unknown mime → null', () =>
+    assert.equal(extForMime('application/octet-stream'), null));
+});
+
+test('maxBytesForMime — per-file size ceiling by mime', async (t) => {
+  await t.test('mp4 → 25 MB video ceiling', () =>
+    assert.equal(maxBytesForMime('video/mp4'), MAX_VIDEO_BYTES));
+  await t.test('webp → 8 MB image ceiling', () =>
+    assert.equal(maxBytesForMime('image/webp'), MAX_IMAGE_BYTES));
+  await t.test('jpeg → 8 MB image ceiling', () =>
+    assert.equal(maxBytesForMime('image/jpeg'), MAX_IMAGE_BYTES));
+  await t.test('unknown/non-video mime → image ceiling (default branch)', () =>
+    assert.equal(maxBytesForMime('image/svg+xml'), MAX_IMAGE_BYTES));
+});
+
+test('sumIncomingBytes — upload-budget tally over incoming items', async (t) => {
+  await t.test('sums the bytes field', () =>
+    assert.equal(sumIncomingBytes([{ bytes: 10 }, { bytes: 20 }]), 30));
+  await t.test('empty list → 0', () => assert.equal(sumIncomingBytes([]), 0));
+  await t.test('NaN bytes coerced to 0 (Number(x) || 0 — no NaN poison)', () =>
+    assert.equal(sumIncomingBytes([{ bytes: NaN }]), 0));
+  await t.test('NaN item does not poison a real total', () =>
+    assert.equal(sumIncomingBytes([{ bytes: 10 }, { bytes: NaN }, { bytes: 5 }]), 15));
 });
 
 test('tier/flag serving gate (returns [] when off)', async (t) => {

@@ -20,6 +20,9 @@ test('notification category gating', async (t) => {
       'order.pending_aging', // signed transactional at STOP-ETHICS-1
       'ops.worker_liveness',
       'ops.backup_failed',
+      // registered in EVENT_REGISTRY but absent from OPERATIONAL/QUALITY sets —
+      // pin its transactional classification so a reclassification can't pass silently.
+      'ops.degradation_changed',
     ];
     for (const ev of transactional) {
       assert.equal(getEventCategory(ev), 'transactional', `${ev} must be transactional`);
@@ -33,7 +36,10 @@ test('notification category gating', async (t) => {
   });
 
   await t.test('operational defaults ON, honours explicit toggle', () => {
-    assert.equal(getEventCategory('shift.started'), 'operational');
+    // Whole OPERATIONAL_EVENTS set is operational — not just shift.started.
+    for (const ev of ['shift.started', 'shift.closed', 'shift.close_reminder']) {
+      assert.equal(getEventCategory(ev), 'operational', `${ev} must be operational`);
+    }
     // default ON: absent prefs => not suppressed
     assert.equal(isSuppressedByCategory('shift.started', {}), false);
     assert.equal(isSuppressedByCategory('shift.started', null), false);

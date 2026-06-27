@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applyTax as serverApplyTax } from '../src/lib/money.js';
 import { applyTax as mirrorApplyTax, estimateOrderTotal, computeDeliveryFee } from '../../../packages/ui/src/lib/money.js';
+import { resolveDeliveryFee } from '../src/lib/order-pricing.js';
 
 // PARITY GUARDRAIL (ADR-0005, Approach M) — the client-side total MIRROR must agree with the
 // server's authoritative order-total math TO THE CENT, or the customer is shown a number the
@@ -15,11 +16,19 @@ import { applyTax as mirrorApplyTax, estimateOrderTotal, computeDeliveryFee } fr
 function serverFeeOracle(subtotal: number, cfg: {
   isPickup: boolean; freeDeliveryThreshold: number | null; deliveryFeeFlat: number | null; hasDistanceTiers: boolean;
 }): number | null {
+  // The pickup / free-threshold short-circuits live in the POST /orders caller (orders.ts section 8),
+  // NOT in resolveDeliveryFee — replicate only those two here.
   if (cfg.isPickup) return 0;
   if (cfg.freeDeliveryThreshold !== null && subtotal >= cfg.freeDeliveryThreshold) return 0;
-  if (cfg.hasDistanceTiers) return null; // server uses delivery_tiers + distance — client can't see them
-  if (cfg.deliveryFeeFlat !== null) return cfg.deliveryFeeFlat;
-  return null; // DELIVERY_NOT_CONFIGURED
+  if (cfg.hasDistanceTiers) return null; // server resolves via delivery_tiers + distance — RLS-hidden from the client
+  // Delegate the flat-fee / DELIVERY_NOT_CONFIGURED decision to the ACTUAL server function so the oracle
+  // drifts red the moment order-pricing.ts changes (no tiers/pin → pure flat-vs-unconfigured branch).
+  const res = resolveDeliveryFee({
+    location: { lat: null, lng: null, delivery_fee_flat: cfg.deliveryFeeFlat },
+    pin: null,
+    tiers: [],
+  });
+  return res.ok ? res.deliveryFee : null; // false → DELIVERY_NOT_CONFIGURED → client must NOT pre-quote
 }
 
 const SUBTOTALS = [0, 1, 499, 500, 799, 800, 1000, 1999, 2000, 2001, 5000, 123_456];
@@ -48,7 +57,7 @@ test('parity: estimateOrderTotal.total === subtotal + serverFee + serverTax (com
   ];
   for (const v of venues) {
     for (const sub of SUBTOTALS) {
-      for (const rate of [0, 0.2]) {
+      for (const rate of TAX_RATES) {
         for (const inc of TAX_MODES) {
           const cfg = { ...v, taxRate: rate, priceIncludesTax: inc, minOrderValue: 800 };
           const est = estimateOrderTotal(sub, cfg);
