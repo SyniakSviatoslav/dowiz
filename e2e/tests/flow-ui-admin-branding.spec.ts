@@ -18,11 +18,14 @@
  */
 import { test, expect } from '@playwright/test';
 import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'node:url';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+// This spec MUTATES branding (PUT /owner/brand, logo upload) and uses the
+// /dev/mock-auth backdoor — it must NEVER run against prod. Default to staging.
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 // __dirname is undefined under ESM (the suite runs as ESM), which threw at
 // COLLECTION time and killed the whole Playwright run. Derive it from import.meta.url.
@@ -38,17 +41,44 @@ let ownerToken: string;
 let baseline: Record<string, any>;
 let locationSlug: string;
 let locationId: string;
+// Set true ONLY when Step 11 confirmed a 200 upload — Step 12 then HARD-asserts
+// the public theme exposes the logoUrl (no optional-guard false-green).
+let logoUploaded = false;
 
 test.describe.configure({ mode: 'serial' });
 
 test.describe('UI: Admin Branding — color/logo update cycle', () => {
 
   test.beforeAll(async ({ request }) => {
+    // HARD-FAIL before exercising the dev backdoor / any mutation against prod.
+    requireStaging(BASE);
     const r = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
-    expect(r.status()).toBe(200);
+    expect(r.status(), 'mock-auth must mint an owner token').toBe(200);
     const body = await r.json();
     ownerToken = body.access_token;
     expectJwt(ownerToken, 'access_token');
+  });
+
+  // Negative auth controls — proof the gate isn't silently accepting everyone.
+  // PUT /owner/brand resolves the owner via getOwnerContext() (spa-proxy.ts:534):
+  // missing Bearer → 401; a non-owner (courier) role → 401 (claims.role!=='owner').
+  test('Auth: PUT /owner/brand without a token returns 401', async ({ request }) => {
+    const r = await request.put(`${BASE}/api/owner/brand`, {
+      data: { primaryColor: NEW_PRIMARY },
+    });
+    expect(r.status(), 'Unauthenticated brand write must be rejected').toBe(401);
+  });
+
+  test('Auth: PUT /owner/brand with a courier token returns 401 (wrong role)', async ({ request }) => {
+    const m = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'courier' } });
+    expect(m.status(), 'mock-auth must mint a courier token').toBe(200);
+    const courierToken = (await m.json()).access_token;
+    expectJwt(courierToken, 'courier access_token');
+    const r = await request.put(`${BASE}/api/owner/brand`, {
+      headers: { Authorization: `Bearer ${courierToken}` },
+      data: { primaryColor: NEW_PRIMARY },
+    });
+    expect(r.status(), 'Non-owner role must not write branding').toBe(401);
   });
 
   // ── STEP 1: Read baseline branding ────────────────────────────────────────────
@@ -114,7 +144,27 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
     });
     expect(r.status(), 'PUT /owner/brand must return 200').toBe(200);
     const body = await r.json();
+    // The PUT echoes the persisted row — a stale/no-op write would return the OLD
+    // colour. Assert the response carries exactly what we sent (no silent cache).
+    expect(body.primaryColor?.toLowerCase(), 'PUT must echo the new primary colour')
+      .toBe(NEW_PRIMARY.toLowerCase());
+    expect(body.bgColor?.toLowerCase(), 'PUT must echo the new bg colour')
+      .toBe(NEW_BG.toLowerCase());
     console.log('Brand PUT response:', body);
+  });
+
+  // ── STEP 4b: API — invalid hex is rejected (error matrix) ─────────────────────
+  test('Step 4b: API — PUT /owner/brand with invalid hex returns 400 VALIDATION_FAILED', async ({ request }) => {
+    const r = await request.put(`${BASE}/api/owner/brand`, {
+      headers: { Authorization: `Bearer ${ownerToken}` },
+      data: { primaryColor: 'not-a-color' },
+    });
+    // brandSchema.parse() throws a ZodError → central setErrorHandler maps it to
+    // 400 VALIDATION_FAILED (server.ts:435-457; A1 preserves 400, not 422).
+    expect(r.status(), 'Invalid hex must be rejected with 400').toBe(400);
+    const body = await r.json();
+    expect(body.code, 'Validation error envelope must carry VALIDATION_FAILED')
+      .toBe('VALIDATION_FAILED');
   });
 
   // ── STEP 5: API — verify colors persisted ────────────────────────────────────
@@ -177,10 +227,12 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
       waitUntil: 'networkidle',
       timeout: 30000,
     });
-    await page.waitForTimeout(3000);
 
-    const bodyText = await page.textContent('body') || '';
-    expect(bodyText.length, 'Branding-preview page must render content').toBeGreaterThan(100);
+    // Render proof: branding-preview mounts the real client menu (ClientRoutes →
+    // ProductCard). A 500/redirect/error-boundary has no menu-item, so this fails
+    // where a body.length check would falsely pass.
+    await expect(page.locator('[data-testid="menu-item"]').first(),
+      'branding-preview must render the client menu').toBeVisible({ timeout: 15000 });
 
     const critical = jsErrors.filter(e =>
       !e.includes('favicon') && !e.includes('ResizeObserver') && !e.includes('Non-Error')
@@ -193,7 +245,7 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
     }
     expect(cspViolations, `CSP violations must not block page: ${cspViolations.join('; ')}`).toHaveLength(0);
 
-    console.log(`/branding-preview/${locationSlug} loaded. Body length:`, bodyText.length);
+    console.log(`/branding-preview/${locationSlug} rendered menu`);
   });
 
   // ── STEP 8: Public — /s/{slug} renders same menu as branding-preview ──────────
@@ -206,10 +258,11 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
       waitUntil: 'networkidle',
       timeout: 30000,
     });
-    await page.waitForTimeout(2000);
 
-    const bodyText = await page.textContent('body') || '';
-    expect(bodyText.length, '/s/{slug} must render client content').toBeGreaterThan(100);
+    // Render proof: a real menu-item must be visible (not just non-empty body text,
+    // which a 500/error page/spinner would also satisfy).
+    await expect(page.locator('[data-testid="menu-item"]').first(),
+      '/s/{slug} must render the client menu').toBeVisible({ timeout: 15000 });
 
     const critical = jsErrors.filter(e =>
       !e.includes('favicon') && !e.includes('ResizeObserver') && !e.includes('Non-Error')
@@ -217,7 +270,7 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
     );
     expect(critical, `JS errors on /s/${locationSlug}: ${critical.join('; ')}`).toEqual([]);
 
-    console.log(`/s/${locationSlug} body length:`, bodyText.length);
+    console.log(`/s/${locationSlug} rendered menu`);
   });
 
   // ── STEP 9: Public — /api/public/theme/{slug} returns updated primary color ────
@@ -228,7 +281,9 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
     const body = await r.json();
     expect(body.primaryColor?.toLowerCase(), 'Public theme must return updated primary color')
       .toBe(NEW_PRIMARY.toLowerCase());
-    console.log('Public theme primaryColor:', body.primaryColor);
+    expect(body.bgColor?.toLowerCase(), 'Public theme must also propagate the updated bg color')
+      .toBe(NEW_BG.toLowerCase());
+    console.log('Public theme primaryColor:', body.primaryColor, '| bgColor:', body.bgColor);
   });
 
   // ── STEP 10: UI — select logo file, preview appears in form ──────────────────
@@ -294,7 +349,32 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
     }
     expect(r.status(), `POST logo must return 200 — got: ${JSON.stringify(body)}`).toBe(200);
     expect(body).toHaveProperty('logo_url');
+    expect(typeof body.logo_url, 'logo_url must be a non-empty string').toBe('string');
+    expect(body.logo_url.length, 'logo_url must be a non-empty string').toBeGreaterThan(0);
+    logoUploaded = true; // Step 12 now HARD-asserts the public theme exposes it
     console.log('Logo uploaded. logo_url:', body.logo_url);
+  });
+
+  // ── STEP 11b: IDOR — owner cannot upload a logo to a foreign location ─────────
+  test('Step 11b: API — logo upload to a non-owned locationId is rejected', async ({ request }) => {
+    test.skip(!fs.existsSync(LOGO_PATH), `Logo file not found at ${LOGO_PATH}`);
+    // requireLocationAccess (auth.ts:148-154) 404s when the owner has no ACTIVE
+    // membership for the path locationId ("don't leak existence"). A well-formed
+    // UUID the owner does not own must NOT return 200.
+    // TODO(needs-2nd-tenant): use a REAL second tenant's locationId to distinguish
+    // ownership-deny from absence — both currently yield 404. Listed in needs_staging.
+    const foreignId = '11111111-1111-4111-8111-111111111111';
+    const logoBuffer = fs.readFileSync(LOGO_PATH);
+    const r = await request.post(
+      `${BASE}/api/owner/locations/${foreignId}/theme/logo`,
+      {
+        headers: { Authorization: `Bearer ${ownerToken}` },
+        multipart: {
+          file: { name: 'dubin-logo.jpg', mimeType: 'image/jpeg', buffer: logoBuffer },
+        },
+      }
+    );
+    expect(r.status(), 'Cross-tenant logo upload must be rejected (404)').toBe(404);
   });
 
   // ── STEP 12: Public — /api/public/theme/{slug} returns logoUrl ───────────────
@@ -303,13 +383,14 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
     const r = await request.get(`${BASE}/api/public/theme/${locationSlug}`);
     expect(r.status()).toBe(200);
     const body = await r.json();
-    // logoUrl may be null if Step 11 was skipped (environment limitation)
     console.log('Public theme logoUrl after logo upload:', body.logoUrl);
-    if (body.logoUrl) {
-      expect(typeof body.logoUrl).toBe('string');
-      expect(body.logoUrl.length, 'logoUrl must be a non-empty string').toBeGreaterThan(0);
+    if (logoUploaded) {
+      // Step 11 confirmed a 200 upload → the public theme MUST now expose the logo.
+      // (No optional guard: a null here would mean the upload silently didn't persist.)
+      expect(typeof body.logoUrl, 'logoUrl must be a string after a confirmed upload').toBe('string');
+      expect(body.logoUrl.length, 'logoUrl must be a non-empty string after upload').toBeGreaterThan(0);
     } else {
-      console.warn('logoUrl is null — logo upload was likely skipped or failed in Step 11');
+      console.warn('Step 11 upload not confirmed (skipped/500) — logoUrl assertion deferred');
     }
   });
 
@@ -331,8 +412,11 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
     });
     await page.waitForTimeout(3000);
 
-    const bodyText = await page.textContent('body') || '';
-    expect(bodyText.length, 'Page must render content').toBeGreaterThan(100);
+    // Render proof: branding-preview mounts the real client menu. A 500/redirect/
+    // error-boundary has no menu-item, so this fails where a body.length check
+    // (a 200-char error page) would falsely pass.
+    await expect(page.locator('[data-testid="menu-item"]').first(),
+      'branding-preview must render the client menu').toBeVisible({ timeout: 15000 });
 
     if (hasLogo) {
       // There should be at least one <img> tag rendering the logo
@@ -353,7 +437,7 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
 
   // ── STEP 14: Restore original branding ───────────────────────────────────────
   test('Step 14: API — restore original branding (colors + logoUrl)', async ({ request }) => {
-    test.skip(!baseline, 'No baseline to restore');
+    expect(baseline, 'A baseline must have been captured in Step 1').toBeTruthy();
     const r = await request.put(`${BASE}/api/owner/brand`, {
       headers: { Authorization: `Bearer ${ownerToken}` },
       data: {
@@ -363,7 +447,37 @@ test.describe('UI: Admin Branding — color/logo update cycle', () => {
         logoUrl: baseline.logoUrl ?? null,
       },
     });
+    // Exactly 200 — a 404/4xx here means the restore silently failed, leaving the
+    // environment polluted with the test colours.
     expect(r.status(), 'PUT /owner/brand restore must return 200').toBe(200);
+
+    // Read-back: confirm the environment is actually back to baseline (the test
+    // colours are gone), not just that the PUT returned 200.
+    const verify = await request.get(`${BASE}/api/owner/brand`, {
+      headers: { Authorization: `Bearer ${ownerToken}` },
+    });
+    expect(verify.status()).toBe(200);
+    const vb = await verify.json();
+    expect((vb.primaryColor ?? '').toLowerCase(), 'Primary colour must be restored to baseline')
+      .toBe((baseline.primaryColor ?? '').toLowerCase());
+    expect(vb.primaryColor?.toLowerCase(), 'Test primary colour must no longer be present')
+      .not.toBe(NEW_PRIMARY.toLowerCase());
     console.log('Restored brand to baseline primary:', baseline.primaryColor, '| logoUrl:', baseline.logoUrl);
+  });
+
+  // Safety net: if an earlier step failed (serial mode skips Step 14), this still
+  // runs and reverts the live environment to baseline. Best-effort but verified.
+  test.afterAll(async ({ request }) => {
+    if (!baseline || !ownerToken) return;
+    const r = await request.put(`${BASE}/api/owner/brand`, {
+      headers: { Authorization: `Bearer ${ownerToken}` },
+      data: {
+        primaryColor: baseline.primaryColor ?? null,
+        bgColor: baseline.bgColor ?? null,
+        textColor: baseline.textColor ?? null,
+        logoUrl: baseline.logoUrl ?? null,
+      },
+    });
+    expect(r.status(), 'afterAll baseline restore must return 200').toBe(200);
   });
 });

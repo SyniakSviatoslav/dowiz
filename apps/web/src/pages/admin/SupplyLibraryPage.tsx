@@ -386,7 +386,7 @@ export function SupplyLibraryPage() {
             const ico = kindIcons[supply.kind] || 'ti ti-circle';
             const icoColor = supply.kind === 'food_ingredient' ? 'var(--color-success)' : supply.kind === 'condiment' ? 'var(--color-warning)' : supply.kind === 'packaging' ? 'var(--color-info)' : 'var(--brand-text-muted)';
             return (
-              <div key={supply.id} className={`group flex items-start sm:items-center gap-3 p-3 rounded-xl border transition-[box-shadow,transform,border-color] duration-200 ease-out [@media(hover:hover)]:hover:-translate-y-0.5 [@media(hover:hover)]:hover:shadow-[var(--elev-2)] [@media(hover:hover)]:hover:border-[color-mix(in_srgb,var(--brand-primary)_25%,transparent)] slide-in-up`}
+              <div key={supply.id} data-testid="supply-item" className={`group flex items-start sm:items-center gap-3 p-3 rounded-xl border transition-[box-shadow,transform,border-color] duration-200 ease-out [@media(hover:hover)]:hover:-translate-y-0.5 [@media(hover:hover)]:hover:shadow-[var(--elev-2)] [@media(hover:hover)]:hover:border-[color-mix(in_srgb,var(--brand-primary)_25%,transparent)] slide-in-up`}
                 style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', animationDelay: `${i * 30}ms` }}>
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--brand-primary-light)' }}>
                   <i className={ico} style={{ fontSize: '1rem', color: icoColor }} />

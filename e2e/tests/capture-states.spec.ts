@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
 /**
  * EXHAUSTIVE state capture for the sushi-durres tenant — every page × breakpoint × state
@@ -11,11 +13,17 @@ import fs from 'node:fs';
  *     pnpm exec playwright test e2e/tests/capture-states.spec.ts --project=desktop --reporter=line
  */
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
-const SECRET = process.env.DEV_AUTH_SECRET || 'stg-e2e-secret';
+// No hardcoded fallback secret — a committed secret would silently authenticate against
+// staging even when DEV_AUTH_SECRET is unset. Throw inside the test body (not at module
+// load, so test collection still works when CAPTURE is unset and the test is skipped).
+const SECRET = process.env.DEV_AUTH_SECRET;
 const SLUG = process.env.SLUG || 'demo';
 const CLIENT_ONLY = !!process.env.CLIENT_ONLY;
 const DIR = process.env.CAPTURE_DIR || '/root/dowiz/audit/full-capture';
 test.skip(!process.env.CAPTURE, 'set CAPTURE=1 to capture');
+// This spec mutates state via /dev/mock-auth (upserts a dev owner user) — refuse to run
+// against prod / an unknown target.
+test.beforeAll(() => requireStaging(BASE));
 test.setTimeout(180_000);
 
 const VIEWPORTS = [
@@ -25,11 +33,17 @@ const VIEWPORTS = [
 
 test('capture all states', async ({ page, request }) => {
   fs.mkdirSync(DIR, { recursive: true });
+  if (!SECRET) throw new Error('DEV_AUTH_SECRET is unset — refusing to run capture without an explicit dev-auth secret');
   const hdr = { 'x-dev-auth-secret': SECRET };
   const ownerRes = await request.post(`${BASE}/api/dev/mock-auth`, { headers: hdr, data: { locationSlug: SLUG } });
+  expect(ownerRes.status(), 'owner mock-auth must return 200').toBe(200);
   const owner = await ownerRes.json();
-  const courierRes = await request.post(`${BASE}/dev/mock-auth`, { headers: hdr, data: { role: 'courier', locationId: owner.activeLocationId } });
+  expectJwt(owner.access_token, 'owner.access_token');
+  const courierRes = await request.post(`${BASE}/api/dev/mock-auth`, { headers: hdr, data: { role: 'courier', locationId: owner.activeLocationId } });
+  expect(courierRes.status(), 'courier mock-auth must return 200').toBe(200);
   const courier = await courierRes.json();
+  expectJwt(courier.access_token, 'courier.access_token');
+  expectUuid(courier.activeLocationId, 'courier.activeLocationId');
   const captured: string[] = [];
 
   const setAuth = async (token?: string, locale = 'sq') => {
@@ -71,12 +85,19 @@ test('capture all states', async ({ page, request }) => {
     // Admin default states
     if (!CLIENT_ONLY) {
     await setAuth(owner.access_token, 'sq');
-    for (const [name, path] of ADMIN) { await go(path); await shot(`${v.tag}-admin-${name}`); }
+    for (const [name, path] of ADMIN) {
+      await go(path); await shot(`${v.tag}-admin-${name}`);
+      // DOM-presence proof: a crashed/blank/login-redirected admin shell would still
+      // increment `captured`. Assert the authed owner dashboard actually rendered.
+      if (name === 'orders') await expect(page.locator('[data-testid="ws-status-dot"]')).toBeVisible({ timeout: 15_000 });
+    }
     }
 
     // Client storefront default + overlays (no auth)
     await setAuth(undefined, 'sq');
     await go(`/s/${SLUG}`); await shot(`${v.tag}-client-menu`);
+    // DOM-presence proof: an HTTP-500 / empty-render storefront would still push a capture.
+    await expect(page.locator('[data-testid="menu-item"]').first()).toBeVisible({ timeout: 15_000 });
     // product modal
     try {
       await page.locator('[data-testid="menu-item"]').first().click({ timeout: 5000 });
@@ -99,7 +120,12 @@ test('capture all states', async ({ page, request }) => {
     // Courier default states
     if (!CLIENT_ONLY) {
     await setAuth(courier.access_token, 'sq');
-    for (const [name, path] of COURIER) { await go(path); await shot(`${v.tag}-courier-${name}`); }
+    for (const [name, path] of COURIER) {
+      await go(path); await shot(`${v.tag}-courier-${name}`);
+      // DOM-presence proof: a login-redirected/blank courier app would still push a capture.
+      // The online/offline status badge is rendered unconditionally on the authed Tasks page.
+      if (name === 'tasks') await expect(page.locator('[role="status"]').first()).toBeVisible({ timeout: 15_000 });
+    }
     }
   }
   if (CLIENT_ONLY) { console.log('CAPTURED', captured.length, ':', captured.join(', ')); expect(captured.length).toBeGreaterThan(5); return; }
@@ -111,6 +137,7 @@ test('capture all states', async ({ page, request }) => {
   // Guard continue/abort in try/catch — a retried request can already be handled.
   const hold = async (r: any) => { await new Promise(res => setTimeout(res, 20000)); try { await r.abort(); } catch { /* already handled */ } };
   const fail500 = (r: any) => { try { r.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"server"}' }); } catch { /* already handled */ } };
+  const failWith = (status: number) => (r: any) => { try { r.fulfill({ status, contentType: 'application/json', body: '{"error":"forced"}' }); } catch { /* already handled */ } };
 
   // Client menu: LOADING skeleton (theme/info still loads → branded skeleton)
   await setAuth(undefined, 'sq');
@@ -122,6 +149,16 @@ test('capture all states', async ({ page, request }) => {
   // Client menu: ERROR (500)
   await page.route('**/public/locations/**/menu**', fail500);
   await go(`/s/${SLUG}`); await shot('state-client-menu-error');
+  await page.unroute('**/public/locations/**/menu**');
+
+  // Client menu: 401 (expired/invalid token) — distinct error surface from 500.
+  await page.route('**/public/locations/**/menu**', failWith(401));
+  await go(`/s/${SLUG}`); await shot('state-client-menu-401');
+  await page.unroute('**/public/locations/**/menu**');
+
+  // Client menu: 404 (unknown slug / location not found).
+  await page.route('**/public/locations/**/menu**', failWith(404));
+  await go(`/s/${SLUG}`); await shot('state-client-menu-404');
   await page.unroute('**/public/locations/**/menu**');
 
   // Admin orders: LOADING skeleton
