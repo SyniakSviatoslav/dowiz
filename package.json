@@ -28,6 +28,7 @@
     "guardrail:owner-active": "node scripts/guardrail-owner-active-membership.mjs",
     "guardrail:spike-boundary": "node scripts/guardrail-spike-boundary.mjs",
     "verify:all": "tsx scripts/verify-all.ts",
+    "test:unit": "node --test --import tsx 'apps/api/tests/**/*.test.ts' 'apps/worker/tests/**/*.test.ts' 'apps/web/src/**/*.test.ts' 'packages/**/*.test.ts' 'tools/**/tests/**/*.test.ts'",
     "backup:restore": "tsx --env-file=.env scripts/backup-restore.ts",
     "migrate:create": "node-pg-migrate create -j ts -m packages/db/migrations",
     "migrate:up": "node-pg-migrate up --no-check-order -d DATABASE_URL_MIGRATIONS -j ts -m packages/db/migrations --envPath .env --tsx --tsconfig tsconfig.migrations.json",
