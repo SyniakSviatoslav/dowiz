@@ -82,7 +82,7 @@ export function renderReport(r: RunRecord): string {
   L.push(`   GIT/MEM   ${t.commits} commits · ${t.prs} PRs · ${t.conflicts} conflicts · RSS peak ${(t.rss_peak_mb / 1024).toFixed(1)}GB`);
   L.push(`   AGENTS    ${Object.entries(t.agents).map(([k, v]) => `${k} ×${v}`).join(' · ') || '(none)'}`);
   L.push(`   SKILLS    ${Object.entries(t.skills_used).map(([k, v]) => `${k} ×${v}`).join(', ') || '(none)'}` + (t.skills_ghost.length ? ` · ghost: ${t.skills_ghost.join(', ')}` : ''));
-  L.push(`   TOKENS    in ${num(t.tokens_in)} · out ${num(t.tokens_out)} · cache-read ${num(t.cache_read)} · cost $${t.cost_usd.toFixed(2)}` + (t.per_resolved ? ` · per-resolved ${num(t.per_resolved)}` : ''));
+  L.push(`   TOKENS    in ${num(t.tokens_in)} · out ${num(t.tokens_out)} · cache-r ${num(t.cache_read)} · cache-w ${num(t.cache_write ?? 0)} · cost $${t.cost_usd.toFixed(2)}` + (t.per_resolved ? ` · per-resolved ${num(t.per_resolved)}` : ''));
   L.push(`   ECO       ${t.eco.kwh ?? 0} kWh · ${t.eco.gco2 ?? 0} gCO₂ · ${t.eco.water_ml ?? 0} ml water  (${t.eco.estimate ? 'estimate' : 'measured'}${t.eco.method ? ', ' + t.eco.method : ''})`);
   L.push('');
   L.push('6. VS HISTORY (' + r.loop + ', all prior runs)');

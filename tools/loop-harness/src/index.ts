@@ -5,6 +5,8 @@
 export * from './types.js';
 export { DEFAULT_BREAKER, initBreaker, stepBreaker, breakerReasonText } from './breaker.js';
 export { renderReport, computeHistory } from './report.js';
+export { buildPropagation, renderPropagation } from './propagate.js';
+export type { Propagation, PropagationTarget } from './propagate.js';
 export {
   nextRunIndex, appendIter, writeRunRecord, readRunRecord,
   appendMetricsLine, readMetrics, iterTracePath, runRecordPath,
@@ -12,7 +14,7 @@ export {
 export { runLoop } from './harness.js';
 export type { HarnessOptions } from './harness.js';
 export { computeEco } from './eco.js';
-export { collectGitMem, collectSessionTelemetry } from './collect.js';
+export { collectGitMem, collectSessionTelemetry, collectWorkflowTelemetry, mergeTelemetry } from './collect.js';
 export type { GitMem, SessionTelemetry } from './collect.js';
 export { buildRecord } from './cli.js';
 export { evaluate, DEFAULT_THRESHOLDS } from './oracle.js';

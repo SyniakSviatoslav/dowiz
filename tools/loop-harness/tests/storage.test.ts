@@ -19,7 +19,7 @@ const recordFixture = (run_index: number): RunRecord => ({
   telemetry: {
     iterations: 4, tests_fail_start: 8, tests_fail_end: 0, edits: 9, loc_add: 80, loc_del: 30,
     slop_min: 92, fake_green_caught: 0, commits: 1, conflicts: 0, prs: 0, rss_peak_mb: 5000,
-    agents: {}, skills_used: {}, skills_ghost: [], tokens_in: 100, tokens_out: 20, cache_read: 50,
+    agents: {}, skills_used: {}, skills_ghost: [], tokens_in: 100, tokens_out: 20, cache_read: 50, cache_write: 10,
     cost_usd: 0.5, per_resolved: 15, eco: { kwh: 0, gco2: 0, water_ml: 0, method: 'deferred', estimate: true },
   },
   carry_forward: { guards: [], watch: [] },
