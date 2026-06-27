@@ -11,8 +11,7 @@ import Redis from 'ioredis';
 import pg from 'pg';
 import { z, type ZodTypeAny } from 'zod';
 import healthRoutes from './routes/health.js';
-import { AccessRequestNotifyWorker } from './workers/access-request-notify.js';
-import { AccessRequestRetentionWorker, assertAccessRequestSchedules } from './workers/access-request-retention.js';
+import { assertAccessRequestSchedules } from './workers/access-request-retention.js';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
@@ -25,8 +24,6 @@ import { registerReplySendError } from './lib/reply-send-error.js';
 import { resolveSubdomainRewrite } from './lib/subdomain-rewrite.js';
 import { registerCoreRoutes } from './bootstrap/routes.js';
 import { initSentry, getSentry } from './lib/sentry.js';
-import { WorkerHeartbeat } from './lib/worker/heartbeat.js';
-import { LivenessChecker } from './workers/liveness-checker.js';
 import securityHeadersPlugin from './lib/security/headers.js';
 
 // Safe __dirname fallback for dual ESM/CJS bundling
@@ -42,19 +39,12 @@ import { LocalFsStorageProvider } from './lib/local-storage.js';
 import { R2StorageProvider } from './lib/r2-storage.js';
 import { LibreTranslateProvider } from './lib/libretranslate-provider.js';
 import { buildNotifications } from './bootstrap/notifications.js';
+import { startBackgroundWorkers } from './bootstrap/workers.js';
 import { TelegramPoller } from './notifications/workers/telegram.poll.js';
-import { DwellMonitorWorker } from './workers/dwell-monitor.js';
-import { LifecycleHandlers } from './workers/lifecycle-handlers.js';
-import { SignalRaiserWorker } from './workers/signal-raiser.js';
-import { VelocityIncrementer } from './lib/signals/velocity-increment.js';
 import mockAuthRoutes from './routes/dev/mock-auth.js';
 import spaProxyRoutes from './routes/spa-proxy.js';
 import telegramWebhookRoutes from './routes/telegram-webhook.js';
-import { AnonymizerService } from './lib/anonymizer/index.js';
-import { AnonymizerRetentionWorker } from './workers/anonymizer-retention.js';
-import { GdprErasureWorker } from './workers/anonymizer-gdpr.js';
 import { MemoryService, getMemoryService } from './lib/memory.js';
-import { registerNotifySubscriptions } from './bootstrap/messaging.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -325,121 +315,22 @@ async function main() {
    // ENTIRE worker/queue startup in a budget: if it hangs past WORKER_BOOT_BUDGET_MS
    // or throws, log and proceed to listen anyway — the menu must serve even with
    // degraded background workers. Workers keep starting in the background.
-   let heartbeats: any[] = [];
-   const WORKER_BOOT_BUDGET_MS = 25_000;
-   await Promise.race([
-    (async () => {
-   await queue.work(QUEUE_NAMES.NOTIFY_DISPATCH, async (data: any) => notifyWorker.handleDispatch({ data }));
-   await queue.work(QUEUE_NAMES.NOTIFY_CUSTOMER_STATUS, async (data: any) => notifyWorker.handleCustomerStatus({ data }));
-   await queue.work(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, async (data: any) => notifyWorker.handleTelegramSend({ data }));
-   console.log('[API] pg-boss workers registered');
-
-  const { CourierDispatchWorker } = await import('./workers/courier-dispatch.js');
-  const { CourierCronWorker } = await import('./workers/courier-cron.js');
-  const { CourierEventsWorker } = await import('./workers/courier-events.js');
-  const { SettlementCronWorker } = await import('./workers/settlement-cron.js');
-  const { BackupCronWorker } = await import('./workers/backup/index.js');
-  const { BackupVerifyWorker } = await import('./workers/backup/backup-verify-scheduled.js');
-  
-  const courierDispatchWorker = new CourierDispatchWorker(pool, queue, messageBus);
-  const courierCronWorker = new CourierCronWorker(pool, queue.boss, messageBus);
-  const courierEventsWorker = new CourierEventsWorker(pool, messageBus);
-  const settlementCronWorker = new SettlementCronWorker(pool, queue.boss);
-  const backupCronWorker = new BackupCronWorker(pool, backupPool, queue.boss, messageBus);
-  const backupVerifyWorker = new BackupVerifyWorker(pool, queue.boss);
-  
-  await courierDispatchWorker.start();
-  await courierCronWorker.start();
-  await courierEventsWorker.start();
-  await settlementCronWorker.start();
-  await backupCronWorker.start();
-  await backupVerifyWorker.start();
-
-  // Dwell Monitor Worker
-  const dwellMonitorWorker = new DwellMonitorWorker(pool, queue.boss, messageBus);
-  await dwellMonitorWorker.start();
-
-  // Nightly Reconciliation Worker — temporarily removed (esbuild bundle issue). Re-add in separate deploy.
-
-  // Order Timeout Sweep — standalone 1-min reconciliation + detection. Safety net
-  // for the per-order order.timeout handler (apps/worker): recovers overdue PENDING
-  // orders whose per-order job was lost, and counts overdue-but-undrained
-  // order.timeout jobs (the lost-consumer signal). Lives here (not on the removed
-  // ReconciliationWorker) so detection cannot lose its host; apps/api does not auto-stop.
-  const { OrderTimeoutSweepWorker } = await import('./workers/order-timeout-sweep.js');
-  const orderTimeoutSweepWorker = new OrderTimeoutSweepWorker(pool, queue.boss, messageBus);
-  await orderTimeoutSweepWorker.start();
-
-  // Lifecycle Handlers (auto-resolve alerts on order transitions)
-  const lifecycleHandlers = new LifecycleHandlers(pool, queue.boss, messageBus);
-  await lifecycleHandlers.start();
-
-  // P5-0 Anonymizer Service + Workers
-  const anonymizerService = new AnonymizerService(pool, messageBus);
-  const anonymizerRetentionWorker = new AnonymizerRetentionWorker(pool, queue.boss, messageBus, anonymizerService);
-  const gdprErasureWorker = new GdprErasureWorker(pool, queue.boss, messageBus, anonymizerService);
-  await anonymizerRetentionWorker.start();
-  await gdprErasureWorker.start();
-
-  // P31 — Worker Heartbeats (critical workers)
-  const heartbeatConfigs = [
-    { workerId: 'dispatcher', jobName: QUEUE_NAMES.COURIER_DISPATCH },
-    { workerId: 'settlement-cron', jobName: QUEUE_NAMES.SETTLEMENT_CRON },
-    { workerId: 'dwell-monitor', jobName: QUEUE_NAMES.DWELL_MONITOR },
-    { workerId: 'anonymizer-retention', jobName: QUEUE_NAMES.ANONYMIZER_RETENTION },
-  ];
-  heartbeats = heartbeatConfigs.map(cfg => {
-    const hb = new WorkerHeartbeat(pool, cfg);
-    hb.start();
-    return hb;
-  });
-
-  // Signal Raiser Worker (P26 — anti-fake signals)
-  const signalRaiserWorker = new SignalRaiserWorker(pool, queue.boss, messageBus);
-  await signalRaiserWorker.start();
-
-  // Velocity Incrementer (P26 — async velocity counter)
-  const velocityIncrementer = new VelocityIncrementer(pool, queue.boss);
-  await queue.work(QUEUE_NAMES.VELOCITY_FLUSH, async (data: any) => velocityIncrementer.handleFlush({ data }));
-
-  // Currency Rates Refresh Worker (hourly, fetches ALL→EUR from fawazahmed0)
-  const { RatesRefreshWorker } = await import('./workers/rates-refresh.js');
-  const ratesRefreshWorker = new RatesRefreshWorker(pool, queue.boss);
-  await ratesRefreshWorker.start();
-
-  // Soft access gate (ADR-soft-access-gate) — notify + retention/reconcile crons. These
-  // run unconditionally (data hygiene): retention auto-erase + notify-gap recovery must
-  // work the moment the public route is enabled. The public POST route itself is gated
-  // separately by ACCESS_GATE_PUBLIC_ENABLED (below).
-  const accessRequestNotifyWorker = new AccessRequestNotifyWorker(pool, queue.boss, messageBus);
-  await accessRequestNotifyWorker.start();
-  const accessRequestRetentionWorker = new AccessRequestRetentionWorker(pool, queue.boss, messageBus);
-  await accessRequestRetentionWorker.start();
-
-  // Telegram Poller disabled — webhook handles all updates (messages + callbacks)
-  // Poller conflicts with webhook (getUpdates HTTP 409). Keep poller import for type,
-  // but don't start. Webhook at /webhook/telegram/:secret handles /start, /stop, /open, /close.
+  // Telegram Poller disabled — webhook handles all updates. Constructed (not
+  // started) here in main() scope so the onClose shutdown hook can .stop() it.
   const telegramPoller = new TelegramPoller(pool, telegramAdapter);
   // telegramPoller.start(); — disabled: webhook active
 
-  registerNotifySubscriptions(messageBus, queue.boss);
-
-  // P31 — Worker Liveness Checker (singleton cron, 60s)
-  const livenessChecker = new LivenessChecker(pool, queue.boss, messageBus);
-  await livenessChecker.start();
-
-  // P5-5 — Free-tier watch (hourly, monitors Free tier limits)
-  const { collectFreeTierMetrics } = await import('./workers/free-tier-watch.js');
-  await queue.boss.work(QUEUE_NAMES.FREE_TIER_WATCH, async () => {
-    try {
-      const metrics = await collectFreeTierMetrics(pool);
-      console.log(`[FreeTier] Watch complete: ${metrics.status} (DB: ${metrics.dbPct}%)`);
-    } catch (err: any) {
-      console.error('[FreeTier] Watch failed:', err.message);
-    }
-  });
-  await queue.boss.schedule(QUEUE_NAMES.FREE_TIER_WATCH, '0 * * * *');
-    })().catch((err: any) => console.error('[API] worker startup error (continuing to listen):', err?.message || err)),
+  // BOOT RESILIENCE (incident 2026-06-21): bound the ENTIRE worker startup in a
+  // budget — if startBackgroundWorkers hangs past WORKER_BOOT_BUDGET_MS or throws,
+  // log and proceed to listen anyway (the menu must serve even with degraded
+  // workers). Workers keep starting in the background. The race + budget + catch
+  // stay HERE; the construction sequence lives in bootstrap/workers.ts.
+  let heartbeats: any[] = [];
+  const WORKER_BOOT_BUDGET_MS = 25_000;
+  await Promise.race([
+    startBackgroundWorkers({ pool, backupPool, queue, messageBus, notifyWorker })
+      .then((r) => { heartbeats = r.heartbeats; })
+      .catch((err: any) => console.error('[API] worker startup error (continuing to listen):', err?.message || err)),
     new Promise<void>((res) => setTimeout(() => { console.warn(`[API] worker startup exceeded ${WORKER_BOOT_BUDGET_MS}ms — listening anyway; workers continue in background`); res(); }, WORKER_BOOT_BUDGET_MS)),
   ]);
 
