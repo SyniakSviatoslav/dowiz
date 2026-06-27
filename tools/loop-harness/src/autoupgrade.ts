@@ -14,6 +14,8 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { makeRepoHooks, type RepoPerfSpec } from './repo-apply.js';
 import { configTuneDetector, loadTunables } from './detectors.js';
+import { checkCredentialIsolation, isTrustedSource } from './containment.js';
+import { queueProposal } from './proposals.js';
 
 export type UpgradeClass = 'A' | 'B';
 export type BlastRadius = 'low' | 'med' | 'high';
@@ -174,6 +176,10 @@ export interface ApplyOutcome {
  */
 export function buildHooks(c: Candidate): { hooks: OracleHooks } | { skip: string } {
   if (c.id.startsWith('repo-perf:') && c.perf) {
+    // §0/§4 — only candidates from a TRUSTED mechanical detector may auto-apply.
+    if (!isTrustedSource(c.source)) {
+      return { skip: `untrusted source "${c.source}" — not an allowlisted mechanical detector; propose-only (§0: never execute web/LLM-derived patches).` };
+    }
     return { hooks: makeRepoHooks(c.perf) }; // reversible + benchmarkable → oracle can KEEP it
   }
   if (c.id.startsWith('ghost-mcp:')) {
@@ -185,7 +191,14 @@ export function buildHooks(c: Candidate): { hooks: OracleHooks } | { skip: strin
   return { skip: 'adapter ready (makeRepoHooks + benchmark, atomic git revert — proven) but no MAP source emits a repo-perf candidate with a deterministic mechanical patch yet (§0: no autonomous LLM patches).' };
 }
 
-async function evaluateClassA(classA: Candidate[], apply: boolean): Promise<ApplyOutcome[]> {
+async function evaluateClassA(classA: Candidate[], apply: boolean, env: Record<string, string | undefined> = process.env): Promise<ApplyOutcome[]> {
+  // §4 credential isolation — refuse autonomous apply if prod secrets are in context.
+  if (apply) {
+    const iso = checkCredentialIsolation(env);
+    if (!iso.ok) {
+      return classA.map((c) => ({ id: c.id, decision: 'skipped' as const, reason: `CONTAINMENT (§4): prod credentials in context (${iso.present.join(', ')}) — autonomous apply refused. Run credential-isolated.` }));
+    }
+  }
   const out: ApplyOutcome[] = [];
   for (const c of classA) {
     if (!apply) { out.push({ id: c.id, decision: 'report-only', reason: 'auto-apply not requested (run with --apply)' }); continue; }
@@ -208,6 +221,13 @@ export async function runAutoupgrade(opts: { repoDir: string; baseDir: string; t
   const candidates = mapCandidates(opts.repoDir).map((c) => ({ c, k: classify(c) }));
   const classA = candidates.filter((x) => x.k.class === 'A');
   const classB = candidates.filter((x) => x.k.class === 'B');
+  // §8c — Class B is PROPOSED to the human-gated queue, never auto-applied.
+  for (const x of classB) {
+    queueProposal(opts.baseDir, {
+      id: x.c.id, source: 'autoupgrade:class-B', kind: x.c.area.split(' ')[0] ?? 'review',
+      description: x.c.pattern, evidence: x.c.evidence, action: x.c.action,
+    }, opts.tEnd);
+  }
   const outcomes = await evaluateClassA(classA.map((x) => x.c), opts.apply);
   const kept = outcomes.filter((o) => o.decision === 'kept');
   const rolledBack = outcomes.filter((o) => o.decision === 'rolled_back');
@@ -224,7 +244,7 @@ export async function runAutoupgrade(opts: { repoDir: string; baseDir: string; t
     iter_to: Math.max(1, candidates.length),
     what_done: `MAP (codeburn + fs scan) → ${candidates.length} candidate(s); CLASSIFY fail-safe (firm boundary → B). Mode: ${mode}. Oracle verdicts: ${kept.length} kept · ${rolledBack.length} rolled back · ${skipped.length} skipped.`,
     issues: [
-      ...classB.map((x) => `Class B (propose-only, human/DB-owner): ${x.c.pattern} — ${x.k.reason}. Action: ${x.c.action}`),
+      ...classB.map((x) => `Class B → QUEUED for human (loops/runs/proposals.json): ${x.c.pattern} — ${x.k.reason}. Action: ${x.c.action}`),
       ...rolledBack.map((o) => `Rolled back (oracle): ${o.id} — ${o.reason}`),
       ...skipped.map((o) => `Skipped (not safely auto-applicable): ${o.id} — ${o.reason}`),
     ],
