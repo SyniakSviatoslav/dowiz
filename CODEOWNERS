@@ -1,0 +1,24 @@
+# Code ownership (GitHub CODEOWNERS). Mitigates bus-factor-1: today a single maintainer owns
+# everything; this file makes review routing explicit and gives a second maintainer a clear
+# on-ramp when one joins. Critical/red-line paths are listed explicitly so they always get review.
+
+# Default — everything
+*                                   @SyniakSviatoslav
+
+# Red-line surfaces (auth / money / RLS / migrations) — never merge without owner review
+/packages/db/migrations/            @SyniakSviatoslav
+/packages/db/scripts/verify-rls.ts  @SyniakSviatoslav
+/apps/api/src/routes/orders.ts      @SyniakSviatoslav
+/apps/api/src/routes/auth/          @SyniakSviatoslav
+/apps/api/src/routes/auth.ts        @SyniakSviatoslav
+/apps/api/src/routes/courier/auth.ts @SyniakSviatoslav
+/apps/api/src/plugins/auth.ts       @SyniakSviatoslav
+/apps/api/src/lib/money.ts          @SyniakSviatoslav
+/apps/api/src/lib/pii-cipher.ts     @SyniakSviatoslav
+/packages/domain/                   @SyniakSviatoslav
+
+# Contracts + governance
+/docs/adr/                          @SyniakSviatoslav
+/docs/agent-rules/INVARIANTS.md     @SyniakSviatoslav
+/tools/eslint-plugin-local/         @SyniakSviatoslav
+/.claude/                           @SyniakSviatoslav
