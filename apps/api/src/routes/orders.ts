@@ -16,7 +16,8 @@ const env = loadEnv();
 // OTP globally disabled until a real SMS gateway exists; per-location
 // require_phone_otp only applies when OTP_ENABLED is 'true'. See packages/config.
 const OTP_ENABLED = env.OTP_ENABLED === 'true';
-import { applyTax, assertNonNegative, computeLineTotal } from '../lib/money.js';
+import { applyTax, assertNonNegative } from '../lib/money.js';
+import { computeOrderPricing } from '../lib/order-pricing.js';
 import { distanceKm } from '../lib/geo.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -477,68 +478,16 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         }
       }
 
-      // 7. Calculate Pricing & Validate Modifier Groups
-      let subtotal = 0;
-      const orderItemRows: Array<any> = [];
-
-      for (const item of items) {
-        const product = productMap.get(item.product_id)!;
-
-        // Group logic validation — re-read this product's groups from the batched
-        // partition (broadcast: read once per line-item, never drained).
-        const groupRows = groupsByProduct.get(item.product_id) || [];
-
-        const groupCounts = new Map<string, number>();
-        const modifierPrices: number[] = [];
-        const itemModifiersRows: Array<any> = [];
-
-        // Check each modifier is valid for this product
-        const uniqueModIdsInItem = new Set(item.modifier_ids || []);
-        if (uniqueModIdsInItem.size !== (item.modifier_ids || []).length) {
-          await client.query('ROLLBACK');
-          return reply.sendError(422, 'DUPLICATE_MODIFIER', 'Duplicate modifier');
-        }
-
-        for (const mid of (item.modifier_ids || [])) {
-          const modInfo = modMap.get(`${item.product_id}_${mid}`);
-          if (!modInfo) {
-            await client.query('ROLLBACK');
-            return reply.sendError(422, 'MODIFIER_UNAVAILABLE', `Modifier ${mid} unavailable or invalid for product`);
-          }
-          const groupId = modInfo.group_id;
-          groupCounts.set(groupId, (groupCounts.get(groupId) || 0) + 1);
-          modifierPrices.push(modInfo.price_delta);
-          itemModifiersRows.push({
-            modifierId: mid,
-            nameSnapshot: modInfo.name,
-            priceDeltaSnapshot: modInfo.price_delta
-          });
-        }
-
-        // Validate min/max select
-        for (const gRow of groupRows) {
-          const count = groupCounts.get(gRow.id) || 0;
-          if (gRow.required && count < gRow.min_select) {
-            await client.query('ROLLBACK');
-            return reply.sendError(422, 'MODIFIER_MIN_NOT_MET', `Modifier group ${gRow.id} min select not met`);
-          }
-          if (count > gRow.max_select) {
-            await client.query('ROLLBACK');
-            return reply.sendError(422, 'MODIFIER_MAX_EXCEEDED', `Modifier group ${gRow.id} max select exceeded`);
-          }
-        }
-
-        const lineTotal = computeLineTotal(product.price, modifierPrices, item.quantity);
-        subtotal += lineTotal;
-        
-        orderItemRows.push({
-          productId: item.product_id,
-          nameSnapshot: product.name,
-          priceSnapshot: product.price, // price without modifiers
-          quantity: item.quantity,
-          modifiers: itemModifiersRows
-        });
+      // 7. Calculate Pricing & Validate Modifier Groups.
+      // Pure core (lib/order-pricing.ts) — consumes the in-tx MVCC snapshot Maps
+      // fetched above, returns priced rows or the first validation failure. The
+      // 422 codes/messages are unchanged; only ROLLBACK + reply stay in the handler.
+      const pricing = computeOrderPricing({ items, productMap, modMap, groupsByProduct });
+      if (!pricing.ok) {
+        await client.query('ROLLBACK');
+        return reply.sendError(422, pricing.error.code, pricing.error.message);
       }
+      const { subtotal, orderItemRows } = pricing;
 
       // 8. Delivery Rules
       if (location.min_order_value !== null && subtotal < location.min_order_value) {
