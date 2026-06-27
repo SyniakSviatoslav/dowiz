@@ -19,3 +19,17 @@ escalation: "знахідка логіки/контракту/безпеки →
 skills_required: [headed-browser, repo-access]
 memory_file: loops/memory/audit-gate.md
 verification_report: loops/reports/audit-gate-0.1.md
+
+# Living Loop System wiring (docs/operating-model/living-loop-system-v3.md §1/§5).
+# This loop runs UNDER the harness: on finish it MUST emit the §5 report (always,
+# every time) via the finalize seam, which measures git+session-tokens+eco and
+# persists permanently+losslessly to runs_dir. No bare loop.
+harness:
+  runs_dir: loops/runs
+  always_emit_report: true        # §5 — printed in full to terminal, no flag
+  progress_metric: sections_not_yet_pass   # ↓=better; breaker watches this
+  finalize: >-
+    npx tsx tools/loop-harness/src/cli.ts finalize
+    --record <run.json> --base loops/runs
+    --session $CLAUDE_SESSION_JSONL --since <run_start_commit> --repo .
+  telemetry_collectors: [git_mem, session_tokens, eco]   # tokens/agents/skills ← session JSONL (codeburn source)
