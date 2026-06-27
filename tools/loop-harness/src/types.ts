@@ -160,4 +160,6 @@ export interface MetricsLine {
   slop_min: number | null;
   conflicts: number;
   recurring_flags: string[];
+  /** Files-changed proxy for the governor's churn/day ceiling (optional). */
+  edits?: number;
 }

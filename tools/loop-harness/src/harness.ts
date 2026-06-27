@@ -151,6 +151,7 @@ export async function runLoop<S, C>(loop: Loop<S, C>, initialState: S, opts: Har
     fail_start: telemetry.tests_fail_start, fail_end: telemetry.tests_fail_end,
     per_resolved: telemetry.per_resolved, slop_min: telemetry.slop_min, conflicts: telemetry.conflicts,
     recurring_flags: record.patterns.filter((p) => /recurring/i.test(p)),
+    edits: telemetry.edits,
   };
   appendMetricsLine(opts.baseDir, metricsLine);
 

@@ -139,6 +139,7 @@ import { renderReport } from './report.js';
 import { writeRunRecord, appendMetricsLine } from './storage.js';
 import { smokeTest, defaultSeed, type SmokeResult } from './smoke.js';
 import { registerLoop, type RegistryLoop } from './registry.js';
+import { queueProposal } from './proposals.js';
 
 function carveOutKeywords(carveOut: string[]): string[] {
   return [...new Set(carveOut.map((g) => (g.match(/[a-z0-9]+/i)?.[0] ?? g)).filter((k) => !/db|migrations/.test(k)))];
@@ -161,6 +162,24 @@ export async function runLoopBuilder(opts: { goal: string; repoDir: string; base
       scope_class: design!.scopeClass, security_carveout: carveOutKeywords(design!.carveOut),
       registered_at: opts.tEnd, status: 'active',
     });
+  }
+
+  // §11 step 5 — a sound design that ISN'T auto-registered goes to the human queue
+  // (durable, deduped), so it never just vanishes into the report. Class B / extend
+  // an existing loop / releasable-but-not-registered all become a proposal.
+  let queued: ReturnType<typeof queueProposal> | null = null;
+  if (design && validation!.ok && smoke!.pass && !registered) {
+    const kind = design.reuseOf ? 'extend' : design.scopeClass === 'B' ? 'security-loop' : 'release';
+    const action = design.reuseOf
+      ? `extend existing loop "${design.reuseOf}" with this design (don't add a duplicate)`
+      : design.scopeClass === 'B'
+        ? `review the Class-B loop design (security scope) before registering`
+        : `release "${design.id}": re-run loop-builder with --register`;
+    queued = queueProposal(opts.baseDir, {
+      id: `loop-design:${design.id}`, source: 'loop-builder', kind,
+      description: `loop for "${opts.goal}" — oracle: ${design.oracle}`,
+      evidence: `validation PASS · smoke PASS (${smoke!.detail})`, action,
+    }, opts.tEnd);
   }
   const mode = opts.register ? 'AUTO-REGISTER (Class A, smoke-gated)' : 'report-only';
 
@@ -198,8 +217,8 @@ export async function runLoopBuilder(opts: { goal: string; repoDir: string; base
       watch: escalated ? ['define measurable success criteria for this goal, or keep it human-driven']
         : [
             registered ? `REGISTERED "${registered.id}" → router can now select it (runs/registry.json)` : '',
+            queued ? `QUEUED for human (proposals.json, ${queued.kind}): ${queued.action}` : '',
             !registered && releasable ? `releasable — re-run with --register to add "${design!.id}" to the registry` : '',
-            design!.scopeClass === 'B' || design!.reuseOf ? `NOT auto-registered: ${design!.reuseOf ? `extend "${design!.reuseOf}"` : 'Class B / security scope → human queue'}` : '',
           ].filter(Boolean),
     },
   };
