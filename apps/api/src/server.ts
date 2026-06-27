@@ -60,6 +60,7 @@ import { fileURLToPath } from 'node:url';
 import { getFastifyLoggerConfig, correlationStore } from './lib/logger.js';
 import { ApiError, isContractCode, rateLimitError, buildErrorEnvelope } from './lib/api-error.js';
 import { registerReplySendError } from './lib/reply-send-error.js';
+import { resolveSubdomainRewrite } from './lib/subdomain-rewrite.js';
 import { initSentry, getSentry } from './lib/sentry.js';
 import { WorkerHeartbeat } from './lib/worker/heartbeat.js';
 import { LivenessChecker } from './workers/liveness-checker.js';
@@ -246,21 +247,12 @@ async function main() {
     }
   });
 
-  // Subdomain routing middleware
-  fastify.addHook('onRequest', async (request, reply) => {
-    const host = request.hostname.split(':')[0]; // remove port
-    // e.g. margherita.dowiz.org
-    if (host.endsWith('dowiz.org')) {
-      const parts = host.split('.');
-      if (parts.length >= 3) {
-        const slug = parts[0];
-        if (!['www', 'api', 'app'].includes(slug) && !request.url.startsWith('/api/') && !request.url.startsWith('/public/') && !request.url.startsWith('/s/') && !request.url.startsWith('/admin') && !request.url.startsWith('/courier') && !request.url.startsWith('/dashboard') && !/\.\w{2,5}(\?|$)/.test(request.url)) {
-          // It's a tenant subdomain, rewrite URL internally to /s/:slug
-          // Preserve query strings
-          const urlObj = new URL(request.url, `http://${request.hostname}`);
-          request.raw.url = `/s/${slug}${urlObj.search}`;
-        }
-      }
+  // Subdomain routing middleware — pure resolver (lib/subdomain-rewrite.ts).
+  // margherita.dowiz.org/<path> → internal /s/margherita rewrite (tenant routes only).
+  fastify.addHook('onRequest', async (request) => {
+    const rewritten = resolveSubdomainRewrite(request.hostname, request.url);
+    if (rewritten !== null) {
+      request.raw.url = rewritten;
     }
   });
 
