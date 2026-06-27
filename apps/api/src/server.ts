@@ -11,46 +11,8 @@ import Redis from 'ioredis';
 import pg from 'pg';
 import { z, type ZodTypeAny } from 'zod';
 import healthRoutes from './routes/health.js';
-import authRoutes from './routes/auth.js';
-import courierRoutes from './routes/couriers.js';
-import orderRoutes from './routes/orders.js';
-import categoryRoutes from './routes/owner/categories.js';
-import productRoutes from './routes/owner/products.js';
-import modifierGroupRoutes from './routes/owner/modifier-groups.js';
-import menuAvailabilityRoutes from './routes/owner/menu-availability.js';
-import locationRoutes from './routes/owner/locations.js';
-import publicMenuRoutes from './routes/public/menu.js';
-import ssrRoutes from './routes/public/ssr.js';
-import brandingPreviewRoutes from './routes/public/branding-preview.js';
-import seoRoutes from './routes/public/seo.js';
-import clientFlowRoutes from './routes/public/client-flow.js';
-import pwaRoutes from './routes/public/pwa.js';
-import vapidRoutes from './routes/public/vapid.js';
-import telemetryRoutes from './routes/public/telemetry.js';
-import accessRequestRoutes from './routes/public/access-requests.js';
-import funnelRoutes from './routes/public/funnel.js';
 import { AccessRequestNotifyWorker } from './workers/access-request-notify.js';
 import { AccessRequestRetentionWorker, assertAccessRequestSchedules } from './workers/access-request-retention.js';
-import ownerThemeRoutes from './routes/owner/themes.js';
-import publicThemeRoutes from './routes/public/theme.js';
-import ownerNotificationRoutes from './routes/owner/notifications.js';
-import menuImportRoutes from './routes/owner/menu-import.js';
-import menuTranslateRoutes from './routes/owner/menu-translate.js';
-import courierAuthRoutes from './routes/courier/auth.js';
-import courierMeRoutes from './routes/courier/me.js';
-import ownerCourierRoutes from './routes/owner/couriers.js';
-import ownerCourierInvitesRoutes from './routes/owner/courier-invites.js';
-import onboardingRoutes from './routes/owner/onboarding.js';
-import activationRoutes from './routes/owner/activation.js';
-import orderMessageRoutes from './routes/order-messages.js';
-import customerOrderRoutes from './routes/customer/orders.js';
-import ownerSettlementRoutes from './routes/owner/settlements.js';
-import ownerDashboardRoutes from './routes/owner/dashboard.js';
-import courierSettlementRoutes from './routes/courier/settlements.js';
-import courierAssignmentsRoutes from './routes/courier/assignments.js';
-import courierShiftsRoutes from './routes/courier/shifts.js';
-import ownerAlertRoutes from './routes/owner/alerts.js';
-import ownerDwellSettingsRoutes from './routes/owner/dwell-settings.js';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
@@ -61,6 +23,7 @@ import { getFastifyLoggerConfig, correlationStore } from './lib/logger.js';
 import { ApiError, isContractCode, rateLimitError, buildErrorEnvelope } from './lib/api-error.js';
 import { registerReplySendError } from './lib/reply-send-error.js';
 import { resolveSubdomainRewrite } from './lib/subdomain-rewrite.js';
+import { registerCoreRoutes } from './bootstrap/routes.js';
 import { initSentry, getSentry } from './lib/sentry.js';
 import { WorkerHeartbeat } from './lib/worker/heartbeat.js';
 import { LivenessChecker } from './workers/liveness-checker.js';
@@ -88,20 +51,8 @@ import { DwellMonitorWorker } from './workers/dwell-monitor.js';
 import { LifecycleHandlers } from './workers/lifecycle-handlers.js';
 import { SignalRaiserWorker } from './workers/signal-raiser.js';
 import { VelocityIncrementer } from './lib/signals/velocity-increment.js';
-import ownerFallbackRoutes from './routes/owner/fallback.js';
-import ownerRevealContactRoutes from './routes/owner/reveal-contact.js';
-import publicFallbackConfigRoutes from './routes/public/fallback-config.js';
-import ratesRoutes from './routes/public/rates.js';
 import mockAuthRoutes from './routes/dev/mock-auth.js';
 import spaProxyRoutes from './routes/spa-proxy.js';
-import customerOtpRoutes from './routes/customer/otp.js';
-import customerTrackRoutes from './routes/customer/track.js';
-import customerPushRoutes from './routes/customer/push.js';
-import ownerPushRoutes from './routes/owner/push.js';
-import ownerOrderMetaRoutes from './routes/owner/order-meta.js';
-import ownerSignalRoutes from './routes/owner/signals.js';
-import ownerGdprRoutes from './routes/owner/gdpr.js';
-import ownerPromotionRoutes from './routes/owner/promotions.js';
 import telegramWebhookRoutes from './routes/telegram-webhook.js';
 import { AnonymizerService } from './lib/anonymizer/index.js';
 import { AnonymizerRetentionWorker } from './workers/anonymizer-retention.js';
@@ -664,75 +615,11 @@ const retryPolicy = new RetryPolicy();
 
   // P1-7 / FX-7: Body limit — Fastify constructor sets 10MB default (above).
   // Individual routes can override via route config if needed.
-  // authRoutes define /auth/* paths; mount under /api so they resolve at /api/auth/*
-  // — matching the frontend, apiClient, the inline local-login, and the OAuth
-  // redirect_uri (APP_BASE_URL/api/auth/google/callback). Without the prefix the
-  // Google button + callback 404'd.
-  fastify.register(authRoutes, { prefix: '/api' });
-  // Real email+password login (argon2) + flag-gated dev bypass, both in routes/auth/local.ts.
-  // Registered here (prefix /api → /api/auth/local/login). Previously this plugin was imported
-  // but never registered; an inline dev-only handler shadowed the route, so DB-password login
-  // was dead code (test@dowiz.com could only 401 on prod). The inline handler is now removed.
-  const { default: localAuthRoutes } = await import('./routes/auth/local.js');
-  fastify.register(localAuthRoutes, { prefix: '/api', db: pool });
-  fastify.register(courierRoutes);
-  fastify.register(orderRoutes, { prefix: '/api', db: pool, messageBus, queue });
-  fastify.register(categoryRoutes);
-  fastify.register(productRoutes);
-  fastify.register(modifierGroupRoutes);
-  fastify.register(menuAvailabilityRoutes);
-  fastify.register(locationRoutes);
-  fastify.register(publicMenuRoutes);
-  fastify.register(ssrRoutes, { db: pool });
-  fastify.register(brandingPreviewRoutes);
-  fastify.register(seoRoutes, { db: pool });
-  fastify.register(clientFlowRoutes, { db: pool });
-  fastify.register(pwaRoutes, { db: pool });
-  fastify.register(vapidRoutes);
-  fastify.register(telemetryRoutes, { db: pool });
-  // SENSOR-BUS §1.3: anonymous storefront-funnel ingest. Always mounted; the FUNNEL_INGEST_ENABLED
-  // kill-switch is enforced inside (returns a uniform 204 when off) so it can be silenced without a deploy.
-  fastify.register(funnelRoutes, { db: pool });
-  // R3-4 (STOP-1 reachable-surface gate): the access-request capture route is mounted
-  // ONLY when the flag is on. While off, POST /api/access-requests 404s via
-  // setNotFoundHandler — it is NOT publicly POST-able before invite-gating ships. The
-  // migrations (table + 3 queues) still ship; only the route is gated.
-  if (env.ACCESS_GATE_PUBLIC_ENABLED === 'true') {
-    fastify.register(accessRequestRoutes, { db: pool, queue });
-  }
-  fastify.register(ownerThemeRoutes, { db: pool, storage });
-  fastify.register(publicThemeRoutes, { db: pool });
-  fastify.register(ownerNotificationRoutes, { db: pool, queue });
-  fastify.register(menuImportRoutes, { prefix: '/api/owner', db: pool, messageBus, parsers, storage, translation });
-  fastify.register(menuTranslateRoutes, { prefix: '/api/owner', db: pool, messageBus, translation });
-  fastify.register(courierAuthRoutes, { prefix: '/api/courier/auth', db: pool });
-  fastify.register(courierMeRoutes, { prefix: '/api/courier', db: pool });
-  fastify.register(ownerCourierRoutes, { db: pool });
-  fastify.register(ownerCourierInvitesRoutes, { db: pool });
-  fastify.register(customerOrderRoutes, { prefix: '/api/customer', db: pool, messageBus });
-  fastify.register(ownerSettlementRoutes, { prefix: '/api/owner/locations', db: pool, messageBus });
-  fastify.register(ownerDashboardRoutes, { prefix: '/api/owner/locations', db: pool, messageBus, queue });
-  fastify.register(ownerAlertRoutes, { prefix: '/api/owner/locations', db: pool, messageBus, queue });
-  fastify.register(ownerDwellSettingsRoutes, { prefix: '/api/owner/locations', db: pool, messageBus, queue });
-  fastify.register(ownerSignalRoutes, { prefix: '/api/owner/locations', db: pool, messageBus, queue });
-  fastify.register(ownerPushRoutes, { prefix: '/api/owner/locations', db: pool, messageBus, queue });
-  fastify.register(ownerOrderMetaRoutes, { prefix: '/api/owner/locations', db: pool, messageBus, queue });
-  fastify.register(ownerFallbackRoutes, { prefix: '/api/owner/locations', db: pool, messageBus, queue });
-  fastify.register(ownerRevealContactRoutes, { prefix: '/api/owner/locations', db: pool, messageBus, queue });
-  fastify.register(ownerGdprRoutes, { prefix: '/api/owner/locations', db: pool, messageBus, queue });
-  fastify.register(ownerPromotionRoutes, { db: pool });
-  fastify.register(onboardingRoutes, { prefix: '/api/owner', db: pool, messageBus, queue });
-  fastify.register(activationRoutes, { prefix: '/api/owner', db: pool });
-  fastify.register(customerOtpRoutes, { prefix: '/api/customer', db: pool, messageBus });
-  fastify.register(customerTrackRoutes, { prefix: '/api/customer', db: pool });
-  fastify.register(customerPushRoutes, { prefix: '/api/customer', db: pool, messageBus });
-  fastify.register(courierSettlementRoutes, { prefix: '/api/courier', db: pool, messageBus });
-  fastify.register(courierAssignmentsRoutes, { prefix: '/api/courier', db: pool, messageBus });
-  fastify.register(courierShiftsRoutes, { prefix: '/api/courier', db: pool, messageBus });
-  fastify.register(orderMessageRoutes, { db: pool, messageBus });
-
-  fastify.register(ratesRoutes, { db: pool });
-  fastify.register(publicFallbackConfigRoutes, { db: pool });
+  // Core application routes (bootstrap/routes.ts) — registered in their original
+  // load-bearing order (auth mounts under /api → /api/auth/*, matching the
+  // frontend/OAuth redirect_uri). The order-sensitive tail (telegram webhook,
+  // mock-auth, the spa-proxy catch-all, admin routes) is registered below, AFTER this.
+  await registerCoreRoutes(fastify, { pool, messageBus, queue, storage, parsers, translation, env });
 
 // Telegram Webhook (must be registered before route definitions)
 fastify.register(telegramWebhookRoutes, {
