@@ -78,3 +78,43 @@ Run loops THROUGH the harness so it's automatic: `tools/loop-harness` (`finalize
 `runAutoupgrade`) call `renderReport(record)` + print unconditionally. If a run somehow produced no
 harness report, render one from its canonical record (`loops/runs/<loop>/<n>.json.gz`) and print the
 actual §5 block in full — not a summary. Design: `docs/operating-model/living-loop-system-v3.md` §5.
+
+The §5 report now also carries §TELEMETRY (tokens-by-model · cost · eco kWh/gCO₂/water, incl. cache-r/w)
+and §8 LOOP-END PROPAGATION. **Telemetry is always collected + displayed** — for background-Workflow
+loops pass `finalize --workflow <subagents/workflows/<runId>>` so the subagent transcripts are merged
+in (their tokens are NOT in the main session JSONL). **§8 fires on every loop end**: it emits a memory
+directive, a reflection (`docs/reflections/INBOX/`), and cross-surface directives (sibling loops/agents/
+docs/guardrails). Advisory — the worker/librarian enacts; the harness never auto-edits sibling surfaces.
+
+---
+
+## RULE: Test Integrity — never write a test that passes while the feature is broken (2026-06-27)
+
+From the full-surface sweep (245 files → 2,023 blind-spots, 217 CRITICAL —
+`docs/design-review/test-hardening-findings.md`). Every agent/loop that WRITES or REVIEWS a test
+applies this. A green test is worthless if it can't go red. **Banned (these are false-greens):**
+
+1. **Tautologies** — `expect(true)`, `assert.ok(true)`, `>= 0`/floor-only, `x===null||x!==null`,
+   unawaited `expect(...)`, and any `const has*/isVisible()` that is computed then only `console.log`'d.
+2. **`body.length > N` / loose body-text regex as the only render proof** — assert a specific
+   `[data-testid=…]` is visible AND no error-boundary text. A 500/redirect/spinner must fail the test.
+3. **Permissive status arrays / negative-only** — `expect([200,400,500])`, `not.toBe(500/401)`. Assert
+   the EXACT expected status; a 4xx/5xx in an accepted set needs an explicit `// known-bug:` annotation.
+4. **No controls** — every protected route needs a NEGATIVE (401 no-token, 403 wrong-role) AND a
+   POSITIVE control (valid → 200 non-empty), so the gate isn't silently rejecting everyone.
+5. **nil-UUID "IDOR"** — isolation must use a REAL second tenant's real id (403/404), never an all-zero
+   id (it 404s by absence, proving nothing).
+6. **`?dev=true` / mock-auth bypass + BASE defaulting to PROD** — exercise the real auth path; guard
+   `requireStaging()`; never write to prod from a test.
+7. **Conditional-skip vacuity** — no `if(count>0)`/`if(isVisible())` wrapping an assertion, no silent
+   `return`/runtime `test.skip`; `beforeAll` must assert setup status 200; seed fixtures, assert exact.
+8. **Real-time via reload/poll-buffer** — assert a LIVE WS-driven DOM change on an open page,
+   orderId-anchored, with `expect(ws.wasOpened()).toBe(true)` before any zero-message isolation claim.
+9. **Truthy on tokens/ids/values** — use `expectJwt()`/`expectUuid()`/exact-or-range; verify every
+   PUT/PATCH by reading the value back, not just status 200.
+10. **Swallowed errors / dead suites** — no `.catch(()=>{})` on goto/click/api; every suite must run
+    ≥1 real assertion (no `.js`-import-of-unbuilt-`.ts`, no missing runner).
+
+🔴 **Red-line (money/RLS/PII):** never "prove" a block with `assert.ok(true)`, a COUNT of an empty
+tenant, a pg_class metadata check, or a PII check by JSON key-name — assert the actual DML/value.
+A test that fails because the PRODUCT is wrong is a **finding to escalate**, never a thing to weaken.

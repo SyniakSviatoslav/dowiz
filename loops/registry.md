@@ -30,3 +30,6 @@ Health-pass (Counsel) читає пам'ять/звіти й сигналить 
 
 ## cross-tenant-realtime-qa (QA · real staged service)
 Cross-tenant, multi-role, real-time ordering validation проти РЕАЛЬНОГО staged сервісу (не мок). 3 ролі (customer UI + order + tracking · owner real-auth lifecycle · courier bus-dispatch) + real-time WS deltas + tenant isolation (ownerCanAccessRoom guard + 401 + customer-token-no-PATCH). Спец: `e2e/tests/cross-tenant-realtime-qa.spec.ts`. Run: `--project=desktop`. 6/6 GREEN staging.
+
+## Test Integrity (cross-loop rule)
+Будь-яка петля/агент, що ПИШЕ або РЕВ'Ю тести (test-hardening, audit-gate, convergence, QA), застосовує AGENTS.md «Test Integrity» (10 заборонених false-green класів + 🔴 money/RLS/PII). Ledger: docs/design-review/test-hardening-findings.md. Агент-визначення в .claude/agents/ успадковують AGENTS.md автоматично (CLAUDE.md).
