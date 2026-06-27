@@ -27,3 +27,6 @@
 ## Здоров'я
 Health-pass (Counsel) читає пам'ять/звіти й сигналить «хворі» петлі (flaky-під-green, training-ніколи-не-вимкнено, нема-пам'яті). Orchestrator на «хвору» петлю → improve-запит loop-architect.
 🔴 DRAFT-петлі НЕ диспатчаться, доки `/build-verify-loop verify <id>` не поставить CERTIFIED.
+
+## cross-tenant-realtime-qa (QA · real staged service)
+Cross-tenant, multi-role, real-time ordering validation проти РЕАЛЬНОГО staged сервісу (не мок). 3 ролі (customer UI + order + tracking · owner real-auth lifecycle · courier bus-dispatch) + real-time WS deltas + tenant isolation (ownerCanAccessRoom guard + 401 + customer-token-no-PATCH). Спец: `e2e/tests/cross-tenant-realtime-qa.spec.ts`. Run: `--project=desktop`. 6/6 GREEN staging.
