@@ -1,0 +1,33 @@
+id: loop-builder
+version: 0.1
+status: DRAFT (report-only)
+intent: "мета-петля: за ціллю G синтезувати найкращу harness-native петлю (5 хуків+конфіг) під наявні ресурси; oracle-admissibility first; born-hardened"
+problem_signature: "треба перетворити ЦІЛЬ на загартовану, oracle-gated, harness-native петлю — швидко, на базі того, що проєкт вже є і вже знає"
+trigger: "/loop-builder \"<ціль>\" (headless, background)"
+role_mindset: "інстанціюй, не винаходь; детермінований оракул або відмова+ескалація; ніколи не випускай петлю, що не довела роботу; security carve-out завжди"
+preconditions: ["v3-FINAL харнес присутній", "субстрат: docs+learnings+run-history+resource-inventory", "autoupgrade containment+proposals присутні"]
+execution_skills: [gather-substrate, design-hooks, oracle-admissibility-gate, structural-validate, smoke-test-dry-run, reuse-detect]
+goal: "за прогон: GATHER субстрат → DESIGN 5 хуків+конфіг для G → VALIDATE (метрика/термінація/smoke/doctrine/не-дубль) → RELEASE(Class A) | QUEUE(Class B); §5 звіт"
+verification: "RELEASE лише якщо: детермінована non-empty метрика + доказова термінація + SMOKE (метрика рухається/термінується/не churn поза скоупом) + doctrine-clean(reuse harness) + не дубль. Інакше reject/escalate. report-only поки smoke не доведено."
+iron_principles: [instantiate-not-reinvent, oracle-admissibility-first, smoke-test-non-negotiable, security-carve-out-always, reuse-over-duplicate, prefer-existing-tools, no-fake-green, born-hardened]
+loop_body: [GATHER, DESIGN, VALIDATE, RELEASE-or-QUEUE, REPORT, FEED]
+exit_conditions: "designed+validated; Class A+smoke → auto-register; Class B/carve-out/uncertain → human queue; §5 звіт надруковано+збережено"
+gates: [ORACLE-ADMISSIBILITY-GATE, SMOKE-GATE]
+proof_artifacts: [designed-hooks, admissibility-verdict, validation+smoke-results, release-or-queue-decision, §5-report]
+out_of_scope: [винаходити нову telemetry/breaker/report, нову важку інфру/deps, architecture rewrite, автономний security/data-write скоуп]
+escalation: "ціль без детермінованої метрики → escalate людині ('define measurable criteria'); Class B/carve-out → proposals queue; дубль → extend наявну петлю"
+skills_required: [repo-access, harness-access, substrate-access]
+memory_file: loops/memory/loop-builder.md
+verification_report: loops/reports/loop-builder-0.1.md
+
+harness:
+  runs_dir: loops/runs
+  always_emit_report: true
+  progress_metric: candidate_loops_remaining_to_design
+  finalize: "tools/loop-harness/src/loop-builder.ts (runLoopBuilder → §5 report; report-only this pass)"
+  telemetry_collectors: [git_mem, session_tokens, eco]
+
+build_status:
+  done: "§11 steps 1-2 + structural VALIDATE (REPORT-ONLY): loop-builder.ts — assessAdmissibility (refuse subjective/unknown, fail-safe), designLoop (be-polish/qa/perf/i18n templates: oracle+prefer-existing-tools+security-carve-out+breaker+reuse-detect), validateDesign (5 structural checks). 7 tests. Live: BE-polish designed (extend backend-contract-convergence); 'make UI prettier' refused+escalated."
+  deferred: "§11 steps 3-tail/4-6 — SMOKE-test dry-run (§2.3 instantiate+run generated loop on a seed: metric moves/terminates/no-churn), Class-A auto-register, Class-B→proposals queue, headless pg-boss. NO loop registered until smoke proven."
+  boundary: "Generated loops never get autonomous security/data-write scope; per-file carve-out (auth/RLS/secrets/payment/PII propose-only) embedded in every design. Containment inherited from autoupgrade."
