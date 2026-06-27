@@ -33,11 +33,11 @@ export default tseslint.config(
       'local/no-duplicate-import': 'warn',
       'local/no-empty-catch': 'warn',
       'local/no-mock-in-prod': 'warn',
-      'local/no-permissive-status-assertion': 'warn',
-      'local/no-tautological-assertion': 'warn',
-      'local/no-swallowed-catch': 'warn',
-      'local/no-truthy-on-identifier': 'warn',
-      'local/no-prod-base-in-test': 'warn',
+      'local/no-permissive-status-assertion': 'error', // ratchet: burned down to 0 (2026-06-27)
+      'local/no-tautological-assertion': 'error',      // ratchet: burned down to 0
+      'local/no-swallowed-catch': 'warn',              // still has product instances (sw.js) — warn until cleared
+      'local/no-truthy-on-identifier': 'error',        // ratchet: burned down to 0
+      'local/no-prod-base-in-test': 'warn',            // 99 prod-host literals pending requireStaging wave
       'local/no-hardcoded-string': 'warn',
       'local/no-insecure-random': 'warn',
       'local/no-direct-websocket': 'warn',
