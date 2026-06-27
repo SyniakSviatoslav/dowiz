@@ -30,6 +30,6 @@ harness:
 
 # Build status (docs/operating-model/autoupgrade-loop-v1.md §8).
 build_status:
-  done: "§8 step 2 (MAP→CLASSIFY→REPORT) + step 3 (machine oracle, 7 tests) + step 4 (Class-A auto-apply behind --apply) + the reversible+benchmarkable adapter (benchmark.ts + repo-apply.ts: git-checkout atomic revert, 5 end-to-end tests proving KEEP/ROLLBACK on real git). classify() fail-safe + tested."
-  deferred: "§8 steps 1,5-6 + the MAP source — sandbox/cred-isolation, contained web-research, a MAP source emitting repo-perf candidates with DETERMINISTIC MECHANICAL patches (never autonomous LLM patches, §0), Class-B queue→GRADUATE, pg-boss scheduling, widen-after-clean-runs"
-  boundary: "Class B NEVER reaches apply. Oracle keeps only PROVEN changes. Apply machinery complete+proven (a real 20%-faster change is KEPT, a broken/no-speedup one is atomically reverted); what remains is a trustworthy SOURCE of auto-keepable patches."
+  done: "END-TO-END FUNCTIONAL. §8 step2 (MAP→CLASSIFY→REPORT) + step3 (oracle, 7 tests) + step4 (Class-A auto-apply --apply) + adapter (benchmark.ts+repo-apply.ts, git-checkout atomic revert, 5 tests) + the MAP source (detectors.ts configTuneDetector: operator-declared tunables → repo-perf candidates with mechanical patches, 5 pipeline tests proving detect→classify-A→apply→benchmark→KEEP|ROLLBACK on real git)."
+  deferred: "§8 steps 1,5-6 — sandbox/cred-isolation, contained web-research, Class-B queue→GRADUATE, pg-boss scheduling, more mechanical detectors (config-tune is the safe beachhead; any new one stays mechanical/deterministic, §0), widen-after-clean-runs"
+  boundary: "Class B NEVER reaches apply. Only autonomous repo-mutation path = operator-declared config tuning (mechanical+bounded+reversible+benchmarked). No tunables.json declared → 0 repo-perf candidates (safe default). Declare loops/autoupgrade.tunables.json to enable (see .example.json)."

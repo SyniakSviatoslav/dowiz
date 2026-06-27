@@ -45,3 +45,20 @@ concurrency-safe; upgrade to worktree when >1 loop runs. **NEXT:** a MAP source 
 candidates with DETERMINISTIC MECHANICAL patches (slow-query→index, slow-test→cache) — NEVER
 autonomous LLM patches (§0 injection). The apply/gate/revert is complete+proven; the missing piece is
 a trustworthy SOURCE of patches.
+
+## 2026-06-27 · the gap closed — MAP source for repo-perf (the loop is now end-to-end functional)
+
+`detectors.ts` `configTuneDetector`: the safe, mechanical MAP source. Operator declares tunables in
+`loops/autoupgrade.tunables.json` (knob file + `find` regex w/ capture-group-1 value + a BOUNDED set
+of safe candidate values + a benchmark + optional green/security cmds). The detector emits a
+`repo-perf:tune:<id>:<value>` Candidate per non-current value, each carrying a RepoPerfSpec (mechanical
+regex value-swap + benchmark + git-revert). The loop tries each value, benchmarks, and the oracle
+KEEPS only the ≥5%-faster one; else atomic rollback. **The operator bounds the search (safety); the
+loop searches+measures+keeps (autonomy).** This is the ONLY autonomous repo-mutation path — mechanical,
+bounded, reversible, benchmarked; NEVER an autonomous LLM patch (§0).
+
+`detectors.test.ts` (5) proves the FULL pipeline on a real git repo: declared tunable → classify A →
+oracle apply → benchmark 50% faster → KEPT on disk; slower value → atomic rollback; no declaration →
+[] (safe default, no auto-tuning without opt-in). Wired into mapCandidates. Example:
+`loops/autoupgrade.tunables.example.json`. **The autoupgrade loop is now end-to-end functional:**
+MAP (incl. real repo-perf) → CLASSIFY → ORACLE → KEEP|ROLLBACK → §5 report. Total 56 harness tests.
