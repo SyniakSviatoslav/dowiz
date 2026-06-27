@@ -1,6 +1,7 @@
 import { test, expect, request, type APIRequestContext } from '@playwright/test';
 import WebSocket from 'ws';
 import crypto from 'node:crypto';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cross-tenant, multi-role, real-time ordering QA/validation loop (v2).
@@ -100,7 +101,7 @@ async function seedOnlineCourier(): Promise<{ courierToken: string; courierId: s
   });
   if (redRes.status() === 429) { console.log('[courier] seed rate-limited (429) — courier dimension skipped'); return null; }
   const red = await redRes.json();
-  expect(red.jwt, `courier redeem jwt (HTTP ${redRes.status()} ${JSON.stringify(red).slice(0, 140)})`).toBeTruthy();
+  expectJwt(red.jwt, `courier redeem jwt (HTTP ${redRes.status()} ${JSON.stringify(red).slice(0, 140)})`);
   const shift = await api.post(`${BASE}/api/courier/me/shift/start`, { headers: { authorization: `Bearer ${red.jwt}` }, data: { lat: 41.324, lng: 19.456 } });
   expect(shift.ok(), `courier shift start → ${shift.status()}`).toBeTruthy();
   return { courierToken: red.jwt, courierId: red.courier.id };
@@ -142,7 +143,7 @@ test('Role 1a — CUSTOMER storefront UI renders menu → cart → checkout (rea
 test('Role 1b — a REAL order is placed against the staged service (idempotent)', async () => {
   ({ orderId, customerToken } = await placeRealOrder());
   expect(orderId).toMatch(/[0-9a-fA-F-]{6,}/);
-  expect(customerToken).toBeTruthy();
+  expectJwt(customerToken, 'customer token');
 });
 
 test('Role 1c — the customer sees their real order in the real tracking UI', async ({ page }) => {
@@ -200,7 +201,7 @@ test('Role 3 — COURIER dispatch: REAL online courier assigned, drives picked-u
     if (match) mainAssignmentId = match.id ?? match.assignment_id ?? '';
     return !!match;
   }, { timeout: 8_000, message: 'the seeded online courier received the assignment' }).toBe(true);
-  expect(mainAssignmentId, 'assignment id').toBeTruthy();
+  expectUuid(mainAssignmentId, 'assignment id');
 
   const pickedUp = await api.post(`${BASE}/api/courier/assignments/${mainAssignmentId}/picked-up`, { headers: { authorization: `Bearer ${courierToken}` } });
   expect(pickedUp.ok(), `courier picked-up → IN_DELIVERY (${pickedUp.status()})`).toBeTruthy();
@@ -211,7 +212,8 @@ test('ISOLATION — cross-order token denial + customer-A→order-B WS room deni
 
   // (1) cross-order: customer-A cannot READ order-B (and the body leaks no order-B data).
   const aReadsB = await api.get(`${BASE}/api/orders/${second.orderId}`, { headers: { authorization: `Bearer ${customerToken}` } });
-  expect([401, 403, 404], `customer-A → order-B = ${aReadsB.status()}`).toContain(aReadsB.status());
+  // an order-scoped token whose orderId !== :id gets exactly 404 (hidden, not 403 — no existence leak)
+  expect(aReadsB.status(), 'customer-A → order-B').toBe(404);
   expect(await aReadsB.text(), 'no order-B payload leaked to customer-A').not.toContain(QA_TAG);
 
   // (2) WS room denial against a REAL room A is not a member of (order:<B>) — not an empty fake.
@@ -231,7 +233,7 @@ test('ISOLATION — cross-order token denial + customer-A→order-B WS room deni
 
   // (4) owner API requires auth; (5) a customer token cannot drive owner-only status.
   const unauth = await api.get(`${BASE}/api/owner/orders`);
-  expect([401, 403], `unauth owner read → ${unauth.status()}`).toContain(unauth.status());
+  expect(unauth.status(), 'unauth owner read').toBe(401);
   const forbidden = await api.patch(`${BASE}/api/orders/${orderId}/status`, { headers: { authorization: `Bearer ${customerToken}` }, data: { status: 'CANCELLED' } });
-  expect([401, 403, 404], `customer PATCH status → ${forbidden.status()}`).toContain(forbidden.status());
+  expect(forbidden.status(), 'customer PATCH owner-only status').toBe(403); // requireRole(['owner'])
 });
