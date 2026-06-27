@@ -42,6 +42,7 @@ import { buildNotifications } from './bootstrap/notifications.js';
 import { startBackgroundWorkers } from './bootstrap/workers.js';
 import { TelegramPoller } from './notifications/workers/telegram.poll.js';
 import mockAuthRoutes from './routes/dev/mock-auth.js';
+import acquisitionRoutes from './modules/acquisition/route.js';
 import spaProxyRoutes from './routes/spa-proxy.js';
 import telegramWebhookRoutes from './routes/telegram-webhook.js';
 import { MemoryService, getMemoryService } from './lib/memory.js';
@@ -509,6 +510,8 @@ fastify.register(telegramWebhookRoutes, {
 });
 
 fastify.register(mockAuthRoutes, { db: pool });
+// P6-1 — internal/ops acquisition entrypoint (rides the /api/dev dev-guard, fail-closed on prod).
+fastify.register(acquisitionRoutes, { prefix: '/api/dev', db: pool });
 
   fastify.post('/api/dev/mock-auth', async (request, reply) => {
     const body = (request.body || {}) as Record<string, unknown>;
