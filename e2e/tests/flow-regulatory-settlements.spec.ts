@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { expectUuid } from '../helpers/assert-shape';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 let authToken: string;
 let activeLocationId: string;
 let signalId: string;
@@ -17,64 +18,95 @@ test.describe('Flow: Regulatory & Financial — GDPR, Settlements, Signals, Aler
   // SETUP
   // ════════════════════════════════════════════════════════════════
   test.beforeAll(async ({ request }) => {
+    requireStaging(BASE); // mutating spec (GDPR create, settlement approve/dispute) — never hit prod
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
     const authBody = await authRes.json();
     authToken = authBody.access_token;
     activeLocationId = authBody.activeLocationId;
+    expectJwt(authToken, 'access_token');
+    expectUuid(activeLocationId, 'activeLocationId');
 
-    // Fetch IDs for existing signals/alerts/settlements for action tests
+    // Fetch IDs for existing signals/alerts/settlements for action tests.
+    // beforeAll MUST assert setup status 200 — a swallowed 401/404/500 here would silently
+    // strand signalId/alertId/settlementId as undefined and skip every action flow green.
     const sigRes = await request.get(
       `${BASE}/api/owner/locations/${activeLocationId}/signals`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    if (sigRes.status() === 200) {
-      const sigs = await sigRes.json();
-      const sigArr = sigs.signals || sigs.data || [];
-      signalId = sigArr.length > 0 ? sigArr[0].id : undefined;
-    }
+    expect(sigRes.status(), `signals setup fetch (${sigRes.status()})`).toBe(200);
+    const sigs = await sigRes.json();
+    const sigArr = sigs.signals || sigs.data || [];
+    signalId = sigArr.length > 0 ? sigArr[0].id : undefined;
 
     const altRes = await request.get(
       `${BASE}/api/owner/locations/${activeLocationId}/alerts`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    if (altRes.status() === 200) {
-      const alerts = await altRes.json();
-      const alertArr = alerts.alerts || alerts.data || [];
-      alertId = alertArr.length > 0 ? alertArr[0].id : undefined;
-    }
+    expect(altRes.status(), `alerts setup fetch (${altRes.status()})`).toBe(200);
+    const alerts = await altRes.json();
+    const alertArr = alerts.alerts || alerts.data || [];
+    alertId = alertArr.length > 0 ? alertArr[0].id : undefined;
 
     const settRes = await request.get(
       `${BASE}/api/owner/locations/${activeLocationId}/settlements`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    if (settRes.status() === 200) {
-      const s = await settRes.json();
-      const payouts = s.payouts || s.data || s;
-      settlementId = Array.isArray(payouts) && payouts.length > 0 ? payouts[0].id : undefined;
-    }
+    expect(settRes.status(), `settlements setup fetch (${settRes.status()})`).toBe(200);
+    const s = await settRes.json();
+    const payouts = s.payouts || s.data || s;
+    settlementId = Array.isArray(payouts) && payouts.length > 0 ? payouts[0].id : undefined;
+    // TODO(needs_staging): seed ≥1 signal/alert/pending-settlement so Flows 8/9/10/12 run a real
+    // action assertion instead of test.skip on an empty tenant (conditional-skip vacuity).
   });
+
+  // ════════════════════════════════════════════════════════════════
+  // NEGATIVE AUTH CONTROL — every sensitive route rejects no-token (401)
+  // ════════════════════════════════════════════════════════════════
+
+  test('Flow 0: unauthenticated requests are rejected (401)', async ({ request }) => {
+    const paths = [
+      `/api/owner/locations/${activeLocationId}/gdpr-requests`,
+      `/api/owner/locations/${activeLocationId}/settlements`,
+      `/api/owner/locations/${activeLocationId}/signals`,
+      `/api/owner/locations/${activeLocationId}/alerts`,
+      `/api/owner/locations/${activeLocationId}/couriers/live`,
+    ];
+    for (const p of paths) {
+      const res = await request.get(`${BASE}${p}`); // no Authorization header
+      expect(res.status(), `unauthenticated ${p} must be 401 (got ${res.status()})`).toBe(401);
+    }
+    // POST create without a token must also be rejected before any DB write.
+    const postRes = await request.post(
+      `${BASE}/api/owner/locations/${activeLocationId}/gdpr-requests`,
+      { data: { phone: '+355600000003', reason: 'no-auth' } }
+    );
+    expect(postRes.status(), `unauthenticated GDPR create must be 401 (got ${postRes.status()})`).toBe(401);
+  });
+
+  // TODO(needs_staging): cross-tenant IDOR — seed a SECOND owner + location, then assert this
+  // owner's token GETting the second tenant's gdpr-requests/settlements/signals returns 404
+  // (requireLocationAccess denies). A random/nil UUID 404s by absence and proves nothing, so this
+  // requires a real second tenant on staging — not added here to avoid a false-green.
 
   // ════════════════════════════════════════════════════════════════
   // GDPR — create request, list requests
   // ════════════════════════════════════════════════════════════════
 
   test('Flow 1: GDPR — create erasure request', async ({ request }) => {
+    // Positive control: a unique phone that matches NO existing customer skips the 409/429
+    // state-machine branches in the handler, so a healthy route MUST return 201. A 401/403/500
+    // (or a swallowed error) now fails the test instead of passing via `.not.toBe(500)`.
+    const uniquePhone = `+35569${Date.now().toString().slice(-7)}`;
     const gdprRes = await request.post(
       `${BASE}/api/owner/locations/${activeLocationId}/gdpr-requests`,
-      { headers: { Authorization: `Bearer ${authToken}` }, data: { phone: '+355600000002', reason: 'E2E test GDPR request' } }
+      { headers: { Authorization: `Bearer ${authToken}` }, data: { phone: uniquePhone, reason: 'E2E test GDPR request' } }
     );
-    const gdprStatus = gdprRes.status();
-    expect(gdprStatus, `GDPR create returned ${gdprStatus}, expected 201/400/422/429`).not.toBe(500);
-    if (gdprStatus === 201) {
-      const body = await gdprRes.json();
-      gdprRequestId = body.requestId || body.id;
-      expectUuid(gdprRequestId, 'gdprRequestId');
-      expect(body.status).toBe('pending');
-    } else {
-      const body = await gdprRes.json().catch(() => ({}));
-      expect(body.error || body.message).toBeTruthy();
-    }
+    expect(gdprRes.status(), `GDPR create returned ${gdprRes.status()}, expected 201`).toBe(201);
+    const body = await gdprRes.json();
+    gdprRequestId = body.requestId || body.id;
+    expectUuid(gdprRequestId, 'gdprRequestId');
+    expect(body.status).toBe('pending');
   });
 
   test('Flow 2: GDPR — list erasure requests', async ({ request }) => {

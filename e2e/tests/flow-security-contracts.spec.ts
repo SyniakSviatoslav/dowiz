@@ -1,15 +1,20 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 let authToken: string;
 
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Flow: Security & Contracts — Auth, CSP, Cookies, Rate Limits, Viewports', () => {
   test.beforeAll(async ({ request }) => {
+    // mock-auth UPSERTs the dev user (a write) — never let this run against prod (#7).
+    requireStaging(BASE);
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
     authToken = (await authRes.json()).access_token;
+    expectJwt(authToken, 'mock-auth access_token');
   });
 
   // ──────────────────────────────────────────────────────────────
@@ -54,13 +59,12 @@ test.describe('Flow: Security & Contracts — Auth, CSP, Cookies, Rate Limits, V
         data: route.data,
         headers: { Authorization: `Bearer ${authToken}` },
       });
-      // Some endpoints may return 500 on completely invalid input (known bug).
-      // Test that we don't get 401 (auth is working) at minimum.
-      expect(res.status(), `${route.method} ${route.url} should not be 401`).not.toBe(401);
-      if (res.status() === 400) {
-        const body = await res.json();
-        expect(body.error || body.message || body.code).toBeTruthy();
-      }
+      // Both routes Zod-validate the body (categories .strict(), products required name/price/
+      // prep_time_minutes) → setErrorHandler maps the ZodError to EXACTLY 400 VALIDATION_FAILED
+      // (server.ts:435-457). Assert the exact status + machine code (#2 — not the old not.toBe(401)).
+      expect(res.status(), `${route.method} ${route.url} must reject invalid input with 400`).toBe(400);
+      const body = await res.json();
+      expect(body.code, `${route.method} ${route.url} VALIDATION_FAILED envelope`).toBe('VALIDATION_FAILED');
     }
   });
 
@@ -69,14 +73,17 @@ test.describe('Flow: Security & Contracts — Auth, CSP, Cookies, Rate Limits, V
   // ──────────────────────────────────────────────────────────────
   test('Flow 3: Security — JWT from mock-auth has correct claims', async ({ request }) => {
     // Decode JWT (without verifying signature — just inspect claims)
+    expectJwt(authToken, 'mock-auth token');
     const parts = authToken.split('.');
     expect(parts.length).toBe(3);
     const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
     expect(payload.role).toBe('owner');
-    expect(payload.userId || payload.sub).toBeTruthy();
+    expectUuid(payload.userId ?? payload.sub, 'jwt subject');
     expect(payload.iat).toBeTruthy();
     expect(payload.exp).toBeTruthy();
     expect(payload.exp).toBeGreaterThan(payload.iat);
+    // #9: exp > iat alone passes for an already-expired token — assert it is still valid NOW.
+    expect(payload.exp, 'token must not already be expired').toBeGreaterThan(Math.floor(Date.now() / 1000));
   });
 
   // ──────────────────────────────────────────────────────────────
@@ -93,13 +100,14 @@ test.describe('Flow: Security & Contracts — Auth, CSP, Cookies, Rate Limits, V
         idempotency_key: crypto.randomUUID(),
       },
     });
-    // 400 is expected (invalid locationId), but headers should be present
+    // @fastify/rate-limit is registered globally (max:100/1min, server.ts:345) → it emits the
+    // x-ratelimit-* headers on every response by default. Assert the header is actually present
+    // (#1 — hasRateLimit was computed but never asserted; the rate-limit check was dead code).
     const headers = res.headers();
     const hasRateLimit = headers['x-ratelimit-limit'] !== undefined ||
                          headers['ratelimit-limit'] !== undefined ||
                          headers['x-ratelimit-remaining'] !== undefined;
-    // Rate limiting may or may not be implemented at HTTP level
-    // At minimum, verify the server responded and didn't crash
+    expect(hasRateLimit, 'rate-limit header must be present on public POST /api/orders').toBe(true);
     expect(res.status()).not.toBe(500);
   });
 
@@ -117,11 +125,13 @@ test.describe('Flow: Security & Contracts — Auth, CSP, Cookies, Rate Limits, V
     for (const { url, label } of pages) {
       const resp = await page.goto(url, { waitUntil: 'networkidle' });
       if (resp) {
+        // #4: the CSP block was inside `if (csp)` — an entirely absent header silently passed.
+        // The SSR shell (spa-shell.ts) + global security hook (security/headers.ts) set CSP on
+        // every page response, so assert presence UNCONDITIONALLY before inspecting it.
         const csp = resp.headers()['content-security-policy'];
-        if (csp) {
-          expect(csp).toContain('default-src');
-          expect(csp).toContain('script-src');
-        }
+        expect(csp, `${label}: CSP header must be present`).toBeTruthy();
+        expect(csp).toContain('default-src');
+        expect(csp).toContain('script-src');
         expect(resp.status(), `${label}: status 200`).toBe(200);
       }
       const cookies = await page.context().cookies();
@@ -169,7 +179,9 @@ test.describe('Flow: Security & Contracts — Auth, CSP, Cookies, Rate Limits, V
              document.documentElement.getAttribute('data-embed') === 'true' ||
              document.documentElement.hasAttribute('data-embed');
     });
-    // Embed class may not be present on the live SSR site — verify no fixed positions as primary check
+    // #5: ClientLayout.tsx adds `embed-mode` to document.body when ?embed=true (L41-43), so the
+    // marker MUST be present once the SPA has mounted — assert it (was computed but never checked).
+    expect(hasEmbedClass, 'embed-mode marker must be present in embed mode').toBe(true);
 
     const hasFixed = await page.evaluate(() => {
       const all = document.querySelectorAll('*');
@@ -201,18 +213,21 @@ test.describe('Flow: Security & Contracts — Auth, CSP, Cookies, Rate Limits, V
     });
     expect(adminRes.status()).toBe(200);
     const adminProds = await adminRes.json();
-    if (Array.isArray(adminProds) && adminProds.length > 0) {
-      const withAllergens = adminProds.find((p: any) => p.allergens && p.allergens.length > 0);
-      if (withAllergens) {
-        // Admin allergens should be arrays
-        expect(Array.isArray(withAllergens.allergens)).toBe(true);
-      }
+    // Structural floor (always fires): the admin products endpoint returns an array.
+    expect(Array.isArray(adminProds), 'admin /menu/products returns an array').toBe(true);
+    // TODO(needs-allergen-seed): #8 — the allergen-array contract is only exercised when a product
+    // actually carries allergens. With the current demo fixture this may be empty → 0 assertions.
+    // Seed a product with allergens in the demo fixture, then assert this unconditionally.
+    const withAllergens = adminProds.find((p: any) => p.allergens && p.allergens.length > 0);
+    if (withAllergens) {
+      expect(Array.isArray(withAllergens.allergens), 'admin allergens must be an array').toBe(true);
     }
 
     // Get public menu
     const menuRes = await request.get(`${BASE}/public/locations/${slug}/menu`);
     expect(menuRes.status()).toBe(200);
     const menu = await menuRes.json();
+    expect(Array.isArray(menu.categories), 'public menu has a categories array').toBe(true);
     const allProds = menu.categories.flatMap((c: any) => c.products || []);
     for (const p of allProds) {
       if (p.attributes?.bom) {
@@ -231,6 +246,10 @@ test.describe('Flow: Security & Contracts — Auth, CSP, Cookies, Rate Limits, V
   // FLOW 9: Cross-tenant query returns 404
   // ──────────────────────────────────────────────────────────────
   test('Flow 9: Security — cross-tenant query returns 404', async ({ request }) => {
+    // TODO(needs-2nd-tenant): #3 — a nil/all-zero UUID 404s by ABSENCE (no row), not by an
+    // ownership check, so a real cross-tenant LEAK (owner A reading owner B's REAL location id)
+    // is NOT exercised here. Provision a second owner fixture, capture its real locationId, and
+    // assert owner A gets 404 for that id. Until then this only proves "unknown id → 404".
     const fakeLocationId = '00000000-0000-0000-0000-000000000000';
     const crossRes = await request.get(
       `${BASE}/api/owner/locations/${fakeLocationId}/dashboard/snapshot`,
@@ -332,5 +351,27 @@ test.describe('Flow: Security & Contracts — Auth, CSP, Cookies, Rate Limits, V
 
     const body = await page.textContent('body');
     expect(body).toBeTruthy();
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // FLOW 14: Privilege escalation — a courier-role token is FORBIDDEN on owner endpoints
+  // ──────────────────────────────────────────────────────────────
+  test('Flow 14: Security — courier-role token cannot access owner endpoints (403)', async ({ request }) => {
+    // #6: Flow 1 only proves "no token → 401". Role confusion (a VALID courier token reaching an
+    // owner-only route) was untested. requireRole(['owner']) (auth.ts:110-112) returns EXACTLY 403
+    // for a non-owner role — assert that, the negative auth control.
+    const courierAuth = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'courier' } });
+    expect(courierAuth.status()).toBe(200);
+    const courierToken = (await courierAuth.json()).access_token;
+    expectJwt(courierToken, 'courier mock-auth token');
+
+    const ownerOnlyRoutes = [
+      `${BASE}/api/owner/menu/categories`,
+      `${BASE}/api/owner/menu/products`,
+    ];
+    for (const url of ownerOnlyRoutes) {
+      const res = await request.get(url, { headers: { Authorization: `Bearer ${courierToken}` } });
+      expect(res.status(), `courier role must be forbidden (403) on ${url}`).toBe(403);
+    }
   });
 });

@@ -10,9 +10,11 @@
  * 7. API proof: GET couriers returns courier with correct data
  */
 import { test, expect, type Page } from '@playwright/test';
-import { expectJwt } from '../helpers/assert-shape';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+// Mutating lifecycle (creates invites, registers a courier, starts a shift) — never run vs prod.
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 const TS = Date.now();
 const COURIER_EMAIL = `courier-full-${TS}@test.invalid`;
 const COURIER_NAME = `E2E Courier ${TS}`;
@@ -29,17 +31,24 @@ test.describe.configure({ mode: 'serial' });
 test.describe('UI: Full Courier Lifecycle — Invite, Register, Use App, Prove on Dashboard', () => {
 
   test.beforeAll(async ({ request }) => {
+    // Hard guard: refuse to exercise the dev mock-auth backdoor against prod/unknown targets.
+    requireStaging(BASE);
     const r = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(r.status()).toBe(200);
     const b = await r.json();
     ownerToken = b.access_token;
     activeLocationId = b.activeLocationId;
     expectJwt(ownerToken, 'ownerToken');
-    expect(activeLocationId).toMatch(/^[0-9a-f-]{36}$/);
+    expectUuid(activeLocationId, 'activeLocationId');
   });
 
   // ─── STEP 1: Owner dashboard couriers list returns 200 (not 500) ───────────
   test('Step 1: GET /api/owner/locations/:id/couriers returns 200 (RLS fix)', async ({ request }) => {
+    // NEGATIVE control: unauthenticated request must be rejected (verifyAuth → 401),
+    // so the POSITIVE 200 below proves the gate accepts the owner, not everyone.
+    const noAuth = await request.get(`${BASE}/api/owner/locations/${activeLocationId}/couriers`);
+    expect(noAuth.status(), 'Couriers list must reject unauthenticated requests with 401').toBe(401);
+
     const r = await request.get(
       `${BASE}/api/owner/locations/${activeLocationId}/couriers`,
       { headers: { Authorization: `Bearer ${ownerToken}` } }
@@ -48,6 +57,8 @@ test.describe('UI: Full Courier Lifecycle — Invite, Register, Use App, Prove o
     const body = await r.json();
     expect(Array.isArray(body.couriers)).toBe(true);
     console.log('Couriers list OK, current count:', body.couriers.length);
+    // TODO[needs-staging]: cross-tenant IDOR — a second real tenant's owner token must get 404
+    // on this location's couriers (requireLocationAccess → "Not found"). Needs a 2nd seeded tenant.
   });
 
   // ─── STEP 2: Owner opens /admin/couriers and sends invite via UI ────────────

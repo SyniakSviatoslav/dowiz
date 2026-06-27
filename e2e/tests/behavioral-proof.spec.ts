@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { expectJwt } from '../helpers/assert-shape';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
 const BASE = process.env.VITE_BASE_URL || 'http://localhost:3000';
 // WS host tracks BASE — a token minted on one env can't auth against another's WS.
@@ -11,6 +12,7 @@ async function getOwnerToken(request: any): Promise<{ token: string; activeLocat
   expect(res.status()).toBe(200);
   const body = await res.json();
   expectJwt(body.access_token, 'access_token');
+  expectUuid(body.activeLocationId, 'activeLocationId');
   return { token: body.access_token as string, activeLocationId: body.activeLocationId as string };
 }
 
@@ -32,6 +34,12 @@ test.describe('Hot-path sanity (Rule 14.4)', () => {
     const body = await response.json();
     expect(body).toHaveProperty('categories');
     expect(Array.isArray(body.categories)).toBe(true);
+    // A bare empty array proves nothing about menu rendering — the demo has products.
+    expect(body.categories.length).toBeGreaterThan(0);
+    expect(Array.isArray(body.categories[0].products)).toBe(true);
+    const totalProducts = body.categories.reduce(
+      (n: number, c: any) => n + (Array.isArray(c.products) ? c.products.length : 0), 0);
+    expect(totalProducts).toBeGreaterThan(0);
   });
 
   test('Subdomain routing serves SPA at /admin', async ({ page }) => {
@@ -53,6 +61,27 @@ test.describe('Hot-path sanity (Rule 14.4)', () => {
 });
 
 test.describe('Auth-first admin actions (Rule 14.2)', () => {
+  // This block contains a mutating PUT /api/owner/settings — never let it run against prod.
+  test.beforeAll(() => requireStaging(BASE));
+
+  // Negative control: the owner API must reject unauthenticated reads/writes (401), not just
+  // serve the happy path. verifyAuth (apps/api/src/plugins/auth.ts:47) → 401 on missing token.
+  test('GET /api/owner/couriers without token → 401', async ({ request }) => {
+    const res = await request.get(`${BASE}/api/owner/couriers`);
+    expect(res.status()).toBe(401);
+  });
+
+  test('PUT /api/owner/settings without token → 401', async ({ request }) => {
+    const res = await request.put(`${BASE}/api/owner/settings`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: { locationName: 'x' },
+    });
+    expect(res.status()).toBe(401);
+  });
+
+  // TODO(needs-staging): cross-tenant isolation — mint a SECOND owner token for a different
+  // location (requires a real 2nd tenant fixture; dev/mock-auth only yields one) and assert
+  // token-A cannot read/write tenant-B's couriers/settings. Not faked here — see needs_staging.
 
   test('GET /api/owner/couriers — no duplicates, offline for inactive', async ({ request }) => {
     const { token } = await getOwnerToken(request);
@@ -90,30 +119,42 @@ test.describe('Auth-first admin actions (Rule 14.2)', () => {
       friday: { open: '09:00', close: '23:00', closed: false },
       sunday: { closed: true },
     };
-    const putRes = await request.put(`${BASE}/api/owner/settings`, {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      data: {
-        locationName: before.locationName,
-        phone: before.phone || '',
-        address: before.address || 'Test Address',
-        hoursJson: testHours,
-      },
-    });
-    expect(putRes.status()).toBe(200);
-    const putBody = await putRes.json() as any;
+    try {
+      const putRes = await request.put(`${BASE}/api/owner/settings`, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        data: {
+          locationName: before.locationName,
+          phone: before.phone || '',
+          address: before.address || 'Test Address',
+          hoursJson: testHours,
+        },
+      });
+      expect(putRes.status()).toBe(200);
 
-    // Step 3: GET again and verify
-    const getRes2 = await request.get(`${BASE}/api/owner/settings`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    expect(getRes2.status()).toBe(200);
-    const after = await getRes2.json() as any;
+      // Step 3: GET again and verify
+      const getRes2 = await request.get(`${BASE}/api/owner/settings`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(getRes2.status()).toBe(200);
+      const after = await getRes2.json() as any;
 
-    // Rule 14.2: verify data persisted, not just HTTP 200
-    expect(after.hoursJson).toEqual(testHours);
-    expect(after.address).toBeTruthy();
-    expect(after.address).not.toMatch(/^[0-9a-f-]{36}$/); // not a corrupted UUID
-    console.log(`Settings: hours persisted, address="${after.address}"`);
+      // Rule 14.2: verify data persisted, not just HTTP 200
+      expect(after.hoursJson).toEqual(testHours);
+      expect(after.address).toBeTruthy();
+      expect(after.address).not.toMatch(/^[0-9a-f-]{36}$/); // not a corrupted UUID
+      console.log(`Settings: hours persisted, address="${after.address}"`);
+    } finally {
+      // Restore shared staging state so reruns / parallel tests don't observe our mutation.
+      await request.put(`${BASE}/api/owner/settings`, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        data: {
+          locationName: before.locationName,
+          phone: before.phone ?? '',
+          address: before.address ?? '',
+          hoursJson: before.hoursJson ?? {},
+        },
+      });
+    }
   });
 
   test('WebSocket auth with real token', async ({ page }) => {
@@ -145,6 +186,26 @@ test.describe('Auth-first admin actions (Rule 14.2)', () => {
     expect(result).toContain('msg:subscribed');
     console.log(`WS auth: [${result.join(', ')}]`);
   });
+
+  test('WebSocket rejects a bogus token (no auth_success, server closes)', async ({ page }) => {
+    const result = await page.evaluate(async ({ wsBase }: { wsBase: string }) => {
+      const ws = new WebSocket(`${wsBase}/ws?token=invalid.bogus.token`);
+      return new Promise<string[]>((resolve) => {
+        const events: string[] = [];
+        const timer = setTimeout(() => { ws.close(); resolve([...events, 'timeout']); }, 9000);
+        ws.onopen = () => events.push('open');
+        ws.onmessage = (e) => {
+          try { events.push(`msg:${JSON.parse(e.data).type}`); } catch { events.push('parse_error'); }
+        };
+        ws.onclose = (ev) => { events.push(`close:${ev.code}`); clearTimeout(timer); resolve(events); };
+      });
+    }, { wsBase: WS_BASE });
+
+    // A bogus token must NEVER be authenticated; the server (websocket.ts:135-140) closes 1008.
+    expect(result).not.toContain('msg:auth_success');
+    expect(result).toContain('close:1008');
+    console.log(`WS reject: [${result.join(', ')}]`);
+  });
 });
 
 test.describe('Integration audit (Rule 14.3)', () => {
@@ -153,27 +214,30 @@ test.describe('Integration audit (Rule 14.3)', () => {
     // Client layout header has CurrencySwitcher next to LanguageSwitcher
     await page.goto(`${BASE}/branding-preview/demo`);
     await expect(page.locator('#root')).toBeVisible({ timeout: 15000 });
-    // CurrencySwitcher renders a button with currency code text (e.g. "ALL")
-    const hasAll = page.locator('button:has(span.font-mono)');
-    const exists = await hasAll.count();
+    // CurrencySwitcher renders a button with a stable aria-label (CurrencySwitcher.tsx:15:
+    // `Switch currency. Current: …`). Matching on that is far tighter than `span.font-mono`.
+    const currencyBtn = page.getByRole('button', { name: /switch currency/i });
+    const exists = await currencyBtn.count();
     console.log(`CurrencySwitcher buttons found: ${exists}`);
-    // At minimum, the LanguageSwitcher is visible in the header
-    expect(exists).toBeGreaterThanOrEqual(0);
+    // >= 0 was always-green (accepts zero renders). Demand the component actually renders.
+    // TODO(needs-staging): confirm /branding-preview/demo mounts the client header that hosts
+    // CurrencySwitcher; if it does not, repoint this at the storefront root (ClientLayout) that does.
+    expect(exists).toBeGreaterThanOrEqual(1);
   });
 
-  test('PriceDisplay replaces formatALL in cart and checkout', async ({ page }) => {
-    // Verify the admin JS bundle contains PriceDisplay references (not formatALL)
-    await page.goto(`${BASE}/`);
-    const pageContent = await page.evaluate(() => document.documentElement.innerHTML);
-    const hasPriceDisplay = pageContent.includes('PriceDisplay');
-    console.log(`PriceDisplay referenced in bundles: ${hasPriceDisplay}`);
-    // PriceDisplay is code-split, so it may not appear in the main HTML
-    // Verify by checking the compiled bundle names
-    const scripts = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('script[src]'))
-        .map(s => (s as HTMLScriptElement).src)
-        .filter(s => s.includes('.js'))
-    );
-    expect(scripts.length).toBeGreaterThan(0);
+  test('PriceDisplay renders formatted money in the product detail flow', async ({ page }) => {
+    // Bundle-script existence proved nothing about PriceDisplay USE. Drive the real flow:
+    // open a product's detail modal — its confirm CTA (MenuPage.tsx:1218/1228) embeds
+    // <PriceDisplay>, which renders formatMoney() output: `<int> ALL` or `<dec> €`.
+    await page.goto(`${BASE}/s/demo`);
+    const item = page.locator('[data-testid="menu-item"]').first();
+    await expect(item).toBeVisible({ timeout: 15000 });
+    await item.click();
+    const confirm = page.locator('[data-testid="product-detail-confirm"]');
+    await expect(confirm).toBeVisible({ timeout: 10000 });
+    // PriceDisplay format from packages/shared-types formatMoney: digits + ALL/€.
+    await expect(confirm).toContainText(/\d+(\.\d+)?\s*(ALL|€)/);
+    // TODO(needs-staging): exercising the cart drawer + /checkout PriceDisplay totals as well
+    // requires a live storefront run with an item added — see needs_staging.
   });
 });

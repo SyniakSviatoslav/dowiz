@@ -5,6 +5,26 @@ import { createOperationalPool, createSessionPool } from '@deliveryos/db';
 import { loadEnv } from '@deliveryos/config';
 
 const env = loadEnv();
+void env; // loaded for side-effect parity with other phase5 specs
+
+// Local UUID shape guard (this spec is under apps/api/tests, not e2e/ — inline regex).
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function expectUuid(v: unknown, label: string): asserts v is string {
+  assert.ok(typeof v === 'string' && UUID_RE.test(v), `${label}: expected a UUID, got ${String(v)}`);
+}
+// Postgres RLS / policy violation error codes & messages (everything else must re-throw).
+function isRlsViolation(err: unknown): boolean {
+  const e = err as { code?: string; message?: string };
+  return (
+    e?.code === '42501' ||
+    /row-level security|violates row-level|new row violates|policy/i.test(e?.message ?? '')
+  );
+}
+
+// High-value tables addressable by primary key without a location_id filter (IDOR surface).
+const IDOR_TABLES = ['orders', 'customers', 'courier_positions'] as const;
+
 const tenantTables = [
   'locations', 'categories', 'products', 'modifier_groups', 'modifiers',
   'product_modifier_groups', 'order_item_modifiers', 'order_status_history',
@@ -29,6 +49,8 @@ let ownerAId: string;
 let ownerBId: string;
 let tenantALocationId: string;
 let tenantBLocationId: string;
+// Real tenant-B primary keys (resolved via the bypass pool) for IDOR sub-tests.
+const tenantBRowIds: Partial<Record<(typeof IDOR_TABLES)[number], string>> = {};
 
 async function setup() {
   const sessionPool = createSessionPool();
@@ -42,15 +64,33 @@ async function setup() {
     ownerAId = resA.rows[0].id;
     ownerBId = resB.rows[0].id;
 
-    const locRes = await sessionPool.query(
-      `SELECT id FROM locations ORDER BY created_at LIMIT 2`,
-    );
-    if (locRes.rowCount < 2) {
-      console.error('❌ Need at least 2 seeded locations.');
+    // Resolve each owner's OWN location via membership ownership — not created_at order,
+    // which does not prove ownerA owns tenant A or ownerB owns tenant B.
+    const ownLoc = async (userId: string) =>
+      sessionPool.query(
+        `SELECT l.id FROM locations l JOIN memberships m ON m.location_id = l.id
+         WHERE m.user_id = $1 ORDER BY l.created_at LIMIT 1`,
+        [userId],
+      );
+    const locA = await ownLoc(ownerAId);
+    const locB = await ownLoc(ownerBId);
+    if (locA.rowCount === 0 || locB.rowCount === 0) {
+      console.error('❌ Each demo owner must own at least one location (memberships).');
       process.exit(1);
     }
-    tenantALocationId = locRes.rows[0].id;
-    tenantBLocationId = locRes.rows[1].id;
+    tenantALocationId = locA.rows[0].id;
+    tenantBLocationId = locB.rows[0].id;
+    assert.notStrictEqual(tenantALocationId, tenantBLocationId,
+      'tenant A and tenant B must be distinct locations');
+
+    // Resolve a real tenant-B row id per IDOR table (bypass pool sees all tenants).
+    for (const table of IDOR_TABLES) {
+      const r = await sessionPool.query(
+        `SELECT id FROM ${table} WHERE location_id = $1 LIMIT 1`,
+        [tenantBLocationId],
+      );
+      if (r.rowCount && r.rowCount > 0) tenantBRowIds[table] = r.rows[0].id;
+    }
   } finally {
     await sessionPool.end();
   }
@@ -60,9 +100,25 @@ test('H1: Adversarial cross-tenant RLS audit', async (t) => {
   await setup();
 
   const pool = createOperationalPool();
-  t.after(async () => { await pool.end(); });
+  // Bypass pool: RLS-unfiltered ground truth to verify the ACTUAL DML outcome (not a
+  // COUNT that owner A can never see anyway). Closing both in t.after.
+  const verifyPool = createSessionPool();
+  t.after(async () => { await pool.end(); await verifyPool.end(); });
 
-  const testId = `test_${crypto.randomUUID().slice(0, 8)}`;
+  // Positive control: the gate must not be silently rejecting everyone — owner A MUST
+  // be able to read their OWN tenant-A location through the RLS-enforced operational pool.
+  await t.test('positive control: owner A reads own tenant-A location', async () => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SELECT set_config('app.user_id', $1, true)", [ownerAId]);
+      const res = await client.query(`SELECT id FROM locations WHERE id = $1`, [tenantALocationId]);
+      await client.query('COMMIT');
+      assert.strictEqual(res.rowCount, 1, 'owner A cannot read their own location — RLS over-blocks');
+    } finally {
+      client.release();
+    }
+  });
 
   for (const table of tenantTables) {
     const isReadOnlyPublic = READ_ONLY_PUBLIC.has(table);
@@ -87,29 +143,35 @@ test('H1: Adversarial cross-tenant RLS audit', async (t) => {
     if (!isReadOnlyPublic) {
       await t.test(`${table}: cross-tenant INSERT denied`, async () => {
         const client = await pool.connect();
+        // Known id so we can verify ITS absence via the bypass pool (a COUNT that owner A
+        // runs is RLS-filtered and therefore vacuous regardless of whether the insert landed).
+        const maliciousId = crypto.randomUUID();
         try {
           await client.query('BEGIN');
           await client.query("SELECT set_config('app.user_id', $1, true)", [ownerAId]);
           try {
             await client.query(
               `INSERT INTO ${table} (id, location_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-              [crypto.randomUUID(), tenantBLocationId],
+              [maliciousId, tenantBLocationId],
             );
-          } catch {
-            // RLS policy violation is expected in adversarial test
-            console.debug('[rls-adversarial] expected RLS violation for', table);
+          } catch (err) {
+            // ONLY an RLS/policy violation is an acceptable block here. NOT NULL / FK / type
+            // errors mean the test never actually exercised RLS — re-throw so it cannot pass blind.
+            // TODO(needs-staging): supply a minimal valid row per table so non-RLS tables also
+            // reach the WITH CHECK clause instead of failing on a NOT NULL column first.
+            if (!isRlsViolation(err)) throw err;
           }
-          // Verify nothing was inserted
-          const check = await client.query(
-            `SELECT COUNT(*)::int AS cnt FROM ${table} WHERE location_id = $1`,
-            [tenantBLocationId],
-          );
-          assert.strictEqual(check.rows[0].cnt, 0,
-            `${table}: Owner A inserted into tenant B`);
           await client.query('COMMIT');
         } finally {
           client.release();
         }
+        // Ground truth via bypass pool: the malicious row must NOT exist in any tenant.
+        const check = await verifyPool.query(
+          `SELECT 1 FROM ${table} WHERE id = $1`,
+          [maliciousId],
+        );
+        assert.strictEqual(check.rowCount, 0,
+          `${table}: Owner A inserted a row into tenant B (RLS WITH CHECK bypassed)`);
       });
 
       await t.test(`${table}: cross-tenant UPDATE = 0 rows`, async () => {
@@ -117,8 +179,10 @@ test('H1: Adversarial cross-tenant RLS audit', async (t) => {
         try {
           await client.query('BEGIN');
           await client.query("SELECT set_config('app.user_id', $1, true)", [ownerAId]);
+          // SET id = id is a no-op present on every table — avoids schema noise (a missing
+          // updated_at column) masquerading as an RLS signal; 0 rows == RLS USING blocked.
           const res = await client.query(
-            `UPDATE ${table} SET updated_at = now() WHERE location_id = $1`,
+            `UPDATE ${table} SET id = id WHERE location_id = $1`,
             [tenantBLocationId],
           );
           await client.query('COMMIT');

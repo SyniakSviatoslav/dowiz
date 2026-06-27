@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
+import { requireStaging } from '../helpers/staging-guard';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 test.describe('UI: Client Order Status — WS, Map, Share, Messages', () => {
   let authToken: string;
@@ -12,11 +14,16 @@ test.describe('UI: Client Order Status — WS, Map, Share, Messages', () => {
   const TS = Date.now();
 
   test.beforeAll(async ({ request }) => {
+    // This suite MUTATES state (creates categories/products/orders, transitions status) and uses
+    // the dev/mock-auth backdoor — refuse to run against prod / an unknown target.
+    requireStaging(BASE);
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
     const body = await authRes.json();
     authToken = body.access_token;
     activeLocationId = body.activeLocationId;
+    expectJwt(authToken, 'mock-auth access_token');
+    expectUuid(activeLocationId, 'activeLocationId');
 
     const settingsRes = await request.get(`${BASE}/api/owner/settings`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -50,6 +57,7 @@ test.describe('UI: Client Order Status — WS, Map, Share, Messages', () => {
     });
     expect(orderRes.status()).toBe(201);
     orderId = (await orderRes.json()).id;
+    expectUuid(orderId, 'orderId');
   });
 
   test.afterAll(async ({ request }) => {
@@ -65,13 +73,9 @@ test.describe('UI: Client Order Status — WS, Map, Share, Messages', () => {
     page.on('pageerror', err => errors.push(err.message));
 
     await page.goto(`${BASE}/s/${locationSlug}/order/${orderId}`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
-
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
-
-    const hasStatus = /received|pending|confirmed|preparing|ready|delivered|PENDING|CONFIRMED|status/i.test(body);
-    expect(hasStatus).toBe(true);
+    // Specific tracking-page anchors — not a body-text regex (which a 404/error/nav shell satisfies).
+    await expect(page.locator('[data-testid="order-progress"]')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('[data-testid="order-status-badge"]')).toBeVisible();
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
@@ -81,16 +85,10 @@ test.describe('UI: Client Order Status — WS, Map, Share, Messages', () => {
     page.on('pageerror', err => errors.push(err.message));
 
     await page.goto(`${BASE}/s/${locationSlug}/order/${orderId}`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    // Progress bar should render
-    const progressBar = page.locator('[role="progressbar"], [class*="progress"], [class*="Progress"]').first();
-    const hasProgress = await progressBar.isVisible({ timeout: 3000 }).catch(() => false);
-
-    if (hasProgress) {
-      const barWidth = await progressBar.getAttribute('style').catch(() => '');
-      expect(barWidth).toBeTruthy();
-    }
+    // The timeline must render (unconditional — no if(hasProgress) escape hatch) with ≥1 lifecycle step.
+    await expect(page.locator('[data-testid="order-progress"]')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('[data-testid^="order-step-"]').first()).toBeVisible();
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
@@ -100,12 +98,14 @@ test.describe('UI: Client Order Status — WS, Map, Share, Messages', () => {
     page.on('pageerror', err => errors.push(err.message));
 
     await page.goto(`${BASE}/s/${locationSlug}/order/${orderId}`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const body = await page.textContent('body');
-    const hasEta = /min|hour|minut|orë|ETA|estimated/i.test(body);
+    // The ETA/status headline always renders and must carry text (no compute-then-never-assert boolean).
+    // TODO(needs-staging): the numeric "X–Y min" range only shows once driven to IN_DELIVERY — drive
+    // status then assert the range string specifically.
+    const headline = page.locator('[data-testid="order-eta-headline"]');
+    await expect(headline).toBeVisible({ timeout: 15000 });
+    await expect(headline).not.toBeEmpty();
 
-    // ETA may not show for PENDING orders, but page should not crash
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
 
@@ -114,10 +114,11 @@ test.describe('UI: Client Order Status — WS, Map, Share, Messages', () => {
     page.on('pageerror', err => errors.push(err.message));
 
     await page.goto(`${BASE}/s/${locationSlug}/order/${orderId}`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const mapEl = page.locator('[class*="map"], [class*="Map"], #map, canvas, [class*="leaflet"], [class*="maplib"]').first();
-    const hasMap = await mapEl.isVisible({ timeout: 3000 }).catch(() => false);
+    // CourierLiveMap renders ONLY for a delivery order in IN_DELIVERY (no courier ⇒ no map for PENDING),
+    // so assert the real tracking page rendered rather than a compute-then-never-assert boolean.
+    // TODO(needs-staging): drive the order to IN_DELIVERY (assign a courier) and assert the live map canvas is visible.
+    await expect(page.locator('[data-testid="order-progress"]')).toBeVisible({ timeout: 15000 });
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
@@ -127,10 +128,11 @@ test.describe('UI: Client Order Status — WS, Map, Share, Messages', () => {
     page.on('pageerror', err => errors.push(err.message));
 
     await page.goto(`${BASE}/s/${locationSlug}/order/${orderId}`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const shareBtn = page.locator('button, a').filter({ hasText: /share|Share|Ndaj|location|Location/i }).first();
-    const hasShare = await shareBtn.isVisible({ timeout: 3000 }).catch(() => false);
+    // The "Share my location with courier" UI is gated to IN_DELIVERY, so it is correctly absent for a
+    // PENDING order — assert the real tracking page rendered rather than a never-asserted boolean.
+    // TODO(needs-staging): drive the order to IN_DELIVERY and assert the share-location control is visible.
+    await expect(page.locator('[data-testid="order-progress"]')).toBeVisible({ timeout: 15000 });
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
@@ -140,10 +142,12 @@ test.describe('UI: Client Order Status — WS, Map, Share, Messages', () => {
     page.on('pageerror', err => errors.push(err.message));
 
     await page.goto(`${BASE}/s/${locationSlug}/order/00000000-0000-0000-0000-000000000000`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(50);
+    // An unknown order id renders the not-found EmptyState with a way back (never a dead-end, never a blank shell).
+    await expect(page.locator('[data-testid="order-back-to-menu"]')).toBeVisible({ timeout: 15000 });
+    // TODO(needs-staging): cross-tenant IDOR — load tenant-A's REAL orderId under tenant-B's slug and
+    // assert this same not-found state. A nil-UUID 404s by absence and proves nothing about isolation;
+    // this needs a real second-tenant fixture.
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
@@ -153,13 +157,11 @@ test.describe('UI: Client Order Status — WS, Map, Share, Messages', () => {
     page.on('pageerror', err => errors.push(err.message));
 
     await page.goto(`${BASE}/s/${locationSlug}/order/${orderId}`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
+    await expect(page.locator('[data-testid="order-progress"]')).toBeVisible({ timeout: 15000 });
 
     await page.reload({ waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
-
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    // The timeline must re-render after reload (specific anchor, not a body.length floor).
+    await expect(page.locator('[data-testid="order-progress"]')).toBeVisible({ timeout: 15000 });
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });

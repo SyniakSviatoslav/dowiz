@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -11,9 +13,11 @@ test.describe('UI: MenuManager — Product & Category CRUD via Forms', () => {
   const PROD_NAME = `UI-FProd-${TS}`;
 
   test.beforeAll(async ({ request }) => {
+    requireStaging(BASE);
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
     authToken = (await authRes.json()).access_token;
+    expectJwt(authToken, 'mock-auth access_token');
   });
 
   test('Menu manager page loads with categories visible', async ({ page }) => {

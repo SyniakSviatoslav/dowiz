@@ -54,8 +54,14 @@ test.describe('Client Checkout', () => {
     await addItemAndGoToCheckout(page);
     await page.waitForTimeout(1000);
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
-    const body = await page.textContent('body');
-    expect(body).toMatch(/delivery|pickup|schedule/i);
+    // Assert the actual delivery-type toggle widget (role=tablist), not loose body text
+    // that also appears in nav/labels/title. Switching a tab must flip aria-selected.
+    const tablist = page.locator('[role="tablist"]');
+    await expect(tablist).toBeVisible({ timeout: 5000 });
+    const tabs = tablist.locator('[role="tab"]');
+    await expect(tabs).toHaveCount(2); // delivery + pickup (scheduled is hidden scaffold)
+    await tabs.nth(1).click();
+    await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
   });
 
   test('address input field is present for delivery', async ({ page }) => {
@@ -64,9 +70,10 @@ test.describe('Client Checkout', () => {
     await addItemAndGoToCheckout(page);
     await page.waitForTimeout(1000);
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
-    const inputs = page.locator('input, textarea');
-    const count = await inputs.count();
-    expect(count).toBeGreaterThanOrEqual(1);
+    // Assert delivery-specific address fields (rendered only when deliveryType==='delivery'),
+    // not any input — the phone field alone would satisfy a generic count>=1.
+    await expect(page.locator('[data-testid="checkout-entrance"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="checkout-apartment"]')).toBeVisible();
   });
 
   test('phone input or OTP modal is present on checkout', async ({ page }) => {
@@ -74,28 +81,27 @@ test.describe('Client Checkout', () => {
     page.on('pageerror', err => errors.push(err.message));
     await addItemAndGoToCheckout(page);
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
-    const phoneField = page.locator('input[type="tel"]');
-    const otpModal = page.locator('[role="dialog"], .modal, [class*="otp"]');
-    const hasPhone = await phoneField.count() > 0;
-    const hasOtp = await otpModal.count() > 0;
+    // Require a VISIBLE phone field or a VISIBLE OTP dialog — not a class-name match
+    // (`[class*="otp"]`) that hits display:none elements. Both branches assert visibility.
+    const phoneField = page.locator('[data-testid="checkout-phone"]');
+    const otpModal = page.locator('[role="dialog"]');
+    const hasPhone = await phoneField.isVisible();
+    const hasOtp = await otpModal.isVisible();
     expect(hasPhone || hasOtp).toBe(true);
-    if (hasPhone) {
-      await expect(phoneField.first()).toBeVisible();
-    }
   });
 
   test('start checkout opens OTP modal', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
     await addItemAndGoToCheckout(page);
-    const submitBtn = page.locator('button[type="submit"]');
-    if (await submitBtn.count() > 0) {
-      await submitBtn.click();
-      await page.waitForTimeout(1000);
-    }
+    // The place-order/start-checkout control must exist and be visible (no conditional
+    // guard that lets the test pass when the button is absent). The full OTP-open flow
+    // requires a valid filled form + OTP_ENABLED on the target — see needs_staging TODO.
+    const submitBtn = page.locator('[data-testid="order-confirm-button"]');
+    await expect(submitBtn).toBeVisible({ timeout: 5000 });
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    // TODO(needs_staging): fill name/phone/address, click submit, assert the OTP [role="dialog"]
+    // becomes visible (or the order is created) against staging with OTP_ENABLED=true.
   });
 
   test('order total is displayed correctly in ALL', async ({ page }) => {
@@ -114,13 +120,16 @@ test.describe('Client Checkout', () => {
     await addItemAndGoToCheckout(page);
     await page.waitForTimeout(1500);
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
-    const body = await page.textContent('body');
-    expect(body).toMatch(/total|order|checkout/i);
-    expect(body.length).toBeGreaterThan(100);
+    // Cash is the default method → its amount input (#cash-amount) renders. Targeted locator,
+    // not /total|order|checkout/ which appears on every checkout page regardless of payment state.
+    await expect(page.locator('#cash-amount')).toBeVisible({ timeout: 5000 });
   });
 
   test('no cookies set on checkout page', async ({ page }) => {
     await addItemAndGoToCheckout(page);
+    // Positive control: prove the checkout page actually rendered before asserting empty cookies —
+    // otherwise an error page / failed nav would also yield [] and give a false security green.
+    await expect(page.locator('[data-testid="checkout-total"]')).toBeVisible({ timeout: 5000 });
     const cookies = await page.context().cookies();
     expect(cookies).toEqual([]);
   });
@@ -165,5 +174,15 @@ test.describe('Client Checkout', () => {
     const totalEl = page.locator('text=/[0-9]+[\\s]*ALL/');
     await expect(totalEl.first()).toBeVisible({ timeout: 5000 });
   });
+
+  // TODO(needs_staging): cross-tenant isolation. Add a test that places/loads a cart under
+  // tenant A's slug then attempts checkout under a REAL second tenant's slug (not a nil/all-zero
+  // id — that 404s by absence and proves nothing) and asserts tenant A's cart/order is neither
+  // visible nor submittable under tenant B. Requires a real second seeded tenant on staging.
+
+  // TODO(needs_staging): error-matrix on order-create. With the full form filled, intercept the
+  // create call (page.route('**/api/orders', r => r.fulfill({ status: 422 | 429 | 503 })) and
+  // r.abort() for network failure) and assert the role="alert" error banner renders for each —
+  // not a silent no-op. Requires the full valid-form submit flow against staging.
 
 });

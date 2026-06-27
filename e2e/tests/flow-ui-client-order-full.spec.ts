@@ -17,8 +17,10 @@
  * 13. Error state: MIN_ORDER_NOT_MET is displayed when cart total is below minimum
  */
 import { test, expect, type Page } from '@playwright/test';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 const SLUG = 'sushi-durres';
 
 const DELIVERY_PHONE = '+355683085694';
@@ -31,6 +33,10 @@ const DELIVERY_APARTMENT = '3A';
 test.describe.configure({ mode: 'serial' });
 
 test.describe(`Client: Full order flow on /branding-preview/${SLUG}`, () => {
+
+  // This spec MUTATES state (places real orders via /api/orders). Refuse to run it
+  // against prod/unknown targets — see Test Integrity rule #6.
+  test.beforeAll(() => requireStaging(BASE));
 
   let productName: string | null = null;
   let productPrice: number | null = null;
@@ -100,13 +106,18 @@ test.describe(`Client: Full order flow on /branding-preview/${SLUG}`, () => {
 
     const productsAfter = await page.locator('[data-testid="menu-item"]').count();
     // Either fewer results OR "no results" text appears
-    const noResultsText = await page.textContent('body').then(t => t?.includes('no result') || t?.includes('No result') || t?.includes('empty'));
+    const noResultsText = await page.textContent('body').then(t => Boolean(t?.includes('no result') || t?.includes('No result') || t?.includes('empty')));
     console.log('Search results — before:', productsBefore, '| after:', productsAfter, '| noResults:', noResultsText);
+    // A no-match query MUST collapse the result set (or surface a no-results state).
+    // Without this the search could be a no-op and the test would still "pass".
+    expect(productsBefore, 'menu must have products to filter').toBeGreaterThan(0);
+    expect(productsAfter < productsBefore || noResultsText, 'search must filter the result set').toBe(true);
 
-    // Clear search
+    // Clear search → results restored to at least the filtered count.
     await searchInput.clear();
     await page.waitForTimeout(500);
     const productsRestored = await page.locator('[data-testid="menu-item"]').count();
+    expect(productsRestored, 'clearing search must restore results').toBeGreaterThanOrEqual(productsAfter);
     console.log('Step 3 PASS — products after clear:', productsRestored);
   });
 
@@ -158,21 +169,16 @@ test.describe(`Client: Full order flow on /branding-preview/${SLUG}`, () => {
     await firstBtn.click();
     await page.waitForTimeout(800);
 
-    // Cart badge/count should now show 1
-    const cartBadge = page.locator('[data-testid="cart-count"], [aria-label*="cart"], [class*="cart-count"], .cart-badge').first();
-    const badgeVisible = await cartBadge.isVisible({ timeout: 3000 }).catch(() => false);
-    if (badgeVisible) {
-      const badgeText = await cartBadge.textContent();
-      console.log('Cart badge text:', badgeText);
-      const qty = parseInt(badgeText?.replace(/\D/g, '') || '0');
-      expect(qty, 'Cart must show at least 1 item').toBeGreaterThanOrEqual(1);
-    } else {
-      // Alternative: cart button exists with non-zero text
-      const cartBtn = page.locator('button').filter({ hasText: /\d+ item|cart/i }).first();
-      const hasBtnText = await cartBtn.isVisible({ timeout: 3000 }).catch(() => false);
-      console.log('Cart button visible:', hasBtnText);
-    }
-    console.log('Step 5 PASS — product added to cart');
+    // The cart trigger (data-testid="cart-open") is rendered ONLY when itemsCount > 0
+    // (ClientLayout.tsx) — so its visibility alone proves the add succeeded. Assert it
+    // unconditionally (no `if (visible)` branch that would silently pass on absence) and
+    // assert its badge shows at least 1 item.
+    const cartTrigger = page.locator('[data-testid="cart-open"]');
+    await expect(cartTrigger, 'cart trigger must appear after adding an item').toBeVisible({ timeout: 5000 });
+    const triggerText = (await cartTrigger.textContent()) || '';
+    const qty = parseInt(triggerText.replace(/\D/g, '') || '0', 10);
+    expect(qty, 'Cart must show at least 1 item').toBeGreaterThanOrEqual(1);
+    console.log('Step 5 PASS — product added to cart, badge qty:', qty);
   });
 
   // ── STEP 6: Cart drawer / cart page shows added item ─────────────────────────
@@ -234,10 +240,15 @@ test.describe(`Client: Full order flow on /branding-preview/${SLUG}`, () => {
     await submitBtn.click();
     await page.waitForTimeout(1500);
 
-    // Should show phone error or HTML5 validation or custom error message
-    const afterText = await page.textContent('body') || '';
-    const hasError = afterText.includes('phone') || afterText.includes('Phone') || afterText.includes('valid') || afterText.includes('required') || afterText.includes('Error');
-    console.log('Step 7 PASS — validation errors shown:', hasError, '(page has error text)');
+    // The form must NOT submit with empty required fields. Prove it two ways that BOTH
+    // go red if validation breaks: (a) we did not navigate to the order page, and
+    // (b) a required field reports the native :invalid state (phone is `required`).
+    // Loose body-text matching ("phone"/"required") is a tautology here — those words
+    // exist in labels/placeholders regardless of validity — so it is deliberately avoided.
+    expect(page.url(), 'empty form must not place an order').not.toContain('/order/');
+    const invalidRequired = await page.locator('[data-testid="checkout-phone"]:invalid, input:invalid').count();
+    expect(invalidRequired, 'a required field must report native :invalid after empty submit').toBeGreaterThan(0);
+    console.log('Step 7 PASS — empty submit blocked, invalid required fields:', invalidRequired);
   });
 
   // ── STEP 8: Fill checkout form and place order ────────────────────────────────
@@ -321,21 +332,27 @@ test.describe(`Client: Full order flow on /branding-preview/${SLUG}`, () => {
     await submitBtn.click();
     await page.waitForTimeout(5000); // allow API round trip
 
-    const afterText = await page.textContent('body') || '';
-    const orderPlaced = afterText.includes('order') && (afterText.includes('placed') || afterText.includes('success') || afterText.includes('confirmed') || afterText.includes('thank'));
-    const hasApiError = afterText.includes('Failed') || afterText.includes('failed') || afterText.includes('error');
-    const minOrderError = afterText.includes('Minimum order') || afterText.includes('MIN_ORDER');
     const currentUrl = page.url();
 
-    console.log('After submit — url:', currentUrl);
-    console.log('  order placed:', orderPlaced, '| api error:', hasApiError, '| min order error:', minOrderError);
+    // The submit MUST produce a designed terminal outcome — never a silent no-op or a
+    // stuck spinner. Proof goes red on a blank/hung page:
+    //   success → navigate to /s/{slug}/order/{id}  OR  the "Order placed!" overlay,
+    //   business rejection → a visible [role="alert"] error (MIN_ORDER / not-deliverable).
+    // (`body.length > N` accepted a 500/redirect/spinner and is removed — Test Integrity #2.)
+    const orderPlaced = currentUrl.includes('/order/');
+    const confirmationVisible = await page.getByText(/order placed|porosia/i).first().isVisible({ timeout: 2000 }).catch(() => false);
+    const errorVisible = await page.locator('[role="alert"]').first().isVisible({ timeout: 2000 }).catch(() => false);
 
-    // At minimum, the page must not have crashed
+    console.log('After submit — url:', currentUrl, '| placed:', orderPlaced, '| confirmation:', confirmationVisible, '| error alert:', errorVisible);
+
     const criticalJs = jsErrors.filter(e => !e.includes('favicon') && !e.includes('ResizeObserver'));
     expect(criticalJs, `JS errors after submit: ${criticalJs.join('; ')}`).toEqual([]);
-    expect(afterText.length, 'Page must render content after submit').toBeGreaterThan(100);
+    // TODO(needs_staging): add enough items to exceed min_order_value so this can assert
+    // strict success (orderPlaced) only. Until then a documented business rejection
+    // (visible error alert) is an accepted terminal outcome.
+    expect(orderPlaced || confirmationVisible || errorVisible, 'submit must reach the order page, show the success confirmation, or surface a visible error — not a silent no-op').toBe(true);
 
-    console.log('Step 8 PASS — order flow completed without JS crash');
+    console.log('Step 8 PASS — submit produced a designed terminal outcome');
   });
 
   // ── STEP 9: Post-order page ───────────────────────────────────────────────────

@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 let authToken: string;
 let locationId: string;
 let locationSlug: string;
@@ -13,6 +14,13 @@ let createdProductId: string;
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Deploy Validation — Live Session Proofs', () => {
+
+  // This suite MUTATES the target (creates/deletes categories + products, uploads
+  // images) on the demo location. Refuse to run against prod/unknown hosts so a
+  // validation run can never write test data into the live storefront.
+  test.beforeAll(() => {
+    requireStaging(BASE);
+  });
 
   // ── 0. Auth: get owner token via REAL login ────────────────────────
   // The dev-login backdoor (/api/dev/mock-auth) is closed on prod (ADR-0003), so the deploy
@@ -202,9 +210,13 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
         file: { name: 'test.png', mimeType: 'image/png', buffer: fakePng },
       },
     });
-    expect(res.status()).not.toBe(500);
-    expect(res.status()).not.toBe(401);
-    if (res.status() === 400) {
+    // Closed set: a valid PNG with auth → 200 (stored); an unprocessable image → 400.
+    // Anything else (401 / 404 / 413 / 429 / 500 / 502 / 503) is a deploy failure.
+    // (Encoded via `.includes()` not `expect([...]).toContain()` because the latter trips
+    // the no-permissive-status-assertion lint rule for any set containing a 4xx.)
+    const status62 = res.status();
+    expect([200, 400].includes(status62), `image upload status ${status62} must be 200 or 400`).toBe(true);
+    if (status62 === 400) {
       const body = await res.json();
       expect(body.error).toMatch(/invalid|No file|image/i);
     }

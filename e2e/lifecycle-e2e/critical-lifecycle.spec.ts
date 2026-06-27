@@ -5,6 +5,10 @@ import { env } from './support/env';
 import { SELECTORS as S, STATES as St } from './support/selectors';
 import { collectWsFrames, driveAlongTrack, extractOrderId } from './support/helpers';
 import { expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
+
+// Mutating spec (places real orders, drives the lifecycle): refuse to run against prod/unknown.
+test.beforeAll(() => requireStaging(env.customerBaseURL));
 
 /**
  * LAUNCH-GATING SMOKE — the full order lifecycle, live, across all three roles
@@ -168,15 +172,17 @@ test('main flow: customer → owner(live) → courier(geo) → deliver → cash 
     const courierId = fs.readFileSync(`${env.authDir}/courierId`, 'utf8').trim();
     const assignDebug = await owner.evaluate(async ([orderIdVal, locIdVal, cIdVal]) => {
       const token = localStorage.getItem('dos_access_token');
-      try {
-        const devRes = await fetch('/api/dev/create-assignment', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId: orderIdVal, courierId: cIdVal, locationId: locIdVal }),
-        });
-        return { status: devRes.status, body: await devRes.text().catch(() => '') };
-      } catch (e: any) { return { error: e.message }; }
+      const devRes = await fetch('/api/dev/create-assignment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orderId: orderIdVal, courierId: cIdVal, locationId: locIdVal }),
+      });
+      return { status: devRes.status, body: await devRes.text() };
     }, [orderId, locId, courierId]);
     console.log('[e2e] Create assignment:', JSON.stringify(assignDebug));
+    // Route returns 200 + { assignmentId } on success; 400 missing-field / 500 db-error must surface.
+    expect(assignDebug.status, `create-assignment failed: ${assignDebug.body}`).toBe(200);
+    expectUuid(JSON.parse(assignDebug.body).assignmentId, 'assignmentId');
 
     // Re-navigate courier page to force fetchTasks() (WS delivery may be degraded)
     await courier.goto(`${env.courierBaseURL}/courier`);
@@ -193,12 +199,16 @@ test('main flow: customer → owner(live) → courier(geo) → deliver → cash 
 
     // Mark as picked-up so deliver endpoint accepts it (requires status='picked_up')
     const assignmentId = courier.url().split('/').pop();
-    await courier.evaluate(async ([asgnId]) => {
+    const pickedUpResp = await courier.evaluate(async ([asgnId]) => {
       const token = localStorage.getItem('dos_access_token');
-      await fetch(`/api/courier/assignments/${asgnId}/picked-up`, {
+      const res = await fetch(`/api/courier/assignments/${asgnId}/picked-up`, {
         method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
       });
+      return { status: res.status, body: await res.text() };
     }, [assignmentId]);
+    // Route returns 200 { success:true }; a silent 401/403/404 here would otherwise hide behind
+    // the later deliver precondition error.
+    expect(pickedUpResp.status, `picked-up failed: ${pickedUpResp.body}`).toBe(200);
 
     // Emulate the courier moving restaurant → customer as a series of GPS pings.
     await driveAlongTrack(courierCtx, env.restaurantGeo, env.customerGeo, 5, 800);
@@ -207,11 +217,13 @@ test('main flow: customer → owner(live) → courier(geo) → deliver → cash 
     // referencing this order arrived on the customer socket.
     // NOTE: we deliberately do NOT assert the marker on the MapLibre canvas —
     // it's WebGL with no DOM; assert on propagated state, not pixels.
-    await customer.goto(`/s/${env.restaurantSlug}/order/${orderId}`);
-    await customer.waitForLoadState('networkidle');
+    // Assert on the SAME open page (no reload) — live WS already proven at the assignment step
+    // above. The WS-frame poll below is the geo-movement proof.
+    // TODO(needs_staging): confirm en-route reflects live on staging without the prior reload.
     await expect(customer.getByTestId(S.customer.orderStatusBadge)).toHaveAttribute(
       'data-status',
       St.enRoute,
+      { timeout: 15_000 },
     );
     await expect
       .poll(() => customerWs.frames.some((f) => f.includes(orderId)), { timeout: 10_000 })
@@ -219,25 +231,36 @@ test('main flow: customer → owner(live) → courier(geo) → deliver → cash 
 
     // ===== 6. Deliver + cash (COD) reconciliation =====
     // Call deliver API directly (UI SwipeToComplete is unreliable with mock data)
-    await courier.evaluate(async () => {
+    const deliverResp = await courier.evaluate(async () => {
       const token = localStorage.getItem('dos_access_token');
       const url = window.location.href;
       const asgnId = url.split('/').pop();
-      await fetch(`/api/courier/assignments/${asgnId}/delivered`, {
+      const res = await fetch(`/api/courier/assignments/${asgnId}/delivered`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ cash_collected: false }),
       });
+      return { status: res.status, body: await res.text() };
     });
+    // Route returns 200 { success:true }; a 401/422-cash-mismatch/404-precondition must fail the
+    // test rather than be swallowed and let the terminal-status assertion lie.
+    expect(deliverResp.status, `deliver failed: ${deliverResp.body}`).toBe(200);
 
     // ===== 7. Terminal state propagates to every role =====
-    // Refresh customer page to force re-fetch (WS publish may be degraded)
-    await customer.goto(`/s/${env.restaurantSlug}/order/${orderId}`);
-    await customer.waitForLoadState('networkidle');
+    // Customer: assert DELIVERED live on the open page (no reload) — proves the deliver WS publish
+    // actually reaches the customer socket, not just that a fresh fetch reads the DB.
+    // TODO(needs_staging): confirm live (no reload) delivered propagation on staging.
     await expect(customer.getByTestId(S.customer.orderStatusBadge)).toHaveAttribute(
       'data-status',
       St.delivered,
+      { timeout: 25_000 },
     );
+    // Owner: the active board filters out DELIVERED (DashboardPage filteredOrders), so the terminal
+    // proof is the card LEAVING the live board over WS — not a DELIVERED attribute that never shows.
+    await expect(orderCard).not.toBeVisible({ timeout: 25_000 });
+    // TODO(needs_staging): assert courier task card also leaves /me/assignments after deliver
+    // (requires a courier refetch on a live run) + add a 2nd-tenant owner/courier negative
+    // (foreign tenant must NOT see/act on this order) — both need real staging fixtures.
   } finally {
     await Promise.all([customerCtx.close(), ownerCtx.close(), courierCtx.close()]);
   }

@@ -71,20 +71,26 @@ test.describe('Theme Switcher', () => {
       await page.waitForSelector(screen.readySelector, { timeout: 20000 });
       await page.waitForTimeout(1000);
 
+      const COLOR = /^(#[0-9a-fA-F]{3,8}|rgb)/;
       const varsBefore = await getBrandCSSVars(page);
-      expect(varsBefore.primary).toBeTruthy();
-      expect(varsBefore.bg).toBeTruthy();
+      expect(varsBefore.primary).toMatch(COLOR);
+      expect(varsBefore.bg).toMatch(COLOR);
 
-      // Apply each theme class and verify variables remain set
+      // Apply each theme class and verify it actually swaps in its OWN colours. toBeTruthy
+      // would pass on an inherited '#000' fallback — assert each value is colour-shaped AND
+      // that cycling yields >1 distinct primary (proves the class drives --brand-primary).
+      const primaries: string[] = [];
       for (const cls of THEME_CLASSES) {
         await setThemeClass(page, cls);
         await page.waitForTimeout(150);
 
         const vars = await getBrandCSSVars(page);
-        expect(vars.primary).toBeTruthy();
-        expect(vars.bg).toBeTruthy();
-        expect(vars.text).toBeTruthy();
+        expect(vars.primary).toMatch(COLOR);
+        expect(vars.bg).toMatch(COLOR);
+        expect(vars.text).toMatch(COLOR);
+        primaries.push(vars.primary);
       }
+      expect(new Set(primaries).size).toBeGreaterThan(1);
 
       // Restore no class � page still renders
       await setThemeClass(page, '');

@@ -251,6 +251,7 @@ export function AnalyticsPage() {
         {statCards.map((card, i) => (
           <div
             key={i}
+            data-testid="kpi-card"
             className="p-4 rounded-xl card-lift breathe min-w-0 transition-shadow"
             style={{ background: 'var(--brand-surface)', boxShadow: 'var(--elev-1)', animationDelay: `${i * 0.3}s`, transitionDuration: 'var(--motion-fast)', transitionTimingFunction: 'var(--ease-soft)' }}
           >
@@ -258,7 +259,7 @@ export function AnalyticsPage() {
               <span className="text-xs font-medium truncate" style={{ color: 'var(--brand-text-muted)' }}>{card.label}</span>
               <i className={`${card.icon} text-lg shrink-0`} style={{ color: `var(${card.colorVar})` }} />
             </div>
-            <div className="text-xl font-bold mb-1 tabular-nums truncate" style={{ color: card.noData ? 'var(--brand-text-muted)' : 'var(--brand-text)' }}>
+            <div data-testid="kpi-value" className="text-xl font-bold mb-1 tabular-nums truncate" style={{ color: card.noData ? 'var(--brand-text-muted)' : 'var(--brand-text)' }}>
               {card.noData ? '—' : <AnimatedNumber value={card.num} formatter={card.format} />}
             </div>
             <span className="text-xs font-medium tabular-nums" style={{ color: card.noData ? 'var(--brand-text-muted)' : card.trend.startsWith('+') ? 'var(--color-success)' : card.trend.startsWith('-') ? 'var(--color-danger)' : 'var(--brand-text-muted)' }}>

@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { expectJwt } from '../helpers/assert-shape';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+const CODE = /^[0-9a-f]{16}$/; // owner courier-invite code = 16 hex chars (crypto.randomBytes(8))
 
 test.describe.configure({ mode: 'serial' });
 
@@ -15,22 +17,26 @@ test.describe('UI: Courier Invite — Full Registration Flow via Browser', () =>
   const PASSWORD = 'test-password-123!';
 
   test.beforeAll(async ({ request }) => {
+    requireStaging(BASE); // mutating suite (creates invites, couriers) — never run against prod
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
     const body = await authRes.json();
     authToken = body.access_token;
     activeLocationId = body.activeLocationId;
+    // Guard the serial suite: empty/garbage setup must FAIL here, not silently pass later.
+    expectJwt(authToken, 'authToken');
+    expectUuid(activeLocationId, 'activeLocationId');
 
     const invRes = await request.post(
       `${BASE}/api/owner/locations/${activeLocationId}/courier-invites`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { email: EMAIL, role: 'courier' } }
     );
-    expect(invRes.status()).toBe(201);
-    inviteId = (await invRes.json()).id;
-
-    const detailRes = await request.get(`${BASE}/api/courier/auth/invites/${inviteId}`);
-    const detail = await detailRes.json();
-    inviteCode = detail.code || detail.inviteCode;
+    expect(invRes.status()).toBe(200); // owner/courier-invites.ts returns reply.send (200), body { inviteId, code }
+    const invBody = await invRes.json();
+    inviteId = invBody.inviteId;
+    inviteCode = invBody.code; // code returned ONCE at creation; the detail GET never exposes it
+    expectUuid(inviteId, 'inviteId');
+    expect(inviteCode, 'inviteCode must be a 16-hex security code').toMatch(CODE);
   });
 
   test('Courier invite detail page loads with invite info', async ({ page }) => {

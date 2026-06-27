@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
 import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 test.describe.configure({ mode: 'serial' });
 

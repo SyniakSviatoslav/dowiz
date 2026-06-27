@@ -13,9 +13,10 @@
  */
 import { test, expect, Page } from '@playwright/test';
 import crypto from 'node:crypto';
-import { expectUuid } from '../helpers/assert-shape';
+import { expectUuid, expectJwt } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 const PAGE_TIMEOUT = 30000;
 
 test.describe.configure({ mode: 'serial' });
@@ -42,6 +43,9 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
 
   // ── Setup: create product and courier via API ──────────────────────────
   test.beforeAll(async ({ request }) => {
+    // Mutating suite (creates couriers, places + transitions orders) — never run against prod.
+    requireStaging(BASE);
+
     // Owner auth
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
@@ -59,31 +63,35 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
       data: { name: CAT_NAME },
       headers: { Authorization: `Bearer ${ownerToken}` },
     });
-    if (catRes.status() === 201) categoryId = (await catRes.json()).id;
+    expect(catRes.status(), 'category setup must succeed').toBe(201);
+    categoryId = (await catRes.json()).id;
+    expectUuid(categoryId, 'categoryId');
 
     const prodRes = await request.post(`${BASE}/api/owner/menu/products`, {
       data: { name: PROD_NAME, price: PROD_PRICE, available: true, categoryId, stockCount: 20 },
       headers: { Authorization: `Bearer ${ownerToken}` },
     });
-    if (prodRes.status() === 201) productId = (await prodRes.json()).id;
+    expect(prodRes.status(), 'product setup must succeed').toBe(201);
+    productId = (await prodRes.json()).id;
+    expectUuid(productId, 'productId');
 
-    // Create courier via invite
+    // Create courier via invite — setup must produce a real courier + JWT (no silent skip)
     const invRes = await request.post(
       `${BASE}/api/owner/locations/${locationId}/courier-invites`,
       { headers: { Authorization: `Bearer ${ownerToken}` }, data: { email: COURIER_EMAIL, role: 'courier' } }
     );
-    if (invRes.status() === 200) {
-      const invBody = await invRes.json();
-      const redeemRes = await request.post(
-        `${BASE}/api/courier/auth/invites/${invBody.inviteId}/redeem`,
-        { data: { full_name: 'LC Courier', email: COURIER_EMAIL, password: COURIER_PASS, code: invBody.code } }
-      );
-      if (redeemRes.status() === 200) {
-        const redeemBody = await redeemRes.json();
-        courierId = redeemBody.courier?.id;
-        courierToken = redeemBody.jwt;
-      }
-    }
+    expect(invRes.status(), 'courier invite must succeed').toBe(200);
+    const invBody = await invRes.json();
+    const redeemRes = await request.post(
+      `${BASE}/api/courier/auth/invites/${invBody.inviteId}/redeem`,
+      { data: { full_name: 'LC Courier', email: COURIER_EMAIL, password: COURIER_PASS, code: invBody.code } }
+    );
+    expect(redeemRes.status(), 'courier invite redeem must succeed').toBe(200);
+    const redeemBody = await redeemRes.json();
+    courierId = redeemBody.courier?.id;
+    courierToken = redeemBody.jwt;
+    expectUuid(courierId, 'courierId');
+    expectJwt(courierToken, 'courierToken');
 
     // Start courier shift
     if (courierToken) {
@@ -195,7 +203,7 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     );
     expect(confirmRes.status()).toBe(200);
     const body = await confirmRes.json();
-    expect(body.status || body.order?.status).toMatch(/CONFIRMED|confirmed/i);
+    expect(body.status || body.order?.status).toBe('CONFIRMED');
     console.log('Confirm status:', confirmRes.status());
   });
 
@@ -225,6 +233,9 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
       { headers: { Authorization: `Bearer ${ownerToken}` }, data: { courierId } }
     );
     expect(assignRes.status()).toBe(200);
+    const assignBody = await assignRes.json();
+    expectUuid(assignBody.id, 'assignment.id');
+    expect(assignBody.status).toBe('assigned');
     console.log('Assign courier status:', assignRes.status(), 'courierId:', courierId);
   });
 
@@ -365,8 +376,9 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     expect(verifyRes.status()).toBe(200);
     const body = await verifyRes.json();
     const status = body.order?.status || body.status;
-    // Status progresses: PENDING → CONFIRMED → IN_DELIVERY → DELIVERED
-    expect(status).toMatch(/DELIVERED|IN_DELIVERY|CONFIRMED|PENDING/i);
+    // The full chain (confirm → assign → accept → picked-up → delivered) must land on DELIVERED.
+    // A permissive set here would let a silently-400'd transition pass.
+    expect(status).toBe('DELIVERED');
     console.log('Final order status:', status);
   });
 

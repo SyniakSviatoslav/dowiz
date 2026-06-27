@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 const TEST_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMklEQVQ4T2NkYPj/n4EBBJgYKAQMowYMAwMDhRE0YBhGDRgGNGAYRg0YBjRgGNUfAABF1wH5r5lRawAAAABJRU5ErkJggg==';
 
 let authToken: string;
@@ -9,9 +11,13 @@ const TS = Date.now();
 
 test.describe('UI: Image Upload — Product + Brand Logo', () => {
   test.beforeAll(async ({ request }) => {
+    // This suite MUTATES tenant state (creates categories/products, uploads images).
+    // Hard-guard against running it (and the dev mock-auth backdoor) at a prod target.
+    requireStaging(BASE);
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
     authToken = (await authRes.json()).access_token;
+    expectJwt(authToken, 'mock-auth access_token');
 
     const catRes = await request.post(`${BASE}/api/owner/menu/categories`, {
       data: { name: `IMG-Cat-${TS}` },
@@ -26,6 +32,7 @@ test.describe('UI: Image Upload — Product + Brand Logo', () => {
     });
     expect(prodRes.status()).toBe(201);
     productId = (await prodRes.json()).id;
+    expectUuid(productId, 'productId');
   });
 
   test.afterAll(async ({ request }) => {
@@ -36,18 +43,20 @@ test.describe('UI: Image Upload — Product + Brand Logo', () => {
     }
   });
 
-  test('Flow 1: Upload product image returns success (not 500, not 401)', async ({ request }) => {
+  test('Flow 1: Upload product image returns an absolute image URL', async ({ request }) => {
     const pngBuf = Buffer.from(TEST_PNG_BASE64, 'base64');
     const imgRes = await request.post(`${BASE}/api/owner/menu/products/${productId}/image`, {
       headers: { Authorization: `Bearer ${authToken}` },
       multipart: { file: { name: 'test.png', mimeType: 'image/png', buffer: pngBuf } },
     });
-    expect(imgRes.status()).not.toBe(500);
-    expect(imgRes.status()).not.toBe(401);
-    if (imgRes.status() === 200) {
-      const body = await imgRes.json();
-      expect(body.url || body.imageUrl || body.path).toBeTruthy();
-    }
+    // The route returns reply.send({ imageUrl, imageKey }) → 200 on success
+    // (spa-proxy.ts:237). Any 4xx/5xx is a real failure, not an acceptable outcome.
+    expect(imgRes.status()).toBe(200);
+    const body = await imgRes.json();
+    // imageUrl is an absolute browser URL (R2 public host or <appBase>/images/<key>,
+    // image-url.ts) — a relative path, '', 'null', or an error fragment must fail.
+    expect(body.imageUrl).toMatch(/^https:\/\/\S+\.webp$/);
+    expect(body.imageKey).toMatch(/\.webp$/);
   });
 
   test('Flow 2: Unauthenticated upload returns 401', async ({ request }) => {
@@ -64,7 +73,12 @@ test.describe('UI: Image Upload — Product + Brand Logo', () => {
     });
     expect(brandRes.status()).toBe(200);
     const body = await brandRes.json();
-    expect(body).toBeTruthy();
+    // Assert the actual contract, not mere truthiness ({} is truthy). The response
+    // always carries the tenant's locationId (a UUID) + the theme key set
+    // (spa-proxy.ts:515-529); primaryColor may be null for an unthemed tenant.
+    expectUuid(body.locationId, 'brand.locationId');
+    expect(body).toHaveProperty('primaryColor');
+    expect(body).toHaveProperty('logoUrl');
   });
 
   test('Flow 4: Update brand config — GET works, PUT may 500 (known bug)', async ({ request }) => {
@@ -74,7 +88,9 @@ test.describe('UI: Image Upload — Product + Brand Logo', () => {
     });
     expect(getRes.status()).toBe(200);
     const before = await getRes.json();
-    expect(before.primary_color || before.primaryColor).toBeTruthy();
+    // Contract shape, not truthy-OR: the GET returns camelCase keys (spa-proxy.ts:515-529).
+    expectUuid(before.locationId, 'brand.locationId');
+    expect(before).toHaveProperty('primaryColor');
 
     // brandSchema is .strict() with camelCase keys (spa-proxy.ts:13-26); these snake_case
     // keys are unrecognized → ZodError → setErrorHandler returns 400 VALIDATION_FAILED
@@ -100,11 +116,23 @@ test.describe('UI: Image Upload — Product + Brand Logo', () => {
 
     await page.addInitScript((token: string) => localStorage.setItem('dos_access_token', token), authToken);
     await page.goto(`${BASE}/admin/branding`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    // Assert the real branding UI rendered (not a 500/redirect/loading skeleton):
+    // the branding-page root + its heading must be visible. body.length>N would pass
+    // on an error page or skeleton.
+    await expect(page.getByTestId('branding-page')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible();
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
+
+  // TODO(needs_staging): cross-tenant IDOR coverage is MISSING and cannot be written
+  // honestly here — the owner path of /api/dev/mock-auth always mints a token for the
+  // single dev owner (dev@deliveryos.com, mock-auth.ts:71), so there is no real second
+  // tenant to exercise isolation against. Faking it with a nil-UUID would 404 by absence
+  // and prove nothing (AGENTS Test Integrity #5). To implement, provision a REAL second
+  // owner+location on staging, then:
+  //   - POST /api/owner/menu/products/${productId}/image with tenant-2's token → expect 403/404.
+  //   - GET /api/owner/brand with tenant-2's token → expect tenant-2's locationId (not tenant-1's);
+  //     PUT as tenant-2, then re-GET tenant-1's brand and assert it is unchanged.
 });

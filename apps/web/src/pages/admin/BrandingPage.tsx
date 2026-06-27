@@ -274,7 +274,7 @@ export function BrandingPage() {
   }
 
   return (
-    <div className="p-4 max-w-6xl mx-auto flex flex-col lg:flex-row gap-8">
+    <div data-testid="branding-page" className="p-4 max-w-6xl mx-auto flex flex-col lg:flex-row gap-8">
       <div className="flex-1 min-w-0 space-y-6">
         <h2 className="text-2xl font-bold border-b border-[var(--brand-border)] pb-4" style={{ fontFamily: 'var(--brand-font-heading)' }}>
           {t('admin.branding', 'Branding Settings')}

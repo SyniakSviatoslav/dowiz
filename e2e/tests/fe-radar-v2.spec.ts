@@ -1,7 +1,9 @@
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import { checkAxe, checkTouchTargets, checkFormLabels, checkAriaLive, type A11yIssue } from '../helpers/a11y.js';
+import { expectJwt } from '../helpers/assert-shape.js';
+import { requireStaging } from '../helpers/staging-guard.js';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 interface Issue {
   surface: string; step: string; dimension: 'base' | 'a11y' | 'throttled';
@@ -23,6 +25,8 @@ function emit(surface: string, step: string, status: string, detail: string) {
 
 async function setupPage(ctx: BrowserContext, profile: typeof NET_PROFILES[number], vp: typeof VIEWPORTS[0]): Promise<Page> {
   const page = await ctx.newPage();
+  await page.setViewportSize({ width: vp.width, height: vp.height });
+  page.on('pageerror', (err) => pageErrors.push(err.message));
   if (profile === 'slow-3g') {
     await page.route('**/*', async (route) => {
       await new Promise(r => setTimeout(r, 400)); // 400ms delay per request
@@ -48,6 +52,8 @@ test.describe('FE-Radar v2 — Full Surface + a11y + Throttled', () => {
   let ctx: BrowserContext;
 
   test.beforeAll(async ({ browser }) => {
+    // S5/S6 mint a token via the /dev/mock-auth backdoor — fail fast if pointed at prod.
+    requireStaging(BASE);
     ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   });
 
@@ -60,10 +66,11 @@ test.describe('FE-Radar v2 — Full Surface + a11y + Throttled', () => {
         await page.goto(`${BASE}/s/demo`, { waitUntil: 'networkidle', timeout: 60000 });
         const loadMs = Date.now() - start;
 
-        // Render check
+        // Render check — assert a real menu item rendered (not a 404/error/nav-only skeleton).
+        await expect(page.locator('[data-testid=menu-item]').first(), 'public menu must render at least one item').toBeVisible({ timeout: 30000 });
         const body = await page.textContent('body');
-        if (body.length > 100) emit('menu', `render-${profile}`, 'OK', `${body.length} chars`);
-        else record('menu', `render-${profile}`, 'base', '🔴', 'Body > 100 chars', `${body.length} chars`, 'Page empty');
+        if (body && body.length > 100) emit('menu', `render-${profile}`, 'OK', `${body.length} chars`);
+        else record('menu', `render-${profile}`, 'base', '🔴', 'Body > 100 chars', `${body?.length ?? 0} chars`, 'Page empty');
 
         // Slow-3g: check loading indicator
         if (profile === 'slow-3g' && loadMs > 2000) {
@@ -116,6 +123,10 @@ test.describe('FE-Radar v2 — Full Surface + a11y + Throttled', () => {
         const page = await setupPage(ctx, profile, vp);
         await page.goto(`${BASE}/s/demo/order/test-123`, { waitUntil: 'networkidle', timeout: 60000 });
 
+        // A fabricated/non-existent order id MUST surface the not-found escape state — never a real order.
+        // TODO(needs-staging): a true cross-tenant IDOR check needs a REAL second tenant's order id (expect 403/404).
+        await expect(page.locator('[data-testid=order-back-to-menu]'), 'fabricated order id must show not-found state').toBeVisible({ timeout: 30000 });
+
         if (profile === 'fast' && vp.name === 'mobile') {
           const axeIssues = await checkAxe(page);
           for (const ai of axeIssues) {
@@ -151,11 +162,14 @@ test.describe('FE-Radar v2 — Full Surface + a11y + Throttled', () => {
 
       test(`[${vp.name}/${profile}] S5: Admin Dashboard`, async () => {
         const page = await setupPage(ctx, profile, vp);
-        const auth = await (await fetch(`${BASE}/api/dev/mock-auth`, { method: 'POST' })).json();
+        const authRes = await fetch(`${BASE}/api/dev/mock-auth`, { method: 'POST' });
+        expect(authRes.status, '/dev/mock-auth must be available on staging').toBe(200);
+        const auth = await authRes.json();
+        expectJwt(auth.access_token, 'mock-auth access_token');
         await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 30000 });
         await page.evaluate((t) => { localStorage.setItem('dos_access_token', t); }, auth.access_token);
         await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle', timeout: 60000 });
-        await page.waitForTimeout(2000);
+        await expect(page.locator('h1, nav, [data-testid=ws-status-dot]').first(), 'admin dashboard must render').toBeVisible({ timeout: 30000 });
 
         if (profile === 'fast' && vp.name === 'mobile') {
           const axeIssues = await checkAxe(page);
@@ -172,11 +186,14 @@ test.describe('FE-Radar v2 — Full Surface + a11y + Throttled', () => {
 
       test(`[${vp.name}/${profile}] S6: Admin Settings`, async () => {
         const page = await setupPage(ctx, profile, vp);
-        const auth = await (await fetch(`${BASE}/api/dev/mock-auth`, { method: 'POST' })).json();
+        const authRes = await fetch(`${BASE}/api/dev/mock-auth`, { method: 'POST' });
+        expect(authRes.status, '/dev/mock-auth must be available on staging').toBe(200);
+        const auth = await authRes.json();
+        expectJwt(auth.access_token, 'mock-auth access_token');
         await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 30000 });
         await page.evaluate((t) => { localStorage.setItem('dos_access_token', t); }, auth.access_token);
         await page.goto(`${BASE}/admin/settings`, { waitUntil: 'networkidle', timeout: 60000 });
-        await page.waitForTimeout(2000);
+        await expect(page.locator('h1, nav, form').first(), 'admin settings must render').toBeVisible({ timeout: 30000 });
 
         if (profile === 'fast' && vp.name === 'mobile') {
           const axeIssues = await checkAxe(page);
@@ -231,5 +248,10 @@ test.describe('FE-Radar v2 — Full Surface + a11y + Throttled', () => {
         console.log(`   hypothesis: ${iss.hypothesis}`);
       }
     }
+
+    // Hard gate: a radar that only console.logs its findings is a false-green. Any 🔴 critical
+    // finding (uncaught JS error, empty render, critical axe violation) MUST fail the suite.
+    const critical = issues.filter((i) => i.severity === '🔴');
+    expect(critical, `${critical.length} critical FE-radar finding(s): ${critical.map((c) => `${c.surface}/${c.step}`).join(', ')}`).toEqual([]);
   });
 });
