@@ -1,7 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CourierEventsWorker } from '../src/workers/courier-events.js';
-import { orderChannel, courierChannel } from '../src/lib/registry.js';
+
+// These modules chain to @deliveryos/db, which calls loadEnv() at import time → a static import
+// crashes here with no env. Load them DYNAMICALLY after ensureEnv() (same pattern as
+// orders-guards.test.ts). This is a pure unit test (bus + lookups stubbed) — no real DB/Redis.
+let CourierEventsWorker: any;
+let orderChannel: (id: string) => string;
+let courierChannel: (id: string) => string;
+function ensureEnv() {
+  const d: Record<string, string> = {
+    NODE_ENV: 'test',
+    DATABASE_URL_OPERATIONAL: 'postgres://u:p@localhost:5432/db',
+    DATABASE_URL_SESSION: 'postgres://u:p@localhost:5432/db',
+    DATABASE_URL_MIGRATIONS: 'postgres://u:p@localhost:5432/db',
+    REDIS_URL: 'redis://localhost:6379',
+    JWT_PRIVATE_KEY: 'test', JWT_PUBLIC_KEY: 'test', JWT_KID: 'test',
+    IP_HASH_SALT: 'test', APP_BASE_URL: 'http://localhost:3000',
+    GOOGLE_CLIENT_ID: 'test', GOOGLE_CLIENT_SECRET: 'test',
+    VAPID_PUBLIC_KEY: 'test', VAPID_PRIVATE_KEY: 'test',
+  };
+  for (const [k, v] of Object.entries(d)) if (!process.env[k]) process.env[k] = v;
+}
 
 // Concurrency proof: when 2-3 couriers are delivering AT THE SAME TIME, the
 // position fan-out must be correct and isolated per role:
@@ -54,6 +73,9 @@ function makeWorker() {
 }
 
 test('multi-courier concurrent position fan-out is correct and isolated', async (t) => {
+  ensureEnv();
+  ({ CourierEventsWorker } = await import('../src/workers/courier-events.js'));
+  ({ orderChannel, courierChannel } = await import('../src/lib/registry.js'));
   const { worker, published } = makeWorker();
 
   // Fire all four couriers' position updates concurrently (real-time burst).
