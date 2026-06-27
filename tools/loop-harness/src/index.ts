@@ -11,3 +11,7 @@ export {
 } from './storage.js';
 export { runLoop } from './harness.js';
 export type { HarnessOptions } from './harness.js';
+export { computeEco } from './eco.js';
+export { collectGitMem, collectSessionTelemetry } from './collect.js';
+export type { GitMem, SessionTelemetry } from './collect.js';
+export { buildRecord } from './cli.js';

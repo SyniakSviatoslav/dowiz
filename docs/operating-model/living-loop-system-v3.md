@@ -243,7 +243,17 @@ Then keep finishing 30–35. The system exists to make that finish cheaper, gree
   contract types (§1), no-progress breaker (§3), per-iteration telemetry types (§2), canonical
   run-record → report renderer (§5), permanent append-only lossless storage (§7), and a thin
   harness that composes them around any `Loop`. Unit-tested (breaker trip matrix, report render
-  from record, storage round-trip, harness happy-path + stall-path). **Deferred (steps 4–7):**
-  eco computation (§6 — needs EcoLogits/CodeCarbon wiring), per-iteration recall + distill +
-  graduate (§8 — needs session-file parsing), fresh-context reviewer gate (§4 — needs a real
-  separate Claude Code invocation). These are integration-heavy and depend on the foundation.
+  from record, storage round-trip, harness happy-path + stall-path).
+- **2026-06-27 — Telemetry collectors + wiring (closes the "semi-empty telemetry" gap).** Built
+  the data SOURCES the foundation deferred: `eco.ts` (§6 — token×per-model-factor; **eco uses
+  COMPUTE tokens (in+out) only — cache-read tokens are not re-processed so must not inflate energy**),
+  `collect.ts` (`collectGitMem` = git branch/commits + /proc RSS; `collectSessionTelemetry` = parse
+  the Claude Code session JSONL over the run window → tokens by model + cost + skills + agents — the
+  source codeburn reads), and `cli.ts finalize` — the **wiring seam**: an agent-run loop hands the
+  harness a partial record (goal/what_done/issues/patterns + code deltas), finalize MEASURES the
+  rest and emits the §5 report (always) + persists. Loops adopt it via the `harness:` node in their
+  card (see loops/audit-gate.yaml + loops/registry.md). 26 tests (eco scaling/factors; session parse
+  window+by-model+cost+skills+agents; gitmem). Proven on the audit-gate run (real tokens/skills/eco).
+- **Still deferred (steps 4–7, integration-heavy):** per-iteration recall + distill + graduate (§8),
+  fresh-context reviewer gate (§4 — a separate clean-context Claude Code invocation), CodeCarbon VPS
+  draw (§6), and driving agent-loops *through* `runLoop` natively (today loops call `finalize` at finish).
