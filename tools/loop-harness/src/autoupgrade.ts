@@ -14,8 +14,11 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { makeRepoHooks, type RepoPerfSpec } from './repo-apply.js';
 import { configTuneDetector, loadTunables } from './detectors.js';
+import os from 'node:os';
 import { checkCredentialIsolation, isTrustedSource } from './containment.js';
 import { queueProposal } from './proposals.js';
+import { checkGovernor } from './governor.js';
+import { isRejected } from './review-queue.js';
 
 export type UpgradeClass = 'A' | 'B';
 export type BlastRadius = 'low' | 'med' | 'high';
@@ -191,9 +194,14 @@ export function buildHooks(c: Candidate): { hooks: OracleHooks } | { skip: strin
   return { skip: 'adapter ready (makeRepoHooks + benchmark, atomic git revert — proven) but no MAP source emits a repo-perf candidate with a deterministic mechanical patch yet (§0: no autonomous LLM patches).' };
 }
 
-async function evaluateClassA(classA: Candidate[], apply: boolean, env: Record<string, string | undefined> = process.env): Promise<ApplyOutcome[]> {
-  // §4 credential isolation — refuse autonomous apply if prod secrets are in context.
+async function evaluateClassA(classA: Candidate[], apply: boolean, baseDir: string, env: Record<string, string | undefined> = process.env): Promise<ApplyOutcome[]> {
   if (apply) {
+    // GOVERNOR (§1) — refuse autonomous apply if halted or any aggregate ceiling breached.
+    const gov = checkGovernor(baseDir, { nowMs: Date.now(), freeRamMb: Math.round(os.freemem() / (1024 * 1024)) });
+    if (!gov.allowed) {
+      return classA.map((c) => ({ id: c.id, decision: 'skipped' as const, reason: `GOVERNOR (§1): ${gov.reason}` }));
+    }
+    // §4 credential isolation — refuse autonomous apply if prod secrets are in context.
     const iso = checkCredentialIsolation(env);
     if (!iso.ok) {
       return classA.map((c) => ({ id: c.id, decision: 'skipped' as const, reason: `CONTAINMENT (§4): prod credentials in context (${iso.present.join(', ')}) — autonomous apply refused. Run credential-isolated.` }));
@@ -222,13 +230,15 @@ export async function runAutoupgrade(opts: { repoDir: string; baseDir: string; t
   const classA = candidates.filter((x) => x.k.class === 'A');
   const classB = candidates.filter((x) => x.k.class === 'B');
   // §8c — Class B is PROPOSED to the human-gated queue, never auto-applied.
+  // §2 feedback: skip re-proposing anything a human already REJECTED (negative learning).
   for (const x of classB) {
+    if (isRejected(opts.baseDir, x.c.id)) continue;
     queueProposal(opts.baseDir, {
       id: x.c.id, source: 'autoupgrade:class-B', kind: x.c.area.split(' ')[0] ?? 'review',
       description: x.c.pattern, evidence: x.c.evidence, action: x.c.action,
     }, opts.tEnd);
   }
-  const outcomes = await evaluateClassA(classA.map((x) => x.c), opts.apply);
+  const outcomes = await evaluateClassA(classA.map((x) => x.c), opts.apply, opts.baseDir);
   const kept = outcomes.filter((o) => o.decision === 'kept');
   const rolledBack = outcomes.filter((o) => o.decision === 'rolled_back');
   const skipped = outcomes.filter((o) => o.decision === 'skipped');

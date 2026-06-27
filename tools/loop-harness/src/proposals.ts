@@ -36,6 +36,11 @@ export function readProposals(baseDir: string): Proposal[] {
   catch { return []; }
 }
 
+export function writeProposals(baseDir: string, all: Proposal[]): void {
+  fs.mkdirSync(baseDir, { recursive: true });
+  fs.writeFileSync(queuePath(baseDir), JSON.stringify(all, null, 2) + '\n');
+}
+
 /**
  * Upsert a proposal by id. New → queued/count 1. Seen → count++ + refresh
  * last_seen, PRESERVING the human-set status (queued/approved/rejected/done).
