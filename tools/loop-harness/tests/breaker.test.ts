@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_BREAKER, initBreaker, stepBreaker } from '../src/breaker.js';
+import { DEFAULT_BREAKER, initBreaker, stepBreaker, breakerReasonText } from '../src/breaker.js';
+import type { BreakerReason } from '../src/types.js';
 
 const cfg = { ...DEFAULT_BREAKER, K: 3, maxIter: 25, budgetUsd: 10, timeCapMs: 60_000 };
 const step = (s: ReturnType<typeof initBreaker>, delta: number, iteration: number, cost = 0, ms = 0) =>
@@ -53,4 +54,24 @@ test('breaker — stall takes precedence when multiple caps hit', () => {
   s = step(s, 0, 1); s = step(s, 0, 2);
   s = step(s, 0, 25, 999, 999_999); // stall AND max_iter AND budget AND time all true
   assert.equal(s.reason, 'stall');
+});
+
+test('breakerReasonText — every reason maps to a distinct, non-empty, descriptive string', () => {
+  // expected substring that proves the text actually describes THIS cap, not a generic blob
+  const cases: Array<[BreakerReason, string]> = [
+    ['stall', 'progress'],
+    ['max_iter', 'MAX_ITER'],
+    ['budget', 'BUDGET'],
+    ['time_cap', 'TIME_CAP'],
+  ];
+  const seen = new Set<string>();
+  for (const [reason, mustMention] of cases) {
+    const text = breakerReasonText(reason);
+    assert.equal(typeof text, 'string', `${reason} → string`);
+    assert.ok(text.trim().length > 0, `${reason} → non-empty`);
+    assert.ok(text.includes(mustMention), `${reason} → mentions "${mustMention}" (got: ${text})`);
+    assert.equal(seen.has(text), false, `${reason} → distinct text (collision: ${text})`);
+    seen.add(text);
+  }
+  assert.equal(seen.size, cases.length, 'all four reasons produce distinct text');
 });

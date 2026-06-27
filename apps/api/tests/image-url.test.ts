@@ -25,14 +25,40 @@ test('getImageUrl', async (t) => {
     delete process.env.R2_PUBLIC_URL;
     process.env.R2_ENDPOINT = 'https://acc.r2.cloudflarestorage.com';
     process.env.R2_BUCKET = 'dowiz-images';
-    process.env.APP_BASE_URL = 'https://dowiz.fly.dev';
+    process.env.APP_BASE_URL = 'https://app.example.com';
     const url = getImageUrl('loc1/p1.webp');
-    assert.equal(url, 'https://dowiz.fly.dev/images/loc1/p1.webp');
+    assert.equal(url, 'https://app.example.com/images/loc1/p1.webp');
     assert.ok(!url!.includes('r2.cloudflarestorage.com'), 'must not build a direct private-R2 URL');
   });
 
   await t.test('public bucket/CDN (R2_PUBLIC_URL) → direct URL', () => {
-    process.env.R2_PUBLIC_URL = 'https://cdn.dowiz.app';
-    assert.equal(getImageUrl('loc1/p1.webp'), 'https://cdn.dowiz.app/loc1/p1.webp');
+    process.env.R2_PUBLIC_URL = 'https://cdn.example.com';
+    assert.equal(getImageUrl('loc1/p1.webp'), 'https://cdn.example.com/loc1/p1.webp');
+  });
+
+  await t.test('runtime baseUrl override wins over APP_BASE_URL (private bucket)', () => {
+    delete process.env.R2_PUBLIC_URL;
+    process.env.R2_ENDPOINT = 'https://acc.r2.cloudflarestorage.com';
+    process.env.R2_BUCKET = 'dowiz-images';
+    process.env.APP_BASE_URL = 'https://app.example.com';
+    // baseUrl arg must take precedence over APP_BASE_URL, not be ignored.
+    assert.equal(
+      getImageUrl('k/img.webp', 'https://tenant.example.com'),
+      'https://tenant.example.com/images/k/img.webp',
+    );
+    // trailing slash on the override is normalised (no double slash).
+    assert.equal(
+      getImageUrl('k/img.webp', 'https://tenant.example.com/'),
+      'https://tenant.example.com/images/k/img.webp',
+    );
+  });
+
+  await t.test('R2_PUBLIC_URL beats runtime baseUrl (public bucket precedence)', () => {
+    process.env.R2_PUBLIC_URL = 'https://cdn.example.com';
+    // A public CDN is configured: the direct URL wins even if a baseUrl is passed.
+    assert.equal(
+      getImageUrl('loc1/p1.webp', 'https://tenant.example.com'),
+      'https://cdn.example.com/loc1/p1.webp',
+    );
   });
 });

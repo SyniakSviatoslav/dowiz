@@ -32,5 +32,7 @@ test('Sense 1 (axe) detects an unlabeled input + low contrast', async ({ page })
   </main></body></html>`);
   const issues = await checkAxe(page);
   expect(issues.length, JSON.stringify(issues)).toBeGreaterThan(0);
-  expect(issues.map((i) => i.id)).toContain('label');
+  const ids = issues.map((i) => i.id);
+  expect(ids, JSON.stringify(issues)).toContain('label');
+  expect(ids, JSON.stringify(issues)).toContain('color-contrast');
 });

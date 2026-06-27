@@ -50,9 +50,9 @@ test('quiet-hours evaluation', async (t) => {
     assert.equal(d.secondsUntilEnd, 34200);
     // not quiet → 0
     assert.equal(evaluateQuietHours(new Date('2026-06-22T12:00:00Z'), 'UTC', OVERNIGHT).secondsUntilEnd, 0);
-    // always at least 60s when quiet (never a zero/negative startAfter)
+    // window closes at 08:00 → exactly 60s remain at 07:59 (floor clamp lands on the true value)
     const edge = evaluateQuietHours(new Date('2026-06-22T07:59:00Z'), 'UTC', OVERNIGHT);
     assert.equal(edge.quiet, true);
-    assert.ok(edge.secondsUntilEnd >= 60);
+    assert.equal(edge.secondsUntilEnd, 60);
   });
 });

@@ -14,6 +14,23 @@ test('PiiRedactor - basic redaction', () => {
   assert.ok(!res.text.includes('1234-5678-9012-3456'));
   assert.ok(!res.text.includes('http://foo.com?token=123'));
   assert.ok(res.text.includes('Rruga 12')); // Not redacted!
+
+  // Machine-readable offsets: email is the first pattern + first match,
+  // so its (start,end) are recorded against the original input (offsetDiff 0).
+  const email = res.redactions.find((r) => r.kind === 'email');
+  assert.ok(email, 'email redaction must be present');
+  assert.strictEqual(email.start, input.indexOf('admin@deliveryos.com'));
+  assert.strictEqual(email.end, input.indexOf('admin@deliveryos.com') + 'admin@deliveryos.com'.length);
+  assert.strictEqual(email.replacement, '[REDACTED]');
+
+  // All four expected kinds must appear, each replaced with the sentinel.
+  for (const kind of ['email', 'phone', 'card', 'url'] as const) {
+    const hit = res.redactions.find((r) => r.kind === kind);
+    assert.ok(hit, `expected a '${kind}' redaction`);
+    assert.strictEqual(hit.replacement, '[REDACTED]');
+    // Offsets must be a non-empty, ordered span.
+    assert.ok(hit.end > hit.start, `'${kind}' span must be non-empty`);
+  }
 });
 
 test('PiiRedactor - IBAN', () => {
@@ -23,6 +40,12 @@ test('PiiRedactor - IBAN', () => {
 
   assert.strictEqual(res.redactions.length, 1);
   assert.strictEqual(res.redactions[0].kind, 'iban');
+  assert.strictEqual(res.redactions[0].start, input.indexOf('AL28020011111234567890123456'));
+  assert.strictEqual(
+    res.redactions[0].end,
+    input.indexOf('AL28020011111234567890123456') + 'AL28020011111234567890123456'.length
+  );
+  assert.strictEqual(res.redactions[0].replacement, '[REDACTED]');
   assert.ok(!res.text.includes('AL28020011111234567890123456'));
 });
 

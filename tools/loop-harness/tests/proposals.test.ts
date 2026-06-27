@@ -42,11 +42,16 @@ test('queueProposal — preserves a human-set status (never silently re-opens)',
 
 test('openProposals — only queued (undecided) ones', () => {
   const dir = tmp();
-  queueProposal(dir, input('a'), 'T0');
-  queueProposal(dir, input('b'), 'T0');
+  queueProposal(dir, input('a'), 'T0'); // → done
+  queueProposal(dir, input('b'), 'T0'); // → stays queued (the only open one)
+  queueProposal(dir, input('c'), 'T0'); // → approved
+  queueProposal(dir, input('d'), 'T0'); // → rejected
   const all = readProposals(dir);
   all[0]!.status = 'done';
+  all[2]!.status = 'approved';
+  all[3]!.status = 'rejected';
   fs.writeFileSync(path.join(dir, 'proposals.json'), JSON.stringify(all, null, 2));
+  // every decided status (done/approved/rejected) must be excluded — only 'queued' surfaces
   assert.deepEqual(openProposals(dir).map((p) => p.id), ['b']);
 });
 

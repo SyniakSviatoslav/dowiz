@@ -41,6 +41,18 @@ test.describe('F9 reconcileCart — cart↔menu_version', () => {
     expect(r.pricedVersion).toBe(43); // but the version is still stamped forward
   });
 
+  test('drops a line WITH modifiers when its product is unavailable', () => {
+    // Guards the check ordering: availability (cartReconcile L53) must run BEFORE the
+    // hasModifiers re-price branch (L54). A refactor that nests availability inside the
+    // !hasModifiers() branch would keep this sold-out modifier line — this must stay red.
+    const items = [line({ price: 800, options: { size: ['large'] } })];
+    const r = reconcileCart(items, 42, 43, [{ id: 'p1', price: 650, available: false }]);
+    expect(r.summary!.removed).toEqual(['Burger']);
+    expect(r.summary!.repriced).toEqual([]);
+    expect(r.items).toHaveLength(0);
+    expect(r.pricedVersion).toBe(43);
+  });
+
   test('no-op fast path when already reconciled to this menu_version', () => {
     const items = [line({ price: 500 })];
     const r = reconcileCart(items, 43, 43, [{ id: 'p1', price: 650, available: true }]);

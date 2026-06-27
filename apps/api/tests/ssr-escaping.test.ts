@@ -94,13 +94,27 @@ test('SSR menu page escapes ampersands exactly once', async (t) => {
 });
 
 test('JSON-LD cannot break out of the <script> tag', async () => {
-  // A venue name containing </script> must not terminate the script element.
+  // A </script> in ANY field that flows into JSON-LD (venue name, product name,
+  // product description) must not terminate the script element. The venue name
+  // goes into the Restaurant/Menu/Breadcrumb nodes; product name+description go
+  // into MenuItem nodes — all three are exercised here.
   const loc = {
     id: 'l1', name: 'Evil</script><script>alert(1)</script>', slug: 'x',
     currency_code: 'EUR', currency_minor_unit: 2, default_locale: 'en',
     supported_locales: ['en'], address: 'A', public_phone: null, hours_json: null, geo: null,
   };
-  const menu = { menu_version: 1, default_locale: 'en', supported_locales: ['en'], currency: { code: 'EUR', minor_unit: 2 }, categories: [] };
+  const menu = {
+    menu_version: 1, default_locale: 'en', supported_locales: ['en'],
+    currency: { code: 'EUR', minor_unit: 2 },
+    categories: [{
+      id: 'c1', available_names: { en: 'Cat</script><script>alert(3)</script>' },
+      products: [{
+        id: 'p1', available_names: { en: 'Pwn</script><script>alert(2)</script>' },
+        available_descriptions: { en: 'Desc</script><script>alert(4)</script>' },
+        image_key: null, price: 1000,
+      }],
+    }],
+  };
   const pool = {
     connect: async () => ({
       query: async (sql: string) =>
@@ -111,9 +125,34 @@ test('JSON-LD cannot break out of the <script> tag', async () => {
     }),
   };
   const out = await renderMenuPage('breakout-test', pool as any, 'https://example.test');
-  const m = out.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
-  assert.ok(m, 'no JSON-LD block');
-  // the injected name must be unicode-escaped, never a literal closing tag
-  assert.ok(!m![1].includes('</script>'), 'literal </script> leaked into JSON-LD (breakout!)');
-  assert.ok(m![1].includes('\\u003c/script\\u003e'), 'name not unicode-escaped');
+
+  // No injected payload may appear as a live tag ANYWHERE in the document. These
+  // literals only exist if a field's </script> terminated the JSON-LD element.
+  assert.ok(!out.includes('<script>alert(1)</script>'), 'venue-name breakout: injected <script> leaked');
+  assert.ok(!out.includes('<script>alert(2)</script>'), 'product-name breakout: injected <script> leaked');
+  assert.ok(!out.includes('<script>alert(3)</script>'), 'category-name breakout: injected <script> leaked');
+  assert.ok(!out.includes('<script>alert(4)</script>'), 'description breakout: injected <script> leaked');
+
+  // Slice the JSON-LD body up to the FIRST </script>. If any field broke out, that
+  // first close is the injected one and the slice is truncated invalid JSON, so the
+  // JSON.parse below throws (the old `!group.includes('</script>')` was tautological:
+  // a lazy [\s\S]*?</script> capture can never contain </script> by construction).
+  const open = '<script type="application/ld+json">';
+  const start = out.indexOf(open);
+  assert.ok(start !== -1, 'no JSON-LD block');
+  const body = out.slice(start + open.length, out.indexOf('</script>', start));
+
+  // Each field's '</script>' must be unicode-escaped, never a literal closing tag.
+  assert.ok(body.includes('\\u003c/script\\u003e'), 'breakout sequence not unicode-escaped');
+
+  // Proves the first </script> is the legitimate close (truncated breakout → throws),
+  // and that every malicious field round-trips intact through valid JSON.
+  const parsed = JSON.parse(body);
+  const nodes = Array.isArray(parsed) ? parsed : [parsed];
+  const restaurant = nodes.find((n: any) => n['@type'] === 'Restaurant');
+  assert.ok(restaurant?.name?.includes('Evil</script>'), 'venue name not round-tripped through escaped JSON');
+  const menuNode = nodes.find((n: any) => n['@type'] === 'Menu');
+  const item = menuNode?.hasMenuItem?.[0];
+  assert.ok(item?.name?.includes('Pwn</script>'), 'product name not round-tripped through escaped JSON');
+  assert.ok(item?.description?.includes('Desc</script>'), 'description not round-tripped through escaped JSON');
 });
