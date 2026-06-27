@@ -81,7 +81,3 @@ function getDefaultMessage(reason: string): string {
   };
   return msgs[reason] || 'Something went wrong.';
 }
-
-export function showDegradedBanner(reason: string): HTMLElement {
-  return showFallbackBanner({ reason, message: getDefaultMessage(reason) });
-}

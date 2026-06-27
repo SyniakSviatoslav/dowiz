@@ -1,25 +1,3 @@
-export function toMinorUnit(amount: number, _currency: string): number {
-  if (!Number.isInteger(amount)) {
-    throw new Error('Amount must be an integer');
-  }
-  return amount;
-}
-
-export function roundHalfUp(value: number, minorUnit: number): number {
-  // Using BigInt internally to avoid float issues for rounding
-  // Scale everything by 10
-  const scaled = BigInt(Math.round(value * 10));
-  const absScaled = scaled < 0n ? -scaled : scaled;
-  const remainder = absScaled % 10n;
-  
-  let result = absScaled / 10n;
-  if (remainder >= 5n) {
-    result += 1n;
-  }
-  
-  return Number(scaled < 0n ? -result : result);
-}
-
 export function applyTax(subtotal: number, taxRate: number, priceIncludesTax: boolean, _minorUnit: number): number {
   if (!Number.isInteger(subtotal)) {
     throw new Error('subtotal must be an integer (minor units)');
