@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -36,7 +37,7 @@ test.describe('UI: Owner CRUD — Products & Categories', () => {
     });
     expect(catRes.status()).toBe(201);
     const cat = await catRes.json();
-    expect(cat.id).toBeTruthy();
+    expectUuid(cat.id);
     expect(cat.name).toBe(`${TEST_ITEM}-Cat`);
   });
 
@@ -56,7 +57,7 @@ test.describe('UI: Owner CRUD — Products & Categories', () => {
     });
     expect(prodRes.status()).toBe(201);
     const prod = await prodRes.json();
-    expect(prod.id).toBeTruthy();
+    expectUuid(prod.id);
     expect(prod.name).toBe(`${TEST_ITEM}-Prod`);
     expect(prod.price).toBe(750);
 
@@ -138,7 +139,7 @@ test.describe('UI: Owner CRUD — Products & Categories', () => {
     const delRes = await request.delete(`${BASE}/api/owner/menu/categories/${target.id}`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
-    expect([200, 409]).toContain(delRes.status());
+    expect(delRes.status()).toBe(204);
   });
 
   test('Flow 7: Menu manager survives page navigation, no JS errors', async ({ page }) => {

@@ -17,9 +17,10 @@ test.describe('Prod smoke — unauthenticated liveness + public reads', () => {
     expect(res.status()).toBe(200);
   });
 
-  test('health: GET /health returns 200 or 503 (never 5xx-other / hang)', async ({ request }) => {
+  test('health: GET /health returns 200 (healthy post-deploy)', async ({ request }) => {
     const res = await request.get(`${BASE}/health`);
-    expect([200, 503]).toContain(res.status());
+    // 200 = healthy or degraded; 503 = a check is down. A post-deploy smoke must fail on 503.
+    expect(res.status()).toBe(200);
   });
 
   test('public storefront: GET /s/:slug renders without auth', async ({ request }) => {
@@ -32,7 +33,8 @@ test.describe('Prod smoke — unauthenticated liveness + public reads', () => {
 
   test('public theme: GET /api/public/theme/:slug returns JSON without auth', async ({ request }) => {
     const res = await request.get(`${BASE}/api/public/theme/${SLUG}`);
-    expect([200, 404]).toContain(res.status());
+    // The seeded smoke slug exists, so the public theme read returns 200 (404 = missing slug).
+    expect(res.status()).toBe(200);
   });
 
   // ── Negative auth (extracted from deploy-validation 1.1–1.3) — no token needed ──

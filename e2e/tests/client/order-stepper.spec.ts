@@ -1,5 +1,6 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import crypto from 'node:crypto';
+import { expectJwt } from '../../helpers/assert-shape';
 
 // Order-status stepper proof (testplan §2a) against deployed staging.
 // Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test order-stepper --project=desktop --reporter=list
@@ -17,7 +18,7 @@ async function ownerToken(request: APIRequestContext): Promise<string> {
   const res = await request.post('/api/auth/local/login', { data: CREDS });
   expect(res.ok(), 'owner login should succeed').toBeTruthy();
   cachedToken = (await res.json()).access_token as string;
-  expect(cachedToken, 'login returns an access token').toBeTruthy();
+  expectJwt(cachedToken, 'login returns an access token');
   return cachedToken;
 }
 

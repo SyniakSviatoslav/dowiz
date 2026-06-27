@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 const SECRET = process.env.DEV_AUTH_SECRET || '';
@@ -21,7 +22,7 @@ test.describe('Product images — upload, serve, display, change', () => {
     });
     expect(auth.ok()).toBeTruthy();
     const token = (await auth.json()).access_token as string;
-    expect(token).toBeTruthy();
+    expectJwt(token);
 
     const menu = await (await request.get(`${BASE}/public/locations/demo/menu`)).json();
     const product = menu.categories.flatMap((c: any) => c.products || [])[0];

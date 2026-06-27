@@ -43,14 +43,14 @@ test('capture all states', async ({ page, request }) => {
     await page.waitForTimeout(1400);
     // Wait for the (CDN) Tabler icon webfont to actually paint — otherwise icons screenshot blank
     // and read as "broken/empty" when they render fine for real users. See findings A5.
-    await page.evaluate(() => (document as any).fonts?.ready).catch(() => {});
+    await page.evaluate(() => (document as any).fonts?.ready).catch((e) => { void e; /* tolerated: fonts API may be absent / never resolve in some engines */ });
     await page.waitForTimeout(300);
-    await page.screenshot({ path: `${DIR}/${name}.png`, fullPage: true }).catch(() => {});
+    await page.screenshot({ path: `${DIR}/${name}.png`, fullPage: true }).catch((e) => { void e; /* tolerated: best-effort capture, a missed shot must not abort the run */ });
     captured.push(name);
   };
 
   const go = async (path: string) => {
-    await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' }).catch(() => {});
+    await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' }).catch((e) => { void e; /* tolerated: networkidle can time out on long-poll/WS pages; capture still proceeds */ });
   };
 
   // ── ADMIN (owner) ────────────────────────────────────────────────────────
@@ -84,13 +84,13 @@ test('capture all states', async ({ page, request }) => {
       // add to cart — scope to the open dialog so we don't hit a card FAB behind the backdrop
       const dialog = page.getByRole('dialog');
       await dialog.getByRole('button', { name: /Shto në Shport|Add to Cart/i }).first().click({ timeout: 5000 }).catch(async () => {
-        await dialog.locator('button').last().click({ timeout: 3000 }).catch(() => {});
+        await dialog.locator('button').last().click({ timeout: 3000 }).catch((e) => { void e; /* tolerated: add-to-cart fallback is best-effort for the capture flow */ });
       });
       await page.waitForTimeout(1000);
-      await page.locator('[data-testid="cart-open"]').first().click({ timeout: 4000 }).catch(() => {});
+      await page.locator('[data-testid="cart-open"]').first().click({ timeout: 4000 }).catch((e) => { void e; /* tolerated: cart may already be open / absent in this state during capture */ });
       await page.waitForTimeout(700); await shot(`${v.tag}-client-cart`);
       // proceed to checkout WITH an item in the cart (the empty cart redirects)
-      await page.locator('[data-testid="cart-checkout"]').first().click({ timeout: 4000 }).catch(() => {});
+      await page.locator('[data-testid="cart-checkout"]').first().click({ timeout: 4000 }).catch((e) => { void e; /* tolerated: checkout button may be absent; fallback go() handles it below */ });
       await page.waitForTimeout(1200); await shot(`${v.tag}-client-checkout`);
     } catch { /* overlay flow best-effort */
       await go(`/s/${SLUG}/checkout`); await shot(`${v.tag}-client-checkout`);
@@ -116,7 +116,7 @@ test('capture all states', async ({ page, request }) => {
   await setAuth(undefined, 'sq');
   await page.route('**/public/locations/**/menu**', hold);
   await go(`/s/${SLUG}`); await page.waitForTimeout(1100);
-  await page.screenshot({ path: `${DIR}/state-client-menu-loading.png`, fullPage: true }).catch(() => {}); captured.push('state-client-menu-loading');
+  await page.screenshot({ path: `${DIR}/state-client-menu-loading.png`, fullPage: true }).catch((e) => { void e; /* tolerated: best-effort capture, a missed shot must not abort the run */ }); captured.push('state-client-menu-loading');
   await page.unroute('**/public/locations/**/menu**');
 
   // Client menu: ERROR (500)
@@ -128,7 +128,7 @@ test('capture all states', async ({ page, request }) => {
   await setAuth(owner.access_token, 'sq');
   await page.route('**/owner/**', hold);
   await go('/admin'); await page.waitForTimeout(1100);
-  await page.screenshot({ path: `${DIR}/state-admin-orders-loading.png`, fullPage: true }).catch(() => {}); captured.push('state-admin-orders-loading');
+  await page.screenshot({ path: `${DIR}/state-admin-orders-loading.png`, fullPage: true }).catch((e) => { void e; /* tolerated: best-effort capture, a missed shot must not abort the run */ }); captured.push('state-admin-orders-loading');
   await page.unroute('**/owner/**');
 
   // Admin orders: ERROR

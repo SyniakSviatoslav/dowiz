@@ -56,7 +56,7 @@ test.describe('UI: Client Order Status — WS, Map, Share, Messages', () => {
     if (productId) {
       await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort cleanup in afterAll, must not fail the suite */ });
     }
   });
 

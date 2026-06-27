@@ -40,7 +40,7 @@ test('RSI round — LLM persona discovery against the live service', async ({ br
     const page = await ctx.newPage();
     // Each session starts at the persona's natural entry surface.
     const entry = persona.role === 'client' ? `${BASE}/s/demo` : persona.role === 'courier' ? `${BASE}/courier` : `${BASE}/admin`;
-    await page.goto(entry, { waitUntil: 'domcontentloaded' }).catch(() => {});
+    await page.goto(entry, { waitUntil: 'domcontentloaded' });
 
     const driver = new AgentDriver(page, persona, reasoner, {
       round: ROUND, maxSteps: MAX_STEPS, transcriptPath: join(out, 'transcript.md'), findingsDir,

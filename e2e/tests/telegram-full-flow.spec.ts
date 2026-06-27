@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 const BOT_SECRET = process.env.TELEGRAM_BOT_SECRET;
@@ -51,7 +52,7 @@ test.describe('Telegram Complete Flow — Live https://dowiz.fly.dev', () => {
     const res = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body.access_token).toBeTruthy();
+    expectJwt(body.access_token, 'access_token');
     authToken = body.access_token;
     userId = body.userId;
   });
@@ -70,7 +71,7 @@ test.describe('Telegram Complete Flow — Live https://dowiz.fly.dev', () => {
     });
     expect(res.status()).toBe(201);
     const body = await res.json();
-    expect(body.locationId).toBeTruthy();
+    expectUuid(body.locationId, 'locationId');
     locationId = body.locationId;
     locationSlug = body.slug;
   });
@@ -172,7 +173,7 @@ test.describe('Telegram Complete Flow — Live https://dowiz.fly.dev', () => {
     );
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body.token).toBeTruthy();
+    expectUuid(body.token, 'connectToken');
     connectToken = body.token;
   });
 
@@ -376,7 +377,7 @@ test.describe('Telegram Complete Flow — Live https://dowiz.fly.dev', () => {
       },
       data: '',
     });
-    expect([200, 400]).toContain(resp.status());
+    expect(resp.status()).toBe(200);
   });
 
   test('P6-NO-COOKIE: webhook endpoint sets no cookies', async ({ request }) => {
@@ -470,6 +471,6 @@ test.describe('Telegram Complete Flow — Live https://dowiz.fly.dev', () => {
       `${BASE}/api/owner/locations/${locationId}/products/${productId}`,
       { headers: await authHeaders() },
     );
-    expect([200, 204, 404]).toContain(res.status());
+    expect(res.status()).toBe(204);
   });
 });

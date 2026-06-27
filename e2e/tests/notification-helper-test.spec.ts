@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
 
 // We'll test our helpers by using them in a simplified version of the existing test
 test.describe('Notification Helper Tests', () => {
@@ -16,6 +17,6 @@ test.describe('Notification Helper Tests', () => {
     const authRes = await fetch(`${BASE_URL}/api/dev/mock-auth`, { method: 'POST' });
     expect(authRes.status()).toBe(200);
     const authBody = await authRes.json();
-    expect(authBody.access_token).toBeTruthy();
+    expectJwt(authBody.access_token);
   });
 });

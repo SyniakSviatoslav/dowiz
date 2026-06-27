@@ -98,8 +98,8 @@ export function MASK(page: Page): Locator[] {
 
 /** Standard pre-snapshot settle: wait for network idle + fonts, then a short paint settle. */
 export async function settle(page: Page): Promise<void> {
-  await page.waitForLoadState('networkidle').catch(() => {});
-  await page.evaluate(() => (document as any).fonts?.ready).catch(() => {});
+  await page.waitForLoadState('networkidle').catch((e) => { void e; /* tolerated: networkidle may never settle on a long-polling SPA — fall through to the paint settle below */ });
+  await page.evaluate(() => (document as any).fonts?.ready).catch((e) => { void e; /* tolerated: document.fonts may be unsupported/absent in the page context */ });
   await page.waitForTimeout(300);
 }
 

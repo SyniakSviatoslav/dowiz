@@ -1,5 +1,6 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import crypto from 'node:crypto';
+import { expectUuid } from '../helpers/assert-shape';
 
 /**
  * SENSOR-BUS §1.1 runtime proof (ADR-0009 v4) — the courier_geofence_enter sensor.
@@ -95,5 +96,5 @@ test('courier crossing the venue geofence on their own active order fires the se
   // ON CONFLICT, exactly-once) — is proven out-of-band via psql against the staging DB and
   // recorded in the commit (it needs DB creds not available to plain CI). This spec is the
   // portable, API-observable guardrail that the geofence path runs on the courier's own order.
-  expect(orderId, 'order id stable through the flow').toBeTruthy();
+  expectUuid(orderId, 'order id stable through the flow');
 });

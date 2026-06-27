@@ -73,7 +73,7 @@ test.describe('Telegram Webhook — Live https://dowiz.fly.dev', () => {
       },
       data: '',
     });
-    expect([200, 400]).toContain(resp.status());
+    expect(resp.status()).toBe(200);
   });
 
   test('WEBHOOK-6: /start with invalid token returns 200 (best-effort)', async ({ request }) => {

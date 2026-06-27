@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
+import { expectJwt, expectUuid } from '../../helpers/assert-shape';
 
 // Testplan §4a/§4b/§4c — Modifier display_type rendering in the /s/demo product modal.
 // Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test modifier-display-type --project=desktop --reporter=list
@@ -28,7 +29,7 @@ async function ownerToken(request: APIRequestContext): Promise<string> {
   }
   expect(res.ok(), 'owner login should succeed').toBeTruthy();
   const body = await res.json();
-  expect(body.access_token, 'login returns an access token').toBeTruthy();
+  expectJwt(body.access_token, 'login access token');
   cachedToken = body.access_token as string;
   return cachedToken;
 }
@@ -39,7 +40,7 @@ async function demoMenu(request: APIRequestContext) {
   expect(res.ok(), 'public demo menu should load').toBeTruthy();
   const menu = await res.json();
   const locationId: string = menu.locationId ?? menu.location_id;
-  expect(locationId, 'demo menu carries a locationId').toBeTruthy();
+  expectUuid(locationId, 'demo menu locationId');
   const products: any[] = (menu.categories ?? []).flatMap((c: any) => c.products ?? []);
   return { locationId, products };
 }

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectUuid } from '../../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'http://localhost:3000';
 const SLUG = 'demo';
@@ -63,7 +64,7 @@ test.describe('Promotions — CRUD + Validate', () => {
   });
 
   test('PATCH toggles active status to false', async ({ request }) => {
-    expect(createdPromoId).toBeTruthy();
+    expectUuid(createdPromoId);
     const res = await request.patch(
       `${BASE}/api/owner/promotions/${createdPromoId}`,
       {
@@ -77,7 +78,7 @@ test.describe('Promotions — CRUD + Validate', () => {
   });
 
   test('PATCH toggles active status back to true', async ({ request }) => {
-    expect(createdPromoId).toBeTruthy();
+    expectUuid(createdPromoId);
     const res = await request.patch(
       `${BASE}/api/owner/promotions/${createdPromoId}`,
       {
@@ -156,7 +157,7 @@ test.describe('Promotions — CRUD + Validate', () => {
   });
 
   test('DELETE removes the test promotion', async ({ request }) => {
-    expect(createdPromoId).toBeTruthy();
+    expectUuid(createdPromoId);
     const res = await request.delete(
       `${BASE}/api/owner/promotions/${createdPromoId}`,
       { headers: { Authorization: `Bearer ${ownerToken}` } }
@@ -167,7 +168,7 @@ test.describe('Promotions — CRUD + Validate', () => {
   });
 
   test('DELETE 404 for already-deleted promotion', async ({ request }) => {
-    expect(createdPromoId).toBeTruthy();
+    expectUuid(createdPromoId);
     const res = await request.delete(
       `${BASE}/api/owner/promotions/${createdPromoId}`,
       { headers: { Authorization: `Bearer ${ownerToken}` } }
@@ -176,7 +177,7 @@ test.describe('Promotions — CRUD + Validate', () => {
   });
 
   test('DELETE returns 401 without auth', async ({ request }) => {
-    expect(createdPromoId).toBeTruthy();
+    expectUuid(createdPromoId);
     const res = await request.delete(
       `${BASE}/api/owner/promotions/${createdPromoId}`
     );

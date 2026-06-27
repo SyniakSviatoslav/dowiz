@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 let authToken: string;
@@ -24,8 +25,8 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body.access_token).toBeTruthy();
-    expect(body.userId).toBeTruthy();
+    expectJwt(body.access_token, 'access_token');
+    expectUuid(body.userId, 'userId');
     authToken = body.access_token;
     if (body.activeLocationId) {
       locationId = body.activeLocationId;
@@ -98,7 +99,7 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
     });
     expect(res.status()).toBe(201);
     const body = await res.json();
-    expect(body.id).toBeTruthy();
+    expectUuid(body.id, 'category id');
     expect(body.name).toBe(catName);
     createdCategoryId = body.id;
   });
@@ -122,7 +123,7 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
     });
     expect(res.status()).toBe(201);
     const body = await res.json();
-    expect(body.id).toBeTruthy();
+    expectUuid(body.id, 'product id');
     expect(body.name).toBe('Pita Test Sushi');
     expect(body.taste).toBeTruthy();
     expect(body.taste.spicy).toBe(2);

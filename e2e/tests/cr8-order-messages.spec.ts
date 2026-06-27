@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -53,16 +54,16 @@ test.describe('CR-8 Order Message Channel', () => {
       data: { preset_key: 'ow_accepted_preparing', params: {} },
       headers: { Authorization: `Bearer ${authToken}` },
     });
-    expect([200, 201, 409]).toContain(res.status());
-    if (res.status() === 200 || res.status() === 201) {
-      const body = await res.json();
-      expect(body.sender).toBe('owner');
-      expect(body.preset_key).toBe('ow_accepted_preparing');
-      expect(body.body).toBeNull();
-    } else {
+    if (res.status() === 409) {
       const err = await res.json();
       expect(err.error).toBeTruthy();
+      return; // preset not allowed in current order status
     }
+    expect(res.status()).toBe(201);
+    const body = await res.json();
+    expect(body.sender).toBe('owner');
+    expect(body.preset_key).toBe('ow_accepted_preparing');
+    expect(body.body).toBeNull();
   });
 
   test('2 — get message history', async ({ request }) => {
@@ -75,7 +76,7 @@ test.describe('CR-8 Order Message Channel', () => {
     expect(Array.isArray(body.messages)).toBe(true);
     if (body.messages.length > 0) {
       const msg = body.messages[0];
-      expect(msg.id).toBeTruthy();
+      expectUuid(msg.id);
       expect(msg.preset_key).toBeTruthy();
       expect(msg.body).toBeNull();
       expect(msg.created_at).toBeTruthy();
@@ -87,10 +88,9 @@ test.describe('CR-8 Order Message Channel', () => {
       data: { preset_key: 'ow_delay', params: { minutes: 15 } },
       headers: { Authorization: `Bearer ${authToken}` },
     });
-    expect([200, 201, 409]).toContain(res.status());
-    if (res.status() === 200 || res.status() === 201) {
-      expect((await res.json()).preset_key).toBe('ow_delay');
-    }
+    if (res.status() === 409) return; // preset not allowed in current order status
+    expect(res.status()).toBe(201);
+    expect((await res.json()).preset_key).toBe('ow_delay');
   });
 
   test('4 — unknown preset returns 400', async ({ request }) => {
@@ -139,7 +139,7 @@ test.describe('CR-8 Order Message Channel', () => {
       created_at: expect.any(String),
     });
     expect(msg.body).toBeNull();
-    expect(msg.location_id).toBeTruthy();
+    expectUuid(msg.location_id);
   });
 
   test('9 — mark-read endpoint', async ({ request }) => {

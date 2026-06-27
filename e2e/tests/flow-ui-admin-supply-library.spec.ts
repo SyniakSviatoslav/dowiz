@@ -14,6 +14,7 @@
  * 6. UI: Reload page → all new supplies visible with correct allergen/nutrition
  */
 import { test, expect, type Page } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -118,7 +119,7 @@ test.describe('UI: Supply Library — add ingredients derived from product descr
     const r = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(r.status()).toBe(200);
     ownerToken = (await r.json()).access_token;
-    expect(ownerToken).toBeTruthy();
+    expectJwt(ownerToken, 'ownerToken');
   });
 
   // ── STEP 1: Fetch products → derive ingredients ────────────────────────────

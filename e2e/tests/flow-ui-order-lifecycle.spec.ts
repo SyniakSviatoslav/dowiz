@@ -13,6 +13,7 @@
  */
 import { test, expect, Page } from '@playwright/test';
 import crypto from 'node:crypto';
+import { expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 const PAGE_TIMEOUT = 30000;
@@ -89,7 +90,7 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
       await request.post(`${BASE}/api/courier/me/shift/start`, {
         headers: { Authorization: `Bearer ${courierToken}` },
         data: { lat: 41.33, lng: 19.82 },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: shift may already be started; setup is best-effort */ });
     }
 
     console.log('Lifecycle setup:', { locationSlug, courierId: courierId || 'MISSING', productId: productId || 'MISSING' });
@@ -98,10 +99,10 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
   test.afterAll(async ({ request }) => {
     if (productId) await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
       headers: { Authorization: `Bearer ${ownerToken}` },
-    }).catch(() => {});
+    }).catch((e) => { void e; /* tolerated: best-effort cleanup, must not fail the suite */ });
     if (categoryId) await request.delete(`${BASE}/api/owner/menu/categories/${categoryId}`, {
       headers: { Authorization: `Bearer ${ownerToken}` },
-    }).catch(() => {});
+    }).catch((e) => { void e; /* tolerated: best-effort cleanup, must not fail the suite */ });
   });
 
   // ── Step 1: Customer browses menu and places order via UI ────────────
@@ -145,7 +146,7 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
     expect(orderRes.status()).toBe(201);
     const body = await orderRes.json();
     orderId = body.id;
-    expect(orderId).toBeTruthy();
+    expectUuid(orderId, 'orderId');
     console.log('Order created:', orderId);
   });
 
@@ -192,11 +193,9 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
       `${BASE}/api/owner/locations/${locationId}/orders/${orderId}/confirm`,
       { headers: { Authorization: `Bearer ${ownerToken}` } }
     );
-    expect([200, 400]).toContain(confirmRes.status());
-    if (confirmRes.status() === 200) {
-      const body = await confirmRes.json();
-      expect(body.status || body.order?.status).toMatch(/CONFIRMED|confirmed/i);
-    }
+    expect(confirmRes.status()).toBe(200);
+    const body = await confirmRes.json();
+    expect(body.status || body.order?.status).toMatch(/CONFIRMED|confirmed/i);
     console.log('Confirm status:', confirmRes.status());
   });
 
@@ -225,7 +224,7 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
       `${BASE}/api/owner/locations/${locationId}/orders/${orderId}/assign-courier`,
       { headers: { Authorization: `Bearer ${ownerToken}` }, data: { courierId } }
     );
-    expect([200, 400, 404, 409]).toContain(assignRes.status());
+    expect(assignRes.status()).toBe(200);
     console.log('Assign courier status:', assignRes.status(), 'courierId:', courierId);
   });
 
@@ -276,8 +275,8 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
       assignmentId = body.assignments[0].id;
       // Verify shape
       const a = body.assignments[0];
-      expect(a.id).toBeTruthy();
-      expect(a.orderId).toBeTruthy();
+      expectUuid(a.id, 'assignment.id');
+      expectUuid(a.orderId, 'assignment.orderId');
       expect(a.status).toBeTruthy();
       expect(a.restaurant?.name ?? a.restaurant).toBeDefined();
       expect(a.customer?.address ?? a.customer).toBeDefined();
@@ -292,7 +291,7 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
       `${BASE}/api/courier/assignments/${assignmentId}/accept`,
       { headers: { Authorization: `Bearer ${courierToken}` } }
     );
-    expect([200, 400, 409]).toContain(acceptRes.status());
+    expect(acceptRes.status()).toBe(200);
     console.log('Accept status:', acceptRes.status());
   });
 
@@ -323,7 +322,7 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
       `${BASE}/api/courier/assignments/${assignmentId}/picked-up`,
       { headers: { Authorization: `Bearer ${courierToken}` } }
     );
-    expect([200, 400, 409]).toContain(puRes.status());
+    expect(puRes.status()).toBe(200);
     console.log('Picked-up status:', puRes.status());
   });
 
@@ -335,7 +334,7 @@ test.describe('Full Order Lifecycle — Customer → Admin → Courier → Deliv
       `${BASE}/api/courier/assignments/${assignmentId}/delivered`,
       { headers: { Authorization: `Bearer ${courierToken}` }, data: { cash_collected: false }, timeout: 30000 }
     );
-    expect([200, 400, 409]).toContain(delRes.status());
+    expect(delRes.status()).toBe(200);
     console.log('Delivered status:', delRes.status());
   });
 

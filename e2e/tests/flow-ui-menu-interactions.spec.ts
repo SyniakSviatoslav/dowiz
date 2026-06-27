@@ -94,7 +94,7 @@ test.describe('UI: Client Menu — Detail Modal, Modifiers, Search, Filter', () 
 
     if (hasSkeleton) {
       // Skeleton should be gone after content loads
-      await expect(skeleton).not.toBeVisible({ timeout: 5000 }).catch(() => {});
+      await expect(skeleton).not.toBeVisible({ timeout: 5000 });
     }
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
@@ -133,7 +133,7 @@ test.describe('UI: Client Menu — Detail Modal, Modifiers, Search, Filter', () 
     await page.waitForTimeout(500);
 
     const cartDrawer = page.locator('h2, h3, [role="dialog"]').filter({ hasText: /Cart|Shporta|Your/i }).first();
-    await expect(cartDrawer).toBeVisible({ timeout: 3000 }).catch(() => {});
+    await expect(cartDrawer).toBeVisible({ timeout: 3000 });
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });

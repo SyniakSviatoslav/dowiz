@@ -61,12 +61,12 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
     if (productId) {
       await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort cleanup */ });
     }
     if (categoryId) {
       await request.delete(`${BASE}/api/owner/menu/categories/${categoryId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort cleanup */ });
     }
   });
 
@@ -146,7 +146,8 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
     });
 
     // 400 = Zod validation rejection; 429 = rate limited before validation runs
-    expect([400, 429]).toContain(orderRes.status());
+    const status = orderRes.status();
+    if (status !== 429) expect(status).toBe(400);
     const body = await orderRes.json();
     expect(body.error || body.code).toBeTruthy();
   });
@@ -165,7 +166,8 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
       },
     });
 
-    expect([400, 429]).toContain(orderRes.status());
+    const status = orderRes.status();
+    if (status !== 429) expect(status).toBe(400);
     const body = await orderRes.json();
     expect(body.error || body.code).toBeTruthy();
   });
@@ -184,7 +186,8 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
       },
     });
 
-    expect([400, 429]).toContain(orderRes.status());
+    const status = orderRes.status();
+    if (status !== 429) expect(status).toBe(400);
     const body = await orderRes.json();
     expect(body.error || body.code).toBeTruthy();
   });
@@ -280,7 +283,7 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
         await request.patch(`${BASE}/api/orders/${body.id}/status`, {
           data: { status: 'CANCELLED' },
           headers: { Authorization: `Bearer ${authToken}` },
-        }).catch(() => {});
+        }).catch((e) => { void e; /* tolerated: best-effort cleanup */ });
       } else if (orderRes.status() === 422) {
         // Other business rule (delivery range, etc.) — acceptable
         expect(body.code).toBeTruthy();
@@ -297,7 +300,7 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
       // Clean up cheap product
       await request.delete(`${BASE}/api/owner/menu/products/${cheapProductId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort cleanup */ });
     }
   });
 
@@ -350,7 +353,7 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
     await request.patch(`${BASE}/api/orders/${orderId}/status`, {
       data: { status: 'CANCELLED' },
       headers: { Authorization: `Bearer ${authToken}` },
-    }).catch(() => {});
+    }).catch((e) => { void e; /* tolerated: best-effort cleanup */ });
   });
 
   test('Duplicate idempotency key: different request body → 422 IDEMPOTENCY_KEY_REUSED', async ({ request }) => {
@@ -397,6 +400,6 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
     await request.patch(`${BASE}/api/orders/${firstBody.id}/status`, {
       data: { status: 'CANCELLED' },
       headers: { Authorization: `Bearer ${authToken}` },
-    }).catch(() => {});
+    }).catch((e) => { void e; /* tolerated: best-effort cleanup */ });
   });
 });

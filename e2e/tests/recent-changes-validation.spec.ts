@@ -6,11 +6,8 @@ test.describe('Recent Changes Validation — Live https://dowiz.fly.dev', () => 
   test('CDN-1: image route serves webp with correct headers', async ({ page }) => {
     // Test that the /images/ route exists and returns proper content-type
     const res = await page.request.get('https://dowiz.fly.dev/images/products/test/test.webp');
-    // 404 is expected since test.webp doesn't exist, but route should exist (not SPA fallback)
-    expect([200, 404]).toContain(res.status());
-    if (res.status() === 200) {
-      expect(res.headers()['content-type']).toContain('webp');
-    }
+    // 404 is expected since test.webp doesn't exist, but the route must exist (not SPA fallback)
+    expect(res.status()).toBe(404);
     // Verify it's not returning HTML (SPA fallback)
     const text = await res.text();
     expect(text).not.toContain('<!DOCTYPE');

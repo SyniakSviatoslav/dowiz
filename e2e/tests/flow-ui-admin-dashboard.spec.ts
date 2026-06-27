@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
+import { expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -52,7 +53,7 @@ test.describe('UI: Admin Dashboard — Status Transitions via UI, Detail Modal, 
     if (productId) {
       await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort fixture cleanup, deletion failure must not fail the suite */ });
     }
   });
 
@@ -107,7 +108,7 @@ test.describe('UI: Admin Dashboard — Status Transitions via UI, Detail Modal, 
       `${BASE}/api/owner/locations/${activeLocationId}/orders/${orderId}/confirm`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    expect([200, 400, 409]).toContain(res.status());
+    expect(res.status()).toBe(200);
   });
 
   test('Dashboard quick stats grid shows numbers', async ({ page }) => {
@@ -162,7 +163,7 @@ test.describe('UI: Admin Dashboard — Status Transitions via UI, Detail Modal, 
 
     const select = page.locator('select').first();
     if (await select.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await select.selectOption({ index: 1 }).catch(() => {});
+      await select.selectOption({ index: 1 }).catch((e) => { void e; /* tolerated: optional sort control may expose no second option */ });
       await page.waitForTimeout(500);
     }
 
@@ -188,7 +189,7 @@ test.describe('UI: Admin Dashboard — Status Transitions via UI, Detail Modal, 
 
     if (dash.orders.length > 0) {
       const o = dash.orders[0];
-      expect(o.orderId).toBeTruthy();
+      expectUuid(o.orderId, 'orderId');
       expect(o.status).toBeTruthy();
       expect(typeof o.total).toBe('number');
     }

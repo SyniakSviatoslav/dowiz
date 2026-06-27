@@ -116,3 +116,25 @@ auth-control work (fixes 2, 4, 5, 8) is large but mechanical behind the shared h
 adversarially verified per-finding. Before acting on any single CRITICAL, confirm it against the live
 source (some "tautologies" may be intentional smoke-only specs). The guardrail approach is safe because
 a lint rule that goes red→green on real files is self-verifying.
+
+## Remediation campaign — categorized plan (2026-06-27)
+
+The 1,013 CRIT+HIGH bucketed by remediation path (script: scratchpad/triage):
+
+| bucket | n | path | status |
+|---|---|---|---|
+| B lint-detectable | 167 | the 4 ESLint guardrails + per-file fixes | burndown workflow (79 files / 232 lint hits) |
+| F dev-bypass / **prod-write** | 157 | `requireStaging()` helper + `no-prod-base-in-test` rule | guard+rule SHIPPED (99 prod-host literals flagged); per-file `requireStaging()` = wave |
+| C cross-tenant / IDOR | 156 | needs a REAL 2nd tenant | **ESCALATED** — staging has no `/auth/local/register`; mostly infeasible without a seeded 2nd owner/location |
+| H coverage / error-matrix / side-effects | 98 | add scenarios + read-backs | staging wave (test-hardening loop) |
+| G missing auth controls | 72 | positive+negative control per route | staging wave |
+| E real-time rigor | 61 | live-WS-DOM helper + wasOpened | staging wave |
+| I determinism (sleeps/swallowed) | 37 | deterministic waits + no-swallowed-catch | mixed (lint covers swallowed) |
+| A dead / never-run suites | 15 | relocate into testDir + wire runners | wave (no staging) — phase2 DONE |
+| D 🔴 money / RLS / PII vacuous | 9 | assert real DML/value | **ESCALATED → Council** (red-line) |
+| Z other | 241 | per-finding review | triage wave |
+
+**Deterministic (no staging) → doing now/next:** B (burndown), F (guard+rule + per-file requireStaging),
+A (relocate dead suites), I-swallowed (lint). **Staging waves (test-hardening loop):** E, G, H, Z.
+**Escalated (human/infra):** C (needs a real 2nd tenant — not provisionable via the staging API),
+D (red-line money/RLS/PII — Council before touching). Queued in the harness review queue.

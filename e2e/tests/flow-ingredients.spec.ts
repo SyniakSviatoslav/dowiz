@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 let authToken: string;
@@ -18,7 +19,7 @@ test.describe('Flow: Ingredients & Modifiers — Groups, Modifiers, price_delta,
     const body = await authRes.json();
     authToken = body.access_token;
     activeLocationId = body.activeLocationId;
-    expect(authToken).toBeTruthy();
+    expectJwt(authToken, 'access_token');
     expect(activeLocationId).toMatch(/^[0-9a-f-]{36}$/);
 
     const catRes = await request.post(`${BASE}/api/owner/menu/categories`, {
@@ -44,21 +45,21 @@ test.describe('Flow: Ingredients & Modifiers — Groups, Modifiers, price_delta,
         .delete(`${BASE}/api/owner/locations/${activeLocationId}/modifier-groups/${groupId}`, {
           headers: { Authorization: `Bearer ${authToken}` },
         })
-        .catch(() => {});
+        .catch((e) => { void e; /* tolerated: best-effort afterAll cleanup */ });
     }
     if (productId) {
       await request
         .delete(`${BASE}/api/owner/menu/products/${productId}`, {
           headers: { Authorization: `Bearer ${authToken}` },
         })
-        .catch(() => {});
+        .catch((e) => { void e; /* tolerated: best-effort afterAll cleanup */ });
     }
     if (categoryId) {
       await request
         .delete(`${BASE}/api/owner/menu/categories/${categoryId}`, {
           headers: { Authorization: `Bearer ${authToken}` },
         })
-        .catch(() => {});
+        .catch((e) => { void e; /* tolerated: best-effort afterAll cleanup */ });
     }
   });
 

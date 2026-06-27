@@ -91,7 +91,7 @@ test.describe('UI: Courier — Accept via UI, Delivery Page, Shift Controls', ()
     if (productId) {
       await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort cleanup, delete may 404 if product already gone */ });
     }
   });
 
@@ -101,7 +101,7 @@ test.describe('UI: Courier — Accept via UI, Delivery Page, Shift Controls', ()
       `${BASE}/api/owner/locations/${activeLocationId}/orders/${orderId}/assign-courier`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { courierId } }
     );
-    expect([200, 409]).toContain(res.status());
+    expect(res.status()).toBe(200);
     console.log(`Assign: ${res.status()}`);
   });
 

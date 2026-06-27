@@ -55,11 +55,26 @@ test('no-truthy-on-identifier — red on expect(token/id/url).toBeTruthy(), gree
   });
 });
 
+test('no-prod-base-in-test — red on a prod-host literal, green on staging/VITE_BASE_URL', () => {
+  rt.run('no-prod-base-in-test', plugin.rules['no-prod-base-in-test'], {
+    valid: [
+      { code: "const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev'", filename: 'a.test.ts' },
+      { code: "const B = 'https://dowiz.fly.dev'", filename: 'a.ts' }, // non-test → inert
+    ],
+    invalid: [
+      { code: "const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev'", filename: 'a.test.ts', errors: 1 },
+      { code: "await page.goto('https://dowiz.app/s/demo')", filename: 'a.spec.ts', errors: 1 },
+    ],
+  });
+});
+
 test('no-permissive-status-assertion — red on expect([..]).toContain(x), green on exact toBe (ACTIVATED)', () => {
   rt.run('no-permissive-status-assertion', plugin.rules['no-permissive-status-assertion'], {
     valid: [
       { code: 'expect(res.status()).toBe(200)', filename: 'a.test.ts' },
       { code: 'expect(["a","b"]).toContain(x)', filename: 'a.test.ts' }, // non-numeric array → fine
+      { code: 'expect([200, 201]).toContain(res.status())', filename: 'a.test.ts' }, // pure-success either/or → fine
+      { code: 'expect([200, 204]).toContain(s)', filename: 'a.test.ts' }, // pure-success → fine
       { code: 'expect([200,400]).toContain(x)', filename: 'a.ts' }, // non-test → inert
     ],
     invalid: [

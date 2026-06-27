@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -90,7 +91,7 @@ test.describe('Service event notifications pipeline', () => {
     expect(orderRes.status).toBe(201, orderText);
     const orderBody = JSON.parse(orderText);
     const orderId = orderBody.id;
-    expect(orderId).toBeTruthy();
+    expectUuid(orderId, 'orderId');
 
     // 5. Advance order through lifecycle (owner confirms → preparing → ready → in_delivery → delivered)
     const statuses = ['CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED'];

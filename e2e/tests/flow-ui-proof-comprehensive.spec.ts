@@ -6,6 +6,7 @@
  */
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -35,8 +36,8 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     const authBody = await authRes.json();
     authToken = authBody.access_token;
     locationId = authBody.activeLocationId;
-    expect(authToken).toBeTruthy();
-    expect(locationId).toBeTruthy();
+    expectJwt(authToken, 'authToken');
+    expectUuid(locationId, 'locationId');
 
     // --- Get location slug ---
     const settingsRes = await request.get(`${BASE}/api/owner/settings`, {
@@ -54,7 +55,7 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     });
     expect(catRes.status()).toBe(201);
     categoryId = (await catRes.json()).id;
-    expect(categoryId).toBeTruthy();
+    expectUuid(categoryId, 'categoryId');
 
     // --- Create product ---
     const prodRes = await request.post(`${BASE}/api/owner/menu/products`, {
@@ -63,7 +64,7 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     });
     expect(prodRes.status()).toBe(201);
     productId = (await prodRes.json()).id;
-    expect(productId).toBeTruthy();
+    expectUuid(productId, 'productId');
 
     // --- Create order ---
     const orderRes = await request.post(`${BASE}/api/orders`, {
@@ -79,14 +80,14 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     });
     expect(orderRes.status()).toBe(201);
     orderId = (await orderRes.json()).id;
-    expect(orderId).toBeTruthy();
+    expectUuid(orderId, 'orderId');
 
     // --- Confirm the order ---
     const confirmRes = await request.post(
       `${BASE}/api/owner/locations/${locationId}/orders/${orderId}/confirm`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
-    expect([200, 400]).toContain(confirmRes.status());
+    expect(confirmRes.status()).toBe(200);
 
     // --- Create courier via invite ---
     const invRes = await request.post(
@@ -95,7 +96,7 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     );
     expect(invRes.status()).toBe(200);
     const invBody = await invRes.json();
-    expect(invBody.inviteId).toBeTruthy();
+    expectUuid(invBody.inviteId, 'inviteId');
     expect(invBody.code).toBeTruthy();
 
     const redeemRes = await request.post(
@@ -106,22 +107,22 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     const redeemBody = await redeemRes.json();
     courierId = redeemBody.courier?.id;
     courierToken = redeemBody.jwt;
-    expect(courierId).toBeTruthy();
-    expect(courierToken).toBeTruthy();
+    expectUuid(courierId, 'courierId');
+    expectJwt(courierToken, 'courierToken');
 
     // --- Start courier shift ---
     const shiftRes = await request.post(`${BASE}/api/courier/me/shift/start`, {
       headers: { Authorization: `Bearer ${courierToken}` },
       data: { lat: 41.33, lng: 19.82 },
     });
-    expect([200, 409]).toContain(shiftRes.status());
+    expect(shiftRes.status()).toBe(200);
 
     // --- Assign courier to order (endpoint expects camelCase courierId) ---
     const assignRes = await request.post(
       `${BASE}/api/owner/locations/${locationId}/orders/${orderId}/assign-courier`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { courierId } }
     );
-    expect([200, 400, 422]).toContain(assignRes.status());
+    expect(assignRes.status()).toBe(200);
 
     // --- Get assignment ID ---
     const myAssignmentsRes = await request.get(`${BASE}/api/courier/me/assignments`, {
@@ -139,12 +140,12 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     if (productId) {
       await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort teardown, suite already asserted */ });
     }
     if (categoryId) {
       await request.delete(`${BASE}/api/owner/menu/categories/${categoryId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
-      }).catch(() => {});
+      }).catch((e) => { void e; /* tolerated: best-effort teardown, suite already asserted */ });
     }
   });
 
@@ -373,8 +374,8 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     if (body.assignments.length > 0) {
       const a = body.assignments[0];
       // Verify camelCase shape matches CourierAssignment schema
-      expect(a.id).toBeTruthy();
-      expect(a.orderId).toBeTruthy();
+      expectUuid(a.id, 'assignment.id');
+      expectUuid(a.orderId, 'assignment.orderId');
       expect(a.status).toBeTruthy();
       expect(a.restaurant).toBeTruthy();
       expect(a.customer).toBeTruthy();
@@ -391,7 +392,9 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
       `${BASE}/api/courier/assignments/${assignmentId}/accept`,
       { headers: { Authorization: `Bearer ${courierToken}` } }
     );
-    expect([200, 400, 409]).toContain(acceptRes.status());
+    // Owner assign-courier inserts the assignment already in 'accepted' state, so the
+    // courier accept call hits acceptCourierAssignment's `status !== 'assigned'` guard.
+    expect(acceptRes.status()).toBe(400);
 
     // Navigate to delivery page
     await page.addInitScript((t: string) => localStorage.setItem('dos_access_token', t), courierToken);
@@ -508,13 +511,13 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     const productVisible = await productEl.isVisible({ timeout: 5000 }).catch(() => false);
 
     if (productVisible) {
-      await productEl.click().catch(() => {});
+      await productEl.click().catch((e) => { void e; /* tolerated: best-effort add-to-cart; checkout load is the real assertion */ });
       await page.waitForTimeout(1000);
 
       // Look for an "Add to cart" button
       const addBtn = page.locator('button').filter({ hasText: /add|shto|cart|\+/i }).first();
       if (await addBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await addBtn.click().catch(() => {});
+        await addBtn.click().catch((e) => { void e; /* tolerated: best-effort add-to-cart; checkout load is the real assertion */ });
         await page.waitForTimeout(1000);
       }
     }
@@ -593,7 +596,7 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body.id).toBeTruthy();
+    expectUuid(body.id, 'settings.id');
     expect(body.slug).toBeTruthy();
     expect(body.locationName ?? body.name).toBeTruthy();
     expect(body.deliveryFee).toBeDefined();
@@ -606,8 +609,8 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body.id).toBeTruthy();
-    expect(body.locationId).toBeTruthy();
+    expectUuid(body.id, 'brand.id');
+    expectUuid(body.locationId, 'brand.locationId');
     // All optional fields should be present (even if null)
     expect('primaryColor' in body).toBe(true);
     expect('bgColor' in body).toBe(true);
@@ -627,7 +630,7 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
 
     if (body.couriers.length > 0) {
       const c = body.couriers[0];
-      expect(c.id).toBeTruthy();
+      expectUuid(c.id, 'courier.id');
       expect(typeof c.name).toBe('string');
       expect(c.maskedEmail !== undefined || c.maskedPhone !== undefined).toBe(true);
       expect(c.status).toBeTruthy();

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
 
 // Proof for O3: the 9-step onboarding wizard is retired. A fresh owner now lands
 // on a minimal create-storefront form (name · phone · link) that POSTs to the real
@@ -20,7 +21,7 @@ async function loginAsOwner(page: import('@playwright/test').Page, request: impo
   });
   expect(r.ok(), `mock-auth failed: ${r.status()}`).toBeTruthy();
   const { access_token } = await r.json();
-  expect(access_token).toBeTruthy();
+  expectJwt(access_token, 'access_token');
   await page.goto('/');
   // Force English so the locale-specific assertions below (incl. the negative
   // "old wizard text is gone" checks) are meaningful — staging defaults to sq.

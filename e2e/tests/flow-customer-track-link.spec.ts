@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
 
 // Proof for the customer order tracking-link handoff:
 //   order mint -> trackUrl with ?t=<opaque code>
@@ -31,7 +32,7 @@ test.describe('Flow: Customer Track Link — Exchange Handoff', () => {
     expect(menuRes.status()).toBe(200);
     const menu = await menuRes.json();
     locationId = menu.locationId || menu.location_id;
-    expect(locationId, 'public menu must expose a locationId').toBeTruthy();
+    expectUuid(locationId, 'public menu must expose a locationId');
 
     // Prefer a product with no modifier groups so an order with empty modifiers
     // can't be rejected for a missing required choice.

@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
+import { expectJwt } from '../../helpers/assert-shape';
 
 // Testplan §1b (docs/research/UI-IMPROVEMENTS-TESTPLAN.md) — prove the storefront surfaces
 // the CLOSED venue state: when the demo location is paused, /s/demo shows
@@ -30,7 +31,7 @@ async function ownerToken(request: APIRequestContext): Promise<string> {
   }
   expect(res.ok(), 'owner login should succeed').toBeTruthy();
   const body = await res.json();
-  expect(body.access_token, 'login returns an access token').toBeTruthy();
+  expectJwt(body.access_token, 'login access token');
   cachedToken = body.access_token as string;
   return cachedToken;
 }

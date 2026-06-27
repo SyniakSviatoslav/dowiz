@@ -10,6 +10,7 @@
  * 7. API proof: GET couriers returns courier with correct data
  */
 import { test, expect, type Page } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 const TS = Date.now();
@@ -33,7 +34,7 @@ test.describe('UI: Full Courier Lifecycle — Invite, Register, Use App, Prove o
     const b = await r.json();
     ownerToken = b.access_token;
     activeLocationId = b.activeLocationId;
-    expect(ownerToken).toBeTruthy();
+    expectJwt(ownerToken, 'ownerToken');
     expect(activeLocationId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -148,7 +149,7 @@ test.describe('UI: Full Courier Lifecycle — Invite, Register, Use App, Prove o
 
     // Extract JWT from localStorage
     courierJwt = await page.evaluate(() => localStorage.getItem('dos_access_token') || '');
-    expect(courierJwt, 'Courier JWT not stored in localStorage after registration').toBeTruthy();
+    expectJwt(courierJwt, 'Courier JWT not stored in localStorage after registration');
     console.log('Courier JWT stored in localStorage, length:', courierJwt.length);
   });
 
@@ -275,7 +276,7 @@ test.describe('UI: Full Courier Lifecycle — Invite, Register, Use App, Prove o
     });
     expect(r.status(), 'Courier login must return 200').toBe(200);
     const body = await r.json();
-    expect(body.jwt, 'Login must return JWT').toBeTruthy();
+    expectJwt(body.jwt, 'Login must return JWT');
     expect(body.courier).toBeTruthy();
     expect(body.courier.full_name).toBe(COURIER_NAME);
     console.log('Courier login OK. Name:', body.courier.full_name, 'Locations:', body.courier.locations?.length);
