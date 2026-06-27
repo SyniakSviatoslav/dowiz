@@ -15,8 +15,17 @@ test('menu-first: upload → prefilled review → Telegram claim seeds via onboa
   let onboardingBody: any = null;
 
   // Catch-all FIRST so the specific mocks below take precedence (Playwright
-  // matches routes in reverse registration order).
+  // matches routes in reverse registration order). Every endpoint THIS flow
+  // exercises is mocked explicitly below; a GET that lands here is at worst a
+  // harmless SPA boot/config probe (empty body is fine), but any unmocked
+  // MUTATION is an unintended request and must fail loudly rather than be
+  // silently swallowed by a blanket 200 (Test Integrity §2/§3).
   await page.route('**/api/**', async (route) => {
+    const req = route.request();
+    if (req.method() !== 'GET') {
+      await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected request', method: req.method(), url: req.url() }) });
+      return;
+    }
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
 
@@ -61,7 +70,10 @@ test('menu-first: upload → prefilled review → Telegram claim seeds via onboa
 
   // 3) Review screen: identity pre-filled from the parsed menu + item preview
   await expect(page.getByTestId('menu-preview')).toBeVisible();
-  await expect(page.getByTestId('menu-preview')).toContainText('3');
+  // Assert the exact item SET surfaced (3 named products), not a bare substring
+  // '3' which any digit-bearing token would satisfy. Locale-independent: product
+  // names render verbatim regardless of the active i18n catalog.
+  await expect(page.getByTestId('menu-preview')).toContainText('Margherita · Pepperoni · Cola');
   await expect(page.locator('input[placeholder="e.g. Pizza Roma"]')).toHaveValue('Pizza Roma');
   await expect(page.locator('input[placeholder^="+355"]')).toHaveValue('+355691234567');
 
@@ -70,4 +82,13 @@ test('menu-first: upload → prefilled review → Telegram claim seeds via onboa
   await expect.poll(() => onboardingBody?.anonymous_import_id, { timeout: 20000 }).toBe(IMPORT_ID);
   expect(onboardingBody.slug).toBe('pizza-roma');
   expect(onboardingBody.name).toBe('Pizza Roma');
+  // The pre-filled phone must reach the backend payload (not just sit in the
+  // input) — proves the parsed identity is carried through to onboarding/start.
+  // (No address field exists in this form, so address is intentionally absent.)
+  expect(onboardingBody.phone).toBe('+355691234567');
+
+  // The poll firing onboarding/start is necessary but not sufficient: assert the
+  // FE actually HANDLED the 201 by completing the flow — it redirects to the
+  // activation screen on success. A swallowed error keeps us on /start.
+  await expect(page).toHaveURL(/\/admin\/activation/);
 });

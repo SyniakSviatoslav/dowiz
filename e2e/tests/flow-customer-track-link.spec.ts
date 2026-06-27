@@ -1,15 +1,24 @@
 import { test, expect } from '@playwright/test';
-import { expectUuid } from '../helpers/assert-shape';
+import { expectUuid, expectJwt } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
+
+// Decode a JWT payload segment (base64url) without verifying the signature — we only
+// need to inspect the claims the server minted, not trust them.
+function decodeJwtClaims(token: string): Record<string, unknown> {
+  const seg = token.split('.')[1] ?? '';
+  return JSON.parse(Buffer.from(seg, 'base64url').toString('utf8'));
+}
 
 // Proof for the customer order tracking-link handoff:
 //   order mint -> trackUrl with ?t=<opaque code>
 //   POST /api/customer/track/exchange -> reissued 7-day customer JWT
 //   clean-profile open of trackUrl -> page self-authenticates, strips ?t=, renders order
 //
-// Bootstraps entirely from PUBLIC endpoints (no owner/dev auth) so it runs against
-// prod, where /api/dev/mock-auth is intentionally 404. Order placement is public.
+// Bootstraps entirely from PUBLIC endpoints (no owner/dev auth). It still PLACES real
+// orders, so it is a mutating spec — requireStaging() in beforeAll refuses to run it
+// against prod (a real order must never be minted there by a test).
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 const SLUG = process.env.TRACK_SLUG || 'sushi-durres'; // OTP off, min_order 0, real coords
 const TS = Date.now();
 
@@ -26,8 +35,10 @@ test.describe('Flow: Customer Track Link — Exchange Handoff', () => {
   let trackUrl: string | undefined;
   let trackCode: string | undefined;
   let orderId: string | undefined;
+  let customerToken: string | undefined;
 
   test.beforeAll(async ({ request }) => {
+    requireStaging(BASE); // mutating spec (places orders) — never run against prod
     const menuRes = await request.get(`${BASE}/public/locations/${SLUG}/menu`);
     expect(menuRes.status()).toBe(200);
     const menu = await menuRes.json();
@@ -93,14 +104,35 @@ test.describe('Flow: Customer Track Link — Exchange Handoff', () => {
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(typeof body.token).toBe('string');
-    expect(body.token.split('.')).toHaveLength(3); // RS256 JWT
+    expectJwt(body.token, 'exchange token'); // 3-segment RS256 JWT shape
+    customerToken = body.token;
+
+    // Inspect the minted claims — structure alone (split length 3) doesn't prove scope.
+    // issueCustomerToken (packages/platform/src/auth/jwt.ts) signs role/orderId/sub(=customerId)/exp.
+    // NOTE: phone is intentionally NOT in the JWT (P0-PII), so `sub` is the customerId UUID,
+    // never the phone — assert the UUID shape, not the phone.
+    const claims = decodeJwtClaims(body.token);
+    expect(claims.role).toBe('customer');
+    expect(claims.orderId).toBe(orderId);
+    expectUuid(claims.sub, 'JWT sub must be the customerId UUID');
+    // 7-day token: exp must sit ~7d out (allow 6–8d to absorb signing skew).
+    const ttlSec = (claims.exp as number) - Math.floor(Date.now() / 1000);
+    expect(ttlSec).toBeGreaterThan(6 * 24 * 3600);
+    expect(ttlSec).toBeLessThanOrEqual(8 * 24 * 3600);
 
     // The reissued JWT must actually authorize the order's status endpoint.
     const statusRes = await request.get(`${BASE}/api/customer/orders/${orderId}/status`, {
       headers: { Authorization: `Bearer ${body.token}` },
     });
     expect(statusRes.status()).toBe(200);
+
+    // Reuse is intentional: the grant is reusable-until-expiry (track.ts: use_count is an
+    // abuse signal, NOT a single-use gate), so a second exchange of the same code must
+    // still return 200 — this guards against an accidental single-use regression.
+    const replay = await request.post(`${BASE}/api/customer/track/exchange`, {
+      data: { code: trackCode },
+    });
+    expect(replay.status()).toBe(200);
   });
 
   // ── TEST 3: bogus / expired codes are rejected with 410 ─────────────────
@@ -136,6 +168,51 @@ test.describe('Flow: Customer Track Link — Exchange Handoff', () => {
     // The app shell rendered (real DOM element visible).
     await expect(page.locator('#root')).toBeVisible();
 
+    // Positive proof the ORDER actually rendered (not just an empty shell / spinner):
+    // the live order-status badge is the order-content anchor (OrderStatusPage.tsx).
+    await expect(page.locator('[data-testid="order-status-badge"]')).toBeVisible({ timeout: 15000 });
+
     await context.close();
+  });
+
+  // ── TEST 5: cross-order IDOR — a customer JWT is scoped to its own order ──
+  // The status route filters `WHERE o.id = $1 AND o.customer_id = $2`
+  // (apps/api/src/routes/customer/orders.ts), so order1's token must NOT read order2
+  // (placed by a different phone => different customer_id => 404 NOT_FOUND).
+  // TODO(needs-staging): requires a live staging run to mint a 2nd real order.
+  test('A customer JWT cannot read a different customer order (cross-order IDOR)', async ({ request }) => {
+    test.skip(!customerToken, 'No customer JWT minted in TEST 2');
+
+    // Place a SECOND order under a DIFFERENT phone => a different customer_id.
+    const order2Res = await request.post(`${BASE}/api/orders`, {
+      data: {
+        locationId,
+        type: 'delivery',
+        items: [{ product_id: productId, quantity: 1, modifier_ids: [] }],
+        customer: { phone: `+35568${String(TS).slice(-7)}`, name: 'IDOR Other' },
+        delivery: {
+          pin: { lat: DELIVERY_LAT, lng: DELIVERY_LNG },
+          address_text: 'Test Street 2, Durres',
+        },
+        payment: { method: 'cash' },
+        idempotency_key: crypto.randomUUID(),
+      },
+    });
+    if (order2Res.status() !== 201) {
+      const b = await order2Res.json().catch(() => ({}));
+      expect(order2Res.status(), `2nd order not 201 (${order2Res.status()}: ${JSON.stringify(b)})`).not.toBe(500);
+      expect(order2Res.status()).not.toBe(401);
+      test.skip(true, `2nd order not created (status ${order2Res.status()}); cannot run IDOR check`);
+      return;
+    }
+    const order2Id = (await order2Res.json()).id;
+    expectUuid(order2Id, '2nd orderId');
+    expect(order2Id).not.toBe(orderId); // genuinely a different order
+
+    // order1's token reading order2 must be rejected (row-scoped to its own customer_id).
+    const idorRes = await request.get(`${BASE}/api/customer/orders/${order2Id}/status`, {
+      headers: { Authorization: `Bearer ${customerToken}` },
+    });
+    expect(idorRes.status()).toBe(404);
   });
 });

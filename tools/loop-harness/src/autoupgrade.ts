@@ -194,7 +194,7 @@ export function buildHooks(c: Candidate): { hooks: OracleHooks } | { skip: strin
   return { skip: 'adapter ready (makeRepoHooks + benchmark, atomic git revert — proven) but no MAP source emits a repo-perf candidate with a deterministic mechanical patch yet (§0: no autonomous LLM patches).' };
 }
 
-async function evaluateClassA(classA: Candidate[], apply: boolean, baseDir: string, env: Record<string, string | undefined> = process.env): Promise<ApplyOutcome[]> {
+export async function evaluateClassA(classA: Candidate[], apply: boolean, baseDir: string, env: Record<string, string | undefined> = process.env): Promise<ApplyOutcome[]> {
   if (apply) {
     // GOVERNOR (§1) — refuse autonomous apply if halted or any aggregate ceiling breached.
     const gov = checkGovernor(baseDir, { nowMs: Date.now(), freeRamMb: Math.round(os.freemem() / (1024 * 1024)) });

@@ -17,6 +17,8 @@ import { test, expect } from '@playwright/test';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { attachConsoleGuard, stripCrossOriginAuth } from '../fixtures/console-guard';
 import { checkAxe, type A11yIssue } from '../helpers/a11y';
+import { expectJwt } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 const API = `${BASE}/api`;
@@ -69,7 +71,12 @@ async function probe(
       .first()
       .isVisible({ timeout: 8000 })
       .catch(() => false);
-    if (interact) await interact(page).catch((e) => { void e; /* tolerated: optional interaction is best-effort discovery; failure is itself a finding, must not abort the probe */ });
+    if (interact)
+      await interact(page).catch((e) =>
+        // a failed interaction is itself a finding — record it (don't swallow) so the
+        // afterAll ledger surfaces it instead of staying silently green.
+        guard.errors.push(`[interaction] ${e instanceof Error ? e.message : String(e)}`),
+      );
     await page.waitForTimeout(500);
   } catch {
     /* navigation issue is itself a finding (reachedDom=false) */
@@ -89,6 +96,10 @@ async function probe(
 }
 
 test.describe('Non-Pixel Sweep (3 roles, mobile-first)', () => {
+  // The sweep uses the /dev/mock-auth backdoor — refuse to run against prod/unknown targets.
+  test.beforeAll(() => {
+    requireStaging(BASE);
+  });
   test.beforeEach(async ({ page }) => {
     await stripCrossOriginAuth(page); // don't leak the dev-auth header cross-origin
   });
@@ -103,7 +114,13 @@ test.describe('Non-Pixel Sweep (3 roles, mobile-first)', () => {
 
   test('owner journey', async ({ page, context }) => {
     const token = await mockAuth('owner');
-    if (token) await context.addInitScript((t) => localStorage.setItem('dos_access_token', t), token);
+    // Finding 2: a null/failed mock-auth token would silently probe public/redirect surfaces
+    // instead of the authed owner UI. Fail loud so the journey can't pass unauthenticated.
+    expectJwt(token, 'owner mock-auth token');
+    await context.addInitScript((t) => localStorage.setItem('dos_access_token', t), token as string);
+    // TODO(needs_staging): cross-tenant isolation negative control — with a REAL second
+    // tenant's owner token, assert this token cannot read tenant-B's /api/owner/orders
+    // (expect 403/404, never tenant-B rows). Requires a seeded 2nd tenant; do not fake with nil-UUID.
     for (const [surface, path] of [
       ['dashboard', '/admin'],
       ['menu', '/admin/menu'],
@@ -124,7 +141,8 @@ test.describe('Non-Pixel Sweep (3 roles, mobile-first)', () => {
 
   test('courier journey', async ({ page, context }) => {
     const token = await mockAuth('courier');
-    if (token) await context.addInitScript((t) => localStorage.setItem('dos_access_token', t), token);
+    expectJwt(token, 'courier mock-auth token'); // Finding 2: no silent unauthenticated probing
+    await context.addInitScript((t) => localStorage.setItem('dos_access_token', t), token as string);
     for (const [surface, path] of [
       ['tasks', '/courier'],
       ['shift', '/courier/shift'],
@@ -164,5 +182,14 @@ test.describe('Non-Pixel Sweep (3 roles, mobile-first)', () => {
     // eslint-disable-next-line no-console
     console.log('\n=== NON-PIXEL SWEEP LEDGER ===\n' + JSON.stringify(summary, null, 2));
     expect(ledger.length).toBeGreaterThan(0);
+    // Finding 1: ledger.length alone stayed green when a surface 404'd or crashed. Assert the
+    // actual sense outputs: every probed surface must render real DOM, and none may carry a
+    // critical/serious a11y violation (a red here is a PRODUCT finding to escalate, not to weaken).
+    const noDom = ledger.filter((f) => !f.reachedDom).map((f) => `${f.role}/${f.surface}`);
+    expect(noDom, 'surfaces that failed to render real DOM (404/crash)').toEqual([]);
+    const axeOffenders = ledger
+      .filter((f) => f.axe.some((a) => a.impact === 'critical' || a.impact === 'serious'))
+      .map((f) => `${f.role}/${f.surface}`);
+    expect(axeOffenders, 'surfaces with critical/serious a11y violations').toEqual([]);
   });
 });

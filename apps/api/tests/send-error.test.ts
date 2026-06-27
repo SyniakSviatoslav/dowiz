@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import { buildErrorEnvelope } from '../src/lib/api-error.js';
+import { registerReplySendError } from '../src/lib/reply-send-error.js';
 
 // A2 (ADR-0010) — `reply.sendError` is the return-based drop-in for ad-hoc
 // `reply.status(n).send({ error })` sites (first migrated file: owner/categories.ts). It must
@@ -26,14 +27,13 @@ test('A2 sendError envelope', async (t) => {
   });
 
   await t.test('reply.sendError returns the envelope + echoes x-correlation-id (wiring)', async () => {
-    const fastify = Fastify();
-    // The decorator mirrors server.ts (4 lines) — buildErrorEnvelope is the REAL shared source.
-    fastify.decorateReply('sendError', function (this: any, status: number, code: string, message: string, opts?: any) {
-      const correlationId = String(this.request.id);
-      this.header('x-correlation-id', correlationId);
-      if (opts?.retryAfterMs) this.header('retry-after', Math.ceil(opts.retryAfterMs / 1000));
-      return this.status(status).send(buildErrorEnvelope(status, code, message, correlationId, opts));
-    });
+    // Pin the server-generated request id so correlationId is proven to TRACK request.id
+    // (not the static Fastify-inject default '1'). genReqId mirrors production (server.ts:107).
+    const KNOWN_REQ_ID = 'req-id-test-7f3a9c21';
+    const fastify = Fastify({ genReqId: () => KNOWN_REQ_ID });
+    // Register the REAL production decorator (server.ts:408) — no inlined re-implementation,
+    // so any divergence in lib/reply-send-error.ts fails here instead of staying hidden.
+    registerReplySendError(fastify);
     fastify.get('/cat', async (_req, reply: any) => reply.sendError(409, 'CATEGORY_NOT_EMPTY', 'Category contains products'));
 
     const res = await fastify.inject({ method: 'GET', url: '/cat' });
@@ -42,9 +42,8 @@ test('A2 sendError envelope', async (t) => {
     assert.equal(body.code, 'CATEGORY_NOT_EMPTY');
     assert.equal(body.status, 409);
     assert.equal(body.error, 'Category contains products'); // legacy preserved
-    assert.equal(typeof body.correlationId, 'string');
-    assert.ok(body.correlationId.length > 0);
-    assert.equal(res.headers['x-correlation-id'], body.correlationId); // echo matches body
+    assert.equal(body.correlationId, KNOWN_REQ_ID); // tracks the server request id, not a static default
+    assert.equal(res.headers['x-correlation-id'], KNOWN_REQ_ID); // header echoes the REAL id (not just body==header)
 
     await fastify.close();
   });

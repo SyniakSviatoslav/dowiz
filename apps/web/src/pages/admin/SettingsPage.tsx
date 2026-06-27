@@ -761,6 +761,7 @@ export function SettingsPage() {
             </Button>
             {justSaved && !saving && (
               <motion.span
+                data-testid="settings-saved"
                 role="status"
                 aria-live="polite"
                 initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.9 }}

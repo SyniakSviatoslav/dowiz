@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 let authToken: string;
 let activeLocationId: string;
 let inviteId: string;
@@ -10,6 +12,7 @@ test.describe.configure({ mode: 'serial' });
 
 test.describe('Flow: Courier — Invite, Shift, Tasks, Earnings, History', () => {
   test.beforeAll(async ({ request }) => {
+    requireStaging(BASE); // mutating spec (creates/revokes invites) — never hit prod
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
     const authBody = await authRes.json();
@@ -30,13 +33,33 @@ test.describe('Flow: Courier — Invite, Shift, Tasks, Earnings, History', () =>
     );
     expect(inviteRes.status()).toBe(200);
     const body = await inviteRes.json();
-    expect(body.inviteId).toMatch(/^[0-9a-f-]{36}$/);
+    expectUuid(body.inviteId, 'inviteId');
     expect(typeof body.code).toBe('string');
     expect(body.code.length).toBe(16);
     expect(body.deepLink).toContain(body.inviteId);
     expect(body.expiresAt).toBeTruthy();
     inviteId = body.inviteId;
     inviteCode = body.code;
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // FLOW 1b: Owner invite endpoints reject unauthenticated access (IDOR)
+  // verifyAuth runs in preValidation → no bearer token must be 401.
+  // ──────────────────────────────────────────────────────────────
+  test('Flow 1b: Owner — courier-invite endpoints require auth', async ({ request }) => {
+    const noAuthCreate = await request.post(
+      `${BASE}/api/owner/locations/${activeLocationId}/courier-invites`,
+      { data: { role: 'courier', email: `e2e-noauth-${Date.now()}@test.dowiz` } }
+    );
+    expect(noAuthCreate.status()).toBe(401);
+
+    const noAuthList = await request.get(
+      `${BASE}/api/owner/locations/${activeLocationId}/courier-invites`
+    );
+    expect(noAuthList.status()).toBe(401);
+    // TODO(needs_staging): true cross-tenant IDOR — a *valid* 2nd-tenant owner token
+    // against this location should return 404 (auth.ts requireLocationAccess "don't leak
+    // existence"). Requires provisioning a second tenant owner on staging.
   });
 
   // ──────────────────────────────────────────────────────────────
@@ -56,6 +79,14 @@ test.describe('Flow: Courier — Invite, Shift, Tasks, Earnings, History', () =>
     expect(detail.isExpired).toBe(false);
     expect(detail.isUsed).toBe(false);
     expect(detail.isRevoked).toBe(false);
+
+    // The route is public (no auth) — exercise the TRUE unauthenticated path,
+    // not just the owner-token path above. Must still return 200 with the same id.
+    const anonRes = await request.get(`${BASE}/api/courier/auth/invites/${inviteId}`);
+    expect(anonRes.status()).toBe(200);
+    const anon = await anonRes.json();
+    expect(anon.id).toBe(inviteId);
+    expect(anon.isValid).toBe(true);
   });
 
   // ──────────────────────────────────────────────────────────────
@@ -108,6 +139,9 @@ test.describe('Flow: Courier — Invite, Shift, Tasks, Earnings, History', () =>
       !e.includes('favicon') && !e.includes('404') && !e.includes('manifest')
     );
     expect(criticalErrors, `JS errors: ${criticalErrors.join('; ')}`).toEqual([]);
+    // Assert the page content shell actually rendered (language-agnostic landmark),
+    // not just that *some* text exists.
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
     const body = await page.textContent('body');
     expect(body.length).toBeGreaterThan(100);
     expect(/task|delivery|order|accept|reject|pending|active|no task|empty/i.test(body)).toBe(true);
@@ -122,6 +156,7 @@ test.describe('Flow: Courier — Invite, Shift, Tasks, Earnings, History', () =>
     await page.goto(`${BASE}/courier/earnings?dev=true`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
     expect(errors, `JS errors on earnings: ${errors.join('; ')}`).toEqual([]);
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
     const body = await page.textContent('body');
     expect(body.length).toBeGreaterThan(50);
     expect(/earning|total|today|week|payout|balance|ALL|Lek/i.test(body)).toBe(true);
@@ -136,6 +171,7 @@ test.describe('Flow: Courier — Invite, Shift, Tasks, Earnings, History', () =>
     await page.goto(`${BASE}/courier/history?dev=true`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
     expect(errors, `JS errors on history: ${errors.join('; ')}`).toEqual([]);
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
     const body = await page.textContent('body');
     expect(body.length).toBeGreaterThan(100);
     expect(/history|delivery|order|completed|rating|star|feedback/i.test(body)).toBe(true);
@@ -150,6 +186,7 @@ test.describe('Flow: Courier — Invite, Shift, Tasks, Earnings, History', () =>
     await page.goto(`${BASE}/courier/shift?dev=true`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
     expect(errors, `JS errors on shift: ${errors.join('; ')}`).toEqual([]);
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
     const body = await page.textContent('body');
     expect(body.length).toBeGreaterThan(50);
     expect(/shift|start|end|timer|online|offline|available/i.test(body)).toBe(true);
@@ -159,6 +196,11 @@ test.describe('Flow: Courier — Invite, Shift, Tasks, Earnings, History', () =>
   // FLOW 9: Courier delivery page — map, dropoff info, swipe to complete
   // ──────────────────────────────────────────────────────────────
   test('Flow 9: Courier — delivery page shows map and dropoff info', async ({ page }) => {
+    // TODO(needs_staging): `test-delivery` is not a real delivery id — the page renders a
+    // not-found/empty shell and the loose regex below passes regardless. Create a real
+    // delivery via the API in beforeAll, navigate to that concrete id, and assert the
+    // `[data-testid=task-cash-amount]` / "Drop-off" (h2) landmark is visible. Requires a
+    // live staged courier+order fixture.
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
     await page.goto(`${BASE}/courier/delivery/test-delivery?dev=true`, { waitUntil: 'networkidle' });
@@ -202,21 +244,25 @@ test.describe('Flow: Courier — Invite, Shift, Tasks, Earnings, History', () =>
 
     await page.goto(`${BASE}/courier?dev=true`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
     let body = await page.textContent('body');
     expect(body.length).toBeGreaterThan(50);
 
     await page.reload({ waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
     body = await page.textContent('body');
     expect(body.length).toBeGreaterThan(50);
 
     await page.goto(`${BASE}/courier/earnings?dev=true`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
     body = await page.textContent('body');
     expect(body.length).toBeGreaterThan(50);
 
     await page.goto(`${BASE}/courier?dev=true`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
     body = await page.textContent('body');
     expect(body.length).toBeGreaterThan(50);
 

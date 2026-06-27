@@ -41,8 +41,19 @@ test('ccc secret-scan merge gate', async (t) => {
     assert.equal(isSecretPath('server.key'), true);
     assert.equal(isSecretPath('certs/tls.pem'), true);
     assert.equal(isSecretPath('.fly-staging-token'), true);
+    // Exercise the remaining hard-deny patterns so all 10 SECRET_DENY entries have a red→green guard.
+    assert.equal(isSecretPath('certs/keystore.p12'), true);
+    assert.equal(isSecretPath('certs/client.pfx'), true);
+    assert.equal(isSecretPath('android/release.keystore'), true);
+    assert.equal(isSecretPath('certs/tls.crt'), true);
+    assert.equal(isSecretPath('certs/tls.cer'), true);
+    assert.equal(isSecretPath('.ssh/id_rsa'), true);
+    assert.equal(isSecretPath('home/id_ed25519'), true);
+    assert.equal(isSecretPath('gcp/credentials.json'), true);
+    assert.equal(isSecretPath('config/secrets.yaml'), true);
     assert.equal(isSecretPath('.env.example'), false); // documentation, not a secret
     assert.equal(isSecretPath('apps/api/src/server.ts'), false);
+    assert.equal(isSecretPath('docs/keystore-howto.md'), false); // not a real keystore
   });
 
   await t.test('the walker never READS a secret/ignored file (B10: ignore before read)', () => {
@@ -78,13 +89,16 @@ test('ccc secret-scan merge gate', async (t) => {
     try {
       // Use a dir NOT in the hardcoded DIR_SKIP (build/dist/node_modules always win) so we
       // exercise the .gitignore ordered-negation path specifically.
-      writeFileSync(join(dir, '.gitignore'), 'generated/\n!generated/keep.ts\n');
+      // The `!.env` line is a DELIBERATE attacker negation trying to re-include the secret; the
+      // hard-deny layer must still win over it (this is the actual B10 adversarial case).
+      writeFileSync(join(dir, '.gitignore'), 'generated/\n!generated/keep.ts\n!.env\n!server.key\n');
       mkdirSync(join(dir, 'generated'), { recursive: true });
       const ig = loadIgnore(dir);
       assert.equal(ig.isIgnored('generated/skip.ts'), true);
-      assert.equal(ig.isIgnored('generated/keep.ts'), false); // negation wins
-      // …but a hard secret is NEVER re-includable, even by a negation.
+      assert.equal(ig.isIgnored('generated/keep.ts'), false); // negation wins for non-secrets
+      // …but a hard secret is NEVER re-includable, even by an explicit `!`-negation in .gitignore.
       assert.equal(ig.isIgnored('.env'), true);
+      assert.equal(ig.isIgnored('server.key'), true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -37,11 +37,15 @@ test('collectSessionTelemetry — sums tokens by model within the time window on
   assert.equal(t.tokensByModel['claude-haiku-4-5'], 550);
   // display by_model keeps the full total (incl. cache)
   assert.equal(t.tokens.by_model!['claude-opus-4-8'], 6200);
+  // haiku display total = 500+50 (no cache) — guards against a dropped by_model entry
+  assert.equal(t.tokens.by_model!['claude-haiku-4-5'], 550);
 });
 
-test('collectSessionTelemetry — cost is computed and non-zero', () => {
+test('collectSessionTelemetry — cost is the exact rounded sum', () => {
   const t = collectSessionTelemetry(fixture(), '2026-06-27T10:00:00Z', '2026-06-27T10:01:00Z');
-  assert.ok(t.tokens.cost_usd! > 0);
+  // opus = (1000/1e6)*15 + (200/1e6)*75 + (5000/1e6)*1.5 = 0.0375
+  // haiku = (500/1e6)*0.8 + (50/1e6)*4 = 0.0006 ; total 0.0381 → rounded(2dp) 0.04
+  assert.equal(t.tokens.cost_usd, 0.04);
 });
 
 test('collectSessionTelemetry — extracts MCP skills + agents from tool_use blocks', () => {

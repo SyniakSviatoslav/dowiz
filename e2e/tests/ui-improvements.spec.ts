@@ -1,9 +1,14 @@
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
 // MVP UI-improvements proof (the GO subset per docs/research/UI-IMPROVEMENTS-TESTPLAN.md).
 // Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test ui-improvements --reporter=list
 const CREDS = { email: 'test@dowiz.com', password: 'test123456' };
+
+// This suite MUTATES owner state (kitchen-busy window, product availability). Refuse to run
+// against prod or an unknown target so a stray VITE_BASE_URL can never write to production.
+test.beforeAll(() => requireStaging(process.env.VITE_BASE_URL));
 
 // The login endpoint is rate-limited (max 5/min); with the suite running serially across
 // three viewport projects that budget is easily blown. Memoize one token per worker.
@@ -17,6 +22,14 @@ async function ownerToken(request: APIRequestContext): Promise<string> {
   cachedToken = body.access_token as string;
   return cachedToken;
 }
+
+// Drop the memoized token at file end so a token revoked during this run (24h TTL, a concurrent
+// password reset) cannot leak forward to a later spec in the same worker. Mid-run staleness is
+// already loud: every mutating PATCH asserts `.ok()` and the dashboard tests fail on a login
+// redirect — a stale token never silently passes.
+test.afterAll(() => {
+  cachedToken = null;
+});
 
 async function ownerLogin(page: Page, request: APIRequestContext) {
   const token = await ownerToken(request);
@@ -43,7 +56,9 @@ test('storefront surfaces the venue state chip on /s/demo', async ({ page }) => 
   await page.goto('/s/demo');
   const chip = page.locator('[data-testid="venue-state-chip"]');
   await expect(chip).toBeVisible({ timeout: 25000 });
-  await expect(chip).toHaveAttribute('data-state', /open|closed|busy/);
+  // Exact state set — an unrecognised value like 'not-open' must FAIL, so anchor the regex
+  // instead of accepting any string that merely contains open|closed|busy.
+  await expect(chip).toHaveAttribute('data-state', /^(open|closed|busy)$/);
 });
 
 test('owner dashboard shows an honest alert state and arms on a gesture', async ({ page, request }) => {
@@ -78,6 +93,16 @@ test('storefront shows the venue-busy state when the kitchen is flagged busy', a
   const { locationId } = await demoMenu(request);
   const busyUntil = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
+  // NEGATIVE control — the mutation must reject an unauthenticated caller (verifyAuth → 401),
+  // so the gate isn't silently letting everyone (or no one) through. EXACT status, not `not 500`.
+  const noAuth = await request.patch(`/api/owner/locations/${locationId}/kitchen-busy`, {
+    data: { busy_until: busyUntil },
+  });
+  expect(noAuth.status(), 'kitchen-busy without a token must be 401').toBe(401);
+  // TODO(needs-staging): cross-tenant isolation — a DIFFERENT real owner's token must get 404
+  // (requireLocationAccess, apps/api/src/plugins/auth.ts:152) on THIS locationId. Needs a real
+  // second-tenant fixture; do not fake with a nil-UUID. Tracked in needs_staging.
+
   const set = await request.patch(`/api/owner/locations/${locationId}/kitchen-busy`, {
     headers: auth,
     data: { busy_until: busyUntil },
@@ -111,9 +136,16 @@ test('unavailable product is hidden from the storefront menu', async ({ page, re
   const target = products.find((p) => p.available !== false);
   expect(target, 'demo menu has an available product to flip').toBeTruthy();
 
-  // Establish the baseline: the product is present on the storefront before we flip it.
+  // Scope to the actual product card ([data-testid="menu-item"], ProductCard.tsx:59) carrying the
+  // exact name — a match in nav/footer/search must NOT count as the product being present, and the
+  // disappearance check below must count the same card locator (symmetry: baseline vs count-0).
+  const card = page
+    .locator('[data-testid="menu-item"]')
+    .filter({ has: page.getByText(target.name, { exact: true }) });
+
+  // Establish the baseline: the product card is present on the storefront before we flip it.
   await page.goto('/s/demo');
-  await expect(page.getByText(target.name, { exact: true }).first()).toBeVisible({ timeout: 25000 });
+  await expect(card.first()).toBeVisible({ timeout: 25000 });
 
   const off = await request.patch(`/api/owner/locations/${locationId}/products/${target.id}`, {
     headers: auth,
@@ -123,7 +155,7 @@ test('unavailable product is hidden from the storefront menu', async ({ page, re
 
   try {
     await page.goto('/s/demo');
-    await expect(page.getByText(target.name, { exact: true })).toHaveCount(0);
+    await expect(card).toHaveCount(0);
   } finally {
     const on = await request.patch(`/api/owner/locations/${locationId}/products/${target.id}`, {
       headers: auth,

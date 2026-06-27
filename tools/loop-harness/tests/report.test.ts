@@ -44,6 +44,36 @@ test('renderReport — stall outcome shows the breaker reason', () => {
   assert.match(out, /breaker: stall/);
 });
 
+test('renderReport — abort outcome shows ABORT badge + breaker reason', () => {
+  const out = renderReport({ ...base, outcome: 'abort', breaker_reason: 'loop-limit' });
+  assert.match(out, /· ABORT ✗/);
+  assert.match(out, /breaker: loop-limit/);
+});
+
+test('renderReport — natural_stop outcome shows STOPPED badge', () => {
+  const out = renderReport({ ...base, outcome: 'natural_stop', breaker_reason: null });
+  assert.match(out, /· STOPPED/);
+  assert.doesNotMatch(out, /breaker:/);
+});
+
+test('renderReport — VS HISTORY renders comparison rows + arrows when prior runs exist', () => {
+  const prior: MetricsLine[] = [
+    { loop: 'convergence', run_index: 40, ts: 'a', outcome: 'green', iters: 4, wall_s: 1, tokens_in: 0, tokens_out: 0, cost_usd: 3.0, kwh: 0, gco2: 0, water_ml: 0, fail_start: 10, fail_end: 0, per_resolved: 22000, slop_min: 90, conflicts: 0, recurring_flags: ['i18n-stall'] },
+    { loop: 'convergence', run_index: 41, ts: 'b', outcome: 'green', iters: 8, wall_s: 1, tokens_in: 0, tokens_out: 0, cost_usd: 3.2, kwh: 0, gco2: 0, water_ml: 0, fail_start: 9, fail_end: 0, per_resolved: 21600, slop_min: 88, conflicts: 0, recurring_flags: ['i18n-stall'] },
+  ];
+  const out = renderReport({ ...base, history: computeHistory(prior, base) });
+  // The '(first run …)' branch must NOT be taken when prior runs exist.
+  assert.doesNotMatch(out, /first run — no prior history/);
+  // report.ts:91 — iters-to-green row, with the arrow vs avg=6 (7 is 17% higher → ↑) and best.
+  assert.match(out, /iters-to-green {2}7 \(avg 6 ↑17%\) \(best 4\)/);
+  // report.ts:92-93 — tokens/resolved row (19,100 vs avg 21,800 → ↓).
+  assert.match(out, /tokens\/resolved 19,100 \(avg 21800 ↓12%\)/);
+  // report.ts:94 — cost row (2.74 vs avg 3.10 → ↓), avg formatted to 2dp.
+  assert.match(out, /cost {12}\$2\.74 \(avg 3\.10 ↓12%\)/);
+  // report.ts:95 — recurring tag line.
+  assert.match(out, /recurring: i18n-stall ×2/);
+});
+
 test('computeHistory — averages prior runs and surfaces recurring flags', () => {
   const prior: MetricsLine[] = [
     { loop: 'convergence', run_index: 40, ts: 'a', outcome: 'green', iters: 4, wall_s: 1, tokens_in: 0, tokens_out: 0, cost_usd: 3.0, kwh: 0, gco2: 0, water_ml: 0, fail_start: 10, fail_end: 0, per_resolved: 22000, slop_min: 90, conflicts: 0, recurring_flags: ['i18n-stall'] },

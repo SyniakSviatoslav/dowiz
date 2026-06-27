@@ -1,7 +1,8 @@
-import { test, expect, type APIRequestContext } from '@playwright/test';
-import { expectUuid } from '../helpers/assert-shape';
+import { test, expect } from '@playwright/test';
+import { expectUuid, expectJwt } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 let authToken: string;
 let locationSlug: string;
 let categoryId: string;
@@ -18,11 +19,16 @@ test.describe('Comprehensive E2E Flow Proofs — Lifecycle & Detail', () => {
   // SETUP
   // ──────────────────────────────────────────────────────────────
   test.beforeAll(async ({ request }) => {
+    // This suite MUTATES state (creates products/categories) via the dev/mock-auth
+    // backdoor — refuse to run against prod (closes the "mock-auth disabled in prod"
+    // blind-spot: the suite can never reach the prod backdoor at all).
+    requireStaging(BASE);
     // Auth
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
     const authBody = await authRes.json();
     authToken = authBody.access_token;
+    expectJwt(authToken, 'access_token');
 
     // Resolve slug
     const settingsRes = await request.get(`${BASE}/api/owner/settings`, {
@@ -105,13 +111,19 @@ test.describe('Comprehensive E2E Flow Proofs — Lifecycle & Detail', () => {
         file: { name: 'test.png', mimeType: 'image/png', buffer: pngBuf },
       },
     });
-    // Image upload may fail if storage is not configured (400) but must not crash (500)
-    expect(imgRes.status()).not.toBe(500);
-    expect(imgRes.status()).not.toBe(401);
-    if (imgRes.status() === 200) {
-      const imgBody = await imgRes.json();
-      expect(String(imgBody.imageUrl)).toMatch(/^(https?:\/\/|\/|data:)/);
-    }
+    // A valid PNG against configured storage must succeed (route returns 200 + imageUrl;
+    // 400=invalid image, 401=no auth, 500=storage/db failure — all are real failures here).
+    expect(imgRes.status()).toBe(200);
+    const imgBody = await imgRes.json();
+    expect(String(imgBody.imageUrl)).toMatch(/^(https?:\/\/|\/|data:)/);
+    // Follow-up: the persisted product must echo the uploaded image URL (round-trip proof).
+    const imgGetRes = await request.get(`${BASE}/api/owner/menu/products?category_id=${categoryId}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    expect(imgGetRes.status()).toBe(200);
+    const afterUpload = (await imgGetRes.json()).find((p: { id: string; imageUrl?: string }) => p.id === productId);
+    expect(afterUpload).toBeTruthy();
+    expect(String(afterUpload?.imageUrl)).toMatch(/^(https?:\/\/|\/)/);
 
     // 1c. Verify via GET: all fields survive round-trip
     const getRes = await request.get(`${BASE}/api/owner/menu/products?category_id=${categoryId}`, {
@@ -148,6 +160,55 @@ test.describe('Comprehensive E2E Flow Proofs — Lifecycle & Detail', () => {
     expect(pubProd.attributes.bom[1].allergens).toContain('soy');
     // Top-level kcal must NOT exist (it's inside bom[])
     expect(pubProd.attributes.kcal).toBeUndefined();
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // FLOW 1b: API auth controls — negative (401 no-token, 403 wrong-role),
+  //          missing-resource (404), bad payload (400). Without these, the
+  //          owner endpoints could be silently open or silently closed.
+  // ──────────────────────────────────────────────────────────────
+  test('Flow 1b: API — auth + error matrix on owner product endpoints', async ({ request }) => {
+    // Positive control already proven in Flow 1 (create → 201). Negative controls:
+
+    // 401 — no Authorization header → create rejected.
+    const noAuthCreate = await request.post(`${BASE}/api/owner/menu/products`, {
+      data: { name: `E2E-NoAuth-${TS}`, price: 100, categoryId },
+    });
+    expect(noAuthCreate.status()).toBe(401);
+
+    // 401 — no Authorization header → delete of the real productId rejected.
+    const noAuthDelete = await request.delete(`${BASE}/api/owner/menu/products/${productId}`);
+    expect(noAuthDelete.status()).toBe(401);
+
+    // 403 — valid token, wrong role (courier) → owner-only route forbidden.
+    const courierAuth = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'courier' } });
+    expect(courierAuth.status()).toBe(200);
+    const courierToken = (await courierAuth.json()).access_token;
+    expectJwt(courierToken, 'courier access_token');
+    const wrongRole = await request.post(`${BASE}/api/owner/menu/products`, {
+      data: { name: `E2E-Courier-${TS}`, price: 100, categoryId },
+      headers: { Authorization: `Bearer ${courierToken}` },
+    });
+    expect(wrongRole.status()).toBe(403);
+
+    // 404 — owner token, delete a syntactically-valid but absent product id.
+    const absentId = '11111111-1111-4111-8111-111111111111';
+    const missing = await request.delete(`${BASE}/api/owner/menu/products/${absentId}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    expect(missing.status()).toBe(404);
+
+    // 400 — owner token, invalid payload (price is required + numeric).
+    const badPayload = await request.post(`${BASE}/api/owner/menu/products`, {
+      data: { categoryId },
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    expect(badPayload.status()).toBe(400);
+
+    // TODO(needs_staging): cross-tenant IDOR — mint a SECOND real tenant's owner token and
+    // assert it gets 403/404 reading/mutating this tenant's productId. Requires a real second
+    // seeded tenant on staging (a nil/random UUID 404s by absence and proves nothing — see
+    // Test Integrity rule #5), so it is left as an explicit gap, not faked.
   });
 
   // ──────────────────────────────────────────────────────────────
@@ -267,20 +328,35 @@ test.describe('Comprehensive E2E Flow Proofs — Lifecycle & Detail', () => {
     const sortCount = await sortBtns.count();
     expect(sortCount).toBeGreaterThanOrEqual(3); // ↑ Price, ↓ Price, A-Z
 
+    // Extract the price (integer ALL) of the first N visible product cards, in DOM order.
+    const firstPrices = async (n: number): Promise<number[]> => {
+      const texts = await page.locator('[data-testid="menu-item"]').allInnerTexts();
+      return texts
+        .map((t) => { const m = t.match(/(\d+)\s*ALL/); return m ? Number(m[1]) : null; })
+        .filter((v): v is number => v !== null)
+        .slice(0, n);
+    };
+
     // Sort by name (A-Z)
     const nameBtn = page.locator('button').filter({ hasText: 'A-Z' }).first();
     await nameBtn.click();
     await page.waitForTimeout(500);
 
-    // Sort by price ascending
+    // Sort by price ascending → DOM order of the first cards must be non-decreasing.
     const priceAscBtn = page.locator('button').filter({ hasText: '↑ Price' }).first();
     await priceAscBtn.click();
     await page.waitForTimeout(500);
+    const asc = await firstPrices(3);
+    expect(asc.length).toBeGreaterThanOrEqual(2);
+    expect(asc).toEqual([...asc].sort((a, b) => a - b));
 
-    // Sort by price descending
+    // Sort by price descending → DOM order of the first cards must be non-increasing.
     const priceDescBtn = page.locator('button').filter({ hasText: '↓ Price' }).first();
     await priceDescBtn.click();
     await page.waitForTimeout(500);
+    const desc = await firstPrices(3);
+    expect(desc.length).toBeGreaterThanOrEqual(2);
+    expect(desc).toEqual([...desc].sort((a, b) => b - a));
 
     // Reset to default
     const resetBtn = page.locator('button').filter({ hasText: '·' }).first();
@@ -291,16 +367,21 @@ test.describe('Comprehensive E2E Flow Proofs — Lifecycle & Detail', () => {
     const soyFilter = page.locator('button').filter({ hasText: 'soy' }).first();
     const hasSoyFilter = await soyFilter.isVisible().catch(() => false);
     if (hasSoyFilter) {
+      const beforeCount = await page.locator('[data-testid="menu-item"]').count();
       await soyFilter.click();
       await page.waitForTimeout(500);
 
       // After filtering by soy, only products containing soy should be visible
       const filteredBody = await page.textContent('body');
       expect(filteredBody).toContain('soy');
-      // Products without soy (like "Clean" ones) should be hidden
-      // The E2E-Sushi-${TS} should still be visible (it has soy allergy)
+      // The E2E-Sushi-${TS} should still be visible (it has a soy allergen)
       const sushiName = page.locator('h3').filter({ hasText: `E2E-Sushi-${TS}` });
       await expect(sushiName).toBeVisible({ timeout: 3000 });
+      // ...and at least one non-soy product must have been HIDDEN (filter actually filters,
+      // not a no-op): visible card count strictly drops but stays > 0.
+      const afterCount = await page.locator('[data-testid="menu-item"]').count();
+      expect(afterCount).toBeGreaterThan(0);
+      expect(afterCount).toBeLessThan(beforeCount);
 
       // Clear filter by clicking again
       await soyFilter.click();
@@ -512,4 +593,10 @@ test.describe('Comprehensive E2E Flow Proofs — Lifecycle & Detail', () => {
     const cookies = await page.context().cookies();
     expect(cookies).toEqual([]);
   });
+
+  // TODO(needs_staging): real-time WS proof. Place an order from /s/:slug and assert the
+  // owner /admin/orders page receives the LIVE update via the open WS connection (a new
+  // [data-testid="order-row"] appearing WITHOUT a reload/poll-buffer — Test Integrity rule #8).
+  // Requires a live staging order-create + an open authenticated admin page; left as an
+  // explicit gap rather than a reload-based pseudo-proof that would false-green.
 });

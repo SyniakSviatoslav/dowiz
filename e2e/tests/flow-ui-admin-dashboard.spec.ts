@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
 import { expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -11,9 +12,30 @@ test.describe('UI: Admin Dashboard — Status Transitions via UI, Detail Modal, 
   let activeLocationId: string;
   let productId: string;
   let orderId: string;
+  let apiOrderId: string;
   const TS = Date.now();
 
+  // Place a PENDING delivery order for this tenant's product; returns its id.
+  async function seedOrder(request: import('@playwright/test').APIRequestContext): Promise<string> {
+    const orderRes = await request.post(`${BASE}/api/orders`, {
+      data: {
+        locationId: activeLocationId,
+        type: 'delivery',
+        items: [{ product_id: productId, quantity: 1 }],
+        customer: { phone: '+355600000030', name: 'Dashboard UI Test' },
+        delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga e Durrësit, Tirana' },
+        payment: { method: 'cash' },
+        idempotency_key: crypto.randomUUID(),
+      },
+    });
+    expect(orderRes.status()).toBe(201);
+    return (await orderRes.json()).id;
+  }
+
   test.beforeAll(async ({ request }) => {
+    // This suite MUTATES state (creates category/product/order) and uses the
+    // dev/mock-auth backdoor — never let it run against prod/unknown targets.
+    requireStaging(BASE);
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
     const body = await authRes.json();
@@ -34,19 +56,12 @@ test.describe('UI: Admin Dashboard — Status Transitions via UI, Detail Modal, 
     expect(prodRes.status()).toBe(201);
     productId = (await prodRes.json()).id;
 
-    const orderRes = await request.post(`${BASE}/api/orders`, {
-      data: {
-        locationId: activeLocationId,
-        type: 'delivery',
-        items: [{ product_id: productId, quantity: 1 }],
-        customer: { phone: '+355600000030', name: 'Dashboard UI Test' },
-        delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga e Durrësit, Tirana' },
-        payment: { method: 'cash' },
-        idempotency_key: crypto.randomUUID(),
-      },
-    });
-    expect(orderRes.status()).toBe(201);
-    orderId = (await orderRes.json()).id;
+    // Two distinct orders: one driven through the UI confirm path, one through
+    // the API confirm path. They must NOT share an order — the state machine
+    // rejects a duplicate CONFIRMED→CONFIRMED with 400 (SameStatusError), so a
+    // shared order would make one of the two confirm tests fail by coupling.
+    orderId = await seedOrder(request);
+    apiOrderId = await seedOrder(request);
   });
 
   test.afterAll(async ({ request }) => {
@@ -65,14 +80,15 @@ test.describe('UI: Admin Dashboard — Status Transitions via UI, Detail Modal, 
     await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
-    expect(body).toMatch(/dashboard|orders|total|count|active|delivery|pending|confirmed/i);
+    // Specific render proof: the order seeded in beforeAll must render its own
+    // card on the live dashboard (a nav-bar containing the word "orders" no
+    // longer satisfies this). A 500/redirect/spinner fails the locator.
+    await expect(page.locator(`[data-testid="order-card-${orderId}"]`)).toBeVisible({ timeout: 15000 });
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
 
-  test('Confirm order via UI button', async ({ page }) => {
+  test('Confirm order via UI button', async ({ page, request }) => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
 
@@ -81,8 +97,12 @@ test.describe('UI: Admin Dashboard — Status Transitions via UI, Detail Modal, 
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
     await page.waitForTimeout(2000);
 
-    // Find and click confirm button
-    const confirmBtn = page.locator('button').filter({ hasText: /confirm|Confirm|Konfirmo|Prano/i }).first();
+    // Scope the confirm button to OUR order card — on shared staging data a
+    // bare `button` filter could confirm a different tenant's demo order,
+    // leaving ours PENDING and making the post-condition a false-red.
+    const card = page.locator(`[data-testid="order-card-${orderId}"]`);
+    await expect(card).toBeVisible({ timeout: 15000 });
+    const confirmBtn = card.locator('button').filter({ hasText: /confirm|Confirm|Konfirmo|Prano/i }).first();
     if (await confirmBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
       await confirmBtn.click();
       await page.waitForTimeout(1500);
@@ -98,17 +118,35 @@ test.describe('UI: Admin Dashboard — Status Transitions via UI, Detail Modal, 
       }
     }
 
+    // Mandatory post-condition: the UI confirm must have transitioned the order
+    // to CONFIRMED. Read it back from the snapshot API (zero-JS-errors alone is
+    // not proof the action fired). If the confirm button/dialog selector is
+    // stale on staging the order stays PENDING and this fails — a real finding.
+    // TODO(needs-staging): verify the confirm button/dialog selectors against a
+    // live staging render; this assertion currently requires a staging run.
+    const snap = await request.get(`${BASE}/api/owner/locations/${activeLocationId}/dashboard/snapshot`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    expect(snap.status()).toBe(200);
+    const snapBody = await snap.json();
+    const confirmed = (snapBody.orders as Array<{ orderId: string; status: string }>).find(o => o.orderId === orderId);
+    expect(confirmed?.status).toBe('CONFIRMED');
+
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
 
-  test('Prepare order status via API', async ({ request }) => {
-    test.skip(!orderId, 'No order');
-    // Use API since UI button may not be reachable after confirm
+  test('Confirm order status via API', async ({ request }) => {
+    expectUuid(apiOrderId, 'apiOrderId');
+    // Dedicated PENDING order (not the UI one) → PENDING→CONFIRMED must be the
+    // canonical 200 with body.status CONFIRMED, never a permissive 4xx that a
+    // [200,400,409] array would have swallowed.
     const res = await request.post(
-      `${BASE}/api/owner/locations/${activeLocationId}/orders/${orderId}/confirm`,
+      `${BASE}/api/owner/locations/${activeLocationId}/orders/${apiOrderId}/confirm`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
     expect(res.status()).toBe(200);
+    const confirmBody = await res.json();
+    expect(confirmBody.status).toBe('CONFIRMED');
   });
 
   test('Dashboard quick stats grid shows numbers', async ({ page }) => {
@@ -187,11 +225,19 @@ test.describe('UI: Admin Dashboard — Status Transitions via UI, Detail Modal, 
     expect(typeof dash.activeAlertCount).toBe('number');
     expect(typeof dash.activeSignalCount).toBe('number');
 
-    if (dash.orders.length > 0) {
-      const o = dash.orders[0];
-      expectUuid(o.orderId, 'orderId');
-      expect(o.status).toBeTruthy();
-      expect(typeof o.total).toBe('number');
-    }
+    // Non-vacuous: beforeAll seeded two orders for this tenant, so the snapshot
+    // MUST contain our own order (no `if (length>0)` escape hatch).
+    const mine = (dash.orders as Array<{ orderId: string; status: string; total: number }>)
+      .find(o => o.orderId === orderId || o.orderId === apiOrderId);
+    expect(mine, 'snapshot must include this tenant\'s seeded order').toBeTruthy();
+    expectUuid(mine!.orderId, 'orderId');
+    expect(mine!.status).toBe('CONFIRMED');
+    expect(typeof mine!.total).toBe('number');
+
+    // TODO(needs-staging): cross-tenant IDOR check — authenticate a SECOND real
+    // tenant and assert (a) GET this location's snapshot as tenant B → 403/404,
+    // and (b) tenant B's snapshot contains none of {orderId, apiOrderId}. This
+    // requires a real second tenant + locationId (mock-auth yields one tenant),
+    // so it must run against a seeded staging DB — do NOT fake it with a nil id.
   });
 });

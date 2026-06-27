@@ -9,8 +9,11 @@ const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 const AWWWARDS = 'awwwards.com/sites/nomadic-tribe';
 
 async function enableSkin(page: Page) {
+  // Seed the flag via an init script so it is present in localStorage BEFORE the app's bootstrap
+  // script reads it on every navigation (incl. the test's own goto). A post-load setItem would race
+  // the first paint and let the skin silently no-op while [data-skin="paper"] assertions still pass.
+  await page.addInitScript(() => { try { localStorage.setItem('dos_paper_skin', 'on'); } catch { /* private mode */ } });
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-  await page.evaluate(() => { try { localStorage.setItem('dos_paper_skin', 'on'); } catch { /* private mode */ } });
 }
 
 // WCAG contrast of an element's text vs its first opaque solid ancestor bg (skip if over an image).
@@ -34,9 +37,11 @@ test('owner login — oasis hero + credit + a READABLE Fraunces title (contrast 
   const title = page.getByRole('heading', { name: 'DeliveryOS' });
   await expect(title).toBeVisible();
   const c = await page.evaluate(`(${CONTRAST})('h1')`) as { ratio?: number; skip?: boolean } | null;
-  if (c && !c.skip && c.ratio !== undefined) {
-    expect(c.ratio, 'the hero title clears WCAG AA-large (was 1.09:1 light-on-light before the fix)').toBeGreaterThanOrEqual(3);
-  }
+  // Assert the probe actually measured a ratio — a null (h1/fg not found) or skip:true (title over an
+  // image, contrast unmeasurable) must FAIL, not silently pass the contrast lock.
+  expect(c, 'contrast probe located the h1 and a solid bg ancestor').not.toBeNull();
+  expect(c?.skip, 'hero title sits on a solid surface so contrast is measurable (not over an image)').not.toBe(true);
+  expect(c?.ratio, 'the hero title clears WCAG AA-large (was 1.09:1 light-on-light before the fix)').toBeGreaterThanOrEqual(3);
 });
 
 test('storefront — adopts the paper world under the skin (flag-gated)', async ({ page }) => {

@@ -1,5 +1,10 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import crypto from 'node:crypto';
+import { requireStaging } from '../helpers/staging-guard';
+
+// These specs MUTATE state (they place real orders), so refuse to run against prod/unknown.
+const BASE = process.env.VITE_BASE_URL ?? 'https://dowiz-staging.fly.dev';
+test.beforeAll(() => requireStaging(BASE));
 
 // Real-UI proof for the polish-debt round's browser-facing seams (server read-only):
 //   F12 — a dedicated sr-only role="status" region announces the order status to screen readers.
@@ -62,16 +67,25 @@ test('F12: order status is announced via a dedicated sr-only role="status" regio
 
 test('F13: refreshing mid-journey restores the live order, not a "Not Found" dead-end', async ({ page, request }) => {
   test.setTimeout(90_000);
-  const { trackPath } = await createDeliveryOrder(request);
+  const { id, trackPath } = await createDeliveryOrder(request);
+  // The order-details heading renders `#<first-4-of-id>` in every locale, so it's a
+  // stable, order-specific fingerprint — distinguishes "same order rehydrated" from a
+  // status-string-only stub.
+  const idFingerprint = page.getByRole('heading', { name: new RegExp(id.slice(0, 4), 'i') });
+  const notFound = page.locator('[data-testid="order-back-to-menu"]');
 
   await page.goto(trackPath);
   const badge = page.locator('[data-testid="order-status-badge"]');
   await expect(badge, 'order status renders on first load').toBeVisible({ timeout: 25000 });
+  await expect(idFingerprint, 'the created order (by id) renders on first load').toBeVisible({ timeout: 25000 });
   const statusBefore = await badge.getAttribute('data-status');
-  expect(statusBefore, 'a real status is present before refresh').toBeTruthy();
+  expect(statusBefore, 'a real status is present before refresh').toMatch(/\w/);
 
-  // The continuity test: a hard reload mid-journey must rehydrate the same order.
+  // The continuity test: a hard reload mid-journey must rehydrate THE SAME order — not any
+  // order with a matching status string, and never the "Not Found" dead-end this seam guards.
   await page.reload();
   await expect(badge, 'order status survives a refresh (continuity)').toBeVisible({ timeout: 25000 });
+  await expect(idFingerprint, 'the SAME order (by id) is re-fetched after refresh').toBeVisible({ timeout: 25000 });
+  await expect(notFound, 'refresh must NOT dead-end into a Not Found state').toHaveCount(0);
   await expect(badge).toHaveAttribute('data-status', statusBefore!);
 });

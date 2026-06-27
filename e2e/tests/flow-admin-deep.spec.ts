@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 let authToken: string;
 let activeLocationId: string;
 let locationSlug: string;
@@ -12,11 +14,14 @@ test.describe.configure({ mode: 'serial' });
 
 test.describe('Flow: Admin — Dashboard, Menu CRUD, Branding, Settings, Signals', () => {
   test.beforeAll(async ({ request }) => {
+    requireStaging(BASE); // mutating spec (creates category/product) — never hit prod
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
     const authBody = await authRes.json();
     authToken = authBody.access_token;
     activeLocationId = authBody.activeLocationId;
+    expectJwt(authToken, 'access_token');
+    expectUuid(activeLocationId, 'activeLocationId');
 
     const settingsRes = await request.get(`${BASE}/api/owner/settings`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -59,9 +64,11 @@ test.describe('Flow: Admin — Dashboard, Menu CRUD, Branding, Settings, Signals
     expect(typeof dash.counts.CANCELLED).toBe('number');
     expect(typeof dash.counts.REJECTED).toBe('number');
     expect(Array.isArray(dash.orders)).toBe(true);
+    // TODO(needs_staging): seed ≥1 order in beforeAll so the order-shape block is never skipped
+    // (today an empty demo silently bypasses every order assertion below — conditional-skip vacuity).
     if (dash.orders.length > 0) {
       const o = dash.orders[0];
-      expect(o.orderId).toMatch(/^[0-9a-f-]{36}$/);
+      expectUuid(o.orderId, 'orderId');
       expect(o.status).toBeTruthy();
       expect(typeof o.total).toBe('number');
       expect(o.createdAt).toBeTruthy();
@@ -89,8 +96,10 @@ test.describe('Flow: Admin — Dashboard, Menu CRUD, Branding, Settings, Signals
     expect(filterRes.status()).toBe(200);
     const filtered = await filterRes.json();
     expect(Array.isArray(filtered.orders)).toBe(true);
+    // The ?status=PENDING filter must actually filter: a broken filter that returns every
+    // order regardless of the param must go RED here (was: accepted ALL statuses → vacuous).
     for (const o of filtered.orders) {
-      expect(['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED', 'CANCELLED', 'REJECTED']).toContain(o.status);
+      expect(o.status).toBe('PENDING');
     }
   });
 
@@ -105,7 +114,7 @@ test.describe('Flow: Admin — Dashboard, Menu CRUD, Branding, Settings, Signals
     });
     expect(catRes.status()).toBe(201);
     categoryId = (await catRes.json()).id;
-    expect(categoryId).toMatch(/^[0-9a-f-]{36}$/);
+    expectUuid(categoryId, 'categoryId');
 
     // Create product with all fields
     const prodRes = await request.post(`${BASE}/api/owner/menu/products`, {
@@ -126,6 +135,7 @@ test.describe('Flow: Admin — Dashboard, Menu CRUD, Branding, Settings, Signals
     });
     expect(prodRes.status()).toBe(201);
     productId = (await prodRes.json()).id;
+    expectUuid(productId, 'productId');
 
     // Verify via GET round-trip
     const getRes = await request.get(`${BASE}/api/owner/menu/products?category_id=${categoryId}`, {
@@ -145,9 +155,8 @@ test.describe('Flow: Admin — Dashboard, Menu CRUD, Branding, Settings, Signals
     expect(found.recipeLines.length).toBe(2);
     expect(found.stockCount).toBe(25);
     expect(found.categoryId).toBe(categoryId);
-    expect(found.allergens).toContain('eggs');
-    expect(found.allergens).toContain('milk');
-    expect(found.allergens).toContain('soy');
+    // Exact set (sorted) — a dedup/aggregation bug that adds a superset of allergens must go RED.
+    expect([...found.allergens].sort()).toEqual(['eggs', 'milk', 'soy']);
   });
 
   // ──────────────────────────────────────────────────────────────
@@ -190,9 +199,10 @@ test.describe('Flow: Admin — Dashboard, Menu CRUD, Branding, Settings, Signals
 
     expect(errors, `JS errors on dashboard: ${errors.join('; ')}`).toEqual([]);
 
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(200);
-    expect(/dashboard|orders|total|count|active|delivery|pending|PENDING|CONFIRMED/i.test(body)).toBe(true);
+    // Real render proof: the dashboard header WS-status dot is present (a 500/redirect/login
+    // page would not render it). A long-enough body or a keyword match is NOT proof.
+    // TODO(needs_staging): confirm 'ws-status-dot' renders against deployed staging.
+    await expect(page.getByTestId('ws-status-dot')).toBeVisible({ timeout: 15000 });
 
     const sidebarLinks = page.locator('nav a, [role="navigation"] a, aside a');
     const linkCount = await sidebarLinks.count();
@@ -224,9 +234,9 @@ test.describe('Flow: Admin — Dashboard, Menu CRUD, Branding, Settings, Signals
 
     expect(errors, `JS errors on menu page: ${errors.join('; ')}`).toEqual([]);
 
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(200);
-    expect(/menu|category|product|item|add|edit|price|E2E-Admin/i.test(body)).toBe(true);
+    // Real render proof: a menu-manager-only control is present (not just a long body).
+    // TODO(needs_staging): confirm 'kitchen-busy-toggle' renders against deployed staging.
+    await expect(page.getByTestId('kitchen-busy-toggle')).toBeVisible({ timeout: 15000 });
 
     const cookies = await page.context().cookies();
     expect(cookies).toEqual([]);
@@ -263,6 +273,11 @@ test.describe('Flow: Admin — Dashboard, Menu CRUD, Branding, Settings, Signals
     }
 
     expect(errors, `JS errors on branding: ${errors.join('; ')}`).toEqual([]);
+
+    // Real render proof: the branding page container is present (CSS vars below live on :root
+    // app-wide and do NOT prove THIS page rendered — a redirect would still expose them).
+    // TODO(needs_staging): confirm 'branding-page' renders against deployed staging.
+    await expect(page.getByTestId('branding-page')).toBeVisible({ timeout: 15000 });
 
     const cssVars = await page.evaluate(() => {
       const style = getComputedStyle(document.documentElement);
@@ -365,6 +380,32 @@ test.describe('Flow: Admin — Dashboard, Menu CRUD, Branding, Settings, Signals
     }
   });
 
+  // TODO(needs_staging): cross-tenant isolation. mock-auth always returns the SAME tenant, so a
+  // real second-tenant locationId (from staging, e.g. process.env.SECOND_TENANT_LOCATION_ID) is
+  // required to prove dashboard/snapshot, couriers, signals and alerts return 403/404 for a
+  // foreign location. A nil/all-zero UUID is forbidden (it 404s by absence, proving nothing).
+
+  // ──────────────────────────────────────────────────────────────
+  // FLOW 11b: Negative control — owner API rejects unauthenticated calls (exact 401)
+  // ──────────────────────────────────────────────────────────────
+  test('Flow 11b: Admin — owner endpoints return 401 without a token', async ({ request }) => {
+    // server.ts onRequest hook guards every /api/owner/ prefix → exactly 401 when no Bearer.
+    const noAuthSnapshot = await request.get(
+      `${BASE}/api/owner/locations/${activeLocationId}/dashboard/snapshot`
+    );
+    expect(noAuthSnapshot.status()).toBe(401);
+
+    const noAuthCatCreate = await request.post(`${BASE}/api/owner/menu/categories`, {
+      data: { name: `E2E-NoAuth-${TS}` },
+    });
+    expect(noAuthCatCreate.status()).toBe(401);
+
+    const noAuthCouriers = await request.get(
+      `${BASE}/api/owner/locations/${activeLocationId}/couriers`
+    );
+    expect(noAuthCouriers.status()).toBe(401);
+  });
+
   // ──────────────────────────────────────────────────────────────
   // FLOW 12: Persistence — admin pages survive refresh
   // ──────────────────────────────────────────────────────────────
@@ -376,28 +417,23 @@ test.describe('Flow: Admin — Dashboard, Menu CRUD, Branding, Settings, Signals
       localStorage.setItem('dos_access_token', token);
     }, authToken);
 
+    // Real render proof at every step: the page's own testid must be visible (a long body or
+    // an error/redirect page must NOT pass).
+    // TODO(needs_staging): confirm these testids render against deployed staging.
     // Dashboard
     await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
-    let body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(200);
+    await expect(page.getByTestId('ws-status-dot')).toBeVisible({ timeout: 15000 });
 
     await page.reload({ waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
-    body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(200);
+    await expect(page.getByTestId('ws-status-dot')).toBeVisible({ timeout: 15000 });
 
     // Navigate to menu page
     await page.goto(`${BASE}/admin/menu`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
-    body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(200);
+    await expect(page.getByTestId('kitchen-busy-toggle')).toBeVisible({ timeout: 15000 });
 
     // Back to dashboard
     await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
-    body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(200);
+    await expect(page.getByTestId('ws-status-dot')).toBeVisible({ timeout: 15000 });
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
 

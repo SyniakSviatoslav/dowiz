@@ -29,26 +29,39 @@ const base: NotificationData = {
   deliveryAddress: 'Rruga Myslym Shyri, Pall. 5',
 };
 
+// A leak is the customer's phone surviving in the body in ANY format: '+355691234567',
+// '355691234567', '+355 69 123 4567', etc. all collapse to the same digit run, so compare
+// digit-only projections rather than one literal spelling (which a reformat would slip past).
+const phoneDigits = (base.customerPhone ?? '').replace(/\D/g, '');
+const leaksPhone = (text: string): boolean => text.replace(/\D/g, '').includes(phoneDigits);
+
 test("level 'full' → body carries the customer phone", () => {
   const { text } = renderTelegramMessage({ type: 'order.created' }, { ...base, alertDetail: 'full' }, 'sq');
-  assert.ok(text.includes('+355691234567'), 'phone present at full detail');
+  assert.ok(leaksPhone(text), 'phone present at full detail');
 });
 
 test("level 'area' (default) → NO phone, NO house number, coarse street only", () => {
   const { text } = renderTelegramMessage({ type: 'order.created' }, { ...base, alertDetail: 'area' }, 'sq');
-  assert.ok(!text.includes('+355691234567'), 'phone withheld at area detail');
+  // Positive control: an empty/omitted body would pass every negative below, proving nothing.
+  // The order.created body carries order identity (not the address — that rides the auth buttons),
+  // so require the order ref + total to render → this test proves "area" (not "broken/blank").
+  assert.ok(text.includes('#A1') && text.includes('1500'), 'order body rendered (non-empty) at area detail');
+  assert.ok(!leaksPhone(text), 'phone withheld at area detail (any format)');
   assert.ok(!text.includes('Pall. 5'), 'house/building number withheld at area detail');
 });
 
 test("level 'minimal' → no phone, no address at all", () => {
   const { text } = renderTelegramMessage({ type: 'order.created' }, { ...base, alertDetail: 'minimal' }, 'sq');
-  assert.ok(!text.includes('+355691234567'), 'phone withheld');
+  assert.ok(!leaksPhone(text), 'phone withheld (any format)');
   assert.ok(!text.includes('Myslym Shyri'), 'address fully withheld at minimal detail');
 });
 
 test('unset alertDetail defaults to area (privacy-preserving) — no phone leaks', () => {
   const { text } = renderTelegramMessage({ type: 'order.created' }, base, 'sq');
-  assert.ok(!text.includes('+355691234567'), 'default omits phone (fail-safe to area)');
+  // Positive control: prove the default actually rendered a real body (order ref + total), not blank
+  // — otherwise the phone-absence assertion below is vacuously true.
+  assert.ok(text.includes('#A1') && text.includes('1500'), 'default renders the order body (fail-safe to area)');
+  assert.ok(!leaksPhone(text), 'default omits phone (fail-safe to area, any format)');
 });
 
 test('owner keeps an authenticated action path (in-app buttons) at area detail', () => {

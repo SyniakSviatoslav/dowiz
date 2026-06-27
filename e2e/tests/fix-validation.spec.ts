@@ -1,10 +1,22 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { expectJwt } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 // WS host must track BASE — a staging-signed token sent to the prod WS can't be
 // validated (different signing key), so the hardcoded prod URL never auth_success'd.
 const WS_BASE = BASE.replace(/^http/, 'ws');
+
+// P0-1/P0-2 probe custom-domain SUBDOMAIN routing, which only exists on the prod
+// `*.dowiz.org` wildcard (there is no staging custom-domain analog). Both are READ-ONLY
+// GETs (no writes), so the prod default is safe; override via SUBDOMAIN_BASE if needed.
+// eslint-disable-next-line local/no-prod-base-in-test -- read-only subdomain-routing probe, env-overridable, no staging analog
+const SUBDOMAIN_BASE = process.env.SUBDOMAIN_BASE || 'https://demo-location.dowiz.org';
+
+// This spec MUTATES via BASE (PUT /api/owner/settings, mock-auth token mints) — fail fast
+// if BASE points at prod so a run can never write to production (Test Integrity #6).
+test.beforeAll(() => requireStaging(BASE));
 
 // ── Helper: get real auth token from mock-auth endpoint ──
 async function getOwnerToken(request: any): Promise<{ access_token: string; userId: string; activeLocationId: string }> {
@@ -20,10 +32,10 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
   // ═══════════════════════════════════════════════════════
   // P0: Subdomain routing
   // ═══════════════════════════════════════════════════════
-  test('P0-1: demo-location.dowiz.org/admin returns SPA (not 404 JSON)', async ({ page }) => {
+  test('P0-1: subdomain /admin returns SPA (not 404 JSON)', async ({ page }) => {
     // BEFORE: Subdomain routing rewrote /admin → /s/demo-location → 404 JSON
     // AFTER: Added /admin to exclusion list, serves SPA shell
-    const response = await page.goto('https://demo-location.dowiz.org/admin');
+    const response = await page.goto(`${SUBDOMAIN_BASE}/admin`);
     expect(response?.status()).toBe(200);
 
     // NOT: the old {"error":"Not found","path":"/s/demo-location"} JSON response
@@ -35,7 +47,7 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
   });
 
   test('P0-2: SSR still works on custom domain for /s/:slug', async ({ page }) => {
-    const response = await page.goto('https://demo-location.dowiz.org/s/demo');
+    const response = await page.goto(`${SUBDOMAIN_BASE}/s/demo`);
     expect(response?.status()).toBe(200);
 
     // SSR product cards render
@@ -101,6 +113,45 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
     expect(result.events).toContain('msg:subscribed');
   });
 
+  test('P0-3b: WS owner CANNOT subscribe to a FOREIGN tenant room (IDOR negative)', async ({ request, page }) => {
+    const { access_token } = await getOwnerToken(request);
+    // A well-formed location id the owner has NO membership on. ownerCanAccessRoom()
+    // (memberships WHERE user_id AND location_id AND role='owner') must reject it with
+    // {type:'error', error:'Forbidden room'} and never emit 'subscribed' (websocket.ts:181-184).
+    // TODO(needs-staging): use a REAL second tenant's location id (one that EXISTS but this
+    // owner does not own) for the strongest IDOR proof — a random uuid exercises the same
+    // membership gate but also misses by absence. Tracked in needs_staging.
+    const foreignRoom = `location:${randomUUID()}:dashboard`;
+
+    const result = await page.evaluate(async ({ token, wsBase, room }) => {
+      const wsUrl = `${wsBase}/ws?token=${token}`;
+      return new Promise<{ events: string[] }>((resolve) => {
+        const events: string[] = [];
+        const ws = new WebSocket(wsUrl);
+        const timer = setTimeout(() => { ws.close(); resolve({ events: [...events, 'timeout'] }); }, 10000);
+        ws.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            events.push(`msg:${data.type}`);
+            if (data.type === 'auth_success') {
+              ws.send(JSON.stringify({ type: 'subscribe', room }));
+            }
+            if (data.type === 'error' || data.type === 'subscribed') {
+              clearTimeout(timer); ws.close(); resolve({ events });
+            }
+          } catch { events.push('parse_error'); }
+        };
+        ws.onclose = (e) => { events.push(`close:${e.code}`); clearTimeout(timer); resolve({ events }); };
+      });
+    }, { token: access_token, wsBase: WS_BASE, room: foreignRoom });
+
+    console.log(`P0-3b: foreign-room result:`, JSON.stringify(result.events));
+    // PROOF: auth succeeds, but the foreign-tenant subscribe is REJECTED, never granted.
+    expect(result.events).toContain('msg:auth_success');
+    expect(result.events).toContain('msg:error');
+    expect(result.events).not.toContain('msg:subscribed');
+  });
+
   test('P0-4: WS with bad token does not 1008-close immediately (server waits for auth)', async ({ page }) => {
     // BEFORE: server would 1008-close on first non-auth message (subscribe sent immediately)
     // AFTER: server reads ?token= from URL, buffers messages until auth resolves, or waits for auth timeout
@@ -137,6 +188,10 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
     // - stays open until we timeout at 7s
     // Either way, it proves the server doesn't 1008-close on first subscribe message
     expect(result.events).toContain('open');
+    // PROOF (finding-2): a BOGUS token must NEVER authenticate. 'open' alone is vacuous
+    // (it fires before any auth check); these go RED if the server ever accepts a bad token.
+    expect(result.events).not.toContain('msg:auth_success');
+    expect(result.events).not.toContain('msg:subscribed');
   });
 
   test('P0-5: Frontend sends auth message + reset on auth_success only', async ({ page }) => {
@@ -257,6 +312,33 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
     console.log(`P1-1: Settings save verified — hours and address persisted correctly`);
   });
 
+  test('P1-1b: PUT /api/owner/settings rejects unauthenticated + non-owner (negative controls)', async ({ request }) => {
+    // Test Integrity #4: a protected route needs a NEGATIVE control so the gate isn't a no-op.
+    // The POSITIVE control (valid owner → 200) is P1-1 above.
+    const payload = { address: 'IDOR Attempt, Tirana' };
+
+    // (1) NO Authorization header → getLocationId() returns null → 401 (spa-proxy.ts:662).
+    const noAuth = await request.put(`${BASE}/api/owner/settings`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: payload,
+    });
+    expect(noAuth.status()).toBe(401);
+
+    // (2) Valid COURIER token (role !== 'owner') → getLocationId() returns null → 401.
+    //   The handler conflates wrong-role into 401 (no 403 branch; spa-proxy.ts:59,662), so we
+    //   assert the EXACT status the route returns rather than a permissive set. Rejected before
+    //   any UPDATE runs (getLocationId precedes settingsSchema.parse), so no state mutates.
+    const courierRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'courier' } });
+    expect(courierRes.status()).toBe(200);
+    const { access_token: courierToken } = await courierRes.json();
+    expectJwt(courierToken, 'courier access_token');
+    const wrongRole = await request.put(`${BASE}/api/owner/settings`, {
+      headers: { Authorization: `Bearer ${courierToken}`, 'Content-Type': 'application/json' },
+      data: payload,
+    });
+    expect(wrongRole.status()).toBe(401);
+  });
+
   test('P1-2: Settings address is NOT set to location UUID (regression check)', async ({ request }) => {
     const { access_token } = await getOwnerToken(request);
     const getRes = await request.get(`${BASE}/api/owner/settings`, {
@@ -324,7 +406,7 @@ test.describe('Bugfix Validation — E2E Behavioral Proofs', () => {
     console.log(`P1-4: ConfirmDialog role="alertdialog" in DOM: ${hasAlertDialogRole}`);
     // The dialog may not be visible until triggered (delete button click)
     // At minimum verify the JS bundle loaded and page renders
-    expect(page.locator('#root')).toBeVisible();
+    await expect(page.locator('#root')).toBeVisible({ timeout: 15000 });
   });
 
   // ═══════════════════════════════════════════════════════

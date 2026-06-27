@@ -2,7 +2,6 @@ import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import rateLimit from '@fastify/rate-limit';
-import crypto from 'node:crypto';
 import { Pool } from 'pg';
 
 // Integration proof for the soft-access-gate route + workers (ADR-soft-access-gate).
@@ -37,9 +36,11 @@ const PRIVACY_VERSION = '2026-06-20'; // matches config default PRIVACY_NOTICE_V
 let pool: Pool;
 const sends: Array<{ name: string; data: any }> = [];
 
-function hashIp(ip: string) {
-  return crypto.createHash('sha256').update(ip).digest('hex').slice(0, 16);
-}
+// Golden ip_hash pins (unsalted SHA-256(ip).slice(0,16)). NOT recomputed with a local
+// mirror of the route's hashing — a mirror would silently track any route algorithm
+// change (e.g. if it ever consumed IP_HASH_SALT), so these are frozen literals on purpose.
+const IP_HASH_FLY = 'e183220b699c10a8';  // SHA-256('198.51.100.7').slice(0,16)
+const IP_HASH_XFF = '6694f83c9f476da3';  // SHA-256('1.2.3.4').slice(0,16)
 
 async function buildApp() {
   const { default: accessRequestRoutes } = await import('../src/routes/public/access-requests.js');
@@ -96,8 +97,8 @@ test('consent:true → 200, row with consent_at + privacy_version + ip_hash, one
   assert.equal(r.rows[0].privacy_version, PRIVACY_VERSION);
   assert.equal(r.rows[0].locale, 'en');
   // B2: ip_hash derives from Fly-Client-IP, NEVER from the spoofed X-Forwarded-For.
-  assert.equal(r.rows[0].ip_hash, hashIp(fly), 'ip_hash from Fly-Client-IP');
-  assert.notEqual(r.rows[0].ip_hash, hashIp('1.2.3.4'), 'ip_hash NOT from X-Forwarded-For');
+  assert.equal(r.rows[0].ip_hash, IP_HASH_FLY, 'ip_hash = unsalted SHA-256 of Fly-Client-IP 198.51.100.7');
+  assert.notEqual(r.rows[0].ip_hash, IP_HASH_XFF, 'ip_hash NOT derived from X-Forwarded-For 1.2.3.4');
 
   assert.equal(sends.length, 1, 'one enqueue on a new row');
   assert.equal(sends[0].name, 'access-request.notify');
@@ -159,4 +160,22 @@ test('prod with NO Fly-Client-IP → fails closed to a shared bucket (never trus
   } finally {
     process.env.NODE_ENV = prevEnv;
   }
+});
+
+test('per-IP rate limit: same Fly-Client-IP → 6th request 429 (route 5/min override beats the global 1000)', async () => {
+  // Dedicated IP unused by any other test → a clean per-key bucket. Exercises the route-level
+  // `config.rateLimit` (max:5); removing that block falls back to the global max:1000 and the
+  // 6th call would 200 → this assertion turns red. Guards the per-PII-endpoint throttle.
+  const ip = '198.51.100.42';
+  const hdrs = { 'content-type': 'application/json', 'fly-client-ip': ip };
+  const statuses: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    const res = await app.inject({
+      method: 'POST', url: '/api/access-requests', headers: hdrs,
+      payload: JSON.stringify({ email: `rl${i}@example.com`, consent: true }),
+    });
+    statuses.push(res.statusCode);
+  }
+  assert.deepEqual(statuses.slice(0, 5), [200, 200, 200, 200, 200], 'first 5 within the 5/min budget');
+  assert.equal(statuses[5], 429, '6th same-IP request rejected by the per-route 5/min limiter');
 });

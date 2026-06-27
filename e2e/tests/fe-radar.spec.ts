@@ -1,6 +1,11 @@
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+// Never default to the PROD host: this spec hits the /dev/mock-auth token minter, so a
+// prod default would exercise an auth backdoor against production. Default to staging and
+// hard-guard in beforeAll.
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 // ── Collectors ──
 interface NetworkRecord { url: string; method: string; status: number; duration: number; type: string; }
@@ -51,6 +56,8 @@ test.describe('FE-Radar — Full Surface Scan', () => {
   let ctx: BrowserContext;
 
   test.beforeAll(async ({ browser }) => {
+    // This spec mints tokens via /dev/mock-auth — refuse to run against prod/unknown targets.
+    requireStaging(BASE);
     ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   });
 
@@ -79,20 +86,29 @@ test.describe('FE-Radar — Full Surface Scan', () => {
     const page = await ctx.newPage();
     setupCollectors(page);
     emit('checkout', 'navigate', 'OK', 'Navigating to /s/demo/checkout');
-    // First add an item to cart via localStorage so checkout renders with content
+    // Add an item to the cart via localStorage so checkout renders the FORM (not the
+    // empty-cart EmptyState). The cart key is `dos_cart_<locationId>` (CartProvider) — a UUID
+    // resolved at runtime, NOT the slug. Read the key the provider persists on mount, then
+    // inject a valid CartItem into THAT key (the old `dowiz_cart_demo` key never landed).
     await page.goto(`${BASE}/s/demo`, { waitUntil: 'networkidle', timeout: 30000 });
-    await page.evaluate(() => {
-      localStorage.setItem('dowiz_cart_demo', JSON.stringify([{ id: 'test_item_1', productId: 'test', name: 'Test Item', quantity: 1, price: 500 }]));
-    });
+    await page.waitForTimeout(2000); // let CartProvider mount and persist its dos_cart_<id> key
+    const cartKey = await page.evaluate(() =>
+      Object.keys(localStorage).find((k) => k.startsWith('dos_cart_')) || null,
+    );
+    expect(cartKey, 'CartProvider must persist a dos_cart_<locationId> key once the menu resolves').not.toBeNull();
+    await page.evaluate((key) => {
+      localStorage.setItem(
+        key as string,
+        JSON.stringify({ version: 1, items: [{ id: 'test_item_1', productId: 'test', name: 'Test Item', quantity: 1, price: 500 }], pricedVersion: null }),
+      );
+    }, cartKey);
     await page.goto(`${BASE}/s/demo/checkout`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(2000);
-    const body = await page.textContent('body');
-    if (body.includes('Checkout') || body.includes('checkout') || body.includes('Phone') || body.includes('Name')) {
-      emit('checkout', 'render', 'OK', 'Checkout form rendered');
-    } else {
-      emit('checkout', 'render', 'ISSUE', 'No checkout form text found');
-      issues.push({ surface: 'checkout', step: 'render', expected: 'Checkout form visible', actual: 'Body has no checkout text', evidence: body.substring(0, 200), severity: '🟠', hypothesis: 'Cart is empty → EmptyState shown. Need to place item in cart first.' });
-    }
+    // A non-empty cart MUST render the form (phone field + total); an empty cart shows the
+    // EmptyState with no phone field. Assert the real form element, not loose body text.
+    await expect(page.locator('[data-testid=checkout-phone]'), 'checkout form (phone field) must render with a non-empty cart').toBeVisible();
+    await expect(page.locator('[data-testid=checkout-total]'), 'checkout total must render with a non-empty cart').toBeVisible();
+    emit('checkout', 'render', 'OK', 'Checkout form rendered');
     checkIssues('checkout', page);
     await page.close();
   });
@@ -104,9 +120,11 @@ test.describe('FE-Radar — Full Surface Scan', () => {
     emit('order-status', 'navigate', 'OK', 'Navigating to /s/demo/order/test-123');
     await page.goto(`${BASE}/s/demo/order/test-123`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(2000);
-    // Order status with mock ID should show error/not-found state
-    const body = await page.textContent('body');
-    emit('order-status', 'render', 'OK', `Body length: ${body.length}`);
+    // A non-existent order id MUST resolve to the not-found / link-expired EmptyState, which
+    // always renders the "back to menu" CTA. Assert that recognisable element — emitting 'OK'
+    // unconditionally would pass on a spinner, blank shell, or 500.
+    await expect(page.locator('[data-testid=order-back-to-menu]'), 'unknown order id must render the not-found EmptyState (back-to-menu CTA)').toBeVisible();
+    emit('order-status', 'render', 'OK', 'Not-found state rendered');
     checkIssues('order-status', page);
     await page.close();
   });
@@ -131,16 +149,19 @@ test.describe('FE-Radar — Full Surface Scan', () => {
     // Login first via API
     const loginRes = await (await fetch(`${BASE}/api/dev/mock-auth`, { method: 'POST' })).json();
     const token = loginRes.access_token;
+    expectJwt(token, 'mock-auth access_token'); // '' / 'null' / an error string must not pass
+    // TODO(needs_staging): negative control — this token is scoped to ONE tenant. Add an assertion
+    // that navigating to a *second* real tenant's /admin resource is rejected (no cross-tenant read).
+    // Requires a real 2nd-tenant id from a live staging seed; do not fake with a nil/zero id.
     await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.evaluate((t) => { localStorage.setItem('dos_access_token', t); }, token);
     emit('admin-dashboard', 'navigate', 'OK', 'Navigating to /admin with stored token');
     await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(3000);
-    const body = await page.textContent('body');
-    const hasData = body.includes('Pending') || body.includes('Orders') || body.includes('order') || body.includes('Revenue');
-    emit('admin-dashboard', 'render', hasData ? 'OK' : 'ISSUE', `Data visible: ${hasData}, length: ${body.length}`);
-    
-    // Check WebSocket: look for WS connections in network
+    // The dashboard always mounts the realtime connection indicator; assert it instead of a
+    // body-text OR-chain (an error page / login redirect shell would satisfy loose words).
+    await expect(page.locator('[data-testid=ws-status-dot]'), 'authenticated dashboard must render the realtime status indicator').toBeVisible();
+    emit('admin-dashboard', 'render', 'OK', 'Dashboard rendered');
     checkIssues('admin-dashboard', page);
     await page.close();
   });
@@ -150,13 +171,15 @@ test.describe('FE-Radar — Full Surface Scan', () => {
     const page = await ctx.newPage();
     setupCollectors(page);
     const loginRes = await (await fetch(`${BASE}/api/dev/mock-auth`, { method: 'POST' })).json();
+    expectJwt(loginRes.access_token, 'mock-auth access_token');
     await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.evaluate((t) => { localStorage.setItem('dos_access_token', t); }, loginRes.access_token);
     emit('admin-menu', 'navigate', 'OK', 'Navigating to /admin/menu');
     await page.goto(`${BASE}/admin/menu`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(3000);
-    const body = await page.textContent('body');
-    emit('admin-menu', 'render', body.length > 200 ? 'OK' : 'ISSUE', `Body length: ${body.length}`);
+    // body.length > 200 passes on an error page / login shell / skeleton. Assert a real control.
+    await expect(page.locator('[data-testid=kitchen-busy-toggle]'), 'menu manager must render its kitchen-busy control').toBeVisible();
+    emit('admin-menu', 'render', 'OK', 'Menu manager rendered');
     checkIssues('admin-menu', page);
     await page.close();
   });
@@ -166,13 +189,14 @@ test.describe('FE-Radar — Full Surface Scan', () => {
     const page = await ctx.newPage();
     setupCollectors(page);
     const loginRes = await (await fetch(`${BASE}/api/dev/mock-auth`, { method: 'POST' })).json();
+    expectJwt(loginRes.access_token, 'mock-auth access_token');
     await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.evaluate((t) => { localStorage.setItem('dos_access_token', t); }, loginRes.access_token);
     emit('admin-settings', 'navigate', 'OK');
     await page.goto(`${BASE}/admin/settings`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(3000);
-    const body = await page.textContent('body');
-    emit('admin-settings', 'render', body.length > 200 ? 'OK' : 'ISSUE', `Body length: ${body.length}`);
+    await expect(page.locator('[data-testid=notif-categories]'), 'settings page must render its notification-category controls').toBeVisible();
+    emit('admin-settings', 'render', 'OK', 'Settings rendered');
     checkIssues('admin-settings', page);
     await page.close();
   });
@@ -182,13 +206,14 @@ test.describe('FE-Radar — Full Surface Scan', () => {
     const page = await ctx.newPage();
     setupCollectors(page);
     const loginRes = await (await fetch(`${BASE}/api/dev/mock-auth`, { method: 'POST' })).json();
+    expectJwt(loginRes.access_token, 'mock-auth access_token');
     await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.evaluate((t) => { localStorage.setItem('dos_access_token', t); }, loginRes.access_token);
     emit('admin-branding', 'navigate', 'OK');
     await page.goto(`${BASE}/admin/branding`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(3000);
-    const body = await page.textContent('body');
-    emit('admin-branding', 'render', body.length > 200 ? 'OK' : 'ISSUE', `Body length: ${body.length}`);
+    await expect(page.locator('[data-testid=branding-page]'), 'branding page container must render').toBeVisible();
+    emit('admin-branding', 'render', 'OK', 'Branding rendered');
     checkIssues('admin-branding', page);
     await page.close();
   });
@@ -198,13 +223,15 @@ test.describe('FE-Radar — Full Surface Scan', () => {
     const page = await ctx.newPage();
     setupCollectors(page);
     const loginRes = await (await fetch(`${BASE}/api/dev/mock-auth`, { method: 'POST' })).json();
+    expectJwt(loginRes.access_token, 'mock-auth access_token');
     await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.evaluate((t) => { localStorage.setItem('dos_access_token', t); }, loginRes.access_token);
     emit('admin-couriers', 'navigate', 'OK');
     await page.goto(`${BASE}/admin/couriers`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(3000);
-    const body = await page.textContent('body');
-    emit('admin-couriers', 'render', body.length > 200 ? 'OK' : 'ISSUE', `Body length: ${body.length}`);
+    // CouriersPage has no testid; assert its content-specific heading (not body.length).
+    await expect(page.getByRole('heading', { name: /Couriers/i }), 'couriers page heading must render').toBeVisible();
+    emit('admin-couriers', 'render', 'OK', 'Couriers rendered');
     checkIssues('admin-couriers', page);
     await page.close();
   });
@@ -214,13 +241,14 @@ test.describe('FE-Radar — Full Surface Scan', () => {
     const page = await ctx.newPage();
     setupCollectors(page);
     const loginRes = await (await fetch(`${BASE}/api/dev/mock-auth`, { method: 'POST' })).json();
+    expectJwt(loginRes.access_token, 'mock-auth access_token');
     await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.evaluate((t) => { localStorage.setItem('dos_access_token', t); }, loginRes.access_token);
     emit('admin-analytics', 'navigate', 'OK');
     await page.goto(`${BASE}/admin/analytics`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(3000);
-    const body = await page.textContent('body');
-    emit('admin-analytics', 'render', body.length > 200 ? 'OK' : 'ISSUE', `Body length: ${body.length}`);
+    await expect(page.locator('[data-testid=kpi-card]').first(), 'analytics page must render at least one KPI card').toBeVisible();
+    emit('admin-analytics', 'render', 'OK', 'Analytics rendered');
     checkIssues('admin-analytics', page);
     await page.close();
   });

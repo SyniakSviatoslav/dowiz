@@ -35,7 +35,40 @@ test('Theme Renderer', async (t) => {
       bg_color: '#ffffff',
       font_family: 'system-ui'
     });
-    assert.ok(!outDark.warnings.includes('LOW_CONTRAST_PRIMARY'));
+    // deepEqual (not !includes) so the assertion fails if warnings is
+    // undefined/null/throws or carries an unexpected token — a real value check.
+    assert.deepEqual(outDark.warnings, []);
+  });
+
+  await t.test('adjustColor packs RGB channels in correct order (hover variant)', () => {
+    // Known primary with distinct G and B channels so a channel-swap bug is
+    // observable. #0a7d2c - 20 => correct #006918 (a buggy g|b<<8|r<<16 packing
+    // would yield #001869). Asserts the exact derived hover value.
+    const out = renderTheme({
+      primary_color: '#0a7d2c',
+      secondary_color: '#d62828',
+      font_family: 'system-ui'
+    });
+    assert.ok(
+      out.css.includes('--brand-primary-hover: #006918'),
+      `Expected --brand-primary-hover: #006918, got css: ${out.css}`
+    );
+  });
+
+  await t.test('logo_url is not a CSS-injection vector', () => {
+    // Verbatim interpolation into url('...') must not let a payload break out
+    // and inject a sibling rule. If it does, the injected declaration appears
+    // in the output CSS.
+    const out = renderTheme({
+      primary_color: '#0a7d2c',
+      secondary_color: '#d62828',
+      font_family: 'system-ui',
+      logo_url: "x'); } body { background: red; } a { content: url('y"
+    });
+    assert.ok(
+      !out.css.includes('background: red'),
+      `logo_url broke out of url() and injected CSS: ${out.css}`
+    );
   });
 
   await t.test('Google Fonts subsets', () => {

@@ -23,9 +23,10 @@ test('router — RUN a registered loop on a tag match', () => {
 });
 
 test('router — retired loops are not matched', () => {
-  // "perf" only belongs to a retired loop → no active match → admissible → BUILD
+  // "perf" only belongs to a retired loop → no active match → admissible (perf template) → BUILD
   const d = route('performance loop for slow queries', REG);
-  assert.notEqual(d.outcome, 'RUN');
+  assert.equal(d.outcome, 'BUILD');
+  assert.equal(d.loopId, undefined);
 });
 
 test('router — BUILD when loop-worthy + no match + oracle-admissible', () => {
@@ -53,4 +54,24 @@ test('scoreMatches — ranks by tag overlap; ignores retired', () => {
   const m = scoreMatches('i18n parity loop', REG);
   assert.equal(m[0]!.loop.id, 'i18n');
   assert.ok(!m.some((x) => x.loop.id === 'retired-x'));
+});
+
+test('router — equal-score tie between two active loops → RUN flagged ambiguous, low confidence', () => {
+  // both loops carry the SAME specific tag, identical goals contribute no extra bonus → exact score tie.
+  const tieReg: RegistryLoop[] = [
+    { id: 'alpha', goal: 'alpha distinct objective', trigger_tags: ['qa'], scope_class: 'A', security_carveout: [], status: 'active' },
+    { id: 'beta', goal: 'beta distinct objective', trigger_tags: ['qa'], scope_class: 'A', security_carveout: [], status: 'active' },
+  ];
+  const d = route('qa loop', tieReg);
+  assert.equal(d.outcome, 'RUN');
+  assert.ok(d.confidence <= 0.6, `tie confidence must be capped, got ${d.confidence}`);
+  assert.match(d.announce, /ambiguous/i);
+});
+
+test('router — empty registry never RUNs; falls through to BUILD/BOUNCE', () => {
+  assert.equal(scoreMatches('i18n coverage loop', []).length, 0);
+  const d = route('i18n coverage loop', []);
+  assert.notEqual(d.outcome, 'RUN');
+  assert.ok(d.outcome === 'BUILD' || d.outcome === 'BOUNCE', `expected BUILD/BOUNCE, got ${d.outcome}`);
+  assert.equal(d.loopId, undefined);
 });

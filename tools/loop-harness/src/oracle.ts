@@ -72,7 +72,10 @@ export async function evaluate(hooks: OracleHooks, thr: OracleThresholds = DEFAU
   // §2.3 — measurably faster
   const after = await hooks.measure();
   const speedup_pct = before > 0 ? ((before - after) / before) * 100 : 0;
-  if (speedup_pct < thr.minSpeedupPct) {
+  // NaN-safe gate: an unparseable/non-finite benchmark CANNOT prove a gain. Use the
+  // negated `>=` so NaN (NaN >= thr === false → !false → true) falls through to rollback,
+  // instead of `< thr` which is false for NaN and would silently KEEP a broken candidate.
+  if (!(speedup_pct >= thr.minSpeedupPct)) {
     await hooks.revert();
     return {
       ...base, decision: 'rolled_back', green: true, security_ok: true, before, after,

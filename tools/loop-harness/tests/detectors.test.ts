@@ -31,13 +31,41 @@ test('configTuneDetector — emits a repo-perf candidate per non-current value; 
   assert.deepEqual(ids, ['repo-perf:tune:N:200', 'repo-perf:tune:N:50']); // 100 == current → skipped
 });
 
+test('configTuneDetector — knob not found (stale declaration) → silently skipped, zero candidates', () => {
+  const { dir } = repo(100);
+  const stale: Tunable = { ...tunable(['50']), find: 'NOPE = (\\d+)' }; // bench.js has no "NOPE = …"
+  assert.deepEqual(configTuneDetector(dir, [stale]), []); // exercises the `cur == null → continue` path
+});
+
+test('classify — firm-boundary AREA tag is forced to Class B (never autonomously mutated)', () => {
+  const { dir } = repo(100);
+  const cand = configTuneDetector(dir, [tunable(['50'])])[0]!; // a real Class-A candidate
+  assert.equal(classify(cand).class, 'A', 'positive control: a config tune is Class A');
+  for (const area of ['auth', 'auth rls', 'rls', 'pii', 'secret', 'payment', 'schema migration', 'tenant isolation']) {
+    assert.equal(classify({ ...cand, area }).class, 'B', `area="${area}" must be Class B`);
+  }
+});
+
+test('classify — firm-boundary keyword in the change TEXT (benign area) is forced to Class B', () => {
+  const { dir } = repo(100);
+  const cand = configTuneDetector(dir, [tunable(['50'])])[0]!;
+  const k = classify({ ...cand, area: 'dev-loop perf', pattern: 'rotate jwt secret', action: 'edit credential' });
+  assert.equal(k.class, 'B', 'firm-boundary keyword in pattern/action → B');
+});
+
 test('full pipeline — detector → classify A → oracle KEEPS a faster value (file tuned on disk)', async () => {
   const { dir, file } = repo(100);
   const [cand] = configTuneDetector(dir, [tunable(['50'])]);
   assert.equal(classify(cand!).class, 'A', 'a config tune is Class A');
   const built = buildHooks(cand!);
   assert.ok('hooks' in built, 'repo-perf candidate yields oracle hooks');
-  const v = await evaluate((built as { hooks: any }).hooks);
+  const hooks = (built as { hooks: any }).hooks;
+  // Hook SHAPE, not just key existence: a stub `{ hooks: {} }` must fail here, not blow up inside evaluate().
+  assert.equal(typeof hooks.reversible, 'boolean', 'reversible is a boolean flag');
+  for (const k of ['measure', 'apply', 'revert', 'green', 'security'] as const) {
+    assert.equal(typeof hooks[k], 'function', `oracle hook "${k}" is callable`);
+  }
+  const v = await evaluate(hooks);
   assert.equal(v.decision, 'kept');
   assert.equal(v.speedup_pct, 50); // 100 → 50
   assert.match(read(file), /N = 50/, 'tuned value kept on disk');
@@ -62,5 +90,10 @@ test('loadTunables — reads loops/autoupgrade.tunables.json', () => {
   const { dir } = repo();
   fs.mkdirSync(path.join(dir, 'loops'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'loops', 'autoupgrade.tunables.json'), JSON.stringify({ tunables: [tunable(['50'])] }));
-  assert.equal(loadTunables(dir).length, 1);
+  const loaded = loadTunables(dir);
+  // Length alone passes for a loader that returns [null]/[{}] — assert the actual decoded content.
+  assert.equal(loaded.length, 1);
+  assert.equal(loaded[0]!.id, 'N');
+  assert.equal(loaded[0]!.file, 'bench.js');
+  assert.deepEqual(loaded[0]!.candidates, ['50']);
 });

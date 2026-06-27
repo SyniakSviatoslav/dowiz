@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
 function uuid() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -8,7 +9,7 @@ function uuid() {
   });
 }
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 test.describe('Real API — Public Endpoints', () => {
 
@@ -68,6 +69,17 @@ test.describe('Real API — Public Endpoints', () => {
     expect(body.default_locale).toBe('sq');
     expect(body.supported_locales).toContain('sq');
     expect(body.categories.length).toBeGreaterThan(0);
+  });
+
+  test('GET /public/locations/:slug/menu 404s an unknown slug', async ({ request }) => {
+    // Exercise the absent-tenant path (apps/api/src/routes/public/menu.ts:170 →
+    // NOT_FOUND). Note: /s/:slug is NOT tested for 404 — it serves the SPA shell at
+    // HTTP 200 for any slug by design (ssr.ts → serveSpaShell); the client resolves
+    // an unknown tenant, so a 404 assertion there would be a false-red.
+    const resp = await request.get(`${BASE}/public/locations/this-slug-does-not-exist-xyz/menu`);
+    expect(resp.status()).toBe(404);
+    const body = await resp.json();
+    expect(body.code).toBe('NOT_FOUND');
   });
 
   test('GET /public/locations/:id/theme.css returns CSS', async ({ request }) => {
@@ -144,7 +156,11 @@ test.describe('Real API — Idempotency & Order Flow', () => {
   let PRODUCT_ID: string;
   let PIN: { lat: number; lng: number };
   test.beforeAll(async ({ request }) => {
-    const menu = await (await request.get(`${BASE}/public/locations/demo/menu`)).json();
+    // This describe POSTs real orders — never let it run against prod.
+    requireStaging(BASE);
+    const menuResp = await request.get(`${BASE}/public/locations/demo/menu`);
+    expect(menuResp.status(), 'demo menu setup must be 200').toBe(200);
+    const menu = await menuResp.json();
     LOCATION_ID = menu.location_id;
     PRODUCT_ID = (menu.categories || []).flatMap((c: any) => c.products || c.items || [])[0]?.id;
     // Deliver to the venue's own coordinates so the pin is always inside the
@@ -172,7 +188,12 @@ test.describe('Real API — Idempotency & Order Flow', () => {
       data: { invalid: true },
       headers: { 'Content-Type': 'application/json' }
     });
-    expect(resp.status()).toBeGreaterThanOrEqual(400);
+    // EXACT 400 — a Zod parse failure returns VALIDATION_FAILED (apps/api/src/routes/orders.ts:89).
+    // A 500 (unhandled throw on bad input) must FAIL this test, not pass as "validation working".
+    expect(resp.status()).toBe(400);
+    const body = await resp.json();
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.error, 'validation error message present').toBeTruthy();
   });
 
   test('POST /api/orders creates order with valid data', async ({ request }) => {
@@ -200,6 +221,11 @@ test.describe('Real API — Idempotency & Order Flow', () => {
     expect(body.status).toBe('PENDING');
   });
 
+  // TODO(needs_staging): the runtime `test.skip` on the §4 velocity gate (429 /
+  // soft_confirm) is per-IP and only deterministic on a fresh CI IP. To delete the
+  // skip without flaking, run this spec from a dedicated staging IP with a reserved
+  // idempotency-test phone prefix so the baseline create is always 201, then assert
+  // 200 + same-id replay unconditionally.
   test('POST /api/orders rejects duplicate idempotency key', async ({ request }) => {
     const idemKey = uuid();
     const validOrder = {
@@ -238,16 +264,29 @@ test.describe('Real API — Security', () => {
     }
   });
 
-  test('Cross-tenant access rejected', async ({ request }) => {
-    const wrongLocationResp = await request.get(
+  test('Owner snapshot rejects an unauthenticated request (negative control)', async ({ request }) => {
+    // NEGATIVE control only: no credentials → 401 (auth gate fires before any tenant
+    // check). This does NOT prove cross-tenant isolation — see the TODO below.
+    const noAuthResp = await request.get(
       `${BASE}/api/owner/locations/00000000-0000-0000-0000-000000000001/dashboard/snapshot`
     );
-    expect(wrongLocationResp.status()).toBe(401);
+    expect(noAuthResp.status()).toBe(401);
+    // TODO(needs_staging): true cross-tenant isolation requires a POSITIVE control —
+    // authenticate as the demo owner, then GET another REAL tenant's location UUID with
+    // that valid token and assert 403/404 (not 401). That needs a real owner JWT + a
+    // second seeded tenant on staging; an all-zero UUID 404s by absence and proves
+    // nothing (Test-Integrity rule 5). Do not fake the token.
   });
 
-  test('CSP present on SSR pages', async ({ request }) => {
+  test('CSP present and locked-down on SSR pages', async ({ request }) => {
     const resp = await request.get(`${BASE}/s/demo`);
-    expect(resp.headers()['content-security-policy']).toBeDefined();
+    const csp = resp.headers()['content-security-policy'];
+    // Content, not just presence: the storefront CSP (apps/api/src/lib/spa-shell.ts)
+    // must default-deny to 'self' and never widen default-src to a wildcard.
+    expect(csp, 'CSP header present').toBeTruthy();
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).not.toContain('default-src *');
+    expect(csp).not.toContain("default-src 'unsafe-eval'");
   });
 
   test('Rate limit headers present', async ({ request }) => {

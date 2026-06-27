@@ -29,12 +29,14 @@ let courierId: string, locationId: string, shiftId: string, orderId: string;
 let lat: number, lng: number;
 let pingN = 0;
 
-async function buildApp() {
+async function buildApp(asCourierId: string = courierId) {
   const { default: courierShiftsRoutes } = await import('../src/routes/courier/shifts.js');
+  const { registerReplySendError } = await import('../src/lib/reply-send-error.js');
   const f = Fastify();
+  registerReplySendError(f); // route error paths use reply.sendError → 500 without it (A2 regression)
   await f.register(rateLimit, { max: 10000, timeWindow: '1 minute' });
   f.decorate('verifyAuth', async (request: any) => {
-    request.user = { sub: courierId, activeLocationId: locationId, role: 'courier' };
+    request.user = { sub: asCourierId, activeLocationId: locationId, role: 'courier' };
   });
   f.decorate('requireRole', () => async () => {});
   await f.register(courierShiftsRoutes, { db: pool, messageBus: { publish: async () => {} } });
@@ -117,30 +119,67 @@ test('P0-1: picked_up is active; delivered/assigned are NOT (consent boundary)',
   await pool.query('DELETE FROM courier_assignments WHERE order_id=$1', [orderId]);
   await addAssignment('delivered'); // finished → must NOT track
   assert.equal((await ping()).json().gps_stored, false, "'delivered' → NOT tracked");
+
+  // Terminal/non-active states are NOT in ACTIVE_DELIVERY_ASSIGNMENT_STATUSES → must NOT track.
+  // (Set = the courier_assignments status CHECK minus the active {accepted,picked_up}; 'failed' is
+  //  NOT a valid status for this table, so the real terminal set is cancelled/rejected/voided.)
+  for (const terminal of ['cancelled', 'rejected', 'voided']) {
+    await pool.query('DELETE FROM courier_assignments WHERE order_id=$1', [orderId]);
+    await addAssignment(terminal);
+    assert.equal((await ping()).json().gps_stored, false, `'${terminal}' (terminal) → NOT tracked`);
+  }
+});
+
+test('P0-1: a DIFFERENT authenticated courier cannot write GPS to a shift they do not own (IDOR)', async () => {
+  // shift_id is never taken from the request — the ping handler derives it from
+  // courier_shifts WHERE courier_id = request.user.sub. A second authenticated courier who does
+  // NOT own this shift must therefore get NO_ACTIVE_SHIFT and write ZERO rows to the victim shift.
+  const { randomUUID } = await import('node:crypto');
+  await addAssignment('accepted'); // victim has an ACTIVE delivery → would store if ownership leaked
+  const otherApp = await buildApp(randomUUID()); // authenticated, but owns no shift here
+  try {
+    const res = await otherApp.inject({
+      method: 'POST', url: '/shifts/ping',
+      headers: { 'content-type': 'application/json', authorization: `Bearer idor-${++pingN}` },
+      payload: JSON.stringify({ lat, lng }),
+    });
+    assert.equal(res.statusCode, 409, 'non-owner courier has no active shift → rejected');
+    assert.equal(res.json().code, 'NO_ACTIVE_SHIFT', 'rejected with NO_ACTIVE_SHIFT');
+    assert.equal(await positionCount(), 0, 'no position row written to the victim shift by a non-owner');
+  } finally {
+    await otherApp.close();
+  }
 });
 
 test('P0-1: heartbeat updates even when GPS withheld (liveness preserved)', async () => {
+  // Force a known-stale baseline so the assertion is deterministic regardless of DB sub-ms clock
+  // resolution — a 10ms sleep can collide with the same now() tick and pass on a broken update.
+  await pool.query(`UPDATE courier_shifts SET last_heartbeat_at = now() - interval '1 hour' WHERE id=$1`, [shiftId]);
   const before = await pool.query('SELECT last_heartbeat_at FROM courier_shifts WHERE id=$1', [shiftId]);
-  await new Promise(r => setTimeout(r, 10));
   await ping(); // no assignment → gps withheld
   const after = await pool.query('SELECT last_heartbeat_at FROM courier_shifts WHERE id=$1', [shiftId]);
-  assert.ok(new Date(after.rows[0].last_heartbeat_at) >= new Date(before.rows[0].last_heartbeat_at),
-    'heartbeat advanced despite GPS being withheld');
+  assert.ok(new Date(after.rows[0].last_heartbeat_at) > new Date(before.rows[0].last_heartbeat_at),
+    'heartbeat strictly advanced despite GPS being withheld');
 });
 
 test('P0-1: GPS purge cron deletes positions older than the retention window', async () => {
   const { CourierCronWorker } = await import('../src/workers/courier-cron.js');
   await addAssignment('accepted');
   await ping(); // writes a fresh row
-  // inject an old row directly
+  // inject one row OUTSIDE the 24h retention window (must be purged) and one just INSIDE it at 23h
+  // (boundary — must be RETAINED). Asserting both sides proves the cron deletes by age, not all rows.
   await pool.query(
     `INSERT INTO courier_positions (courier_id, location_id, shift_id, lat, lng, source, recorded_at)
      VALUES ($1,$2,$3,$4,$5,'gps', now() - interval '25 hours')`,
     [courierId, locationId, shiftId, lat, lng]);
-  assert.equal(await positionCount(), 2, 'fresh + old');
+  await pool.query(
+    `INSERT INTO courier_positions (courier_id, location_id, shift_id, lat, lng, source, recorded_at)
+     VALUES ($1,$2,$3,$4,$5,'gps', now() - interval '23 hours')`,
+    [courierId, locationId, shiftId, lat, lng]);
+  assert.equal(await positionCount(), 3, 'fresh + 23h (in-window) + 25h (out-of-window)');
   const worker: any = new CourierCronWorker(pool, { } as any, { publish: async () => {} } as any);
   await worker.handleGpsPurge();
-  assert.equal(await positionCount(), 1, 'old (>24h) purged, fresh kept');
+  assert.equal(await positionCount(), 2, 'only >24h purged; fresh + 23h-boundary row retained');
 });
 
 test('P0-2: NOT VALID constraint rejects a NEW whatsapp target, accepts telegram', async () => {

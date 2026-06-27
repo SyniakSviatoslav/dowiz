@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { expectUuid } from '../helpers/assert-shape';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 const BOT_SECRET = process.env.TELEGRAM_BOT_SECRET;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = 999999;
@@ -31,6 +32,12 @@ test.describe('Real service event notifications → Telegram', () => {
   let lastUpdateId: number = 0;
 
   test.beforeAll(async () => {
+    // Guard: this spec MUTATES (creates locations/orders, transitions status) — never run it
+    // against prod. And fail fast (not vacuously green) if the Telegram bot token is absent —
+    // without it getUpdates hits /botundefined/ and the message assertions below have nothing
+    // to match, so an empty result set would slip through as a false pass.
+    requireStaging(BASE);
+    expect(BOT_TOKEN ?? '', 'TELEGRAM_BOT_TOKEN must be a real bot token, not undefined').toMatch(/^\d+:[\w-]+$/);
     // Clear any pending updates to have clean slate
     const updates = await sendTelegramGetUpdates();
     if (updates.result && updates.result.length > 0) {
@@ -45,6 +52,7 @@ test.describe('Real service event notifications → Telegram', () => {
     expect(authRes.status).toBe(200);
     const authBody = await authRes.json();
     ownerToken = authBody.access_token;
+    expectJwt(ownerToken, 'ownerToken');
     const ownerId = authBody.userId;
 
     // Create a location via onboarding (skip to active)
@@ -63,6 +71,7 @@ test.describe('Real service event notifications → Telegram', () => {
     expect(startOnboarding.status).toBe(201);
     const onboardingBody = await startOnboarding.json();
     locationId = onboardingBody.locationId;
+    expectUuid(locationId, 'locationId');
 
     // Complete onboarding steps 1-6
     for (let step = 1; step <= 6; step++) {
@@ -110,17 +119,27 @@ test.describe('Real service event notifications → Telegram', () => {
     });
     // Note: We don't need to check status; the webhook will process it.
     // Instead, verify target becomes active via API.
-    const targetsRes = await fetch(`${BASE}/api/owner/locations/${locationId}/notifications/targets`, {
-      headers: await authHeaders(ownerToken),
-    });
-    expect(targetsRes.status).toBe(200);
-    const targetsBody = await targetsRes.json();
-    const tgTargets = targetsBody.targets.filter((t: any) => t.channel === 'telegram');
-    expect(tgTargets.length).toBeGreaterThanOrEqual(1);
-    const ourTarget = tgTargets.find((t: any) => t.address === String(CHAT_ID));
-    expect(ourTarget).toBeTruthy();
+    // The /start webhook is processed asynchronously, so reading targets immediately races it.
+    // Poll (≤15s) until our target is active. ponytail: bounded poll. ceiling: a worker slower
+    // than the budget fails (not a silent pass on a missing target).
+    // TODO(needs_staging): CHAT_ID is a fixed integer, so a target left 'active' by a PRIOR run
+    // could satisfy this without the current webhook completing — a per-run fixture (unique chat
+    // id linked via THIS run's connectToken) is required to make it fully non-vacuous.
+    let ourTarget: any;
+    const targetDeadline = Date.now() + 15000;
+    do {
+      const targetsRes = await fetch(`${BASE}/api/owner/locations/${locationId}/notifications/targets`, {
+        headers: await authHeaders(ownerToken),
+      });
+      expect(targetsRes.status).toBe(200);
+      const targetsBody = await targetsRes.json();
+      const tgTargets = targetsBody.targets.filter((t: any) => t.channel === 'telegram');
+      ourTarget = tgTargets.find((t: any) => t.address === String(CHAT_ID));
+      if (ourTarget?.status === 'active') break;
+      await new Promise(r => setTimeout(r, 2000));
+    } while (Date.now() < targetDeadline);
+    expect(ourTarget, 'telegram target for CHAT_ID must exist').toBeDefined();
     expect(ourTarget.status).toBe('active');
-    // (Optional) update lastUpdateId after the /start webhook? We'll just get updates after we send order.
 
     // 3. Create a product
     const productRes = await fetch(`${BASE}/api/owner/locations/${locationId}/products`, {
@@ -136,6 +155,7 @@ test.describe('Real service event notifications → Telegram', () => {
     expect(productRes.status).toBe(201);
     const productBody = await productRes.json();
     productId = productBody.id;
+    expectUuid(productId, 'productId');
 
     // 4. Create an order via customer endpoint (no auth)
     const orderPayload = {
@@ -156,32 +176,67 @@ test.describe('Real service event notifications → Telegram', () => {
     const orderBody = await orderRes.json();
     const orderId = orderBody.id;
     expectUuid(orderId, 'orderId');
+    // The Telegram template renders `#${orderId.substring(0,4).toUpperCase()}` (notifications/
+    // workers/index.ts) — anchor matches to THIS order so an unrelated 'NEW ORDER' message can't
+    // satisfy them (finding: text.includes('NEW ORDER') alone is forgeable by any stray message).
+    const shortId = orderId.substring(0, 4).toUpperCase();
 
-    // 5. Wait a moment for event processing
-    await new Promise(r => setTimeout(r, 3000));
-
-    // 6. Check for order.created telegram message
-    const updatesAfterOrder = await sendTelegramGetUpdates(lastUpdateId + 1);
-    expect(updatesAfterOrder.ok).toBeTruthy();
-    const result = updatesAfterOrder.result;
-    let orderCreatedMsg = null;
-    for (const upd of result) {
-      if (upd.message && upd.message.chat?.id === CHAT_ID) {
-        const text = upd.message.text;
-        if (text && text.includes('NEW ORDER')) {
-          orderCreatedMsg = text;
-          break;
+    // 5-6. Poll (≤20s) for the order.created message anchored to shortId. ponytail: bounded poll
+    // replaces the fixed 3s sleep. ceiling: a worker slower than the budget fails — but a fast
+    // broken pipeline can no longer pass vacuously on an empty result set (the toContain below
+    // fails when no anchored message arrived).
+    let orderCreatedMsg: string | null = null;
+    const createdDeadline = Date.now() + 20000;
+    do {
+      const updates = await sendTelegramGetUpdates(lastUpdateId + 1);
+      expect(updates.ok).toBe(true);
+      for (const upd of updates.result) {
+        if (upd.message?.chat?.id === CHAT_ID) {
+          const text = upd.message.text;
+          if (text && text.includes('NEW ORDER') && text.includes(`#${shortId}`)) {
+            orderCreatedMsg = text;
+          }
         }
       }
-    }
-    expect(orderCreatedMsg).toBeTruthy(`Expected order.created telegram message not found. Updates: ${JSON.stringify(result)}`);
+      if (updates.result.length > 0) {
+        lastUpdateId = updates.result[updates.result.length - 1].update_id + 1;
+      }
+      if (orderCreatedMsg) break;
+      await new Promise(r => setTimeout(r, 2000));
+    } while (Date.now() < createdDeadline);
+    expect(orderCreatedMsg, `order.created Telegram message for #${shortId} not found`).toContain(`NEW ORDER #${shortId}`);
 
-    // Update lastUpdateId to latest processed
-    if (updatesAfterOrder.result.length > 0) {
-      lastUpdateId = updatesAfterOrder.result[updatesAfterOrder.result.length - 1].update_id + 1;
-    }
+    // 7. Authz controls on PATCH /orders/:id/status BEFORE the valid transition — neither a 401
+    //    nor a 403 reaches the handler (preHandler [verifyAuth, requireRole(['owner'])]), so the
+    //    order state is untouched.
+    //    NEGATIVE — no token → 401 (verifyAuth).
+    const noAuthPatch = await fetch(`${BASE}/api/orders/${orderId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'DELIVERED' }),
+    });
+    expect(noAuthPatch.status).toBe(401);
+    //    NEGATIVE — wrong role (courier) → 403 (requireRole(['owner'])).
+    const courierAuth = await fetch(`${BASE}/api/dev/mock-auth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: 'courier' }),
+    });
+    expect(courierAuth.status).toBe(200);
+    const courierToken = (await courierAuth.json()).access_token;
+    expectJwt(courierToken, 'courierToken');
+    const wrongRolePatch = await fetch(`${BASE}/api/orders/${orderId}/status`, {
+      method: 'PATCH',
+      headers: await authHeaders(courierToken),
+      body: JSON.stringify({ status: 'DELIVERED' }),
+    });
+    expect(wrongRolePatch.status).toBe(403);
+    // TODO(needs_staging): true cross-tenant authz — a SECOND tenant's owner PATCHing this order
+    // must get 404 (orders.ts withTenant scopes the SELECT by user.userId → no rows). /dev/mock-auth
+    // always mints the SAME dev owner, so it cannot produce a foreign owner; a real 2nd-tenant
+    // fixture is required to assert the 404 without faking it.
 
-    // 7. Deliver the order via owner PATCH /api/orders/:id/status
+    // 7b. POSITIVE — the order's own owner delivers it.
     const deliverRes = await fetch(`${BASE}/api/orders/${orderId}/status`, {
       headers: await authHeaders(ownerToken),
       method: 'PATCH',
@@ -189,23 +244,30 @@ test.describe('Real service event notifications → Telegram', () => {
     });
     expect(deliverRes.status).toBe(200, await deliverRes.text());
 
-    // 8. Wait for event processing
-    await new Promise(r => setTimeout(r, 3000));
-
-    // 9. Check for order.delivered telegram message
-    const updatesAfterDeliver = await sendTelegramGetUpdates(lastUpdateId + 1);
-    expect(updatesAfterDeliver.ok).toBeTruthy();
-    const result2 = updatesAfterDeliver.result;
-    let orderDeliveredMsg = null;
-    for (const upd of result2) {
-      if (upd.message && upd.message.chat?.id === CHAT_ID) {
-        const text = upd.message.text;
-        if (text && text.includes('ORDER DELIVERED')) {
-          orderDeliveredMsg = text;
-          break;
+    // 8-9. Poll (≤20s) for the order.delivered message anchored to this order's shortId.
+    let orderDeliveredMsg: string | null = null;
+    const deliveredDeadline = Date.now() + 20000;
+    do {
+      const updates = await sendTelegramGetUpdates(lastUpdateId + 1);
+      expect(updates.ok).toBe(true);
+      for (const upd of updates.result) {
+        if (upd.message?.chat?.id === CHAT_ID) {
+          const text = upd.message.text;
+          if (text && text.includes('ORDER DELIVERED') && text.includes(`#${shortId}`)) {
+            orderDeliveredMsg = text;
+          }
         }
       }
-    }
-    expect(orderDeliveredMsg).toBeTruthy(`Expected order.delivered telegram message not found. Updates: ${JSON.stringify(result2)}`);
+      if (updates.result.length > 0) {
+        lastUpdateId = updates.result[updates.result.length - 1].update_id + 1;
+      }
+      if (orderDeliveredMsg) break;
+      await new Promise(r => setTimeout(r, 2000));
+    } while (Date.now() < deliveredDeadline);
+    expect(orderDeliveredMsg, `order.delivered Telegram message for #${shortId} not found`).toContain(`ORDER DELIVERED #${shortId}`);
+    // TODO(needs_staging): opt-out negative scenario — disable the 'order.created' category for
+    // this location, place another order, and assert NO matching Telegram message arrives within
+    // the budget (the preference-centre control the happy path never exercises). Requires a live
+    // staging run.
   });
 });

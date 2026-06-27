@@ -66,6 +66,52 @@ test('menu-parse eval (B1)', async (t) => {
     assert.ok(r.failures.some((f) => f.includes('modifier-structure')));
   });
 
+  // --- KNOWN GATE GAPS (characterized, not weakened). Each asserts the scorer's CURRENT behavior with
+  // falsifiable values so a future scorer fix turns the test RED. ESCALATE: scorer.ts (ADR-0011 gate) —
+  // not patched here (gate business logic is out of this test's hardening scope). ---
+
+  await t.test('GAP/ESCALATE: empty expected baseline auto-scores 100% — a hallucinated item is NOT blocked', () => {
+    // scorer rate(n,d) returns 1 when d===0, so an empty `expected` makes every rate vacuously 1.0:
+    // a parse fabricating a whole menu from a blank golden slips the gate. TODO(scorer): d===0 with a
+    // non-empty actual must FAIL (or add precision). This RED-on-fix locks the gap.
+    const emptyExpected: CanonicalMenuDraft = { ...clone(), products: [], modifierGroups: [] };
+    const hallucinated: CanonicalMenuDraft = {
+      ...clone(),
+      products: [{ externalKey: 'x', categoryKey: 'c', name: 'Fabricated', price: 999, currency: 'ALL', available: true }],
+    };
+    const r = scoreParse(emptyExpected, hallucinated);
+    assert.equal(r.itemRecall.total, 0); // no baseline to recall against
+    assert.equal(r.itemRecall.rate, 1); // d===0 → vacuous 1.0 (the blind spot)
+    assert.equal(r.modifierStructure.rate, 1);
+    assert.equal(r.pass, true); // GAP: hallucination with no baseline passes today
+  });
+
+  await t.test('GAP/ESCALATE: extra fabricated products are invisible — no precision metric, report still passes', () => {
+    // The scorer measures recall (expected→found) but NOT precision (actual extras). TODO(scorer): add a
+    // precision rate so fabricated products drop the score. RED-on-fix locks the gap.
+    const bad = clone();
+    for (let i = 0; i < 5; i++) {
+      bad.products.push({ externalKey: `fake${i}`, categoryKey: 'c', name: `Phantom ${i}`, price: 100 + i, currency: 'ALL', available: true });
+    }
+    const r = scoreParse(GOLDEN, bad);
+    assert.equal(r.itemRecall.rate, 1); // both golden items still found
+    assert.equal(r.priceExact.rate, 1);
+    assert.equal(r.modifierStructure.rate, 1);
+    assert.equal(r.pass, true); // GAP: 5 hallucinated extras pass today
+  });
+
+  await t.test('GAP/ESCALATE: individual modifier priceDelta drift is unscored — wrong delta still passes', () => {
+    // modifierStructure scores only modifierGroups (min/max/required); the modifiers[] priceDelta is never
+    // compared, so a wrong delta is invisible. TODO(scorer): score modifiers[].priceDelta. RED-on-fix locks it.
+    const withMod = (delta: number): CanonicalMenuDraft => ({
+      ...clone(),
+      modifiers: [{ externalKey: 'm1', groupKey: 's', name: 'Large', priceDelta: delta, available: true }],
+    });
+    const r = scoreParse(withMod(200), withMod(999)); // expected +200, actual +999
+    assert.equal(r.modifierStructure.rate, 1); // group structure unchanged → matches; priceDelta ignored
+    assert.equal(r.pass, true); // GAP: wrong modifier priceDelta passes today
+  });
+
   await t.test('thresholds are the version-controlled ADR-0011 values', () => {
     assert.equal(THRESHOLDS.priceExact, 1.0);
     assert.equal(THRESHOLDS.itemRecall, 0.95);

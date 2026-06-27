@@ -7,22 +7,16 @@ import {
 
 describe('formatALL', () => {
   it('formats integer Lek amounts', () => {
-    const result = formatALL(1500);
-    assert.ok(result.includes('1'));
-    assert.ok(result.includes('500'));
-    assert.ok(result.includes('L'));
+    assert.equal(formatALL(1500), '1500 ALL');
   });
 
   it('formats zero', () => {
-    const result = formatALL(0);
-    assert.ok(result.includes('0'));
-    assert.ok(result.includes('L'));
+    assert.equal(formatALL(0), '0 ALL');
   });
 
-  it('formats large numbers with grouping', () => {
-    const result = formatALL(100000);
-    assert.ok(result.length > 0);
-    assert.ok(result.includes('L'));
+  it('formats large numbers (currently no thousands grouping)', () => {
+    // Pins exact output; impl emits `${Math.round(amount)} ALL` with no separator.
+    assert.equal(formatALL(100000), '100000 ALL');
   });
 });
 
@@ -151,10 +145,16 @@ describe('checkWCAGContrast', () => {
     assert.equal(Math.round(ratio), 1);
   });
 
-  it('meets AA standard for brand colors on white', () => {
-    // #ea4f16 on white = ?
+  it('brand primary on white meets AA-Large (3:1) but not AA-normal (4.5:1)', () => {
     const ratio = checkWCAGContrast('#ea4f16', '#FFFFFF');
-    // AA normal text requires 4.5:1
-    assert.ok(ratio >= 3, `Brand primary on white: ${ratio.toFixed(2)}:1`);
+    // Measured 3.73:1 — clears AA large text / UI components (3:1),
+    // fails AA normal text (4.5:1). Pin exact value so a regression in the
+    // luminance math (or a brand-color change) goes red.
+    assert.ok(
+      ratio >= 3.72 && ratio < 3.74,
+      `Brand primary on white expected ~3.73:1, got ${ratio.toFixed(2)}:1`,
+    );
+    assert.ok(ratio >= 3, 'must clear AA-Large 3:1');
+    assert.ok(ratio < 4.5, 'documented: does NOT clear AA-normal 4.5:1');
   });
 });

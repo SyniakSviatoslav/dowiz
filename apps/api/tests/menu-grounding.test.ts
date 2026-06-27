@@ -18,17 +18,32 @@ test('menu grounding (B7 normalizer-parity)', async (t) => {
     const ocr = 'BUKË & VERË\nPizza Margherita 1.200 Lek\nSallatë Greke 800 Lek';
     const minors = collectOcrPriceMinors(ocr, 0);
     assert.ok(minors.has(1200), 'normalizer must read 1.200 Lek as 1200, not 1.2');
-    const r = groundItems([{ name: 'Pizza Margherita', price: 1200 }], ocr, 0);
+    assert.equal(minors.size, 2, 'exactly 2 price tokens (1200, 800) — "BUKË & VERË" must not over-extract');
+    const items = [{ name: 'Pizza Margherita', price: 1200 }];
+    const r = groundItems(items, ocr, 0);
     assert.equal(r.groundedCount, 1);
     assert.equal(r.ungrounded.length, 0); // a substring approach would have FLAGGED this
+    assert.equal(r.groundedCount + r.ungrounded.length, items.length);
   });
 
   await t.test('FALSE-PASS fixture: a hallucinated price:1 IS flagged (no OCR token normalizes to 1)', () => {
     const ocr = 'Pizza Margherita 800 Lek\nSallatë Greke 450 Lek';
-    const r = groundItems([{ name: 'Ghost Item', price: 1 }], ocr, 0);
+    const items = [{ name: 'Ghost Item', price: 1 }];
+    const r = groundItems(items, ocr, 0);
     assert.equal(r.groundedCount, 0);
     assert.equal(r.ungrounded.length, 1); // a substring "1" would have wrongly PASSED this
     assert.equal(r.ungrounded[0].price, 1);
+    assert.equal(r.groundedCount + r.ungrounded.length, items.length);
+  });
+
+  await t.test('empty OCR: nothing grounds, every item is flagged', () => {
+    const items = [{ name: 'X', price: 800 }];
+    const r = groundItems(items, '', 0);
+    assert.equal(r.groundedCount, 0);
+    assert.equal(r.ungrounded.length, 1);
+    assert.equal(r.ungrounded[0].name, 'X');
+    assert.equal(r.ungrounded[0].price, 800);
+    assert.equal(r.groundedCount + r.ungrounded.length, items.length);
   });
 
   await t.test('mixed: grounds real prices, flags the hallucinated one', () => {
@@ -41,5 +56,6 @@ test('menu grounding (B7 normalizer-parity)', async (t) => {
     const r = groundItems(items, ocr, 0);
     assert.equal(r.groundedCount, 2);
     assert.deepEqual(r.ungrounded.map((u) => u.externalKey), ['ghost']);
+    assert.equal(r.groundedCount + r.ungrounded.length, items.length);
   });
 });

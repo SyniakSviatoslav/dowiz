@@ -18,6 +18,10 @@ export class R2StorageProvider implements StorageProvider {
     const bucket = process.env.R2_BUCKET;
     if (!bucket) throw new Error('R2StorageProvider requires R2_BUCKET');
     if (!process.env.R2_ENDPOINT) throw new Error('R2StorageProvider requires R2_ENDPOINT');
+    if (!process.env.R2_ACCESS_KEY_ID)
+      throw new Error('R2StorageProvider requires R2_ACCESS_KEY_ID');
+    if (!process.env.R2_SECRET_ACCESS_KEY)
+      throw new Error('R2StorageProvider requires R2_SECRET_ACCESS_KEY');
     this.bucket = bucket;
   }
 

@@ -9,12 +9,31 @@
 // correctness?" — a different question from "is this change correct?" (the per-loop
 // reviewer). It must not be checkable by the loops it polices.
 
+// Strip comments + string/template literals so counts reflect REAL code only.
+// Without this, `// test('x',…)` or `const s = "test('x',…)"` inflate the count —
+// letting a loop wrap real tests in a string to keep the regex-count steady while
+// the live test count silently drops (the exact evasion the oracle must catch).
+function stripNonCode(src: string): string {
+  let out = '';
+  for (let i = 0, n = src.length; i < n; ) {
+    const c = src[i], d = src[i + 1];
+    if (c === '/' && d === '/') { while (i < n && src[i] !== '\n') i++; continue; }
+    if (c === '/' && d === '*') { i += 2; while (i < n && !(src[i] === '*' && src[i + 1] === '/')) i++; i += 2; continue; }
+    if (c === '"' || c === "'" || c === '`') {
+      const q = c; i++;
+      while (i < n && src[i] !== q) { if (src[i] === '\\') i++; i++; }
+      i++; continue;
+    }
+    out += c; i++;
+  }
+  return out;
+}
 export function countTests(src: string): number {
-  return (src.match(/(?:^|\b)(?:test|it|Deno\.test)\s*\(/g) ?? []).length;
+  return (stripNonCode(src).match(/(?:^|\b)(?:test|it|Deno\.test)\s*\(/g) ?? []).length;
 }
 export function countAssertions(src: string): number {
   // matches expect(...), assert(...), and method forms like assert.equal(...)
-  return (src.match(/\bexpect\s*\(|\bassert(?:\.\w+)?\s*\(/g) ?? []).length;
+  return (stripNonCode(src).match(/\bexpect\s*\(|\bassert(?:\.\w+)?\s*\(/g) ?? []).length;
 }
 // no-fake-green markers (enforced at the meta-level against the loops' OWN test edits).
 const WEAKENERS: { re: RegExp; label: string }[] = [

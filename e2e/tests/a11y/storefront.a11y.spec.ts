@@ -35,18 +35,18 @@ for (const lang of LOCALES) {
     // 1) initial render
     await expectNoA11y(page);
 
-    // 2) interactive state — open the first product detail/modal if reachable.
-    const product = page
-      .locator(
-        '[data-testid^="product"], article button, [role="button"]:has-text("+"), button:has-text("Shto"), button:has-text("Add")',
-      )
-      .first();
-    if (await product.count()) {
-      await product.click({ trial: false }).catch((e) => {
-        void e; /* tolerated: opportunistic modal-open for the interactive a11y scan — if this product is not clickable the initial-render scan above still gates */
-      });
-      await page.waitForTimeout(400); // let dialog mount + focus settle
-      await expectNoA11y(page);
-    }
+    // 2) interactive state — open the first product detail modal and scan it.
+    // The demo storefront always renders products, so this is asserted (no vacuous
+    // `if(count)` skip) and the click is NOT swallowed: a failed click → red test.
+    const product = page.locator('[data-testid="menu-item"]').first();
+    await expect(product).toBeVisible({ timeout: 15000 });
+    await product.click();
+
+    // Prove the modal actually opened — otherwise expectNoA11y would re-scan the
+    // initial render and falsely claim the interactive state passed.
+    const modal = page.locator('[role="dialog"][aria-modal="true"]').first();
+    await expect(modal).toBeVisible({ timeout: 5000 });
+
+    await expectNoA11y(page);
   });
 }

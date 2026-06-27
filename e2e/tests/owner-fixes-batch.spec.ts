@@ -2,6 +2,11 @@ import { test, expect, type APIRequestContext } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
+
+// This spec MUTATES state (repair-test-owner inserts memberships; refresh rotates the token
+// family) and carries the shared DEV_AUTH_SECRET — never let it run against prod.
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 // Proof for the deployed-app owner fixes (session relogin, PDF import via OpenCode Zen,
 // Google OAuth hidden, test-owner → sushi-durres binding). Server changes are real.
@@ -20,11 +25,20 @@ function decodeJwtExpiry(token: string): { ttlSeconds: number } {
 
 async function login(request: APIRequestContext) {
   const res = await request.post('/api/auth/local/login', { data: CREDS });
-  expect(res.ok(), `owner login (${res.status()})`).toBeTruthy();
-  return res.json();
+  // EXACT status (route returns a plain object → 200) — `.ok()` truthy would also pass a 201
+  // with an empty body. Then validate the real response shape, not just its presence.
+  expect(res.status(), `owner login (${res.status()})`).toBe(200);
+  const body = await res.json();
+  expectJwt(body.access_token, 'login access_token');
+  expectUuid(body.userId, 'login userId');
+  return body;
 }
 
 test.describe('Owner fixes batch', () => {
+  test.beforeAll(() => {
+    requireStaging(BASE);
+  });
+
   test('session: password login mints a ~7d access token (was 1h → hourly relogin)', async ({ request }) => {
     const body = await login(request);
     expectJwt(body.access_token, 'access_token');
@@ -43,6 +57,16 @@ test.describe('Owner fixes batch', () => {
     expectJwt(refreshed.access_token, 'new access_token');
     const { ttlSeconds } = decodeJwtExpiry(refreshed.access_token);
     expect(ttlSeconds, `refreshed TTL ${ttlSeconds}s ~7d`).toBeGreaterThan(24 * 3600);
+
+    // Single-use rotation: REPLAY the now-consumed original refresh_token. The token was
+    // claimed (used=true) by the first refresh, so it must NOT mint a fresh access token.
+    // Because a sibling token was rotated <5s ago, the route returns the soft 409
+    // `concurrent_refresh` (auth.ts:280) rather than the family-revoke 401 — either way the
+    // stale token yields no token. We assert the exact 409 AND the security invariant (no token).
+    const replay = await request.post('/api/auth/refresh', { data: { refresh_token: body.refresh_token } });
+    expect(replay.status(), `replayed (used) refresh token must be rejected (${replay.status()})`).toBe(409);
+    const replayBody = await replay.json().catch(() => ({}));
+    expect(replayBody.access_token, 'replayed token must NOT mint a new access_token').toBeUndefined();
   });
 
   test('login UI: Google OAuth button is hidden; email + Telegram remain', async ({ page }) => {
@@ -65,6 +89,22 @@ test.describe('Owner fixes batch', () => {
       (m: any) => m.location_id === r.locationId && m.role === 'owner' && m.status === 'active',
     );
     expect(active, `active owner membership to ${r.locationName} (${r.locationId})`).toBeTruthy();
+  });
+
+  test('security: /dev/repair-test-owner rejects a wrong/missing dev secret (fail-closed 404)', async ({ request }) => {
+    // Negative control for the positive case above: the dev guard (server.ts → isDevRequestAuthorized)
+    // requires a matching x-dev-auth-secret and fails CLOSED with 404 (never leaks the endpoint's
+    // presence). Without this, a guard that silently accepted ANY secret would go unnoticed.
+    const wrong = await request.post('/dev/repair-test-owner', {
+      headers: { 'x-dev-auth-secret': 'not-the-real-secret' },
+      data: { email: CREDS.email, slug: 'demo' },
+    });
+    expect(wrong.status(), `wrong dev secret must be rejected (${wrong.status()})`).toBe(404);
+
+    const missing = await request.post('/dev/repair-test-owner', {
+      data: { email: CREDS.email, slug: 'demo' },
+    });
+    expect(missing.status(), `missing dev secret must be rejected (${missing.status()})`).toBe(404);
   });
 
   test('import: PDF menu extracts products via OpenCode Zen (was 0 on OpenRouter 402)', async ({ request }) => {

@@ -15,8 +15,9 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { expectJwt } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 // ── Nutrition + allergen database for known sushi ingredients ─────────────────
 
@@ -110,16 +111,53 @@ let ownerToken: string;
 let newIngredients: IngredientData[] = [];
 // One ingredient used for the live UI proof (the first new one)
 let uiIngredient: IngredientData;
+// The actual object the Step 3 UI form persisted to localStorage (captured, NOT hand-built),
+// so Step 4 validates the real form-submission result rather than an injected fixture.
+let uiPersistedSupply: Record<string, unknown> | null = null;
 
 test.describe.configure({ mode: 'serial' });
 
 test.describe('UI: Supply Library — add ingredients derived from product descriptions', () => {
 
   test.beforeAll(async ({ request }) => {
+    // This spec mutates state (mock-auth mint + UI/localStorage writes against the deployed app).
+    // Fail fast unless BASE is an explicit non-prod target so a run can never write to prod.
+    requireStaging(BASE);
     const r = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(r.status()).toBe(200);
     ownerToken = (await r.json()).access_token;
     expectJwt(ownerToken, 'ownerToken');
+  });
+
+  // ── STEP 0: Access control (negative + no-token controls) ──────────────────
+  // Supplies are a client-only feature (localStorage), so the backing data the library
+  // derives from is /api/owner/menu/products (owner-only). A courier token must be
+  // forbidden there, and the /admin/* shell must bounce an unauthenticated visitor.
+  // TODO(needs-staging): exercises the real auth path + dev-gated courier mint — only
+  // meaningful against a live staging deploy (the /dev/* family 404s on prod).
+  test('Step 0: Access control — courier role 403 on backing API; no token redirects to /login', async ({ request, page }) => {
+    const cRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'courier' } });
+    expect(cRes.status(), 'mock-auth must mint a courier token').toBe(200);
+    const courierToken = (await cRes.json()).access_token;
+    expectJwt(courierToken, 'courierToken');
+
+    // NEGATIVE control: wrong role → exact 403 (apps/api/src/plugins/auth.ts requireRole).
+    const forbidden = await request.get(`${BASE}/api/owner/menu/products`, {
+      headers: { Authorization: `Bearer ${courierToken}` },
+    });
+    expect(forbidden.status(), 'courier role must be forbidden on owner products endpoint').toBe(403);
+
+    // POSITIVE control: the owner token from beforeAll must still be accepted (gate isn't
+    // silently rejecting everyone).
+    const allowed = await request.get(`${BASE}/api/owner/menu/products`, {
+      headers: { Authorization: `Bearer ${ownerToken}` },
+    });
+    expect(allowed.status(), 'owner token must be accepted on owner products endpoint').toBe(200);
+
+    // No-token UI access → AdminRoutes guard redirects to /login (apps/web/src/routes/AdminRoutes.tsx).
+    await page.goto(`${BASE}/admin/supplies`, { waitUntil: 'load', timeout: 30000 });
+    await page.waitForURL(/\/login/, { timeout: 10000 });
+    expect(page.url(), 'no-token /admin/supplies must redirect to /login').toContain('/login');
   });
 
   // ── STEP 1: Fetch products → derive ingredients ────────────────────────────
@@ -240,27 +278,24 @@ test.describe('UI: Supply Library — add ingredients derived from product descr
       packaging: 'i.ti-box',
       utensil: 'i.ti-tool',
     };
+    // Kind, unit and nutrition interactions must actually run — no silent guards.
     const kindBtn = page.locator(`button:has(${kindIconMap[uiIngredient.kind] || 'i.ti-meat'})`).first();
-    if (await kindBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await kindBtn.click();
-    }
+    await kindBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await kindBtn.click();
 
     // Unit select
     const unitSelect = page.locator('select').first();
-    if (await unitSelect.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await unitSelect.selectOption(uiIngredient.unit);
-    }
+    await unitSelect.waitFor({ state: 'visible', timeout: 5000 });
+    await unitSelect.selectOption(uiIngredient.unit);
 
     // Nutrition inputs (4 number inputs in grid: kcal, protein, fat, carbs)
     // The inputs appear inside the nutrition section for food/condiment kinds
     const numInputs = page.locator('input[type="number"]');
-    const numCount = await numInputs.count();
-    if (numCount >= 4) {
-      await numInputs.nth(0).fill(String(uiIngredient.kcalPer100));
-      await numInputs.nth(1).fill(String(uiIngredient.proteinG));
-      await numInputs.nth(2).fill(String(uiIngredient.fatG));
-      await numInputs.nth(3).fill(String(uiIngredient.carbsG));
-    }
+    await numInputs.nth(3).waitFor({ state: 'visible', timeout: 5000 });
+    await numInputs.nth(0).fill(String(uiIngredient.kcalPer100));
+    await numInputs.nth(1).fill(String(uiIngredient.proteinG));
+    await numInputs.nth(2).fill(String(uiIngredient.fatG));
+    await numInputs.nth(3).fill(String(uiIngredient.carbsG));
 
     // Allergen chips — click each applicable allergen
     // Button text is translated (Albanian: fish→Peshk, eggs→Veze, gluten→Gluten, etc.)
@@ -294,6 +329,15 @@ test.describe('UI: Supply Library — add ingredients derived from product descr
     const critical = jsErrors.filter(e => !e.includes('favicon') && !e.includes('ResizeObserver'));
     expect(critical, `JS errors after add supply: ${critical.join('; ')}`).toEqual([]);
     console.log(`UI: Added "${uiIngredient.name}" to supply library`);
+
+    // Capture the object the FORM actually persisted (not a hand-built fixture) so Step 4
+    // validates the real submission result. Serial mode runs in one worker → this module
+    // var carries into Step 4 (which gets a fresh browser context and must re-inject it).
+    uiPersistedSupply = await page.evaluate((name) => {
+      const arr = JSON.parse(localStorage.getItem('dos_supplies') || '[]');
+      return arr.find((s: { name: string }) => s.name === name) || null;
+    }, uiIngredient.name);
+    expect(uiPersistedSupply, 'Step 3 form must have persisted the new supply to localStorage').not.toBeNull();
   });
 
   // ── STEP 4: Verify allergen tags and nutrition shown on new card ─────────
@@ -301,14 +345,18 @@ test.describe('UI: Supply Library — add ingredients derived from product descr
     test.skip(!uiIngredient, 'No UI ingredient from Step 3');
 
     await injectAuth(page, ownerToken);
-    // Each test gets a fresh browser context — re-inject the supply we proved adding via UI in Step 3
+    // Each test gets a fresh browser context — re-inject the EXACT object Step 3's form
+    // persisted (captured from localStorage), so the assertions below validate the real
+    // form-submission result, not a re-built fixture. (Serial mode guarantees Step 3 ran
+    // and set this; its not-null assertion gates Step 4 by failing the chain otherwise.)
+    expect(uiPersistedSupply, 'Step 3 must have captured the persisted supply').not.toBeNull();
     await page.evaluate((supply) => {
       const existing = JSON.parse(localStorage.getItem('dos_supplies') || '[]');
-      if (!existing.find((s: any) => s.name === supply.name)) {
+      if (!existing.find((s: { name: string }) => s.name === (supply as { name: string }).name)) {
         existing.unshift(supply);
         localStorage.setItem('dos_supplies', JSON.stringify(existing));
       }
-    }, buildSupplyObject(uiIngredient));
+    }, uiPersistedSupply);
     await page.goto(`${BASE}/admin/supplies`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(1500);
 
@@ -322,7 +370,7 @@ test.describe('UI: Supply Library — add ingredients derived from product descr
     if (uiIngredient.kcalPer100 > 0) {
       const kcalText = page.getByText(`${uiIngredient.kcalPer100} kcal`, { exact: false });
       const kcalVisible = await kcalText.isVisible({ timeout: 3000 }).catch(() => false);
-      console.log(`Kcal (${uiIngredient.kcalPer100}) visible on card: ${kcalVisible}`);
+      expect(kcalVisible, 'kcal must render on supply card').toBe(true);
     }
 
     // Verify allergen chips shown in the card area (scope to the card's surrounding element)

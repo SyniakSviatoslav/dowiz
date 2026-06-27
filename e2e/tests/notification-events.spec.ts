@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 function uuid() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -15,6 +16,10 @@ async function authHeaders(token: string) {
 }
 
 test.describe('Service event notifications pipeline', () => {
+  // Mutating spec (creates locations/orders, drives the lifecycle): refuse to run against
+  // prod or an unknown target so a CI misconfig can never write to production.
+  test.beforeAll(() => requireStaging(BASE));
+
   test('should create order and advance through lifecycle', async () => {
     // 1. Get owner token
     const authRes = await fetch(`${BASE}/api/dev/mock-auth`, { method: 'POST' });
@@ -38,8 +43,10 @@ test.describe('Service event notifications pipeline', () => {
     expect(startOnboarding.status).toBe(201);
     const onboardingBody = await startOnboarding.json();
     const locationId = onboardingBody.locationId;
+    expectUuid(locationId, 'locationId');
 
-    // Complete onboarding
+    // Complete onboarding — assert the flow actually reaches a completed state on the
+    // final step (a chain of bare 200s does not prove the location went live).
     for (let step = 1; step <= 8; step++) {
       if (step === 7) {
         const skipRes = await fetch(`${BASE}/api/owner/onboarding/${locationId}/step/7/skip`, {
@@ -53,7 +60,11 @@ test.describe('Service event notifications pipeline', () => {
           method: 'POST',
           body: JSON.stringify({ step }),
         });
-        expect(stepRes.status).toBe(200);
+        const stepText = await stepRes.text();
+        expect(stepRes.status).toBe(200, `onboarding step ${step}: ${stepText}`);
+        if (step === 8) {
+          expect(JSON.parse(stepText).completed, 'onboarding must mark completed on final step').toBe(true);
+        }
       }
     }
 
@@ -71,6 +82,7 @@ test.describe('Service event notifications pipeline', () => {
     expect(productRes.status).toBe(201);
     const productBody = await productRes.json();
     const productId = productBody.id;
+    expectUuid(productId, 'productId');
 
     // 4. Create order - triggers order.created event
     const orderPayload = {
@@ -93,6 +105,40 @@ test.describe('Service event notifications pipeline', () => {
     const orderId = orderBody.id;
     expectUuid(orderId, 'orderId');
 
+    // 4b. Error matrix for PATCH /orders/:id/status — exercised BEFORE the happy path so
+    // these rejected calls cannot mutate the order. Exact codes read from
+    // apps/api/src/routes/orders.ts + lib/orderStatusService.ts.
+    // (i) no token → 401 (verifyAuth preHandler, plugins/auth.ts:47).
+    const noTokenRes = await fetch(`${BASE}/api/orders/${orderId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'CONFIRMED' }),
+    });
+    expect(noTokenRes.status).toBe(401);
+    // (ii) invalid status enum → 400 VALIDATION_FAILED (safeParse, orders.ts:757).
+    const badEnumRes = await fetch(`${BASE}/api/orders/${orderId}/status`, {
+      headers: await authHeaders(ownerToken),
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'INVALID' }),
+    });
+    expect(badEnumRes.status).toBe(400);
+    // (iii) illegal transition (PENDING → DELIVERED) → 400 IllegalTransitionError
+    // (assertTransition, orderStatusService.ts:80). Order is still PENDING here.
+    const illegalRes = await fetch(`${BASE}/api/orders/${orderId}/status`, {
+      headers: await authHeaders(ownerToken),
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'DELIVERED' }),
+    });
+    expect(illegalRes.status).toBe(400);
+    // (iv) nonexistent order id (valid UUID, absent / out-of-tenant) → 404
+    // (RLS-scoped SELECT returns 0 rows, orders.ts:774).
+    const missingRes = await fetch(`${BASE}/api/orders/${uuid()}/status`, {
+      headers: await authHeaders(ownerToken),
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'CONFIRMED' }),
+    });
+    expect(missingRes.status).toBe(404);
+
     // 5. Advance order through lifecycle (owner confirms → preparing → ready → in_delivery → delivered)
     const statuses = ['CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED'];
     for (const status of statuses) {
@@ -105,7 +151,21 @@ test.describe('Service event notifications pipeline', () => {
       expect(statusRes.status).toBe(200, `Failed to set status ${status}: ${statusText}`);
     }
 
-    // Test passes if order lifecycle completes successfully
-    // Each status change triggers order.status events → notification dispatch
+    // 6. Read the order back and assert the PATCH chain actually persisted the terminal
+    // state (Test Integrity #9: verify a PATCH by reading the value, not just status 200).
+    const readBack = await fetch(`${BASE}/api/orders/${orderId}`, {
+      headers: await authHeaders(ownerToken),
+    });
+    const readText = await readBack.text();
+    expect(readBack.status).toBe(200, readText);
+    expect(String(JSON.parse(readText).status).toUpperCase(), 'order must persist DELIVERED').toBe('DELIVERED');
+
+    // NOTE: this proves the lifecycle + event-emitting transitions, but NOT that a
+    // notification was actually delivered to a channel. Asserting real dispatch requires
+    // a live Telegram link (helpers/notifHelpers.linkTelegram + waitTelegramMessage) with
+    // TELEGRAM_BOT_TOKEN/CHAT_ID set against staging.
+    // TODO(needs-staging): add a Telegram/push dispatch assertion (see needs_staging).
+    // TODO(needs-staging): cross-tenant IDOR — owner B advancing owner A's order must 404.
+    // mock-auth always mints the SAME owner, so a REAL second tenant is required (never a nil UUID).
   });
 });

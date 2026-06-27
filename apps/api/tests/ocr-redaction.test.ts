@@ -31,6 +31,18 @@ test('OCR redaction (redact-by-default before the LLM prompt)', async (t) => {
     assert.ok(!redacted.includes('ardit.hoxha@gmail.com'), 'staff email leaked into prompt input');
     assert.ok(redactions.some((r) => r.kind === 'phone'), 'phone not detected');
     assert.ok(redactions.some((r) => r.kind === 'email'), 'email not detected');
+    // VALUE-ANCHORED (not just `kind` presence): bind each redaction to the SPECIFIC staff-contact
+    // token. `redactions.some(kind==='phone')` alone goes green if a price like "800 Lek" is
+    // mis-classified as a phone while the real staff phone survives. These anchors fail in exactly
+    // that case — the contact-line tokens must be the things replaced.
+    assert.ok(
+      redacted.includes('Ardit [REDACTED]'),
+      'the staff phone after the contact label was not the redacted token',
+    );
+    assert.ok(
+      redacted.includes('porosi: [REDACTED]'),
+      'the staff email after the order label was not the redacted token',
+    );
 
     // Menu CONTENT (prices, item names, street address) is preserved — redaction is targeted,
     // not destructive, so extraction quality holds.
@@ -59,5 +71,36 @@ test('OCR redaction (redact-by-default before the LLM prompt)', async (t) => {
       !/`[^`]*\$\{rawText\}`/.test(src),
       'no prompt template may interpolate ${rawText} — redact-by-default is binding',
     );
+    // FINDING-1 (short-circuit defence): the `${redactedText}` check above still passes for
+    // `const redactedText = rawText` (redaction disabled, name unchanged). Lock the data BINDING:
+    // redactedText must be the destructured OUTPUT of piiRedactor.redact(rawText), never an alias.
+    assert.ok(
+      /\{\s*text:\s*redactedText\s*\}\s*=\s*this\.piiRedactor\.redact\(rawText\)/.test(src),
+      'redactedText must be the OUTPUT of piiRedactor.redact(rawText), not an alias of rawText',
+    );
+    assert.ok(
+      !/\bredactedText\s*=\s*rawText\b/.test(src),
+      'redactedText must never be aliased to rawText — that short-circuits redaction',
+    );
+    // TODO(needs_staging): a true DATA-FLOW proof (vs source-text) needs an integration run that
+    // feeds a PDF whose text layer carries a staff phone through parse() into a prompt-capturing
+    // mock LLM and asserts the captured prompt omits the raw phone. Source-text guard is the floor.
+  });
+
+  await t.test('heuristic onboarding pre-fill is a SEPARATE non-egress surface (residual + escalation)', () => {
+    // FINDING-2: the heuristic structurer derives restaurant.phone from rawText (ai-ocr-parser.ts
+    // ~L649 `rawText.match`), NOT redactedText — so an incidental third-party staff phone can
+    // pre-fill the venue-contact field. ADR-0011-bounded: restaurant.* is LOCAL onboarding pre-fill
+    // the owner reviews before publish and is NEVER sent to the external LLM (only redactedText
+    // egresses). Switching the source to redactedText would break the intentional venue-OWN-phone
+    // pre-fill proven in ai-ocr-parser.test.ts L385-398 → escalate, do not silently "fix". What this
+    // guardrail locks: the EGRESS copy carries no staff phone while menu content survives.
+    const ocr = 'Trattoria Roma\nTel +355 69 234 5678\nPizza 800 Lek';
+    const { text: egress } = new PiiRedactor().redact(ocr);
+    assert.ok(!egress.includes('+355 69 234 5678'), 'staff phone must not survive into the egress copy');
+    assert.ok(egress.includes('800 Lek'), 'menu price must survive redaction');
+    // TODO(escalate/needs_staging): a dedicated integration test must drive parse() through the
+    // heuristic path with a THIRD-PARTY (non-venue) phone and assert restaurant.phone is owner-flagged
+    // before publish — a product decision (separate consented venue-contact path), not a redaction bug.
   });
 });

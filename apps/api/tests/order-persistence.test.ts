@@ -30,6 +30,29 @@ function stubClient(calls: Call[]) {
   };
 }
 
+// Variant that throws on the first INSERT matching `throwOn` — exercises the
+// error path so a swallowed/ignored DB failure during persistence can go red.
+function throwingStubClient(calls: Call[], throwOn: RegExp) {
+  return {
+    async query(sql: string, params: unknown[] = []) {
+      calls.push({ sql, params });
+      if (throwOn.test(sql)) {
+        throw new Error(`db failure on: ${sql.slice(0, 40)}`);
+      }
+      if (/INSERT INTO orders\b/.test(sql)) {
+        return {
+          rows: [{ id: 'order-1', status: 'PENDING', subtotal: 1500, total: 1700, created_at: 'now', timeout_at: 'later' }],
+          rowCount: 1,
+        };
+      }
+      if (/INSERT INTO order_items\b/.test(sql)) {
+        return { rows: [{ id: 'oi-1' }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+}
+
 function stubQueue(enqueues: Array<{ name: string; payload: any; opts: any }>) {
   return {
     enqueue: async (name: string, payload: any, opts: any) => {
@@ -110,8 +133,15 @@ test('insertOrderWithItems — writes dependent rows + returns order/trackCode',
   assert.ok(sqls.some((s) => /INSERT INTO idempotency_keys/.test(s)), 'idempotency key written');
   assert.ok(sqls.some((s) => /INSERT INTO customer_track_grants/.test(s)), 'track grant written');
 
+  // order_items params are pinned positionally — a swap (e.g. price/qty) would be
+  // a silent snapshot bug. $1=order.id $2=productId $3=nameSnapshot $4=priceSnapshot $5=quantity.
+  const oiInsert = calls.find((c) => /INSERT INTO order_items\b/.test(c.sql))!;
+  assert.deepEqual(oiInsert.params, ['order-1', 'p1', 'Pizza', 1500, 1]);
+
   assert.equal(result.order.id, 'order-1');
-  assert.equal(typeof result.trackCode, 'string'); // minted for a resolved customer
+  // minted for a resolved customer — must be a real opaque token (base64url of 32
+  // random bytes → 43 chars), not '' / 'null' / a fixed constant.
+  assert.match(result.trackCode ?? '', /^[A-Za-z0-9_-]{40,}$/);
 });
 
 test('insertOrderWithItems — enqueues timeout + notify jobs transactionally', async () => {
@@ -129,6 +159,27 @@ test('insertOrderWithItems — enqueues timeout + notify jobs transactionally', 
   // both enqueues carry the tx db handle so they land inside the order transaction
   assert.ok(timeout.opts.db?.executeSql, 'timeout enqueue carries tx db');
   assert.ok(notify.opts.db?.executeSql, 'notify enqueue carries tx db');
+});
+
+test('insertOrderWithItems — rejects (propagates) when the orders INSERT fails', async () => {
+  const calls: Call[] = [];
+  const enqueues: any[] = [];
+  await assert.rejects(
+    () => insertOrderWithItems(throwingStubClient(calls, /INSERT INTO orders\b/) as any, stubQueue(enqueues), baseInput()),
+    /db failure/,
+  );
+  // the failure must surface before any job is enqueued (no half-committed order).
+  assert.equal(enqueues.length, 0);
+});
+
+test('insertOrderWithItems — rejects (propagates) when an order_items INSERT fails', async () => {
+  const calls: Call[] = [];
+  const enqueues: any[] = [];
+  await assert.rejects(
+    () => insertOrderWithItems(throwingStubClient(calls, /INSERT INTO order_items\b/) as any, stubQueue(enqueues), baseInput()),
+    /db failure/,
+  );
+  assert.equal(enqueues.length, 0);
 });
 
 test('insertOrderWithItems — no track grant / velocity for anonymous (no phone, no customer)', async () => {

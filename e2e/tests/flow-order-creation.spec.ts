@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 const TS = Date.now();
 
 // Serial so beforeAll state is shared cleanly
@@ -16,6 +18,10 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
   let deliveryLng: number;
 
   test.beforeAll(async ({ request }) => {
+    // This suite CREATES categories, products and orders — a mutating run must
+    // never hit prod. Fail fast unless BASE is an explicit staging/local target.
+    requireStaging(BASE);
+
     // 1. Authenticate as owner
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
@@ -92,15 +98,14 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
     });
 
     // The route can also return 200 (soft_confirm from preflight) or 422
-    // (min_order, delivery range, etc.) depending on location config.
-    // We accept any non-500, non-401 result and assert the contract for each.
-    expect(orderRes.status()).not.toBe(500);
-    expect(orderRes.status()).not.toBe(401);
-
+    // (min_order, delivery range, etc.) depending on location config. Each
+    // documented business outcome asserts its own contract below; the final
+    // `else` throws, so an undocumented status (500/401/404/409, or a 200
+    // without soft_confirm) FAILS the test rather than passing silently.
     const body = await orderRes.json();
 
     if (orderRes.status() === 201) {
-      expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
+      expectUuid(body.id, 'order.id');
       expect(body.status).toBe('PENDING');
       expect(typeof body.total).toBe('number');
       expect(body.total).toBeGreaterThan(0);
@@ -126,10 +131,12 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
 
   // ──────────────────────────────────────────────────────────────────────
   // TEST 2: Missing required fields → 400
-  // Note: the rate limiter (max:10/min) fires before Zod validation, so when
-  // the test suite runs across 3 browser projects in quick succession the same
-  // IP may be throttled. Both 400 (validation) and 429 (rate limit) prove the
-  // request was rejected — neither lets invalid data through.
+  // The POST /orders rate limiter (max:5/min) is keyed by customer.phone
+  // (apps/api/src/routes/orders.ts:71-74), so giving each validation request a
+  // UNIQUE phone gives it its own fresh bucket → it can never be throttled →
+  // Zod validation is ALWAYS exercised and the exact 400 is asserted (no 429
+  // escape hatch). TS differs per browser-project process, so the phone is also
+  // unique across the 3 Playwright projects.
   // ──────────────────────────────────────────────────────────────────────
   test('Missing required fields: POST /api/orders without items → 400', async ({ request }) => {
     const orderRes = await request.post(`${BASE}/api/orders`, {
@@ -137,6 +144,7 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
         locationId: activeLocationId,
         type: 'delivery',
         // items deliberately omitted
+        customer: { phone: `+35569${String(TS).slice(-7)}2`, name: 'OrdCreate NoItems' },
         delivery: {
           pin: { lat: deliveryLat, lng: deliveryLng },
         },
@@ -145,11 +153,10 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
       },
     });
 
-    // 400 = Zod validation rejection; 429 = rate limited before validation runs
-    const status = orderRes.status();
-    if (status !== 429) expect(status).toBe(400);
+    // Fresh per-phone bucket → never rate-limited → Zod validation runs → 400.
+    expect(orderRes.status()).toBe(400);
     const body = await orderRes.json();
-    expect(body.error || body.code).toBeTruthy();
+    expect(body.code).toBe('VALIDATION_FAILED');
   });
 
   test('Missing required fields: POST /api/orders without idempotency_key → 400', async ({ request }) => {
@@ -158,6 +165,7 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
         locationId: activeLocationId,
         type: 'delivery',
         items: [{ product_id: productId, quantity: 1, modifier_ids: [] }],
+        customer: { phone: `+35569${String(TS).slice(-7)}3`, name: 'OrdCreate NoIdem' },
         delivery: {
           pin: { lat: deliveryLat, lng: deliveryLng },
         },
@@ -166,10 +174,10 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
       },
     });
 
-    const status = orderRes.status();
-    if (status !== 429) expect(status).toBe(400);
+    // Fresh per-phone bucket → never rate-limited → Zod validation runs → 400.
+    expect(orderRes.status()).toBe(400);
     const body = await orderRes.json();
-    expect(body.error || body.code).toBeTruthy();
+    expect(body.code).toBe('VALIDATION_FAILED');
   });
 
   test('Missing required fields: POST /api/orders without locationId → 400', async ({ request }) => {
@@ -178,6 +186,7 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
         // locationId deliberately omitted
         type: 'delivery',
         items: [{ product_id: productId, quantity: 1, modifier_ids: [] }],
+        customer: { phone: `+35569${String(TS).slice(-7)}4`, name: 'OrdCreate NoLoc' },
         delivery: {
           pin: { lat: deliveryLat, lng: deliveryLng },
         },
@@ -186,10 +195,10 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
       },
     });
 
-    const status = orderRes.status();
-    if (status !== 429) expect(status).toBe(400);
+    // Fresh per-phone bucket → never rate-limited → Zod validation runs → 400.
+    expect(orderRes.status()).toBe(400);
     const body = await orderRes.json();
-    expect(body.error || body.code).toBeTruthy();
+    expect(body.code).toBe('VALIDATION_FAILED');
   });
 
   // ──────────────────────────────────────────────────────────────────────
@@ -203,7 +212,10 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
         locationId: activeLocationId,
         type: 'delivery',
         items: [{ product_id: fakeProductId, quantity: 1, modifier_ids: [] }],
-        customer: { phone: '+355691000002', name: 'OrdCreate Unknown Prod' },
+        // Unique phone → fresh per-phone rate bucket → never throttled → the DB
+        // product lookup always runs, so the 422 PRODUCT_NOT_FOUND contract is
+        // asserted exactly (no 429 escape hatch).
+        customer: { phone: `+35569${String(TS).slice(-7)}5`, name: 'OrdCreate Unknown Prod' },
         delivery: {
           pin: { lat: deliveryLat, lng: deliveryLng },
           address_text: 'Test Street 2, Tirana',
@@ -213,20 +225,9 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
       },
     });
 
-    // 422 PRODUCT_NOT_FOUND is the primary contract assertion.
-    // 429 can occur when the rate limiter (max:10/min) fires before DB lookup.
-    expect(orderRes.status()).not.toBe(500);
-    expect(orderRes.status()).not.toBe(401);
+    expect(orderRes.status()).toBe(422);
     const body = await orderRes.json();
-
-    if (orderRes.status() === 422) {
-      expect(body.code).toBe('PRODUCT_NOT_FOUND');
-    } else if (orderRes.status() === 429) {
-      // Rate limited — request was rejected; product was never looked up
-      expect(body.code).toBeTruthy();
-    } else {
-      throw new Error(`Unexpected status ${orderRes.status()}: ${JSON.stringify(body)}`);
-    }
+    expect(body.code).toBe('PRODUCT_NOT_FOUND');
   });
 
   // ──────────────────────────────────────────────────────────────────────
@@ -255,7 +256,9 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
           locationId: activeLocationId,
           type: 'delivery',
           items: [{ product_id: cheapProductId, quantity: 1, modifier_ids: [] }],
-          customer: { phone: '+355691000003', name: 'OrdCreate MinOrder' },
+          // Unique phone → fresh per-phone rate bucket → never throttled, so the
+          // min_order check always runs and a 429 can never mask the result.
+          customer: { phone: `+35569${String(TS).slice(-7)}6`, name: 'OrdCreate MinOrder' },
           delivery: {
             pin: { lat: deliveryLat, lng: deliveryLng },
             address_text: 'Test Street 3, Tirana',
@@ -265,10 +268,8 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
         },
       });
 
-      expect(orderRes.status()).not.toBe(500);
-      expect(orderRes.status()).not.toBe(401);
-      expect(orderRes.status()).not.toBe(400);
-
+      // Documented outcomes are asserted per-branch below; the final `else`
+      // throws, so any undocumented status (500/401/400/404/409/429) FAILS.
       const body = await orderRes.json();
 
       if (orderRes.status() === 422 && body.code === 'MIN_ORDER_NOT_MET') {
@@ -279,7 +280,7 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
         expect(body.details.subtotal).toBeLessThan(body.details.min_order_value);
       } else if (orderRes.status() === 201) {
         // Location has no min_order — order succeeds; clean up
-        expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
+        expectUuid(body.id, 'order.id');
         await request.patch(`${BASE}/api/orders/${body.id}/status`, {
           data: { status: 'CANCELLED' },
           headers: { Authorization: `Bearer ${authToken}` },
@@ -290,9 +291,6 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
       } else if (orderRes.status() === 200 && body.outcome === 'soft_confirm') {
         // Preflight soft-block — acceptable
         expect(body.reasons).toBeTruthy();
-      } else if (orderRes.status() === 429) {
-        // Rate limited before min_order check runs — request rejected either way
-        expect(body.code).toBeTruthy();
       } else {
         throw new Error(`Unexpected status ${orderRes.status()}: ${JSON.stringify(body)}`);
       }
@@ -402,4 +400,14 @@ test.describe('Flow: Order Creation — Contract Tests', () => {
       headers: { Authorization: `Bearer ${authToken}` },
     }).catch((e) => { void e; /* tolerated: best-effort cleanup */ });
   });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // TODO (needs_staging — real second tenant): cross-tenant IDOR.
+  // Order against tenant A's locationId using a product_id that belongs to a
+  // DIFFERENT tenant's catalogue and assert 422 PRODUCT_NOT_FOUND (the product
+  // is scoped to its own location, so it must not be orderable here). Test
+  // Integrity #5 forbids faking this with a nil/all-zero UUID — it 404s by
+  // absence and proves nothing. This requires a second seeded tenant with a
+  // known product id on a live staging run; do NOT stub it.
+  // ──────────────────────────────────────────────────────────────────────
 });

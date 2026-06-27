@@ -173,6 +173,7 @@ function ClientLayoutInner() {
                   {items.map(item => (
                     <motion.div
                       key={item.id}
+                      data-testid="cart-item"
                       variants={listItem}
                       className="flex items-center justify-between">
                       <div className="flex-1 min-w-0">
@@ -186,7 +187,7 @@ function ClientLayoutInner() {
                         >
                           <i className="ti ti-minus text-sm" />
                         </button>
-                        <span className="text-[var(--brand-text)] font-medium w-6 text-center">{item.quantity}</span>
+                        <span data-testid="cart-item-qty" className="text-[var(--brand-text)] font-medium w-6 text-center">{item.quantity}</span>
                         <button
                           onClick={() => updateQuantity(item.id, item.quantity + 1)}
                           className="min-w-[44px] min-h-[44px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95 flex items-center justify-center"
@@ -200,7 +201,7 @@ function ClientLayoutInner() {
                 <div className="pt-4 border-t border-[var(--brand-border)] space-y-3">
                   <div className="flex justify-between font-bold text-lg text-[var(--brand-text)]">
                     <span>{t('cart.total', 'Total')}</span>
-                    <PriceDisplay amount={total} />
+                    <span data-testid="cart-total"><PriceDisplay amount={total} /></span>
                   </div>
                   <button
                     data-testid="cart-checkout"

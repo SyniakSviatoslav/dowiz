@@ -1,6 +1,7 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import crypto from 'node:crypto';
-import { expectUuid } from '../../helpers/assert-shape';
+import { expectJwt, expectUuid } from '../../helpers/assert-shape';
+import { requireStaging } from '../../helpers/staging-guard';
 
 // Courier offer timer + accept/decline proof (testplan §6) against deployed staging.
 // Run: VITE_BASE_URL=https://dowiz-staging.fly.dev DEV_AUTH_SECRET=stg-e2e-secret \
@@ -24,6 +25,16 @@ import { expectUuid } from '../../helpers/assert-shape';
 // clear message rather than fake green.
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+
+// These tests MUTATE state (place a real order, seed couriers, accept/decline). Fail fast
+// against a prod/unknown target rather than writing to prod.
+test.beforeAll(() => requireStaging(BASE));
+
+// One real order + one assignment row are shared across the whole file (rate-limit budget).
+// §6b accepts the order (→ CONFIRMED / 'accepted'); §6c/§6e/§6f re-point the SAME order_id
+// row via create-assignment (ON CONFLICT DO UPDATE status='assigned'). Serial mode prevents
+// concurrent create-assignment from racing that single row into a conflicting state.
+test.describe.configure({ mode: 'serial' });
 
 // /api/orders is rate-limited ~5/min per IP, so we place exactly ONE real order for the
 // whole file and reset its single assignment between tests (create-assignment is idempotent
@@ -163,12 +174,24 @@ test('6b: task-accept navigates to the delivery view', async ({ page, request })
   const orderId = await ensureOrder(request);
   const courier = await mockCourier(request);
   const assignmentId = await offerTask(request, orderId, courier.courierId, courier.locationId);
+  expectUuid(assignmentId, 'assignment id');
 
   await openTasksAs(page, courier.token);
 
   const accept = page.locator('[data-testid="task-accept"]');
   await expect(accept, 'accept button is visible').toBeVisible({ timeout: 25000 });
-  await accept.click();
+
+  // The optimistic navigate() would hide a swallowed 4xx/5xx from handleAccept (its catch
+  // only console.warns). Assert the accept POST actually returned 200 — not just that the URL
+  // changed. (accept route → reply.send({success:true}) = 200; see courier/assignments.ts.)
+  const [acceptRes] = await Promise.all([
+    page.waitForResponse(
+      (r) => r.url().includes(`/courier/assignments/${assignmentId}/accept`) && r.request().method() === 'POST',
+      { timeout: 20000 },
+    ),
+    accept.click(),
+  ]);
+  expect(acceptRes.status(), 'accept POST must succeed server-side').toBe(200);
 
   // TasksPage.handleAccept POSTs /courier/assignments/:id/accept then navigate(`/courier/delivery/${id}`).
   await expect(page).toHaveURL(new RegExp(`/courier/delivery/${assignmentId}`), { timeout: 20000 });
@@ -178,7 +201,8 @@ test('6b: task-accept navigates to the delivery view', async ({ page, request })
 test('6c: courier-offer-decline removes the task card', async ({ page, request }) => {
   const orderId = await ensureOrder(request);
   const courier = await mockCourier(request);
-  await offerTask(request, orderId, courier.courierId, courier.locationId);
+  const assignmentId = await offerTask(request, orderId, courier.courierId, courier.locationId);
+  expectUuid(assignmentId, 'assignment id');
 
   await openTasksAs(page, courier.token);
 
@@ -191,6 +215,18 @@ test('6c: courier-offer-decline removes the task card', async ({ page, request }
 
   // handleReject optimistically removes the card, then releases the assignment server-side.
   await expect(card, 'card is removed after decline').toHaveCount(0, { timeout: 20000 });
+
+  // The optimistic removal would mask a swallowed reject error (handleReject's catch only
+  // console.warns + refetches). Confirm the server actually moved the row to 'rejected'.
+  await expect
+    .poll(async () => {
+      const res = await request.get(`/api/courier/assignments/${assignmentId}`, {
+        headers: { Authorization: `Bearer ${courier.token}`, accept: 'application/json' },
+      });
+      if (!res.ok()) return `http ${res.status()}`;
+      return (await res.json()).status as string;
+    }, { timeout: 20000, message: 'assignment status should become "rejected" server-side' })
+    .toBe('rejected');
 });
 
 // §6e — RE-VERIFY: the courier-advance-action testid. The §6 note said it was previously
@@ -230,4 +266,86 @@ test('6e: courier-advance-action exists on the delivery view (after pickup)', as
     page.locator('[data-testid="courier-advance-action"]'),
     'advance action appears after marking picked up',
   ).toBeVisible({ timeout: 20000 });
+});
+
+// §6d — EXPIRY: when the countdown reaches 0 the card auto-declines (TaskCard fires onReject
+// at remaining<=0, TaskCard.tsx:31) and the card is removed. TasksPage hard-codes
+// offerSeconds=60 with no test seam, so this needs a real ~60s countdown on a live staging
+// deploy. TODO(seam): drive offerSeconds via a query param / dev flag so this can run fast.
+test('6d: offer timer auto-declines and removes the card at zero', async ({ page, request }) => {
+  const orderId = await ensureOrder(request);
+  const courier = await mockCourier(request);
+  const assignmentId = await offerTask(request, orderId, courier.courierId, courier.locationId);
+  expectUuid(assignmentId, 'assignment id');
+
+  await openTasksAs(page, courier.token);
+
+  const timer = page.locator('[data-testid="courier-offer-timer"]');
+  await expect(timer, 'offer timer is visible').toBeVisible({ timeout: 25000 });
+
+  // Let the client-side 1s-tick countdown run all the way down (~60s).
+  await expect
+    .poll(async () => Number(await timer.getAttribute('data-remaining')), {
+      timeout: 75000,
+      intervals: [2000],
+      message: 'data-remaining should reach 0',
+    })
+    .toBe(0);
+
+  // At zero the card auto-declines itself off the list.
+  const card = page.locator(`[data-testid="task-card-${orderId}"]`);
+  await expect(card, 'card is auto-removed when the timer hits zero').toHaveCount(0, { timeout: 20000 });
+
+  // …and the auto-decline released the assignment server-side (status 'rejected').
+  await expect
+    .poll(async () => {
+      const res = await request.get(`/api/courier/assignments/${assignmentId}`, {
+        headers: { Authorization: `Bearer ${courier.token}`, accept: 'application/json' },
+      });
+      if (!res.ok()) return `http ${res.status()}`;
+      return (await res.json()).status as string;
+    }, { timeout: 20000, message: 'auto-decline should move the assignment to "rejected"' })
+    .toBe('rejected');
+});
+
+// §6f — IDOR: a DIFFERENT courier must not be able to accept another courier's assignment.
+// acceptCourierAssignment scopes the row by courier_id (RLS only isolates by location), so a
+// second courier hijacking the same-location assignment is rejected 404 (courierAssignment
+// Service.ts: rowCount===0 → throw {statusCode:404}). Uses REAL minted courier ids, not a
+// nil-UUID. mock-auth always returns the demo location, so this proves the same-location
+// cross-courier hijack; TODO(2nd-tenant): mint a courier bound to a DIFFERENT locationId to
+// also prove the cross-location case (needs a real second tenant on staging).
+test('6f: a different courier cannot accept this courier\'s assignment (IDOR → 404)', async ({ request }) => {
+  const orderId = await ensureOrder(request);
+  const courierA = await mockCourier(request);
+  const assignmentId = await offerTask(request, orderId, courierA.courierId, courierA.locationId);
+  expectUuid(assignmentId, 'assignment id');
+
+  const courierB = await mockCourier(request);
+  expect(courierB.courierId, 'a distinct second courier').not.toBe(courierA.courierId);
+  expectJwt(courierB.token, 'courier B token');
+
+  const res = await request.post(`/api/courier/assignments/${assignmentId}/accept`, {
+    headers: { Authorization: `Bearer ${courierB.token}` },
+  });
+  expect(res.status(), `courier B accept of A's assignment must 404 (got ${await res.text()})`).toBe(404);
+
+  // POSITIVE control: the owning courier A still can't be blocked silently — the row is intact
+  // and still 'assigned' for A.
+  const ownerView = await request.get(`/api/courier/assignments/${assignmentId}`, {
+    headers: { Authorization: `Bearer ${courierA.token}`, accept: 'application/json' },
+  });
+  expect(ownerView.status(), 'owning courier can still read the assignment').toBe(200);
+  expect((await ownerView.json()).status, 'assignment untouched by the IDOR attempt').toBe('assigned');
+});
+
+// §6g — AUTH baseline: the protected courier endpoints reject an unauthenticated caller.
+// (verifyAuth → 401 'Missing or invalid token'; plugins/auth.ts:47.) Positive controls live
+// in §6a/§6b/§6e (valid courier token → 200).
+test('6g: courier assignment endpoints reject an unauthenticated caller (401)', async ({ request }) => {
+  const list = await request.get('/api/courier/me/assignments', { headers: { accept: 'application/json' } });
+  expect(list.status(), 'GET /me/assignments without a token must 401').toBe(401);
+
+  const accept = await request.post(`/api/courier/assignments/${crypto.randomUUID()}/accept`);
+  expect(accept.status(), 'POST accept without a token must 401').toBe(401);
 });

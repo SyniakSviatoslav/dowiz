@@ -42,6 +42,8 @@ test('harness — happy path: converges to GREEN, prints report, persists lossle
   assert.equal(rec.iter_to, 3, '3 iterations to clear 3 failing');
   assert.equal(rec.telemetry.tests_fail_start, 3);
   assert.equal(rec.telemetry.tests_fail_end, 0);
+  // cost accumulates across iterations: 3 × $0.10 = $0.30
+  assert.equal(rec.telemetry.cost_usd, 0.30);
 
   // report ALWAYS printed, in full
   assert.equal(printed.length, 1);
@@ -93,4 +95,36 @@ test('harness — budget cap aborts a long-but-progressing run', async () => {
   });
   assert.equal(rec.outcome, 'abort');
   assert.equal(rec.breaker_reason, 'budget');
+  // 3 progressing iters × $5 = $15 trips the $12 budget on the 3rd; not a runaway
+  assert.equal(rec.iter_to, 3);
+  assert.equal(rec.telemetry.cost_usd, 15);
+});
+
+test('harness — iterate() throwing rejects, prints nothing, persists no record', async () => {
+  const dir = tmp();
+  const printed: string[] = [];
+  // succeeds on iter 1, throws on iter 2 — the harness has no try/catch (harness.ts:96)
+  let calls = 0;
+  const exploding: Loop<S, unknown> = {
+    id: 'convergence',
+    goal: () => 'reach green',
+    iterate: (_c, s: S): IterationOutcome<S> => {
+      calls += 1;
+      if (calls >= 2) throw new Error('iterate boom');
+      return { state: { failing: s.failing }, telemetry: { tokens: { cost_usd: 0.1 } } };
+    },
+    progressMetric: (s: S) => s.failing,
+    isTerminal: (s: S) => s.failing === 0,
+  };
+
+  await assert.rejects(
+    runLoop(exploding, { failing: 5 }, { baseDir: dir, ctx: {}, clockMs: fakeClock(), print: (s) => printed.push(s) }),
+    /iterate boom/,
+  );
+
+  // the report is rendered only after a clean finish — a throw means it was never printed
+  assert.equal(printed.length, 0);
+  // no canonical run-record was persisted, and nothing leaked into the metrics index
+  assert.throws(() => readRunRecord(dir, 'convergence', 1));
+  assert.equal(readMetrics(dir, 'convergence').length, 0);
 });

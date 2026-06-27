@@ -24,6 +24,19 @@ test('assertDevAuthDisabledInProd (boot-guard D)', async (t) => {
     assert.throws(() => assertDevAuthDisabledInProd(base({ DEV_AUTH_SECRET: 'leaked' })), /DEV_AUTH_SECRET/);
   });
 
+  await t.test('treats an EMPTY-STRING DEV_AUTH_SECRET as unset (inert, not an offender)', () => {
+    // Empty string is falsy, so the guard does NOT flag it. This is correct, not a gap:
+    // devLoginAllowed() activates only on `!!env.DEV_AUTH_SECRET` (apps/api/src/plugins/dev-guard.ts),
+    // so an empty secret can never carry a dev-auth surface. This pins that equivalence so a future
+    // change to `=== undefined` (which would diverge from the `!!` activation check) goes red here.
+    assert.doesNotThrow(() => assertDevAuthDisabledInProd(base({ DEV_AUTH_SECRET: '' })));
+    // …and the empty value must not appear in any offender list when combined with a real offender.
+    assert.throws(
+      () => assertDevAuthDisabledInProd(base({ DEV_AUTH_SECRET: '', ALLOW_DEV_LOGIN: 'true' })),
+      (err: unknown) => err instanceof Error && /ALLOW_DEV_LOGIN/.test(err.message) && !/DEV_AUTH_SECRET/.test(err.message),
+    );
+  });
+
   await t.test('throws on prod when a dev keypair / kid is present', () => {
     assert.throws(() => assertDevAuthDisabledInProd(base({ JWT_DEV_KID: 'dev' })), /JWT_DEV_KID/);
     assert.throws(() => assertDevAuthDisabledInProd(base({ JWT_DEV_PRIVATE_KEY: 'x' })), /JWT_DEV_PRIVATE_KEY/);

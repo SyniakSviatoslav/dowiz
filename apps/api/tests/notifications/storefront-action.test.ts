@@ -15,7 +15,9 @@ const url = process.env.TEST_DATABASE_URL;
 test('storefront action (DB integration)', { skip: url ? false : 'set TEST_DATABASE_URL to run' }, async (t) => {
   const pool = new pg.Pool({ connectionString: url });
   const userId = '11111111-1111-1111-1111-111111111111';
+  const userIdB = '22222222-2222-2222-2222-222222222222';
   let locationId = '';
+  let locationIdB = '';
 
   const seed = await pool.connect();
   try {
@@ -25,6 +27,12 @@ test('storefront action (DB integration)', { skip: url ? false : 'set TEST_DATAB
       [org.rows[0].id],
     );
     locationId = loc.rows[0].id;
+    // Second location (same org) for nonce cross-location portability test.
+    const locB = await seed.query(
+      `INSERT INTO locations(org_id, slug, name, phone) VALUES ($1, 'sf-loc-b', 'SF Loc B', '+355601') RETURNING id`,
+      [org.rows[0].id],
+    );
+    locationIdB = locB.rows[0].id;
   } finally {
     seed.release();
   }
@@ -94,6 +102,47 @@ test('storefront action (DB integration)', { skip: url ? false : 'set TEST_DATAB
       assert.equal(after, before, 'storefront must be unchanged when nonce is expired');
     } finally { c.release(); }
   });
+
+  await t.test('nonce bound to location-A cannot be replayed against location-B (storefrontService.ts:90 AND location_id)', async () => {
+    const c = await pool.connect();
+    try {
+      const nonce = await createCloseNonce(c, locationId, userId, 'chat-1');
+      const beforeA = (await getLocationStorefront(c, locationId))?.paused;
+      const beforeB = (await getLocationStorefront(c, locationIdB))?.paused;
+      // Consume against the WRONG location — DELETE's `AND location_id = $2` must reject it.
+      const r = await setStorefrontPaused(c, locationIdB, userId, true, { consumeNonce: nonce });
+      assert.deepEqual(r, { result: 'nonce_invalid' });
+      assert.equal((await getLocationStorefront(c, locationId))?.paused, beforeA, 'location-A unchanged');
+      assert.equal((await getLocationStorefront(c, locationIdB))?.paused, beforeB, 'location-B unchanged');
+      // The nonce is still valid for its own location (it was not consumed by the rejected call).
+      const ok = await setStorefrontPaused(c, locationId, userId, true, { consumeNonce: nonce });
+      assert.deepEqual(ok, { result: 'changed', paused: true });
+      await setStorefrontPaused(c, locationId, userId, false); // reset
+    } finally { c.release(); }
+  });
+
+  await t.test('nonce created by user-A cannot be consumed by user-B (storefrontService.ts:90 AND user_id)', async () => {
+    const c = await pool.connect();
+    try {
+      const nonce = await createCloseNonce(c, locationId, userId, 'chat-1');
+      const beforeA = (await getLocationStorefront(c, locationId))?.paused;
+      // Consume as the WRONG user — DELETE's `AND user_id = $3` must reject it.
+      const r = await setStorefrontPaused(c, locationId, userIdB, true, { consumeNonce: nonce });
+      assert.deepEqual(r, { result: 'nonce_invalid' });
+      assert.equal((await getLocationStorefront(c, locationId))?.paused, beforeA, 'storefront unchanged for wrong-user nonce');
+      // The nonce remains valid for its owner (was not consumed by the rejected call).
+      const ok = await setStorefrontPaused(c, locationId, userId, true, { consumeNonce: nonce });
+      assert.deepEqual(ok, { result: 'changed', paused: true });
+      await setStorefrontPaused(c, locationId, userId, false); // reset
+    } finally { c.release(); }
+  });
+
+  // TODO(needs_staging): cross-tenant RLS enforcement — a userId with NO org membership must get
+  // { result: 'denied' }, not 'changed'. setStorefrontPaused relies on the locations FORCE-RLS
+  // policy reading the `app.user_id` GUC (storefrontService.ts:85). This pool connects as a
+  // migration/superuser role that BYPASSRLS, so the GUC has no effect here and the assertion would
+  // falsely pass as 'changed'. A faithful test needs a non-BYPASSRLS app-role DB connection
+  // (staging operational role), so it is not authored here rather than faked. See FINDING #1.
 
   await pool.end();
 });

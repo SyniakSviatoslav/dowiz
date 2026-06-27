@@ -1,4 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
+
+// mock-auth UPSERTs a dev `users` row (a server write) — guard the target so this never
+// runs against prod. BASE defaults to staging, never the prod host.
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 // Proof for the 2026-06-19 onboarding QA fixes (docs/audit/2026-06-19/onboarding-qa-report.md):
 //   O1 — a fresh owner (valid token, no location yet) must land on the onboarding
@@ -12,12 +18,19 @@ import { test, expect } from '@playwright/test';
 
 async function freshOwnerToken(request: any): Promise<string | null> {
   const res = await request.post('/api/dev/mock-auth', { data: { fresh: true } });
-  if (!res.ok()) return null; // 404 ⇒ no DEV_AUTH_SECRET / not a dev-enabled target
+  // 404 ⇒ no DEV_AUTH_SECRET / not a dev-enabled target → a legitimate skip.
+  if (res.status() === 404) return null;
+  // ANY other non-ok (500, network/config error) is a BROKEN target, not a skip —
+  // fail loudly so the suite signals instead of silently no-opping.
+  expect(res.status(), 'mock-auth fresh-owner must return 200 on a dev target').toBe(200);
   const body = await res.json();
-  return body.access_token ?? null;
+  expectJwt(body.access_token, 'mock-auth access_token'); // not truthy-on-id: assert JWT shape
+  return body.access_token as string;
 }
 
 test.describe('Onboarding QA fixes', () => {
+  test.beforeAll(() => requireStaging(BASE));
+
   test('O1: a fresh owner lands on the wizard, not bounced to login', async ({ page, request }) => {
     const token = await freshOwnerToken(request);
     test.skip(!token, 'mock-auth fresh owner unavailable (no DEV_AUTH_SECRET on target)');
@@ -27,13 +40,17 @@ test.describe('Onboarding QA fixes', () => {
       localStorage.setItem('dos_locale', 'en'); // assert against English copy deterministically
     }, token);
     await page.goto('/admin');
-    await page.waitForLoadState('networkidle');
 
+    // Wait on the auth-redirect DESTINATION, not on 'networkidle' (which can fire before the
+    // SPA resolves the auth check, or never settle on a long-poll). toHaveURL polls until the
+    // redirect lands — this is the real timing gate.
+    await expect(page).toHaveURL(/\/admin\/onboarding/);
+    // The wizard actually RENDERED — guards against a blank shell, error boundary, or a
+    // 403 interstitial that would still satisfy a /admin/* URL + the negative checks below.
+    await expect(page.getByTestId('upload-menu-cta')).toBeVisible();
     // Must NOT be ejected to the login screen with a session-expired banner.
     expect(page.url()).not.toContain('/login');
     await expect(page.getByText(/session has expired/i)).toHaveCount(0);
-    // Must be on the onboarding wizard.
-    await expect(page).toHaveURL(/\/admin\/onboarding/);
   });
 
   test('O2 + O4: stepper labels are "Couriers" and "Test order", never "Courier:"', async ({ page, request }) => {

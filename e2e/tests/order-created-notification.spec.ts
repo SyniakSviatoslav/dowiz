@@ -1,42 +1,52 @@
 import { test, expect } from '@playwright/test';
 import { linkTelegram, placeOrder, waitTelegramMessage, deleteTelegramWebhook, clearTelegramUpdates } from '../helpers/notifHelpers';
 import { expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
+
+// Mutating spec (creates a location + order via mock-auth). Refuse to run against prod/unknown.
+const BASE = process.env.VITE_BASE_URL;
 
 test.describe('Order Created Notification Flow', () => {
+  test.beforeAll(() => {
+    requireStaging(BASE);
+  });
+
   test('should receive telegram notification for order.created', async () => {
     // Step 1: Delete webhook to enable getUpdates (avoids 409 conflict)
     await deleteTelegramWebhook();
-    
+
     // Step 2: Clear any pending updates to establish clean baseline
     await clearTelegramUpdates();
-    
+
     // Step 3: Link Telegram for owner
-    const { connectToken, deepLink, locationId, userId } = await linkTelegram('owner');
-    
+    // TODO(needs_staging): linkTelegram only fetches connectToken/deepLink — the bot /start
+    // handshake is never simulated, so the owner chat is not actually bound. A live staging run
+    // must POST the /start payload (connectToken) to the bot webhook before the message can arrive.
+    const { locationId } = await linkTelegram('owner');
+
     // Step 4: Place an order
     const order = await placeOrder(locationId);
     const orderId = order.id;
     expectUuid(orderId, 'orderId');
-    
-    // Step 5: Wait for order.created telegram notification
+    // TODO(needs_staging): read the order back (GET /api/orders/:id with owner token) and assert
+    // status === 'pending' to prove persistence, not just a UUID-shaped echo.
+
+    // The order.created Telegram body embeds `#<shortOrderId>` where shortOrderId is the
+    // first 4 hex chars of the order id, uppercased (apps/api/.../workers/index.ts:282).
+    // Anchor the match to THIS order's short id so a stale / cross-tenant "NEW ORDER" can't pass.
+    const shortId = orderId.slice(0, 4).toUpperCase();
+
+    // Step 5: Wait for order.created telegram notification for this exact order
     const orderCreatedMessage = await waitTelegramMessage(
-      (text) => text.includes('NEW ORDER') || text.includes('YANGI BUYURTMA'),
+      (text) => text.includes('NEW ORDER') && text.includes(`#${shortId}`),
       20000, // 20 second budget
       2000   // check every 2 seconds
     );
-    
-    expect(orderCreatedMessage).toBeTruthy(`Expected order.created telegram message not found`);
-    expect(orderCreatedMessage).toMatch(/NEW ORDER|YANGI BUYURTMA/);
-    
+
+    // Cross-tenant isolation: the received message must belong to this order.
+    expect(orderCreatedMessage).toContain('NEW ORDER');
+    expect(orderCreatedMessage).toContain(`#${shortId}`);
+
     console.log(`Received order.created telegram message: ${orderCreatedMessage}`);
   });
 });
-
-// Helper to get an owner token (mock-auth)
-async function getOwnerToken(): Promise<string> {
-  const BASE_URL = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
-  const authRes = await fetch(`${BASE_URL}/api/dev/mock-auth`, { method: 'POST' });
-  if (!authRes.ok) throw new Error(`Failed to get owner token: ${await authRes.text()}`);
-  const authBody = await authRes.json();
-  return authBody.access_token;
-}

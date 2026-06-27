@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
 import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
 // Courier refresh token is `<sessionUuid>.<32-byte-hex>` (apps/api/src/routes/courier/auth.ts).
 const REFRESH_TOKEN = /^[0-9a-f-]{36}\.[0-9a-f]{64}$/i;
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 let authToken: string;
 let activeLocationId: string;
 let orderId: string;
@@ -32,6 +33,9 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
   // SETUP
   // ════════════════════════════════════════════════════════════════
   test.beforeAll(async ({ request }) => {
+    // This spec MUTATES state (orders, couriers, settings) and calls /api/dev/* backdoors —
+    // refuse to run against prod or an unknown target (fail fast).
+    requireStaging(BASE);
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'owner', locationSlug: 'demo' }, timeout: 30000 });
     expect(authRes.status()).toBe(200);
     const authBody = await authRes.json();
@@ -145,7 +149,13 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
       `${BASE}/api/owner/locations/${activeLocationId}/orders/${orderId}/mark-no-show`,
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
+    // mark-no-show is requireRole(['owner']) and returns 200 {success:true} on success
+    // (apps/api/src/routes/owner/signals.ts). A 5xx is a real failure, not a pass.
     expect(noShowRes.status()).toBe(200);
+    expect((await noShowRes.json()).success).toBe(true);
+    // Verify the side effect: the canonical no-show path sets status=CANCELLED + status_notes='no_show'.
+    const afterStatus = await getOrderStatus(request);
+    expect(afterStatus).toBe('CANCELLED');
   });
 
   test('Flow 5: Owner — verify order detail', async ({ request }) => {
@@ -241,7 +251,8 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     courierRefreshToken = body.refreshToken;
     expectJwt(courierJwt, 'courierJwt');
     expectUuid(body.activeLocationId, 'activeLocationId');
-    expect(body.role || body.role).toBeTruthy();
+    // Login returns role: 'courier' for a courier-membership account (apps/api/src/routes/courier/auth.ts).
+    expect(body.role).toBe('courier');
   });
 
   test('Flow 10: Courier — refresh token', async ({ request }) => {
@@ -337,6 +348,27 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     expect(logoutRes.status()).toBe(200);
   });
 
+  test('Flow 16b: Courier — stale JWT rejected after logout, then re-login', async ({ request }) => {
+    test.skip(!courierJwt, 'No courier auth');
+    // The courier access token is bound to a live courier_sessions row by jti; logout sets
+    // revoked_at, so reusing the same access token must now 401 (apps/api/src/plugins/auth.ts:85).
+    // TODO(staging): validate on a live staging run — listed in needs_staging.
+    const staleRes = await request.get(`${BASE}/api/courier/me`, {
+      headers: { Authorization: `Bearer ${courierJwt}` },
+    });
+    expect(staleRes.status()).toBe(401);
+
+    // Re-login so the subsequent assignment/shift flows have a live session again.
+    const loginRes = await request.post(`${BASE}/api/courier/auth/login`, {
+      data: { email: COURIER_EMAIL, password: COURIER_PASSWORD, location_id: activeLocationId },
+    });
+    expect(loginRes.status()).toBe(200);
+    const body = await loginRes.json();
+    courierJwt = body.jwt;
+    courierRefreshToken = body.refreshToken;
+    expectJwt(courierJwt, 'courierJwt');
+  });
+
   test('Flow 17: Courier — assignment accept/pickup/deliver/cancel', async ({ request }) => {
     // Create a fresh order + assignment for the courier
     if (!assignmentId && courierJwt) {
@@ -387,6 +419,22 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
       timeout: 20000,
     });
     expect(cancelRes.status()).toBe(410);
+  });
+
+  test('Flow 17b: Courier — cannot accept an assignment that is not theirs (IDOR)', async ({ request }) => {
+    test.skip(!courierJwt, 'No courier auth');
+    // acceptCourierAssignment is scoped by courier_id (ADR courier-assignment-idor); an
+    // assignment the courier does not own resolves to 404 (apps/api/src/lib/courierAssignmentService.ts:30).
+    // A random UUID stands in for "an assignment owned by someone else"; the courier_id
+    // predicate makes both cases 404.
+    // TODO(staging): replace the random UUID with a REAL second-tenant assignmentId from a
+    // separate fixture to prove cross-tenant isolation end-to-end — listed in needs_staging.
+    const foreignAssignmentId = crypto.randomUUID();
+    const res = await request.post(`${BASE}/api/courier/assignments/${foreignAssignmentId}/accept`, {
+      headers: { Authorization: `Bearer ${courierJwt}` },
+      timeout: 20000,
+    });
+    expect(res.status()).toBe(404);
   });
 
   // ════════════════════════════════════════════════════════════════

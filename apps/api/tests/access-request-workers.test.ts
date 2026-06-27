@@ -23,6 +23,9 @@ function ensureEnv() {
 }
 ensureEnv();
 
+// Inline UUID matcher (file is under apps/api/tests, not e2e/ — no assert-shape import path).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 let pool: Pool;
 const fakeBoss = { send: async () => {}, createQueue: async () => {}, work: async () => {}, schedule: async () => {} } as any;
 const fakeBus = { publish: async () => {} } as any;
@@ -71,6 +74,18 @@ test('B8 send failure → rolls notified_at back to NULL, bumps notify_attempts,
   const r = await pool.query('SELECT notified_at, notify_attempts FROM access_requests WHERE id=$1', [id]);
   assert.equal(r.rows[0].notified_at, null, 'claim released on send failure');
   assert.equal(r.rows[0].notify_attempts, 1, 'attempt counter bumped (R2-9 bound)');
+});
+
+test('B8 email-disabled: claim stands (notified_at set), no rollback, no attempt bump, no throw', async () => {
+  const { AccessRequestNotifyWorker } = await import('../src/workers/access-request-notify.js');
+  process.env.WAITLIST_NOTIFY_EMAIL = 'ops@example.com';
+  const worker: any = new AccessRequestNotifyWorker(pool, fakeBoss, fakeBus,
+    { sendOps: async () => ({ delivered: false, reason: 'email-disabled' }) } as any);
+  const id = await insertRow('disabled@wkr.test');
+  await assert.doesNotReject(() => worker.handle(id), 'email-disabled is a benign no-send, not a retryable failure');
+  const r = await pool.query('SELECT notified_at, notify_attempts FROM access_requests WHERE id=$1', [id]);
+  assert.ok(r.rows[0].notified_at, 'claim stays set (row visible via status=new, no reconcile treadmill)');
+  assert.equal(r.rows[0].notify_attempts, 0, 'attempt counter NOT bumped (distinct from a genuine send failure)');
 });
 
 test('retention sweep: row > 12 months erased; row < 12 months survives', async () => {
@@ -122,10 +137,20 @@ test('R3-4 route-registration gate: POST 404 when flag off, 200 when on', async 
   await off.close();
 
   const on = await buildWithFlag(true);
+  // Non-reserved TLD (.dev) so the route's reserved-TLD reject does NOT silently no-op it.
+  const onEmail = 'route-on@routecheck.dev';
+  await pool.query('DELETE FROM access_requests WHERE email=$1', [onEmail]);
   const onRes = await on.inject({ method: 'POST', url: '/api/access-requests',
     headers: { 'content-type': 'application/json', 'fly-client-ip': '2.2.2.2' },
-    payload: JSON.stringify({ email: 'y@example.com', consent: true }) });
+    payload: JSON.stringify({ email: onEmail, consent: true }) });
   assert.equal(onRes.statusCode, 200, 'flag on → route mounted → 200');
+  // The route returns 200 for honeypot/no-consent/no-op too — prove a REAL row was inserted,
+  // not a silent no-op masquerading as success.
+  const inserted = await pool.query('SELECT id, consent_at FROM access_requests WHERE email=$1', [onEmail]);
+  assert.equal(inserted.rowCount, 1, 'flag-on 200 actually persisted the access request (not a silent no-op)');
+  assert.match(inserted.rows[0].id, UUID_RE, 'inserted row has a real UUID id');
+  assert.ok(inserted.rows[0].consent_at, 'consent_at recorded (lawful basis), proving the real INSERT path ran');
+  await pool.query('DELETE FROM access_requests WHERE email=$1', [onEmail]);
   await on.close();
 });
 
@@ -142,4 +167,24 @@ test('RLS: ENABLE+FORCE, single ops policy, and anon/authenticated/service_role 
     `SELECT grantee, privilege_type FROM information_schema.role_table_grants
       WHERE table_name='access_requests' AND grantee IN ('anon','authenticated','service_role')`);
   assert.equal(grants.rowCount, 0, 'anon/authenticated/service_role revoked (GRANT-layer boundary)');
+
+  // Live DML proof (not metadata): SET ROLE to each restricted role and attempt a real write.
+  // RLS FORCE + zero grants must yield a runtime "permission denied", not a silent allow.
+  for (const role of ['anon', 'authenticated', 'service_role']) {
+    const c = await pool.connect();
+    try {
+      await c.query('BEGIN');
+      await c.query(`SET LOCAL ROLE ${role}`);
+      await assert.rejects(
+        () => c.query(
+          `INSERT INTO access_requests (email, consent_at, privacy_version)
+           VALUES ('rls-probe@routecheck.dev', now(), 'v1')`),
+        /permission denied/i,
+        `${role} must be DENIED INSERT on access_requests at runtime`,
+      );
+      await c.query('ROLLBACK'); // clears the aborted tx and the LOCAL role
+    } finally {
+      c.release();
+    }
+  }
 });

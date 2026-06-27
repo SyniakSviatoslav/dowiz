@@ -27,6 +27,14 @@ test('H7: Integrity under concurrency', async (t) => {
     [locationId],
   );
 
+  // TODO(needs-staging): error-matrix controls missing from this suite —
+  //   (a) INSERT with NO app.user_id set -> expect RLS block / rollback (negative control);
+  //   (b) UPDATE/INSERT under a wrong-tenant app.user_id -> expect 0 rows (403-equivalent);
+  //   (c) true-conflict 409 path (distinct ids, same idempotency_key, no DO UPDATE);
+  //   (d) bad-payload 422 (negative total / missing currency_code).
+  // These require the real RLS-enforcing role + a second seeded tenant; do NOT assert with a
+  // random/nil uuid (proves nothing). Exercise against staging DB.
+
   await t.test('R1: Idempotency — N parallel duplicate orders = 1 order', async () => {
     const idempotencyKey = `test_${crypto.randomUUID()}`;
     const N = 5;
@@ -67,7 +75,12 @@ test('H7: Integrity under concurrency', async (t) => {
       }),
     );
 
-    const uniqueOrders = new Set(results.map(r => r.orderId).filter(Boolean));
+    const returnedIds = results.map(r => r.orderId).filter(Boolean);
+    // Every concurrent attempt must converge on the winning id (no silent 409/rollback
+    // hiding behind a set-size-of-1). Conflates-INSERT-result blind-spot guard.
+    assert.strictEqual(returnedIds.length, N,
+      `Expected all ${N} parallel attempts to return an order id, got ${returnedIds.length}`);
+    const uniqueOrders = new Set(returnedIds);
     assert.strictEqual(uniqueOrders.size, 1,
       `Expected 1 order from ${N} parallel duplicates, got ${uniqueOrders.size}`);
 
@@ -123,6 +136,11 @@ test('H7: Integrity under concurrency', async (t) => {
     );
     assert.strictEqual(finalState.rows[0].status, 'CONFIRMED');
 
+    // TODO(needs-staging): cross-tenant RLS negative — repeat this UPDATE under a REAL second
+    // tenant's app.user_id and assert rowCount===0 (block), then re-read status unchanged.
+    // Requires a second seeded owner; a random/nil uuid 404s by absence and proves nothing
+    // (Test-Integrity rule #5). Run against staging where ownerb@demo.com exists.
+
     // Cleanup
     await sessionPool.query(`DELETE FROM orders WHERE id = $1`, [orderId]);
   });
@@ -138,59 +156,57 @@ test('H7: Integrity under concurrency', async (t) => {
         AND table_name NOT IN ('pgmigrations')
     `);
 
-    for (const row of tables.rows) {
-      try {
-        const checks = await sessionPool.query(`
-          SELECT pgc.conname AS constraint_name
-          FROM pg_constraint pgc
-          JOIN pg_class rel ON rel.oid = pgc.conrelid
-          WHERE rel.relname = $1
-            AND pgc.contype = 'c'
-            AND pgc.condef::text ILIKE '%CHECK%' AND pgc.condef::text ILIKE '%${row.column_name}%'
-        `, [row.table_name]);
+    assert.ok(tables.rows.length > 0, 'Expected money columns to sweep for CHECK constraints');
 
-        if (checks.rowCount === 0) {
-          console.log(`  ℹ ${row.table_name}.${row.column_name} has no CHECK constraint`);
-        }
-      } catch {
-        console.debug('[integrity] CHECK constraint query failed for', row.table_name);
+    const missing: string[] = [];
+    for (const row of tables.rows) {
+      const checks = await sessionPool.query(`
+        SELECT pgc.conname AS constraint_name
+        FROM pg_constraint pgc
+        JOIN pg_class rel ON rel.oid = pgc.conrelid
+        WHERE rel.relname = $1
+          AND pgc.contype = 'c'
+          AND pgc.condef::text ILIKE '%CHECK%' AND pgc.condef::text ILIKE '%' || $2 || '%'
+      `, [row.table_name, row.column_name]);
+
+      if (checks.rowCount === 0) {
+        missing.push(`${row.table_name}.${row.column_name}`);
       }
     }
-    assert.ok(tables.rows.length > 0, 'Expected money columns to sweep for CHECK constraints');
+    // Was: assert.ok(true)-equivalent. A money column with no CHECK is a finding to ESCALATE,
+    // never a thing to weaken (Test-Integrity red-line).
+    assert.deepStrictEqual(missing, [],
+      `Money columns lack a CHECK constraint: ${missing.join(', ')}`);
   });
 
   await t.test('R4: Zero orphans after cascade — FK integrity', async () => {
+    // Derive the FK column from pg_constraint.conkey -> pg_attribute (single-column FKs).
+    // The constraint name is NOT the column name; using conname as a column was the blind-spot.
     const fkRelations = await sessionPool.query(`
-      SELECT conname, conrelid::regclass AS table_name,
-             confrelid::regclass AS ref_table
-      FROM pg_constraint
-      WHERE contype = 'f' AND confrelid::regclass::text IN ('customers', 'orders', 'locations')
+      SELECT con.conname,
+             con.conrelid::regclass AS table_name,
+             con.confrelid::regclass AS ref_table,
+             att.attname AS column_name
+      FROM pg_constraint con
+      JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = con.conkey[1]
+      WHERE con.contype = 'f'
+        AND array_length(con.conkey, 1) = 1
+        AND con.confrelid::regclass::text IN ('customers', 'orders', 'locations')
     `);
 
     let totalOrphans = 0;
     for (const fk of fkRelations.rows) {
-      try {
-        const orphans = await sessionPool.query(
-          `SELECT COUNT(*)::int AS cnt FROM ${fk.table_name}
-           WHERE ${fk.conname} IS NOT NULL AND
-             NOT EXISTS (SELECT 1 FROM ${fk.ref_table} WHERE id = ${fk.table_name}.${getFkColumn(fk.conname)})`,
-        );
-        if (orphans.rows[0].cnt > 0) {
-          console.log(`  ⚠ ${fk.table_name}: ${orphans.rows[0].cnt} orphan(s) via ${fk.conname}`);
-          totalOrphans += orphans.rows[0].cnt;
-        }
-      } catch {
-        console.debug('[integrity] FK orphan check failed for', fk.conname);
+      // Errors must surface (no swallow): a broken orphan query is itself a failure.
+      const orphans = await sessionPool.query(
+        `SELECT COUNT(*)::int AS cnt FROM ${fk.table_name}
+         WHERE ${fk.column_name} IS NOT NULL AND
+           NOT EXISTS (SELECT 1 FROM ${fk.ref_table} WHERE id = ${fk.table_name}.${fk.column_name})`,
+      );
+      if (orphans.rows[0].cnt > 0) {
+        console.log(`  ⚠ ${fk.table_name}: ${orphans.rows[0].cnt} orphan(s) via ${fk.conname} (${fk.column_name})`);
+        totalOrphans += orphans.rows[0].cnt;
       }
     }
     assert.strictEqual(totalOrphans, 0, `Expected zero FK orphans, found ${totalOrphans}`);
   });
 });
-
-function getFkColumn(constraintName: string): string {
-  const map: Record<string, string> = {
-    'orders_customer_id_fkey': 'customer_id',
-    'customers_location_id_fkey': 'location_id',
-  };
-  return map[constraintName] || 'id';
-}

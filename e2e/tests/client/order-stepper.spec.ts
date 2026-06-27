@@ -1,6 +1,7 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import crypto from 'node:crypto';
-import { expectJwt } from '../../helpers/assert-shape';
+import { expectJwt, expectUuid } from '../../helpers/assert-shape';
+import { requireStaging } from '../../helpers/staging-guard';
 
 // Order-status stepper proof (testplan §2a) against deployed staging.
 // Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test order-stepper --project=desktop --reporter=list
@@ -9,6 +10,11 @@ import { expectJwt } from '../../helpers/assert-shape';
 // (self-authenticating via the ?t= grant — no login needed), asserts the delivery-branch
 // stepper, then advances the order to CONFIRMED as owner and proves the step lights up.
 const CREDS = { email: 'test@dowiz.com', password: 'test123456' };
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+
+// These tests MUTATE state (place real orders, drive the lifecycle). Fail fast against a
+// prod/unknown target rather than writing to prod.
+test.beforeAll(() => requireStaging(BASE));
 
 // /api/orders is rate-limited per phone and login per IP; keep a unique phone per order
 // and memoize one owner token per worker.
@@ -71,6 +77,7 @@ async function createOrder(
   const created = await request.post('/api/orders', { data: body });
   expect(created.status(), `create ${type} order: ${await created.text()}`).toBe(201);
   const order = await created.json();
+  expectUuid(order.id, 'created order id');
   const trackUrl = new URL(order.trackUrl as string);
   return { id: order.id as string, trackPath: trackUrl.pathname + trackUrl.search };
 }
@@ -102,8 +109,11 @@ test('order-status stepper renders the delivery branch and lights up on CONFIRME
   });
   expect(patch.status(), `confirm: ${await patch.text()}`).toBe(200);
 
-  // The ?t= grant is single-use and already stripped; the stored session re-fetches on reload.
-  await page.reload();
+  // Real-time proof (Test Integrity §8): the still-open tracking page must light up the
+  // CONFIRMED step from the live WS push alone — NO reload. A reload here would mask a dead
+  // realtime channel by re-fetching over HTTP. The page is anchored to THIS order id.
+  // TODO(needs_staging): only a live staging run exercises the WS push; if the realtime
+  // channel is down this assertion (correctly) goes red instead of being papered over by reload.
   await expect(page.locator('[data-testid="order-step-confirmed"]')).toHaveAttribute('data-active', 'true', { timeout: 25000 });
   await expect(page.locator('[data-testid="order-step-confirmed-time"]')).toBeVisible();
 });
@@ -158,4 +168,42 @@ test('order-status stepper shows the terminal CANCELLED node', async ({ page, re
   const cancelled = page.locator('[data-testid="order-step-cancelled"]');
   await expect(cancelled).toBeVisible({ timeout: 25000 });
   await expect(cancelled).toHaveAttribute('data-active', 'true');
+});
+
+// Negative auth controls (Test Integrity §4) on PATCH /api/orders/:id/status. The positive
+// control (valid owner → 200) is proven by the §2a/§2c/§2d tests above; here we prove the
+// gate actually rejects unauthenticated and bad-token callers rather than letting everyone in.
+// Statuses verified against apps/api/src/plugins/auth.ts verifyAuth (401) and the route at
+// apps/api/src/routes/orders.ts:749 (withTenant RLS → 404 for a non-owning tenant).
+test('PATCH order status rejects unauthenticated and bad-token callers', async ({ request }) => {
+  const target = await demoTarget(request);
+  const { id } = await createOrder(request, 'delivery', target);
+
+  // (1) No Authorization header → 401.
+  const noAuth = await request.patch(`/api/orders/${id}/status`, { data: { status: 'CONFIRMED' } });
+  expect(noAuth.status(), 'bare PATCH must be 401').toBe(401);
+
+  // (2) Malformed bearer token → 401 (token verification fails).
+  const badToken = await request.patch(`/api/orders/${id}/status`, {
+    data: { status: 'CONFIRMED' },
+    headers: { Authorization: 'Bearer not.a.real.jwt' },
+  });
+  expect(badToken.status(), 'garbage-token PATCH must be 401').toBe(401);
+
+  // TODO(needs_staging): a wrong-tenant owner (real second tenant's owner JWT) must get 404
+  // (withTenant RLS hides the order, orders.ts:773-775) — NOT a nil-UUID (§5). Needs a second
+  // seeded owner fixture; add once staging exposes one.
+});
+
+// Self-authenticating ?t= track grant — negative control (Test Integrity §10). An unknown/forged
+// code must be refused with the single opaque 410 (apps/api/src/routes/customer/track.ts:55-62);
+// the grant is reusable-by-design until expiry (track.ts:66-67) so single-use is NOT asserted.
+test('track-exchange refuses an unknown ?t= code with 410', async ({ request }) => {
+  const forged = crypto.randomBytes(32).toString('base64url'); // valid shape, no matching grant
+  const res = await request.post('/api/customer/track/exchange', { data: { code: forged } });
+  expect(res.status(), 'unknown track code must be 410').toBe(410);
+
+  // TODO(needs_staging): cross-order IDOR — a grant minted for order A must not read order B's
+  // status. Needs a real second order from a DIFFERENT customer (distinct customer_id) on a live
+  // run; the issued customer JWT is order/customer-scoped (track.ts:75-79). Do not fake with nil-UUID.
 });

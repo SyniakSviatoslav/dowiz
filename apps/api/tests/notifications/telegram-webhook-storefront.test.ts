@@ -33,6 +33,7 @@ test('telegram webhook storefront + pref routing (DB integration)', { skip: url 
   let userId = '';
   let targetId = '';
   let otherLoc = '';
+  let linkedLoc = '';
 
   const c = await pool.connect();
   try {
@@ -55,16 +56,32 @@ test('telegram webhook storefront + pref routing (DB integration)', { skip: url 
     const org2 = await c.query(`INSERT INTO organizations(name) VALUES ('Other Org') RETURNING id`);
     const loc2 = await c.query(`INSERT INTO locations(org_id, slug, name, phone) VALUES ($1,'other-loc','Other','+355') RETURNING id`, [org2.rows[0].id]);
     otherLoc = loc2.rows[0].id;
+    // a SECOND location the chat IS linked to (target + membership) — used to exercise the
+    // store.confirm nonce-confusion path at the service layer (auth passes, nonce must still
+    // be rejected because it was minted for a different location_id).
+    const org3 = await c.query(`INSERT INTO organizations(name) VALUES ('Linked Org') RETURNING id`);
+    const loc3 = await c.query(`INSERT INTO locations(org_id, slug, name, phone) VALUES ($1,'linked-loc','Linked','+355') RETURNING id`, [org3.rows[0].id]);
+    linkedLoc = loc3.rows[0].id;
+    await c.query(`INSERT INTO memberships(user_id, location_id, role, status) VALUES ($1,$2,'owner','active')`, [userId, linkedLoc]);
+    await c.query(
+      `INSERT INTO owner_notification_targets(location_id, channel, address, status, user_id)
+       VALUES ($1,'telegram',$2,'active',$3)`,
+      [linkedLoc, chatId, userId],
+    );
   } finally {
     c.release();
   }
 
+  // Recording wrappers (not silent no-ops) so realtime/queue side-effects are observable.
+  const busPublishes: Array<{ channel: string; payload: any }> = [];
+  const bossSends: Array<{ queue: string; payload: any }> = [];
+
   const app = Fastify();
   await app.register(webhookRoutes, {
     db: pool,
-    queue: { boss: { send: async () => {} } },
+    queue: { boss: { send: async (q: string, payload: any) => { bossSends.push({ queue: q, payload }); return ''; } } },
     telegramBotSecret: 'sek',
-    messageBus: { publish: async () => {} },
+    messageBus: { publish: async (channel: string, payload: any) => { busPublishes.push({ channel, payload }); } },
   });
 
   const cb = (data: string) => ({
@@ -113,6 +130,82 @@ test('telegram webhook storefront + pref routing (DB integration)', { skip: url 
     const r = await post(cb(`store.open:${otherLoc}`)); // chat has no target@otherLoc
     assert.equal(r.statusCode, 200); // handler answers gracefully
     assert.equal(await paused(otherLoc), true, 'foreign location must stay unchanged');
+  });
+
+  await t.test('wrong webhook secret in URL is rejected (no route, no mutation)', async () => {
+    // The bot secret IS the route path segment — a wrong secret matches no registered
+    // route, so Fastify returns 404 and the handler (and every DB mutation) is never reached.
+    await pool.query(`UPDATE locations SET delivery_paused=true WHERE id=$1`, [locationId]);
+    const r = await app.inject({
+      method: 'POST',
+      url: '/webhook/telegram/WRONG-SECRET',
+      payload: cb(`store.open:${locationId}`),
+    });
+    assert.equal(r.statusCode, 404);
+    assert.equal(await paused(locationId), true, 'wrong-secret request must not toggle the storefront');
+  });
+
+  await t.test('BR-3: store.close on a foreign location is denied (no nonce, no mutation)', async () => {
+    await pool.query(`UPDATE locations SET delivery_paused=false WHERE id=$1`, [otherLoc]);
+    const r = await post(cb(`store.close:${otherLoc}`)); // chat has no target@otherLoc
+    assert.equal(r.statusCode, 200); // handler answers gracefully
+    assert.equal(await paused(otherLoc), false, 'foreign location must stay unchanged');
+    const nonceCount = (await pool.query(
+      `SELECT count(*)::int AS n FROM telegram_action_nonces WHERE location_id=$1 AND action='store.close'`,
+      [otherLoc],
+    )).rows[0].n;
+    assert.equal(nonceCount, 0, 'no close nonce may be minted for a foreign location');
+  });
+
+  await t.test('BR-3: pref.set on a foreign location is denied (no target, no audit)', async () => {
+    const r = await post(cb(`pref.set:${otherLoc}:operational:0`)); // chat has no target@otherLoc
+    assert.equal(r.statusCode, 200); // handler answers gracefully
+    const targetCount = (await pool.query(
+      `SELECT count(*)::int AS n FROM owner_notification_targets WHERE location_id=$1 AND channel='telegram'`,
+      [otherLoc],
+    )).rows[0].n;
+    assert.equal(targetCount, 0, 'pref.set must not create/mutate a target on a foreign location');
+    const auditCount = (await pool.query(
+      `SELECT count(*)::int AS n FROM notification_prefs_audit a
+        JOIN owner_notification_targets t ON t.id = a.target_id
+       WHERE t.location_id=$1`,
+      [otherLoc],
+    )).rows[0].n;
+    assert.equal(auditCount, 0, 'no consent-audit row may be written for a foreign location');
+  });
+
+  await t.test('store.confirm nonce confusion: a nonce minted for locationId cannot close linkedLoc', async () => {
+    // Mint a REAL close nonce for locationId (chat is linked there).
+    await pool.query(`UPDATE locations SET delivery_paused=false WHERE id=$1`, [locationId]);
+    await pool.query(`UPDATE locations SET delivery_paused=false WHERE id=$1`, [linkedLoc]);
+    const r0 = await post(cb(`store.close:${locationId}`));
+    assert.equal(r0.statusCode, 200);
+    const nonce = (await pool.query(
+      `SELECT nonce FROM telegram_action_nonces WHERE location_id=$1 AND action='store.close' ORDER BY created_at DESC LIMIT 1`,
+      [locationId],
+    )).rows[0]?.nonce;
+    assert.match(String(nonce), /^[0-9a-f]{12}$/, 'a valid 12-hex close nonce was minted for locationId');
+    // Replay it against linkedLoc — auth passes (chat IS linked to linkedLoc) so the ONLY
+    // thing that can stop this is the service-layer nonce↔location binding.
+    const r = await post(cb(`store.confirm:${linkedLoc}:${nonce}`));
+    assert.equal(r.statusCode, 200);
+    assert.equal(await paused(linkedLoc), false, 'cross-location nonce must NOT toggle linkedLoc');
+    // The nonce belongs to locationId and must remain unconsumed by the cross-location replay.
+    const stillThere = (await pool.query(
+      `SELECT count(*)::int AS n FROM telegram_action_nonces WHERE nonce=$1 AND location_id=$2`,
+      [nonce, locationId],
+    )).rows[0].n;
+    assert.equal(stillThere, 1, "locationId's nonce must survive a foreign-location confirm attempt");
+  });
+
+  await t.test('storefront/pref toggles emit NO realtime broadcast (current contract)', async () => {
+    // Characterization: store.open/close/confirm + pref.set mutate the DB but do NOT call
+    // messageBus.publish / queue.boss.send (unlike order.* and shift paths). Locking this
+    // makes adding realtime a deliberate, test-reviewed change rather than a silent drift.
+    // TODO(realtime): when storefront toggles should live-update dashboards, exercise the
+    // order.confirm path (needs an orders fixture) and assert publish(channel, {locationId}).
+    assert.equal(busPublishes.length, 0, 'no messageBus.publish on storefront/pref Telegram paths');
+    assert.equal(bossSends.length, 0, 'no queue.boss.send on storefront/pref Telegram paths');
   });
 
   await app.close();

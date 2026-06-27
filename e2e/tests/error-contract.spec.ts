@@ -1,8 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { expectUuid } from '../helpers/assert-shape';
 
 // ADR-0010 Area A1 — structured error envelope + server-authoritative correlationId.
 // A2 will add the full verify:error-contract matrix; this is the A1 infrastructure proof.
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+// Read-only suite (validation 400s + GET probes) — never mutates, so no requireStaging guard;
+// default BASE to staging (never the prod host) so a CI run can't probe prod by accident.
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 test.describe('Error contract A1 — envelope + correlationId', () => {
   // This is an API contract proof — viewport/browser are irrelevant. Pin it to ONE project:
@@ -39,10 +42,16 @@ test.describe('Error contract A1 — envelope + correlationId', () => {
     expect(typeof body.code).toBe('string'); // SCREAMING_SNAKE machine code, not a number
     expect(body.code).toMatch(/^[A-Z][A-Z0-9_]*$/);
     expect(body.code).toBe('VALIDATION_FAILED');
-    expect(typeof body.correlationId).toBe('string');
-    expect(body.correlationId.length).toBeGreaterThan(0);
+    expectUuid(body.correlationId, 'correlationId'); // crypto.randomUUID, not just truthy
     expect(body.status).toBe(400); // numeric status now lives in `status`
-    expect(Array.isArray(body.fields)).toBe(true); // 422-style field paths
+    // 422-style field paths: must be NON-empty AND name the actually-missing field. An empty
+    // `[]` would pass `Array.isArray` while proving the validator surfaced nothing (Zod
+    // exchangeSchema rejects the missing `code` → fields entry { path:'code', code:<keyword> }).
+    expect(Array.isArray(body.fields)).toBe(true);
+    expect(body.fields.length).toBeGreaterThan(0);
+    const codeField = body.fields.find((f: { path: string }) => f.path === 'code');
+    expect(codeField, 'fields must carry the rejected `code` path').toBeTruthy();
+    expect(typeof codeField.code).toBe('string'); // keyword/path only, never the submitted value (B4)
     // Legacy key retained so un-migrated FE keeps working (code-preserving rollout)
     expect(typeof body.error).toBe('string');
   });
@@ -72,14 +81,35 @@ test.describe('Error contract A1 — envelope + correlationId', () => {
     expect(ba.correlationId).not.toBe(bb.correlationId);
   });
 
-  test('5xx leaks no internal detail (generic message, no err.detail/stack)', async ({ request }) => {
-    // A validation error is the deterministic A1 path; assert the leak guard on what we can
-    // reliably trigger: the envelope never carries a `details`/`stack`/`detail` field.
+  test('error envelope leaks no internal detail (no err.detail/stack/details)', async ({ request }) => {
+    // Leak guard on the deterministic path we CAN reliably trigger (validation): the envelope
+    // never carries a `details`/`stack`/`detail` field.
+    // TODO(needs_staging): this does NOT exercise a real 5xx (DB-down / unhandled throw). A
+    // genuine 500 that leaks a stack/PG detail would stay green here. A dedicated 5xx proof
+    // needs a route that deterministically throws on staging (no such public trigger exists
+    // without mutating state) — escalate to add a staging-only 5xx fixture.
     const res = await fireValidationError(request);
     const body = await res.json();
     expect(body.details).toBeUndefined();
     expect(body.detail).toBeUndefined();
     expect(body.stack).toBeUndefined();
+  });
+
+  test('protected route without a token returns EXACTLY 401 (auth negative control)', async ({ request }) => {
+    // GET /api/owner/onboarding/:locationId/state is guarded by verifyAuth + requireRole(['owner'])
+    // (apps/api/src/routes/owner/onboarding.ts:29-30). No Bearer header → verifyAuth short-circuits 401.
+    const res = await request.get(
+      `${BASE}/api/owner/onboarding/00000000-0000-4000-8000-000000000000/state`,
+      { headers: { Accept: 'application/json' }, failOnStatusCode: false },
+    );
+    expect(res.status()).toBe(401); // exact — not [401,403]; missing token, not wrong role
+    const body = await res.json();
+    expect(typeof body.error).toBe('string'); // legacy auth body conveys the failure
+    expect(body.error.length).toBeGreaterThan(0);
+    // TODO(needs_staging): the auth-guard 401/403 path (plugins/auth.ts) still emits the legacy
+    // `{error}` body — the ADR-0010 structured envelope (code/correlationId) is NOT applied there.
+    // Asserting `body.code`/`correlationId` here would (correctly) go red — a real envelope-coverage
+    // gap to escalate, not to fake-green. Verify against live staging before tightening.
   });
 
   test('unmatched API route returns the NOT_FOUND envelope (A2 notFound handler)', async ({ request }) => {
@@ -91,8 +121,7 @@ test.describe('Error contract A1 — envelope + correlationId', () => {
     const body = await res.json();
     expect(body.code).toBe('NOT_FOUND'); // was an ad-hoc {error,path} before A2
     expect(body.status).toBe(404);
-    expect(typeof body.correlationId).toBe('string');
-    expect(body.correlationId.length).toBeGreaterThan(0);
+    expectUuid(body.correlationId, 'correlationId');
     expect(body.path).toBeUndefined(); // path no longer leaked in the body
   });
 });

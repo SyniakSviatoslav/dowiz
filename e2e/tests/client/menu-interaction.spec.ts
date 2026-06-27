@@ -1,105 +1,104 @@
 import { test, expect } from '@playwright/test';
 
+// Hardened against false-greens (AGENTS.md "Test Integrity"): every test asserts a
+// specific product-domain [data-testid] is visible — never body.length / loose regex —
+// and no assertion is wrapped in an if(count>0) conditional-skip. Render waits are
+// web-first (expect-visible / poll), never fixed waitForTimeout sleeps.
+const MENU_ITEM = '[data-testid="menu-item"]';
+const RENDER_TIMEOUT = 20000;
+
 test.describe('Client Menu — Interaction Tests', () => {
-  test('menu page loads with hero and categories', async ({ page }) => {
+  test('menu page loads with nav and product cards', async ({ page }) => {
     await page.goto('/s/demo', { waitUntil: 'networkidle' });
-    await page.waitForTimeout(5000);
 
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(500);
-
-    // Navigation should be present (sticky nav bar)
-    const nav = page.locator('nav').first();
-    await expect(nav).toBeVisible({ timeout: 10000 });
+    // Sticky category nav + at least one real product card must render.
+    await expect(page.locator('[data-testid="category-nav"]')).toBeVisible({ timeout: RENDER_TIMEOUT });
+    await expect(page.locator(MENU_ITEM).first()).toBeVisible({ timeout: RENDER_TIMEOUT });
+    await expect(page.locator('nav').first()).toBeVisible();
   });
 
-  test('category tab click scrolls to section', async ({ page }) => {
+  test('category tab click scrolls to its section', async ({ page }) => {
     await page.goto('/s/demo', { waitUntil: 'networkidle' });
-    await page.waitForTimeout(4000);
 
-    // Click a category tab in the nav
-    const tab = page.locator('[role="tab"]').first();
-    if (await tab.count() > 0) {
-      const tabText = await tab.textContent();
-      await tab.click();
-      await page.waitForTimeout(1000);
+    const nav = page.locator('[data-testid="category-nav"]');
+    await expect(nav).toBeVisible({ timeout: RENDER_TIMEOUT });
 
-      // Should scroll to the section
-      const body = await page.textContent('body');
-      expect(body).toContain(tabText!.trim());
-    }
+    const tabs = nav.locator('button');
+    const tabCount = await tabs.count();
+    expect(tabCount).toBeGreaterThan(0);
+
+    // Sections render in the same order as their tabs (id={category.id}); clicking the
+    // last tab must scroll its section into the viewport — a real DOM consequence, not a no-op.
+    const sections = page.locator('section[id]');
+    await expect(sections.last()).toBeAttached({ timeout: RENDER_TIMEOUT });
+    await tabs.last().click();
+    await expect(sections.last()).toBeInViewport({ timeout: 5000 });
   });
 
   test('product card renders with name and price', async ({ page }) => {
     await page.goto('/s/demo', { waitUntil: 'networkidle' });
-    await page.waitForTimeout(4000);
 
-    // Wait for product cards to appear
-    const productCards = page.locator('article').filter({ has: page.locator('.font-bold') });
-    const cardCount = await productCards.count();
+    const cards = page.locator(MENU_ITEM);
+    await expect(cards.first()).toBeVisible({ timeout: RENDER_TIMEOUT });
+    // A blank menu must FAIL the test — no body.length fallback.
+    expect(await cards.count()).toBeGreaterThan(0);
 
-    if (cardCount > 0) {
-      // First product should have a name and price
-      const firstCard = productCards.first();
-      const text = await firstCard.textContent();
-
-      // Should have at least some text content
-      expect(text.length).toBeGreaterThan(10);
-    } else {
-      // If no products, at least the page rendered
-      const body = await page.textContent('body');
-      expect(body.length).toBeGreaterThan(200);
-    }
+    const firstCard = cards.first();
+    await expect(firstCard.locator('h3')).toBeVisible(); // product name
+    await expect(firstCard).toContainText(/\d/); // price (scoped to the card, not the body)
   });
 
-  test('search input filters products', async ({ page }) => {
+  test('search input actually filters products', async ({ page }) => {
     await page.goto('/s/demo', { waitUntil: 'networkidle' });
-    await page.waitForTimeout(4000);
 
-    // Search input should be present (above the product grid, in the sticky bar)
+    const items = page.locator(MENU_ITEM);
+    await expect(items.first()).toBeVisible({ timeout: RENDER_TIMEOUT });
+    const baseline = await items.count();
+    expect(baseline).toBeGreaterThan(0);
+
     const searchInput = page.locator('input[placeholder*="Search"]');
-    if (await searchInput.count() > 0) {
-      await searchInput.fill('test');
-      await page.waitForTimeout(500);
+    await expect(searchInput).toHaveCount(1);
 
-      // Should not crash
-      const body = await page.textContent('body');
-      expect(body.length).toBeGreaterThan(100);
-    }
+    // Derive a real query token from a rendered product so we don't depend on seed text.
+    const firstName = (await items.first().locator('h3').textContent())?.trim() ?? '';
+    const token = firstName.split(/\s+/)[0];
+    expect(token.length).toBeGreaterThan(0);
+
+    await searchInput.fill(token);
+    // Filtering narrows (or holds) the set, and the source product stays matched.
+    await expect.poll(async () => items.count()).toBeLessThanOrEqual(baseline);
+    await expect(items.filter({ hasText: token }).first()).toBeVisible();
+
+    // A query that cannot match anything must zero out the grid — proves the filter is live.
+    await searchInput.fill('zzqqx-no-such-product');
+    await expect.poll(async () => items.count()).toBe(0);
   });
 
-  test('add to cart button exists on product cards', async ({ page }) => {
+  test('add to cart updates the cart FAB badge', async ({ page }) => {
     await page.goto('/s/demo', { waitUntil: 'networkidle' });
-    await page.waitForTimeout(4000);
 
-    // Find plus buttons (add to cart) on product cards
     const addBtns = page.locator('[data-testid="menu-item-add"]');
-    const count = await addBtns.count();
-    if (count > 0) {
-      // Click first add button
-      await addBtns.first().click();
-      await page.waitForTimeout(1000);
+    await expect(addBtns.first()).toBeVisible({ timeout: RENDER_TIMEOUT });
 
-      // Cart FAB should appear (if cart wasn't empty before)
-      const fabBtn = page.locator('#cartFabBtn');
-      const fabCount = await fabBtn.count();
-      expect(fabCount).toBeGreaterThanOrEqual(0); // May already exist
-    }
+    // FAB renders only when the cart is non-empty; clicking add must make it appear with count "1".
+    const fab = page.locator('#cartFabBtn');
+    await expect(fab).toHaveCount(0);
+    await addBtns.first().click();
+    await expect(fab).toBeVisible({ timeout: 10000 });
+    await expect(fab).toContainText('1');
   });
 
   test('product cards show product info and add button', async ({ page }) => {
     await page.goto('/s/demo', { waitUntil: 'networkidle' });
-    await page.waitForTimeout(6000);
 
-    const productCards = page.locator('[data-testid="menu-item"]').first();
-    await expect(productCards).toBeVisible({ timeout: 15000 });
+    const cards = page.locator(MENU_ITEM);
+    await expect(cards.first()).toBeVisible({ timeout: RENDER_TIMEOUT });
+    expect(await cards.count()).toBeGreaterThanOrEqual(1);
 
-    const count = await page.locator('[data-testid="menu-item"]').count();
-    expect(count).toBeGreaterThanOrEqual(1);
-
-    // Each card should have a price displayed
-    const body = await page.textContent('body');
-    expect(body).toMatch(/\d+/);
+    // Each card must carry a name, an add button, and a price digit.
+    await expect(cards.first().locator('h3')).toBeVisible();
+    await expect(cards.first().locator('[data-testid="menu-item-add"]')).toBeVisible();
+    await expect(cards.first()).toContainText(/\d/);
   });
 
   test('no JS errors on client menu', async ({ page }) => {
@@ -107,7 +106,7 @@ test.describe('Client Menu — Interaction Tests', () => {
     page.on('pageerror', err => errors.push(err.message));
 
     await page.goto('/s/demo', { waitUntil: 'networkidle' });
-    await page.waitForTimeout(4000);
+    await expect(page.locator(MENU_ITEM).first()).toBeVisible({ timeout: RENDER_TIMEOUT });
 
     const criticalErrors = errors.filter(e =>
       !e.includes('favicon') && !e.includes('404') && !e.includes('manifest') && !e.includes('ResizeObserver')
@@ -117,7 +116,7 @@ test.describe('Client Menu — Interaction Tests', () => {
 
   test('no cookies set on client menu', async ({ page }) => {
     await page.goto('/s/demo', { waitUntil: 'networkidle' });
-    await page.waitForTimeout(3000);
+    await expect(page.locator(MENU_ITEM).first()).toBeVisible({ timeout: RENDER_TIMEOUT });
     const cookies = await page.context().cookies();
     expect(cookies).toEqual([]);
   });

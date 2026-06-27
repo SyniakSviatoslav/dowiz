@@ -119,6 +119,34 @@ test('resolveDeliveryFee — first tier covering the distance wins (ASC order)',
   assert.equal(res.deliveryFee, 100);
 });
 
+test('resolveDeliveryFee — pin BETWEEN tiers skips the under-distance tier (proves ASC scan)', () => {
+  const res = resolveDeliveryFee({
+    location: loc(41.0, 19.0, null),
+    pin: { lat: 41.03, lng: 19.0 }, // ~3.34 km: past the 2km tier, inside the 5km tier
+    tiers: [
+      { max_distance_km: 2, fee: 100 },
+      { max_distance_km: 5, fee: 200 },
+    ],
+  });
+  assert.equal(res.ok, true);
+  if (!res.ok) return;
+  // Distance (~3.34km) exceeds the 2km tier, so the FIRST covering tier is the 5km one (200).
+  // If tiers were not honoured in ASC order this would wrongly return 100 or NOT_DELIVERABLE —
+  // the prior ASC test used a ~0km pin and could never distinguish that.
+  assert.equal(res.deliveryFee, 200);
+});
+
+test('resolveDeliveryFee — distance exactly on a tier boundary is inclusive (<=)', () => {
+  const res = resolveDeliveryFee({
+    location: loc(41.0, 19.0, null),
+    pin: { lat: 41.03, lng: 19.0 }, // distanceKm() === 3.336 exactly
+    tiers: [{ max_distance_km: 3.336, fee: 150 }],
+  });
+  assert.equal(res.ok, true);
+  if (!res.ok) return;
+  assert.equal(res.deliveryFee, 150);
+});
+
 test('resolveDeliveryFee — beyond all tiers → NOT_DELIVERABLE', () => {
   const res = resolveDeliveryFee({
     location: loc(41.0, 19.0, null),

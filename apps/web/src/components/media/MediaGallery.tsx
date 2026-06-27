@@ -84,6 +84,7 @@ export function MediaGallery({ media, posterFallbackUrl }: MediaGalleryProps) {
     // non-focusable group (no roving tabindex needed).
     <div
       className="dz-media-gallery"
+      data-testid="media-gallery"
       role="group"
       aria-roledescription="carousel"
       aria-label="Product media"

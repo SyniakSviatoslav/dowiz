@@ -5,6 +5,24 @@ import { withTenant } from '@deliveryos/platform';
 import { mapProductRow } from '../../lib/product-mapper.js';
 import { getOwnerLocationId } from '../../lib/get-owner-location.js';
 
+// SoT for the storefront/menu product create body. Exported so unit tests exercise
+// the REAL schema (not a drifting copy). prep_time_minutes is required; unknown keys
+// are stripped (.strip), not rejected.
+export const menuProductCreateSchema = z.object({
+  name: z.string().min(1).max(200),
+  price: z.number().int().nonnegative(),
+  prep_time_minutes: z.number().int().min(1).max(1440),
+  description: z.string().max(2000).optional().nullable(),
+  available: z.boolean().optional(),
+  category_id: z.string().uuid().optional().nullable(),
+  categoryId: z.string().uuid().optional().nullable(),
+  image_key: z.string().max(500).optional().nullable(),
+  stockCount: z.number().int().nonnegative().optional().nullable(),
+  taste: z.record(z.number().min(0).max(3)).optional().nullable(),
+  recipeLines: z.array(z.any()).optional().nullable(),
+  attributes: z.record(z.any()).optional().nullable(),
+}).strip();
+
 export default async function productRoutes(fastify: FastifyInstance) {
   const server = fastify.withTypeProvider<ZodTypeProvider>();
 
@@ -347,20 +365,7 @@ export default async function productRoutes(fastify: FastifyInstance) {
     {
       preValidation: [server.verifyAuth, server.requireRole(['owner'])],
       schema: {
-        body: z.object({
-          name: z.string().min(1).max(200),
-          price: z.number().int().nonnegative(),
-          prep_time_minutes: z.number().int().min(1).max(1440),
-          description: z.string().max(2000).optional().nullable(),
-          available: z.boolean().optional(),
-          category_id: z.string().uuid().optional().nullable(),
-          categoryId: z.string().uuid().optional().nullable(),
-          image_key: z.string().max(500).optional().nullable(),
-          stockCount: z.number().int().nonnegative().optional().nullable(),
-          taste: z.record(z.number().min(0).max(3)).optional().nullable(),
-          recipeLines: z.array(z.any()).optional().nullable(),
-          attributes: z.record(z.any()).optional().nullable(),
-        }).strip()
+        body: menuProductCreateSchema
       }
     },
     async (request: any, reply: any) => {

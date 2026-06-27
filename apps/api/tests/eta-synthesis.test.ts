@@ -17,6 +17,8 @@ describe('clampWindow — range-never-point + eta_cap (R3-M1 cap-last)', () => {
   test('width floor: a band narrower than min_window_width_min is widened', () => {
     const r = clampWindow(20, 23, CAPS); // raw width 3 < 10
     assert.ok(r.hiMin - r.loMin >= CAPS.minWindowWidthMin, `band ${r.loMin}-${r.hiMin} < floor`);
+    // the floor must widen by raising hi — lo stays anchored at the raw input, not drifted off.
+    assert.strictEqual(r.loMin, 20, `lo drifted off the raw input: ${r.loMin}`);
   });
 
   test('never a point even when lo == hi', () => {
@@ -35,7 +37,9 @@ describe('clampWindow — range-never-point + eta_cap (R3-M1 cap-last)', () => {
   test('huge inputs still clamp to the cap and keep a valid band', () => {
     const r = clampWindow(1000, 2000, CAPS);
     assert.strictEqual(r.hiMin, CAPS.etaCapMin);
-    assert.ok(r.loMin >= 1 && r.loMin < r.hiMin);
+    // lo is clamped FIRST to leave room for the floor under the cap: cap - width = 80 (exact, not >=1).
+    assert.strictEqual(r.loMin, CAPS.etaCapMin - CAPS.minWindowWidthMin);
+    assert.ok(r.loMin < r.hiMin);
   });
 
   test('never below 1, never NaN, on degenerate input', () => {
@@ -50,3 +54,13 @@ describe('clampWindow — range-never-point + eta_cap (R3-M1 cap-last)', () => {
     assert.ok(r.hiMin > r.loMin, `band inverted: ${r.loMin}-${r.hiMin}`);
   });
 });
+
+// TODO(needs_staging): only the pure clampWindow helper is covered here. Two HIGH gaps need a live
+// DB / second tenant and so cannot be faked in this unit suite (Test Integrity §5/§7 — never assert
+// a block with an empty-tenant COUNT or a nil-UUID):
+//   1. synthesizeAndPersistEtaWindow / gatherOrderEtaRange pipeline — assert the live_eta_lo_min /
+//      live_eta_hi_min row written after a status transition equals the clamped band, and that the
+//      frozen promised_window_* pair is set exactly once at CONFIRMED. Needs a seeded order + pg.
+//   2. cross-tenant isolation — call the order-status/ETA read with a JWT for tenant B against a
+//      delivery_id owned by tenant A → assert 403/404 (RLS FORCE), using a REAL second tenant id.
+//   Land these as an integration spec against dowiz-staging (requireStaging) once seeded.

@@ -1,24 +1,33 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Recent Changes Validation — Live https://dowiz.fly.dev', () => {
+// Read-only GETs below target BASE; default to staging so a test never hits prod
+// (no-prod-base-in-test). Navigation tests use the Playwright baseURL (also VITE_BASE_URL-driven).
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+
+test.describe('Recent Changes Validation — Live (staging via VITE_BASE_URL)', () => {
 
   // ─── CDN Image Serving ───────────────────────────────────────────
   test('CDN-1: image route serves webp with correct headers', async ({ page }) => {
     // Test that the /images/ route exists and returns proper content-type
-    const res = await page.request.get('https://dowiz.fly.dev/images/products/test/test.webp');
+    const res = await page.request.get(`${BASE}/images/products/test/test.webp`);
     // 404 is expected since test.webp doesn't exist, but the route must exist (not SPA fallback)
     expect(res.status()).toBe(404);
     // Verify it's not returning HTML (SPA fallback)
     const text = await res.text();
     expect(text).not.toContain('<!DOCTYPE');
+    // Positive: the route returns the JSON error envelope (NOT an SPA HTML 404). The handler
+    // is reply.sendError(404,'NOT_FOUND',…) → buildErrorEnvelope, so code === 'NOT_FOUND'.
+    expect(JSON.parse(text).code).toBe('NOT_FOUND');
   });
 
   test('CDN-2: image route does not serve SPA HTML', async ({ page }) => {
-    const res = await page.request.get('https://dowiz.fly.dev/images/products/nonexistent/file.webp');
+    const res = await page.request.get(`${BASE}/images/products/nonexistent/file.webp`);
     expect(res.status()).toBe(404);
     const text = await res.text();
     expect(text).not.toContain('<!DOCTYPE');
     expect(text).not.toContain('<html');
+    // Positive: a real JSON NOT_FOUND envelope, not an SPA fallback that happens to lack <html>.
+    expect(JSON.parse(text).code).toBe('NOT_FOUND');
   });
 
   // ─── Currency Display (Lek/L instead of ALL) ─────────────────────
@@ -68,7 +77,11 @@ test.describe('Recent Changes Validation — Live https://dowiz.fly.dev', () => 
   test('STATUS-2: ETA time display visible (sq/en/uk)', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
+    // Provenance: prove the ETA/content is API-derived, not a static/mock page that renders
+    // the same strings regardless. The page must call the customer order-status endpoint.
+    const orderApi = page.waitForResponse(r => r.url().includes('/customer/orders/') && r.url().includes('/status'), { timeout: 9000 });
     await page.goto('/s/test-slug/order/o_mock_123?dev=true');
+    await orderApi;
     await page.waitForTimeout(4000);
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
     // Matches Albanian or English translation text
@@ -80,26 +93,37 @@ test.describe('Recent Changes Validation — Live https://dowiz.fly.dev', () => 
   test('STATUS-3: status timeline renders', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
+    const orderApi = page.waitForResponse(r => r.url().includes('/customer/orders/') && r.url().includes('/status'), { timeout: 9000 });
     await page.goto('/s/test-slug/order/o_mock_123?dev=true');
+    await orderApi; // provenance: timeline is API-derived
     await page.waitForTimeout(4000);
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
-    const steps = page.locator('text=/received|preparing|ready|on the way|delivered/i');
+    // Scope to the OrderProgress stepper so tooltips / aria-labels / body copy elsewhere on the
+    // page can't inflate the count (the stepper renders inside [data-testid=order-status-badge]).
+    const steps = page.locator('[data-testid="order-status-badge"]').locator('text=/received|preparing|ready|on the way|delivered/i');
     expect(await steps.count()).toBeGreaterThanOrEqual(4);
   });
 
   test('STATUS-4: share location button hidden (not IN_DELIVERY)', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
+    const orderApi = page.waitForResponse(r => r.url().includes('/customer/orders/') && r.url().includes('/status'), { timeout: 9000 });
     await page.goto('/s/test-slug/order/o_mock_123?dev=true');
+    await orderApi; // provenance: state is API-derived
     await page.waitForTimeout(4000);
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
     await expect(page.locator('text=Share my location with courier')).toHaveCount(0);
+    // TODO(needs-staging): add STATUS-4b positive-control — seed a real IN_DELIVERY order on
+    // staging and assert this button IS visible, so the negative above isn't vacuously true on a
+    // blank/errored page. Requires a live courier-on-the-way order id (no fake/mock substitute).
   });
 
   test('STATUS-5: Order details section + total visible (sq/en/uk)', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
+    const orderApi = page.waitForResponse(r => r.url().includes('/customer/orders/') && r.url().includes('/status'), { timeout: 9000 });
     await page.goto('/s/test-slug/order/o_mock_123?dev=true');
+    await orderApi; // provenance: order details are API-derived
     await page.waitForTimeout(4000);
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
     await expect(page.locator('text=/Porosisë|Order Details|Detajet/i')).toBeVisible({ timeout: 5000 });
@@ -157,11 +181,14 @@ test.describe('Recent Changes Validation — Live https://dowiz.fly.dev', () => 
     expect(page.url()).not.toMatch(/\/admin(\/|\?|$)/);
     // Still on the customer tracking surface.
     expect(page.url()).toContain(`/order/${orderId}`);
+    // Positive: not a blank 200 / generic error — the no-session path renders the customer
+    // tracking error surface with its "back to the menu" escape (OrderStatusPage error branch).
+    await expect(page.locator('[data-testid="order-back-to-menu"]')).toBeVisible({ timeout: 8000 });
   });
 
   // ─── Health Check ────────────────────────────────────────────────
   test('HEALTH-1: app serves HTML on root path', async ({ page }) => {
-    const res = await page.request.get('https://dowiz.fly.dev/');
+    const res = await page.request.get(`${BASE}/`);
     expect(res.status()).toBe(200);
     const text = await res.text();
     expect(text).toContain('<!DOCTYPE html>');

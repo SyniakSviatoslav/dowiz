@@ -92,10 +92,24 @@ for (const loc of LOCALES) {
     await bootOwner(page, request);
     await setLocale(page, loc);
     await stubOwnerBackground(page, { orders: mockOrders(['PENDING', 'PENDING']) });
+    // The persistent new-order banner is WS-driven (DashboardPage useWebSocket → on
+    // `order.created` → unackOrders → banner). Mock the /ws upgrade: ack `auth`, then push
+    // a synthetic `order.created` frame so the banner actually renders. A bare PENDING-card
+    // check never exercised this path → it could go green with the banner wiring broken.
+    await page.routeWebSocket(/\/ws(\?|$)/, (ws) => {
+      ws.onMessage((message) => {
+        let parsed: { type?: string } | null = null;
+        try { parsed = JSON.parse(String(message)) as { type?: string }; } catch { parsed = null; }
+        if (parsed?.type === 'auth' || parsed?.type === 'subscribe') {
+          ws.send(JSON.stringify({ type: 'auth_success' }));
+          ws.send(JSON.stringify({ type: 'order.created', data: { id: 'vis-order-0', status: 'PENDING', shortId: 'A100' } }));
+        }
+      });
+    });
     await page.goto('/admin/orders');
     await settle(page);
-    // A static snapshot of the new (PENDING) order present in the live board. The
-    // persistent new-order banner is WS-driven; the PENDING cards are the stable proof.
+    // Proof the WS-driven banner rendered (not merely that PENDING cards exist).
+    await expect(page.locator('[data-testid="owner-new-order-banner"]')).toBeVisible();
     await expect(page.locator('[data-testid^="order-card-"][data-status="PENDING"]').first()).toBeVisible();
     await expect(page).toHaveScreenshot(`dashboard-new-order-${loc}.png`, { mask: MASK(page), fullPage: true });
   });
@@ -119,16 +133,47 @@ for (const loc of LOCALES) {
     await bootOwner(page, request);
     await setLocale(page, loc);
     await stubOwnerBackground(page, { orders: mockOrders(['PENDING', 'CONFIRMED']) });
-    // Force the realtime socket to fail its upgrade so connectionStatus is not 'connected'.
-    await page.route('**/socket.io/**', (route) => route.abort());
-    await page.route('ws://**', (route) => route.abort()).catch((e) => { void e; /* tolerated: ws:// scheme routing unsupported on some Playwright builds; socket.io abort above already forces the dead-channel state */ });
-    await page.route('wss://**', (route) => route.abort()).catch((e) => { void e; /* tolerated: wss:// scheme routing unsupported on some Playwright builds; socket.io abort above already forces the dead-channel state */ });
+    // Force the realtime socket dead: the app connects a raw WebSocket to `/ws` (NOT
+    // socket.io). Mock the upgrade and immediately close it so connectionStatus settles
+    // on 'disconnected' (close code 1000 → no reconnect, per useWebSocket.onclose).
+    await page.routeWebSocket(/\/ws(\?|$)/, (ws) => ws.close());
     await page.goto('/admin/orders');
     await settle(page);
-    await expect(page.locator('[data-testid="ws-status-dot"]')).toBeVisible();
+    // Assert the dot actually reflects the dead channel — a bare toBeVisible() passed even
+    // when connected, so a broken status→data-connected mapping would not have failed here.
+    await expect(page.locator('[data-testid="ws-status-dot"][data-connected="false"]')).toBeVisible();
     await expect(page).toHaveScreenshot(`dashboard-dead-channel-${loc}.png`, { mask: MASK(page), fullPage: true });
   });
 }
+
+// ── Dashboard: orders fetch error (500 → honest error UI, not a silent empty board) ─
+// Every status branch was previously mocked 200; a 500/spinner/redirect would have slipped
+// through. Here the orders endpoint 500s → DashboardPage.fetchOrders catch → error EmptyState.
+for (const loc of LOCALES) {
+  test(`dashboard-orders-error-${loc}`, async ({ page, request }) => {
+    await bootOwner(page, request);
+    await setLocale(page, loc);
+    await stubOwnerBackground(page); // side fetches only; orders handled below
+    await page.route('**/api/owner/orders', (route) =>
+      route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'internal' }) }),
+    );
+    await page.goto('/admin/orders');
+    await settle(page);
+    // The error surface must render AND no order cards must be present (a 500 cannot look
+    // like a normal/empty board). A bare list check would never have caught a swallowed 500.
+    await expect(page.locator('[data-testid="orders-load-error"]')).toBeVisible();
+    await expect(page.locator('[data-testid^="order-card-"]')).toHaveCount(0);
+    await expect(page).toHaveScreenshot(`dashboard-orders-error-${loc}.png`, { mask: MASK(page), fullPage: true });
+  });
+}
+
+// TODO(needs-staging): two blind-spots can't be honestly covered with route-mocks here —
+//   (1) 401/403 on /api/owner/orders → the real auth interceptor's logout/redirect behaviour
+//       (mocking it would only re-assert the local catch branch, proving nothing about auth).
+//   (2) cross-tenant isolation: a token bound to location A must NOT receive location B's
+//       orders. This needs the REAL /api/owner/orders + a REAL second tenant's seeded id
+//       (a nil/zero id 404s by absence and proves nothing — see AGENTS.md Test Integrity #5).
+//   Both require a live staging run against a 2nd seeded tenant; do NOT fake them here.
 
 // ── Dashboard: alert/sound-enable affordance (the dashboard's "toggle on" surface) ─
 for (const loc of LOCALES) {
@@ -168,7 +213,12 @@ for (const loc of LOCALES) {
     await settle(page);
     // Click the card body (OrderCard root onClick → onViewDetail opens the detail dialog).
     await page.locator('[data-testid="order-card-vis-order-0"]').click();
-    await expect(page.getByRole('dialog')).toBeVisible();
+    const detailDialog = page.getByRole('dialog');
+    await expect(detailDialog).toBeVisible();
+    // Assert the dialog rendered the order's own content (customer + a line item), not just
+    // an empty shell — a visible-dialog-only check passed even if the body failed to bind.
+    await expect(detailDialog.getByText('Customer 1')).toBeVisible();
+    await expect(detailDialog.getByText(/Sushi roll/)).toBeVisible();
     await settle(page);
     await expect(page).toHaveScreenshot(`kanban-order-detail-${loc}.png`, { mask: MASK(page), fullPage: true });
   });

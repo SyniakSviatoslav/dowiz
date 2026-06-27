@@ -23,6 +23,7 @@ function registerEnvelopeHandler(fastify: ReturnType<typeof Fastify>) {
     const status = apiErr?.status ?? error.statusCode ?? 500;
     const code = apiErr?.code ?? (status >= 500 ? 'INTERNAL' : 'ERROR');
     const message = status >= 500 ? 'Internal server error' : apiErr?.message || error.message;
+    reply.header('x-correlation-id', correlationId); // mirror server.ts:421 — divergence guard
     reply.status(status).send({
       code,
       message,
@@ -66,9 +67,13 @@ test('A3 rate-limit error', async (t) => {
     assert.equal(body.status, 429);
     assert.match(body.message, /Too many requests/); // NOT "Internal server error"
     assert.equal(typeof body.retryAfterMs, 'number');
-    assert.ok(body.retryAfterMs > 0); // context.ttl actually flowed through
+    // context.ttl is the remaining window — a '1 minute' window must yield ~60_000ms here,
+    // not TTL=1/1000 (a unit/scale bug that `> 0` would silently pass).
+    assert.ok(body.retryAfterMs >= 50_000 && body.retryAfterMs <= 60_000);
     assert.equal(typeof body.correlationId, 'string');
     assert.ok(body.correlationId.length > 0);
+    // Envelope MUST echo the correlationId in the x-correlation-id header (server.ts:421).
+    assert.equal(limited.headers['x-correlation-id'], body.correlationId);
     // The plugin sets Retry-After itself, before the throw.
     assert.ok(limited.headers['retry-after'] !== undefined);
 

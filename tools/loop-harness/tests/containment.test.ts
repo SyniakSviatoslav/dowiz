@@ -16,8 +16,15 @@ test('checkCredentialIsolation — clean env is ok', () => {
   assert.deepEqual(checkCredentialIsolation({ PATH: '/bin', NODE_ENV: 'test' }), { ok: true, present: [] });
 });
 
-test('assertCredentialIsolation — throws with the offending names when secrets present', () => {
-  assert.throws(() => assertCredentialIsolation({ JWT_PRIVATE_KEY: 'k' }), /CONTAINMENT.*JWT_PRIVATE_KEY/s);
+test('checkCredentialIsolation — secrets present is not ok and lists the offending names', () => {
+  assert.deepEqual(checkCredentialIsolation({ JWT_PRIVATE_KEY: 'k' }), { ok: false, present: ['JWT_PRIVATE_KEY'] });
+});
+
+test('assertCredentialIsolation — throws with count + offending names when secrets present', () => {
+  assert.throws(
+    () => assertCredentialIsolation({ JWT_PRIVATE_KEY: 'k' }),
+    /CONTAINMENT \(§4\).*1 credential-shaped env var\(s\) in context: JWT_PRIVATE_KEY\./s,
+  );
 });
 
 test('assertCredentialIsolation — clean env does not throw', () => {
@@ -28,4 +35,11 @@ test('isTrustedSource — only allowlisted mechanical detectors; web/LLM is untr
   assert.equal(isTrustedSource('config-tune detector (operator-declared tunable)'), true);
   assert.equal(isTrustedSource('web research'), false);
   assert.equal(isTrustedSource('llm-suggested patch'), false);
+});
+
+test('isTrustedSource — exact match only; a prefix/substring of a trusted source is untrusted', () => {
+  // Allowlist must be injection-resistant: no startsWith/includes leniency.
+  assert.equal(isTrustedSource('config-tune detector'), false);
+  assert.equal(isTrustedSource('config-tune detector (operator-declared tunable) + llm patch'), false);
+  assert.equal(isTrustedSource('detector'), false);
 });
