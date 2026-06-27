@@ -10,6 +10,16 @@ authority; the ETHICAL-STOP is friction requiring a recorded decision — this i
 | 3 | Add a real `status` reject in `POST /orders` | **APPROVE** | Designs out the breaker's HARD BLOCKER. This touches a 🔴 untested-hotspot (order route) → its own red→green guardrail + the closed-tenant-rejects-public-order test before it's "done". |
 | 4 | Facts-only extraction vs full | **EXTRACT EVERYTHING; owner manually approves the autofilled data at claim** | Rejects facts-only. The **owner-manual-approval-at-claim** is the accuracy + authority safeguard: nothing the pipeline autofills (descriptions, etc.) is authoritative/live until a human owner reviews + approves it post-claim. **Carve-out that remains BINDING:** zero-PII-in-AI (ADR-0011) is NOT waived by "extract everything" — PII redaction + a free-text/name guard still run **before the AI boundary** (extracting the full menu ≠ sending owner phone/staff names to a 3rd-party model). `place_raw` minimized + hard-delete-on-request (unconsented third-party data). **If the operator intends to also waive PII-redaction-before-AI, that is a SEPARATE binding-invariant override to confirm at P6-3** — not assumed here. |
 
+## Decision 1b — shadow write-authority (resolves the ФАЗА-A UNCERTAIN)
+**Mint a one-time provisioning token so the shadow write goes THROUGH RLS, not around it.** Reject the
+BYPASSRLS-pool and the blanket-SECURITY-DEFINER options. Design (P6-2): a single-use, short-TTL provisioning
+grant that sets an RLS context (`SET LOCAL app.provision_token = <one-time>`) which a NEW, narrow provisioning
+RLS policy on the shadow-writable tables (`organizations`/`locations`/`products`) honors **only** for
+`owner_id IS NULL` + `status='closed'` shadow rows — so RLS stays ENFORCED and provisioning is an explicit,
+auditable, single-use carve-out (not a standing bypass). The token is minted per-acquisition, consumed once,
+never reused. 🔴 RLS red-line → its own migration + red→green RLS test (provisioning policy admits the shadow
+write; a non-token write under the same role is still rejected). This is a **P6-2** concern; P6-1 is unaffected.
+
 **Net:** PUBLIC shadow store, never-orderable (status reject), no pre-claim allergens, full extraction
 gated by **owner-manual-approval-at-claim**, PII-redaction-before-AI stays binding, honest-labeled +
 instant-kill + noindex/sitemap-excluded. Provenance: own-site / official Places API within ToS only.

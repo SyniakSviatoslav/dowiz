@@ -51,7 +51,24 @@ Council: `docs/design/p6-provisioning-council-verdict.md`. **STOP at the end —
   state enum, `menu_draft` jsonb, provenance) + `products` ALTER (`source` enum default `'owner'`,
   `allergens_confirmed` bool default false). UNIQUE-insert-FIRST + whole spine in one tx (dedup race, breaker MED).
 
-## ✅ STOP-Checkpoint ФАЗА A
-INVENTORY complete · 5 MISSING + 1 UNCERTAIN reported above (none silently built) · module/migration plan set ·
-operator decisions recorded. **Awaiting GO to enter P6-1** (migration 068 + state-machine + dedup), per the
-one-PR-per-stage / STOP-GO model.
+## ✅ STOP-Checkpoint ФАЗА A — PASSED (GO received)
+INVENTORY complete · 5 MISSING + 1 UNCERTAIN reported (none silently built) · operator decisions recorded
+(incl. 1b: one-time-token RLS-through write, not bypass).
+
+## ✅ P6-1 — DONE (proven)
+- Staged migration `docs/acquisition/migration-1790000000068-acquisition.ts` (operator places at
+  `packages/db/migrations/` + `migrate:up` on dev-Postgres — migrations dir is protected). Full SQL applies
+  clean on a throwaway PG: `acquisition_sources` (place_id UNIQUE, FORCE-RLS + ops policy, access_requests
+  grant-mirror) + `products` provenance (`source` default 'owner', `allergens_confirmed` default false).
+- `apps/api/src/modules/acquisition/`: `types.ts` (state enum + Zod `.strict()`), `state-machine.ts`
+  (assertTransition, every-non-terminal-has-exit, REQUIRES_REASON), `service.ts` (idempotent `createSource`
+  dedup anchor + guarded `advance`/`flag*`), `route.ts` (ops-only `POST /api/dev/acquisition`, rides the
+  global dev-guard, rate-limited, Zod). Registered `server.ts`.
+- Proof: `acquisition-state-machine.test.ts` 6/6 + `acquisition-service.test.ts` 3/3 vs real PG (dedup → 1
+  row/place_id, legal/illegal transitions, reason invariant). apps/api typecheck + lint clean. Ledger #22.
+- **Operator step before P6-2:** place the staged migration + `migrate:up` on dev-Postgres.
+
+## ▶ NEXT — P6-2 (awaiting GO)
+Places → spine (no LLM) via the **one-time provisioning token** (decision 1b): a single-use grant + a narrow
+RLS provisioning policy on organizations/locations honoring it ONLY for `owner_id IS NULL`+`status='closed'`
+shadow rows — RLS stays enforced. + GO-exception (a) noindex/sitemap. Its own Council-light check (🔴 RLS).
