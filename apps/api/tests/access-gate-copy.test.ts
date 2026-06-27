@@ -9,15 +9,27 @@ import crypto from 'node:crypto';
 //   • R2-10 banned-strings: scarcity copy is mechanically un-shippable pre-invite-gating.
 //   • R2-6  privacy content-hash: the /privacy prose is bound to PRIVACY_NOTICE_VERSION —
 //     editing copy without bumping the version (and this hash) fails the build.
+// SSOT migration (i18n-ssot): translations live in the key-major catalog, not the
+// derived i18n.ts. Each entry is object-form: `'key': { en: '…', sq: '…', uk: '…' }`.
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
-const i18nSrc = readFileSync(REPO + 'packages/ui/src/lib/i18n.ts', 'utf8');
+const i18nSrc = readFileSync(REPO + 'packages/ui/src/lib/i18n-catalog.ts', 'utf8');
 
-// Extract every quoted value on lines whose key starts with one of these prefixes.
+// Extract every locale value for keys starting with one of these prefixes. Handles
+// the object form (the catalog) and the legacy inline `'key': 'value'` form.
 function valuesForPrefix(prefix: string): string[] {
   const out: string[] = [];
-  const re = new RegExp(`'${prefix}[^']*':\\s*'((?:[^'\\\\]|\\\\.)*)'`, 'g');
+  const keyRe = new RegExp(`'(${prefix}[^']*)':\\s*(\\{[\\s\\S]*?\\n\\s*\\}|'(?:[^'\\\\]|\\\\.)*')`, 'g');
   let m: RegExpExecArray | null;
-  while ((m = re.exec(i18nSrc))) out.push(m[1]);
+  while ((m = keyRe.exec(i18nSrc))) {
+    const body = m[2]!;
+    if (body.startsWith('{')) {
+      const vre = /'((?:[^'\\]|\\.)*)'/g; // every quoted value inside the {en,sq,uk} object
+      let v: RegExpExecArray | null;
+      while ((v = vre.exec(body))) out.push(v[1]!);
+    } else {
+      out.push(body.slice(1, -1)); // inline 'value'
+    }
+  }
   return out;
 }
 
@@ -48,7 +60,7 @@ test('privacy retention copy states "12 months" (must equal ACCESS_REQUEST_RETEN
 test('R2-6: /privacy prose content-hash is bound to PRIVACY_NOTICE_VERSION', () => {
   // Bump BOTH config PRIVACY_NOTICE_VERSION and EXPECTED below when the prose changes.
   const PRIVACY_NOTICE_VERSION = '2026-06-20';
-  const EXPECTED = 'e440fe13bdbd120f8c294e034db9ca2a'; // sha256(privacy prose en+sq+uk).slice(0,32); bump with PRIVACY_NOTICE_VERSION
+  const EXPECTED = '3c335bf628e7a15b8553b581233d49ea'; // sha256(privacy prose en+sq+uk from i18n-catalog).slice(0,32); bump with PRIVACY_NOTICE_VERSION
   const hash = crypto.createHash('sha256').update(privacyValues.join('')).digest('hex').slice(0, 32);
   assert.equal(
     hash,

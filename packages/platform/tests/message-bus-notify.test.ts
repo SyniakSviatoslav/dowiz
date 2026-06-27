@@ -1,6 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PgMessageBus } from '../src/message-bus.js';
+
+// message-bus.js calls loadEnv() at module load; stub the required env BEFORE the
+// dynamic import so the pure (pool-stubbed) test runs without real infra.
+const ENV_STUB: Record<string, string> = {
+  NODE_ENV: 'test', APP_BASE_URL: 'http://localhost:3000',
+  DATABASE_URL_OPERATIONAL: 'postgres://u:p@localhost:5432/db',
+  DATABASE_URL_SESSION: 'postgres://u:p@localhost:5432/db',
+  DATABASE_URL_MIGRATIONS: 'postgres://u:p@localhost:5432/db',
+  REDIS_URL: 'redis://localhost:6379', JWT_PRIVATE_KEY: 'test-priv', JWT_PUBLIC_KEY: 'test-pub',
+  JWT_KID: 'test', GOOGLE_CLIENT_ID: 'test', GOOGLE_CLIENT_SECRET: 'test',
+  VAPID_PUBLIC_KEY: 'test', VAPID_PRIVATE_KEY: 'test', IP_HASH_SALT: 'test',
+};
+for (const [k, v] of Object.entries(ENV_STUB)) if (!process.env[k]) process.env[k] = v;
+const { PgMessageBus } = await import('../src/message-bus.js');
 
 // Extract the single-quoted payload from a `NOTIFY "chan", '...'` statement and
 // undo the '' escaping, so we can JSON.parse what actually went on the wire.
