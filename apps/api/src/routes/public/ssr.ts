@@ -3,6 +3,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { renderMenuPage } from '../../lib/ssr-renderer.js';
 import { isBot, serveSpaShell } from '../../lib/spa-shell.js';
+import { renderShadowPreview } from '../../lib/preview-render.js';
 
 // /s/:slug is the menu. Humans get the React SPA storefront (one cart, shared
 // across menu → cart → checkout → order via /s/:slug/* in client-flow.ts).
@@ -16,6 +17,21 @@ export default (async function ssrRoutes(fastify: any, opts: any) {
 
   fastify.get('/s/:slug', async (request: any, reply: any) => {
     const { slug } = request.params as any;
+
+    // P6-3 (D): a SHADOW tenant gets the honest labeled preview (humans AND bots) — generic OG (H3) +
+    // noindex + never-orderable. read_preview_menu returns non-null ONLY for shadows (owner_id NULL +
+    // closed + published_at NULL). If migration 070 isn't applied yet, the fn is absent → fall through
+    // to the real-tenant path (where the B2 shadow guard still suppresses the real name as a safety net).
+    try {
+      const previewRes = await db.query('SELECT read_preview_menu($1) AS m', [slug]);
+      const previewMenu = previewRes.rows[0]?.m;
+      if (previewMenu) {
+        reply.header('X-Robots-Tag', 'noindex, nofollow');
+        return reply.type('text/html').send(renderShadowPreview(previewMenu));
+      }
+    } catch (err: any) {
+      if (err?.code !== '42883') console.debug('[ssr] preview lookup failed:', err?.message); // 42883 = fn not yet migrated
+    }
 
     if (isBot(request.headers['user-agent'])) {
       const html = await renderMenuPage(slug, db);
