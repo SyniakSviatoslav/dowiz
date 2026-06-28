@@ -19,6 +19,7 @@ import { GdprErasureWorker } from '../workers/anonymizer-gdpr.js';
 import { AccessRequestNotifyWorker } from '../workers/access-request-notify.js';
 import { AccessRequestRetentionWorker } from '../workers/access-request-retention.js';
 import { AcquisitionRetentionWorker } from '../workers/acquisition-retention.js';
+import { DeliveryTraceRetentionWorker } from '../workers/delivery-trace-retention.js';
 import { registerNotifySubscriptions } from './messaging.js';
 
 export interface BackgroundWorkerDeps {
@@ -124,6 +125,8 @@ export async function startBackgroundWorkers(deps: BackgroundWorkerDeps): Promis
   await accessRequestRetentionWorker.start();
   const acquisitionRetentionWorker = new AcquisitionRetentionWorker(pool, queue.boss, messageBus);
   await acquisitionRetentionWorker.start();
+  const deliveryTraceRetentionWorker = new DeliveryTraceRetentionWorker(pool, queue.boss, messageBus);
+  await deliveryTraceRetentionWorker.start();
 
   registerNotifySubscriptions(messageBus, queue.boss);
 
