@@ -18,6 +18,7 @@ import { AnonymizerRetentionWorker } from '../workers/anonymizer-retention.js';
 import { GdprErasureWorker } from '../workers/anonymizer-gdpr.js';
 import { AccessRequestNotifyWorker } from '../workers/access-request-notify.js';
 import { AccessRequestRetentionWorker } from '../workers/access-request-retention.js';
+import { AcquisitionRetentionWorker } from '../workers/acquisition-retention.js';
 import { registerNotifySubscriptions } from './messaging.js';
 
 export interface BackgroundWorkerDeps {
@@ -121,6 +122,8 @@ export async function startBackgroundWorkers(deps: BackgroundWorkerDeps): Promis
   await accessRequestNotifyWorker.start();
   const accessRequestRetentionWorker = new AccessRequestRetentionWorker(pool, queue.boss, messageBus);
   await accessRequestRetentionWorker.start();
+  const acquisitionRetentionWorker = new AcquisitionRetentionWorker(pool, queue.boss, messageBus);
+  await acquisitionRetentionWorker.start();
 
   registerNotifySubscriptions(messageBus, queue.boss);
 

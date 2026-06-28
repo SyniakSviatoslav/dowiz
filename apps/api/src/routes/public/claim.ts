@@ -9,6 +9,7 @@ import type { Pool } from 'pg';
 //  • POST /api/claim/decline — NO auth, token-only: the restaurant can erase the unconsented preview
 //    in one action without creating an account (mandatory, equally-prominent to claim — counsel CC2).
 const tokenSchema = z.object({ token: z.string().min(16).max(256) });
+const requestSchema = z.object({ slug: z.string().trim().min(2).max(100).regex(/^[a-z0-9-]+$/) }).strict();
 
 export default async function claimRoutes(fastify: FastifyInstance, opts: { pool: Pool }) {
   const { pool } = opts;
@@ -37,6 +38,30 @@ export default async function claimRoutes(fastify: FastifyInstance, opts: { pool
         }
         throw e;
       }
+    },
+  );
+
+  // Owner-initiated "this is my restaurant" REQUEST (counsel steel-man — the most-consented entry). It does
+  // NOT auto-mint (that would be a spam/IDOR vector — anyone could trigger unsolicited claim emails). It
+  // records a verified-mint REQUEST for ops, which then does the contact-verified mint. Generic ack always
+  // (no enumeration of which slugs are shadows).
+  fastify.post(
+    '/claim/request',
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (request: any, reply: any) => {
+      const parsed = requestSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ error: 'VALIDATION_FAILED' });
+      try {
+        // Only a shadow (read_preview_menu non-null) yields a real signal; non-shadows are silently ignored.
+        const res = await pool.query('SELECT read_preview_menu($1) AS m', [parsed.data.slug]);
+        if (res.rows[0]?.m) {
+          console.log(JSON.stringify({ event: 'acquisition.claim_requested', slug: parsed.data.slug, at: new Date().toISOString() }));
+        }
+      } catch (err: any) {
+        if (err?.code !== '42883') console.debug('[claim] request lookup failed:', err?.message);
+      }
+      // Generic ack regardless — never reveal whether the slug is a claimable shadow.
+      return reply.code(202).send({ requested: true, message: 'If this is your restaurant, our team will verify ownership via the contact on file and send a claim link.' });
     },
   );
 

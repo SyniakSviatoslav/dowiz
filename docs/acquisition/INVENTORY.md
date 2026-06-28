@@ -136,6 +136,14 @@ authors menu → publishes via the existing gated path.
   schema under NOBYPASSRLS. **Operator: migrate:up on staging (next deploy applies via release_command) + set
   PROVISION_OPS_SECRET; run the Playwright verify spec on staging before PROD.** Remaining follow-ups:
   owner-initiated "this is my restaurant" verified-invite request, decline-without-complaint health metric (CC4).
+- **Follow-ups DONE (2026-06-28):** (1) **retention cron** — `AcquisitionRetentionWorker`
+  (`workers/acquisition-retention.ts`, wired in bootstrap/workers.ts) schedules `runRetentionSweep` daily
+  (03:30, advisory-locked, .catch-wrapped) — the GDPR Art-5(e) sweep now runs automatically. (2) **CC4
+  decline-without-complaint** — `declineAndErase` emits `acquisition.shadow_declined`; `recordComplaint` +
+  `POST /internal/acquisition/complaint` emit `acquisition.complaint` (structured logs → a computable health
+  signal, no migration; proof acquisition-metrics.test.ts 2/2). (3) **owner-initiated request** — public
+  `POST /api/claim/request {slug}` records `acquisition.claim_requested` for ops (signal-only, NO auto-mint →
+  no spam/IDOR vector; generic 202 ack, no enumeration). Ops then does the contact-verified mint.
 - **Extraction orchestration WIRED** — `POST /internal/acquisition/extract` (orchestrate-extraction.ts) composes
   MenuSource.locate (SSRF) → AiOcrParser.parse (C1) → classifyExtraction (H4), driving SOURCED→ENRICHED (or to a
   terminal verdict). Closes the SOURCED→ENRICHED gap (no manual menu_draft seed). Proof:
