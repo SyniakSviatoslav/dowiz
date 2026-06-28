@@ -137,6 +137,18 @@ export async function declineAndErase(pool: Pool, token: string): Promise<void> 
   }
   await hardDeleteShadow(pool, sourceId); // clears spine + place_raw + menu_draft + grants
   await flagTerminal(pool, sourceId, 'ABANDONED', 'owner declined the preview (erased)');
+  // CC4 — a decline is a first-class health signal. Structured log = a log-based metric (decline rate);
+  // paired with logged complaints (recordComplaint), the key signal is decline-WITHOUT-complaint.
+  console.log(JSON.stringify({ event: 'acquisition.shadow_declined', acquisition_source_id: sourceId, at: new Date().toISOString() }));
+}
+
+/**
+ * CC4 — record a complaint / C&D against an acquisition (the OTHER half of the health signal). Structured
+ * log only (no migration); ops calls this when a restaurant objects. decline-without-complaint = the count
+ * of `acquisition.shadow_declined` events minus `acquisition.complaint` events over a window.
+ */
+export function recordComplaint(placeId: string, note?: string): void {
+  console.log(JSON.stringify({ event: 'acquisition.complaint', place_id: placeId, note: note ?? null, at: new Date().toISOString() }));
 }
 
 /**

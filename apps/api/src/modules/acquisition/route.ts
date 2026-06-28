@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { z } from 'zod';
 import { createSource } from './service.js';
 import { mintProvisionToken, provisionShadowSpine, hardDeleteShadow, ProvisionError } from './provisioning.js';
-import { markVerified, mintClaimInvite, buildArt14Notice, ClaimError } from './claim.js';
+import { markVerified, mintClaimInvite, buildArt14Notice, recordComplaint, ClaimError } from './claim.js';
 import { runRetentionSweep } from './retention.js';
 import { orchestrateExtraction, type MenuParser } from './extraction-orchestrator.js';
 import { provisionOpsAuthorized, PROVISION_OPS_HEADER } from './ops-auth.js';
@@ -175,6 +175,19 @@ export default async function acquisitionRoutes(fastify: FastifyInstance, opts: 
         if (e instanceof ClaimError) return reply.code(409).send({ error: e.code });
         throw e;
       }
+    },
+  );
+
+  // CC4 — record a complaint / C&D against an acquisition (the other half of the decline-without-complaint
+  // health signal). Structured log; ops calls this when a restaurant objects.
+  fastify.post(
+    '/acquisition/complaint',
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const parsed = z.object({ place_id: z.string().trim().min(1).max(512), note: z.string().trim().max(2000).optional() }).strict().safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ error: 'VALIDATION_FAILED' });
+      recordComplaint(parsed.data.place_id, parsed.data.note);
+      return reply.code(200).send({ recorded: true });
     },
   );
 
