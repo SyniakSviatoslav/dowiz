@@ -30,6 +30,7 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
     try {
       const orderRes = await db.query(`
          SELECT o.id, o.status, o.type, o.delivery_address, o.delivery_instructions,
+                o.payment_outcome,
                 o.total, o.tip_amount, o.created_at::text as created_at,
                 o.delivery_lat, o.delivery_lng,
                 o.promised_window_lo_min, o.promised_window_hi_min,
@@ -149,6 +150,13 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
       return reply.status(200).send({
         id: row.id,
         status: row.status,
+        // deliver v2 (Q4): surface the customer's OWN recorded outcome so a customer recorded as a refuser
+        // (refused_goods/refused_payment/customer_cancelled_on_door) can SEE and contest it — the accused sees
+        // the accusation (the inversion-of-C2 fix). Code only; the FE i18n-maps it humanely. paid_full/pending
+        // need no callout.
+        outcome: row.payment_outcome && row.payment_outcome !== 'pending' && row.payment_outcome !== 'paid_full'
+          ? { code: row.payment_outcome }
+          : null,
         type: row.type,
         rating,
         feedback,
