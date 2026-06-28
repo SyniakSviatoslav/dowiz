@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { createSource } from './service.js';
 import { mintProvisionToken, provisionShadowSpine, hardDeleteShadow, ProvisionError } from './provisioning.js';
 import { markVerified, mintClaimInvite, buildArt14Notice, ClaimError } from './claim.js';
+import { runRetentionSweep } from './retention.js';
 import { provisionOpsAuthorized, PROVISION_OPS_HEADER } from './ops-auth.js';
 
 // P6-1/P6-2 — internal/ops acquisition + provisioning entrypoint. Mounted OUTSIDE /api/dev so the
@@ -155,6 +156,20 @@ export default async function acquisitionRoutes(fastify: FastifyInstance, opts: 
         if (e instanceof ClaimError) return reply.code(409).send({ error: e.code });
         throw e;
       }
+    },
+  );
+
+  // Retention sweep (council H-abandoned-TTL / GDPR Art-5(e)): reap expired grants + invites + hard-delete
+  // unclaimed public shadows past the TTL. Idempotent; a recurring cron POSTs here (the ops-auth gate applies).
+  fastify.post(
+    '/acquisition/retention/sweep',
+    { config: { rateLimit: { max: 6, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const ttl = (request.body as { abandoned_ttl_days?: number } | undefined)?.abandoned_ttl_days;
+      const result = await runRetentionSweep(pool, {
+        abandonedTtlDays: typeof ttl === 'number' && ttl > 0 ? ttl : undefined,
+      });
+      return reply.code(200).send(result);
     },
   );
 }
