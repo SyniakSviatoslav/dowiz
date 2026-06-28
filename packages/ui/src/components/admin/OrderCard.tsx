@@ -7,6 +7,12 @@ import React, { memo, useState } from 'react';
 import { Button, useI18n, MessageThread, PriceDisplay } from '../../index.js';
 import { type AdminOrder, isOrderDetailsPending } from './types.js';
 
+// §5 flow-simplification: collapse the owner lane to Accept → Send-for-delivery (drop the manual
+// Preparing/Ready taps from the main path). Build-time flag, DARK by default (the launch is a separate act;
+// the READY status stays in the machine and its re-enabling is the deferred location-level toggle). The
+// server honest-dispatch (orders.ts → lib/dispatch) makes CONFIRMED→IN_DELIVERY orphan-safe regardless.
+const OWNER_TWO_TAP = (import.meta as any).env?.VITE_OWNER_TWO_TAP === 'true';
+
 interface OrderCardProps {
   order: AdminOrder;
   onUpdateStatus: (id: string, newStatus: string) => Promise<void>;
@@ -225,14 +231,25 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
             <Button size="sm" variant="outline" onClick={() => handleAction('CANCELLED')} isLoading={loadingAction === 'CANCELLED'}>{t('common.reject', 'Reject')}</Button>
           </>
         )}
-        {order.status === 'CONFIRMED' && (
-          <Button size="sm" data-testid="order-prepare" onClick={() => handleAction('PREPARING')} isLoading={loadingAction === 'PREPARING'}>{t('admin.mark_preparing', 'Mark Preparing')}</Button>
-        )}
-        {order.status === 'PREPARING' && (
-          <Button size="sm" data-testid="order-ready" onClick={() => handleAction('READY')} isLoading={loadingAction === 'READY'}>{t('admin.mark_ready', 'Mark Ready')}</Button>
-        )}
-        {order.status === 'READY' && (
-          <Button size="sm" data-testid="order-assign" onClick={() => handleAction('IN_DELIVERY')} isLoading={loadingAction === 'IN_DELIVERY'}>{t('admin.assign_courier', 'Assign Courier')}</Button>
+        {OWNER_TWO_TAP ? (
+          /* §5 collapsed lane: after Accept, ONE tap sends the order for delivery (the manual Preparing/Ready
+             taps are removed from the owner's main path). The server resolves a courier first and never
+             orphans (no courier → stays put, surfaced as a toast). Any pre-delivery status can be sent. */
+          (order.status === 'CONFIRMED' || order.status === 'PREPARING' || order.status === 'READY') && (
+            <Button size="sm" data-testid="order-send" onClick={() => handleAction('IN_DELIVERY')} isLoading={loadingAction === 'IN_DELIVERY'}>{t('admin.send_for_delivery', 'Send for delivery')}</Button>
+          )
+        ) : (
+          <>
+            {order.status === 'CONFIRMED' && (
+              <Button size="sm" data-testid="order-prepare" onClick={() => handleAction('PREPARING')} isLoading={loadingAction === 'PREPARING'}>{t('admin.mark_preparing', 'Mark Preparing')}</Button>
+            )}
+            {order.status === 'PREPARING' && (
+              <Button size="sm" data-testid="order-ready" onClick={() => handleAction('READY')} isLoading={loadingAction === 'READY'}>{t('admin.mark_ready', 'Mark Ready')}</Button>
+            )}
+            {order.status === 'READY' && (
+              <Button size="sm" data-testid="order-assign" onClick={() => handleAction('IN_DELIVERY')} isLoading={loadingAction === 'IN_DELIVERY'}>{t('admin.assign_courier', 'Assign Courier')}</Button>
+            )}
+          </>
         )}
       </div>
     </div>
