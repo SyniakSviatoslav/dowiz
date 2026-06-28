@@ -510,8 +510,14 @@ fastify.register(telegramWebhookRoutes, {
 });
 
 fastify.register(mockAuthRoutes, { db: pool });
-// P6-1 — internal/ops acquisition entrypoint (rides the /api/dev dev-guard, fail-closed on prod).
-fastify.register(acquisitionRoutes, { prefix: '/api/dev', db: pool });
+// P6-1/P6-2 — internal/ops acquisition + provisioning entrypoint. Mounted OUTSIDE /api/dev (breaker
+// B4): gated by its OWN PROVISION_OPS_SECRET (read from env, decoupled from the dev-login owner-JWT
+// minter family), fail-closed 404 when unset. Never public.
+fastify.register(acquisitionRoutes, {
+  prefix: '/internal',
+  pool,
+  opsSecret: process.env.PROVISION_OPS_SECRET,
+});
 
   fastify.post('/api/dev/mock-auth', async (request, reply) => {
     const body = (request.body || {}) as Record<string, unknown>;

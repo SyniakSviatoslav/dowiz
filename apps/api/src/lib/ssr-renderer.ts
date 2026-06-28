@@ -264,9 +264,10 @@ export async function renderMenuPage(
   const client = await pool.connect();
   try {
     const locRes = await client.query(
-      `SELECT id, name, slug, currency_code, currency_minor_unit, default_locale, 
-              supported_locales, address, public_phone, hours_json, geo
-       FROM locations WHERE slug = $1`,
+      `SELECT l.id, l.name, l.slug, l.currency_code, l.currency_minor_unit, l.default_locale,
+              l.supported_locales, l.address, l.public_phone, l.hours_json, l.geo, o.owner_id
+       FROM locations l JOIN organizations o ON o.id = l.org_id
+       WHERE l.slug = $1`,
       [slug],
     );
     if (locRes.rowCount === 0) {
@@ -274,6 +275,12 @@ export async function renderMenuPage(
     }
 
     const loc = locRes.rows[0];
+    // P6-2 (breaker B2 / counsel C1): a shadow tenant (org.owner_id IS NULL) is unconsented — never
+    // emit its real name/logo OG to crawlers/unfurlers. Explicit gate (not the menu RPC's accidental
+    // filtering). The honest, labeled preview render is P6-3.
+    if (loc.owner_id === null || loc.owner_id === undefined) {
+      return `<html><head><meta name="robots" content="noindex, nofollow" /><title>Dowiz</title></head><body><h1>Not available</h1></body></html>`;
+    }
     const menuRes = await client.query(
       `SELECT read_public_menu_all_locales($1) as menu`,
       [slug],

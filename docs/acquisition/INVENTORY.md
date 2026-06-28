@@ -68,7 +68,31 @@ INVENTORY complete · 5 MISSING + 1 UNCERTAIN reported (none silently built) · 
   row/place_id, legal/illegal transitions, reason invariant). apps/api typecheck + lint clean. Ledger #22.
 - **Operator step before P6-2:** place the staged migration + `migrate:up` on dev-Postgres.
 
-## ▶ NEXT — P6-2 (Council-light DONE → awaiting operator GO on the hardened plan)
+## ✅ P6-2 — DONE (proven; 4 blockers designed out)
+- **B1** dedup anchor moved to the in-tx guarded state-transition (`advance` ENRICHED→PROVISIONED,
+  state-pinned) + consume-LAST + partial-unique one-active-grant. **B2/ETHICAL-STOP** shadow tenants
+  (org.owner_id IS NULL) render NO real name/logo to humans/bots + emit noindex (`spa-shell.ts`,
+  `ssr-renderer.ts`) + excluded from sitemap (`seo.ts`). **B3** spine writes `published_at` NULL
+  (proven). **B4** ops surface decoupled from the dev-login flag → its own `PROVISION_OPS_SECRET`,
+  mounted `/internal` (not `/api/dev`), fail-closed 404 (`ops-auth.ts`).
+- Code: `apps/api/src/modules/acquisition/provisioning.ts` (mint + `provisionShadowSpine` one-tx +
+  `hardDeleteShadow` C2 + `reapExpiredGrants`), `route.ts` (mint/spine/hard-delete, ops-auth hook),
+  `ops-auth.ts`. Registered `/internal` in server.ts. Migration staged
+  `docs/acquisition/migration-1790000000069-provision-grants.ts` (operator places + `migrate:up`,
+  REQUIRES 068): `provision_grants` FORCE-RLS + additive `provision_shadow` policies (built-in sha256,
+  no search_path dep).
+- Proof: `apps/api/tests/provision-rls.test.ts` 8/8 under a **real NOBYPASSRLS role** (token admitted,
+  no-token/bogus/expired rejected, single-use, no-widening, B1 chokepoint, one-active-grant, C2
+  delete) + P6-1 regression 9/9. typecheck + lint clean. Ledger #23.
+- **Operator steps before P6-3:** place migrations 068 + 069 + `migrate:up` on dev-Postgres; set
+  `PROVISION_OPS_SECRET` where provisioning should be reachable (NOT a dev-login flag).
+
+## ▶ NEXT — P6-3 (menu extraction → products, awaiting GO)
+Extends `provision_shadow` to `products`/`categories`, writes the menu from `menu_draft` (source='place',
+allergens_confirmed=false), and the honest labeled "preview mockup — not a live store" storefront render
+that lifts B2's stub. PII-redaction-before-AI stays binding. Its own Council-light (🔴 RLS + AI/PII).
+
+## (superseded) P6-2 plan — Council-light verdict
 Places → spine (no LLM) via the **one-time provisioning token** (decision 1b): a single-use grant + a narrow
 additive RLS provisioning policy on organizations/locations/menu_versions honoring it ONLY for
 `owner_id IS NULL`+`status='closed'` shadow rows — RLS stays enforced (once the role is NOBYPASSRLS; inert

@@ -19,9 +19,14 @@ export default (async function seoRoutes(fastify: any, opts: any) {
           LIMIT 1
         ) as has_products
       FROM locations l
+      JOIN organizations o ON o.id = l.org_id
       LEFT JOIN menu_versions mv ON mv.location_id = l.id
       WHERE l.status IS DISTINCT FROM 'deleted'
         AND l.status IS DISTINCT FROM 'disabled'
+        -- P6-2 (B2): never list an unconsented shadow tenant (org.owner_id IS NULL) in the sitemap.
+        -- A P6-2 shadow has no products (already filtered by has_products downstream); this makes
+        -- the exclusion explicit + forward-safe for when P6-3 writes the menu.
+        AND o.owner_id IS NOT NULL
       ORDER BY l.slug
     `);
     return res.rows;
