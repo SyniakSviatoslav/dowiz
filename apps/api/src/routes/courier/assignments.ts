@@ -8,6 +8,7 @@ import { completeDelivery, CompletionError } from '../../lib/deliveryCompletion.
 import { getImageUrl } from '../../lib/image-url.js';
 import { distanceKm } from '../../lib/geo.js';
 import { ETA_DEFAULTS, deliveryLegMinutes } from '../../lib/etaService.js';
+import { releaseBindingAndReoffer } from '../../lib/bindingRelease.js';
 
 const env = loadEnv();
 
@@ -421,8 +422,9 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
       const res = await client.query(`
-        SELECT order_id, shift_id, assigned_at FROM courier_assignments 
-        WHERE id = $1 AND courier_id = $2 AND status IN ('accepted', 'picked_up') FOR UPDATE
+        SELECT ca.order_id, ca.shift_id, ca.assigned_at, ca.status AS asg_status, o.status AS ord_status
+        FROM courier_assignments ca JOIN orders o ON o.id = ca.order_id
+        WHERE ca.id = $1 AND ca.courier_id = $2 AND ca.status IN ('accepted', 'picked_up') FOR UPDATE OF ca
       `, [id, courierId]);
 
       if (res.rowCount === 0) {
@@ -430,7 +432,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
         return reply.sendError(404, 'ASSIGNMENT_NOT_FOUND_OR_INVALID_STATUS', 'ASSIGNMENT_NOT_FOUND_OR_INVALID_STATUS');
       }
 
-      const { order_id, shift_id, assigned_at } = res.rows[0];
+      const { order_id, shift_id, assigned_at, asg_status, ord_status } = res.rows[0];
       const elapsedMs = Date.now() - new Date(assigned_at).getTime();
 
       if (elapsedMs > cancelWindowMs) {
@@ -438,25 +440,23 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
         return reply.sendError(410, 'CANCEL_WINDOW_EXPIRED', 'CANCEL_WINDOW_EXPIRED');
       }
 
-      await client.query(`
-        UPDATE courier_assignments 
-        SET status = 'cancelled', cancelled_at = now(), cancellation_reason = $1 
-        WHERE id = $2
-      `, [reason, id]);
-
-      await client.query(`
-        UPDATE courier_shifts SET status = 'available' WHERE id = $1
-      `, [shift_id]);
+      // D1 (C-2 / R2-2 / R2-5): cancel takes the SAME exit rail as /abort — terminalize the binding, then
+      // revert the order through updateOrderStatus ONLY when it is IN_DELIVERY (status-guarded; never forces an
+      // illegal transition) and re-offer. The old code hand-published an unconditional ORDER_CANCELLED that
+      // LIED for an order reverting to READY and left an owner-forced IN_DELIVERY order stranded (no revert);
+      // the rail + the post-commit binding_changed broadcast now carry the truthful resulting state.
+      const { reoffered } = await releaseBindingAndReoffer(
+        client,
+        { assignmentId: id, orderId: order_id, shiftId: shift_id, asgStatus: asg_status, ordStatus: ord_status, locationId, reason: `courier_cancelled: ${reason}` },
+        { messageBus },
+      );
 
       await client.query('COMMIT');
 
-      await messageBus.publish(BUS_CHANNELS.ORDER_CANCELLED, { 
-        orderId: order_id, 
-        locationId,
-        reason: `courier_cancelled: ${reason}` 
-      });
+      await messageBus.publish(orderChannel(order_id), { type: 'binding_changed', orderId: order_id });
+      await messageBus.publish(dashboardChannel(locationId), { type: 'assignment_aborted', orderId: order_id });
 
-      return reply.send({ success: true });
+      return reply.send({ success: true, reoffered });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -496,41 +496,13 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       }
       const { order_id, shift_id, asg_status, ord_status } = res.rows[0];
 
-      // (1) Terminalize the binding UNCONDITIONALLY + free shift — abort always frees the assignment,
-      //     independent of any order transition.
-      await client.query(
-        `UPDATE courier_assignments SET status = 'cancelled', cancelled_at = now(), cancellation_reason = $1 WHERE id = $2`,
-        [reason, id],
+      // (1)+(2): terminalize the binding + take the order-side action via the SHARED rail (the same one
+      // /cancel uses) — abort always frees the assignment; the transition is guarded on the locked order status.
+      const { reoffered } = await releaseBindingAndReoffer(
+        client,
+        { assignmentId: id, orderId: order_id, shiftId: shift_id, asgStatus: asg_status, ordStatus: ord_status, locationId, reason },
+        { messageBus },
       );
-      await client.query(`UPDATE courier_shifts SET status = 'available' WHERE id = $1`, [shift_id]);
-
-      // (2) Order-side, guarded on the locked order status.
-      let reoffered = false;
-      if (ord_status === 'IN_DELIVERY' && asg_status === 'picked_up') {
-        // Food is out with a failed courier → honest terminal (the no-cash-equivalent CANCELLED).
-        await updateOrderStatus(client, order_id, locationId, 'CANCELLED', { messageBus, comment: reason });
-      } else if (ord_status === 'IN_DELIVERY') {
-        // Legacy flag-OFF force-IN_DELIVERY, pre-pickup → revert to assignable (food still at venue) + clear
-        // the mirror (updateOrderStatus does not touch orders.courier_id) + re-offer.
-        await updateOrderStatus(client, order_id, locationId, 'READY', { messageBus, comment: reason });
-        await client.query(`UPDATE orders SET courier_id = NULL WHERE id = $1`, [order_id]);
-        await client.query(
-          `INSERT INTO courier_dispatch_queue (order_id, location_id, enqueued_at) VALUES ($1,$2,now())
-           ON CONFLICT (order_id) DO UPDATE SET attempts = courier_dispatch_queue.attempts + 1`,
-          [order_id, locationId],
-        );
-        reoffered = true;
-      } else {
-        // R3-2/R4-3: flag-ON accept — the order never advanced (CONFIRMED/PREPARING/READY) → NO status
-        // transition (forcing one would throw). Converge with the decline path: drop the binding + re-offer.
-        await client.query(`UPDATE orders SET courier_id = NULL WHERE id = $1`, [order_id]);
-        await client.query(
-          `INSERT INTO courier_dispatch_queue (order_id, location_id, enqueued_at) VALUES ($1,$2,now())
-           ON CONFLICT (order_id) DO UPDATE SET attempts = courier_dispatch_queue.attempts + 1`,
-          [order_id, locationId],
-        );
-        reoffered = true;
-      }
 
       await client.query('COMMIT');
 

@@ -98,6 +98,27 @@ Both new ESLint rules live in `tools/eslint-plugin-local/src/index.js`, are regi
   WS payload (`courier-events.ts`); the honest `etaRange` on `/customer/orders/:id/status` is the sole
   customer ETA (D1 kept live position/route). | 2026-06-24 · this change
 
+### deliver v2 — RESOLVE round 5 (implementation-drift) guardrails (row 27)
+- **Drift class:** shipped code diverged from items the council marked FIXED (D1 `/cancel` re-created the C-2
+  trap + a false `ORDER_CANCELLED`; D2 owner-reassign raw revert bypassed the machine) + two
+  named-but-unbuilt authorities (D4 anti-scoring-creep ban; D5 M-3a signal-independence). See
+  `docs/design/deliver-v2-cash-as-proof/resolution.md` §"RESOLVE round 5".
+- **Fixes:** the `/cancel` and `/abort` exits now share one rail `apps/api/src/lib/bindingRelease.ts::releaseBindingAndReoffer`
+  (terminalize-first + order-side action guarded on the locked order status; never a forced transition);
+  owner-reassign displaced revert routes through `updateOrderStatus` (`owner/dashboard.ts`); the owner
+  `/deliver` body gained the courier-parity Zod schema (`.int().nonnegative()` / `.strict()` / outcome enum).
+- **RED→GREEN guardrails:**
+  - `apps/api/tests/deliver-drift-resolve5.test.ts` — D1a (IN_DELIVERY+picked_up→CANCELLED), **D1b
+    (IN_DELIVERY+accepted→READY, NOT stuck IN_DELIVERY, NO false ORDER_CANCELLED — the C-2/R2-5 fix)**, D1c
+    (flag-ON CONFIRMED → no forced-transition throw), D2 (IN_DELIVERY→READY writes `order_status_history`),
+    **D5 M-3a (a contradictory pre-existing `delivery_trace` signal does NOT change the completion outcome —
+    the "never build the verdict engine" authority)**. 9/9 green vs a head-migrated throwaway.
+  - `scripts/guardrail-deliver-v2.mjs` (wired into `verify:all`) now also enforces **(D4 / C1/Q5)** no
+    non-`'hold'` `courier_cash_ledger` type write + no penalty/score derived from a signal row — in addition
+    to R2-1 completion-parity + R3-3 no-new-raw-cancel (this row also names the previously-unlisted R3-3 gate).
+- **GREEN** — `node scripts/guardrail-deliver-v2.mjs`; `DV2_TEST_DATABASE_URL=… node --test --import tsx
+  apps/api/tests/deliver-drift-resolve5.test.ts`. | 2026-06-28 · this change
+
 ## Reversal log
 
 _(none — both guardrails active. To remove a guardrail, delete its rule + fixtures and append a

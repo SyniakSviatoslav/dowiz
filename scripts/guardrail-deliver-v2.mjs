@@ -62,6 +62,21 @@ function scan(file) {
       }
     });
   }
+
+  // D4 (C1/Q5 anti-scoring-creep): deliver-v2 writes exactly ONE ledger type — 'hold'. A non-'hold' ledger
+  // type (a 'deduction'/'penalty'/… write) OR a penalty/score DERIVED FROM a passive signal row
+  // (delivery_trace / order_sensor_events / customer_signals) is the reconciliation scoring-creep the council
+  // forbade without its own Triadic Council (ADR-stage21-reconciliation). Scanned EVERYWHERE incl. the primitive.
+  lines.forEach((line, i) => {
+    const window = lines.slice(i, i + 3).join(' ');
+    if (/guardrail-exempt:/.test(window)) return;
+    if (/INSERT\s+INTO\s+courier_cash_ledger/i.test(window) && /'(deduction|penalty|fine|score|chargeback|adjustment|debit)'/i.test(window)) {
+      violations.push(`${file}:${i + 1}: courier_cash_ledger write with a non-'hold' type (scoring-creep, C1/Q5 — needs ADR-stage21-reconciliation Council) → ${line.trim().slice(0, 100)}`);
+    }
+    if (/(deduct|penalt|scoring|score)/i.test(window) && /\b(delivery_trace|order_sensor_events|customer_signals)\b/.test(window)) {
+      violations.push(`${file}:${i + 1}: penalty/score derived from a passive signal row (verdict-engine creep, C1/Q5) → ${line.trim().slice(0, 100)}`);
+    }
+  });
 }
 
 walk(ROOT);
@@ -69,7 +84,7 @@ walk(ROOT);
 if (violations.length) {
   console.error(`✗ guardrail-deliver-v2: ${violations.length} violation(s) (ADR-deliver-v2-cash-as-proof):`);
   for (const v of violations) console.error('  ' + v);
-  console.error('\nFix: route completions through lib/deliveryCompletion.ts::completeDelivery and order cancels through updateOrderStatus.');
+  console.error('\nFix: route completions through lib/deliveryCompletion.ts::completeDelivery, order cancels through updateOrderStatus, and never write a non-\'hold\' ledger type / signal-derived penalty without ADR-stage21-reconciliation.');
   process.exit(1);
 }
-console.log('✓ guardrail-deliver-v2: completion-parity (R2-1) + no-new-raw-cancel (R3-3) hold.');
+console.log('✓ guardrail-deliver-v2: completion-parity (R2-1) + no-new-raw-cancel (R3-3) + anti-scoring-creep (C1/Q5) hold.');
