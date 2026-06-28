@@ -12,6 +12,7 @@ import pg from 'pg';
 import { z, type ZodTypeAny } from 'zod';
 import healthRoutes from './routes/health.js';
 import { assertAccessRequestSchedules } from './workers/access-request-retention.js';
+import { assertDeliveryTraceSchedule } from './workers/delivery-trace-retention.js';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
@@ -839,6 +840,8 @@ fastify.register(acquisitionRoutes, {
     // R3-1 fail-fast: verify both access-request cron schedules landed; a miss is a
     // VISIBLE deploy failure in prod (process.exit 1), not a silent HTTP-dead zombie.
     await assertAccessRequestSchedules(pool);
+    // deliver v2 (R2-7): the GPS-anonymize retention cron must exist — a miss is indefinite-retention drift.
+    await assertDeliveryTraceSchedule(pool);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
