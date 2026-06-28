@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { advance, getById, flagTerminal, type Queryable } from './service.js';
 import { hashToken, hardDeleteShadow } from './provisioning.js';
+import { verifyShadowPreview } from './provision-verifier.js';
 
 // P6 CLAIM PHASE — the ownership-transfer authority. A single-use, short-TTL, opaque-256-bit claim
 // token transfers a SHADOW org (owner_id NULL) to an authenticated owner THROUGH RLS (claim_accept,
@@ -34,8 +35,10 @@ export async function markVerified(pool: Pool, acquisitionSourceId: string): Pro
   const loc = await pool.query('SELECT slug FROM locations WHERE id = $1', [src.location_id]);
   const slug = (loc.rows[0] as { slug?: string } | undefined)?.slug;
   if (!slug) throw new ClaimError('NOT_VERIFIABLE', 'location missing');
-  const preview = await pool.query('SELECT read_preview_menu($1) AS m', [slug]);
-  if (!(preview.rows[0] as { m?: unknown }).m) throw new ClaimError('NOT_VERIFIABLE', 'preview does not render');
+  // P6-6 ProvisionVerifier: the rendered preview must pass every external-boundary invariant (served,
+  // has items, honest banner, noindex, generic OG, never-orderable) before the shadow is offered for claim.
+  const verdict = await verifyShadowPreview(pool, slug);
+  if (!verdict.ok) throw new ClaimError('NOT_VERIFIABLE', `preview failed checks: ${verdict.failed.join(', ')}`);
   await advance(pool, acquisitionSourceId, 'VERIFIED');
 }
 
