@@ -137,8 +137,25 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
        await client.query('BEGIN');
        await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
-       // Use the service to accept the assignment (scoped to the calling courier —
-       // cross-courier IDOR fix; the service rejects another courier's assignment 404)
+       // deliver v2 §A: an 'offered' assignment is the handshake path — accept it (status-guarded, courier-
+       // scoped) and advance the order to IN_DELIVERY (the courier takes the run). Used under
+       // COURIER_OFFER_HANDSHAKE_ENABLED. The order WAS NOT advanced at offer time, so this is its first move.
+       const offered = await client.query(
+         `SELECT order_id, shift_id FROM courier_assignments WHERE id=$1 AND courier_id=$2 AND status='offered' FOR UPDATE`,
+         [id, courierId],
+       );
+       if (offered.rowCount > 0) {
+         const { order_id, shift_id } = offered.rows[0];
+         await client.query(`UPDATE courier_assignments SET status='accepted', offered_expires_at=NULL WHERE id=$1`, [id]);
+         if (shift_id) await client.query(`UPDATE courier_shifts SET status='on_delivery' WHERE id=$1`, [shift_id]);
+         await updateOrderStatus(client, order_id, locationId, 'IN_DELIVERY', { messageBus });
+         await client.query(`UPDATE orders SET courier_id=$1 WHERE id=$2`, [courierId, order_id]);
+         await client.query('COMMIT');
+         return reply.send({ success: true });
+       }
+
+       // Legacy (flag-off): the pre-handshake 'assigned'→'accepted' service path (scoped to the calling
+       // courier — cross-courier IDOR fix; the service rejects another courier's assignment 404).
        const { orderId: orderIdForStatus } = await acceptCourierAssignment(client, id, locationId, courierId, { messageBus });
 
        // Advance order to CONFIRMED (idempotent — ignore if already at or past this state)
@@ -522,41 +539,6 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       await messageBus.publish(orderChannel(order_id), { type: 'binding_changed', orderId: order_id });
       await messageBus.publish(dashboardChannel(locationId), { type: 'assignment_aborted', orderId: order_id });
       return reply.send({ success: true, reoffered });
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
-  });
-
-  // deliver v2 §A: courier ACCEPTS an offered assignment → the handshake advances the order to IN_DELIVERY.
-  // Status-guarded (status='offered' AND courier_id=$me). Used only under COURIER_OFFER_HANDSHAKE_ENABLED.
-  fastify.post('/assignments/:id/accept', {
-    schema: { params: z.object({ id: z.string().uuid() }) },
-  }, async (request: any, reply: any) => {
-    const courierId = request.user.sub;
-    const locationId = request.user.activeLocationId;
-    const { id } = request.params;
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
-      const res = await client.query(
-        `SELECT order_id, shift_id FROM courier_assignments WHERE id=$1 AND courier_id=$2 AND status='offered' FOR UPDATE`,
-        [id, courierId],
-      );
-      if (res.rowCount === 0) {
-        await client.query('ROLLBACK');
-        return reply.sendError(404, 'ASSIGNMENT_NOT_FOUND_OR_NOT_OFFERED', 'ASSIGNMENT_NOT_FOUND_OR_NOT_OFFERED');
-      }
-      const { order_id, shift_id } = res.rows[0];
-      await client.query(`UPDATE courier_assignments SET status='accepted', offered_expires_at=NULL WHERE id=$1`, [id]);
-      if (shift_id) await client.query(`UPDATE courier_shifts SET status='on_delivery' WHERE id=$1`, [shift_id]);
-      await updateOrderStatus(client, order_id, locationId, 'IN_DELIVERY', { messageBus });
-      await client.query(`UPDATE orders SET courier_id=$1 WHERE id=$2`, [courierId, order_id]);
-      await client.query('COMMIT');
-      return reply.send({ success: true });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
