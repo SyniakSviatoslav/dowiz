@@ -14,6 +14,8 @@ import courierRoutes from '../routes/couriers.js';
 import orderRoutes from '../routes/orders.js';
 import categoryRoutes from '../routes/owner/categories.js';
 import productRoutes from '../routes/owner/products.js';
+import menuConfirmRoutes from '../routes/owner/menu-confirm.js';
+import publicClaimRoutes from '../routes/public/claim.js';
 import modifierGroupRoutes from '../routes/owner/modifier-groups.js';
 import menuAvailabilityRoutes from '../routes/owner/menu-availability.js';
 import locationRoutes from '../routes/owner/locations.js';
@@ -91,6 +93,9 @@ export async function registerCoreRoutes(fastify: FastifyInstance, deps: CoreRou
   fastify.register(orderRoutes, { prefix: '/api', db: pool, messageBus, queue });
   fastify.register(categoryRoutes);
   fastify.register(productRoutes);
+  fastify.register(menuConfirmRoutes);
+  // P6 claim phase — public claim accept (verifyAuth) + decline (token-only, no auth).
+  fastify.register(publicClaimRoutes, { prefix: '/api', pool });
   fastify.register(modifierGroupRoutes);
   fastify.register(menuAvailabilityRoutes);
   fastify.register(locationRoutes);

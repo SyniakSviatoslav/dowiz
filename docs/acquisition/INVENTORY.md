@@ -106,10 +106,26 @@ KEEP PUBLIC) in `p6-operator-decisions.md` §P6-3.
   rejected) · `menu-region-pii.test.ts` 5/5 (recall floor) · `menu-extractor.test.ts` 6/6 · `preview-render.test.ts`
   4/4. Ledger #24. typecheck clean. **Operator: place migs 068+069+070 + migrate:up before staging.**
 
-## ▶ NEXT — P6 claim phase (awaiting GO)
-Owner claims a shadow → authenticated, reviews+approves autofilled data (descriptions/allergens), tenant goes
-live. Place the C2 live-menu read-gate (`c2-read-gate-claim-phase.sql`, re-diff first) so post-claim unconfirmed
-allergens stay stripped. First-contact GDPR Art-14 notice attaches to the claim-invite outreach.
+## ✅ P6 CLAIM PHASE — DONE (proven; shadow → consented owner → live)
+Council verdict `docs/design/p6-claim-council-verdict.md`. Owner claims a shadow → authenticated → reviews/
+authors menu → publishes via the existing gated path.
+- **Ownership transfer** = `claim_transfer(token,user)` SECURITY DEFINER carve-out (migration 071, staged) —
+  the inline RLS UPDATE policy can't work (PG requires SELECT-visibility for an UPDATE target; proven); the fn
+  validates the token INSIDE + touches only the target shadow (token = sole authority, K2/IDOR-safe). Leaves
+  published_at NULL + status closed (NO auto-publish — B3), erases place_raw/menu_draft (H-erase), voids grants.
+- **Invite** = 256-bit opaque single-use sha256 token (`claim_invites`, provision_grants RLS template, one-active
+  guard, TTL). **Decline** = token-only, no registration, equally prominent (CC2) → hardDelete. **Art-14 notice**
+  (CC1) for the hostile recipient. **Approve** = `routes/owner/menu-confirm.ts` sets allergens_confirmed=true only
+  (CC3 — owner authors allergens into the write-stripped empty fields; never confirms an AI guess).
+- **C2 live read-gate** placed: `docs/acquisition/migration-1790000000072-c2-read-gate.ts` (verbatim 065/035 +
+  bom-strip CASE, REQUIRES 068, golden-snapshot proof-on-staging plan — DO NOT place blind).
+- Code: `apps/api/src/modules/acquisition/claim.ts`, `routes/public/claim.ts` (accept verifyAuth / decline
+  token-only), `routes/owner/menu-confirm.ts`, ops mint/verify on the `/internal` route. Proof: claim-rls 7/7
+  (NOBYPASSRLS) + claim-notice 8/8; 35/35 P6 total. Ledger #25.
+- **Operator: place migrations 068+069+070+071 (+072 after staging golden-snapshot proof) + migrate:up; set
+  PROVISION_OPS_SECRET.** Follow-ups (not built): email-match hardening (invited_contact_hash is staged for it),
+  owner-initiated "this is my restaurant" verified-invite request (counsel steel-man), reaper cron wiring,
+  decline-without-complaint health metric (CC4).
 
 ## (superseded) P6-2 plan — Council-light verdict
 Places → spine (no LLM) via the **one-time provisioning token** (decision 1b): a single-use grant + a narrow

@@ -136,6 +136,40 @@ export async function declineAndErase(pool: Pool, token: string): Promise<void> 
   await flagTerminal(pool, sourceId, 'ABANDONED', 'owner declined the preview (erased)');
 }
 
+/**
+ * Art-14 first-contact notice (council CC1) — written for the HOSTILE recipient, NOT a growth-hack CTA.
+ * Returned to the ops minter to deliver to the restaurant's official contact alongside the claim/decline
+ * links. Honest: identity, purpose, data categories, SOURCE (your public site/Places), retention, rights
+ * (incl. erasure + complaint), and an EQUALLY-prominent one-click decline-and-erase (no registration).
+ */
+export function buildArt14Notice(opts: { previewUrl: string; claimUrl: string; declineUrl: string; controller?: string }): {
+  subject: string;
+  body: string;
+} {
+  const controller = opts.controller ?? 'Dowiz';
+  return {
+    subject: 'We built a preview of your restaurant from your public website — your options inside',
+    body: [
+      `We are ${controller}. You did not ask us to do this, and we want to be upfront about it: we built a`,
+      `non-live PREVIEW of your menu from your restaurant's PUBLIC website and public Google Places listing.`,
+      ``,
+      `What we used: your business name, address, and the menu items + prices published on your own public`,
+      `pages. Purpose: to show you what an online ordering page could look like. It is NOT a live store, it`,
+      `cannot take orders, and it is hidden from search engines.`,
+      ``,
+      `Preview: ${opts.previewUrl}`,
+      ``,
+      `Your options, both one click:`,
+      `  • CLAIM it (free) — review, correct, and decide whether to go live: ${opts.claimUrl}`,
+      `  • DELETE it — remove the preview and erase the data we used, no account needed: ${opts.declineUrl}`,
+      ``,
+      `Your rights: you can access, correct, or erase this data, and complain to your data protection`,
+      `authority. The data came from your own public website / the Google Places API. If you do nothing, the`,
+      `preview is automatically deleted shortly. Questions: reply to this message.`,
+    ].join('\n'),
+  };
+}
+
 /** Reaper (council H-abandoned-TTL): expired/unused invites → revoked; SHORT TTL for a public shadow. */
 export async function reapExpiredInvites(pool: Pool): Promise<number> {
   const res = await pool.query(
