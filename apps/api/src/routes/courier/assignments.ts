@@ -530,4 +530,80 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
     }
   });
 
+  // deliver v2 §A: courier ACCEPTS an offered assignment → the handshake advances the order to IN_DELIVERY.
+  // Status-guarded (status='offered' AND courier_id=$me). Used only under COURIER_OFFER_HANDSHAKE_ENABLED.
+  fastify.post('/assignments/:id/accept', {
+    schema: { params: z.object({ id: z.string().uuid() }) },
+  }, async (request: any, reply: any) => {
+    const courierId = request.user.sub;
+    const locationId = request.user.activeLocationId;
+    const { id } = request.params;
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
+      const res = await client.query(
+        `SELECT order_id, shift_id FROM courier_assignments WHERE id=$1 AND courier_id=$2 AND status='offered' FOR UPDATE`,
+        [id, courierId],
+      );
+      if (res.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return reply.sendError(404, 'ASSIGNMENT_NOT_FOUND_OR_NOT_OFFERED', 'ASSIGNMENT_NOT_FOUND_OR_NOT_OFFERED');
+      }
+      const { order_id, shift_id } = res.rows[0];
+      await client.query(`UPDATE courier_assignments SET status='accepted', offered_expires_at=NULL WHERE id=$1`, [id]);
+      if (shift_id) await client.query(`UPDATE courier_shifts SET status='on_delivery' WHERE id=$1`, [shift_id]);
+      await updateOrderStatus(client, order_id, locationId, 'IN_DELIVERY', { messageBus });
+      await client.query(`UPDATE orders SET courier_id=$1 WHERE id=$2`, [courierId, order_id]);
+      await client.query('COMMIT');
+      return reply.send({ success: true });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
+  // deliver v2 §A: courier DECLINES an offered assignment → re-offer to the owner. 🔴 The customer order is
+  // UNTOUCHED (only the binding rolls back) — never a trap-state for the customer. Re-enqueues like a reject.
+  fastify.post('/assignments/:id/decline', {
+    schema: { params: z.object({ id: z.string().uuid() }) },
+  }, async (request: any, reply: any) => {
+    const courierId = request.user.sub;
+    const locationId = request.user.activeLocationId;
+    const { id } = request.params;
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
+      const res = await client.query(
+        `SELECT order_id FROM courier_assignments WHERE id=$1 AND courier_id=$2 AND status='offered' FOR UPDATE`,
+        [id, courierId],
+      );
+      if (res.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return reply.sendError(404, 'ASSIGNMENT_NOT_FOUND_OR_NOT_OFFERED', 'ASSIGNMENT_NOT_FOUND_OR_NOT_OFFERED');
+      }
+      const { order_id } = res.rows[0];
+      await client.query(
+        `UPDATE courier_assignments SET status='offered_expired', cancelled_at=now(), cancellation_reason='courier_declined' WHERE id=$1`,
+        [id],
+      );
+      await client.query(
+        `INSERT INTO courier_dispatch_queue (order_id, location_id, enqueued_at) VALUES ($1,$2,now())
+         ON CONFLICT (order_id) DO UPDATE SET attempts = courier_dispatch_queue.attempts + 1`,
+        [order_id, locationId],
+      );
+      await client.query('COMMIT');
+      await messageBus.publish(dashboardChannel(locationId), { type: 'offer_declined', orderId: order_id });
+      return reply.send({ success: true });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
 });
