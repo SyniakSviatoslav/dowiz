@@ -762,6 +762,9 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       return reply.sendError(403, 'FORBIDDEN', 'Forbidden');
     }
 
+     // §5 / R2-1 honest dispatch: the resulting status + whether a courier was dispatched, carried out of the
+     // tx (we cannot send the reply from inside withTenant). Defaults to the requested transition.
+     let outcome: { status: string; dispatched?: boolean; reason?: string } = { status: newStatus };
      try {
        await withTenant(db, user.userId, async (client) => {
          // 1. Read current status
@@ -774,15 +777,26 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
            throw { statusCode: 404, error: 'Order not found' };
          }
 
-          // 2. Use the service to update the order status
           const locationId = cur.rows[0].location_id;
-          await updateOrderStatus(client, id, locationId, newStatus, {
-            messageBus
-          });
 
-          // 3. If transitioning to IN_DELIVERY, find and assign available courier synchronously.
-          // Pickup orders are never dispatched to a courier (READY → PICKED_UP instead).
+          // §5 / R2-1 / R3-2 — HONEST DISPATCH. For an IN_DELIVERY target on a delivery order, find a courier
+          // BEFORE advancing the status. The old code flipped to IN_DELIVERY first, then silently no-op'd when
+          // no courier was free → an IN_DELIVERY order with NO courier and NO recovery affordance (the F1
+          // orphan). Now: no courier → DO NOT advance (stay put), report {dispatched:false,reason:'no_courier'};
+          // the owner re-taps when a courier comes on shift. An order already carrying an active binding (incl
+          // 'offered' from the owner offer-handshake — in the mig-073 partial-uniques) is already being
+          // dispatched → no conflicting insert. This holds regardless of any offer-handshake flag.
           if (newStatus === 'IN_DELIVERY' && cur.rows[0].type === 'delivery') {
+            const bound = await client.query(
+              `SELECT 1 FROM courier_assignments
+               WHERE order_id = $1 AND status IN ('offered','assigned','accepted','picked_up') LIMIT 1`,
+              [id]
+            );
+            if ((bound.rowCount ?? 0) > 0) {
+              // Already being dispatched (e.g. a pending 'offered' row) — leave the order as-is, don't double-bind.
+              outcome = { status: cur.rows[0].status, dispatched: false, reason: 'already_assigned' };
+              return;
+            }
             const availRes = await client.query(
               `SELECT c.id AS courier_id, cs.id AS shift_id
                FROM couriers c
@@ -791,37 +805,38 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
                WHERE cl.location_id = $1 AND c.status = 'active' AND cs.status = 'available'
                  AND c.id NOT IN (
                    SELECT courier_id FROM courier_assignments
-                   WHERE status IN ('assigned','accepted','picked_up') AND courier_id IS NOT NULL
+                   WHERE status IN ('offered','assigned','accepted','picked_up') AND courier_id IS NOT NULL
                  )
                ORDER BY cs.last_heartbeat_at DESC NULLS LAST, c.id ASC
                LIMIT 1`,
               [locationId]
             );
-            if ((availRes.rowCount ?? 0) > 0) {
-              const { courier_id, shift_id } = availRes.rows[0];
-              await client.query(
-                `INSERT INTO courier_assignments (order_id, location_id, courier_id, shift_id, status, assigned_at)
-                 VALUES ($1, $2, $3, $4, 'assigned', now())`,
-                [id, locationId, courier_id, shift_id]
-              );
-              await client.query(
-                `UPDATE courier_shifts SET status = 'on_delivery' WHERE id = $1`,
-                [shift_id]
-              );
-              await messageBus.publish(dashboardChannel(locationId), {
-                type: 'assignment.created',
-                orderId: id,
-                courierId: courier_id
-              });
-              await messageBus.publish(`courier:${courier_id}`, {
-                type: 'task_assigned',
-                payload: { id, orderId: id, status: 'assigned', courierId: courier_id }
-              });
+            if ((availRes.rowCount ?? 0) === 0) {
+              // No courier free → stay at the current status (no orphan). Owner sees "awaiting courier" + re-taps.
+              outcome = { status: cur.rows[0].status, dispatched: false, reason: 'no_courier' };
+              return;
             }
+            // Courier found → NOW advance to IN_DELIVERY and assign, atomically.
+            await updateOrderStatus(client, id, locationId, newStatus, { messageBus });
+            const { courier_id, shift_id } = availRes.rows[0];
+            await client.query(
+              `INSERT INTO courier_assignments (order_id, location_id, courier_id, shift_id, status, assigned_at)
+               VALUES ($1, $2, $3, $4, 'assigned', now())`,
+              [id, locationId, courier_id, shift_id]
+            );
+            await client.query(`UPDATE courier_shifts SET status = 'on_delivery' WHERE id = $1`, [shift_id]);
+            await messageBus.publish(dashboardChannel(locationId), { type: 'assignment.created', orderId: id, courierId: courier_id });
+            await messageBus.publish(`courier:${courier_id}`, { type: 'task_assigned', payload: { id, orderId: id, status: 'assigned', courierId: courier_id } });
+            outcome = { status: newStatus, dispatched: true };
+            return;
           }
+
+          // All other transitions (and pickup) — unchanged.
+          await updateOrderStatus(client, id, locationId, newStatus, { messageBus });
+          outcome = { status: newStatus };
         });
 
-        return reply.status(200).send({ id: id, status: newStatus });
+        return reply.status(200).send({ id, ...outcome });
      } catch (err: unknown) {
       const error = err as Record<string, unknown>;
       if (error.statusCode) {
