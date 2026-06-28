@@ -124,8 +124,15 @@ authors menu → publishes via the existing gated path.
   (NOBYPASSRLS) + claim-notice 8/8; 35/35 P6 total. Ledger #25.
 - **Operator: place migrations 068+069+070+071 (+072 after staging golden-snapshot proof) + migrate:up; set
   PROVISION_OPS_SECRET.** Follow-ups (not built): email-match hardening (invited_contact_hash is staged for it),
-  owner-initiated "this is my restaurant" verified-invite request (counsel steel-man), reaper cron wiring,
-  decline-without-complaint health metric (CC4).
+  owner-initiated "this is my restaurant" verified-invite request (counsel steel-man), decline-without-complaint
+  health metric (CC4), full P6-6 ProvisionVerifier (the VERIFIED floor is lightweight; Playwright verify deferred).
+
+## ✅ P6 RETENTION SWEEP — DONE (proven; GDPR Art-5(e) storage-limitation)
+`apps/api/src/modules/acquisition/retention.ts`: `reapAbandonedShadows` (never-claimed PROVISIONED/VERIFIED/
+CLAIM_OFFERED shadows past a short TTL → hardDelete + ABANDONED; a CLAIMED tenant is NEVER reaped) +
+`runRetentionSweep` (grants + invites + shadows). Triggered by the ops route `POST /internal/acquisition/
+retention/sweep` (a recurring cron hits it; cadence is operator/infra). Proof: `retention-sweep.test.ts` 4/4
+(stale erased, fresh survives, claimed untouched, unified sweep). Closes the breaker HIGH + counsel C5.
 
 ## (superseded) P6-2 plan — Council-light verdict
 Places → spine (no LLM) via the **one-time provisioning token** (decision 1b): a single-use grant + a narrow
