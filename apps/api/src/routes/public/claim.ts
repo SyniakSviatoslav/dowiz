@@ -33,6 +33,7 @@ export default async function claimRoutes(fastify: FastifyInstance, opts: { pool
             code === 'ALREADY_CLAIMED' ? 409
             : code === 'INVALID_OR_EXPIRED_TOKEN' ? 401
             : code === 'CONTACT_MISMATCH' ? 403 // authenticated, but not the invited identity
+            : code === 'CONTACT_REQUIRED' ? 403 // G-F2g: token-only invite is not web-claimable
             : 422;
           return reply.code(status).send({ error: code });
         }
