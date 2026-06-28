@@ -1,0 +1,92 @@
+# P6 acquisition bulk-provisioning loop — operator tooling that runs a LIST of restaurants through
+# the SHIPPED /internal acquisition pipeline to produce claimable shadow tenants + claim invites at
+# scale. Loop-shaped (fixed per-item pipeline · verification gate per stage · idempotency · exit states).
+id: acquisition-bulk-provision
+version: 0.1
+status: CERTIFIED          # M1–M11 green + anti-cheat dry-run PASS (loops/reports/acquisition-bulk-provision-0.1.md)
+intent: "Drive a batch of restaurants through SOURCED→…→CLAIM_OFFERED, idempotently, emitting per-item outcome + claim URLs + a run summary."
+problem_signature: "operator has N restaurants to onboard as claimable shadows; needs a resumable, gated, no-cheat bulk run over the /internal acquisition pipeline — not a one-shot script that aborts or fakes success."
+trigger: "node scripts/acquisition-bulk-provision.mjs <list.json|csv>  (operator-invoked; or a cron with the list)"
+role_mindset: "Acquisition ops engineer: process the whole list, gate every mutation against the real response, never abort on one bad item, never publish, never print the secret."
+
+preconditions:
+  - "PROVISION_BASE_URL set to the target deployment (NEVER prod for a dry-run/test)."
+  - "PROVISION_OPS_SECRET set (the x-provision-ops-secret value); surface 404s fail-closed without it."
+  - "Input list present with per-row place_id + website_url + name + slug (phone?, invited_contact?)."
+  - "The /internal surface is live on the target (apps/api/src/modules/acquisition/route.ts mounted, PROVISION_OPS_SECRET configured on the box)."
+
+scope_class: B             # WRITES shadow tenants (owner_id NULL, status closed, published_at NULL) via the real API; never publishes, never mutates real tenants or code
+
+execution_skills:          # all battle-tested this session — each endpoint run manually on staging
+  - "POST /internal/acquisition {place_id}                         (idempotent create + CURRENT-state read — the resume seam)"
+  - "POST /internal/acquisition/extract {acquisition_source_id, website_url}   (SOURCED→ENRICHED; the external/AI fallible stage)"
+  - "POST /internal/acquisition/provision/mint {acquisition_source_id}         (~5min provisioning token)"
+  - "POST /internal/acquisition/provision/spine {acquisition_source_id, token, name, slug, phone?}  (writes the shadow spine; REQUIRES ENRICHED)"
+  - "POST /internal/acquisition/claim/verify {acquisition_source_id}           (preview-renders + has-items GATE → verified:true)"
+  - "POST /internal/acquisition/claim/mint {acquisition_source_id, invited_contact, base_url}       (claim invite; token rides #token= fragment)"
+
+goal: "Every list item reaches a TERMINAL OUTCOME — invited (real claim token) | needs-review (recorded reason) | skipped-already-done — with the run summary counts and the claim URLs for the invited."
+
+verification: >
+  Machine gates on the REAL parsed response field after every mutating stage (NOT HTTP 200):
+  create → isUuid(id) && state present; extract → result.state==='ENRICHED' (else exit-state → needs-review);
+  spine → 201 && isUuid(org_id) && isUuid(location_id); verify → json.verified===true; claim/mint → 201 && non-empty token.
+  Proven by the anti-cheat dry-run (21/21): a LIAR backend (200 verified:false / 201 no-token) and a wrong
+  secret (404) both produce needs-review, never 'invited' — a status-only loop would falsely pass those.
+
+iron_principles:
+  - no-fake-green            # assert the response FIELD (state/verified/token), never the status code alone
+  - never-spine-an-exit-state   # MENU_NOT_FOUND/LOW_QUALITY/MANUAL_REVIEW/DISQUALIFIED/ABANDONED → record + skip
+  - continue-on-failure      # one bad item is recorded as needs-review; the run never aborts
+  - idempotent-resume        # read CURRENT state first; jump to the right stage; never double-provision / re-mint
+  - shadow-only              # writes owner_id NULL / status closed / published_at NULL; never publishes a tenant
+  - secret-never-printed     # PROVISION_OPS_SECRET only ever leaves as the x-provision-ops-secret header
+  - fail-closed              # missing config → exit 2; rejected secret (404) → needs-review, never a faked success
+
+loop_body: [SENSE, DIAGNOSE, ACT, VERIFY, REPEAT]   # per item: SENSE=read state · DIAGNOSE=pick resume stage · ACT=call stage · VERIFY=gate the field · REPEAT=next stage/item
+
+exit_conditions: >
+  ALL must hold to finish an ITEM: it lands in exactly one of {invited, needs-review, skipped-already-done}.
+  The RUN finishes when every list item has an outcome (no item left in a working state); a per-run JSON
+  artifact is written to loops/runs/ and the summary {attempted, invited, needs_review, skipped} printed.
+  Process exit 3 iff any needs-review (so a cron caller detects partial failure); exit 2 on missing config.
+
+gates:
+  - "Target-URL gate: operator confirms PROVISION_BASE_URL is the intended deployment — NEVER prod for a test/dry-run (this loop writes real shadow rows)."
+  - "Per-stage verification gate (the high-risk 'false turn = whole loop garbage' point): a non-ENRICHED extract MUST NOT proceed to spine; a non-verified shadow MUST NOT be claim-minted."
+
+proof_artifacts:
+  - "loops/reports/acquisition-bulk-provision-0.1.md  (M1–M11 + the 21/21 anti-cheat dry-run)"
+  - "loops/runs/acquisition-bulk-provision-<ts>.json   (per-run lossless: summary + per-item outcome + claim URLs)"
+  - "tools/acquisition-bulk-provision/dry-run.mjs       (the re-runnable anti-cheat certification harness)"
+
+out_of_scope:
+  - "Publishing a tenant (status closed / published_at NULL is invariant — claiming + publishing is the OWNER's act via /claim)."
+  - "The AI extraction internals (menu-extractor/extraction-orchestrator) — treated as the fallible external stage; its failure → needs-review."
+  - "Sending the Art-14 notice / contacting the restaurant (the loop RETURNS the notice + claim URL; delivery is a separate human/ops step)."
+  - "Any /api (non-/internal) surface, real-tenant data, auth, RLS, or money paths."
+
+escalation: >
+  MISSING capability or an unexpected state → record the item as needs-review with the exact reason and CONTINUE; do not invent a transition.
+  A whole-surface 404 (OPS_AUTH_404 on every item) → STOP and raise to the operator (secret wrong or surface disabled), do not retry-loop.
+  A claim link with no invited_contact is decline-only (CONTACT_REQUIRED on web accept) → surfaced as a per-item warning, not a silent half-success.
+
+skills_required: [node>=18 (native fetch), read PROVISION_BASE_URL/PROVISION_OPS_SECRET from env, the live /internal surface on the target]
+
+harness:
+  always_emit_report: true   # standing RULE — every run prints its full report (stdout) + writes loops/runs/<ts>.json
+  artifacts: loops/runs/acquisition-bulk-provision-*.json
+  note: "Operator-runtime loop (not a code-mutation loop); the per-run report IS the §5 artifact. Token/eco telemetry N/A (no agent session / git mutation)."
+
+memory_file: loops/memory/acquisition-bulk-provision.md
+verification_report: loops/reports/acquisition-bulk-provision-0.1.md
+
+test_seam: >
+  Full live certification is blocked by the extract stage's real-site+AI dependency. The orchestration /
+  idempotency / gate logic is certified against a state-machine-faithful mock (tools/acquisition-bulk-provision/
+  mock-internal.mjs) that mirrors the shipped semantics (ops-auth 404, idempotent create, ENRICHED-required
+  spine, empty-menu verify failure, active-invite guard) + a LIAR mode. To exercise stages 4–6 LIVE without the
+  AI extract, DB-bump a source to ENRICHED with a minimal menu_draft
+  {"categories":[{"name":"Mains","products":[{"name":"X","price":80000}]}]} then run the loop (it resumes at mint).
+
+build_status: BUILT+CERTIFIED (anti-cheat dry-run 21/21 green, 2026-06-28); not yet run against a live deployment.
