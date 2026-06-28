@@ -99,6 +99,20 @@ export async function acceptClaim(
   token: string,
   userId: string,
 ): Promise<{ orgId: string; locationId: string }> {
+  // G-F2g (flow-simpl §6): the WEB claim path REFUSES a token-only (NULL invited_contact_hash) invite.
+  // Such an invite would let a leaked token bind ownership to ANY authenticated account (the council R3-1
+  // theft vector — `claim_transfer` only enforces the recipient match when the hash is non-NULL). The web
+  // surface therefore requires a bound recipient; token-only invites are operator/CLI-only, never
+  // web-claimable. (Refusing accept does NOT touch the token-only decline/erase path — that only erases.)
+  const inv = await pool.query(
+    `SELECT invited_contact_hash FROM claim_invites
+      WHERE token_hash = encode(sha256($1::bytea), 'hex') AND used_at IS NULL
+        AND (expires_at IS NULL OR expires_at > now()) LIMIT 1`,
+    [token],
+  );
+  if (inv.rows[0] && inv.rows[0].invited_contact_hash == null) {
+    throw new ClaimError('CONTACT_REQUIRED');
+  }
   try {
     const res = await pool.query('SELECT org_id, location_id FROM claim_transfer($1, $2)', [token, userId]);
     const row = res.rows[0] as { org_id: string; location_id: string } | undefined;
