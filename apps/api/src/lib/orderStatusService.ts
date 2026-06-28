@@ -121,6 +121,24 @@ export async function updateOrderStatus(
     throw { statusCode: 409, error: 'Order status already changed', code: 'CONFLICT' };
   }
 
+  // deliver v2 (R2-3 shared invariant — ADR-deliver-v2-cash-as-proof): NO order leaves IN_DELIVERY without
+  // its active courier assignment terminalized in the SAME tx. Folded centrally here so EVERY caller (owner
+  // no-show signals.ts, owner PATCH orders.ts, courier cancel/abort, reassign revert) is covered, present
+  // and future. Idempotent: an already-terminal row (incl. a just-set 'delivered' or a completeDelivery
+  // 'cancelled') is a no-op; 'delivered' ∉ {CANCELLED,READY} so a delivered row is never reverted.
+  if (currentStatus === 'IN_DELIVERY' && (newStatus === 'CANCELLED' || newStatus === 'READY')) {
+    await client.query(
+      `WITH freed AS (
+         UPDATE courier_assignments SET status = 'cancelled', cancelled_at = now(),
+                cancellation_reason = COALESCE($2, 'order_' || lower($3))
+          WHERE order_id = $1 AND status IN ('offered','assigned','accepted','picked_up')
+         RETURNING shift_id)
+       UPDATE courier_shifts SET status = 'available'
+        WHERE id IN (SELECT shift_id FROM freed WHERE shift_id IS NOT NULL)`,
+      [orderId, opts.comment ?? null, newStatus],
+    );
+  }
+
   // ORDER-TRACKING: audit-trail row with optional reason. Best-effort — a
   // history-insert failure must never roll back the (already-applied) status
   // change. Wrapped in a SAVEPOINT so a failed insert (e.g. RLS denial) cannot
