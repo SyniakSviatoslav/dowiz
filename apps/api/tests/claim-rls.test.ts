@@ -129,9 +129,11 @@ maybe('(f) tenant flip: after claim, read_preview_menu no longer serves the (now
 });
 
 maybe('(h) email-match: a contact-bound invite is claimable ONLY by the invited identity', async () => {
-  const { orgId, token } = await boundShadow('owner@bound.test');
+  const rnd = crypto.randomBytes(4).toString('hex');
+  const contact = `owner-${rnd}@bound.test`;
+  const { orgId, token } = await boundShadow(contact);
   // a DIFFERENT user (wrong email) cannot claim even with the valid token
-  const wrong = await newUser('someone-else@x.test');
+  const wrong = await newUser(`someone-else-${rnd}@x.test`);
   await assert.rejects(
     () => acceptClaim(pool, token, wrong),
     (e: unknown) => e instanceof ClaimError && (e as ClaimError).code === 'CONTACT_MISMATCH',
@@ -139,7 +141,7 @@ maybe('(h) email-match: a contact-bound invite is claimable ONLY by the invited 
   let org = await adminPool.query('SELECT owner_id FROM organizations WHERE id = $1', [orgId]);
   assert.equal(org.rows[0].owner_id, null, 'wrong identity did not transfer');
   // the invited identity (case/space-insensitive) CAN claim
-  const right = await newUser('  Owner@Bound.test ');
+  const right = await newUser(`  ${contact.toUpperCase()} `);
   const out = await acceptClaim(pool, token, right);
   assert.equal(out.orgId, orgId);
   org = await adminPool.query('SELECT owner_id FROM organizations WHERE id = $1', [orgId]);

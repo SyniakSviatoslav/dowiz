@@ -65,7 +65,7 @@ maybe('a CLAIMED (consented) tenant is NEVER reaped, even when stale', async () 
   const { sourceId, orgId } = await provisionShadow();
   await markVerified(pool, sourceId);
   const { token } = await mintClaimInvite(pool, sourceId);
-  const u = (await adminPool.query(`INSERT INTO users (email) VALUES ('o@t.test') RETURNING id`)).rows[0].id;
+  const u = (await adminPool.query(`INSERT INTO users (email) VALUES ($1) RETURNING id`, ['o-' + crypto.randomBytes(4).toString('hex') + '@t.test'])).rows[0].id;
   await acceptClaim(pool, token, u);
   await backdate(sourceId, 999);
   await reapAbandonedShadows(adminPool, 30);

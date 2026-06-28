@@ -126,10 +126,16 @@ authors menu → publishes via the existing gated path.
   (`invited_contact_hash` set at mint), that only the invited identity (case/space-normalized email) can claim —
   even with a valid token (CONTACT_MISMATCH → 403). Token-only when the invite has no bound contact. Proven
   (claim-rls test (h)).
-- **Operator: place migrations 068+069+070+071 (+072 after staging golden-snapshot proof) + migrate:up; set
-  PROVISION_OPS_SECRET.** Follow-ups (not built): owner-initiated "this is my restaurant" verified-invite request
-  (counsel steel-man), decline-without-complaint health metric (CC4), full P6-6 ProvisionVerifier (the VERIFIED
-  floor is lightweight; Playwright verify deferred).
+- **P6-6 ProvisionVerifier DONE** — `modules/acquisition/provision-verifier.ts::verifyShadowPreview` renders the
+  REAL preview (read_preview_menu → renderShadowPreview) and asserts every external-boundary invariant
+  (served, hasItems, banner, noindex, generic-OG, never-orderable) before VERIFIED. markVerified now gates on it.
+  Proof: `provision-verifier.test.ts` 4/4 + the deploy-time Playwright `e2e/tests/p6-provision-verify.spec.ts`
+  (re-asserts on live staging, runs once deployed).
+- **Migrations 068-072 PLACED + committed + proven vs the REAL full schema** (147 migrations apply clean; 072
+  golden-snapshot: owner menu byte-identical, place stripped, confirm restores). Full P6 suite **53/53** vs real
+  schema under NOBYPASSRLS. **Operator: migrate:up on staging (next deploy applies via release_command) + set
+  PROVISION_OPS_SECRET; run the Playwright verify spec on staging before PROD.** Remaining follow-ups:
+  owner-initiated "this is my restaurant" verified-invite request, decline-without-complaint health metric (CC4).
 
 ## ✅ P6 RETENTION SWEEP — DONE (proven; GDPR Art-5(e) storage-limitation)
 `apps/api/src/modules/acquisition/retention.ts`: `reapAbandonedShadows` (never-claimed PROVISIONED/VERIFIED/
