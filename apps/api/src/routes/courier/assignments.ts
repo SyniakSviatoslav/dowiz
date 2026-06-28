@@ -4,6 +4,7 @@ import { acceptCourierAssignment } from '../../lib/courierAssignmentService';
 import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { updateOrderStatus } from '../../lib/orderStatusService';
+import { completeDelivery, CompletionError } from '../../lib/deliveryCompletion.js';
 import { getImageUrl } from '../../lib/image-url.js';
 import { distanceKm } from '../../lib/geo.js';
 import { ETA_DEFAULTS, deliveryLegMinutes } from '../../lib/etaService.js';
@@ -273,9 +274,13 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
   fastify.post('/assignments/:id/delivered', {
     schema: {
       params: z.object({ id: z.string().uuid() }),
+      // deliver v2: payment_outcome is the first-class completion signal (H-3); paid_partial/pending are
+      // not in the enum → forbidden (H-2). cash_amount tightened to int/nonneg (M-2). cash_collected kept
+      // for backward-compat (legacy courier app) — derives paid_full / refused_payment when no outcome sent.
       body: z.object({
-        cash_collected: z.boolean(),
-        cash_amount: z.number().optional()
+        payment_outcome: z.enum(['paid_full', 'refused_goods', 'refused_payment', 'customer_cancelled_on_door']).optional(),
+        cash_collected: z.boolean().optional(),
+        cash_amount: z.number().int().nonnegative().optional()
       }).strict()
     }
   }, async (request: any, reply: any) => {
@@ -283,6 +288,9 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
     const locationId = request.user.activeLocationId;
     const { id } = request.params;
     const { cash_collected, cash_amount } = request.body;
+    // Resolve the outcome: explicit payment_outcome wins; else legacy cash_collected → paid_full/refused_payment.
+    const paymentOutcome: 'paid_full' | 'refused_goods' | 'refused_payment' | 'customer_cancelled_on_door' =
+      request.body.payment_outcome ?? (cash_collected ? 'paid_full' : 'refused_payment');
 
     const client = await db.connect();
     try {
@@ -321,53 +329,41 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       );
       const expectedDeliveryMin = legMin != null && Number.isFinite(legMin) ? Math.max(1, Math.round(legMin)) : null;
 
-      if (cash_collected && cash_amount !== total) {
-        await client.query('ROLLBACK');
-        return reply.status(422).send({ error: 'CASH_AMOUNT_MISMATCH', expected: total });
-      }
-
-      await client.query(`
-        UPDATE courier_assignments 
-        SET status = 'delivered', delivered_at = now(), cash_collected = $1, cash_amount = $2 
-        WHERE id = $3
-      `, [cash_collected, cash_collected ? cash_amount : null, id]);
-
-      await client.query(`
-        UPDATE courier_shifts SET status = 'available' WHERE id = $1
-      `, [shift_id]);
-
-      // Canonical path: update orders status + publish WS events (customer + owner)
-      await updateOrderStatus(client, order_id, locationId, 'DELIVERED', { messageBus });
-
-      // Immutable delivery audit (one per order; idempotent). §1.2: carries the normalised
-      // baseline (route_distance_m + expected_delivery_min); a re-fired DELIVERED is a no-op
-      // (DO NOTHING) so the first observed baseline is the immutable record.
-      await client.query(`
-        INSERT INTO delivery_trace (order_id, location_id, courier_id, total, delivered_at, route_distance_m, expected_delivery_min)
-        VALUES ($1, $2, $3, $4, now(), $5, $6)
-        ON CONFLICT (order_id) DO NOTHING
-      `, [order_id, locationId, courierId, total, routeDistanceM, expectedDeliveryMin]);
-
-      // Cash-collected → append a 'hold' audit row (NOT the settlement source of
-      // truth; settlement_items remains authoritative). Idempotent per (order_id,type).
-      if (cash_collected) {
-        await client.query(`
-          INSERT INTO courier_cash_ledger (courier_id, location_id, order_id, type, amount)
-          VALUES ($1, $2, $3, 'hold', $4)
-          ON CONFLICT (order_id, type) DO NOTHING
-        `, [courierId, locationId, order_id, cash_amount]);
+      // deliver v2 (R2-1): the SINGLE completion primitive — writes the assignment terminal + shift +
+      // updateOrderStatus (DELIVERED for paid_full, CANCELLED for the no-cash tail) + delivery_trace crumb +
+      // cash-as-proof 'hold'. The no-partial-handover rule is enforced server-side: paid_full requires
+      // cash===total → CompletionError('CASH_AMOUNT_MISMATCH') → 422.
+      let orderStatus: 'DELIVERED' | 'CANCELLED';
+      try {
+        ({ orderStatus } = await completeDelivery(client, {
+          assignmentId: id, orderId: order_id, locationId, courierId, shiftId: shift_id, total,
+          paymentOutcome, cashAmount: cash_amount,
+          gpsLat: dRow.delivery_lat != null ? Number(dRow.delivery_lat) : null,
+          gpsLng: dRow.delivery_lng != null ? Number(dRow.delivery_lng) : null,
+          routeDistanceM, expectedDeliveryMin,
+        }, { messageBus }));
+      } catch (e) {
+        if (e instanceof CompletionError) {
+          await client.query('ROLLBACK');
+          return reply.status(422).send({ error: e.code, ...(e.meta ?? {}) });
+        }
+        throw e;
       }
 
       await client.query('COMMIT');
 
-      // Integrate with Phase 1 lifecycle
-      await messageBus.publish(BUS_CHANNELS.ORDER_DELIVERED, {
-        orderId: order_id,
-        locationId,
-        courierId,
-        cashCollected: cash_collected,
-        cashAmount: cash_collected ? cash_amount : null
-      });
+      // Lifecycle fan-out: ORDER_DELIVERED only for a real delivery (paid_full). The no-cash tail terminalized
+      // the order to CANCELLED inside completeDelivery (which already broadcast the CANCELLED delta) — never
+      // emit ORDER_DELIVERED for refused/returned food.
+      if (orderStatus === 'DELIVERED') {
+        await messageBus.publish(BUS_CHANNELS.ORDER_DELIVERED, {
+          orderId: order_id,
+          locationId,
+          courierId,
+          cashCollected: paymentOutcome === 'paid_full',
+          cashAmount: paymentOutcome === 'paid_full' ? cash_amount : null,
+        });
+      }
 
       // NOTE: a post-delivery feedback reminder was intended here, but registering a
       // new pg-boss queue is infeasible on this infra — pgboss.queue is owned by the
@@ -444,6 +440,88 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       });
 
       return reply.send({ success: true });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
+  // deliver v2 (R2-2): en-route ABORT — the courier's "I can't complete this" exit, with NO time gate (the
+  // 5-min window on /cancel is accept-regret only). No-trap red-line: abort ALWAYS frees the assignment; the
+  // order-side action is CONDITIONAL on the order's LOCKED status (R3-2) so updateOrderStatus is invoked only
+  // from IN_DELIVERY (the one state with a legal widened exit) and can never throw on a no-op transition.
+  fastify.post('/assignments/:id/abort', {
+    schema: {
+      params: z.object({ id: z.string().uuid() }),
+      body: z.object({ reason: z.string().max(300).optional() }).strict(),
+    },
+  }, async (request: any, reply: any) => {
+    const courierId = request.user.sub;
+    const locationId = request.user.activeLocationId;
+    const { id } = request.params;
+    const reason = request.body?.reason ?? 'courier_aborted_en_route';
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
+
+      const res = await client.query(`
+        SELECT ca.order_id, ca.shift_id, ca.status AS asg_status, o.status AS ord_status
+        FROM courier_assignments ca JOIN orders o ON o.id = ca.order_id
+        WHERE ca.id = $1 AND ca.courier_id = $2 AND ca.status IN ('accepted','picked_up') FOR UPDATE OF ca
+      `, [id, courierId]);
+      if (res.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return reply.sendError(404, 'ASSIGNMENT_NOT_FOUND_OR_INVALID_STATUS', 'ASSIGNMENT_NOT_FOUND_OR_INVALID_STATUS');
+      }
+      const { order_id, shift_id, asg_status, ord_status } = res.rows[0];
+
+      // (1) Terminalize the binding UNCONDITIONALLY + free shift — abort always frees the assignment,
+      //     independent of any order transition.
+      await client.query(
+        `UPDATE courier_assignments SET status = 'cancelled', cancelled_at = now(), cancellation_reason = $1 WHERE id = $2`,
+        [reason, id],
+      );
+      await client.query(`UPDATE courier_shifts SET status = 'available' WHERE id = $1`, [shift_id]);
+
+      // (2) Order-side, guarded on the locked order status.
+      let reoffered = false;
+      if (ord_status === 'IN_DELIVERY' && asg_status === 'picked_up') {
+        // Food is out with a failed courier → honest terminal (the no-cash-equivalent CANCELLED).
+        await updateOrderStatus(client, order_id, locationId, 'CANCELLED', { messageBus, comment: reason });
+      } else if (ord_status === 'IN_DELIVERY') {
+        // Legacy flag-OFF force-IN_DELIVERY, pre-pickup → revert to assignable (food still at venue) + clear
+        // the mirror (updateOrderStatus does not touch orders.courier_id) + re-offer.
+        await updateOrderStatus(client, order_id, locationId, 'READY', { messageBus, comment: reason });
+        await client.query(`UPDATE orders SET courier_id = NULL WHERE id = $1`, [order_id]);
+        await client.query(
+          `INSERT INTO courier_dispatch_queue (order_id, location_id, enqueued_at) VALUES ($1,$2,now())
+           ON CONFLICT (order_id) DO UPDATE SET attempts = courier_dispatch_queue.attempts + 1`,
+          [order_id, locationId],
+        );
+        reoffered = true;
+      } else {
+        // R3-2/R4-3: flag-ON accept — the order never advanced (CONFIRMED/PREPARING/READY) → NO status
+        // transition (forcing one would throw). Converge with the decline path: drop the binding + re-offer.
+        await client.query(`UPDATE orders SET courier_id = NULL WHERE id = $1`, [order_id]);
+        await client.query(
+          `INSERT INTO courier_dispatch_queue (order_id, location_id, enqueued_at) VALUES ($1,$2,now())
+           ON CONFLICT (order_id) DO UPDATE SET attempts = courier_dispatch_queue.attempts + 1`,
+          [order_id, locationId],
+        );
+        reoffered = true;
+      }
+
+      await client.query('COMMIT');
+
+      // R4-3: a binding-change broadcast (id-only, claim-check) so owner/customer realtime reconverges even
+      // when the order status itself is unchanged (the flag-ON branch).
+      await messageBus.publish(orderChannel(order_id), { type: 'binding_changed', orderId: order_id });
+      await messageBus.publish(dashboardChannel(locationId), { type: 'assignment_aborted', orderId: order_id });
+      return reply.send({ success: true, reoffered });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
