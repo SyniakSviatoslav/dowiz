@@ -87,10 +87,29 @@ INVENTORY complete · 5 MISSING + 1 UNCERTAIN reported (none silently built) · 
 - **Operator steps before P6-3:** place migrations 068 + 069 + `migrate:up` on dev-Postgres; set
   `PROVISION_OPS_SECRET` where provisioning should be reachable (NOT a dev-login flag).
 
-## ▶ NEXT — P6-3 (menu extraction → products, awaiting GO)
-Extends `provision_shadow` to `products`/`categories`, writes the menu from `menu_draft` (source='place',
-allergens_confirmed=false), and the honest labeled "preview mockup — not a live store" storefront render
-that lifts B2's stub. PII-redaction-before-AI stays binding. Its own Council-light (🔴 RLS + AI/PII).
+## ✅ P6-3 — DONE (proven; 2 CRIT + 4 HIGH designed out, operator overrides recorded)
+Scrape → AI-parse → write products → labeled PUBLIC preview render. Council verdict
+`docs/design/p6-3-extraction-render-council-verdict.md`; operator decisions (FULL DESCRIPTIONS override +
+KEEP PUBLIC) in `p6-operator-decisions.md` §P6-3.
+- **C1** PII-before-AI: `menu-region.ts` allowlist (drops About/Team/Reviews/footer) + name-guard fail-closed
+  + anchored name pattern in `pii-redactor.ts`; the new `html`/`text` parser kind converges on the single
+  `:404` redaction (one redactor, no bypass). **C2** allergens: write-strip `bom[].allergens` + `read_preview_menu`
+  read-gate (`attributes - 'bom'`); live-menu re-version deferred to claim-phase (`c2-read-gate-claim-phase.sql`).
+  **H1** `read_preview_menu` shadow-only. **H2** products/categories `provision_shadow` bound to a shadow
+  location via SECURITY DEFINER `app_is_shadow_location()`. **H3** generic-OG labeled preview (`preview-render.ts`).
+  **H4** `menu-extractor.ts::classifyExtraction` enforced no-fabrication gate. **M1** `hardDeleteShadow` clears
+  place_raw/menu_draft.
+- Modules: `apps/api/src/modules/acquisition/{menu-source,menu-extractor}.ts` + `apps/api/src/lib/{menu-region,preview-render}.ts`;
+  render wired in `routes/public/ssr.ts` (falls through if mig 070 absent). Migration staged
+  `docs/acquisition/migration-1790000000070-provision-products.ts` (REQUIRES 068+069).
+- Proof: 27/27 — `provision-rls.test.ts` 12/12 (NOBYPASSRLS, incl. menu write + allergen strip + victim-location
+  rejected) · `menu-region-pii.test.ts` 5/5 (recall floor) · `menu-extractor.test.ts` 6/6 · `preview-render.test.ts`
+  4/4. Ledger #24. typecheck clean. **Operator: place migs 068+069+070 + migrate:up before staging.**
+
+## ▶ NEXT — P6 claim phase (awaiting GO)
+Owner claims a shadow → authenticated, reviews+approves autofilled data (descriptions/allergens), tenant goes
+live. Place the C2 live-menu read-gate (`c2-read-gate-claim-phase.sql`, re-diff first) so post-claim unconfirmed
+allergens stay stripped. First-contact GDPR Art-14 notice attaches to the claim-invite outreach.
 
 ## (superseded) P6-2 plan — Council-light verdict
 Places → spine (no LLM) via the **one-time provisioning token** (decision 1b): a single-use grant + a narrow
