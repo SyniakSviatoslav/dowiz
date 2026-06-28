@@ -244,6 +244,24 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
       );
       if (courierCheck.rowCount === 0) { await client.query('ROLLBACK'); return reply.sendError(404, 'NOT_FOUND', 'Courier not found in this location'); }
 
+      // C-3 (deliver v2): terminalize the ORDER's existing active binding (guarded) BEFORE inserting the new
+      // one, so the partial-unique courier_assignments_order_active_uniq is free (no INSERT collision → 500)
+      // and a re-assigned order never carries two active rows. Frees the prior shift; the order-mirror revert
+      // (if it was IN_DELIVERY) is handled below per the handshake flag.
+      const orderActive = await client.query(
+        `SELECT id, shift_id FROM courier_assignments
+         WHERE order_id = $1 AND status IN ('offered','assigned','accepted','picked_up') FOR UPDATE`,
+        [orderId],
+      );
+      if (orderActive.rowCount > 0) {
+        const oa = orderActive.rows[0];
+        await client.query(
+          `UPDATE courier_assignments SET status='offered_expired', cancelled_at=now(), cancellation_reason='reassigned' WHERE id=$1`,
+          [oa.id],
+        );
+        if (oa.shift_id) await client.query(`UPDATE courier_shifts SET status='available' WHERE id=$1`, [oa.shift_id]);
+      }
+
       const busyCheck = await client.query(
         `SELECT ca.id, ca.shift_id, ca.order_id, o.status AS order_status
          FROM courier_assignments ca
@@ -299,7 +317,25 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
         shiftId = shiftCheck.rows[0].id;
       }
       const assignId = crypto.randomUUID();
+      const handshake = process.env.COURIER_OFFER_HANDSHAKE_ENABLED === 'true';
 
+      if (handshake) {
+        // deliver v2 §A: OFFER the assignment — the courier must accept before the order advances. The order
+        // is NOT driven to IN_DELIVERY and the shift stays available until acceptance, so an unanswered offer
+        // (or a decline / sweep-expiry) NEVER traps the customer order — only the binding rolls back.
+        const ttlMin = String(Number(process.env.COURIER_OFFER_TTL_MIN) || 5);
+        await client.query(
+          `INSERT INTO courier_assignments (id, order_id, courier_id, shift_id, status, location_id, offered_at, offered_expires_at)
+           VALUES ($1, $2, $3, $4, 'offered', $5, now(), now() + ($6 || ' minutes')::interval)`,
+          [assignId, orderId, courierId, shiftId, locationId, ttlMin],
+        );
+        await client.query('COMMIT');
+        await messageBus.publish(`courier:${courierId}`, { type: 'task_offered', payload: { id: orderId, orderId, assignmentId: assignId, courierId } });
+        await messageBus.publish(dashboardChannel(locationId), { type: 'offer_sent', orderId });
+        return reply.send({ success: true, offered: true, assignmentId: assignId });
+      }
+
+      // flag OFF (legacy): owner-direct force-accept + IN_DELIVERY.
       await client.query(
         `INSERT INTO courier_assignments (id, order_id, courier_id, shift_id, status, location_id)
          VALUES ($1, $2, $3, $4, 'accepted', $5)`,

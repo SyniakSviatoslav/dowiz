@@ -79,6 +79,9 @@ export async function startBackgroundWorkers(deps: BackgroundWorkerDeps): Promis
   const { OrderTimeoutSweepWorker } = await import('../workers/order-timeout-sweep.js');
   const orderTimeoutSweepWorker = new OrderTimeoutSweepWorker(pool, queue.boss, messageBus);
   await orderTimeoutSweepWorker.start();
+  const { CourierOfferSweepWorker } = await import('../workers/courier-offer-sweep.js');
+  const courierOfferSweepWorker = new CourierOfferSweepWorker(pool, queue.boss, messageBus);
+  await courierOfferSweepWorker.start();
 
   // Lifecycle Handlers (auto-resolve alerts on order transitions)
   const lifecycleHandlers = new LifecycleHandlers(pool, queue.boss, messageBus);
