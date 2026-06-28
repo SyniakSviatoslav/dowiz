@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { z } from 'zod';
 import { maskName, maskPhone } from '../../lib/pii-mask.js';
 import { decryptPII } from '../../lib/pii-cipher.js';
 import crypto from 'node:crypto';
@@ -263,7 +264,7 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
       }
 
       const busyCheck = await client.query(
-        `SELECT ca.id, ca.shift_id, ca.order_id, o.status AS order_status
+        `SELECT ca.id, ca.shift_id, ca.order_id, o.status AS order_status, o.location_id AS order_location_id
          FROM courier_assignments ca
          JOIN orders o ON o.id = ca.order_id
          WHERE ca.courier_id = $1 AND ca.status IN ('accepted', 'picked_up') LIMIT 1`,
@@ -281,10 +282,11 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
           [old.shift_id],
         );
         if (old.order_status === 'IN_DELIVERY') {
-          await client.query(
-          `UPDATE orders SET status = 'READY', courier_id = NULL WHERE id = $1`,
-            [old.order_id],
-          );
+          // D2 (R2-6): route the displaced order's revert through the machine (order_status_history + WS),
+          // not a raw UPDATE that stranded its customer on stale "out for delivery". The binding was already
+          // terminalized above, so the central R2-3 fold inside updateOrderStatus is an idempotent no-op.
+          await updateOrderStatus(client, old.order_id, old.order_location_id, 'READY', { messageBus, comment: 'owner_reassigned' });
+          await client.query(`UPDATE orders SET courier_id = NULL WHERE id = $1`, [old.order_id]);
         }
         await client.query(
           `INSERT INTO courier_audit_log (courier_id, location_id, action, actor_kind, actor_id)
@@ -347,8 +349,7 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
         [shiftId],
       );
 
-      // Canonical path: updateOrderStatus handles state machine + event publishing
-      const { updateOrderStatus } = await import('../../lib/orderStatusService.js');
+      // Canonical path: updateOrderStatus handles state machine + event publishing (top-level import)
       await updateOrderStatus(client, orderId, locationId, 'IN_DELIVERY', { messageBus });
       // Set courier_id separately (not part of status transition)
       await client.query(
@@ -444,6 +445,16 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
   // ─── Deliver (owner proxy for courier) ─────────────────────────────
   fastify.post('/:locationId/orders/:orderId/deliver', {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    // D3 (R2-1 / M-2): the owner-proxy completion body is validated to PARITY with the courier /delivered body
+    // — integer-nonneg cash, .strict(), and the payment_outcome enum. The enum forbids paid_partial/pending at
+    // the EDGE → 400 before any write (was: silent CANCELLED coercion on the owner path; negative → DB 500).
+    schema: {
+      body: z.object({
+        payment_outcome: z.enum(['paid_full', 'refused_goods', 'refused_payment', 'customer_cancelled_on_door']).optional(),
+        cash_collected: z.boolean().optional(),
+        cash_amount: z.number().int().nonnegative().optional(),
+      }).strict(),
+    },
   }, async (request: any, reply: any) => {
     const { locationId, orderId } = request.params as any;
     const body = request.body as any;
