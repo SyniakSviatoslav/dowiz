@@ -17,6 +17,7 @@ import { PrivacyPage } from './pages/PrivacyPage.js';
 const ClientRoutes = lazy(() => import('./routes/ClientRoutes.js').then(m => ({ default: m.ClientRoutes })));
 const AdminRoutes = lazy(() => import('./routes/AdminRoutes.js').then(m => ({ default: m.AdminRoutes })));
 const CourierRoutes = lazy(() => import('./routes/CourierRoutes.js').then(m => ({ default: m.CourierRoutes })));
+const ClaimPage = lazy(() => import('./pages/ClaimPage.js').then(m => ({ default: m.ClaimPage })));
 const CourierInvitePage = lazy(() => import('./pages/courier/CourierInvitePage.js').then(m => ({ default: m.CourierInvitePage })));
 
 function LoadingFallback() {
@@ -44,6 +45,7 @@ function AnimatedRoutes() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/claim" element={<ClaimPage />} />
             <Route path="/s/:slug/*" element={<ClientRoutes />} />
             <Route path="/branding-preview/:slug/*" element={<ClientRoutes />} />
             <Route path="/admin/*" element={<AdminRoutes />} />

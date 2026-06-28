@@ -166,9 +166,12 @@ export default async function acquisitionRoutes(fastify: FastifyInstance, opts: 
         const { token, expiresAt } = await mintClaimInvite(pool, parsed.data.acquisition_source_id, parsed.data.invited_contact);
         const base = parsed.data.base_url ?? process.env.APP_BASE_URL ?? 'https://dowiz.fly.dev';
         const notice = buildArt14Notice({
+          // §6 token-safe transport: the claim token rides the URL FRAGMENT (#token=), never the query
+          // string — a query leaks via Referer/access-logs/history. The /claim page reads the fragment,
+          // scrubs the URL, and offers BOTH claim + decline (token-only). previewUrl carries no token.
           previewUrl: `${base}/claim?preview=${parsed.data.acquisition_source_id}`,
-          claimUrl: `${base}/claim?token=${token}`,
-          declineUrl: `${base}/claim/decline?token=${token}`,
+          claimUrl: `${base}/claim#token=${token}`,
+          declineUrl: `${base}/claim#token=${token}`,
         });
         return reply.code(201).send({ token, expires_at: expiresAt.toISOString(), notice });
       } catch (e) {
