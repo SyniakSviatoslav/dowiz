@@ -68,7 +68,17 @@ INVENTORY complete · 5 MISSING + 1 UNCERTAIN reported (none silently built) · 
   row/place_id, legal/illegal transitions, reason invariant). apps/api typecheck + lint clean. Ledger #22.
 - **Operator step before P6-2:** place the staged migration + `migrate:up` on dev-Postgres.
 
-## ▶ NEXT — P6-2 (awaiting GO)
+## ▶ NEXT — P6-2 (Council-light DONE → awaiting operator GO on the hardened plan)
 Places → spine (no LLM) via the **one-time provisioning token** (decision 1b): a single-use grant + a narrow
-RLS provisioning policy on organizations/locations honoring it ONLY for `owner_id IS NULL`+`status='closed'`
-shadow rows — RLS stays enforced. + GO-exception (a) noindex/sitemap. Its own Council-light check (🔴 RLS).
+additive RLS provisioning policy on organizations/locations/menu_versions honoring it ONLY for
+`owner_id IS NULL`+`status='closed'` shadow rows — RLS stays enforced (once the role is NOBYPASSRLS; inert
+defense-in-depth today). + GO-exception (a) noindex/sitemap.
+
+**Council-light verdict (2026-06-28): APPROVE-WITH-CONDITIONS** → `docs/design/p6-2-provisioning-council-verdict.md`.
+4 blockers to design out before code: **B1** dedup anchor is on the wrong table (mint-twice → two spines; fix
+= guarded conditional state-transition inside the tx); **B2/ETHICAL-STOP** noindex doesn't stop OG real-name
+unfurl/human render (fix = no real-name render to humans/bots until P6-3's labeled storefront); **B3**
+ship the `published_at`-stays-NULL guardrail with P6-2 (non-orderability rests on `published_at NULL`, not the
+not-yet-built status-reject); **B4** decouple the ops route from the dev-login backdoor flag for prod. Plus
+fix-conditions (pre-gen UUIDs/no RETURNING, menu_versions policy, schema-qualified digest, single-tx +
+consume-LAST, day-one hard-delete, reaper) + the NOBYPASSRLS red→green proof gate. Migration head = **069**.
