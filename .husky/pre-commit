@@ -31,20 +31,20 @@ fi
 
 echo "5/5: Checking Fly.io Build (Docker)..."
 if command -v docker >/dev/null 2>&1; then
-  # DISK GUARD (regression fix): a full multi-stage build needs several GB, and re-tagging dowiz-check:latest
-  # ORPHANS the previous image + intermediate layers. With no cleanup, ~50 commits accumulated ~50GB and
-  # filled /dev/sda1 → local Postgres (same disk) could not write WAL → crashed into recovery. So: skip the
-  # build when disk is low (the cloud build still gates the actual deploy), and prune the orphaned layers
-  # after every build to cap the footprint at ~one image.
+  # DISK GUARD (regression fix — docs/incidents/2026-06-28-local-pg-disk-crash.md): Docker shares /dev/sda1
+  # with the local Postgres data dir; the per-commit build orphans layers, and ~50 commits once filled the
+  # disk and crashed PG into WAL-recovery. Reclaim to a free-space target BEFORE the build (tiered, safe),
+  # skip the build if still too low, and reclaim again AFTER to drop the layer this build just orphaned.
+  bash scripts/docker-disk-guard.sh 15
   AVAIL_GB=$(df -BG --output=avail / 2>/dev/null | tail -1 | tr -dc '0-9')
-  if [ -n "$AVAIL_GB" ] && [ "$AVAIL_GB" -lt 10 ]; then
-    echo "Low disk (${AVAIL_GB}G free) — skipping the local Docker build to protect the disk (cloud build still gates deploy)."
+  if [ -n "$AVAIL_GB" ] && [ "$AVAIL_GB" -lt 8 ]; then
+    echo "Low disk (${AVAIL_GB}G free after prune) — skipping the local Docker build to protect the disk (cloud build still gates deploy)."
   elif docker build -t dowiz-check . 2>&1; then
     echo "Fly.io (Docker) build successful!"
   else
     echo "Warning: Docker build failed (local network/env issue). Fly.io builds in cloud — skipping."
   fi
-  docker image prune -f >/dev/null 2>&1 || true
+  bash scripts/docker-disk-guard.sh 20
 else
   echo "Docker is not installed or not running. Skipping Fly.io build check."
 fi
