@@ -517,6 +517,7 @@ fastify.register(acquisitionRoutes, {
   prefix: '/internal',
   pool,
   opsSecret: process.env.PROVISION_OPS_SECRET,
+  parser: (parsers as any)['ai-ocr'], // the AiOcrParser port — for the SOURCED→ENRICHED extraction route
 });
 
   fastify.post('/api/dev/mock-auth', async (request, reply) => {

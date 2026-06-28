@@ -5,6 +5,7 @@ import { createSource } from './service.js';
 import { mintProvisionToken, provisionShadowSpine, hardDeleteShadow, ProvisionError } from './provisioning.js';
 import { markVerified, mintClaimInvite, buildArt14Notice, ClaimError } from './claim.js';
 import { runRetentionSweep } from './retention.js';
+import { orchestrateExtraction, type MenuParser } from './extraction-orchestrator.js';
 import { provisionOpsAuthorized, PROVISION_OPS_HEADER } from './ops-auth.js';
 
 // P6-1/P6-2 — internal/ops acquisition + provisioning entrypoint. Mounted OUTSIDE /api/dev so the
@@ -15,6 +16,7 @@ import { provisionOpsAuthorized, PROVISION_OPS_HEADER } from './ops-auth.js';
 interface Opts {
   pool: Pool;
   opsSecret?: string;
+  parser?: MenuParser; // the AiOcrParser port (for the SOURCED→ENRICHED extraction route)
 }
 
 const placeIdSchema = z.object({ place_id: z.string().trim().min(1).max(512) }).strict();
@@ -43,8 +45,12 @@ const claimMintSchema = z
   })
   .strict();
 
+const extractSchema = z
+  .object({ acquisition_source_id: z.string().uuid(), website_url: z.string().trim().url().max(2048) })
+  .strict();
+
 export default async function acquisitionRoutes(fastify: FastifyInstance, opts: Opts) {
-  const { pool, opsSecret } = opts;
+  const { pool, opsSecret, parser } = opts;
 
   // Sole gate for this surface: fail-closed 404 (hide existence) unless the ops secret matches.
   fastify.addHook('onRequest', async (request, reply) => {
@@ -64,6 +70,19 @@ export default async function acquisitionRoutes(fastify: FastifyInstance, opts: 
       // Idempotent: a repeat place_id returns the existing lifecycle row (never a 2nd).
       const source = await createSource(pool, parsed.data.place_id);
       return reply.code(201).send(source);
+    },
+  );
+
+  // SOURCED→ENRICHED extraction: locate the menu (SSRF-guarded) → AI-parse (PII redacted) → H4 verdict.
+  fastify.post(
+    '/acquisition/extract',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const parsed = extractSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ error: 'VALIDATION_FAILED' });
+      if (!parser) return reply.code(503).send({ error: 'EXTRACTION_UNAVAILABLE' });
+      const result = await orchestrateExtraction(pool, parsed.data.acquisition_source_id, parsed.data.website_url, parser);
+      return reply.code(200).send(result);
     },
   );
 

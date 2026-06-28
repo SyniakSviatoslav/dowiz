@@ -136,6 +136,10 @@ authors menu → publishes via the existing gated path.
   schema under NOBYPASSRLS. **Operator: migrate:up on staging (next deploy applies via release_command) + set
   PROVISION_OPS_SECRET; run the Playwright verify spec on staging before PROD.** Remaining follow-ups:
   owner-initiated "this is my restaurant" verified-invite request, decline-without-complaint health metric (CC4).
+- **Extraction orchestration WIRED** — `POST /internal/acquisition/extract` (orchestrate-extraction.ts) composes
+  MenuSource.locate (SSRF) → AiOcrParser.parse (C1) → classifyExtraction (H4), driving SOURCED→ENRICHED (or to a
+  terminal verdict). Closes the SOURCED→ENRICHED gap (no manual menu_draft seed). Proof:
+  extraction-orchestrator.test.ts 4/4 (real PG, injected locate/parser).
 
 ## ✅ P6 RETENTION SWEEP — DONE (proven; GDPR Art-5(e) storage-limitation)
 `apps/api/src/modules/acquisition/retention.ts`: `reapAbandonedShadows` (never-claimed PROVISIONED/VERIFIED/
