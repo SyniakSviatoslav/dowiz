@@ -5,6 +5,7 @@ import { decryptPII } from '../../lib/pii-cipher.js';
 import crypto from 'node:crypto';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { updateOrderStatus } from '../../lib/orderStatusService.js';
+import { completeDelivery, CompletionError } from '../../lib/deliveryCompletion.js';
 import { withTenant } from '@deliveryos/platform';
 
 const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED', 'CANCELLED', 'REJECTED'] as const;
@@ -441,24 +442,29 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
 
       const { id: assignmentId, courierId, shiftId } = assignmentRes.rows[0];
 
-      await client.query(
-        `UPDATE courier_assignments
-         SET status = 'delivered', delivered_at = now(), cash_collected = $1, cash_amount = $2
-         WHERE id = $3`,
-        [cashCollected, cashCollected ? finalCashAmount : null, assignmentId],
-      );
-
-      await client.query(
-        `UPDATE courier_shifts SET status = 'available' WHERE id = $1`,
-        [shiftId],
-      );
-
-      await updateOrderStatus(client, orderId, locationId, 'DELIVERED' as any, { messageBus });
+      // deliver v2 (R2-1): owner-proxy completion goes through the SAME completeDelivery primitive as the
+      // courier path — so the cash-as-proof 'hold' + delivery_trace crumb + payment_outcome are written here
+      // too (this path previously wrote NONE → silent unreconciled debt). paid_full requires cash===total.
+      const paymentOutcome: 'paid_full' | 'refused_goods' | 'refused_payment' | 'customer_cancelled_on_door' =
+        body?.payment_outcome ?? (cashCollected ? 'paid_full' : 'refused_payment');
+      let orderStatus: 'DELIVERED' | 'CANCELLED';
+      try {
+        ({ orderStatus } = await completeDelivery(client, {
+          assignmentId, orderId, locationId, courierId, shiftId, total: orderCheck.rows[0].total,
+          paymentOutcome, cashAmount: finalCashAmount,
+        }, { messageBus }));
+      } catch (e) {
+        if (e instanceof CompletionError) {
+          await client.query('ROLLBACK');
+          return reply.status(422).send({ error: e.code, ...(e.meta ?? {}) });
+        }
+        throw e;
+      }
 
       await client.query(
         `INSERT INTO courier_audit_log (courier_id, location_id, action, actor_kind, actor_id)
-         VALUES ($1, $2, 'order.delivered', 'owner', $3)`,
-        [courierId, locationId, (request as any).user.sub],
+         VALUES ($1, $2, $3, 'owner', $4)`,
+        [courierId, locationId, orderStatus === 'DELIVERED' ? 'order.delivered' : 'order.delivery_failed', (request as any).user.sub],
       );
 
       await client.query('COMMIT');
@@ -468,9 +474,10 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
         assignmentId,
         orderId,
         courierId,
-        status: 'delivered',
-        cashCollected,
-        cashAmount: finalCashAmount,
+        status: orderStatus === 'DELIVERED' ? 'delivered' : 'cancelled',
+        paymentOutcome,
+        cashCollected: paymentOutcome === 'paid_full',
+        cashAmount: paymentOutcome === 'paid_full' ? finalCashAmount : null,
       });
     } catch (err) {
       await client.query('ROLLBACK');
