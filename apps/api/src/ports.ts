@@ -1,10 +1,14 @@
 // @ts-nocheck
 import type { ParseResult, CsvParseConfig, AiOcrConfig, TranslateRequest, TranslateResponse } from '@deliveryos/shared-types';
 
-export type ParserInputType = 
+export type ParserInputType =
   | { kind: 'csv'; bytes: Buffer; config: CsvParseConfig }
   | { kind: 'image'; bytes: Buffer; mime: 'image/png' | 'image/jpeg' | 'image/webp'; config: AiOcrConfig }
-  | { kind: 'pdf'; bytes: Buffer; config: AiOcrConfig };
+  | { kind: 'pdf'; bytes: Buffer; config: AiOcrConfig }
+  // P6-3 — scraped restaurant menu page (html) or pre-extracted text. The HTML path isolates the
+  // menu region + fails closed on residual person-PII BEFORE the converged redaction (council C1).
+  | { kind: 'html'; bytes: Buffer; config: AiOcrConfig }
+  | { kind: 'text'; bytes: Buffer; config: AiOcrConfig };
 
 export interface MenuParserProvider {
   readonly id: string;

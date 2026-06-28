@@ -1,5 +1,5 @@
 export interface PiiRedaction {
-  kind: 'email' | 'phone' | 'card' | 'iban' | 'url';
+  kind: 'email' | 'phone' | 'card' | 'iban' | 'url' | 'name';
   start: number;
   end: number;
   replacement: string;
@@ -8,6 +8,16 @@ export interface PiiRedaction {
 export class PiiRedactor {
   // Simple regexes for PII detection
   private static readonly PATTERNS = [
+    {
+      // P6-3 (C1): ANCHORED person-name — a role/attribution trigger followed by a TitleCase name.
+      // Anchored (not bare TitleCase) so menu item names ("Caesar Salad") are NOT redacted; catches
+      // "Chef Maria Hoxha", "Owner: Jeton Berisha", "by Arben K." inline. The menu-region allowlist
+      // (menu-region.ts) is the primary control; this is the converged-redactor secondary net.
+      kind: 'name',
+      // Case-insensitive TRIGGER (char-classes, not the /i flag — /i would let [A-Z] match lowercase
+      // and break the TitleCase anchor), case-sensitive TitleCase NAME so menu items aren't redacted.
+      regex: /\b(?:[Cc]hef|[Oo]wner|[Mm]anager|[Ff]ounder|[Dd]irector|[Pp]roprietor|[Hh]ost|[Hh]ostess|[Bb]y|[Mm]eet|[Ss]erved by|[Pp]repared by)\b[:.,]?\s+(?:[Oo]ur\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z.]+){0,2}/g
+    },
     {
       kind: 'email',
       regex: /[\w.+-]+@[\w-]+\.[\w.-]+/gi

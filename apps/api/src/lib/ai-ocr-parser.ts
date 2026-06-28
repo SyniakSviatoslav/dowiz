@@ -2,6 +2,7 @@ import type { MenuParserProvider, ParserInputType } from '../ports.js';
 // @ts-ignore — legacy types removed from shared-types, used by OCR parser at runtime
 import type { CanonicalMenuDraft, ParseIssue, ParseResult } from '@deliveryos/shared-types';
 import { PiiRedactor } from './pii-redactor.js';
+import { extractMenuRegion, scanResidualPii } from './menu-region.js';
 import { collectOcrPriceMinors, computeGrounding, extractTrailingPriceMinor } from './menu-grounding.js';
 import Tesseract from 'tesseract.js';
 import crypto from 'crypto';
@@ -389,8 +390,29 @@ export class AiOcrParser implements MenuParserProvider {
       if (ocrConfidence < 0.4) {
         issues.push({ rowNumber: 1, code: 'OCR_LOW_QUALITY' as any, message: 'Image quality is poor, results may be inaccurate.', severity: 'warning' });
       }
+    } else if (input.kind === 'html' || input.kind === 'text') {
+      // P6-3 (council C1) — the net-new scrape path. Isolate the menu region BEFORE the AI boundary
+      // (staff names / testimonials live in About/Team/footer), then FALL THROUGH to the single
+      // redaction below (:404). One redactor, all kinds converge — the HTML path cannot bypass it.
+      const decoded = Buffer.from(input.bytes).toString('utf8');
+      const regionText = input.kind === 'html' ? extractMenuRegion(decoded) : decoded;
+
+      // Name-guard: if person-PII signals survive the allowlist, FAIL CLOSED — never send third-party
+      // names to an external model (binding zero-PII-in-AI, ADR-0011 / operator decision #4 not waived).
+      const scan = scanResidualPii(regionText);
+      if (scan.dense) {
+        issues.push({
+          rowNumber: 1,
+          code: 'PII_DENSE' as any,
+          message: `menu region still carries person-PII signals (${scan.score}) — routed to manual review, not sent to the model`,
+          severity: 'error',
+        });
+        return this.fallbackError(issues);
+      }
+      rawText = regionText;
+      ocrMs = Date.now() - t0;
     } else {
-      throw new Error(`AiOcrParser does not support kind: ${input.kind}`);
+      throw new Error(`AiOcrParser does not support kind: ${(input as { kind: string }).kind}`);
     }
 
     // PRIVACY (ADR-0011 / ETHICAL-STOP-1, redact-by-default — BINDING): the OCR text is
