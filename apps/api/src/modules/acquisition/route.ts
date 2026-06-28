@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { z } from 'zod';
 import { createSource } from './service.js';
 import { mintProvisionToken, provisionShadowSpine, hardDeleteShadow, ProvisionError } from './provisioning.js';
+import { markVerified, mintClaimInvite, buildArt14Notice, ClaimError } from './claim.js';
 import { provisionOpsAuthorized, PROVISION_OPS_HEADER } from './ops-auth.js';
 
 // P6-1/P6-2 — internal/ops acquisition + provisioning entrypoint. Mounted OUTSIDE /api/dev so the
@@ -32,6 +33,14 @@ const spineSchema = z
   })
   .strict();
 const deleteSchema = z.object({ acquisition_source_id: z.string().uuid() }).strict();
+const verifySchema = z.object({ acquisition_source_id: z.string().uuid() }).strict();
+const claimMintSchema = z
+  .object({
+    acquisition_source_id: z.string().uuid(),
+    invited_contact: z.string().trim().max(256).optional(),
+    base_url: z.string().trim().url().max(256).optional(),
+  })
+  .strict();
 
 export default async function acquisitionRoutes(fastify: FastifyInstance, opts: Opts) {
   const { pool, opsSecret } = opts;
@@ -106,6 +115,46 @@ export default async function acquisitionRoutes(fastify: FastifyInstance, opts: 
       if (!parsed.success) return reply.code(400).send({ error: 'VALIDATION_FAILED' });
       await hardDeleteShadow(pool, parsed.data.acquisition_source_id);
       return reply.code(200).send({ deleted: true });
+    },
+  );
+
+  // Mark a provisioned shadow VERIFIED (cheap floor: spine + preview renders) — ops, no P6-6 verifier.
+  fastify.post(
+    '/acquisition/claim/verify',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const parsed = verifySchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ error: 'VALIDATION_FAILED' });
+      try {
+        await markVerified(pool, parsed.data.acquisition_source_id);
+        return reply.code(200).send({ verified: true });
+      } catch (e) {
+        if (e instanceof ClaimError) return reply.code(409).send({ error: e.code });
+        throw e;
+      }
+    },
+  );
+
+  // Mint a single-use claim invite + the Art-14 first-contact notice to deliver to the restaurant.
+  fastify.post(
+    '/acquisition/claim/mint',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const parsed = claimMintSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ error: 'VALIDATION_FAILED' });
+      try {
+        const { token, expiresAt } = await mintClaimInvite(pool, parsed.data.acquisition_source_id, parsed.data.invited_contact);
+        const base = parsed.data.base_url ?? process.env.APP_BASE_URL ?? 'https://dowiz.fly.dev';
+        const notice = buildArt14Notice({
+          previewUrl: `${base}/claim?preview=${parsed.data.acquisition_source_id}`,
+          claimUrl: `${base}/claim?token=${token}`,
+          declineUrl: `${base}/claim/decline?token=${token}`,
+        });
+        return reply.code(201).send({ token, expires_at: expiresAt.toISOString(), notice });
+      } catch (e) {
+        if (e instanceof ClaimError) return reply.code(409).send({ error: e.code });
+        throw e;
+      }
     },
   );
 }
