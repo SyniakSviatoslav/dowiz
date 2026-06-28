@@ -12,6 +12,7 @@ export type MenuKind = 'html' | 'pdf' | 'image' | 'none';
 export interface LocateResult {
   kind: MenuKind;
   bytes?: Buffer;
+  mime?: string; // content-type (needed for the image OCR path)
   finalUrl?: string;
   truncated?: boolean;
   note?: string;
@@ -94,7 +95,7 @@ export async function locate(websiteUrl: string): Promise<LocateResult> {
     const { bytes, contentType, finalUrl, truncated } = await guardedFetchBytes(websiteUrl);
     const kind = classify(contentType);
     if (kind === 'none') return { kind: 'none', finalUrl, note: `unsupported content-type: ${contentType}` };
-    return { kind, bytes, finalUrl, truncated };
+    return { kind, bytes, mime: contentType || undefined, finalUrl, truncated };
   } catch (e) {
     return { kind: 'none', note: `fetch failed: ${(e as Error).message}` };
   }
