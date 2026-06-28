@@ -3848,4 +3848,5 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Kjo porosi i është caktuar tashmë një korrieri.',
     uk: "Це замовлення вже призначено кур'єру.",
   },
+  'common.optional': { en: '(optional)', sq: '(opsionale)', uk: "(необов'язково)" },
 };

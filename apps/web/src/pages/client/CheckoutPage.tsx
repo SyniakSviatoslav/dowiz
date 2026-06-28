@@ -400,8 +400,13 @@ export function CheckoutPage() {
     if (e164 !== phone) setPhone(e164); // reflect the normalized value back in the field
     setPhoneError('');
     
-    // Validate entrance and apartment for delivery orders
-    if (deliveryType === 'delivery') {
+    // §3 contextually-required door detail (council-ratified): entrance/apartment are REQUIRED only when the
+    // map-pin is LOW-confidence (the customer never placed a precise pin → pinLocation null), because that is
+    // exactly when the courier needs the door detail + a clarifying call the least-served customer can't take.
+    // When the pin IS placed (high confidence) they are optional — friction lands only where omission causes a
+    // failed delivery, never taxing the confident user. Server-tolerant; no contract change.
+    const pinIsLowConfidence = pinLocation == null;
+    if (deliveryType === 'delivery' && pinIsLowConfidence) {
       if (!entrance.trim()) {
         setEntranceError(t('checkout.entrance_required', 'Entrance is required'));
         return;
@@ -742,18 +747,18 @@ export function CheckoutPage() {
               </div>
               <div className="space-y-4">
                 <div>
-                  <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entrance')}</label>
+                  <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entrance')}{pinLocation != null && <span className="font-normal ml-1" style={{ color: 'var(--brand-text-muted)' }}>{t('common.optional', '(optional)')}</span>}</label>
                   <div className="relative">
                     <i className="ti ti-door-open absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                    <input required value={entrance} onChange={e => setEntrance(e.target.value)} data-testid="checkout-entrance" placeholder={t('checkout.entrance_placeholder', 'Entrance number or name')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                    <input required={pinLocation == null} value={entrance} onChange={e => setEntrance(e.target.value)} data-testid="checkout-entrance" placeholder={t('checkout.entrance_placeholder', 'Entrance number or name')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                   </div>
                   {entranceError && <p role="alert" className="text-step-xs mt-1" style={{ color: 'var(--color-danger)' }}>{entranceError}</p>}
                 </div>
                 <div>
-                  <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.apartment')}</label>
+                  <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.apartment')}{pinLocation != null && <span className="font-normal ml-1" style={{ color: 'var(--brand-text-muted)' }}>{t('common.optional', '(optional)')}</span>}</label>
                   <div className="relative">
                     <i className="ti ti-apartment absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                    <input required value={apartment} onChange={e => setApartment(e.target.value)} data-testid="checkout-apartment" placeholder={t('checkout.apartment_placeholder', 'Apartment or unit number')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                    <input required={pinLocation == null} value={apartment} onChange={e => setApartment(e.target.value)} data-testid="checkout-apartment" placeholder={t('checkout.apartment_placeholder', 'Apartment or unit number')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                   </div>
                   {apartmentError && <p role="alert" className="text-step-xs mt-1" style={{ color: 'var(--color-danger)' }}>{apartmentError}</p>}
                 </div>
