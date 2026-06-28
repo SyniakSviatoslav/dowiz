@@ -24,6 +24,7 @@ const STEPS = [
   { name: 'connection lifecycle (NX)', cmd: 'pnpm verify:connection-lifecycle' },
   { name: 'owner active-membership (ADR-0004 P-d)', cmd: 'pnpm guardrail:owner-active' },
   { name: 'spike boundary (operating-model)', cmd: 'pnpm guardrail:spike-boundary' },
+  { name: 'deliver v2 parity + no-raw-cancel (ADR-deliver-v2)', cmd: 'pnpm guardrail:deliver-v2' },
 ];
 
 function run(cmd: string): { ok: boolean; output: string } {
