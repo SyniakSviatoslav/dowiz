@@ -122,10 +122,14 @@ authors menu → publishes via the existing gated path.
 - Code: `apps/api/src/modules/acquisition/claim.ts`, `routes/public/claim.ts` (accept verifyAuth / decline
   token-only), `routes/owner/menu-confirm.ts`, ops mint/verify on the `/internal` route. Proof: claim-rls 7/7
   (NOBYPASSRLS) + claim-notice 8/8; 35/35 P6 total. Ledger #25.
+- **Email-match hardening DONE** (counsel): `claim_transfer` enforces, when an invite is BOUND to a contact
+  (`invited_contact_hash` set at mint), that only the invited identity (case/space-normalized email) can claim —
+  even with a valid token (CONTACT_MISMATCH → 403). Token-only when the invite has no bound contact. Proven
+  (claim-rls test (h)).
 - **Operator: place migrations 068+069+070+071 (+072 after staging golden-snapshot proof) + migrate:up; set
-  PROVISION_OPS_SECRET.** Follow-ups (not built): email-match hardening (invited_contact_hash is staged for it),
-  owner-initiated "this is my restaurant" verified-invite request (counsel steel-man), decline-without-complaint
-  health metric (CC4), full P6-6 ProvisionVerifier (the VERIFIED floor is lightweight; Playwright verify deferred).
+  PROVISION_OPS_SECRET.** Follow-ups (not built): owner-initiated "this is my restaurant" verified-invite request
+  (counsel steel-man), decline-without-complaint health metric (CC4), full P6-6 ProvisionVerifier (the VERIFIED
+  floor is lightweight; Playwright verify deferred).
 
 ## ✅ P6 RETENTION SWEEP — DONE (proven; GDPR Art-5(e) storage-limitation)
 `apps/api/src/modules/acquisition/retention.ts`: `reapAbandonedShadows` (never-claimed PROVISIONED/VERIFIED/

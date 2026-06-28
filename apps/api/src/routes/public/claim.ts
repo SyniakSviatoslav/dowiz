@@ -28,7 +28,11 @@ export default async function claimRoutes(fastify: FastifyInstance, opts: { pool
       } catch (e) {
         if (e instanceof ClaimError) {
           const code = (e as ClaimError).code;
-          const status = code === 'ALREADY_CLAIMED' ? 409 : code === 'INVALID_OR_EXPIRED_TOKEN' ? 401 : 422;
+          const status =
+            code === 'ALREADY_CLAIMED' ? 409
+            : code === 'INVALID_OR_EXPIRED_TOKEN' ? 401
+            : code === 'CONTACT_MISMATCH' ? 403 // authenticated, but not the invited identity
+            : 422;
           return reply.code(status).send({ error: code });
         }
         throw e;
