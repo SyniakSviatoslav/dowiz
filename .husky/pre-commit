@@ -31,11 +31,20 @@ fi
 
 echo "5/5: Checking Fly.io Build (Docker)..."
 if command -v docker >/dev/null 2>&1; then
-  if docker build -t dowiz-check . 2>&1; then
+  # DISK GUARD (regression fix): a full multi-stage build needs several GB, and re-tagging dowiz-check:latest
+  # ORPHANS the previous image + intermediate layers. With no cleanup, ~50 commits accumulated ~50GB and
+  # filled /dev/sda1 → local Postgres (same disk) could not write WAL → crashed into recovery. So: skip the
+  # build when disk is low (the cloud build still gates the actual deploy), and prune the orphaned layers
+  # after every build to cap the footprint at ~one image.
+  AVAIL_GB=$(df -BG --output=avail / 2>/dev/null | tail -1 | tr -dc '0-9')
+  if [ -n "$AVAIL_GB" ] && [ "$AVAIL_GB" -lt 10 ]; then
+    echo "Low disk (${AVAIL_GB}G free) — skipping the local Docker build to protect the disk (cloud build still gates deploy)."
+  elif docker build -t dowiz-check . 2>&1; then
     echo "Fly.io (Docker) build successful!"
   else
     echo "Warning: Docker build failed (local network/env issue). Fly.io builds in cloud — skipping."
   fi
+  docker image prune -f >/dev/null 2>&1 || true
 else
   echo "Docker is not installed or not running. Skipping Fly.io build check."
 fi
