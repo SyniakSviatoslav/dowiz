@@ -181,7 +181,10 @@ function NutritionRing({ kcal, protein, fat, carbs }: { kcal: number; protein: n
   );
 }
 
-export function CheckoutPage() {
+// §1 flow-simplification: CheckoutPage renders BOTH as the /checkout route (legacy/no-JS) and inside the
+// bottom-sheet over the menu (the primary flow). In sheet mode, `onClose` is provided so Back / empty-state
+// close the panel (cart intact, no page nav, no trap) instead of navigating the router.
+export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { items, clearCart } = useSharedCart();
@@ -641,7 +644,7 @@ export function CheckoutPage() {
         <p className="text-sm leading-relaxed" style={{ color: 'var(--brand-text-muted)' }}>
           {t('checkout.empty_body', 'Add a few dishes to get started — your order will appear here.')}
         </p>
-        <Button onClick={() => navigate(`/s/${slug}`)} className="mt-1">
+        <Button onClick={() => onClose ? onClose() : navigate(`/s/${slug}`)} className="mt-1">
           <i className="ti ti-arrow-left mr-2" aria-hidden="true" />
           {t('checkout.browse_menu', 'Browse menu')}
         </Button>
@@ -651,12 +654,14 @@ export function CheckoutPage() {
 
   return (
     <div className="max-w-xl mx-auto p-4 md:py-8 space-y-6 pb-32">
-      <div className="flex items-center gap-3 mb-6">
-        <motion.button onClick={() => navigate(-1)} whileTap={{ scale: 0.95 }} aria-label={t('common.back', 'Go back')} className="w-11 h-11 shrink-0 rounded-full flex items-center justify-center border transition-[transform,box-shadow,background-color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-95 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
-          <i className="ti ti-arrow-left" aria-hidden="true" />
-        </motion.button>
-        <h1 className="text-step-2xl font-bold min-w-0 truncate" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.title')}</h1>
-      </div>
+      {!onClose && (
+        <div className="flex items-center gap-3 mb-6">
+          <motion.button onClick={() => navigate(-1)} whileTap={{ scale: 0.95 }} aria-label={t('common.back', 'Go back')} className="w-11 h-11 shrink-0 rounded-full flex items-center justify-center border transition-[transform,box-shadow,background-color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-95 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
+            <i className="ti ti-arrow-left" aria-hidden="true" />
+          </motion.button>
+          <h1 className="text-step-2xl font-bold min-w-0 truncate" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.title')}</h1>
+        </div>
+      )}
 
       <form id="checkout-form" onSubmit={handlePlaceOrder} className="space-y-6">
         <motion.div

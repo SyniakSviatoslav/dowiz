@@ -18,6 +18,7 @@ const PublicThemeResponse = z.object({
   supportedLocales: z.array(z.string()).nullable().optional(),
 }).passthrough();
 import { CartProvider, useSharedCart } from '../lib/CartProvider.js';
+import { CheckoutPage } from '../pages/client/CheckoutPage.js';
 
 function ClientLayoutInner() {
   const { slug } = useParams<{ slug: string }>();
@@ -25,6 +26,7 @@ function ClientLayoutInner() {
   const location = useLocation();
   const [theme, setTheme] = useState<ThemeConfig | null>(null);
   const [isCartOpen, setCartOpen] = useState(false);
+  const [isCheckoutOpen, setCheckoutOpen] = useState(false);
   const [isBouncing, setIsBouncing] = useState(false);
   const { items, updateQuantity, clearCart } = useSharedCart();
   const { t } = useI18n();
@@ -48,6 +50,20 @@ function ClientLayoutInner() {
       document.body.classList.remove('embed-mode');
     };
   }, [isEmbed]);
+
+  // §1 flow-simplification: /checkout is a REDIRECT SEAM → /s/:slug?checkout=1 opens the checkout sheet OVER
+  // the menu (no page navigation; deep-link friendly; Back closes the sheet with the cart intact). Strip the
+  // param after opening, and close the sheet once the order is placed (route changes to the order page).
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('checkout') === '1') {
+      setCheckoutOpen(true);
+      params.delete('checkout');
+      const qs = params.toString();
+      navigate({ pathname: location.pathname, search: qs ? `?${qs}` : '' }, { replace: true });
+    }
+    if (location.pathname.includes('/order/')) setCheckoutOpen(false);
+  }, [location.pathname, location.search, navigate]);
 
   const [locationName, setLocationName] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
@@ -204,7 +220,7 @@ function ClientLayoutInner() {
                   </div>
                   <button
                     data-testid="cart-checkout"
-                    onClick={() => { setCartOpen(false); navigate(`/s/${slug}/checkout`); }}
+                    onClick={() => { setCartOpen(false); setCheckoutOpen(true); }}
                     className="w-full h-12 rounded-full bg-[var(--brand-primary)] text-[var(--brand-bg)] font-bold text-base shadow-xl transition-all active:scale-[0.97]"
                   >
                     {t('cart.checkout', 'Checkout')}
@@ -220,6 +236,12 @@ function ClientLayoutInner() {
                 </div>
               </div>
             )}
+          </ResponsiveDialog>
+          {/* §1: checkout as a bottom-sheet OVER the menu (the same panel-over-menu primitive as the cart) —
+              the customer never leaves /s/:slug; closing keeps the cart. CheckoutPage renders headerless here
+              (the dialog provides the chrome) and closes the sheet on Back/empty-state. */}
+          <ResponsiveDialog open={isCheckoutOpen} onClose={() => setCheckoutOpen(false)} title={t('checkout.title', 'Checkout')}>
+            <CheckoutPage onClose={() => setCheckoutOpen(false)} />
           </ResponsiveDialog>
         </div>
       </ToastProvider>
