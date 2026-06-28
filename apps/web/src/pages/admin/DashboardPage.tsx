@@ -274,7 +274,14 @@ export function DashboardPage() {
       return prev.map(o => o.id === id ? { ...o, status: newStatus as AdminOrder['status'] } as AdminOrder : o);
     });
     try {
-      await apiClient(`/orders/${id}/status`, { method: 'PATCH', body: { status: newStatus } });
+      const res: any = await apiClient(`/orders/${id}/status`, { method: 'PATCH', body: { status: newStatus } });
+      // §5 honest dispatch: when sending for delivery with no courier free, the server does NOT advance to
+      // IN_DELIVERY (it stays put — never an orphan) and returns {dispatched:false,reason}. Reconcile the
+      // optimistic flip to server truth and tell the owner why, so the snap-back never reads as a mis-tap.
+      const serverStatus = (res && res.status) || newStatus;
+      if (serverStatus !== newStatus) {
+        setOrders(prev => prev.map(o => o.id === id ? { ...o, status: serverStatus as AdminOrder['status'] } as AdminOrder : o));
+      }
       const statusLabels: Record<string, string> = {
         CONFIRMED: t('admin.order_confirmed_toast', 'Order confirmed!'),
         PREPARING: t('admin.order_preparing_toast', 'Order marked as preparing!'),
@@ -284,7 +291,11 @@ export function DashboardPage() {
         REJECTED: t('admin.order_rejected_toast', 'Order rejected.'),
         CANCELLED: t('admin.order_cancelled_toast', 'Order cancelled.'),
       };
-      if (statusLabels[newStatus]) {
+      if (res && res.dispatched === false && res.reason === 'no_courier') {
+        showToast(t('admin.no_courier_toast', 'No courier is on shift yet — send for delivery again once one comes online.'), 'error');
+      } else if (res && res.dispatched === false && res.reason === 'already_assigned') {
+        showToast(t('admin.already_assigned_toast', 'This order is already assigned to a courier.'), 'success');
+      } else if (statusLabels[newStatus]) {
         showToast(statusLabels[newStatus], newStatus === 'REJECTED' || newStatus === 'CANCELLED' ? 'error' : 'success');
       }
     } catch (err) {

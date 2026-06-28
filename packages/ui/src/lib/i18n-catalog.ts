@@ -3833,4 +3833,19 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: 'Ваш нік у месенджері',
   },
   'admin.sort_by': { en: 'Sort by', sq: 'Rendit sipas', uk: 'Сортувати за' },
+  'admin.send_for_delivery': {
+    en: 'Send for delivery',
+    sq: 'Dërgo për dorëzim',
+    uk: 'Надіслати на доставку',
+  },
+  'admin.no_courier_toast': {
+    en: 'No courier is on shift yet — send for delivery again once one comes online.',
+    sq: 'Asnjë korrier nuk është në turn ende — dërgojeni përsëri kur një të vijë online.',
+    uk: "Кур'єр ще не на зміні — надішліть знову, коли хтось вийде онлайн.",
+  },
+  'admin.already_assigned_toast': {
+    en: 'This order is already assigned to a courier.',
+    sq: 'Kjo porosi i është caktuar tashmë një korrieri.',
+    uk: "Це замовлення вже призначено кур'єру.",
+  },
 };
