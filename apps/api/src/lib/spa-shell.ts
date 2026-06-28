@@ -99,6 +99,14 @@ function injectTenantMeta(shell: string, meta: string): string {
   return shell.replace('</head>', `    ${meta}\n  </head>`);
 }
 
+// P6-2 (breaker B2 / counsel C1): inject a robots noindex into the head. Used for shadow tenants
+// (org.owner_id IS NULL) so a direct-URL human / social unfurler never indexes an unconsented page.
+function injectNoindex(shell: string): string {
+  const tag = '<meta name="robots" content="noindex, nofollow" />';
+  if (shell.includes('<title>Dowiz</title>')) return shell.replace('<title>Dowiz</title>', `<title>Dowiz</title>\n    ${tag}`);
+  return shell.replace('</head>', `    ${tag}\n  </head>`);
+}
+
 /**
  * Serve the SPA shell with the CSP it needs. `frameAncestors` is the per-location
  * embed policy (default 'self'); pass location_themes.frame_ancestors to permit
@@ -107,11 +115,14 @@ function injectTenantMeta(shell: string, meta: string): string {
 export async function serveSpaShell(reply: any, db: any, slug: string): Promise<any> {
   let frameAncestors = "'self'";
   let tenant: TenantMeta | null = null;
+  let isShadow = false;
   try {
-    // LEFT JOIN: a location may not have a theme row yet; still want name/address.
+    // LEFT JOIN themes (may be absent); JOIN organizations for owner_id (shadow discriminator).
     const res = await db.query(
-      `SELECT l.name, l.address, lt.frame_ancestors, lt.logo_url
-         FROM locations l LEFT JOIN location_themes lt ON lt.location_id = l.id
+      `SELECT l.name, l.address, lt.frame_ancestors, lt.logo_url, o.owner_id
+         FROM locations l
+         JOIN organizations o ON o.id = l.org_id
+         LEFT JOIN location_themes lt ON lt.location_id = l.id
         WHERE l.slug = $1 LIMIT 1`,
       [slug],
     );
@@ -119,7 +130,10 @@ export async function serveSpaShell(reply: any, db: any, slug: string): Promise<
     if (row) {
       const fa = row.frame_ancestors;
       if (Array.isArray(fa) && fa.length) frameAncestors = fa.join(' ');
-      if (row.name) {
+      // P6-2 (B2/C1): a shadow tenant (org.owner_id IS NULL) is unconsented — NEVER advertise its
+      // real name/logo to humans or unfurlers, and mark it noindex. The honest labeled preview is P6-3.
+      isShadow = row.owner_id === null || row.owner_id === undefined;
+      if (row.name && !isShadow) {
         tenant = { name: row.name, address: row.address ?? null, logoUrl: row.logo_url ?? null, slug };
       }
     }
@@ -139,6 +153,17 @@ export async function serveSpaShell(reply: any, db: any, slug: string): Promise<
   reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
   if (frameAncestors !== "'self'") {
     try { reply.raw.removeHeader('X-Frame-Options'); } catch { /* ignore */ }
+  }
+
+  // P6-2 (B2/C1): shadow tenant → noindex header + a robots-noindex shell with NO real identity.
+  if (isShadow) {
+    reply.header('X-Robots-Tag', 'noindex, nofollow');
+    try {
+      return reply.type('text/html').send(injectNoindex(readShell()));
+    } catch (err: any) {
+      console.debug('[spa-shell] noindex injection failed, serving static shell:', err?.message);
+      return reply.sendFile('index.html');
+    }
   }
 
   // P1-SEO: inject per-tenant <title> + OG tags so link unfurls / search snippets
