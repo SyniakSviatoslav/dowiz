@@ -65,7 +65,9 @@ const RICH_DRAFT = {
 async function makeRealLocation(): Promise<string> {
   const orgId = crypto.randomUUID();
   const locId = crypto.randomUUID();
-  await adminPool.query(`INSERT INTO organizations (id, name, owner_id) VALUES ($1, 'Real', gen_random_uuid())`, [orgId]);
+  // organizations.owner_id FKs to users on the real schema → mint a real owner first.
+  const owner = (await adminPool.query(`INSERT INTO users (email) VALUES ($1) RETURNING id`, ['real-' + crypto.randomBytes(4).toString('hex') + '@t.test'])).rows[0].id;
+  await adminPool.query(`INSERT INTO organizations (id, name, owner_id) VALUES ($1, 'Real', $2)`, [orgId, owner]);
   await adminPool.query(
     `INSERT INTO locations (id, org_id, slug, name, phone, status) VALUES ($1, $2, $3, 'Real', '', 'open')`,
     [locId, orgId, 'real-' + crypto.randomBytes(4).toString('hex')],

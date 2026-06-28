@@ -47,8 +47,9 @@ export interface MenuDraft {
 // C2 WRITE-strip (defense-in-depth on the safety red-line): keep bom ingredients (decision #4
 // "extract everything") but NULL every bom[].allergens — the unverified AI allergen claim is never
 // persisted. The READ-gate (migration 070) is the authoritative post-claim layer; this is belt+braces.
-function stripAllergens(attributes: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
-  if (!attributes || typeof attributes !== 'object') return attributes ?? null;
+function stripAllergens(attributes: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  // products.attributes is NOT NULL DEFAULT '{}' — never write null (proven against the real schema).
+  if (!attributes || typeof attributes !== 'object') return {};
   const bom = (attributes as { bom?: unknown }).bom;
   if (!Array.isArray(bom)) return attributes;
   return {
