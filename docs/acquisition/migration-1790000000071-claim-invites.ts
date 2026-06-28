@@ -50,14 +50,23 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
     CREATE OR REPLACE FUNCTION claim_transfer(p_token text, p_user_id uuid)
     RETURNS TABLE(org_id uuid, location_id uuid)
     LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-    DECLARE v_source uuid; v_org uuid; v_loc uuid; v_state acquisition_state;
+    DECLARE v_source uuid; v_org uuid; v_loc uuid; v_state acquisition_state; v_contact_hash text; v_email text;
     BEGIN
-      -- 1. token = sole authority. Lock the active invite.
-      SELECT acquisition_source_id INTO v_source FROM claim_invites
+      -- 1. token = sole authority. Lock the active invite (+ capture the bound contact, if any).
+      SELECT acquisition_source_id, invited_contact_hash INTO v_source, v_contact_hash FROM claim_invites
         WHERE token_hash = encode(sha256(p_token::bytea), 'hex')
           AND used_at IS NULL AND revoked_at IS NULL AND expires_at > now()
         FOR UPDATE;
       IF v_source IS NULL THEN RAISE EXCEPTION 'CLAIMERR:INVALID_OR_EXPIRED_TOKEN'; END IF;
+
+      -- 1b. email-match hardening (counsel — defense-in-depth for a business-identity-sized asset): if the
+      -- invite was BOUND to an official contact, only that identity may claim — even with a valid token.
+      -- Token-only when invited_contact_hash IS NULL (ops minted without a contact).
+      IF v_contact_hash IS NOT NULL THEN
+        SELECT email INTO v_email FROM users WHERE id = p_user_id;
+        IF v_email IS NULL OR encode(sha256(lower(trim(v_email))::bytea), 'hex') <> v_contact_hash THEN
+          RAISE EXCEPTION 'CLAIMERR:CONTACT_MISMATCH'; END IF;
+      END IF;
 
       -- 2. resolve the spine from acquisition_sources; require a claimable state.
       SELECT s.org_id, s.location_id, s.state INTO v_org, v_loc, v_state

@@ -35,12 +35,26 @@ async function offeredShadow(): Promise<{ sourceId: string; orgId: string; locat
   const slug = 'claim-' + crypto.randomBytes(4).toString('hex');
   const { orgId, locationId } = await provisionShadowSpine(pool, { acquisitionSourceId: src.id, token: provTok, name: 'Claimco', slug });
   await markVerified(pool, src.id); // PROVISIONED→VERIFIED (cheap floor: preview renders)
-  const { token } = await mintClaimInvite(pool, src.id, 'owner@claimco.test'); // VERIFIED→CLAIM_OFFERED
+  // token-only invite by default (no bound contact); email-match cases pass an explicit contact below.
+  const { token } = await mintClaimInvite(pool, src.id); // VERIFIED→CLAIM_OFFERED
   return { sourceId: src.id, orgId, locationId, slug, token };
 }
 
-async function newUser(): Promise<string> {
-  const r = await adminPool.query(`INSERT INTO users (email) VALUES ($1) RETURNING id`, ['u-' + crypto.randomBytes(4).toString('hex') + '@t.test']);
+// An invite BOUND to a specific contact (email-match hardening).
+async function boundShadow(contact: string): Promise<{ sourceId: string; orgId: string; token: string }> {
+  const src = await createSource(pool, 'ChIJ_bind_' + crypto.randomBytes(6).toString('hex'));
+  await advance(pool, src.id, 'PLACE_INGESTED', { website_url: 'https://x.test' });
+  await advance(pool, src.id, 'MENU_EXTRACTED', { menu_draft: RICH_DRAFT });
+  await advance(pool, src.id, 'ENRICHED');
+  const { token: provTok } = await mintProvisionToken(pool, src.id);
+  const { orgId } = await provisionShadowSpine(pool, { acquisitionSourceId: src.id, token: provTok, name: 'Bound', slug: 'bound-' + crypto.randomBytes(4).toString('hex') });
+  await markVerified(pool, src.id);
+  const { token } = await mintClaimInvite(pool, src.id, contact);
+  return { sourceId: src.id, orgId, token };
+}
+
+async function newUser(email?: string): Promise<string> {
+  const r = await adminPool.query(`INSERT INTO users (email) VALUES ($1) RETURNING id`, [email ?? 'u-' + crypto.randomBytes(4).toString('hex') + '@t.test']);
   return r.rows[0].id;
 }
 
@@ -112,6 +126,24 @@ maybe('(f) tenant flip: after claim, read_preview_menu no longer serves the (now
   await acceptClaim(pool, token, await newUser());
   const afterRes = await adminPool.query('SELECT read_preview_menu($1) AS m', [slug]);
   assert.equal(afterRes.rows[0].m, null, 'owner_id set → no longer a shadow → preview returns null');
+});
+
+maybe('(h) email-match: a contact-bound invite is claimable ONLY by the invited identity', async () => {
+  const { orgId, token } = await boundShadow('owner@bound.test');
+  // a DIFFERENT user (wrong email) cannot claim even with the valid token
+  const wrong = await newUser('someone-else@x.test');
+  await assert.rejects(
+    () => acceptClaim(pool, token, wrong),
+    (e: unknown) => e instanceof ClaimError && (e as ClaimError).code === 'CONTACT_MISMATCH',
+  );
+  let org = await adminPool.query('SELECT owner_id FROM organizations WHERE id = $1', [orgId]);
+  assert.equal(org.rows[0].owner_id, null, 'wrong identity did not transfer');
+  // the invited identity (case/space-insensitive) CAN claim
+  const right = await newUser('  Owner@Bound.test ');
+  const out = await acceptClaim(pool, token, right);
+  assert.equal(out.orgId, orgId);
+  org = await adminPool.query('SELECT owner_id FROM organizations WHERE id = $1', [orgId]);
+  assert.equal(org.rows[0].owner_id, right, 'invited identity claimed (email normalized)');
 });
 
 maybe('(g) decline + erase: token-only erases the shadow tenant', async () => {
