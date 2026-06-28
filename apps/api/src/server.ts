@@ -653,7 +653,8 @@ fastify.register(acquisitionRoutes, {
       const asgn = await pool.query(
         `INSERT INTO courier_assignments (order_id, courier_id, location_id, status, assigned_at)
          VALUES ($1, $2, $3, 'assigned', now())
-         ON CONFLICT (order_id) DO UPDATE SET courier_id = EXCLUDED.courier_id, status = 'assigned'
+         ON CONFLICT (order_id) WHERE status IN ('offered','assigned','accepted','picked_up')
+           DO UPDATE SET courier_id = EXCLUDED.courier_id, status = 'assigned'
          RETURNING id`,
         [orderId, courierId, locationId]
       );

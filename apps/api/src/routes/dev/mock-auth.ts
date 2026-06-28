@@ -148,7 +148,8 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
       const asgnRes = await client.query(
         `INSERT INTO courier_assignments (order_id, courier_id, location_id, shift_id, status)
          VALUES ($1, $2, $3, $4, 'assigned')
-         ON CONFLICT (order_id) DO UPDATE SET courier_id = EXCLUDED.courier_id, status = 'assigned'
+         ON CONFLICT (order_id) WHERE status IN ('offered','assigned','accepted','picked_up')
+           DO UPDATE SET courier_id = EXCLUDED.courier_id, status = 'assigned'
          RETURNING id`,
         [orderId, courierId, locationId, shiftId]
       );
@@ -535,7 +536,8 @@ export default async function mockAuthRoutes(fastify: FastifyInstance) {
       const synthAsgnRes = await synthClient.query(
         `INSERT INTO courier_assignments (order_id, courier_id, location_id, shift_id, status)
            VALUES ($1, $2, $3, $4, 'assigned')
-         ON CONFLICT (order_id) DO UPDATE SET
+         ON CONFLICT (order_id) WHERE status IN ('offered','assigned','accepted','picked_up')
+           DO UPDATE SET
            courier_id = EXCLUDED.courier_id,
            shift_id = EXCLUDED.shift_id,
            status = 'assigned'

@@ -83,6 +83,14 @@ test('D1 · courier /cancel of an owner-forced IN_DELIVERY order reverts it to R
   const confirmRes = await request.post(`/api/owner/locations/${locationId}/orders/${orderId}/confirm`, { headers: ownerAuth, data: {} });
   expect(confirmRes.ok(), `confirm failed: ${confirmRes.status()} ${await confirmRes.text()}`).toBeTruthy();
 
+  // Provision the courier INTO this location (couriers.status defaults 'active' + courier_locations + shift)
+  // via the dev create-assignment shortcut — assign-courier's courierCheck requires an active courier in the
+  // location, and the mock-auth courier is a bare JWT with no DB row. The 'assigned' binding it creates is
+  // incidental: the owner assign-courier below terminalizes it and creates the real 'accepted' + IN_DELIVERY
+  // binding (the C-2 setup). (x-dev-auth-secret is injected globally by playwright.config.)
+  const provRes = await request.post('/api/dev/create-assignment', { data: { orderId, courierId, locationId } });
+  expect(provRes.ok(), `courier provisioning (dev create-assignment) failed: ${provRes.status()} ${await provRes.text()}`).toBeTruthy();
+
   const assignRes = await request.post(`/api/owner/locations/${locationId}/orders/${orderId}/assign-courier`, { headers: ownerAuth, data: { courierId } });
   expect(assignRes.ok(), `assign-courier failed: ${assignRes.status()} ${await assignRes.text()}`).toBeTruthy();
   const assignmentId = (await assignRes.json()).id;
