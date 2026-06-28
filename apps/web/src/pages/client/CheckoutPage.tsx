@@ -644,10 +644,6 @@ export function CheckoutPage() {
     );
   }
 
-  const btnStyle = (type: DeliveryType) => deliveryType === type
-    ? { background: 'var(--brand-surface-raised)', color: 'var(--brand-text)', fontWeight: 600 }
-    : { background: 'transparent', color: 'var(--brand-text-muted)' } as const;
-
   return (
     <div className="max-w-xl mx-auto p-4 md:py-8 space-y-6 pb-32">
       <div className="flex items-center gap-3 mb-6">
@@ -727,11 +723,9 @@ export function CheckoutPage() {
           transition={{ duration: 0.25, ease: ease.out, delay: 0.05 }}
           className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
           <h2 className="text-step-xl font-semibold mb-6" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.delivery_address')}</h2>
-          <div className="flex p-1 rounded-[var(--brand-radius-sm)] mb-6 gap-0.5" role="tablist" aria-label={t('checkout.delivery_type', 'Delivery type')} style={{ background: 'var(--brand-surface)' }}>
-            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'delivery'} onClick={() => setDeliveryType('delivery')} className="flex-1 min-h-[44px] py-2 text-step-sm rounded-[var(--brand-radius-sm)] transition-[background-color,color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1" style={btnStyle('delivery')}>{t('courier.deliver')}</motion.button>
-            <motion.button type="button" role="tab" whileTap={{ scale: 0.97 }} aria-selected={deliveryType === 'pickup'} onClick={() => setDeliveryType('pickup')} className="flex-1 min-h-[44px] py-2 text-step-sm rounded-[var(--brand-radius-sm)] transition-[background-color,color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1" style={btnStyle('pickup')}>{t('courier.pickup')}</motion.button>
-            {/* Scheduled is scaffold (not yet implemented end-to-end) — hidden until supported. */}
-          </div>
+          {/* §4 flow-simplification: order-type switch removed — delivery is the only live type (pickup/scheduled
+              deferred). deliveryType stays 'delivery' (the switch + pickup branches restore with the capability),
+              the payload still sends a valid type → no order-contract change. */}
 
           {deliveryType === 'delivery' && (
             <div className="space-y-4">
