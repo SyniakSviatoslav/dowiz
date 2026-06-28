@@ -26,6 +26,73 @@ export class ProvisionError extends Error {
   }
 }
 
+// P6-3 — the transient menu draft (reuse the import_sessions draft SHAPE, stored in
+// acquisition_sources.menu_draft jsonb). Written to products/categories ONLY at provisioning.
+export interface DraftProduct {
+  name: string;
+  price: number; // integer minor units (the parser integer-normalizes; guarded again at write)
+  description?: string | null;
+  sort_order?: number;
+  attributes?: Record<string, unknown> | null;
+}
+export interface DraftCategory {
+  name: string;
+  sort_order?: number;
+  products?: DraftProduct[];
+}
+export interface MenuDraft {
+  categories?: DraftCategory[];
+}
+
+// C2 WRITE-strip (defense-in-depth on the safety red-line): keep bom ingredients (decision #4
+// "extract everything") but NULL every bom[].allergens — the unverified AI allergen claim is never
+// persisted. The READ-gate (migration 070) is the authoritative post-claim layer; this is belt+braces.
+function stripAllergens(attributes: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
+  if (!attributes || typeof attributes !== 'object') return attributes ?? null;
+  const bom = (attributes as { bom?: unknown }).bom;
+  if (!Array.isArray(bom)) return attributes;
+  return {
+    ...attributes,
+    bom: bom.map((entry) =>
+      entry && typeof entry === 'object' ? { ...(entry as object), allergens: [] } : entry,
+    ),
+  };
+}
+
+// Write categories then products (FK order) from the draft, under the provision_shadow policy.
+// Pre-gen UUIDs / no RETURNING (products/categories tenant SELECT USING would reject the shadow row).
+async function writeMenuFromDraft(client: PoolClient, locationId: string, draft: MenuDraft): Promise<void> {
+  for (const [ci, cat] of (draft.categories ?? []).entries()) {
+    const catId = crypto.randomUUID();
+    await client.query(`INSERT INTO categories (id, location_id, name, sort_order) VALUES ($1, $2, $3, $4)`, [
+      catId,
+      locationId,
+      cat.name,
+      cat.sort_order ?? ci,
+    ]);
+    for (const [pi, prod] of (cat.products ?? []).entries()) {
+      if (!Number.isInteger(prod.price) || prod.price < 0) {
+        throw new ProvisionError('INVALID_PRICE', `non-integer/negative price for "${prod.name}"`);
+      }
+      await client.query(
+        `INSERT INTO products
+           (id, location_id, category_id, name, description, price, is_available, sort_order, source, allergens_confirmed, attributes)
+         VALUES ($1, $2, $3, $4, $5, $6, true, $7, 'place', false, $8)`,
+        [
+          crypto.randomUUID(),
+          locationId,
+          catId,
+          prod.name,
+          prod.description ?? null,
+          prod.price,
+          prod.sort_order ?? pi,
+          stripAllergens(prod.attributes),
+        ],
+      );
+    }
+  }
+}
+
 /**
  * Mint a single-use provisioning grant for a source. Returns the PLAINTEXT token ONCE (only the
  * hash is stored). The partial-unique index `provision_grants_one_active_per_source` makes a second
@@ -106,6 +173,15 @@ export async function provisionShadowSpine(
     );
     await client.query(`INSERT INTO menu_versions (location_id, version) VALUES ($1, 1)`, [locationId]);
 
+    // P6-3: write the menu from the source's transient menu_draft (categories then products) in the
+    // SAME tx, under the provision_shadow policy — "never partial-write tenant." Empty/absent draft →
+    // container-only (P6-2 behavior preserved). Allergens are write-stripped; price is integer-guarded.
+    const draftRes = await client.query(`SELECT menu_draft FROM acquisition_sources WHERE id = $1`, [
+      input.acquisitionSourceId,
+    ]);
+    const draft = (draftRes.rows[0] as { menu_draft?: MenuDraft | null } | undefined)?.menu_draft ?? null;
+    if (draft) await writeMenuFromDraft(client, locationId, draft);
+
     // B1 chokepoint: state-pinned ENRICHED→PROVISIONED. advance() throws if the row is not still
     // ENRICHED (a concurrent runner already provisioned) → ROLLBACK, undoing this spine.
     await advance(client, input.acquisitionSourceId, 'PROVISIONED', { org_id: orgId, location_id: locationId });
@@ -144,11 +220,16 @@ export async function hardDeleteShadow(pool: Pool, acquisitionSourceId: string):
     const row = src.rows[0] as { org_id: string | null; location_id: string | null } | undefined;
     // Drop the acquisition_sources → org/location FK references FIRST, else deleting the location
     // violates acquisition_sources_location_id_fkey (caught by provision-rls.test.ts (h)).
-    await client.query(`UPDATE acquisition_sources SET org_id = NULL, location_id = NULL WHERE id = $1`, [
-      acquisitionSourceId,
-    ]);
+    // M1 (breaker): erase the PII the pipeline ingested too — NULL place_raw + menu_draft on the
+    // source row, not just the FK links. "Born with its erasure path" must actually erase the data.
+    await client.query(
+      `UPDATE acquisition_sources SET org_id = NULL, location_id = NULL, place_raw = NULL, menu_draft = NULL WHERE id = $1`,
+      [acquisitionSourceId],
+    );
     await client.query(`DELETE FROM provision_grants WHERE acquisition_source_id = $1`, [acquisitionSourceId]);
     if (row?.location_id) {
+      await client.query(`DELETE FROM products WHERE location_id = $1`, [row.location_id]);
+      await client.query(`DELETE FROM categories WHERE location_id = $1`, [row.location_id]);
       await client.query(`DELETE FROM menu_versions WHERE location_id = $1`, [row.location_id]);
       await client.query(`DELETE FROM locations WHERE id = $1`, [row.location_id]);
     }
