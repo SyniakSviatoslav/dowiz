@@ -28,9 +28,10 @@ test('§1 · place an order through the checkout sheet (no page nav, lands on or
   // fill the delivery fields (no precise pin placed → entrance/apartment required, §3)
   await page.locator('input[autocomplete="name"]').first().fill('E2E Sheet');
   await phone.fill(`+3556${crypto.randomInt(10_000_000, 99_999_999)}`);
+  await page.getByTestId('checkout-address').fill('Rruga Test 1');
   await page.getByTestId('checkout-entrance').fill('1');
   await page.getByTestId('checkout-apartment').fill('2');
-  await page.getByPlaceholder(/find the exact place|how to find/i).first().fill('Blue gate by the square');
+  await page.locator('#checkout-form textarea').first().fill('Blue gate by the square'); // the required "how to find you" notes (locale-independent)
 
   // place the order through the sheet
   await page.getByTestId('order-confirm-button').click();
