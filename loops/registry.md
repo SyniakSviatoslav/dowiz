@@ -23,6 +23,7 @@
 | audit-gate | секції A–F PASS з артефактами | 0.1 | DRAFT | loops/audit-gate.yaml | loops/reports/audit-gate-0.1.md | loops/memory/audit-gate.md | /audit-gate |
 | exit-audit | завершеність фази (змагально) | 0.1 | DRAFT | loops/exit-audit.yaml | loops/reports/exit-audit-0.1.md | loops/memory/exit-audit.md | /exit-audit |
 | mobile-polish | мобільний UX (390px) кожної поверхні → PASS Mobile Rubric | 1.0 | CERTIFIED | loops/mobile-polish.yaml | loops/reports/mobile-polish-0.1.md | loops/memory/mobile-polish.md | /mobile-polish |
+| acquisition-bulk-provision | батч ресторанів → claimable shadow + claim invite через /internal pipeline (idempotent, gated, no-cheat) | 0.1 | CERTIFIED | loops/acquisition-bulk-provision.yaml | loops/reports/acquisition-bulk-provision-0.1.md | loops/memory/acquisition-bulk-provision.md | node scripts/acquisition-bulk-provision.mjs &lt;list&gt; |
 
 ## Здоров'я
 Health-pass (Counsel) читає пам'ять/звіти й сигналить «хворі» петлі (flaky-під-green, training-ніколи-не-вимкнено, нема-пам'яті). Orchestrator на «хвору» петлю → improve-запит loop-architect.
