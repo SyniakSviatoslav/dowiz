@@ -20,7 +20,12 @@ const TRANSITIONS: Record<OrderStatus, ReadonlyArray<OrderStatus>> = {
   CONFIRMED: ['PREPARING', 'IN_DELIVERY'],
   PREPARING: ['READY'],
   READY: ['IN_DELIVERY', 'PICKED_UP'],
-  IN_DELIVERY: ['DELIVERED'],
+  // deliver v2 (ADR-deliver-v2-cash-as-proof): CANCELLED = the no-cash-tail terminal (refused/cancelled-on-door)
+  // so the customer never sees "Delivered" for refused food; READY = the revert target for courier
+  // cancel/abort/owner-reassign of an order force-driven to IN_DELIVERY (no new order_status enum value added).
+  // Both are downgrades to terminal/assignable states the machine already owns; the central updateOrderStatus
+  // fold terminalizes the active assignment on either edge so no order leaves IN_DELIVERY stranded.
+  IN_DELIVERY: ['DELIVERED', 'CANCELLED', 'READY'],
   DELIVERED: [],
   REJECTED: [],
   CANCELLED: [],
