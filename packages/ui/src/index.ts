@@ -14,6 +14,7 @@ export * from './lib/motion.js';
 export * from './lib/money.js';
 
 export * from './constants/allergenColors.js';
+export * from './lib/characteristics.js';
 export * from './lib/i18n.js';
 export { I18nProvider, useI18n, LanguageSwitcher } from './lib/I18nProvider.js';
 

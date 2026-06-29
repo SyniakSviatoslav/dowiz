@@ -83,3 +83,26 @@ export function regulatedSubsetActive(flagOn: boolean): boolean {
 export function activeRegulatedAnchor(label: string, market: 'EU' | 'AL'): RegulatedAnchor | undefined {
   return REGULATED_ANCHORS.find((a) => a.label === label && a.market === market && anchorActive(a));
 }
+
+// ── ALLERGEN SURFACE (DETAIL-FLOOR-ONLY — council #5 floor + #4-positive) ────────────────────────────────
+// Pure computation of the storefront allergen surface. PRESENCE only — absence is NEVER returned (an owner
+// "none" attestation yields hasInfo:false, NOT a "free-from" claim). The known set is a CONSERVATIVE UNION of
+// the owner's L3 declaration (status 'listed') and any recipe-derived allergens, so a base-dish allergen
+// warning can never be dropped by attestation status (#4-positive). hasInfo:false ⇒ the caller renders the
+// floor ("allergen info not provided"), NEVER a blank — data-absence must never read as a clean state.
+export interface AllergenSurface {
+  known: string[];
+  hasInfo: boolean;
+}
+export function computeAllergenSurface(
+  attributes: { allergen_status?: string; declared_allergens?: unknown } | null | undefined,
+  bomAllergens: readonly string[] = [],
+): AllergenSurface {
+  const a = attributes || {};
+  const declared =
+    a.allergen_status === 'listed' && Array.isArray(a.declared_allergens)
+      ? (a.declared_allergens as unknown[]).map((x) => String(x))
+      : [];
+  const known = Array.from(new Set([...declared, ...bomAllergens.map((x) => String(x))]));
+  return { known, hasInfo: known.length > 0 };
+}
