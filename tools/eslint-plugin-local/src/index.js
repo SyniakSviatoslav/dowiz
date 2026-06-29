@@ -584,5 +584,37 @@ export default {
         };
       },
     },
+    'no-raw-courier-ws-send': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'disallow raw `<member>.ws.send` at the WS fan-out sites — route courier-joinable rooms through the relay guard (ADR-0013)' },
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, '/');
+        // Keyed on the fan-out SITE (websocket.ts), NOT on `role==='courier'` — the role-AGNOSTIC bus
+        // handler is the exact site that re-creates the C1 reassign leak if it sends raw (Breaker
+        // NEW-E/R3-3). Matches `<x>.ws.send(...)` (member fan-out) but NOT the bare connection
+        // socket `ws.send(...)` (auth/ack/error replies to the connecting client — legitimate).
+        const isFanoutSite = /\/apps\/api\/src\/websocket\.tsx?$/.test(filename)
+          || /\/__fixtures__\//.test(filename); // fixtures exercise the rule for the red→green proof
+        if (!isFanoutSite) return {};
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (
+              callee.type === 'MemberExpression' &&
+              callee.property.type === 'Identifier' && callee.property.name === 'send' &&
+              callee.object.type === 'MemberExpression' &&
+              callee.object.property.type === 'Identifier' && callee.object.property.name === 'ws'
+            ) {
+              context.report({
+                node,
+                message: 'raw `<member>.ws.send` over a courier-joinable room — route through createCourierRelayGuard so an unbound courier is revalidated/evicted (ADR-0013 C1). The bare connection socket `ws.send` is fine.',
+              });
+            }
+          },
+        };
+      },
+    },
   },
 };
