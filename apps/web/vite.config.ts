@@ -38,6 +38,12 @@ export default defineConfig({
         // module graph and triggers load-order/circular-init issues, so we do
         // NOT split them apart here.
         manualChunks(id) {
+          // The Vite __vitePreload helper must live in the always-loaded `vendor` chunk — if it gets
+          // co-located into the lazy `map` chunk, the entry + the /s/:slug route statically import
+          // `map` just to reach the helper, dragging the ~1MB maplibre chunk onto every page's
+          // critical path (storefront LCP). Routing it here (before the node_modules guard, since the
+          // helper is a Vite-internal virtual module) breaks that static edge → map loads only on map mount.
+          if (id.includes('preload-helper')) return 'vendor';
           if (!id.includes('node_modules')) return undefined;
           if (id.includes('maplibre-gl') || id.includes('@maplibre') || id.includes('maplibre')) {
             return 'map';
