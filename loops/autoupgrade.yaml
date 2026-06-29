@@ -1,5 +1,5 @@
 id: autoupgrade
-version: 0.1
+version: 0.2
 status: DRAFT
 intent: "автономно знаходити зміни, що ДОВЕДЕНО прискорюють ітерацію за менші ресурси; безпечний клас застосовувати машинно, ризиковий — лише пропонувати"
 problem_signature: "потрібен machine-gated self-upgrade: знайти→дослідити→класифікувати→(оракул)→застосувати|відкотити, з твердою межею"
@@ -32,5 +32,6 @@ harness:
 build_status:
   done: "END-TO-END FUNCTIONAL. §8 step2 (MAP→CLASSIFY→REPORT) + step3 (oracle, 7 tests) + step4 (Class-A auto-apply --apply) + adapter (benchmark.ts+repo-apply.ts, git-checkout atomic revert, 5 tests) + the MAP source (detectors.ts configTuneDetector: operator-declared tunables → repo-perf candidates with mechanical patches, 5 pipeline tests proving detect→classify-A→apply→benchmark→KEEP|ROLLBACK on real git)."
   done_extra: "§4 containment (containment.ts: assertCredentialIsolation refuses --apply with prod secrets in env; isTrustedSource allowlist = only mechanical detectors auto-apply) + §8c Class-B queue (proposals.ts: durable deduped human-gated proposals.json, status preserved, never auto-applied). 11 tests; live run queued the SECURITY-DEFINER migration."
+  done_v02: "v0.2 trust-spine deepening (loop-architect CERTIFIED, M1–M11 + anti-cheat mutant): EvoMap-insight A proven-upgrade registry (proven-upgrades.ts: append-only deduped genes {version,patch_ref,metric before/after,speedup_pct,revert,provenance,caller-ts,count} in loops/runs/proven-upgrades.json; recordKeptUpgrades wires KEEP→gene, lens-gated) + STORM-insight B decorrelated lenses (classify = security·reversibility·perf, ALL-must-pass→A, any-fail→B; evaluateLenses exported, auditable). Report-only DEFAULT + applyCandidate DISABLE + firm boundary UNCHANGED (run-#5 staged-security→B re-proven). 129 loop-harness tests green; mutant on security lens → 10 RED."
   deferred: "§4 runtime sandbox/agent-vault key-brokering (env-guard is the code side), contained web-research, worktree concurrency upgrade (only at >1 loop, teamConcurrency 1 today), widen-after-clean-runs. NOT wiring pg-boss into apps/api (autonomous repo-mutation doesn't belong in the customer-serving server — use cron/CI)."
   boundary: "Class B NEVER reaches apply. Only autonomous repo-mutation path = operator-declared config tuning (mechanical+bounded+reversible+benchmarked). No tunables.json declared → 0 repo-perf candidates (safe default). Declare loops/autoupgrade.tunables.json to enable (see .example.json)."

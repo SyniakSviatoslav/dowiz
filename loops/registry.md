@@ -18,7 +18,7 @@
 | refactor-convergence | дублі→єдине джерело, поведінка незмінна | 0.1 | DRAFT | loops/refactor-convergence.yaml | loops/reports/refactor-convergence-0.1.md | loops/memory/refactor-convergence.md | /refactor-converge |
 | performance | метрика в межі бюджету, без регресії | 0.1 | DRAFT | loops/performance.yaml | loops/reports/performance-0.1.md | loops/memory/performance.md | /perf |
 | build-stage | етап роадмапу до ✅ чекпойнта | 0.1 | DRAFT | loops/build-stage.yaml | loops/reports/build-stage-0.1.md | loops/memory/build-stage.md | /build-stage |
-| autoupgrade | machine-gated self-upgrade (haste iteration, fewer resources); Class A авто/Class B пропозиція | 0.1 | DRAFT (report-only) | loops/autoupgrade.yaml | loops/reports/autoupgrade-0.1.md | loops/memory/autoupgrade.md | /autoupgrade |
+| autoupgrade | machine-gated self-upgrade (haste iteration, fewer resources); Class A авто/Class B пропозиція; v0.2 +proven-upgrade registry +decorrelated lenses (security·reversibility·perf) | 0.2 | CERTIFIED (report-only) | loops/autoupgrade.yaml | loops/reports/autoupgrade-0.2.md | loops/memory/autoupgrade.md | /autoupgrade |
 | loop-builder | мета-петля: ціль G → найкраща harness-native петля (oracle-admissibility first, born-hardened) | 0.1 | DRAFT (report-only) | loops/loop-builder.yaml | loops/reports/loop-builder-0.1.md | loops/memory/loop-builder.md | /loop-builder |
 | audit-gate | секції A–F PASS з артефактами | 0.1 | DRAFT | loops/audit-gate.yaml | loops/reports/audit-gate-0.1.md | loops/memory/audit-gate.md | /audit-gate |
 | exit-audit | завершеність фази (змагально) | 0.1 | DRAFT | loops/exit-audit.yaml | loops/reports/exit-audit-0.1.md | loops/memory/exit-audit.md | /exit-audit |
