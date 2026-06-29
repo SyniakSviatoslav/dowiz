@@ -211,6 +211,7 @@ export class AnonymizerService {
         `UPDATE orders
          SET client_ip_hash = NULL,
              delivery_address = NULL,
+             delivery_instructions = NULL,
              anonymized_at = now()
          WHERE id = $1`,
         [orderId],
