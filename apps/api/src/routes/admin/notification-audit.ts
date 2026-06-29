@@ -5,13 +5,15 @@ import { z } from 'zod';
 export default (async function notificationAuditRoutes(fastify, opts) {
   const { db } = opts as any;
 
-  fastify.addHook('onRequest', fastify.verifyAuth);
-  fastify.addHook('onRequest', fastify.requireRole(['owner']));
+  // ADR-admin-platform-authz (B4): auth is the platform-admin gate on the parent plane
+  // (routes/admin/index.ts) + the root-instance gate in server.ts — NOT a per-file owner check.
 
-  // GET /admin/notification-audit — lightweight audit query for release gate
-  // Returns count of delivered entries matching event+location within time window
-  // PII-free: only exposes event, status, channel, count — no targets or addresses
-  fastify.get('/admin/notification-audit', {
+  // GET /api/admin/notification-audit — lightweight audit query for release gate.
+  // ADR-admin-platform-authz F4: was declared '/admin/notification-audit' under prefix '/api/admin'
+  // → the real route was the double-prefixed '/api/admin/admin/notification-audit' and the single
+  // path was unregistered (SPA fall-through → false-green). Declared without the redundant segment now.
+  // PII-free: only exposes event, status, channel, count — no targets or addresses.
+  fastify.get('/notification-audit', {
     schema: {
       querystring: z.object({
         event: z.string().min(1).max(50),

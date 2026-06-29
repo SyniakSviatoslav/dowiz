@@ -616,5 +616,36 @@ export default {
         };
       },
     },
+    'no-admin-prefix-register': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'the /api/admin plane mounts ONLY via routes/admin/index.ts in server.ts — any other register at /api/admin bypasses the platform-admin gate (ADR-admin-platform-authz B4)' },
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, '/');
+        // server.ts is the ONE canonical mount of the admin plane (gated by the root onRequest hook).
+        if (/\/apps\/api\/src\/server\.tsx?$/.test(filename)) return {};
+        const inScope = /\/apps\/api\/src\//.test(filename) || /\/__fixtures__\//.test(filename);
+        if (!inScope) return {};
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (!(callee.type === 'MemberExpression' && callee.property.type === 'Identifier' && callee.property.name === 'register')) return;
+            const opts = node.arguments[1];
+            if (!opts || opts.type !== 'ObjectExpression') return;
+            const prefix = opts.properties.find(
+              (p) => p.type === 'Property' && p.key && (p.key.name === 'prefix' || p.key.value === 'prefix'),
+            );
+            if (prefix && prefix.value.type === 'Literal' && typeof prefix.value.value === 'string'
+                && (prefix.value.value === '/api/admin' || prefix.value.value.startsWith('/api/admin/'))) {
+              context.report({
+                node,
+                message: 'register at /api/admin outside server.ts — the admin plane is gated ONLY by the root onRequest hook + routes/admin/index.ts (ADR-admin-platform-authz B4). A new admin register here would ship ungated (BOLA). Mount it as a child of routes/admin/index.ts instead.',
+              });
+            }
+          },
+        };
+      },
+    },
   },
 };

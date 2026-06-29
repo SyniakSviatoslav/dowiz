@@ -4,9 +4,9 @@ import { runRestoreVerify } from '../../workers/backup/backup-verify.js';
 const backupAdminRoutes: FastifyPluginAsync = async (fastify, opts) => {
   const { db, queue } = opts as any;
 
-  // Auth: require owner JWT for all backup operations
-  fastify.addHook('onRequest', fastify.verifyAuth);
-  fastify.addHook('onRequest', fastify.requireRole(['owner']));
+  // ADR-admin-platform-authz (B4): auth is the platform-admin gate on the parent plane
+  // (routes/admin/index.ts) + the root-instance gate in server.ts — NOT a per-file owner check.
+  // Do NOT re-add verifyAuth/requireRole here (an owner check would 403 a legitimate platform-admin).
 
   // GET /api/admin/backups — list recent backups
   fastify.get('/backups', async (request: any, reply: any) => {
@@ -64,18 +64,27 @@ const backupAdminRoutes: FastifyPluginAsync = async (fastify, opts) => {
     };
   });
 
-  // POST /api/admin/backups/verify — trigger manual restore-test
-  fastify.post('/backups/verify', async (request: any, reply: any) => {
+  // POST /api/admin/backups/verify — trigger manual restore-test (DR-drill, weaponizable)
+  // ADR-admin-platform-authz §4: platform-admin (parent gate) + Zod-uuid backupId + per-actor
+  // rate-limit + single-flight (the advisory lock inside runRestoreVerify → 409 if a drill is in
+  // flight). backupId is uuid-validated so an arbitrary/unbounded body can't drive the drill.
+  fastify.post('/backups/verify', {
+    config: { rateLimit: { max: 3, timeWindow: '5 minutes' } },
+  }, async (request: any, reply: any) => {
     const body = request.body as any;
     const backupId = body?.backupId;
-
-    // Run async, return immediately with status
+    if (backupId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(backupId))) {
+      return reply.status(400).send({ error: 'VALIDATION_FAILED', message: 'backupId must be a uuid' });
+    }
     const result = await runRestoreVerify(db, { backupId, fullHash: false });
     return result;
   });
 
-  // GET /api/admin/backups/dr-report — generate DR drill report
-  fastify.get('/backups/dr-report', async (request: any, reply: any) => {
+  // GET /api/admin/backups/dr-report — generate DR drill report (heavy, fleet-wide DR-drill)
+  // ADR-admin-platform-authz §4: platform-admin (parent gate) + rate-limit + single-flight (409).
+  fastify.get('/backups/dr-report', {
+    config: { rateLimit: { max: 3, timeWindow: '5 minutes' } },
+  }, async (request: any, reply: any) => {
     const result = await runRestoreVerify(db, { fullHash: true });
     return result;
   });

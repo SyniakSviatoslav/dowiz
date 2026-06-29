@@ -789,14 +789,16 @@ fastify.register(acquisitionRoutes, {
   // an owner can stage media before launch. Operational pool (RLS) via withTenant.
   const { default: ownerProductMediaRoutes } = await import('./routes/owner/product-media.js');
   fastify.register(ownerProductMediaRoutes, { prefix: '/api/owner', db: pool, storage });
-  // P32 — Backup admin routes
-  const { default: backupAdminRoutes } = await import('./routes/admin/backups.js');
-  fastify.register(backupAdminRoutes, { prefix: '/api/admin', db: pool, queue });
-  // P33 — Fallback admin routes
-  const { default: fallbackAdminRoutes } = await import('./routes/admin/fallback.js');
-  fastify.register(fallbackAdminRoutes, { prefix: '/api/admin', db: pool });
-  const { default: notificationAuditRoutes } = await import('./routes/admin/notification-audit.js');
-  fastify.register(notificationAuditRoutes, { prefix: '/api/admin', db: pool });
+  // B4 (ADR-admin-platform-authz) — the /api/admin plane. STRUCTURAL authority: a root-instance
+  // onRequest gate (registerAdminPlaneGate) that runs verifyAuth → requirePlatformAdmin for every
+  // request whose matched route pattern is under /api/admin — child, sibling, or future — by
+  // construction (closes BOLA / B4). Registered BEFORE the admin plane so it covers it. The single
+  // parent plugin (routes/admin/index.ts) is the ONLY register at prefix:/api/admin; the eslint rule
+  // local/no-admin-register-outside-plane bans any other /api/admin register.
+  const { registerAdminPlaneGate } = await import('./lib/platform-admin.js');
+  registerAdminPlaneGate(fastify);
+  const { default: adminPlane } = await import('./routes/admin/index.js');
+  fastify.register(adminPlane, { prefix: '/api/admin', db: pool, queue, storage });
 
   // SPA Fallback: Serve index.html for unknown GET requests matching SPA route patterns
   const SPA_ROUTES = ['/admin', '/courier', '/dashboard', '/s/', '/login', '/branding-preview', '/privacy'];
