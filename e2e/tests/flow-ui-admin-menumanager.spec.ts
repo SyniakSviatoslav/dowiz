@@ -75,7 +75,7 @@ test.describe('UI: MenuManager — Product & Category CRUD via Forms', () => {
     test.skip(!catId, 'Category not found');
 
     const prodRes = await request.post(`${BASE}/api/owner/menu/products`, {
-      data: { name: PROD_NAME, price: 850, categoryId: catId, available: true, stockCount: 15 },
+      data: { name: PROD_NAME, price: 850, prep_time_minutes: 10, categoryId: catId, available: true, stockCount: 15 },
       headers: { Authorization: `Bearer ${authToken}` },
     });
     expect(prodRes.status()).toBe(201);

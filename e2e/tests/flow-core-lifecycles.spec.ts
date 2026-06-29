@@ -120,16 +120,14 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
         delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga e Barrikadave, Tirana' },
         payment: { method: 'cash' },
         idempotency_key: crypto.randomUUID(),
+        acknowledged_codes: ['velocity'], // ack the anti-fake-signals speed-bump so a setup order is never soft-blocked
       },
     });
     const body = await orderRes.json();
-    if (orderRes.status() === 201) {
-      orderId = body.id || body.orderId;
-      expectUuid(orderId, 'orderId');
-    } else {
-      console.log('Order creation 422 body:', JSON.stringify(body));
-      expect(orderRes.status()).toBe(201);
-    }
+    // Proof of creation is the body's UUID id — a soft_confirm/hard_block body has none. The status
+    // is 201 on a clean create and 200 when acked/idempotent; both are created.
+    orderId = body.id || body.orderId;
+    expectUuid(orderId, `order create failed (HTTP ${orderRes.status()}): ${JSON.stringify(body).slice(0, 180)}`);
   });
 
   test('Flow 3: Owner — assign courier to order (tested in Flow 17)', async () => {
