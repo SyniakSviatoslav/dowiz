@@ -16,6 +16,9 @@
   alternatives.
 - **Peace for everyone.** Build toward outcomes that serve human wellbeing, dignity, and peace — for
   all people, without exception.
+- **AI is a collective human tool.** It is built on the collective knowledge of all humanity, so it
+  belongs to and must serve everyone — a commons, never captured for the exclusive benefit, control,
+  or enrichment of any narrow group, and never turned against the people it was learned from.
 
 ## Agent Discipline (synthesized from Cline · Cursor · Devin)
 
