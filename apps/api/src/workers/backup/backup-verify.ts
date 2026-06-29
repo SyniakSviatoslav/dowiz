@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { loadEnv } from '@deliveryos/config';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { createReadStream, createWriteStream } from 'node:fs';
@@ -59,22 +59,30 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function acquireLock(pool: Pool, lockId: number): Promise<boolean> {
+// ADR-admin-platform-authz F2 / RA2-2 — ONE lock, ONE owner, held on a DEDICATED client.
+// The prior code did pg_try_advisory_lock then released the client to the pool in `finally` — the
+// SESSION-level lock stayed held on a pooled connection (leak forever → every later drill 409s), and
+// releaseLock connected a DIFFERENT session whose pg_advisory_unlock was a no-op. Fix: return the
+// locked client, hold it across the whole drill, unlock-then-release on the SAME session. Crash-safe:
+// if the process dies the backend session ends and PG drops the session lock.
+async function acquireLock(pool: Pool, lockId: number): Promise<PoolClient | null> {
   const client = await pool.connect();
   try {
     const res = await client.query('SELECT pg_try_advisory_lock($1) AS locked', [lockId]);
-    return res.rows[0].locked;
-  } finally {
+    if (!res.rows[0].locked) { client.release(); return null; }
+    return client; // HOLD this client for the drill's lifetime — do NOT release here
+  } catch (err) {
     client.release();
+    throw err;
   }
 }
 
-async function releaseLock(pool: Pool, lockId: number): Promise<void> {
-  const client = await pool.connect();
+async function releaseLock(client: PoolClient | null, lockId: number): Promise<void> {
+  if (!client) return;
   try {
     await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
   } finally {
-    client.release();
+    client.release(); // unlock BEFORE release, on the SAME session that holds the lock
   }
 }
 
@@ -252,12 +260,13 @@ export async function runRestoreVerify(
 ): Promise<VerifyResult> {
   const startTime = Date.now();
   const result: VerifyResult = { success: false, stage: 'init', durationMs: 0, smokeChecks: [] };
+  let lockClient: PoolClient | null = null;
 
   try {
-    // ── 1. Acquire singleton lock ──
+    // ── 1. Acquire singleton lock (held on a dedicated client for the whole drill — F2) ──
     result.stage = 'lock';
-    const locked = await acquireLock(pool, BACKUP_VERIFY_LOCK);
-    if (!locked) {
+    lockClient = await acquireLock(pool, BACKUP_VERIFY_LOCK);
+    if (!lockClient) {
       result.error = 'Another verify in progress';
       result.durationMs = Date.now() - startTime;
       return result;
@@ -357,7 +366,7 @@ export async function runRestoreVerify(
     await alertFailure(result);
 
   } finally {
-    await releaseLock(pool, BACKUP_VERIFY_LOCK);
+    await releaseLock(lockClient, BACKUP_VERIFY_LOCK);
   }
 
   return result;

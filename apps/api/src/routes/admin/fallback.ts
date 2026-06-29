@@ -5,9 +5,8 @@ import { z } from 'zod';
 export default (async function fallbackAdminRoutes(fastify: any, opts: any) {
   const { db } = opts;
 
-  // Auth: require owner JWT for all admin fallback operations
-  fastify.addHook('onRequest', fastify.verifyAuth);
-  fastify.addHook('onRequest', fastify.requireRole(['owner']));
+  // ADR-admin-platform-authz (B4): auth is the platform-admin gate on the parent plane
+  // (routes/admin/index.ts) + the root-instance gate in server.ts — NOT a per-file owner check.
 
   // ─── GET Fallback Health Overview ────────────────────────────────
   fastify.get('/fallback/health', async (request: any, reply: any) => {

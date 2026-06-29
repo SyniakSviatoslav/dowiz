@@ -42,6 +42,7 @@ export default tseslint.config(
       'local/no-insecure-random': 'warn',
       'local/no-direct-websocket': 'warn',
       'local/no-raw-courier-ws-send': 'error', // ADR-0013: courier fan-out MUST go through the relay guard (C1)
+      'local/no-admin-prefix-register': 'error', // ADR-admin-platform-authz (B4): /api/admin mounts only via server.ts
       'local/no-arbitrary-tailwind': 'warn',
       // Phase-B type-scale: error-level (zero violations after migration → locks the win).
       'local/no-arbitrary-font-size': 'error',
