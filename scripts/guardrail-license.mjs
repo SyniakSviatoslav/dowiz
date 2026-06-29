@@ -94,7 +94,14 @@ function scanPnpm() {
 scanPnpm();
 
 // ───────────────────────── (b) FORBIDDEN-DEP ─────────────────────────
-const FORBIDDEN = ['langgraph', '@langchain/langgraph', '@workos-inc/', 'skyvern', 'recall', 'moneyprinter', 'glossopetrae'];
+const FORBIDDEN = [
+  'langgraph', '@langchain/langgraph', '@langchain/', 'langchain', '@workos-inc/',
+  'skyvern', 'recall', 'moneyprinter', 'glossopetrae',
+  // Out-of-tree harness pilots (2026-06-29): DeerFlow (LangChain/LangGraph-based — already DEFERRED),
+  // Decepticon (offensive red-team), EvoMap (external agent-capability network). All reached only
+  // out-of-band; NEVER a product dependency or source import. See docs/research/{deerflow,decepticon,evomap}-pilot.md.
+  'deer-flow', 'deerflow', 'decepticon', 'evomap', '@evomap/',
+];
 const lockPath = join(ROOT, 'pnpm-lock.yaml');
 if (existsSync(lockPath)) {
   const lock = readFileSync(lockPath, 'utf8');
