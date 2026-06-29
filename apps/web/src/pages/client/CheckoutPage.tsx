@@ -432,8 +432,10 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
 
   // Submits the order. When `verifiedToken` is provided it is passed back to the
   // backend (header + acknowledged code) so a require-OTP location lets it through.
+  // `ackCodes` carries soft-signal reason codes we auto-acknowledge on a single silent
+  // retry (e.g. a velocity soft-confirm) — a soft speed-bump must never add customer friction.
   // Returns true if the order was created (or OTP flow was started), false on hard error.
-  const submitOrder = async (verifiedToken?: string) => {
+  const submitOrder = async (verifiedToken?: string, ackCodes: string[] = []) => {
     if (!slug || !locationId) { setPlacing(false); return false; }
     setOrderError('');
     setShowPhoneFallback(false);
@@ -467,8 +469,9 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
           payment: { method: 'cash' },
           cash_pay_with: cashAmount > 0 ? cashAmount : undefined,
           idempotency_key: idempotencyKey,
-          // Acknowledge the OTP soft-reason once we've verified the phone.
-          acknowledged_codes: verifiedToken ? ['otp_required'] : [],
+          // Acknowledge the OTP soft-reason once we've verified the phone, plus any soft-signal
+          // reasons we auto-acknowledge on the frictionless retry (e.g. velocity).
+          acknowledged_codes: [...(verifiedToken ? ['otp_required'] : []), ...ackCodes],
           prefs: {
             dropoff: {
               entrance: entrance.trim(),
@@ -490,6 +493,15 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
       if (pre.success && pre.data.outcome === 'soft_confirm' && pre.data.requiresOtp) {
         await beginOtpFlow();
         return true;
+      }
+      // A non-OTP soft_confirm (e.g. the velocity speed-bump for a frequent customer) is a SOFT
+      // signal, not a block — auto-acknowledge its reason codes and resubmit ONCE, silently. This
+      // keeps a legitimate regular frictionless instead of dead-ending on the generic "order failed"
+      // banner. requiresOtp is handled above (a real security gate, never auto-acked); hard_block below.
+      // `ackCodes.length === 0` bounds it to a single retry (no loop). S26/anti-friction.
+      if (pre.success && pre.data.outcome === 'soft_confirm' && !pre.data.requiresOtp && ackCodes.length === 0) {
+        const codes = (pre.data.reasons ?? []).map((r) => r.code).filter(Boolean);
+        return submitOrder(verifiedToken, codes.length ? codes : ['velocity']);
       }
       // A 200-body hard_block (item sold out / price changed since the cart was built) must show
       // the designed "review your cart" message — not fall through Zod-parse into the generic
