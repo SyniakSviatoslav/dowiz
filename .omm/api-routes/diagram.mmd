@@ -1,0 +1,35 @@
+flowchart TD
+  subgraph clients[Clients]
+    SF[Storefront SPA]
+    OW[Owner admin SPA]
+    CO[Courier app]
+  end
+
+  SF -->|SSR + menu read| PUBLIC[routes/public/*]
+  SF -->|OTP, place order| CUST[routes/customer/*]
+  OW -->|login| AUTH[routes/auth + auth.ts]
+  OW -->|menu, settings, KPIs| ADMIN[routes/admin/*]
+  OW -->|ops: orders, couriers, GDPR| OWNER[routes/owner/*]
+  CO -->|shifts, accept, deliver| COURIER[routes/courier/*]
+
+  subgraph core[Order + dispatch core]
+    ORDERS[orders.ts]
+    DISPATCH[lib/dispatch.ts - attemptHonestDispatch]
+    MSGS[order-messages.ts]
+    COURIERS[couriers.ts]
+  end
+
+  CUST --> ORDERS
+  OWNER --> ORDERS
+  ORDERS --> DISPATCH
+  COURIER --> COURIERS
+
+  subgraph infra[Cross-cutting]
+    SPA[spa-proxy.ts - SSR shell]
+    HEALTH[health.ts - livez/health]
+    TG[telegram-webhook.ts]
+    DEV[routes/dev/* - dev-gated only]
+  end
+
+  PUBLIC --> SPA
+  ORDERS -->|notify| TG
