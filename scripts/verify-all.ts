@@ -27,6 +27,7 @@ const STEPS = [
   { name: 'deliver v2 parity + no-raw-cancel (ADR-deliver-v2)', cmd: 'pnpm guardrail:deliver-v2' },
   { name: 'adversarial-corpus reachability (tooling-integration-eval G1)', cmd: 'pnpm guardrail:corpus-reachability' },
   { name: 'license + forbidden-dep + env-classification (tooling-integration-eval G5)', cmd: 'pnpm guardrail:license' },
+  { name: 'hook matchers cover Edit|Write|MultiEdit (no gate bypass)', cmd: 'pnpm guardrail:hook-matchers' },
 ];
 
 function run(cmd: string): { ok: boolean; output: string } {
