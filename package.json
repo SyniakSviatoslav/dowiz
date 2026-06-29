@@ -28,6 +28,7 @@
     "guardrail:owner-active": "node scripts/guardrail-owner-active-membership.mjs",
     "guardrail:spike-boundary": "node scripts/guardrail-spike-boundary.mjs",
     "guardrail:deliver-v2": "node scripts/guardrail-deliver-v2.mjs",
+    "guardrail:corpus-reachability": "node scripts/guardrail-corpus-reachability.mjs",
     "verify:all": "tsx scripts/verify-all.ts",
     "test:unit": "node --test --import tsx 'apps/api/tests/**/*.test.ts' 'apps/worker/tests/**/*.test.ts' 'apps/web/src/**/*.test.ts' 'packages/**/*.test.ts' 'tools/**/tests/**/*.test.ts'",
     "backup:restore": "tsx --env-file=.env scripts/backup-restore.ts",
