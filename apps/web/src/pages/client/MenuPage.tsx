@@ -943,7 +943,9 @@ export function MenuPage() {
                   >
                     <i className="ti ti-tools-kitchen-2 leading-none" style={{ fontSize: '1.75rem', color: 'var(--brand-primary)' }} />
                   </span>
-                  <span className="relative text-sm font-semibold tracking-tight" style={{ color: 'var(--brand-text)' }}>{detailProduct.name}</span>
+                  {/* No dish name here: it already renders once as the modal body heading
+                      (the <h2> below). Repeating it on the photoless hero read as a
+                      duplicate title. */}
                 </div>
               )}
               {/* Cinematic reveal — decorative Canvas-2D dissolve over the hero on open. Only

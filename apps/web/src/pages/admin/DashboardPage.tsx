@@ -327,6 +327,12 @@ export function DashboardPage() {
 
   const filteredOrders = useMemo(() => {
     let result = orders;
+    // Hide clearly-synthetic E2E/test-fixture orders from the owner-facing view. Every
+    // harness-seeded order names its customer "E2E …" (e.g. "E2E D1", "E2E Customer") — no
+    // real customer is. This is a DISPLAY-only guard against staging/demo-DB pollution
+    // (and stale "361 min overdue" fixtures); it never mutates order state, the realtime
+    // bus, or the refetch logic, and real orders are untouched.
+    result = result.filter(o => !/^E2E\b/i.test(o.customerName ?? ''));
     if (viewMode === 'live') {
       result = result.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED');
     } else {
