@@ -28,6 +28,9 @@ const STEPS = [
   { name: 'adversarial-corpus reachability (tooling-integration-eval G1)', cmd: 'pnpm guardrail:corpus-reachability' },
   { name: 'license + forbidden-dep + env-classification (tooling-integration-eval G5)', cmd: 'pnpm guardrail:license' },
   { name: 'hook matchers cover Edit|Write|MultiEdit (no gate bypass)', cmd: 'pnpm guardrail:hook-matchers' },
+  // Invoked directly (no package.json script needed — package.json is protect-paths): the SECURITY
+  // DEFINER search_path gate was authored (ledger #33) but never wired here, so it never ran. Wired.
+  { name: 'SECURITY DEFINER search_path pinned (pg-privilege-hardening, ledger #33)', cmd: 'node scripts/guardrail-definer-search-path.mjs' },
 ];
 
 function run(cmd: string): { ok: boolean; output: string } {
