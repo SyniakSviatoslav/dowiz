@@ -24,7 +24,7 @@ export function PriceDisplay({ amount, className = '', style, size = 'md', curre
   const formatted = formatMoney(amount, displayCurrency, rate);
 
   return (
-    <span className={`font-semibold text-brand-text ${sizes[size]} ${className}`} style={style}>
+    <span className={`font-semibold text-brand-text whitespace-nowrap tabular-nums ${sizes[size]} ${className}`} style={style}>
       {formatted}
     </span>
   );
