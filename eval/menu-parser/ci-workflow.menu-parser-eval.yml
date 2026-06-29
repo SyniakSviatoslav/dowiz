@@ -1,0 +1,68 @@
+# G2 — DeepEval menu-parser eval (tooling-integration-eval, Phase 2). CI-ONLY, isolated venv.
+# Never in apps/api runtime deps (G5 asserts that). Judge = Anthropic (the only allowlisted egress).
+#
+# APPLY (protected zone — operator copies this into .github/workflows/menu-parser-eval.yml):
+#   cp eval/menu-parser/ci-workflow.menu-parser-eval.yml .github/workflows/menu-parser-eval.yml
+#   gh secret set ANTHROPIC_API_KEY    # judge key (the only external destination)
+#   gh secret set EVAL_LLM_PROVIDER    # e.g. "anthropic" to exercise the live parser path
+# Do NOT set any CONFIDENT_AI_* / DEEPEVAL_API_KEY secret (cloud sync stays off; preflight enforces).
+name: menu-parser-eval
+
+on:
+  pull_request:
+    paths:
+      - 'apps/api/src/lib/ai-ocr-parser.ts'
+      - 'apps/api/src/lib/menu-region.ts'
+      - 'apps/api/src/lib/menu-grounding.ts'
+      - 'apps/api/src/lib/pii-redactor.ts'
+      - 'eval/menu-parser/**'
+  schedule:
+    - cron: '0 3 * * *'   # nightly
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # In-process fail-closed complement to the network allowlist (preflight enforces these).
+      DEEPEVAL_TELEMETRY_OPT_OUT: '1'
+      ERROR_REPORTING: '0'
+      OTEL_SDK_DISABLED: 'true'
+      EVAL_EGRESS_ALLOWLIST: 'api.anthropic.com'
+      # Judge key (Anthropic) — the ONLY external destination. Confident-AI cloud keys are NOT set.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      LLM_PROVIDER: ${{ secrets.EVAL_LLM_PROVIDER }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: 'pnpm' }
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      # Isolated venv — deepeval NEVER touches the Node runtime / apps/api deps.
+      - name: install deepeval (isolated venv)
+        run: |
+          python3 -m venv eval/menu-parser/.venv
+          ./eval/menu-parser/.venv/bin/pip install -r eval/menu-parser/requirements.txt
+
+      # Fail-closed pre-flight FIRST — exits non-zero before any fixture/network if misconfigured.
+      - name: G2 pre-flight (fail-closed)
+        run: ./eval/menu-parser/.venv/bin/python eval/menu-parser/preflight.py
+
+      # Egress allowlist note (R10): GitHub-hosted runners don't enforce a per-job network policy.
+      # The bound is that ONLY synthetic fixtures exist on disk (preflight scans them) + Confident-AI
+      # cloud is off + OTEL disabled, so the worst case egresses synthetic data to the Anthropic judge.
+      # A self-hosted runner with an egress firewall is the path to a hard network allowlist.
+      - name: generate parser outputs (real AiOcrParser)
+        run: pnpm exec tsx eval/menu-parser/generate-outputs.ts
+
+      - name: DeepEval scoring (judge = Anthropic)
+        run: ./eval/menu-parser/.venv/bin/python eval/menu-parser/eval_menu_parser.py

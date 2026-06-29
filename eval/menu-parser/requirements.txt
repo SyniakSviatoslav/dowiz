@@ -1,0 +1,3 @@
+# G2 DeepEval menu-parser eval — CI-only, isolated venv. Pinned (re-review on any bump; verify the
+# #2497 OTel-TracerProvider-hijack neutralization still holds — see preflight.py + README).
+deepeval==2.0.9

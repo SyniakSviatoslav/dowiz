@@ -16,6 +16,7 @@
 | OpenCode Zen | текст меню (raw, un-redacted) + контакт власника | OCR-структуризація (preferred) | [____] | OPENCODE_ZEN_API_KEY | можливо [owner-uploaded doc може містити 3-ю-сторонню PII; notice на upload] | [____] |
 | OpenRouter | текст меню (raw) + контакт власника; UI-скріншоти SEED/synthetic стану (vision QA) — без production-PII | OCR-структуризація (fallback); UI screenshot review (vision QA) — SEED/synthetic state only, never production data | per OpenRouter | OPENROUTER_API_KEY | можливо [як вище; vision QA = seed-only, нуль prod-PII, масковано перед egress] | [seed-only, no prod data ____] |
 | Web Push (VAPID) | order id/сума | push | — | VAPID_* | ні | — |
+| Google (OAuth) | owner email/profile при OAuth-логіні (flag-gated, default off) | owner sign-in (опційний IdP) | US/global | GOOGLE_CLIENT_SECRET | так [owner email] | [flag-gated; DPA via Google Cloud terms ____] |
 
 * Sentry scrub regex-based — перевіряй покриття.
 WhatsApp/Baileys — ВИДАЛЕНО (P0-2).
