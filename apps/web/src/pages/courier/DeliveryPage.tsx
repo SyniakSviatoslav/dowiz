@@ -209,10 +209,16 @@ export function DeliveryPage() {
     // never blocked: a transient failure surfaces a retry-able error and resets the swipe; a
     // terminal order (already cancelled/delivered) gets a soft "closed" message, not a fake win.
     setDeliverError(null);
-    const isCash = Boolean(task?.cashPayWith);
+    // BUGFIX: the swipe-to-complete IS a successful delivery. Send deliver-v2's first-class
+    // `payment_outcome: 'paid_full'` + the cash amount (= order total; the cash-only MVP collects the
+    // full total as cash-as-proof). The old body sent only `cash_collected: isCash` where
+    // isCash=Boolean(task.cashPayWith) — but cashPayWith was ALWAYS null pre-delivery (it mapped from
+    // the post-collection column), so the server derived `refused_payment` → CANCELLED and EVERY
+    // delivery was wrongly cancelled. (Multi-payment-method completion — sending no cash hold for a
+    // card order — needs the server to surface the order's payment_method to the task; tracked.)
     const body: Record<string, unknown> = {
-      cash_collected: isCash,
-      ...(isCash && task?.total != null ? { cash_amount: task.total } : {}),
+      payment_outcome: 'paid_full',
+      ...(task?.total != null ? { cash_amount: task.total } : {}),
     };
     try {
       await apiClient(`/courier/assignments/${id}/delivered`, { method: 'POST', body });
@@ -454,7 +460,11 @@ export function DeliveryPage() {
         <MessageThread
           orderId={orderId!}
           role="courier"
-          currentStatus={task.status}
+          // BUGFIX: MessageThread keys presets on the ORDER status (`courier_IN_DELIVERY`), but
+          // task.status is the ASSIGNMENT status (accepted/picked_up) → getPresets returned [] and the
+          // courier had NO quick-replies. On the delivery page the courier is actively delivering, so
+          // the order is IN_DELIVERY — pass that for preset selection.
+          currentStatus={task.status === 'accepted' || task.status === 'picked_up' ? 'IN_DELIVERY' : task.status}
           messages={messages}
           onSend={handleSendMessage}
           onMarkRead={handleMarkRead}

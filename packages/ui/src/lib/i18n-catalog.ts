@@ -3357,9 +3357,9 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: 'Не вдалося завантажити цей ресторан — оновіть і спробуйте ще раз.',
   },
   'checkout.pin_on_map': {
-    en: 'Drag the pin to your location',
-    sq: 'Tërhiqni shënjuesin te vendndodhja juaj',
-    uk: 'Перетягніть мітку до вашого місцезнаходження',
+    en: 'Tap the map to set your delivery location',
+    sq: 'Trokit hartën për të caktuar vendndodhjen e dorëzimit',
+    uk: 'Торкніться карти, щоб задати місце доставки',
   },
   'checkout.street_address': { en: 'Street address', sq: 'Adresa e rrugës', uk: 'Адреса (вулиця)' },
   'admin.analytics_unavailable': {
@@ -3858,5 +3858,10 @@ export const catalog: Record<string, CatalogEntry> = {
     en: 'Add {{amount}} more for free delivery',
     sq: 'Shto edhe {{amount}} për dorëzim falas',
     uk: 'Додайте ще {{amount}} для безкоштовної доставки',
+  },
+  'courier.accept_failed': {
+    en: 'Could not accept the task — please try again.',
+    sq: 'Detyra nuk u pranua — provo përsëri.',
+    uk: 'Не вдалося прийняти завдання — спробуйте ще раз.',
   },
 };
