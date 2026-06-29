@@ -713,7 +713,7 @@ export function SettingsPage() {
                     aria-describedby={fallbackPhoneError ? 'settings-fallbackPhone-error' : undefined}
                     className="flex-1 min-h-[44px]"
                   />
-                  <Button onClick={handleFallbackSave} isLoading={fallbackSaving} variant="ghost" className="min-h-[44px]">
+                  <Button type="button" onClick={handleFallbackSave} isLoading={fallbackSaving} variant="ghost" className="min-h-[44px]">
                     {t('common.save', 'Save')}
                   </Button>
                 </div>

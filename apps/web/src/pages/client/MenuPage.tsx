@@ -194,6 +194,12 @@ export function MenuPage() {
     }
     if (sortBy === 'default' && !searchQuery && !filterAllergen) return categories;
 
+    // An active search/sort/filter that matches nothing must yield ZERO sections — never a
+    // bare "All items" heading over blank space. Returning [] here lets the single empty-state
+    // branch below fire for every path (the sorted-flat branch would otherwise emit one empty
+    // category, hiding the empty-state).
+    if (result.length === 0) return [];
+
     // A non-default sort is a GLOBAL order ("cheapest first" etc.). Re-bucketing the
     // sorted list back into categories breaks monotonicity (each category restarts the
     // ordering), so when a sort is active we render ONE flat ungrouped section. Category
@@ -772,7 +778,9 @@ export function MenuPage() {
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
             <i className="ti ti-search-off text-5xl opacity-40 mb-3" style={{ color: 'var(--brand-primary)' }} />
             <p className="text-base font-semibold" style={{ color: 'var(--brand-text)' }}>
-              {t('client.no_results', 'No products match your filters')}
+              {searchQuery
+                ? t('client.no_results_query', 'No items match “{{query}}”', { query: searchQuery })
+                : t('client.no_results', 'No products match your filters')}
             </p>
             <p className="text-sm mt-1 mb-4 max-w-xs" style={{ color: 'var(--brand-text-muted)' }}>
               {t('client.no_results_hint', 'Try a different search or clear your filters to see the full menu.')}

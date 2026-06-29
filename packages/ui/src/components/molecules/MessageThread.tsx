@@ -157,7 +157,10 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
                 }`}
                 style={{ boxShadow: 'var(--elev-1)' }}
               >
-                <p>{t(msg.preset_key as any, msg.preset_key, msg.params as any)}</p>
+                {/* BUGFIX: the stored preset_key is the bare code ('cu_on_my_way'); the catalog keys
+                    them under 'message.preset.<key>' (the chips use that). Without the namespace t()
+                    fell back to the raw code in the bubble. Prepend it; keep the raw code as fallback. */}
+                <p>{t(('message.preset.' + msg.preset_key) as any, msg.preset_key, msg.params as any)}</p>
                 <p className={`text-step-2xs mt-1 tabular-nums ${isMine ? 'text-white/80' : 'text-[var(--brand-text-muted)]'}`}>
                   {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>

@@ -3864,4 +3864,14 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Detyra nuk u pranua — provo përsëri.',
     uk: 'Не вдалося прийняти завдання — спробуйте ще раз.',
   },
+  'client.no_results_query': {
+    en: 'No items match “{{query}}”',
+    sq: 'Asnjë artikull nuk përputhet me “{{query}}”',
+    uk: 'Жодна позиція не відповідає “{{query}}”',
+  },
+  'order.not_found_expired': {
+    en: 'We couldn’t find this order. The link may have expired or be incorrect.',
+    sq: 'Nuk e gjetëm këtë porosi. Lidhja mund të ketë skaduar ose të jetë e pasaktë.',
+    uk: 'Ми не змогли знайти це замовлення. Посилання могло застаріти або бути неправильним.',
+  },
 };
