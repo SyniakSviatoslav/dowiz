@@ -260,6 +260,33 @@ async function callLlm(provider: LlmProvider, prompt: string, model: string, tim
   }
 }
 
+// ── LLM response cache (token economy, ADR-0012) ──────────────────────────────
+// The menu parse is near-deterministic (temperature 0.1) and identical inputs recur: a re-import of the
+// same PDF, a retry after a transient failure, the same scraped page across runs. Cache the VALIDATED
+// response keyed by (provider | model | full prompt) so an identical parse costs ZERO LLM tokens. The
+// key includes the prompt verbatim — schema text, memory examples, AND the redacted source — so any
+// change misses (never a stale parse). Per-instance, bounded (FIFO-evicted at the cap) and TTL'd.
+const LLM_CACHE_MAX = 200;
+const LLM_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const llmCache = new Map<string, { value: string; expires: number }>();
+export const LLM_CACHE_CAP = LLM_CACHE_MAX; // exported for the guardrail test
+export function llmCacheKeyOf(provider: string, model: string, prompt: string): string {
+  return crypto.createHash('sha256').update(`${provider} ${model} ${prompt}`).digest('hex');
+}
+export function llmCacheGet(key: string): string | undefined {
+  const e = llmCache.get(key);
+  if (!e) return undefined;
+  if (e.expires < Date.now()) { llmCache.delete(key); return undefined; }
+  return e.value;
+}
+export function llmCacheSet(key: string, value: string): void {
+  if (llmCache.size >= LLM_CACHE_MAX && !llmCache.has(key)) {
+    const oldest = llmCache.keys().next().value;
+    if (oldest !== undefined) llmCache.delete(oldest);
+  }
+  llmCache.set(key, { value, expires: Date.now() + LLM_CACHE_TTL_MS });
+}
+
 export class AiOcrParser implements MenuParserProvider {
   readonly id = 'ai-ocr';
   private piiRedactor = new PiiRedactor();
@@ -503,6 +530,7 @@ export class AiOcrParser implements MenuParserProvider {
     }
 
     let llmResponse = '';
+    let llmCacheKey = '';
     try {
       const currency = input.config.expectedCurrency || 'ALL';
       const prompt = `Extract the complete menu structure from the text below. Return ONLY valid JSON matching this schema:
@@ -541,7 +569,14 @@ CRITICAL RULES:
 5. FORMAT: Output ONLY the JSON object. No markdown fences, no commentary.
 6. RESTAURANT: From the header/footer, extract the venue "name", full street "address", contact "phone", and opening-"hoursText" if present. Use "" for any field not found. Do NOT invent these. This is the venue's OWN business contact — never any customer's details.\n\n${redactedText}`;
 
-      llmResponse = await callLlm(provider, prompt, modelForProvider, 120000);
+      // Token economy: an identical (provider+model+prompt) parse is served from cache — zero tokens.
+      llmCacheKey = llmCacheKeyOf(provider, modelForProvider, prompt);
+      const cached = llmCacheGet(llmCacheKey);
+      if (cached !== undefined) {
+        llmResponse = cached;
+      } else {
+        llmResponse = await callLlm(provider, prompt, modelForProvider, 120000);
+      }
     } catch (e: any) {
       // The configured LLM failed (provider down / out of credits / every free-model promo ended).
       // Degrade — don't cascade to 0 products: fall back to the zero-dependency heuristic structurer
@@ -568,7 +603,10 @@ CRITICAL RULES:
     }
 
     const draft = validation.data;
-    
+
+    // Cache only a VALIDATED response (never garbage/partial) so a repeat parse skips the LLM entirely.
+    if (llmCacheKey) llmCacheSet(llmCacheKey, llmResponse);
+
     // Format draft into CanonicalMenuDraft
     const canonicalDraft: CanonicalMenuDraft = {
       categories: draft.categories,
