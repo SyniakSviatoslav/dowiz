@@ -220,7 +220,11 @@ export function CouriersPage() {
   }, [filtered, courierPositions, mapCenter, t]);
 
   // Count enabled ACCOUNTS, not presence — labelled "active" (never "online", which we can't prove). ADR-0006.
-  const activeCount = couriers.filter((c) => c.status === 'active').length;
+  // A courier row defaults to status='active' the moment it exists (couriers.status DEFAULT 'active'),
+  // so an unclaimed/stub row — no redeemed identity, no name, no phone — would otherwise inflate the
+  // badge. Only count couriers that have genuinely CLAIMED their invite: a redeemed account always has
+  // a real name (required at redeem) or at least a phone. No identity → not a real active courier.
+  const activeCount = couriers.filter((c) => c.status === 'active' && (!!c.name.trim() || !!c.phone)).length;
 
   return (
     <div className="p-4 space-y-6 max-w-4xl mx-auto">

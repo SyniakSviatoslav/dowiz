@@ -18,6 +18,7 @@ export function TasksPage() {
   // Mirrors ShiftPage's source of truth (GET /courier/me/shift → isActive).
   const [onShift, setOnShift] = useState(false);
   const navigate = useNavigate();
+  const [actionError, setActionError] = useState<string | null>(null);
   const { play: playPing } = useSound('/sounds/ping.mp3');
   const { t } = useI18n();
 
@@ -83,14 +84,23 @@ export function TasksPage() {
   });
 
   const handleAccept = async (id: string) => {
+    setActionError(null);
+    const task = tasks.find(t => t.id === id);
+    // BUGFIX: an owner-direct-assigned task is already 'accepted'/'picked_up' (no offer handshake on
+    // staging). It does NOT need a /accept call — the server only accepts 'offered'/'assigned' and 400s
+    // an already-accepted one, which left the courier STUCK on Tasks (the error was swallowed). Go
+    // straight to the delivery screen; only call /accept for a genuine offer.
+    if (task && (task.status === 'accepted' || task.status === 'picked_up')) {
+      navigate(`/courier/delivery/${id}`);
+      return;
+    }
     setAcceptingId(id);
     try {
-      await apiClient(`/courier/assignments/${id}/accept`, {
-        method: 'POST'
-      });
+      await apiClient(`/courier/assignments/${id}/accept`, { method: 'POST' });
       navigate(`/courier/delivery/${id}`);
     } catch (err) {
       console.warn('[TasksPage] accept task failed:', err);
+      setActionError(t('courier.accept_failed', 'Could not accept the task — please try again.')); // surface, don't swallow
       setAcceptingId(null);
     }
   };
@@ -165,12 +175,23 @@ export function TasksPage() {
         />
       ) : (
         <motion.div className="space-y-4" variants={containerVariants} initial="hidden" animate="visible">
+          {actionError && (
+            <div role="alert" aria-live="assertive" data-testid="courier-task-error" className="rounded-[var(--brand-radius)] px-3 py-2 text-sm text-center font-medium" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--color-danger)' }}>
+              {actionError}
+            </div>
+          )}
           <AnimatePresence mode="popLayout">
-            {tasks.map(task => (
-              <motion.div key={task.id} variants={itemVariants} exit={{ opacity: 0, y: -8, scale: 0.97, transition: { duration: 0.15, ease: ease.out } }} layout>
-                <TaskCard task={task} onAccept={handleAccept} onReject={handleReject} isLoading={acceptingId === task.id} />
-              </motion.div>
-            ))}
+            {tasks.map(task => {
+              // An owner-direct-assigned / already-accepted task has NO offer window — passing onReject
+              // undefined stops TaskCard's 60s countdown + auto-reject (it keys `timed` on !!onReject),
+              // which was wrongly auto-releasing owner-assigned tasks after 60s.
+              const isOffer = task.status === 'offered' || task.status === 'assigned';
+              return (
+                <motion.div key={task.id} variants={itemVariants} exit={{ opacity: 0, y: -8, scale: 0.97, transition: { duration: 0.15, ease: ease.out } }} layout>
+                  <TaskCard task={task} onAccept={handleAccept} onReject={isOffer ? handleReject : undefined} isLoading={acceptingId === task.id} />
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
         </motion.div>
       )}
