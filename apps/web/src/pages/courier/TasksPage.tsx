@@ -137,6 +137,14 @@ export function TasksPage() {
         </div>
       </div>
 
+      {/* Shown ABOVE the list/empty branches so an accept failure (e.g. a 410 expired-offer) stays
+          visible even when the failed task vanishes and the list empties (was lost inside the list). */}
+      {actionError && (
+        <div role="alert" aria-live="assertive" data-testid="courier-task-error" className="rounded-[var(--brand-radius)] px-3 py-2 text-sm text-center font-medium" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--color-danger)' }}>
+          {actionError}
+        </div>
+      )}
+
       {loading && tasks.length === 0 ? (
         <div className="space-y-4">
           {[1, 2, 3].map(i => (
@@ -175,20 +183,16 @@ export function TasksPage() {
         />
       ) : (
         <motion.div className="space-y-4" variants={containerVariants} initial="hidden" animate="visible">
-          {actionError && (
-            <div role="alert" aria-live="assertive" data-testid="courier-task-error" className="rounded-[var(--brand-radius)] px-3 py-2 text-sm text-center font-medium" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--color-danger)' }}>
-              {actionError}
-            </div>
-          )}
           <AnimatePresence mode="popLayout">
             {tasks.map(task => {
               // An owner-direct-assigned / already-accepted task has NO offer window — passing onReject
-              // undefined stops TaskCard's 60s countdown + auto-reject (it keys `timed` on !!onReject),
-              // which was wrongly auto-releasing owner-assigned tasks after 60s.
+              // undefined stops TaskCard's countdown + auto-reject (it keys `timed` on !!onReject),
+              // which was wrongly auto-releasing owner-assigned tasks. An 'offered'/'assigned' offer keeps
+              // the accept/decline window, sized to the server's 30s accept window (was a desynced 60s).
               const isOffer = task.status === 'offered' || task.status === 'assigned';
               return (
                 <motion.div key={task.id} variants={itemVariants} exit={{ opacity: 0, y: -8, scale: 0.97, transition: { duration: 0.15, ease: ease.out } }} layout>
-                  <TaskCard task={task} onAccept={handleAccept} onReject={isOffer ? handleReject : undefined} isLoading={acceptingId === task.id} />
+                  <TaskCard task={task} onAccept={handleAccept} onReject={isOffer ? handleReject : undefined} offerSeconds={30} isLoading={acceptingId === task.id} />
                 </motion.div>
               );
             })}

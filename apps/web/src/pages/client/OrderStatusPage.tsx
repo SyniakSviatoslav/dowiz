@@ -195,13 +195,11 @@ export function OrderStatusPage() {
         return;
       }
       if (err?.status === 404) {
-        setOrder({
-          id,
-          status: 'PENDING',
-          createdAt: new Date().toISOString(),
-          items: [],
-          total: 0,
-        });
+        // Unknown / expired order id. NEVER fabricate a placeholder order — a fake
+        // "#0000 · Total 0.00" tracking UI with a live cancel button is worse than an
+        // honest dead-end. Surface the same branded "this link is no longer active"
+        // state used for a missing session (order stays null → not-found branch renders).
+        setError(t('order.not_found_expired', 'We couldn’t find this order. The link may have expired or be incorrect.'));
       } else {
         setError('Failed to fetch order status');
       }
