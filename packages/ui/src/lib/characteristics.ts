@@ -106,3 +106,48 @@ export function computeAllergenSurface(
   const known = Array.from(new Set([...declared, ...bomAllergens.map((x) => String(x))]));
   return { known, hasInfo: known.length > 0 };
 }
+
+// ── COMPARISON of exactly two dishes (council §5 + guardrail #8) ─────────────────────────────────────────
+// Reuses the same characteristics layer. Directional "lower wins" markers are emitted ONLY on the
+// NON-regulated axes (price, prep-time) — NEVER on macros (a kcal "wins" arrow is a regulated lightness
+// verdict, R2-H1) and NEVER a global winner (deltas are neutral; the customer's priority decides). Taste is
+// side-by-side, not a winner. Allergens: BOTH dishes' surfaces are ALWAYS returned explicitly (#8) — a
+// no-data dish yields hasInfo:false (the caller renders the floor), NEVER a blank that reads "free-from".
+export interface CompareDishInput {
+  id: string;
+  name: string;
+  price: number;
+  prepTimeMinutes?: number | null;
+  taste?: Record<string, number> | null;
+  attributes?: { allergen_status?: string; declared_allergens?: unknown } | null;
+  bomAllergens?: readonly string[];
+}
+export interface CompareAxis {
+  a: number | null;
+  b: number | null;
+  lower: 'a' | 'b' | 'tie' | null; // null when either side is missing — no fabricated winner
+}
+export interface DishComparison {
+  price: CompareAxis;
+  prepTime: CompareAxis;
+  taste: { a: Record<string, number>; b: Record<string, number> };
+  allergens: { a: AllergenSurface; b: AllergenSurface };
+}
+function lowerWinsAxis(a: number | null | undefined, b: number | null | undefined): CompareAxis {
+  const av = typeof a === 'number' ? a : null;
+  const bv = typeof b === 'number' ? b : null;
+  let lower: CompareAxis['lower'] = null;
+  if (av != null && bv != null) lower = av < bv ? 'a' : bv < av ? 'b' : 'tie';
+  return { a: av, b: bv, lower };
+}
+export function compareDishes(a: CompareDishInput, b: CompareDishInput): DishComparison {
+  return {
+    price: lowerWinsAxis(a.price, b.price), // lower = cheaper (a fact, not a verdict)
+    prepTime: lowerWinsAxis(a.prepTimeMinutes ?? null, b.prepTimeMinutes ?? null), // lower = faster
+    taste: { a: a.taste || {}, b: b.taste || {} }, // side-by-side, NO winner
+    allergens: {
+      a: computeAllergenSurface(a.attributes, a.bomAllergens || []),
+      b: computeAllergenSurface(b.attributes, b.bomAllergens || []),
+    },
+  };
+}

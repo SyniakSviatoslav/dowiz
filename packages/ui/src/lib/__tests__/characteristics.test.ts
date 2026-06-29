@@ -8,6 +8,7 @@ import {
   selectDescriptiveLabels,
   regulatedSubsetActive,
   computeAllergenSurface,
+  compareDishes,
 } from '../characteristics.js';
 
 // Guardrail #6 (council menu-characteristics-model) — the deterministic ratchet that gates the descriptive
@@ -106,5 +107,37 @@ describe('characteristics — allergen surface (#5 floor + #4-positive)', () => 
     const s = computeAllergenSurface({ allergen_status: 'none', declared_allergens: [] }, []);
     assert.equal(s.hasInfo, false);
     assert.equal(s.known.length, 0);
+  });
+});
+
+// Guardrail #8 — comparison of two dishes: allergen cells explicit-BOTH (never blank), directional markers
+// only on the non-regulated axes, never a macro/global winner.
+describe('characteristics — comparison (#8 explicit-both + no regulated/global winner)', () => {
+  const nuts = { id: 'a', name: 'A', price: 500, prepTimeMinutes: 10, attributes: { allergen_status: 'listed', declared_allergens: ['nuts'] } };
+  const nodata = { id: 'b', name: 'B', price: 700, prepTimeMinutes: 20, attributes: { allergen_status: 'unset' } };
+
+  it('#8: BOTH dishes get an explicit allergen surface — a no-data dish never renders blank/"—"', () => {
+    const c = compareDishes(nuts, nodata);
+    assert.equal(c.allergens.a.hasInfo, true);
+    assert.ok(c.allergens.a.known.includes('nuts'));
+    assert.equal(c.allergens.b.hasInfo, false); // caller renders the floor — never blank (no "free-from" by contrast)
+    assert.ok(Array.isArray(c.allergens.b.known)); // surface always present, not undefined
+  });
+
+  it('directional "lower wins" only on price + prep-time (neutral facts)', () => {
+    const c = compareDishes(nuts, nodata);
+    assert.equal(c.price.lower, 'a'); // 500 < 700 — cheaper
+    assert.equal(c.prepTime.lower, 'a'); // 10 < 20 — faster
+  });
+
+  it('no fabricated winner when an axis value is missing', () => {
+    const c = compareDishes({ ...nuts, prepTimeMinutes: null }, nodata);
+    assert.equal(c.prepTime.lower, null);
+  });
+
+  it('taste is side-by-side, never a winner; no macro axis carries a winner (kcal arrow = regulated verdict)', () => {
+    const c = compareDishes(nuts, nodata) as Record<string, unknown>;
+    assert.ok(!('lower' in (c.taste as object)));
+    assert.ok(!('macros' in c) && !('kcal' in c), 'no macro winner axis may exist');
   });
 });
