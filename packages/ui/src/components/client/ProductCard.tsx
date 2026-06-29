@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useI18n, PriceDisplay, getAllergenStyle } from '../../index.js';
+import { useI18n, PriceDisplay } from '../../index.js';
 import { ease, duration } from '../../lib/motion.js';
 
 interface ProductCardProps {
@@ -46,13 +46,19 @@ const canHover = typeof window !== 'undefined' && window.matchMedia?.('(hover: h
 export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
   const { t } = useI18n();
   const [imgError, setImgError] = useState(false);
-  const hasAllergens = product.allergens && product.allergens.length > 0;
-  const hasIngredients = product.ingredients && product.ingredients.length > 0;
-  const hasTaste = product.taste && Object.keys(product.taste).length > 0;
-  const hasNutrition = product.kcal != null;
-  const allergens = product.allergens || [];
-  const ingredients = product.ingredients || [];
   const isChefPick = !!product.chefPick;
+  // HIGH-1: photoless items render text-first (no fake placeholder slot), so the card
+  // only reserves a photo area when there is a real photo to show.
+  const hasPhoto = !!product.image && !imgError;
+  // HIGH-2: the card carries ESSENTIALS only — name, price, short description, and at
+  // most ONE taste cue (the dominant axis). The full taste profile, allergens, nutrition
+  // and ingredients all live in the detail modal, so the grid stays scannable instead of
+  // a wall of chips on every card.
+  const dominantTaste = product.taste
+    ? Object.entries(product.taste)
+        .filter(([axis, v]) => v > 0 && TASTE_ICONS[axis])
+        .sort((a, b) => b[1] - a[1])[0]
+    : undefined;
 
   return (
     <motion.article
@@ -67,11 +73,15 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
       whileHover={product.isAvailable && canHover ? 'hover' : undefined}
       whileTap={product.isAvailable && onClick ? 'tap' : undefined}
     >
-      <div
-        className="w-full aspect-[4/3] flex items-center justify-center relative overflow-hidden"
-        style={{ background: 'var(--brand-surface-raised)' }}
-      >
-        {product.image && !imgError ? (
+      {/* HIGH-1: photo cards keep the image; photoless items render TEXT-FIRST with no
+          fake placeholder slot. Most menu items have no photo, and an identical cutlery
+          medallion on every one turned the grid into a sea of placeholders — so without a
+          real photo the name, price and description simply take the lead instead. */}
+      {hasPhoto && (
+        <div
+          className="w-full aspect-[4/3] flex items-center justify-center relative overflow-hidden"
+          style={{ background: 'var(--brand-surface-raised)' }}
+        >
           <motion.img
             layoutId={`product-photo-${product.id}`}
             src={product.image}
@@ -81,93 +91,34 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             onError={() => setImgError(true)}
             variants={product.isAvailable ? imgVariants : undefined}
           />
-        ) : (
-          // Crafted, on-brand no-photo fallback. Not a dead grey box and not a
-          // giant monogram: a warm brand-tinted gradient, a faint repeating
-          // dotted "tablecloth" texture, and a centred cutlery glyph in a soft
-          // brand-coloured medallion. Themed per tenant via --brand-* tokens.
-          <div
-            className="flex items-center justify-center w-full h-full select-none relative"
-            style={{
-              background:
-                'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 14%, var(--brand-surface)) 0%, var(--brand-surface-raised) 55%, color-mix(in srgb, var(--brand-primary) 7%, var(--brand-surface)) 100%)',
-            }}
-            aria-hidden="true"
-          >
-            <div
-              className="absolute inset-0"
-              style={{
-                backgroundImage:
-                  'radial-gradient(color-mix(in srgb, var(--brand-primary) 30%, transparent) 1px, transparent 1.4px)',
-                backgroundSize: '14px 14px',
-                opacity: 0.35,
-              }}
-            />
-            <span
-              className="relative flex items-center justify-center rounded-full"
-              style={{
-                width: 'clamp(2.75rem, 22%, 3.75rem)',
-                aspectRatio: '1 / 1',
-                background: 'color-mix(in srgb, var(--brand-surface) 78%, transparent)',
-                border: '1px solid color-mix(in srgb, var(--brand-primary) 28%, transparent)',
-                boxShadow: '0 2px 10px color-mix(in srgb, var(--brand-primary) 16%, transparent)',
-              }}
-            >
-              <i
-                className="ti ti-tools-kitchen-2 leading-none"
-                style={{ fontSize: 'clamp(1.25rem, 9vw, 1.75rem)', color: 'var(--brand-primary)' }}
-              />
-            </span>
-          </div>
+          {/* Chef-pick is the one curation cue that stays ON the photo. Allergens,
+              nutrition and ingredient chips moved into the detail modal (HIGH-2). */}
+          {isChefPick && (
+            <div className="absolute top-1.5 right-1.5 z-10">
+              <motion.span
+                className="text-step-2xs font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
+                style={{ background: 'var(--brand-primary)', color: 'color-mix(in srgb, var(--brand-bg) 88%, #000)', boxShadow: '0 2px 8px color-mix(in srgb, var(--brand-primary) 45%, transparent)' }}
+                initial={{ scale: 0.85, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              >
+                ✦ {t('client.chefs_pick_badge', "Chef's Pick")}
+              </motion.span>
+            </div>
+          )}
+          {/* No sold-out overlay/chip: read_public_menu only returns is_available=true products,
+              so the storefront hides unavailable items rather than greying them. */}
+        </div>
+      )}
+      <div className={`flex flex-col flex-1 gap-1 min-h-0 ${hasPhoto ? 'p-2.5' : 'p-3.5'}`}>
+        {/* Photoless cards have no image corner to host the chef-pick cue, so it surfaces inline. */}
+        {!hasPhoto && isChefPick && (
+          <span className="self-start text-step-2xs font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 mb-0.5" style={{ background: 'color-mix(in srgb, var(--brand-primary) 14%, transparent)', color: 'var(--brand-primary-readable)' }}>
+            ✦ {t('client.chefs_pick_badge', "Chef's Pick")}
+          </span>
         )}
-        {hasAllergens && (
-          <div className="absolute top-1.5 left-1.5 z-10 flex flex-wrap gap-0.5 max-w-[70%]">
-            {allergens.slice(0, 3).map(a => {
-              const s = getAllergenStyle(a);
-              return (
-                <span key={a} className="text-step-2xs font-semibold px-1 py-0.5 rounded-sm leading-tight" style={{ background: s.bg, color: s.text }}>
-                  {t(`allergen.${a.toLowerCase()}`, a)}
-                </span>
-              );
-            })}
-            {allergens.length > 3 && (
-              <span className="text-step-2xs font-semibold px-1 py-0.5 rounded-sm" style={{ background: 'color-mix(in srgb, var(--brand-surface) 84%, #000)', color: 'var(--brand-text)' }}>
-                +{allergens.length - 3}
-              </span>
-            )}
-          </div>
-        )}
-        {/* No "Clean/allergen-free" fallback badge: absence of declared allergen
-            data is NOT a safety guarantee. Showing it on every product with no
-            allergen info was both misleading (e.g. a salmon roll reading "Clean")
-            and visual noise. Allergen scent now appears only when real data exists. */}
-        {hasNutrition && !isChefPick && (
-          <div className="absolute top-1.5 right-1.5 z-10">
-              <span className="text-step-2xs font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-1" style={{ background: 'rgba(0,0,0,0.6)', color: 'var(--color-on-primary)' }}>
-              <i className="ti ti-flame" style={{ fontSize: '0.6rem' }} />
-              {product.kcal}
-            </span>
-          </div>
-        )}
-        {isChefPick && (
-          <div className="absolute top-1.5 right-1.5 z-10">
-            <motion.span
-              className="text-step-2xs font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
-              style={{ background: 'var(--brand-primary)', color: 'color-mix(in srgb, var(--brand-bg) 88%, #000)', boxShadow: '0 2px 8px color-mix(in srgb, var(--brand-primary) 45%, transparent)' }}
-              initial={{ scale: 0.85, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-            >
-              ✦ {t('client.chefs_pick_badge', "Chef's Pick")}
-            </motion.span>
-          </div>
-        )}
-        {/* No sold-out overlay/chip: read_public_menu only returns is_available=true products,
-            so the storefront hides unavailable items rather than greying them. */}
-      </div>
-      <div className="p-2.5 flex flex-col flex-1 gap-1 min-h-0">
         <div className="flex items-start justify-between gap-1.5">
-          <h3 className="font-semibold text-step-sm leading-tight line-clamp-2 flex-1 min-h-[2.5em]" style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
+          <h3 className={`font-semibold leading-tight line-clamp-2 flex-1 ${hasPhoto ? 'text-step-sm min-h-[2.5em]' : 'text-step-base'}`} style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
           <motion.button
             data-testid="menu-item-add"
             className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--brand-bg)] rounded-full mt-0.5 ${
@@ -189,29 +140,17 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
           </motion.button>
         </div>
         {product.description && (
-          <p className="text-step-2xs leading-snug line-clamp-2" style={{ color: 'var(--brand-text-muted)' }}>
+          // Photoless cards earn an extra description line since they don't spend height on an image.
+          <p className={`text-step-2xs leading-snug ${hasPhoto ? 'line-clamp-2' : 'line-clamp-3'}`} style={{ color: 'var(--brand-text-muted)' }}>
             {product.description}
           </p>
         )}
 
-        {hasIngredients && (
-          <div className="flex gap-0.5 flex-wrap">
-            {ingredients.slice(0, 4).map((ing, i) => (
-              <span key={i} className="px-1 py-0 rounded text-step-2xs leading-tight" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
-                {ing}
-              </span>
-            ))}
-            {ingredients.length > 4 && <span className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>+{ingredients.length - 4}</span>}
-          </div>
-        )}
+        {/* HIGH-2: full ingredients / allergen / nutrition detail intentionally omitted from
+            the card — it all lives one tap away in the detail modal. */}
 
-        {/* Allergen scent lives on the image corner badges (top-3 + overflow) and
-            the full labelled list is in the detail modal — rendering the loud
-            uppercase colour row again here was redundant noise that broke the
-            card's palette discipline, so it's intentionally omitted. */}
-
-        <div className="flex items-center justify-between mt-auto pt-1">
-          <div className="flex items-baseline gap-1">
+        <div className="flex items-center justify-between gap-2 mt-auto pt-1">
+          <div className="flex items-baseline gap-1 min-w-0">
             <PriceDisplay amount={product.price} size="md" style={{ color: 'var(--brand-primary-readable, var(--brand-text))', fontWeight: 800 }} />
             {product.prepTimeMinutes != null && (
               <span className="inline-flex items-center gap-0.5 text-step-2xs font-medium whitespace-nowrap" style={{ color: 'var(--brand-text-muted)' }}>
@@ -219,29 +158,19 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
                 {t('product.prep_minutes', '~{{n}} min', { n: product.prepTimeMinutes })}
               </span>
             )}
-            {hasNutrition && (
-              <span className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>
-                {product.kcal}kcal
-                {product.protein != null && <span className="opacity-60"> · P{product.protein}g</span>}
-                {product.fat != null && <span className="opacity-60"> · F{product.fat}g</span>}
-              </span>
-            )}
           </div>
+          {/* HIGH-2: a single dominant taste cue — the full taste profile is in the modal. */}
+          {dominantTaste && (
+            <span
+              className="inline-flex items-center shrink-0"
+              style={{ color: 'color-mix(in srgb, var(--brand-text) 62%, transparent)' }}
+              title={TASTE_LABELS[dominantTaste[0]] || dominantTaste[0]}
+              aria-label={TASTE_LABELS[dominantTaste[0]] || dominantTaste[0]}
+            >
+              <i className={TASTE_ICONS[dominantTaste[0]]} style={{ fontSize: '0.85rem' }} />
+            </span>
+          )}
         </div>
-
-        {hasTaste && (
-          <div className="flex gap-1.5 flex-wrap">
-            {/* Skip axes we have no icon for — a hollow ti-circle fallback reads as an
-                empty/broken glyph, so an unmapped axis is dropped rather than rendered blank. */}
-            {Object.entries(product.taste!).filter(([axis, v]) => v > 0 && TASTE_ICONS[axis]).map(([axis, level]) => (
-              <span key={axis} className="inline-flex items-center gap-0.5" style={{ color: 'color-mix(in srgb, var(--brand-text) 62%, transparent)' }} title={`${TASTE_LABELS[axis] || axis}`}>
-                {Array.from({ length: level }).map((_, i) => (
-                  <i key={i} className={TASTE_ICONS[axis]} style={{ fontSize: '0.7rem' }} />
-                ))}
-              </span>
-            ))}
-          </div>
-        )}
       </div>
     </motion.article>
   );
