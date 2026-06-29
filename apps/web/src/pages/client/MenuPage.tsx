@@ -10,7 +10,7 @@ const MediaRenderer = lazy(() => import('../../components/media').then(m => ({ d
 const RevealOverlay = lazy(() => import('../../components/media/RevealOverlay').then(m => ({ default: m.RevealOverlay })));
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput } from '@deliveryos/ui';
+import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput, computeAllergenSurface } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 
 interface ProductModifier {
@@ -1075,23 +1075,62 @@ export function MenuPage() {
                 </div>
               )}
 
-              {(bomToNutrition(detailProduct).allergens.length > 0) && (
-                <div className="rounded-xl p-4" style={{ background: 'rgba(220,38,38,0.06)', borderColor: 'rgba(220,38,38,0.15)', borderWidth: 1 }}>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
-                    <i className="ti ti-alert-triangle" /> {t('client.allergens', 'Allergens')}
-                  </h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    {bomToNutrition(detailProduct).allergens.map(a => {
-                      const s = getAllergenStyle(a);
-                      return (
-                        <span key={a} className="px-2 py-0.5 rounded font-semibold text-step-2xs uppercase" style={{ background: s.bg, color: s.text }}>
-                          {t(`allergen.${a.toLowerCase()}`, a)}
-                        </span>
-                      );
-                    })}
+              {(() => {
+                const bomAllergens = bomToNutrition(detailProduct).allergens;
+                // Flag OFF (today): legacy — show recipe-derived allergens only when present, nothing otherwise.
+                const charsOn = (import.meta as any).env?.VITE_MENU_CHARACTERISTICS_ENABLED === 'true';
+                if (!charsOn) {
+                  if (bomAllergens.length === 0) return null;
+                  return (
+                    <div className="rounded-xl p-4" style={{ background: 'rgba(220,38,38,0.06)', borderColor: 'rgba(220,38,38,0.15)', borderWidth: 1 }}>
+                      <h3 className="text-xs font-semibold uppercase tracking-wider mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
+                        <i className="ti ti-alert-triangle" /> {t('client.allergens', 'Allergens')}
+                      </h3>
+                      <div className="flex flex-wrap gap-1.5">
+                        {bomAllergens.map(a => {
+                          const s = getAllergenStyle(a);
+                          return (
+                            <span key={a} className="px-2 py-0.5 rounded font-semibold text-step-2xs uppercase" style={{ background: s.bg, color: s.text }}>
+                              {t(`allergen.${a.toLowerCase()}`, a)}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                }
+                // Flag ON — DETAIL-FLOOR-ONLY honest surface (council menu-characteristics-model #5/#5d).
+                // PRESENCE only (absence is NEVER shown). Conservative union of the owner's L3 declaration and
+                // recipe-derived allergens so a warning is never hidden. No allergens known → the floor, never
+                // a blank (data-absence must never read as a clean allergen state). The reliance bound is
+                // ALWAYS attached so a partial declaration can't read as the complete truth.
+                const { known } = computeAllergenSurface((detailProduct as any).attributes, bomAllergens);
+                return (
+                  <div className="rounded-xl p-4" style={{ background: 'rgba(220,38,38,0.06)', borderColor: 'rgba(220,38,38,0.15)', borderWidth: 1 }} data-testid="allergen-surface">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
+                      <i className="ti ti-alert-triangle" /> {t('client.allergens', 'Allergens')}
+                    </h3>
+                    {known.length > 0 ? (
+                      <>
+                        <p className="text-step-2xs mb-1.5" style={{ color: 'var(--brand-text-muted)' }}>{t('client.allergen_declared_to_contain', 'Declared to contain')}:</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {known.map(a => {
+                            const s = getAllergenStyle(a);
+                            return (
+                              <span key={a} className="px-2 py-0.5 rounded font-semibold text-step-2xs uppercase" style={{ background: s.bg, color: s.text }}>
+                                {t(`allergen.${a.toLowerCase()}`, a)}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-step-2xs" data-testid="allergen-no-info" style={{ color: 'var(--brand-text-muted)' }}>{t('client.allergen_info_not_provided', 'Allergen info not provided')}</p>
+                    )}
+                    <p className="text-step-2xs mt-2 italic" style={{ color: 'var(--brand-text-muted)' }}>{t('client.allergen_confirm_venue', 'Not a complete allergen list — please confirm with the venue for severe allergies.')}</p>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {(bomToNutrition(detailProduct).ingredients.length > 0) && (
                 <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)' }}>

@@ -7,6 +7,7 @@ import {
   isRegulatedTerm,
   selectDescriptiveLabels,
   regulatedSubsetActive,
+  computeAllergenSurface,
 } from '../characteristics.js';
 
 // Guardrail #6 (council menu-characteristics-model) — the deterministic ratchet that gates the descriptive
@@ -78,5 +79,32 @@ describe('characteristics — guardrail #2 (regulated subset dark until verified
     for (const a of REGULATED_ANCHORS) {
       assert.equal(isRegulatedTerm(a.label), true, `anchor "${a.label}" should match the regulated register`);
     }
+  });
+});
+
+// Guardrails #5 (floor) + #4-positive (never drop a warning) — the DETAIL-FLOOR-ONLY allergen surface.
+describe('characteristics — allergen surface (#5 floor + #4-positive)', () => {
+  it('#5: no allergens known → hasInfo:false (caller renders the floor, never a blank/clean state)', () => {
+    assert.deepEqual(computeAllergenSurface({ allergen_status: 'unset' }, []), { known: [], hasInfo: false });
+    assert.deepEqual(computeAllergenSurface(null, []), { known: [], hasInfo: false });
+  });
+
+  it('#4-positive: a recipe-derived allergen is ALWAYS surfaced regardless of attestation status', () => {
+    for (const status of ['unset', 'none', 'listed', undefined]) {
+      const s = computeAllergenSurface({ allergen_status: status }, ['nuts']);
+      assert.ok(s.known.includes('nuts'), `recipe allergen dropped under status=${String(status)}`);
+      assert.equal(s.hasInfo, true);
+    }
+  });
+
+  it('conservative union — owner declaration ∪ recipe-derived (a warning is never hidden)', () => {
+    const s = computeAllergenSurface({ allergen_status: 'listed', declared_allergens: ['nuts'] }, ['milk']);
+    assert.deepEqual([...s.known].sort(), ['milk', 'nuts']);
+  });
+
+  it('absence is never asserted — an owner "none" attestation yields no claim, not "free-from"', () => {
+    const s = computeAllergenSurface({ allergen_status: 'none', declared_allergens: [] }, []);
+    assert.equal(s.hasInfo, false);
+    assert.equal(s.known.length, 0);
   });
 });
