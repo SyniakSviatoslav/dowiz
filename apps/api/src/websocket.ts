@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { verifyAuthToken } from '@deliveryos/platform';
 import { AuthToken } from '@deliveryos/shared-types';
 import type { MessageBus } from '@deliveryos/platform';
+import { courierCanAccessRoom } from './lib/courier-room-authz.js';
 
 interface RoomMember {
   ws: WebSocket;
@@ -108,6 +109,11 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
     }
   }
 
+  // ADR-0013 (courier-realtime-authz): courier room-authz lives in the shared lib
+  // (apps/api/src/lib/courier-room-authz.ts) so the WS gate and the order-messages REST routes
+  // can't drift. `courierCanAccessRoom(fastify.db, sub, activeLocationId, room)` denies `location:*`
+  // and any order: room the courier holds no live binding for; fail-closed; NOBYPASSRLS-sound.
+
   wss.on('connection', (ws, req) => {
     (ws as any).isAlive = true; // seed before the first heartbeat tick
     ws.on('pong', () => { (ws as any).isAlive = true; });
@@ -183,12 +189,20 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
               return;
             }
           } else if (user!.role === 'courier') {
-            if (!room.startsWith('courier:') && !room.startsWith('location:') && !room.startsWith('order:')) {
-              ws.send(JSON.stringify({ type: 'error', error: 'Invalid room' }));
-              return;
-            }
-            // A courier may only watch their OWN task room (courier:<sub>).
-            if (room.startsWith('courier:') && room !== `courier:${user!.sub}`) {
+            if (room.startsWith('courier:')) {
+              // A courier may only watch their OWN task room (courier:<sub>).
+              if (room !== `courier:${user!.sub}`) {
+                ws.send(JSON.stringify({ type: 'error', error: 'Forbidden room' }));
+                return;
+              }
+            } else if (room.startsWith('order:')) {
+              // ADR-0013: binding-scoped — must hold a live courier_assignments row for THIS order.
+              if (!(await courierCanAccessRoom(fastify.db, user!.sub, user!.activeLocationId, room))) {
+                ws.send(JSON.stringify({ type: 'error', error: 'Forbidden room' }));
+                return;
+              }
+            } else {
+              // `location:*` is the owner dashboard feed; couriers have no legitimate location/other room.
               ws.send(JSON.stringify({ type: 'error', error: 'Forbidden room' }));
               return;
             }
