@@ -5,6 +5,7 @@ import {
 } from '@deliveryos/shared-types';
 import type { MessageBus } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../lib/registry.js';
+import { courierCanReadOrder, courierCanSendOrder } from '../lib/courier-room-authz.js';
 
 export default async function orderMessageRoutes(fastify: any, opts: any) {
   const { db, messageBus } = opts;
@@ -52,12 +53,19 @@ export default async function orderMessageRoutes(fastify: any, opts: any) {
     // Check tenant isolation
     const role = request.user.role;
     const userId = request.user.sub;
-    if (role === 'owner' || role === 'courier') {
+    if (role === 'owner') {
       const memCheck = await db.query(
         `SELECT 1 FROM memberships WHERE user_id = $1 AND location_id = $2 AND status = 'active'`,
         [userId, order.location_id]
       );
       if (memCheck.rows.length === 0) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
+    } else if (role === 'courier') {
+      // ADR-0013 N3: assignment-scoped, NOT location-wide. This courier must hold a live SEND
+      // binding for THIS order (assigned/accepted/picked_up) — an offered-only courier may read
+      // but not yet speak in the thread. Subsumes the old hasCourier() "some courier" check into
+      // "THIS courier", closing the intra-tenant colleague-thread leak (404 = indistinguishable).
+      const ok = await courierCanSendOrder(db, userId, request.user.activeLocationId, orderId);
+      if (!ok) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
     } else if (role === 'customer') {
       if (order.customer_id !== userId) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
     }
@@ -123,12 +131,17 @@ export default async function orderMessageRoutes(fastify: any, opts: any) {
     const order = await getOrder(request, orderId);
     if (!order) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
 
-    if (role === 'owner' || role === 'courier') {
+    if (role === 'owner') {
       const memCheck = await db.query(
         `SELECT 1 FROM memberships WHERE user_id = $1 AND location_id = $2 AND status = 'active'`,
         [request.user.sub, order.location_id]
       );
       if (memCheck.rows.length === 0) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
+    } else if (role === 'courier') {
+      // ADR-0013 N3: assignment-scoped READ binding (offered/assigned/accepted/picked_up — the
+      // offer-handshake courier may view the thread to decide accept/decline).
+      const ok = await courierCanReadOrder(db, request.user.sub, request.user.activeLocationId, orderId);
+      if (!ok) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
     } else if (role === 'customer') {
       if (order.customer_id !== request.user.sub) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
     }
@@ -154,12 +167,16 @@ export default async function orderMessageRoutes(fastify: any, opts: any) {
     const order = await getOrder(request, orderId);
     if (!order) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
 
-    if (role === 'owner' || role === 'courier') {
+    if (role === 'owner') {
       const memCheck = await db.query(
         `SELECT 1 FROM memberships WHERE user_id = $1 AND location_id = $2 AND status = 'active'`,
         [request.user.sub, order.location_id]
       );
       if (memCheck.rows.length === 0) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
+    } else if (role === 'courier') {
+      // ADR-0013 N3: assignment-scoped READ binding (marking the thread read implies read access).
+      const ok = await courierCanReadOrder(db, request.user.sub, request.user.activeLocationId, orderId);
+      if (!ok) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
     } else if (role === 'customer') {
       if (order.customer_id !== request.user.sub) return reply.sendError(404, 'NOT_FOUND', 'Order not found');
     }

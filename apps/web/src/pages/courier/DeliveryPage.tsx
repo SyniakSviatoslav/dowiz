@@ -44,18 +44,27 @@ export function DeliveryPage() {
   const [pickupLoading, setPickupLoading] = useState(false);
   const [cashCollected, setCashCollected] = useState<number | null>(null);
 
+  // ADR-0013 R1: the route `:id` is the ASSIGNMENT id (used to fetch /courier/assignments/:id).
+  // The order-scoped surfaces — the `order:<id>` WS room and the /orders/:orderId/messages REST
+  // routes — must key on the REAL order id (`task.orderId`), not the assignment id. With the
+  // binding-scoped WS/REST gates now live, subscribing to `order:<assignmentId>` would be DENIED
+  // (no courier_assignments row has order_id = assignmentId). These are gated on the loaded task.
+  const orderId = task?.orderId ?? (task as any)?.order_id;
+
   const fetchMessages = useCallback(async () => {
+    if (!orderId) return;
     try {
-      const data = await apiClient<typeof MessagesResponse>(`/orders/${id}/messages`, { schema: MessagesResponse });
+      const data = await apiClient<typeof MessagesResponse>(`/orders/${orderId}/messages`, { schema: MessagesResponse });
       if (data?.messages) setMessages(data.messages);
     } catch (err) {
       console.debug('[DeliveryPage] fetch messages failed:', err);
     }
-  }, [id]);
+  }, [orderId]);
 
   const handleSendMessage = useCallback(async (presetKey: string, params?: Record<string, unknown>) => {
+    if (!orderId) return;
     try {
-      const data = await apiClient<typeof MessageSendResponse>(`/orders/${id}/messages`, {
+      const data = await apiClient<typeof MessageSendResponse>(`/orders/${orderId}/messages`, {
         method: 'POST',
         body: { preset_key: presetKey, params: params || {} },
         schema: MessageSendResponse,
@@ -66,15 +75,16 @@ export function DeliveryPage() {
     } catch (err) {
       console.warn('[DeliveryPage] send message failed:', err);
     }
-  }, [id]);
+  }, [orderId]);
 
   const handleMarkRead = useCallback(async () => {
+    if (!orderId) return;
     try {
-      await apiClient(`/orders/${id}/messages/read`, { method: 'POST' });
+      await apiClient(`/orders/${orderId}/messages/read`, { method: 'POST' });
     } catch (err) {
       console.debug('[DeliveryPage] mark read failed:', err);
     }
-  }, [id]);
+  }, [orderId]);
 
   const { position, error: geoError } = useGeolocation({
     enableHighAccuracy: true,
@@ -99,6 +109,7 @@ export function DeliveryPage() {
       if (err.status === 404 && import.meta.env.DEV) {
         setTask({
           id: id!,
+          orderId: id!, // DEV mock: no live order — reuse the assignment id so previews still wire up
           status: 'IN_DELIVERY',
           restaurant: { name: 'Burger King', address: 'Blloku, Tirana', lat: 41.328, lng: 19.812 },
           customer: { address: 'Rruga e Elbasanit 12', phone: '+355 69 123 4567', instructions: 'Call when near', lat: 41.337, lng: 19.825 },
@@ -114,11 +125,16 @@ export function DeliveryPage() {
 
   useEffect(() => {
     fetchTask();
+  }, [id]);
+
+  // Message history loads once the task resolves the real order id (fetchMessages no-ops until then).
+  useEffect(() => {
     fetchMessages();
-  }, [id, fetchMessages]);
+  }, [fetchMessages]);
 
   const { status: wsStatus } = useWebSocket({
-    room: `order:${id}`,
+    room: orderId ? `order:${orderId}` : undefined,
+    enabled: !!orderId,
     onMessage: (msg: any) => {
       if (msg.type === 'client_location' && msg.payload) {
         const { lat, lng } = msg.payload;
@@ -436,7 +452,7 @@ export function DeliveryPage() {
 
         {/* eslint-disable jsx-a11y/aria-role */}
         <MessageThread
-          orderId={id!}
+          orderId={orderId!}
           role="courier"
           currentStatus={task.status}
           messages={messages}

@@ -41,6 +41,7 @@ export default tseslint.config(
       'local/no-hardcoded-string': 'warn',
       'local/no-insecure-random': 'warn',
       'local/no-direct-websocket': 'warn',
+      'local/no-raw-courier-ws-send': 'error', // ADR-0013: courier fan-out MUST go through the relay guard (C1)
       'local/no-arbitrary-tailwind': 'warn',
       // Phase-B type-scale: error-level (zero violations after migration → locks the win).
       'local/no-arbitrary-font-size': 'error',
@@ -89,6 +90,15 @@ export default tseslint.config(
   },
   {
     ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'src/**', '.opencode/**', '**/build-client.js', '**/churn-report.cjs', '.agents/skills/**', '.claude/skills/**', 'apps/api/public/assets/**', 'apps/api/public/dist/**'],
+  },
+  {
+    // Build/CI/dev tooling has no user-facing i18n surface — `t('key','fallback')` is for UI strings,
+    // not a Node CLI's console output / internal constants ('utf8', file paths, …). The rule stays
+    // warn everywhere else (server + UI). Off here kills the false-positive storm on guardrail scripts.
+    files: ['scripts/**', 'tools/**'],
+    rules: {
+      'local/no-hardcoded-string': 'off',
+    },
   },
   {
     files: ['tools/eslint-plugin-local/__fixtures__/**'],

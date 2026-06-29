@@ -3,7 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import { verifyAuthToken } from '@deliveryos/platform';
 import { AuthToken } from '@deliveryos/shared-types';
 import type { MessageBus } from '@deliveryos/platform';
-import { courierCanAccessRoom } from './lib/courier-room-authz.js';
+import { courierRoomVerdict, courierReadVerdict } from './lib/courier-room-authz.js';
+import { createCourierRelayGuard } from './lib/courier-relay-guard.js';
 
 interface RoomMember {
   ws: WebSocket;
@@ -38,10 +39,12 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
         const members = rooms.get(room);
         if (!members) return;
         const payload = JSON.stringify({ room, data: msg });
+        // ADR-0013: this fan-out is role-AGNOSTIC (sends to EVERY member), so it is the exact site the
+        // C1 reassign leak rides. Route ALL members through the guard — couriers in an order: room are
+        // revalidated; non-couriers and non-order rooms relay directly inside the guard.
+        const orderId = room.startsWith('order:') ? (room.split(':')[1] ?? null) : null;
         for (const m of members) {
-          if (m.ws.readyState === WebSocket.OPEN) {
-            m.ws.send(payload);
-          }
+          relayGuard.relay(orderId, m, payload);
         }
       };
       roomHandlers.set(room, handler);
@@ -51,6 +54,30 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
     rooms.get(room)!.add(member);
     console.log('[WS] Member joined room:', room, 'total:', rooms.get(room)!.size);
   }
+
+  // ADR-0013 fan-out revalidation guard. Re-derives each courier member's live binding before every
+  // `order:<O>` frame so an involuntarily-reassigned courier (the C1 leak) stops receiving within
+  // ≤TTL (DB up) / ≤ceiling (DB down). The SHARED chokepoint for all three raw courier-send sites —
+  // a raw `member.ws.send` over a courier-joinable room outside this guard is the drift the ESLint
+  // rule bans (Breaker NEW-E). Evict = drop from the room + `binding_revoked` (NOT socket-close).
+  const relayGuard = createCourierRelayGuard({
+    check: (orderId, sub, loc) => courierReadVerdict(fastify.db, sub, loc, orderId),
+    evict: (orderId, member, reason) => {
+      const room = `order:${orderId}`;
+      const members = rooms.get(room);
+      if (members) {
+        members.delete(member as RoomMember);
+        if (members.size === 0) deleteRoom(room);
+      }
+      if (member.ws.readyState === WebSocket.OPEN) {
+        // The guard's sanctioned revocation notice — a single binding_revoked, NOT a frame fan-out
+        // (the rule guards the relay sites; eviction is the controlled exit from them).
+        // eslint-disable-next-line local/no-raw-courier-ws-send
+        member.ws.send(JSON.stringify({ type: 'error', error: reason }));
+      }
+      console.warn('[WS] courier binding revoked, evicted from', room, (member.user as any).sub);
+    },
+  });
 
   // Heartbeat: detect and clean zombie connections every 30s
   const heartbeat = setInterval(() => {
@@ -65,7 +92,7 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
     }
   }, 30000);
 
-  // Periodic cleanup of empty rooms
+  // Periodic cleanup of empty rooms + relay-guard heap hygiene (drop expired ALLOW entries).
   const roomCleanup = setInterval(() => {
     for (const [room, members] of rooms) {
       if (members.size === 0) {
@@ -73,6 +100,7 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
         console.log('[WS] Cleaned up empty room:', room);
       }
     }
+    relayGuard.sweep();
   }, 60000);
 
   // Per-tenant authorization for owner subscriptions. An authenticated owner must
@@ -197,7 +225,14 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
               }
             } else if (room.startsWith('order:')) {
               // ADR-0013: binding-scoped — must hold a live courier_assignments row for THIS order.
-              if (!(await courierCanAccessRoom(fastify.db, user!.sub, user!.activeLocationId, room))) {
+              // Tri-state (Breaker NEW-A): a DB blip is UNAVAILABLE → a RETRYABLE soft error that keeps
+              // the socket open, NEVER a permanent Forbidden / ws.close — so a pool storm can't fleet-deny.
+              const verdict = await courierRoomVerdict(fastify.db, user!.sub, user!.activeLocationId, room);
+              if (verdict === 'UNAVAILABLE') {
+                ws.send(JSON.stringify({ type: 'error', error: 'Service temporarily unavailable', retryable: true }));
+                return;
+              }
+              if (verdict !== 'ALLOW') {
                 ws.send(JSON.stringify({ type: 'error', error: 'Forbidden room' }));
                 return;
               }
@@ -242,10 +277,9 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
                 type: 'client_location',
                 payload: { lat, lng, timestamp: Date.now() }
               });
+              // ADR-0013: customer GPS goes to courier members ONLY, each binding-revalidated by the guard.
               for (const m of members) {
-                if (m.user.role === 'courier' && m.ws.readyState === WebSocket.OPEN) {
-                  m.ws.send(relay);
-                }
+                if (m.user.role === 'courier') relayGuard.relay(user!.orderId ?? null, m, relay);
               }
             }
           }
@@ -257,10 +291,9 @@ export function setupWebSocket(fastify: FastifyInstance, messageBus: MessageBus)
           const members = rooms.get(orderRoom);
           if (members) {
             const relay = JSON.stringify({ type: 'client_location_stop' });
+            // ADR-0013: same guarded fan-out — a revoked courier must not even learn tracking stopped.
             for (const m of members) {
-              if (m.user.role === 'courier' && m.ws.readyState === WebSocket.OPEN) {
-                m.ws.send(relay);
-              }
+              if (m.user.role === 'courier') relayGuard.relay(user!.orderId ?? null, m, relay);
             }
           }
           return;

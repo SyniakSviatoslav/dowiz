@@ -4,6 +4,8 @@ import {
   courierCanAccessRoom,
   courierCanReadOrder,
   courierCanSendOrder,
+  courierReadVerdict,
+  courierRoomVerdict,
   BINDING_READ_STATUSES,
   BINDING_SEND_STATUSES,
 } from '../src/lib/courier-room-authz.js';
@@ -93,4 +95,39 @@ test('read includes offered (offer-handshake); send excludes offered (read-but-n
   await courierCanSendOrder(pool, SUB, LOC, 'ord-9');
   const sel = queries.find((x) => /courier_assignments/.test(x.sql));
   assert.deepEqual(sel!.params?.[2], BINDING_SEND_STATUSES);
+});
+
+// ── Tri-state (ADR-0013 Breaker H1/NEW-A): a DB blip must read UNAVAILABLE (retryable), NOT DENY.
+// This distinction is load-bearing for the fan-out relay (DENY→evict vs UNAVAILABLE→withhold+ceiling)
+// and the subscribe path (UNAVAILABLE→retryable soft error, never a fleet-denying ws.close).
+test('verdict: bound courier → ALLOW', async () => {
+  const { pool } = mockPool({ rows: 1 });
+  assert.equal(await courierReadVerdict(pool, SUB, LOC, 'ord-9'), 'ALLOW');
+  assert.equal(await courierRoomVerdict(pool, SUB, LOC, 'order:ord-9'), 'ALLOW');
+});
+
+test('verdict: clean 0-row (real negative) → DENY, not UNAVAILABLE', async () => {
+  const { pool } = mockPool({ rows: 0 });
+  assert.equal(await courierReadVerdict(pool, SUB, LOC, 'ord-9'), 'DENY');
+});
+
+test('verdict: location:* and malformed rooms → DENY with ZERO db access', async () => {
+  const { pool } = mockPool({ rows: 1 });
+  for (const room of ['location:other', 'location:loc-1', 'garbage', 'order:']) {
+    assert.equal(await courierRoomVerdict(pool, SUB, LOC, room), 'DENY', room);
+  }
+  assert.equal(pool.connected, false);
+});
+
+test('verdict: missing activeLocationId → DENY, no db access (cannot scope tenant)', async () => {
+  const { pool } = mockPool({ rows: 1 });
+  assert.equal(await courierReadVerdict(pool, SUB, undefined, 'ord-9'), 'DENY');
+  assert.equal(pool.connected, false);
+});
+
+test('verdict: connect/begin/select failure → UNAVAILABLE (retryable), never throws', async () => {
+  for (const throwOn of ['connect', 'begin', 'select'] as const) {
+    const { pool } = mockPool({ rows: 1, throwOn });
+    assert.equal(await courierReadVerdict(pool, SUB, LOC, 'ord-9'), 'UNAVAILABLE', `throwOn=${throwOn}`);
+  }
 });
