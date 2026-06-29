@@ -45,6 +45,19 @@ M2 Telegram webhook fail-open on absent header (borderline — drives order stat
 ## CONFIRMED-SECURE (verified negatives — do not re-flag)
 dev-backdoor fail-closed (3 layers), JWT RS256, refresh-token rotation, server-authoritative integer money + idempotency + cash-as-proof HOLD (no double-spend), SQLi clear, `.env` gitignored, pg-boss IDs-only, `/internal/acquisition` fail-closed, strong per-route rate limits, humane error/empty states, `derivePalette` AA, motion/reduced-motion discipline.
 
+## Iter-2/3 NEW blind spots (loop-until-dry; iter-3 converged ~dry; QA PASS: loop-harness 129/129 + ui tests + staging healthy + dev-backdoor 404)
+| # | Finding | Disp |
+|---|---------|------|
+| **B6** | **🔴 LIVE cross-tenant break (not latent): courier WebSocket has NO room authz.** `websocket.ts:185-195` validates only the room PREFIX for couriers (owners get `ownerCanAccessRoom`); any authenticated courier can `subscribe` to `location:<otherTenant>` / `order:<any>` and receive another restaurant's live order/assignment/message stream **today, with no RLS-flip needed**. The prior "cross-tenant QA 6/6 green" covered owners, not couriers. **Elevate — exploitable now.** | 🔴 COUNCIL |
+| **B7** | **Owner settlement `regenerate` = platform-wide cross-tenant write + DoS.** `owner/settlements.ts` ignores `:locationId` and runs `SettlementCronWorker.handleGenerate` over ALL tenants on the RLS-bypass pool (FOR UPDATE locks platform-wide), from a 5/5min endpoint, unvalidated `referenceDate`, audit attributed to `system` (no actor). (Elevates iter-1 O8 from LOW → HIGH.) | 🔴 COUNCIL |
+| N1 | Customer JWT `orderId` claim enforced on WS but **not on REST** (`customer/orders.ts`, `order-messages.ts`) — token is account-scoped not order-scoped as documented; a 7-day track-grant reads/cancels any order sharing the `customer_id`. | 🔴 COUNCIL |
+| N2 | `customer/push.ts` reads `user.userId` (doesn't exist on the customer token — only `sub`) → sets the RLS GUC to NULL, writes orphan/failed `customer_devices` rows. Fix: `user.sub`. (Clean fix but RLS-context surface → council batch.) | 🔴 COUNCIL |
+| N3 | `order-messages` courier authz is location-wide, not assignment-scoped — any active courier can read/send on another courier's order thread (within-tenant). | INLINE/🔴 |
+| N4 | Settlement list **swallows decrypt/query errors → `{payouts:[]}`** → owner sees "nothing owed" (money-blindness) instead of a failure. | 🔴 COUNCIL |
+| N5 | Owner can mark a never-dispatched **PENDING** order as `no_show` → strikes the customer's cross-tenant reputation (state-machine allows PENDING→CANCELLED). | 🔴 COUNCIL |
+
+→ The loop's main yield is **B6 (live courier-WS cross-tenant)** — promote it next to B1/B2 as a top launch-blocker (it leaks data *today*, unlike the latent RLS items). iter-3 found essentially nothing new → the 7-lens surface is mapped.
+
 ## Recommended sequencing
 1. **Security council** (B3+B4 + the safe M2–M6): B3 order is H3+GUC → H2 → C1-flip; B4 platform-admin gate. Several already staged.
 2. **Order-money + dispatch council** (B1+B2+B5 + customer-cancel + refund-ledger): the biggest launch-blockers — the money model + the dead re-dispatch machinery.
