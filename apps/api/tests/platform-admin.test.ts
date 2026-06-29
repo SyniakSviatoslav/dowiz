@@ -4,6 +4,10 @@ import {
   isPlatformAdmin,
   requirePlatformAdmin,
   isAdminRoutedPath,
+  auditCtx,
+  auditStart,
+  auditFinish,
+  auditCompleted,
 } from '../src/lib/platform-admin.js';
 
 // Mock pg Pool: returns a configurable rowCount for the point-read, or throws.
@@ -85,6 +89,41 @@ test('requirePlatformAdmin: no userId (courier/customer token, or unauth) → 40
   await requirePlatformAdmin(mockRequest({ role: 'courier', sub: 'c1' }, pool), reply);
   assert.equal(state.code, 401);
   assert.equal(queries.length, 0, 'no userId → never touches the DB');
+});
+
+test('auditCtx: actor = user.userId, ip/ua hashed (no raw PII), target carried', () => {
+  const ctx = auditCtx({ user: { userId: UID }, ip: '1.2.3.4', headers: { 'user-agent': 'curl/8' } }, 'backups.verify', 'bk-1');
+  assert.equal(ctx.actorId, UID);
+  assert.equal(ctx.action, 'backups.verify');
+  assert.equal(ctx.target, 'bk-1');
+  assert.match(ctx.ipHash!, /^[0-9a-f]{64}$/, 'ip is sha256-hashed, not raw');
+  assert.notEqual(ctx.ipHash, '1.2.3.4');
+  assert.match(ctx.uaHash!, /^[0-9a-f]{64}$/);
+});
+
+test('auditStart writes a write-ahead started row and returns its id', async () => {
+  const { pool, queries } = mockPool({ rows: 1 });
+  // mock RETURNING id
+  pool.query = async (sql: string, params?: any[]) => { queries.push({ sql, params }); return { rows: [{ id: 42 }], rowCount: 1 }; };
+  const id = await auditStart(pool, auditCtx({ user: { userId: UID }, ip: '', headers: {} }, 'backups.verify', 'bk-1'));
+  assert.equal(id, '42');
+  assert.match(queries[0].sql, /INSERT INTO platform_admin_audit_log/);
+  assert.match(queries[0].sql, /'started'/);
+});
+
+test('auditFinish updates the row status', async () => {
+  const { pool, queries } = mockPool({ rows: 1 });
+  await auditFinish(pool, '42', 'completed');
+  assert.match(queries[0].sql, /UPDATE platform_admin_audit_log SET status/);
+  assert.deepEqual(queries[0].params, ['42', 'completed']);
+});
+
+test('auditCompleted is best-effort — a write failure does NOT throw (a read must not fail on audit)', async () => {
+  const { pool } = mockPool({ throws: true });
+  let threw = false;
+  try { await auditCompleted(pool, auditCtx({ user: { userId: UID }, ip: '', headers: {} }, 'backups.list'), { error() {} }); }
+  catch { threw = true; }
+  assert.equal(threw, false, 'read-path audit swallows its own failure');
 });
 
 test('isAdminRoutedPath: gates the matched PATTERN, excludes the lookalike, ignores 404s', () => {

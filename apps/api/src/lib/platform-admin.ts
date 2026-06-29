@@ -1,5 +1,6 @@
 import type { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
+import crypto from 'node:crypto';
 
 /**
  * ADR-admin-platform-authz (B4) — the platform-admin authority.
@@ -79,4 +80,62 @@ export function registerAdminPlaneGate(fastify: FastifyInstance): void {
     if (reply.sent) return;
     await requirePlatformAdmin(request, reply);
   });
+}
+
+// ── platform_admin_audit_log (ADR §4.4/§6) — actor trail, hashed ip/ua only (no raw PII) ──
+
+const sha256 = (s: string | undefined): string | null =>
+  s ? crypto.createHash('sha256').update(s).digest('hex') : null;
+
+export interface AuditCtx { actorId: string; action: string; target: string | null; ipHash: string | null; uaHash: string | null; }
+
+/**
+ * Build an audit context from the gated request (the platform-admin is `request.user.userId`).
+ * Structural param (not `FastifyRequest`) so it accepts any route's request generic (e.g. the
+ * ZodTypeProvider-typed handlers) without a type-argument mismatch.
+ */
+export function auditCtx(
+  request: { user: unknown; ip: string; headers: Record<string, string | string[] | undefined> },
+  action: string,
+  target?: string | null,
+): AuditCtx {
+  const ua = request.headers['user-agent'];
+  return {
+    actorId: (request.user as { userId?: string } | null)?.userId ?? 'unknown',
+    action,
+    target: target ?? null,
+    ipHash: sha256(request.ip),
+    uaHash: sha256(Array.isArray(ua) ? ua[0] : ua),
+  };
+}
+
+/**
+ * WRITE-AHEAD intent row (F5/RA2-4): a `started` row committed in its OWN statement BEFORE a
+ * destructive drill, so no side-effect can occur without a pre-committed trail. Returns the row id.
+ */
+export async function auditStart(pool: Pool, ctx: AuditCtx): Promise<string> {
+  const r = await pool.query(
+    `INSERT INTO platform_admin_audit_log (actor_id, action, target, status, ip_hash, user_agent_hash)
+     VALUES ($1, $2, $3, 'started', $4, $5) RETURNING id`,
+    [ctx.actorId, ctx.action, ctx.target, ctx.ipHash, ctx.uaHash],
+  );
+  return String(r.rows[0].id);
+}
+
+/** Close out a write-ahead row. */
+export async function auditFinish(pool: Pool, id: string, status: 'completed' | 'failed'): Promise<void> {
+  await pool.query(`UPDATE platform_admin_audit_log SET status = $2 WHERE id = $1`, [id, status]);
+}
+
+/** Single `completed` row for a read-only endpoint. Best-effort (a read must not fail on an audit blip). */
+export async function auditCompleted(pool: Pool, ctx: AuditCtx, log?: { error: (...a: any[]) => void }): Promise<void> {
+  try {
+    await pool.query(
+      `INSERT INTO platform_admin_audit_log (actor_id, action, target, status, ip_hash, user_agent_hash)
+       VALUES ($1, $2, $3, 'completed', $4, $5)`,
+      [ctx.actorId, ctx.action, ctx.target, ctx.ipHash, ctx.uaHash],
+    );
+  } catch (err) {
+    log?.error({ err }, '[platform-admin] read audit write failed (non-blocking)');
+  }
 }
