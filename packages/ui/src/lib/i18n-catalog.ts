@@ -3849,4 +3849,14 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: "Це замовлення вже призначено кур'єру.",
   },
   'common.optional': { en: '(optional)', sq: '(opsionale)', uk: "(необов'язково)" },
+  'cart.free_delivery_unlocked': {
+    en: 'Free delivery unlocked!',
+    sq: 'Dorëzimi falas u aktivizua!',
+    uk: 'Безкоштовна доставка активована!',
+  },
+  'cart.free_delivery_progress': {
+    en: 'Add {{amount}} more for free delivery',
+    sq: 'Shto edhe {{amount}} për dorëzim falas',
+    uk: 'Додайте ще {{amount}} для безкоштовної доставки',
+  },
 };
