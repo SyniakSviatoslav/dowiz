@@ -51,3 +51,35 @@ export const DESCRIPTIVE_ALLOWLIST: readonly string[] = Object.freeze([]);
 export function selectDescriptiveLabels(candidates: readonly string[]): string[] {
   return candidates.filter((c) => DESCRIPTIVE_ALLOWLIST.includes(c) && !isRegulatedTerm(c));
 }
+
+// ── REGULATED L2 subset (light / low-calorie / source-of-protein …) ────────────────────────────────────
+// These ARE regulated nutrition claims (EU 1924/2006 + Albanian food law). They are NEVER platform-asserted
+// by default. Rendering one requires ALL THREE: (a) a VERIFIED per-market legal anchor in the table below,
+// (b) owner authority (opt-in, enforced at the data/render layer), and (c) the regulated flag ON. The table
+// is EMPTY until a human supplies anchors verified against the actual regulation text — NEVER from memory.
+// Guardrail #2 keeps the subset dark until then.
+export interface RegulatedAnchor {
+  label: string;                 // the regulated term (en)
+  market: 'EU' | 'AL';
+  basis: string;                 // the numeric condition that licenses the claim (human-readable)
+  citation: string;              // the regulation + article (e.g. "Reg (EC) 1924/2006, Annex — 'low energy'")
+  verifiedBy?: string;           // operator/legal sign-off; an anchor with no verifiedBy is INERT (never activates)
+}
+
+// EMPTY in v1 — NEEDS-HUMAN. Supplying a verified anchor here (with citation + verifiedBy) is the deliberate,
+// audited act that licenses one regulated label in one market. Do not populate from memory.
+export const REGULATED_ANCHORS: readonly RegulatedAnchor[] = Object.freeze([]);
+
+function anchorActive(a: RegulatedAnchor): boolean {
+  return !!a.verifiedBy && a.verifiedBy.trim().length > 0;
+}
+
+// Global legal-anchor gate: regulated labels may render only when the flag is on AND ≥1 verified anchor exists.
+// (Owner-authority is the second lock, enforced where the label is derived/rendered.)
+export function regulatedSubsetActive(flagOn: boolean): boolean {
+  return flagOn && REGULATED_ANCHORS.some(anchorActive);
+}
+
+export function activeRegulatedAnchor(label: string, market: 'EU' | 'AL'): RegulatedAnchor | undefined {
+  return REGULATED_ANCHORS.find((a) => a.label === label && a.market === market && anchorActive(a));
+}

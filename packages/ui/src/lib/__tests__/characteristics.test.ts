@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import {
   DESCRIPTIVE_ALLOWLIST,
   REGULATED_REGISTER,
+  REGULATED_ANCHORS,
   isRegulatedTerm,
   selectDescriptiveLabels,
+  regulatedSubsetActive,
 } from '../characteristics.js';
 
 // Guardrail #6 (council menu-characteristics-model) — the deterministic ratchet that gates the descriptive
@@ -49,5 +51,32 @@ describe('characteristics — guardrail #6 (descriptive allowlist safety)', () =
 
   it('the register is non-empty (a removed register would silently disable the gate)', () => {
     assert.ok(REGULATED_REGISTER.length >= 10, 'regulated register suspiciously small — gate may be disabled');
+  });
+});
+
+// Guardrail #2 — the regulated L2 subset (light/low-calorie/source-of-protein) stays DARK until a human
+// supplies a verified per-market legal anchor. The subset can never be platform-asserted by an empty table,
+// even with the flag on. RED if a verified anchor is added without updating this lock (i.e. activation is a
+// deliberate, audited act, never silent).
+describe('characteristics — guardrail #2 (regulated subset dark until verified anchors)', () => {
+  it('regulatedSubsetActive is false in v1 (no verified anchors) even when the flag is ON', () => {
+    assert.equal(regulatedSubsetActive(true), false, 'regulated labels must not render without a verified anchor');
+    assert.equal(regulatedSubsetActive(false), false);
+  });
+
+  it('any ACTIVE anchor carries a citation + basis + sign-off (no claim without provenance)', () => {
+    for (const a of REGULATED_ANCHORS) {
+      const active = !!a.verifiedBy && a.verifiedBy.trim().length > 0;
+      if (active) {
+        assert.ok(a.citation?.trim(), `active anchor "${a.label}" missing a regulation citation`);
+        assert.ok(a.basis?.trim(), `active anchor "${a.label}" missing a numeric basis`);
+      }
+    }
+  });
+
+  it('every regulated anchor label is itself a regulated term (by definition)', () => {
+    for (const a of REGULATED_ANCHORS) {
+      assert.equal(isRegulatedTerm(a.label), true, `anchor "${a.label}" should match the regulated register`);
+    }
   });
 });
