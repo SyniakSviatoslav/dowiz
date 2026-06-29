@@ -76,8 +76,9 @@ test('main flow: customer → owner(live) → courier(geo) → deliver → cash 
 
     // Cart button appears in the sticky bar — click to open cart drawer
     await customer.getByTestId(S.customer.cartButton).click();
-    // Checkout button inside the cart drawer — click to navigate to checkout
-    // Wait for both the URL change and location info fetch
+    // §1 flow-simplification: checkout is now a BOTTOM-SHEET over the menu (CheckoutPage rendered in a
+    // ResponsiveDialog) — the URL stays /s/:slug, there is no /checkout route navigation. Assert the
+    // sheet opened (its phone input becomes visible) + the location /info fetch fired, instead of a URL.
     const [infoResp] = await Promise.all([
       customer.waitForResponse(
         (r) => r.url().includes('/public/locations/') && r.url().includes('/info'),
@@ -86,7 +87,7 @@ test('main flow: customer → owner(live) → courier(geo) → deliver → cash 
       customer.getByTestId(S.customer.checkoutButton).click(),
     ]);
     expect(infoResp.ok()).toBeTruthy();
-    await customer.waitForURL(`**/s/${env.restaurantSlug}/checkout`);
+    await expect(customer.getByTestId(S.customer.phoneInput).first()).toBeVisible();
 
     // Place the order via the API using the page's request context
     const menuData = await (await customer.request.fetch(`${env.customerBaseURL}/public/locations/${env.restaurantSlug}/menu`)).json();
@@ -230,18 +231,23 @@ test('main flow: customer → owner(live) → courier(geo) → deliver → cash 
       .toBeTruthy();
 
     // ===== 6. Deliver + cash (COD) reconciliation =====
+    // deliver-v2 (cash-as-proof, ADR-deliver-v2): a COD delivery completes as `paid_full` ONLY with
+    // cash_collected:true AND cash_amount === order.total (the no-partial-handover rule). cash_collected:false
+    // is the no-cash tail → order CANCELLED (never "Delivered" for refused food). Collect the full cash here.
+    const orderTotal = Number(orderBody.total);
+    expect(Number.isInteger(orderTotal) && orderTotal > 0, `order total missing/invalid: ${raw}`).toBeTruthy();
     // Call deliver API directly (UI SwipeToComplete is unreliable with mock data)
-    const deliverResp = await courier.evaluate(async () => {
+    const deliverResp = await courier.evaluate(async ([cashAmount]) => {
       const token = localStorage.getItem('dos_access_token');
       const url = window.location.href;
       const asgnId = url.split('/').pop();
       const res = await fetch(`/api/courier/assignments/${asgnId}/delivered`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ cash_collected: false }),
+        body: JSON.stringify({ cash_collected: true, cash_amount: cashAmount }),
       });
       return { status: res.status, body: await res.text() };
-    });
+    }, [orderTotal]);
     // Route returns 200 { success:true }; a 401/422-cash-mismatch/404-precondition must fail the
     // test rather than be swallowed and let the terminal-status assertion lie.
     expect(deliverResp.status, `deliver failed: ${deliverResp.body}`).toBe(200);
