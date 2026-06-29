@@ -6,6 +6,7 @@ import type { QueueProvider, MessageBus } from '@deliveryos/platform';
 import { loadEnv } from '@deliveryos/config';
 import { BUS_CHANNELS, orderChannel, dashboardChannel, courierChannel } from '../lib/registry.js';
 import { updateOrderStatus } from '../lib/orderStatusService';
+import { attemptHonestDispatch } from '../lib/dispatch.js';
 import { evaluatePreflight } from '../lib/preflight.js';
 import { computeSignals } from '../lib/signals/compute.js';
 import type { Pool } from 'pg';
@@ -787,47 +788,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           // 'offered' from the owner offer-handshake — in the mig-073 partial-uniques) is already being
           // dispatched → no conflicting insert. This holds regardless of any offer-handshake flag.
           if (newStatus === 'IN_DELIVERY' && cur.rows[0].type === 'delivery') {
-            const bound = await client.query(
-              `SELECT 1 FROM courier_assignments
-               WHERE order_id = $1 AND status IN ('offered','assigned','accepted','picked_up') LIMIT 1`,
-              [id]
-            );
-            if ((bound.rowCount ?? 0) > 0) {
-              // Already being dispatched (e.g. a pending 'offered' row) — leave the order as-is, don't double-bind.
-              outcome = { status: cur.rows[0].status, dispatched: false, reason: 'already_assigned' };
-              return;
-            }
-            const availRes = await client.query(
-              `SELECT c.id AS courier_id, cs.id AS shift_id
-               FROM couriers c
-               JOIN courier_locations cl ON cl.courier_id = c.id
-               JOIN courier_shifts cs ON cs.courier_id = c.id
-               WHERE cl.location_id = $1 AND c.status = 'active' AND cs.status = 'available'
-                 AND c.id NOT IN (
-                   SELECT courier_id FROM courier_assignments
-                   WHERE status IN ('offered','assigned','accepted','picked_up') AND courier_id IS NOT NULL
-                 )
-               ORDER BY cs.last_heartbeat_at DESC NULLS LAST, c.id ASC
-               LIMIT 1`,
-              [locationId]
-            );
-            if ((availRes.rowCount ?? 0) === 0) {
-              // No courier free → stay at the current status (no orphan). Owner sees "awaiting courier" + re-taps.
-              outcome = { status: cur.rows[0].status, dispatched: false, reason: 'no_courier' };
-              return;
-            }
-            // Courier found → NOW advance to IN_DELIVERY and assign, atomically.
-            await updateOrderStatus(client, id, locationId, newStatus, { messageBus });
-            const { courier_id, shift_id } = availRes.rows[0];
-            await client.query(
-              `INSERT INTO courier_assignments (order_id, location_id, courier_id, shift_id, status, assigned_at)
-               VALUES ($1, $2, $3, $4, 'assigned', now())`,
-              [id, locationId, courier_id, shift_id]
-            );
-            await client.query(`UPDATE courier_shifts SET status = 'on_delivery' WHERE id = $1`, [shift_id]);
-            await messageBus.publish(dashboardChannel(locationId), { type: 'assignment.created', orderId: id, courierId: courier_id });
-            await messageBus.publish(`courier:${courier_id}`, { type: 'task_assigned', payload: { id, orderId: id, status: 'assigned', courierId: courier_id } });
-            outcome = { status: newStatus, dispatched: true };
+            outcome = await attemptHonestDispatch(client, { orderId: id, locationId, currentStatus: cur.rows[0].status }, { messageBus });
             return;
           }
 
