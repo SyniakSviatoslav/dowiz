@@ -8,7 +8,7 @@
 > Applied in every session. These rules override default instincts.
 
 ### Tool Use
-- **Read before edit**: Never edit a file without reading the relevant section first. No blind writes.
+- **Read before edit**: Never edit a file without reading the relevant section first. No blind writes. (Bash `cat`/`sed` inspection does NOT satisfy this — only a Read tool call primes the Edit precondition.)
 - **Existing files win**: Edit rather than create. Never make a new file when an existing one can be extended.
 - **One edit per turn**: Don't batch multiple file edits in a single step — confirm each before the next.
 - **Don't over-tool**: If the answer is already known or the task is trivial, respond directly without calling tools.

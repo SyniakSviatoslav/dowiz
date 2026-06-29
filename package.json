@@ -30,6 +30,7 @@
     "guardrail:deliver-v2": "node scripts/guardrail-deliver-v2.mjs",
     "guardrail:corpus-reachability": "node scripts/guardrail-corpus-reachability.mjs",
     "guardrail:license": "node scripts/guardrail-license.mjs",
+    "guardrail:hook-matchers": "node scripts/guardrail-hook-matchers.mjs",
     "verify:all": "tsx scripts/verify-all.ts",
     "test:unit": "node --test --import tsx 'apps/api/tests/**/*.test.ts' 'apps/worker/tests/**/*.test.ts' 'apps/web/src/**/*.test.ts' 'packages/**/*.test.ts' 'tools/**/tests/**/*.test.ts'",
     "backup:restore": "tsx --env-file=.env scripts/backup-restore.ts",
