@@ -38,9 +38,17 @@ export interface Candidate {
   perf?: RepoPerfSpec;
 }
 
+// STORM-insight B — decorrelated lenses. Each candidate is judged through THREE
+// independent perspectives (mirrors the council's cause/pattern/ratchet critics);
+// a Class-A KEEP requires ALL to pass — a single failing lens demotes to Class B.
+export type Lens = 'security' | 'reversibility' | 'perf';
+export interface LensVerdict { lens: Lens; pass: boolean; reason: string }
+
 export interface Classification {
   class: UpgradeClass;
   reason: string;
+  /** The decorrelated lens verdicts that produced this class (auditability). */
+  lenses: LensVerdict[];
 }
 
 // §0/§3 firm-boundary triggers. ANY hit → Class B (propose-only), no exceptions.
@@ -54,19 +62,56 @@ const TEXT_BOUNDARY = /\b(auth|jwt|rls|tenant-?isolation|secret|credential|payme
 const MAJOR_DEP = /\b(major|breaking)\b.*\b(upgrade|bump|migration)\b/i;
 
 /**
+ * STORM-insight B — judge a candidate through three DECORRELATED lenses:
+ *  - security:      trips no firm-boundary trigger (auth/RLS/secrets/payments/PII/
+ *                   schema/architecture). `area` checked against the broad list,
+ *                   free text against a tight list so innocuous prose can't false-trip.
+ *  - reversibility: has a recorded revert AND isn't a major/breaking dep (not cleanly undoable).
+ *  - perf:          blast radius is containable (high blast → not auto-eligible).
+ * Each lens is independent; classify() ANDs them (a single fail → Class B).
+ */
+export function evaluateLenses(c: Candidate): LensVerdict[] {
+  const text = `${c.pattern} ${c.action}`;
+  const securityHit = AREA_BOUNDARY.test(c.area) || TEXT_BOUNDARY.test(text);
+  const majorDep = MAJOR_DEP.test(text);
+  const highBlast = c.blast_radius === 'high';
+  return [
+    {
+      lens: 'security',
+      pass: !securityHit,
+      reason: securityHit
+        ? 'firm-boundary (auth/RLS/secrets/payments/PII/schema/architecture) — never autonomously mutated'
+        : 'outside firm boundary',
+    },
+    {
+      lens: 'reversibility',
+      pass: c.reversible && !majorDep,
+      reason: !c.reversible
+        ? 'not reversible — no recorded revert'
+        : majorDep
+          ? 'major/breaking dependency change — not cleanly reversible'
+          : 'reversible with a recorded revert',
+    },
+    {
+      lens: 'perf',
+      pass: !highBlast,
+      reason: highBlast ? 'high blast radius — too risky to auto-apply' : 'low/med blast — containable',
+    },
+  ];
+}
+
+/**
  * Classify a candidate. Fail-safe: a candidate is Class A (auto-eligible) ONLY if
- * it is reversible, low/med blast radius, and trips no firm-boundary trigger. The
- * `area` tag is checked against the broad list; free text against a tight list so
- * innocuous prose can't false-trip. Everything ambiguous → Class B (human decides).
+ * ALL decorrelated lenses pass (security · reversibility · perf). A single failing
+ * lens → Class B (human decides). Everything ambiguous → Class B.
  */
 export function classify(c: Candidate): Classification {
-  const text = `${c.pattern} ${c.action}`;
-  if (AREA_BOUNDARY.test(c.area)) return { class: 'B', reason: 'firm-boundary area (auth/RLS/secrets/payments/PII/schema/architecture) — never autonomously mutated' };
-  if (TEXT_BOUNDARY.test(text)) return { class: 'B', reason: 'firm-boundary keyword in the change itself — never autonomously mutated' };
-  if (MAJOR_DEP.test(text)) return { class: 'B', reason: 'major/breaking dependency change' };
-  if (!c.reversible) return { class: 'B', reason: 'not reversible — no recorded revert' };
-  if (c.blast_radius === 'high') return { class: 'B', reason: 'high blast radius' };
-  return { class: 'A', reason: 'reversible · low/med blast · outside firm boundary · dev-loop/perf' };
+  const lenses = evaluateLenses(c);
+  const failed = lenses.filter((l) => !l.pass);
+  if (failed.length > 0) {
+    return { class: 'B', reason: `lens fail → ${failed.map((l) => `${l.lens}: ${l.reason}`).join('; ')}`, lenses };
+  }
+  return { class: 'A', reason: 'all lenses pass — security · reversibility · perf (outside firm boundary, reversible, containable blast)', lenses };
 }
 
 // ─── MAP — ground candidates in REAL local telemetry (no web research this pass) ───
@@ -161,6 +206,10 @@ export interface ApplyOutcome {
   decision: 'kept' | 'rolled_back' | 'skipped' | 'report-only';
   reason: string;
   speedup_pct?: number | null;
+  /** Oracle benchmark metrics (lower = better) — carried so a KEPT outcome can be
+   *  recorded as a proven-upgrade gene with its before/after. */
+  before?: number | null;
+  after?: number | null;
 }
 
 /**
@@ -213,9 +262,41 @@ async function evaluateClassA(classA: Candidate[], apply: boolean, baseDir: stri
     const built = buildHooks(c);
     if ('skip' in built) { out.push({ id: c.id, decision: 'skipped', reason: built.skip }); continue; }
     const v: OracleVerdict = await evaluate(built.hooks, DEFAULT_THRESHOLDS);
-    out.push({ id: c.id, decision: v.decision, reason: v.reason, speedup_pct: v.speedup_pct });
+    out.push({ id: c.id, decision: v.decision, reason: v.reason, speedup_pct: v.speedup_pct, before: v.before, after: v.after });
   }
   return out;
+}
+
+// ─── EvoMap-insight A — persist a KEPT Class-A upgrade as a proven "gene" ───
+
+import { recordProvenUpgrade, type ProvenUpgrade } from './proven-upgrades.js';
+
+/**
+ * For every KEPT outcome, persist a versioned, replayable proven-upgrade asset.
+ * STORM-insight B double-check (defense-in-depth): a kept candidate is recorded
+ * ONLY if EVERY decorrelated lens still passes — a single failing lens (esp.
+ * security/firm-boundary) means it is NOT recorded as a gene. `ts` is supplied by
+ * the caller (no Date.now() — determinism).
+ */
+export function recordKeptUpgrades(baseDir: string, classA: Candidate[], outcomes: ApplyOutcome[], ts: string): ProvenUpgrade[] {
+  const recorded: ProvenUpgrade[] = [];
+  for (const o of outcomes) {
+    if (o.decision !== 'kept') continue;
+    const cand = classA.find((c) => c.id === o.id);
+    if (!cand) continue;
+    const failed = evaluateLenses(cand).filter((l) => !l.pass);
+    if (failed.length > 0) continue; // never record a lens-failing change as proven
+    recorded.push(recordProvenUpgrade(baseDir, {
+      id: cand.id,
+      patch_ref: cand.action,
+      metric_before: o.before ?? null,
+      metric_after: o.after ?? null,
+      speedup_pct: o.speedup_pct ?? null,
+      revert: cand.perf ? `git checkout -- ${cand.perf.paths.join(' ')}` : 'recorded inverse command (see patch_ref)',
+      provenance: `${cand.source} | lenses pass: security·reversibility·perf`,
+    }, ts));
+  }
+  return recorded;
 }
 
 // ─── Runner — MAP → CLASSIFY → (oracle-gated apply) → §5 report ───
@@ -239,6 +320,9 @@ export async function runAutoupgrade(opts: { repoDir: string; baseDir: string; t
     }, opts.tEnd);
   }
   const outcomes = await evaluateClassA(classA.map((x) => x.c), opts.apply, opts.baseDir);
+  // EvoMap-insight A — persist every KEPT Class-A change as a proven, replayable
+  // gene (lens-gated). Report-only runs keep 0, so this is dormant-but-ready.
+  const genes = recordKeptUpgrades(opts.baseDir, classA.map((x) => x.c), outcomes, opts.tEnd);
   const kept = outcomes.filter((o) => o.decision === 'kept');
   const rolledBack = outcomes.filter((o) => o.decision === 'rolled_back');
   const skipped = outcomes.filter((o) => o.decision === 'skipped');
@@ -270,6 +354,7 @@ export async function runAutoupgrade(opts: { repoDir: string; baseDir: string; t
       ],
       watch: [
         ...kept.map((o) => `APPLIED+KEPT (revert recorded): ${o.id}`),
+        ...genes.map((g) => `PROVEN-UPGRADE gene recorded (loops/runs/proven-upgrades.json): ${g.id} v${g.version} · ${g.speedup_pct}% faster · revert: ${g.revert}`),
         'NEXT (§8 step 4/6): add a reversible+benchmarkable Class-A adapter (worktree + benchmark-replay) so real repo-perf candidates can be auto-applied; widen only after several clean runs.',
       ],
     },
