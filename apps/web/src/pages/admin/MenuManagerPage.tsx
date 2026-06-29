@@ -20,6 +20,7 @@ const MenuImportCommitResponse = z.object({
   }).optional(),
 }).passthrough();
 import { RecipeEditor } from './RecipeEditor.js';
+import { AllergenEditor } from './AllergenEditor.js';
 import { MediaManager } from '../../components/admin/MediaManager.js';
 
 // Rich-media (cinematic product-media, ADR-0002) is DARK by default. The admin
@@ -257,6 +258,10 @@ export function MenuManagerPage() {
   const TASTE_ICONS: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
   const [formTaste, setFormTaste] = useState<Record<string, number>>({});
   const [formRecipeLines, setFormRecipeLines] = useState<Array<{supplyId: string; supplyName: string; qty: number; unit: string; kind: string; kcal: number | null; proteinG: number | null; fatG: number | null; carbsG: number | null; allergens: string[]}>>([]);
+  // Owner allergen attestation (L3 owner declaration — owner is the authority; persisted in attributes jsonb,
+  // never derived). 'listed' carries declaredAllergens; 'none'/'unset' carry none. See menu-characteristics-model council.
+  const [formAllergenStatus, setFormAllergenStatus] = useState<'unset' | 'none' | 'listed'>('unset');
+  const [formDeclaredAllergens, setFormDeclaredAllergens] = useState<string[]>([]);
 
   // Filter/sort state
   const [searchQuery, setSearchQuery] = useState('');
@@ -285,6 +290,9 @@ export function MenuManagerPage() {
     setFormPrepTime('15');
 
     setFormTaste({});
+    setFormRecipeLines([]);
+    setFormAllergenStatus('unset');
+    setFormDeclaredAllergens([]);
     setExpandedCat(categoryId);
   };
 
@@ -301,6 +309,9 @@ export function MenuManagerPage() {
 
     setFormTaste(product.taste || {});
     setFormRecipeLines(product.recipeLines || []);
+    const attrs = (product.attributes as any) || {};
+    setFormAllergenStatus(attrs.allergen_status === 'none' || attrs.allergen_status === 'listed' ? attrs.allergen_status : 'unset');
+    setFormDeclaredAllergens(Array.isArray(attrs.declared_allergens) ? attrs.declared_allergens : []);
   };
 
   const closeForm = () => {
@@ -332,6 +343,11 @@ export function MenuManagerPage() {
       taste: hasTaste ? formTaste : undefined,
       stockCount: stock,
       recipeLines: hasRecipeLines ? formRecipeLines : undefined,
+      // L3 owner allergen declaration — merged into attributes server-side (never derived; absence never shown).
+      attributes: {
+        allergen_status: formAllergenStatus,
+        declared_allergens: formAllergenStatus === 'listed' ? formDeclaredAllergens : [],
+      },
     };
 
     try {
@@ -982,6 +998,15 @@ export function MenuManagerPage() {
 
             {/* BOM Recipe */}
             <RecipeEditor lines={formRecipeLines} onChange={setFormRecipeLines}
+            />
+
+            {/* Allergen attestation (owner declaration — L3). bomAllergens = recipe-derived cross-check (advisory). */}
+            <AllergenEditor
+              status={formAllergenStatus}
+              declaredAllergens={formDeclaredAllergens}
+              bomAllergens={Array.from(new Set(formRecipeLines.flatMap(l => Array.isArray(l.allergens) ? l.allergens : [])))}
+              onStatusChange={setFormAllergenStatus}
+              onAllergensChange={setFormDeclaredAllergens}
             />
 
             {/* Stock count */}

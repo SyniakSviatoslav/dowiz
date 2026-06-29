@@ -21,7 +21,7 @@ export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStat
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="allergen-attestation">
       <label className="text-xs font-medium block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.allergen_attestation', 'Allergen Attestation')} *</label>
 
       {/* Tri-state toggle */}
@@ -34,6 +34,7 @@ export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStat
             <button
               key={s}
               type="button"
+              data-testid={`allergen-status-${s}`}
               aria-pressed={active}
               onClick={() => onStatusChange(s)}
               className={`flex-1 min-w-0 truncate py-1.5 text-step-2xs font-medium rounded-md transition-[background,color,box-shadow,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${
@@ -74,6 +75,7 @@ export function AllergenEditor({ status, declaredAllergens, bomAllergens, onStat
                 <button
                   key={a}
                   type="button"
+                  data-testid={`allergen-chip-${a}`}
                   aria-pressed={active}
                   onClick={() => toggleAllergen(a)}
                   className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-step-2xs font-medium transition-[background,color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${
