@@ -68,6 +68,8 @@ function ClientLayoutInner() {
   const [locationName, setLocationName] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
   const [supportedLocales, setSupportedLocales] = useState<string[] | undefined>(undefined);
+  // Free-delivery threshold (minor units) for the cart nudge — null/0 = feature off (never promise it).
+  const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState<number | null>(null);
 
   useEffect(() => {
     if (!slug) return;
@@ -117,12 +119,23 @@ function ClientLayoutInner() {
       })
       .catch(() => setTheme(null));
 
+    // Free-delivery threshold for the cart nudge (server-cached /info; best-effort, never blocks the cart).
+    fetch(`/public/locations/${slug}/info`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((info) => { if (info && info.freeDeliveryThreshold != null) setFreeDeliveryThreshold(Number(info.freeDeliveryThreshold)); })
+      .catch(() => {});
+
     return () => window.removeEventListener('message', handleMessage);
   }, [slug, location.search]);
 
   const { currency: activeCurrency, eurRate } = useCurrency();
   const itemsCount = items.reduce((sum, i) => sum + i.quantity, 0);
   const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  // Free-delivery nudge (subtotal vs the location threshold; the price engine zeroes the fee server-side).
+  const fdt = freeDeliveryThreshold != null && freeDeliveryThreshold > 0 ? freeDeliveryThreshold : null;
+  const fdReached = fdt != null && total >= fdt;
+  const fdRemaining = fdt != null ? Math.max(0, fdt - total) : 0;
+  const fdPct = fdt != null ? Math.min(100, Math.round((total / fdt) * 100)) : 0;
 
   return (
     <ThemeProvider theme={theme || undefined}>
@@ -214,6 +227,23 @@ function ClientLayoutInner() {
                   ))}
                 </motion.div>
                 <div className="pt-4 border-t border-[var(--brand-border)] space-y-3">
+                  {fdt != null && (
+                    fdReached ? (
+                      <div data-testid="free-delivery-nudge" className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--brand-primary-readable)' }}>
+                        <i className="ti ti-truck-delivery" aria-hidden="true" />
+                        <span>{t('cart.free_delivery_unlocked', 'Free delivery unlocked!')}</span>
+                      </div>
+                    ) : (
+                      <div data-testid="free-delivery-nudge">
+                        <p className="text-sm mb-1.5 text-[var(--brand-text-muted)]">
+                          {t('cart.free_delivery_progress', 'Add {{amount}} more for free delivery', { amount: formatMoney(fdRemaining, activeCurrency, eurRate ?? undefined) })}
+                        </p>
+                        <div className="h-1.5 rounded-full overflow-hidden bg-[var(--brand-border)]" role="progressbar" aria-valuenow={fdPct} aria-valuemin={0} aria-valuemax={100}>
+                          <div className="h-full rounded-full bg-[var(--brand-primary)] transition-[width] duration-300" style={{ width: `${fdPct}%` }} />
+                        </div>
+                      </div>
+                    )
+                  )}
                   <div className="flex justify-between font-bold text-lg text-[var(--brand-text)]">
                     <span>{t('cart.total', 'Total')}</span>
                     <PriceDisplay amount={total} />
