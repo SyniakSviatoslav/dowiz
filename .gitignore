@@ -32,6 +32,12 @@ graphify-out/
 # claude installed skills.claude/skills/
 # local-only secrets (never commit)
 .secrets.local
+# SOPS local-dev secrets: commit ONLY the encrypted *.enc.env (+ *.env.example); never plaintext or keys
+secrets/*.env
+!secrets/*.enc.env
+!secrets/*.env.example
+keys.txt
+*.agekey
 # agentic-system local runtime state (not committed)
 .claude/state/
 .claude/logs/
