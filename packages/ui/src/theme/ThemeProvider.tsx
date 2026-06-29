@@ -9,6 +9,14 @@ export interface ThemeConfig {
    * literals may omit it (consumers fall back via the CSS var default).
    */
   primaryReadable?: string;
+  /**
+   * Brand primary as a CTA FILL — darkened/lightened until `onPrimary` text clears AA on it,
+   * with `onPrimary` the matching text colour. Fixes the illegible-CTA bug where a pale brand
+   * primary shipped white button text on a pale fill (sub-AA). Optional for hand-built literals
+   * (CSS-var defaults in tokens.css stand when omitted).
+   */
+  primaryStrong?: string;
+  onPrimary?: string;
   primaryLight: string;
   accent: string;
   bg: string;
@@ -39,6 +47,8 @@ export function ThemeProvider({
       '--brand-primary',
       '--brand-primary-hover',
       '--brand-primary-readable',
+      '--brand-primary-strong',
+      '--color-on-primary',
       '--brand-primary-light',
       '--brand-accent',
       '--brand-bg',
@@ -63,6 +73,8 @@ export function ThemeProvider({
       applyVar('--brand-primary', theme.primary);
       applyVar('--brand-primary-hover', theme.primaryHover);
       applyVar('--brand-primary-readable', theme.primaryReadable);
+      applyVar('--brand-primary-strong', theme.primaryStrong);
+      applyVar('--color-on-primary', theme.onPrimary);
       applyVar('--brand-primary-light', theme.primaryLight);
       applyVar('--brand-accent', theme.accent);
       applyVar('--brand-bg', theme.bg);

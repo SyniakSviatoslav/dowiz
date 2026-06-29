@@ -133,6 +133,14 @@ export function derivePalette(input: PaletteInput): ThemeConfig {
   // keep raw --brand-primary for fills.
   const primaryReadable = ensureContrast(primary, surface, 4.5);
 
+  // Primary as a CTA FILL (button background with text on it). The naive tokens.css default
+  // (`color-mix(primary 85%, black)` + hard-coded white text) ships an ILLEGIBLE button when a
+  // tenant picks a pale primary: white text on a pale fill is sub-AA. Derive the pair together —
+  // `onPrimary` is the best text pole for the primary, and `primaryStrong` is the primary nudged
+  // until that text clears AA on it — so a CTA is always readable for ANY brand colour.
+  const onPrimary = readableOn(primary);
+  const primaryStrong = ensureContrast(primary, onPrimary, 4.5);
+
   // Accent: neutral chip/section tint, slightly stronger than the raised surface.
   const accent = parseColor(input.accent)
     ? toHex(parseColor(input.accent)!)
@@ -142,6 +150,8 @@ export function derivePalette(input: PaletteInput): ThemeConfig {
     primary: toHex(primary),
     primaryHover: toHex(primaryHover),
     primaryReadable: toHex(primaryReadable),
+    primaryStrong: toHex(primaryStrong),
+    onPrimary: toHex(onPrimary),
     primaryLight,
     accent,
     bg: toHex(bg),
