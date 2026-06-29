@@ -101,6 +101,10 @@ const FORBIDDEN = [
   // Decepticon (offensive red-team), EvoMap (external agent-capability network). All reached only
   // out-of-band; NEVER a product dependency or source import. See docs/research/{deerflow,decepticon,evomap}-pilot.md.
   'deer-flow', 'deerflow', 'decepticon', 'evomap', '@evomap/',
+  // STORM (research synthesis, PyPI `knowledge-storm`) + Scrapling (scraper) + dspy (STORM's framework):
+  // out-of-tree harness pilots only (docs/research/storm-scrapling-pilot.md). Specific tokens (not bare
+  // "storm") to avoid false-positives on unrelated packages.
+  'knowledge-storm', 'scrapling', 'dspy',
 ];
 const lockPath = join(ROOT, 'pnpm-lock.yaml');
 if (existsSync(lockPath)) {
