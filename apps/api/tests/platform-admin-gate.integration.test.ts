@@ -76,6 +76,11 @@ test('non-admin + lookalike are NOT gated (zero false-positive)', async () => {
   await app.close();
 });
 
+// NOTE — the double-prefix regression (adminPlane must strip the inherited `prefix` before registering
+// children, else they mount at /api/admin/api/admin/* and the real paths 404) is covered by the staging
+// E2E (e2e/tests/admin-platform-authz.spec.ts), which caught it live; a unit test can't import the real
+// adminPlane (its children pull in env-requiring modules, same gate as websocket-churn).
+
 test('revocation takes effect at request-entry (remove from allowlist → next request 403)', async () => {
   const app = buildApp();
   ADMINS.add('temp-admin');

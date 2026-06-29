@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { runRestoreVerify } from '../../workers/backup/backup-verify.js';
+import { auditCtx, auditStart, auditFinish, auditCompleted } from '../../lib/platform-admin.js';
 
 const backupAdminRoutes: FastifyPluginAsync = async (fastify, opts) => {
   const { db, queue } = opts as any;
@@ -50,6 +51,7 @@ const backupAdminRoutes: FastifyPluginAsync = async (fastify, opts) => {
       }
     }
 
+    await auditCompleted(db, auditCtx(request, 'backups.list'), request.log);
     return {
       backups: res.rows.map((r: any) => ({
         id: r.id,
@@ -76,8 +78,21 @@ const backupAdminRoutes: FastifyPluginAsync = async (fastify, opts) => {
     if (backupId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(backupId))) {
       return reply.status(400).send({ error: 'VALIDATION_FAILED', message: 'backupId must be a uuid' });
     }
-    const result = await runRestoreVerify(db, { backupId, fullHash: false });
-    return result;
+    // Write-ahead audit: a 'started' row is durable BEFORE the (destructive) drill runs.
+    const auditId = await auditStart(db, auditCtx(request, 'backups.verify', backupId ?? null));
+    try {
+      const result = await runRestoreVerify(db, { backupId, fullHash: false });
+      // single-flight: the internal advisory lock returns this when a drill is already in flight.
+      if (result?.error === 'Another verify in progress') {
+        await auditFinish(db, auditId, 'failed');
+        return reply.status(409).send({ error: 'drill_in_progress' });
+      }
+      await auditFinish(db, auditId, result?.success ? 'completed' : 'failed');
+      return result;
+    } catch (err) {
+      await auditFinish(db, auditId, 'failed');
+      throw err;
+    }
   });
 
   // GET /api/admin/backups/dr-report — generate DR drill report (heavy, fleet-wide DR-drill)
@@ -85,8 +100,19 @@ const backupAdminRoutes: FastifyPluginAsync = async (fastify, opts) => {
   fastify.get('/backups/dr-report', {
     config: { rateLimit: { max: 3, timeWindow: '5 minutes' } },
   }, async (request: any, reply: any) => {
-    const result = await runRestoreVerify(db, { fullHash: true });
-    return result;
+    const auditId = await auditStart(db, auditCtx(request, 'backups.dr_report'));
+    try {
+      const result = await runRestoreVerify(db, { fullHash: true });
+      if (result?.error === 'Another verify in progress') {
+        await auditFinish(db, auditId, 'failed');
+        return reply.status(409).send({ error: 'drill_in_progress' });
+      }
+      await auditFinish(db, auditId, result?.success ? 'completed' : 'failed');
+      return result;
+    } catch (err) {
+      await auditFinish(db, auditId, 'failed');
+      throw err;
+    }
   });
 };
 

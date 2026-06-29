@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { auditCtx, auditCompleted } from '../../lib/platform-admin.js';
 
 export default (async function fallbackAdminRoutes(fastify: any, opts: any) {
   const { db } = opts;
@@ -38,6 +39,7 @@ export default (async function fallbackAdminRoutes(fastify: any, opts: any) {
       };
     });
 
+    await auditCompleted(db, auditCtx(request, 'fallback.health'), request.log);
     return reply.send({ locations });
   });
 
@@ -49,6 +51,7 @@ export default (async function fallbackAdminRoutes(fastify: any, opts: any) {
        FROM locations`,
     );
     const { total_locations, with_fallback_phone } = res.rows[0];
+    await auditCompleted(db, auditCtx(request, 'fallback.r2_check'), request.log);
     return reply.send({
       totalLocations: total_locations,
       withFallbackPhone: with_fallback_phone,

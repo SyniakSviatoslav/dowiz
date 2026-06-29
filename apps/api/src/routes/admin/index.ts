@@ -21,9 +21,13 @@ import notificationAuditRoutes from './notification-audit.js';
 const adminPlane: FastifyPluginAsync = async (fastify, opts) => {
   fastify.addHook('onRequest', fastify.verifyAuth);      // (1) MUST be first — populates request.user
   fastify.addHook('onRequest', requirePlatformAdmin);    // (2) the gate: 403 non-admin / 503 fail-closed
-  await fastify.register(backupAdminRoutes, opts);
-  await fastify.register(fallbackAdminRoutes, opts);
-  await fastify.register(notificationAuditRoutes, opts);
+  // Children inherit THIS plugin's /api/admin prefix from the encapsulation — they must NOT re-apply
+  // it. `opts` carries the `prefix:'/api/admin'` Fastify passed us; forwarding it verbatim would
+  // double-prefix the children to /api/admin/api/admin/* (→ the real /api/admin/* 404s). Strip it.
+  const { prefix: _ignored, ...childOpts } = opts as Record<string, unknown>;
+  await fastify.register(backupAdminRoutes, childOpts);
+  await fastify.register(fallbackAdminRoutes, childOpts);
+  await fastify.register(notificationAuditRoutes, childOpts);
 };
 
 export default adminPlane;

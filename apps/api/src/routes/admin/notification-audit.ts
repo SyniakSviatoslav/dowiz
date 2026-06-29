@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { auditCtx, auditCompleted } from '../../lib/platform-admin.js';
 
 export default (async function notificationAuditRoutes(fastify, opts) {
   const { db } = opts as any;
@@ -43,9 +44,12 @@ export default (async function notificationAuditRoutes(fastify, opts) {
 
     try {
       const res = await db.query(query, params);
+      await auditCompleted(db, auditCtx(request, 'notification_audit.query'), request.log);
       return { audit: res.rows };
     } catch (err: any) {
-      return reply.status(500).send({ error: 'Audit query failed', detail: err.message });
+      // ADR-admin-platform-authz F6: do NOT leak err.message (schema/internal detail) in the envelope.
+      request.log?.error?.({ err }, '[admin] notification-audit query failed');
+      return reply.status(500).send({ error: 'Audit query failed' });
     }
   });
 }) as FastifyPluginAsync<any, any, ZodTypeProvider>;
