@@ -24,14 +24,31 @@ async function injectAuth(page: Page) {
 
 // Open the edit modal for a product (category chip sets React's expandedCat, which handleSaveProduct guards on).
 async function openEditForm(page: Page): Promise<Locator> {
+  await injectAuth(page); // sets the owner token in localStorage (else /admin/menu redirects to login)
   await page.goto(`${BASE}/admin/menu`, { waitUntil: 'networkidle', timeout: 30000 });
   await page.waitForTimeout(2000);
-  if (product.categoryName) {
-    const chip = page.getByRole('button', { name: new RegExp(product.categoryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
-    if (await chip.isVisible({ timeout: 3000 }).catch(() => false)) { await chip.click(); await page.waitForTimeout(400); }
-  }
   const card = page.locator('div.rounded-xl.border').filter({ hasText: product.name }).first();
-  await card.waitFor({ state: 'visible', timeout: 15000 });
+  // Must click the product's CATEGORY tab (index 0 is "All", which does NOT set expandedCat — and
+  // handleSaveProduct returns early when expandedCat is null, silently no-op'ing the save). There are many
+  // categories, so click the named tab directly (fast); fall back to a bounded iteration.
+  const tabs = page.locator('div.snap-x button');
+  if (product.categoryName) {
+    const named = tabs.filter({ hasText: product.categoryName }).first();
+    if (await named.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await named.scrollIntoViewIfNeeded().catch(() => {});
+      await named.click().catch(() => {});
+      await page.waitForTimeout(1500);
+    }
+  }
+  if (!(await card.isVisible({ timeout: 2000 }).catch(() => false))) {
+    const n = Math.min(await tabs.count(), 25);
+    for (let i = 1; i < n; i++) {
+      await tabs.nth(i).click().catch(() => {});
+      await page.waitForTimeout(900);
+      if (await card.isVisible({ timeout: 1000 }).catch(() => false)) break;
+    }
+  }
+  await card.waitFor({ state: 'visible', timeout: 10000 });
   const editBtn = card.locator('button').filter({ has: page.locator('.ti-edit') }).first();
   if (await editBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
     await editBtn.click();
@@ -106,7 +123,8 @@ test.describe('Allergen authoring — owner declaration persists (menu-character
   test('API cross-check: the declaration is stored in attributes (owner-authored, not derived)', async ({ request }) => {
     const r = await request.get(`${BASE}/api/owner/menu/products`, { headers: { Authorization: `Bearer ${ownerToken}` } });
     expect(r.status()).toBe(200);
-    const products: any[] = (await r.json()).products;
+    const body = await r.json();
+    const products: any[] = body.products || body.data || body;
     const saved = products.find(p => p.id === product.id);
     expect(saved?.attributes?.allergen_status, 'allergen_status persisted').toBe('listed');
     expect(saved?.attributes?.declared_allergens, 'declared allergen persisted').toContain(ALLERGEN);
