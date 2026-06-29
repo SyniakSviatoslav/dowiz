@@ -101,6 +101,44 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
       }
     }
 
+    // Resolve the PRIMARY product-media (the media seam) into a card image URL. read_public_menu
+    // emits primary_media_id but never a URL, and the card grid only renders image_key/imageUrl —
+    // so without this a media-only product shows the gradient fallback on the grid while its photo
+    // sits one click away in the modal (lazy /media). One batched query per refresh (the whole
+    // refresh is cached); gated by the MEDIA_RICH_ENABLED deploy kill-switch. A product with a
+    // legacy image_key keeps it (we only fill the gap). video/spin contribute only their poster
+    // still — never a non-image URL in an <img>.
+    if (mediaRichEnabled && Array.isArray(menu.categories)) {
+      const ids: string[] = [];
+      for (const cat of menu.categories) {
+        for (const prod of cat.products || []) {
+          if (!prod.imageUrl && prod.primary_media_id) ids.push(prod.primary_media_id);
+        }
+      }
+      if (ids.length > 0) {
+        const mediaRes = await server.db.query(
+          `SELECT id, storage_key, poster_key, kind FROM product_media WHERE id = ANY($1::uuid[]) AND available`,
+          [ids],
+        );
+        const byId = new Map<string, { storage_key: string; poster_key: string | null; kind: string }>(
+          mediaRes.rows.map((r: any) => [r.id, r]),
+        );
+        for (const cat of menu.categories) {
+          for (const prod of cat.products || []) {
+            if (prod.imageUrl || !prod.primary_media_id) continue;
+            const m = byId.get(prod.primary_media_id);
+            if (!m) continue;
+            const key = m.kind === 'image' ? m.storage_key : m.poster_key; // still only
+            const url = resolveMediaUrl(key);
+            if (url) {
+              prod.imageUrl = url;
+              prod.image_key = prod.image_key ?? key;
+            }
+          }
+        }
+      }
+    }
+
     const now = Date.now();
     // FIFO-evict the oldest entry when inserting a NEW key past the cap (bounds memory).
     if (!menuCache.has(key) && menuCache.size >= MENU_CACHE_MAX_ENTRIES) {
