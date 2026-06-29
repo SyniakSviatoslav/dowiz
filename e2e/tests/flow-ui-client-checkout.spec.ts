@@ -93,9 +93,11 @@ test.describe('UI: Client Checkout — Full Flow', () => {
     await expect(checkoutBtn).toBeVisible({ timeout: 3000 });
     await checkoutBtn.click();
 
-    // Verify on checkout page
-    await expect(page).toHaveURL(/\/checkout/, { timeout: 8000 });
-    await expect(page.locator('body')).toBeAttached({ timeout: 5000 });
+    // §1 (flow-simplification): checkout is a bottom-SHEET over the menu — the URL stays /s/:slug
+    // (no page nav), and the sheet's phone field appears. (Previously asserted a /checkout route
+    // that the sheet replaced.)
+    await expect(page).toHaveURL(new RegExp(`/s/${locationSlug}(\\?|$)`), { timeout: 8000 });
+    await expect(page.getByTestId('checkout-phone')).toBeVisible({ timeout: 8000 });
 
     const criticalErrors = errors.filter(e => !e.includes('favicon') && !e.includes('404') && !e.includes('manifest') && !e.includes('ResizeObserver') && !e.includes("Unexpected token"));
     expect(criticalErrors, `JS errors: ${criticalErrors.join('; ')}`).toEqual([]);
@@ -121,7 +123,7 @@ test.describe('UI: Client Checkout — Full Flow', () => {
     const checkoutBtn = page.locator('button, a').filter({ hasText: /checkout|Checkout|Porosit|Vazhdo/i }).first();
     await expect(checkoutBtn).toBeVisible({ timeout: 3000 });
     await checkoutBtn.click();
-    await expect(page).toHaveURL(/\/checkout/, { timeout: 8000 });
+    await expect(page.getByTestId('checkout-phone')).toBeVisible({ timeout: 8000 }); // §1 bottom-sheet (no /checkout nav)
     await page.waitForTimeout(1000);
 
     // Fill the REQUIRED fields deterministically — no silent isVisible() guard on a field

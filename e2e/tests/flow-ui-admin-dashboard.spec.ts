@@ -28,7 +28,7 @@ test.describe('UI: Admin Dashboard — Status Transitions via UI, Detail Modal, 
     const catId = (await catRes.json()).id;
 
     const prodRes = await request.post(`${BASE}/api/owner/menu/products`, {
-      data: { name: `Dsh-Prod-${TS}`, price: 700, available: true, categoryId: catId },
+      data: { name: `Dsh-Prod-${TS}`, price: 700, prep_time_minutes: 10, available: true, categoryId: catId },
       headers: { Authorization: `Bearer ${authToken}` },
     });
     expect(prodRes.status()).toBe(201);
@@ -43,10 +43,12 @@ test.describe('UI: Admin Dashboard — Status Transitions via UI, Detail Modal, 
         delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga e Durrësit, Tirana' },
         payment: { method: 'cash' },
         idempotency_key: crypto.randomUUID(),
+        acknowledged_codes: ['velocity'], // ack the speed-bump so the setup order is never soft-blocked
       },
     });
-    expect(orderRes.status()).toBe(201);
-    orderId = (await orderRes.json()).id;
+    const orderBody = await orderRes.json();
+    orderId = orderBody.id; // created-order proof is the UUID (201 clean / 200 acked-or-idempotent)
+    expectUuid(orderId, `order create failed (HTTP ${orderRes.status()}): ${JSON.stringify(orderBody).slice(0, 180)}`);
   });
 
   test.afterAll(async ({ request }) => {
