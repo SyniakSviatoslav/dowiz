@@ -1,0 +1,13 @@
+{
+  "id": "pizza-basic",
+  "synthetic": true,
+  "ocr": "PIZZA ROMA\nMargherita ... 800\nQuattro Formaggi ... 990\nDiavola ... 950\nOpen Mon-Sun 10:00-23:00",
+  "expected": {
+    "restaurant": { "name": "Pizza Roma" },
+    "products": [
+      { "name": "Margherita", "price": 800 },
+      { "name": "Quattro Formaggi", "price": 990 },
+      { "name": "Diavola", "price": 950 }
+    ]
+  }
+}
