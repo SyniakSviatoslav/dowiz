@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
@@ -193,5 +194,28 @@ test.describe('UI: Analytics + Supplies CRUD', () => {
       const cookies = await page.context().cookies();
       expect(cookies, `${path} should have 0 cookies`).toEqual([]);
     }
+  });
+
+  // Agentic-export: aggregate Analytics surfaces (no PII) gain a JSON download
+  // alongside CSV — agents parse JSON cleaner. PII surfaces (orders/customers/
+  // couriers) are deliberately excluded (red-line gate + Counsel ETHICAL-STOP).
+  test('Analytics exposes a JSON export that downloads a valid JSON array', async ({ page }) => {
+    await page.addInitScript((token: string) => localStorage.setItem('dos_access_token', token), authToken);
+    await page.goto(`${BASE}/admin/analytics`, { waitUntil: 'networkidle' });
+
+    const jsonBtn = page.getByRole('button', { name: /export json/i }).first();
+    await expect(jsonBtn).toBeVisible({ timeout: 15000 });
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      jsonBtn.click(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/\.json$/);
+
+    const path = await download.path();
+    expect(path).toBeTruthy();
+    const parsed = JSON.parse(readFileSync(path as string, 'utf8'));
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed.length).toBeGreaterThan(0);
   });
 });
