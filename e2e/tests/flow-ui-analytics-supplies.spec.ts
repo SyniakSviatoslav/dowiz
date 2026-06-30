@@ -203,7 +203,9 @@ test.describe('UI: Analytics + Supplies CRUD', () => {
     await page.addInitScript((token: string) => localStorage.setItem('dos_access_token', token), authToken);
     await page.goto(`${BASE}/admin/analytics`, { waitUntil: 'networkidle' });
 
-    const jsonBtn = page.getByRole('button', { name: /export json/i }).first();
+    // Locale-robust: the label is "Export/Eksporto/Експорт JSON" — match the
+    // constant "JSON" token so the test passes regardless of the tenant locale.
+    const jsonBtn = page.getByRole('button', { name: /\bjson\b/i }).first();
     await expect(jsonBtn).toBeVisible({ timeout: 15000 });
 
     const [download] = await Promise.all([
