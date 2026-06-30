@@ -16,7 +16,6 @@ import type { CompareDish } from './MenuComparePanel.js';
 import { DishStats } from '../../components/client/DishStats.js';
 import type { DishIngredient } from '../../components/client/DishStats.js';
 import { StylizedMap } from '../../components/client/StylizedMap.js';
-import { SatelliteMap } from '../../components/client/SatelliteMap.js';
 import type { MacroLens } from '@deliveryos/ui';
 
 // Allergen FILTER — gated OFF by default (council menu-characteristics-model FB-C1, recorded human
@@ -373,35 +372,51 @@ export function MenuPage() {
     return Array.from(set);
   }, [data]);
 
-  const loadMenu = useCallback(async () => {
+  // A language change must update the menu IN PLACE (like the currency switch) — never flash the
+  // skeleton or re-run the page. The item names/descriptions are server-translated, so we still refetch,
+  // but SOFTLY: no setLoading, no skeleton dwell, keep the current menu on screen until the translated
+  // one arrives, then swap. Only the FIRST load for a slug (or a retry) shows the skeleton.
+  const loadedOnceRef = useRef(false);
+  const prevSlugRef = useRef(slug);
+  const fetchSeqRef = useRef(0);
+
+  const loadMenu = useCallback(async (soft = false) => {
+    const seq = ++fetchSeqRef.current;
     const start = Date.now();
-    setLoading(true);
+    if (!soft) setLoading(true);
     setFetchError(false);
     setNotFound(false);
     try {
       const res = await fetch(`/public/locations/${slug}/menu?locale=${encodeURIComponent(locale)}`);
-      if (res.status === 404) { setMenu(null); setData([]); setNotFound(true); return; }
+      if (seq !== fetchSeqRef.current) return; // a newer request superseded this one (rapid switching)
+      if (res.status === 404) { if (!soft) { setMenu(null); setData([]); setNotFound(true); } return; }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const menuData: MenuResponse = await res.json();
+      if (seq !== fetchSeqRef.current) return;
       setMenu(menuData);
-      const cats = menuData.categories || [];
-      setData(cats);
+      setData(menuData.categories || []);
+      loadedOnceRef.current = true;
     } catch (err) {
+      if (seq !== fetchSeqRef.current) return;
       console.error('[MenuPage] Failed to load menu:', err);
-      setMenu(null);
-      setData([]);
-      setFetchError(true);
+      // Soft (locale-change) refetch failure: keep the currently-shown menu rather than blanking it.
+      if (!soft) { setMenu(null); setData([]); setFetchError(true); }
     } finally {
-      const elapsed = Date.now() - start;
-      if (elapsed < MIN_SKELETON_DWELL) {
-        await new Promise(r => setTimeout(r, MIN_SKELETON_DWELL - elapsed));
+      if (!soft) {
+        const elapsed = Date.now() - start;
+        if (elapsed < MIN_SKELETON_DWELL) {
+          await new Promise(r => setTimeout(r, MIN_SKELETON_DWELL - elapsed));
+        }
+        if (seq === fetchSeqRef.current) setLoading(false);
       }
-      setLoading(false);
     }
   }, [slug, locale]);
 
   useEffect(() => {
-    loadMenu();
+    // Hard load (skeleton) on first load / slug change / retry; soft refetch on a locale-only change.
+    const slugChanged = prevSlugRef.current !== slug;
+    prevSlugRef.current = slug;
+    loadMenu(loadedOnceRef.current && !slugChanged);
   }, [loadMenu, retryCount]);
 
   const stickyRef = useRef<HTMLDivElement>(null);
@@ -1215,8 +1230,10 @@ export function MenuPage() {
                 whileTap={prefersReduced ? undefined : { scale: 0.95 }}
                 onClick={closeDetail}
                 aria-label={t('common.close', 'Close')}
-                className="pointer-events-auto absolute top-2.5 right-2.5 min-w-[48px] min-h-[48px] rounded-full flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
-                style={{ background: 'var(--brand-surface)', color: 'var(--brand-text)', border: '1px solid var(--brand-border)', boxShadow: 'var(--elev-3, 0 4px 16px rgba(0,0,0,0.35))' }}
+                // High-contrast dark scrim + white X so Close is unmistakable over ANY hero (photo or
+                // surface, light or dark theme) — the old surface-coloured button blended into photos on mobile.
+                className="pointer-events-auto absolute top-2.5 right-2.5 min-w-[48px] min-h-[48px] rounded-full flex items-center justify-center outline-none backdrop-blur-sm focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2"
+                style={{ background: 'rgba(0,0,0,0.55)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.28)', boxShadow: '0 4px 16px rgba(0,0,0,0.45)' }}
               >
                 <i className="ti ti-x text-2xl" />
               </motion.button>
@@ -1226,9 +1243,11 @@ export function MenuPage() {
                 type="button"
                 onClick={closeDetail}
                 aria-label={t('common.close', 'Close')}
-                className="md:hidden pointer-events-auto absolute top-0 left-1/2 -translate-x-1/2 flex items-center justify-center w-32 h-11"
+                className="md:hidden pointer-events-auto absolute top-2 left-1/2 -translate-x-1/2 flex items-center justify-center px-4 h-8 rounded-full backdrop-blur-sm"
+                style={{ background: 'rgba(0,0,0,0.4)' }}
               >
-                <span className="block w-12 h-[5px] rounded-full" style={{ background: 'color-mix(in srgb, var(--brand-text) 60%, transparent)' }} />
+                {/* White bar on a dark scrim pill — reads on any hero (a bare grabber vanished on photos). */}
+                <span className="block w-10 h-[5px] rounded-full" style={{ background: 'rgba(255,255,255,0.92)' }} />
               </button>
             </div>
             {/* Image — taller hero with more room; the photo is shown in FULL (object-contain) over a
@@ -1564,64 +1583,62 @@ export function MenuPage() {
           preview). Restaurant identity + address, with Google Maps + socials when
           set. Each absent link simply doesn't render. */}
       {!isEmbed && (() => {
-        // Two-column footer: LEFT = a stylized (decorative, not a live tile) map with the vendor pin,
-        // clickable through to real Maps; RIGHT = identity + address + the contact number (tap-to-call)
-        // and the WhatsApp/socials rail. Each link renders only when its datum exists.
+        // Single-column footer (the decorative map tile was removed — owner directive 2026-06-30): vendor
+        // identity + address (with a plain "View on Google Maps" text link, not a map) + tap-to-call, and a
+        // PROMINENT socials rail (WhatsApp · Instagram · Facebook). Each link renders only when its datum exists.
         const waDigits = storeLinks.phone ? storeLinks.phone.replace(/\D/g, '') : '';
         const mapsHref = storeLinks.mapsUrl
           || (locationInfo?.lat != null && locationInfo?.lng != null
             ? `https://www.google.com/maps/search/?api=1&query=${locationInfo.lat},${locationInfo.lng}`
             : null);
-        const iconCls = "text-lg inline-flex items-center justify-center w-10 h-10 rounded-full outline-none transition-[color,transform] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]";
-        const iconSty = { color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' } as React.CSSProperties;
+        // Larger, branded social buttons so the socials read as a first-class footer element.
+        const iconCls = "text-2xl inline-flex items-center justify-center w-12 h-12 rounded-full border outline-none transition-[color,background-color,transform] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-bg)] [@media(hover:hover)]:hover:bg-[var(--brand-primary)] active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]";
+        const iconSty = { color: 'var(--brand-primary)', background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' } as React.CSSProperties;
         return (
         <footer className="mt-12 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-          <div className="grid grid-cols-1 sm:grid-cols-2">
-            {/* LEFT — stylized map + pin */}
-            {mapsHref ? (
-              <a href={mapsHref} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')}
-                 className="relative block h-40 sm:h-full min-h-[10rem] overflow-hidden group outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset">
-                {locationInfo?.lat != null && locationInfo?.lng != null ? <SatelliteMap lat={locationInfo.lat} lng={locationInfo.lng} className="w-full h-full" /> : <StylizedMap />}
-                <span className="absolute bottom-2 left-2 text-step-2xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1" style={{ background: 'color-mix(in srgb, var(--brand-bg) 78%, transparent)', color: 'var(--brand-text)' }}>
-                  <i className="ti ti-map-pin" aria-hidden="true" /> {t('client.view_on_maps', 'View on Google Maps')}
-                </span>
-              </a>
-            ) : (
-              <div className="relative h-40 sm:h-full min-h-[10rem] overflow-hidden">{locationInfo?.lat != null && locationInfo?.lng != null ? <SatelliteMap lat={locationInfo.lat} lng={locationInfo.lng} className="w-full h-full" /> : <StylizedMap />}</div>
-            )}
-            {/* RIGHT — identity + address + contact */}
-            <div className="px-5 py-7 flex flex-col gap-2 justify-center">
-              <div className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
-                {menu?.location_name || t('client.menu', 'Menu')}
-              </div>
-              {storeAddress && (
-                <div className="text-xs leading-relaxed" style={{ color: 'var(--brand-text-muted)' }}>{storeAddress}</div>
-              )}
-              {storeLinks.phone && (
-                <a href={`tel:${storeLinks.phone}`} className="text-sm font-semibold inline-flex items-center gap-1.5 mt-1 w-fit outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] rounded" style={{ color: 'var(--brand-text)' }} aria-label={t('client.call_restaurant', 'Call the restaurant')}>
-                  <i className="ti ti-phone" aria-hidden="true" style={{ color: 'var(--brand-primary)' }} /> {storeLinks.phone}
-                </a>
-              )}
-              {(waDigits || storeLinks.instagram || storeLinks.facebook) && (
-                <div className="flex items-center gap-2 mt-2">
-                  {waDigits && (
-                    <a href={`https://wa.me/${waDigits}`} target="_blank" rel="noopener noreferrer" aria-label={t('client.contact_whatsapp', 'Message on WhatsApp')} className={iconCls} style={iconSty}>
-                      <i className="ti ti-brand-whatsapp" />
-                    </a>
-                  )}
-                  {storeLinks.instagram && (
-                    <a href={storeLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className={iconCls} style={iconSty}>
-                      <i className="ti ti-brand-instagram" />
-                    </a>
-                  )}
-                  {storeLinks.facebook && (
-                    <a href={storeLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className={iconCls} style={iconSty}>
-                      <i className="ti ti-brand-facebook" />
-                    </a>
-                  )}
-                </div>
-              )}
+          <div className="px-5 py-9 flex flex-col items-center text-center gap-2.5 max-w-md mx-auto">
+            <div className="text-xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
+              {menu?.location_name || t('client.menu', 'Menu')}
             </div>
+            {storeAddress && (
+              <div className="text-xs leading-relaxed" style={{ color: 'var(--brand-text-muted)' }}>
+                {storeAddress}
+                {mapsHref && (
+                  <>
+                    {' · '}
+                    <a href={mapsHref} target="_blank" rel="noopener noreferrer"
+                       className="font-medium underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] rounded"
+                       style={{ color: 'var(--brand-primary)' }}>
+                      {t('client.view_on_maps', 'View on Google Maps')}
+                    </a>
+                  </>
+                )}
+              </div>
+            )}
+            {storeLinks.phone && (
+              <a href={`tel:${storeLinks.phone}`} className="text-sm font-semibold inline-flex items-center gap-1.5 mt-0.5 outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] rounded" style={{ color: 'var(--brand-text)' }} aria-label={t('client.call_restaurant', 'Call the restaurant')}>
+                <i className="ti ti-phone" aria-hidden="true" style={{ color: 'var(--brand-primary)' }} /> {storeLinks.phone}
+              </a>
+            )}
+            {(waDigits || storeLinks.instagram || storeLinks.facebook) && (
+              <div className="flex items-center justify-center gap-3 mt-3">
+                {waDigits && (
+                  <a href={`https://wa.me/${waDigits}`} target="_blank" rel="noopener noreferrer" aria-label={t('client.contact_whatsapp', 'Message on WhatsApp')} className={iconCls} style={iconSty}>
+                    <i className="ti ti-brand-whatsapp" />
+                  </a>
+                )}
+                {storeLinks.instagram && (
+                  <a href={storeLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className={iconCls} style={iconSty}>
+                    <i className="ti ti-brand-instagram" />
+                  </a>
+                )}
+                {storeLinks.facebook && (
+                  <a href={storeLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className={iconCls} style={iconSty}>
+                    <i className="ti ti-brand-facebook" />
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </footer>
         );
