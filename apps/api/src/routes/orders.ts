@@ -7,6 +7,7 @@ import { loadEnv } from '@deliveryos/config';
 import { BUS_CHANNELS, orderChannel, dashboardChannel, courierChannel } from '../lib/registry.js';
 import { updateOrderStatus } from '../lib/orderStatusService';
 import { attemptHonestDispatch } from '../lib/dispatch.js';
+import { getPaymentProvider, isPrepaidEnabled, isCryptoEnabled } from '../lib/payments/registry.js';
 import { evaluatePreflight } from '../lib/preflight.js';
 import { computeSignals } from '../lib/signals/compute.js';
 import type { Pool } from 'pg';
@@ -621,6 +622,38 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         }
       }
 
+      // Crypto prepaid fork (ADR-0017) — DARK behind PAYMENTS_PREPAID_ENABLED + PAYMENTS_CRYPTO_ENABLED. The
+      // order is committed PENDING/unpaid above; here we create the money-SoT payment row + the hosted charge,
+      // mark the order prepaid-pending (held: not offered to fulfillment until the webhook flips payment_status
+      // to 'paid'), and hand back the Plisio invoice URL. Failures are swallowed — the order stays held and
+      // times out / owner-reviews; a charge failure must NOT fail an already-committed order.
+      let paymentRedirect: string | undefined;
+      if ((input as any).payment?.method === 'crypto' && isPrepaidEnabled() && isCryptoEnabled()) {
+        try {
+          const provider = getPaymentProvider();
+          const payRes = await client.query(
+            `INSERT INTO payments (location_id, order_id, provider, status, amount_minor, currency_code)
+             VALUES ($1, $2, $3, 'pending', $4, $5) RETURNING id`,
+            [locationId, order.id, provider.name, total, location.currency_code],
+          );
+          const paymentId = payRes.rows[0].id as string;
+          await client.query(`UPDATE orders SET payment_method = 'crypto', payment_status = 'pending' WHERE id = $1`, [order.id]);
+          const charge = await provider.createCharge({
+            paymentId,
+            amountMinor: total,
+            currencyCode: location.currency_code,
+            minorUnit: location.currency_minor_unit ?? 2,
+            idempotencyKey: idempotency_key,
+            returnUrl: `${env.APP_BASE_URL}/s/${location.slug}/order/${order.id}`,
+            orderName: '#' + order.id.substring(0, 4).toUpperCase(),
+          });
+          await client.query(`UPDATE payments SET provider_payment_id = $1 WHERE id = $2`, [charge.providerPaymentId, paymentId]);
+          paymentRedirect = charge.redirectUrl;
+        } catch (err) {
+          request.log.error({ err }, 'crypto charge failed — order held unpaid');
+        }
+      }
+
       return reply.status(201).send({
         id: order.id,
         locationId,
@@ -630,6 +663,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         deliveryInstructions: rawInstructions || null,
         createdAt: order.created_at,
         authToken,
+        payment: paymentRedirect ? { method: 'crypto', redirectUrl: paymentRedirect } : undefined,
         trackUrl: trackCode
           ? `${env.APP_BASE_URL}/s/${location.slug}/order/${order.id}?t=${trackCode}`
           : undefined,

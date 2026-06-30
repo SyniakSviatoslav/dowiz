@@ -11,6 +11,7 @@ import { updateOrderStatus } from './orderStatusService.js';
 
 export type PaymentOutcome =
   | 'paid_full'
+  | 'delivered_prepaid'   // C1: crypto-prepaid delivery — no cash, no till-hold (precond payment_status='paid')
   | 'refused_goods'
   | 'refused_payment'
   | 'customer_cancelled_on_door';
@@ -54,15 +55,27 @@ export async function completeDelivery(
   opts: { messageBus: MessageBus },
 ): Promise<{ orderStatus: 'DELIVERED' | 'CANCELLED' }> {
   const isPaidFull = args.paymentOutcome === 'paid_full';
+  // C1 (ADR-0017): prepaid (crypto) delivery — the money is already in via the payments ledger, so completion
+  // collects NO cash and writes NO courier 'hold' (a paid order must never create a till-debt).
+  const isPrepaid = args.paymentOutcome === 'delivered_prepaid';
 
   // Coherence: paid_full requires the full cash in hand (no-partial-handover rule). 422 before any mutation.
   if (isPaidFull && args.cashAmount !== args.total) {
     throw new CompletionError('CASH_AMOUNT_MISMATCH', { expected: args.total });
   }
+  // Prepaid precondition: the order must actually be paid (the webhook flipped payment_status='paid') — else
+  // 409, never silently mark a not-yet-confirmed crypto order delivered.
+  if (isPrepaid) {
+    const ps = await client.query(`SELECT payment_status FROM orders WHERE id = $1`, [args.orderId]);
+    if (ps.rows[0]?.payment_status !== 'paid') {
+      throw new CompletionError('PREPAID_NOT_PAID', {});
+    }
+  }
 
-  const cashCollected = isPaidFull;
-  const assignmentStatus = isPaidFull ? 'delivered' : 'cancelled';
-  const orderStatus: 'DELIVERED' | 'CANCELLED' = isPaidFull ? 'DELIVERED' : 'CANCELLED';
+  const cashCollected = isPaidFull;                       // prepaid collects no cash
+  const isDelivered = isPaidFull || isPrepaid;
+  const assignmentStatus = isDelivered ? 'delivered' : 'cancelled';
+  const orderStatus: 'DELIVERED' | 'CANCELLED' = isDelivered ? 'DELIVERED' : 'CANCELLED';
 
   // 1. Terminalize the assignment + free the shift.
   await client.query(
@@ -83,7 +96,7 @@ export async function completeDelivery(
   //    updateOrderStatus is a no-op here (the assignment is already terminal above).
   await updateOrderStatus(client, args.orderId, args.locationId, orderStatus, {
     messageBus: opts.messageBus,
-    comment: isPaidFull ? undefined : args.paymentOutcome,
+    comment: isDelivered ? undefined : args.paymentOutcome,
   });
 
   // 3. Persist the distinguishing crumb server-authoritatively (orders + immutable trace).
@@ -108,6 +121,27 @@ export async function completeDelivery(
        VALUES ($1, $2, $3, 'hold', $4) ON CONFLICT (order_id, type) DO NOTHING`,
       [args.courierId, args.locationId, args.orderId, args.cashAmount],
     );
+  }
+
+  // 5. C2 (ADR-0017): a PREPAID (crypto-paid) order that ends refused/cancelled was already paid. Crypto is
+  //    irreversible → no auto-refund; record an owner-review 'refund_due' obligation in the payments ledger.
+  //    The owner sends the crypto back out-of-band → records 'refund_sent' → payment_status='refunded'.
+  if (!isDelivered) {
+    const pay = await client.query(
+      `SELECT id, provider, provider_payment_id, amount_minor, currency_code
+         FROM payments WHERE order_id = $1 AND status = 'paid' LIMIT 1`,
+      [args.orderId],
+    );
+    if (pay.rowCount) {
+      const p = pay.rows[0];
+      await client.query(
+        `INSERT INTO payment_events
+           (payment_id, location_id, provider, provider_payment_id, type, amount_minor, currency_code, signature_verified)
+         VALUES ($1, $2, $3, $4, 'refund_due', $5, $6, true)
+         ON CONFLICT (provider, provider_payment_id, type) DO NOTHING`,
+        [p.id, args.locationId, p.provider, p.provider_payment_id, p.amount_minor, p.currency_code],
+      );
+    }
   }
 
   return { orderStatus };

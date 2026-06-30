@@ -296,7 +296,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       // not in the enum → forbidden (H-2). cash_amount tightened to int/nonneg (M-2). cash_collected kept
       // for backward-compat (legacy courier app) — derives paid_full / refused_payment when no outcome sent.
       body: z.object({
-        payment_outcome: z.enum(['paid_full', 'refused_goods', 'refused_payment', 'customer_cancelled_on_door']).optional(),
+        payment_outcome: z.enum(['paid_full', 'delivered_prepaid', 'refused_goods', 'refused_payment', 'customer_cancelled_on_door']).optional(),
         cash_collected: z.boolean().optional(),
         cash_amount: z.number().int().nonnegative().optional()
       }).strict()
@@ -307,7 +307,8 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
     const { id } = request.params;
     const { cash_collected, cash_amount } = request.body;
     // Resolve the outcome: explicit payment_outcome wins; else legacy cash_collected → paid_full/refused_payment.
-    const paymentOutcome: 'paid_full' | 'refused_goods' | 'refused_payment' | 'customer_cancelled_on_door' =
+    // For a PREPAID (crypto-paid) order the auto-resolve below overrides to 'delivered_prepaid' (no cash).
+    let paymentOutcome: 'paid_full' | 'delivered_prepaid' | 'refused_goods' | 'refused_payment' | 'customer_cancelled_on_door' =
       request.body.payment_outcome ?? (cash_collected ? 'paid_full' : 'refused_payment');
 
     const client = await db.connect();
@@ -316,7 +317,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
       const res = await client.query(`
-        SELECT ca.order_id, ca.shift_id, o.total,
+        SELECT ca.order_id, ca.shift_id, o.total, o.payment_status, o.payment_method,
                o.delivery_lat, o.delivery_lng, l.lat AS loc_lat, l.lng AS loc_lng
         FROM courier_assignments ca
         JOIN orders o ON ca.order_id = o.id
@@ -330,6 +331,13 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       }
 
       const { order_id, shift_id, total } = res.rows[0];
+
+      // C1 (ADR-0017): a crypto-prepaid order is settled before delivery — the courier collects NO cash, so
+      // "mark delivered" auto-resolves to 'delivered_prepaid' (completeDelivery then skips the cash assert +
+      // writes no till-hold; precondition payment_status='paid'). Overrides any cash-derived outcome.
+      if (res.rows[0].payment_method === 'crypto' && res.rows[0].payment_status === 'paid') {
+        paymentOutcome = 'delivered_prepaid';
+      }
 
       // SENSOR-BUS §1.2: normalised delivery baseline — observed venue→customer road distance +
       // expected leg minutes, NO router (brief §1.2). Pure haversine × road-factor on coords in-hand;
@@ -363,7 +371,8 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       } catch (e) {
         if (e instanceof CompletionError) {
           await client.query('ROLLBACK');
-          return reply.status(422).send({ error: e.code, ...(e.meta ?? {}) });
+          // PREPAID_NOT_PAID = 409 (the crypto order isn't confirmed paid yet); cash mismatch = 422.
+          return reply.status(e.code === 'PREPAID_NOT_PAID' ? 409 : 422).send({ error: e.code, ...(e.meta ?? {}) });
         }
         throw e;
       }

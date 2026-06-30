@@ -43,6 +43,8 @@ function normalizeAlbanianPhone(raw: string): string {
 const OrderCreateResponse = z.object({
   id: z.string(),
   authToken: z.string().optional(),
+  // Crypto prepaid (ADR-0017): when present, redirect the customer to the hosted invoice to pay.
+  payment: z.object({ method: z.string(), redirectUrl: z.string() }).optional(),
 }).passthrough();
 
 // The /orders endpoint returns 200 with this body (NO order created) when the
@@ -113,6 +115,9 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
 
   // Order-summary accordion (subtle, collapsed by default) — items + photos + combined price + nutrition.
   const [summaryOpen, setSummaryOpen] = useState(false);
+  // Crypto prepaid (ADR-0017) — DARK behind VITE_PAYMENTS_CRYPTO_ENABLED. Cash-on-delivery stays the default.
+  const CRYPTO_ENABLED = import.meta.env.VITE_PAYMENTS_CRYPTO_ENABLED === 'true';
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'crypto'>('cash');
   // productId → { image, per-unit nutrition } from the public menu (for thumbnails + combined nutrition).
   const [orderMenuMap, setOrderMenuMap] = useState<Record<string, { image?: string; kcal: number; protein: number; fat: number; carbs: number }>>({});
 
@@ -436,7 +441,7 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
               address_text: address || undefined,
             },
           }),
-          payment: { method: 'cash' },
+          payment: { method: paymentMethod },
           cash_pay_with: cashAmount > 0 ? cashAmount : undefined,
           idempotency_key: idempotencyKey,
           // Acknowledge the OTP soft-reason once we've verified the phone, plus any soft-signal
@@ -500,6 +505,11 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
       clearCart();
       setOtpOpen(false);
       setPlacing(false);
+      // Crypto prepaid: send the customer to the hosted invoice to pay (the order is held until confirmed).
+      if (orderRes.payment?.redirectUrl) {
+        window.location.href = orderRes.payment.redirectUrl;
+        return true;
+      }
       setShowConfirmation(true);
       setTimeout(() => navigate(`/s/${slug}/order/${orderRes.id}`), 1500);
       return true;
@@ -1077,6 +1087,37 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
             </div>
           )}
         </motion.div>
+
+        {/* Payment method (ADR-0017) — DARK behind VITE_PAYMENTS_CRYPTO_ENABLED. Cash-on-delivery default. */}
+        {CRYPTO_ENABLED && (
+          <div className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }} data-testid="checkout-payment">
+            <h2 className="text-step-xl font-semibold mb-3" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.payment', 'Payment')}</h2>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={t('checkout.payment', 'Payment')}>
+              {(['cash', 'crypto'] as const).map(m => {
+                const active = paymentMethod === m;
+                return (
+                  <button key={m} type="button" role="radio" aria-checked={active} data-testid={`pay-method-${m}`}
+                    onClick={() => setPaymentMethod(m)}
+                    className="flex items-center gap-2 h-[48px] px-3 rounded-[var(--brand-radius-sm)] border text-step-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]"
+                    style={{ background: active ? 'var(--brand-primary)' : 'var(--brand-surface-raised)', borderColor: active ? 'var(--brand-primary)' : 'var(--brand-border)', color: active ? 'var(--brand-primary-readable, #fff)' : 'var(--brand-text)' }}>
+                    <i className={m === 'cash' ? 'ti ti-cash' : 'ti ti-currency-bitcoin'} aria-hidden="true" />
+                    <span>{m === 'cash' ? t('checkout.pay_cash', 'Cash on delivery') : t('checkout.pay_crypto', 'Pay with crypto')}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {paymentMethod === 'crypto' && (
+              <div className="mt-3 p-3 rounded-[var(--brand-radius-sm)] border" data-testid="crypto-disclosure" style={{ background: 'var(--color-danger-light, var(--brand-surface-raised))', borderColor: 'var(--color-danger, var(--brand-border))' }}>
+                <p className="text-step-xs font-bold flex items-center gap-1.5" style={{ color: 'var(--color-danger, var(--brand-text))' }}>
+                  <i className="ti ti-alert-triangle" aria-hidden="true" />{t('checkout.crypto_irreversible_title', 'Crypto payments are final')}
+                </p>
+                <p className="text-step-2xs mt-1 leading-relaxed" style={{ color: 'var(--brand-text-muted)' }}>
+                  {t('checkout.crypto_irreversible_body', 'Once confirmed on the blockchain, a crypto payment cannot be reversed. If your order is cancelled or undelivered, the venue refunds you manually to your wallet within 3 business days. You’ll pay in USDT or USDC on a secure page.')}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </form>
 
       {locationLoadFailed && (
