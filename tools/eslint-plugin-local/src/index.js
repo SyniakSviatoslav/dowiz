@@ -647,5 +647,36 @@ export default {
         };
       },
     },
+    'no-recipe-only-allergen-read': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'disallow recipe-only allergen reads on the storefront — the allergen surface must derive from computeAllergenSurface (declared∪recipe) on every surface (council menu-characteristics-model STEP-0 / #12)' },
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, '/');
+        // Keyed on the storefront menu SITE (the FB-C1/FB-C2 surfaces) + fixtures for the red→green proof.
+        // A recipe-only allergen array (e.g. `bomToNutrition(p).allergens`) used as a safety read silently
+        // drops an owner-DECLARED allergen with no recipe data → a live false-negative. The ONLY allergen
+        // source is computeAllergenSurface (allergenSurfaceOf), which unions declaration + recipe.
+        const isStorefrontMenu = /\/apps\/web\/src\/pages\/client\/MenuPage\.tsx$/.test(filename)
+          || /\/__fixtures__\//.test(filename);
+        if (!isStorefrontMenu) return {};
+        return {
+          MemberExpression(node) {
+            // Flag `<call>.allergens` where <call> is a bomToNutrition(...) call (the recipe-only accessor).
+            if (
+              node.property.type === 'Identifier' && node.property.name === 'allergens' &&
+              node.object.type === 'CallExpression' &&
+              node.object.callee.type === 'Identifier' && node.object.callee.name === 'bomToNutrition'
+            ) {
+              context.report({
+                node,
+                message: 'recipe-only allergen read (`bomToNutrition(...).allergens`) — derive the allergen surface from computeAllergenSurface/allergenSurfaceOf (declared∪recipe) so a declared-only allergen is never dropped (council STEP-0 / #12).',
+              });
+            }
+          },
+        };
+      },
+    },
   },
 };
