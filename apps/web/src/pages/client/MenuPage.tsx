@@ -9,8 +9,10 @@ const MediaGallery = lazy(() => import('../../components/media/MediaGallery').th
 const MediaRenderer = lazy(() => import('../../components/media').then(m => ({ default: m.MediaRenderer })));
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput, computeAllergenSurface } from '@deliveryos/ui';
+import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput, computeAllergenSurface, partitionByMacroLens } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
+import { MenuComparePanel } from './MenuComparePanel.js';
+import type { CompareDishInput, MacroLens } from '@deliveryos/ui';
 
 // Allergen FILTER — gated OFF by default (council menu-characteristics-model FB-C1, recorded human
 // decision). The filter PREDICATE is converged onto computeAllergenSurface (declared∪recipe) regardless,
@@ -18,6 +20,16 @@ import { useSharedCart } from '../../lib/CartProvider.js';
 // coverage a visible "contains X" filter risks a "dishes not shown ⇒ safe" false-read, so the CHIPS stay
 // dark until a positive-only human sign-off. Re-enable = flip the flag (predicate is already correct).
 const ALLERGEN_FILTER_ENABLED = (import.meta as any).env?.VITE_MENU_ALLERGEN_FILTER === 'true';
+
+// Menu Characteristics layer sub-flags (council menu-characteristics-model, ADR-0014) — all default OFF
+// (dark on prod). Each ships behind its own flag, gated by its red→green guardrails. STEP-0 (the allergen
+// single-source safety fix) is UNCONDITIONAL and independent of these.
+//  - CHARACTERISTICS_ENABLED: L1 taste (already live) + L2 descriptive band (allowlist EMPTY → dormant).
+//  - COMPARISON_ENABLED: affordance-only 2-dish compare (no long-press, FB-M4); arrows only price/prep (#11).
+//  - FILTER_LENSES_ENABLED: non-allergen sort/filter lenses; no-bom dishes in an explicit "no data" bucket (#15).
+const CHARACTERISTICS_ENABLED = (import.meta as any).env?.VITE_MENU_CHARACTERISTICS_ENABLED === 'true';
+const COMPARISON_ENABLED = (import.meta as any).env?.VITE_MENU_CHARACTERISTICS_COMPARISON === 'true';
+const FILTER_LENSES_ENABLED = (import.meta as any).env?.VITE_MENU_CHARACTERISTICS_FILTER === 'true';
 
 interface ProductModifier {
   id: string;
@@ -136,8 +148,23 @@ export function MenuPage() {
   // — the card unit + comparison). PRESENCE-only, conservative declared∪recipe union (council STEP-0 / #12).
   const allergenSurfaceOf = (p: Product) => computeAllergenSurface((p as any).attributes, recipeAllergens(p));
 
+  // Compare input — allergens ride recipeAllergens() into compareDishes → computeAllergenSurface (the single
+  // source, #12). Never reads bomToNutrition().allergens.
+  const toCompareInput = (p: Product): CompareDishInput => ({
+    id: p.id,
+    name: p.name,
+    price: p.price,
+    prepTimeMinutes: p.prep_time_minutes ?? null,
+    taste: (getAttr(p, 'taste') as Record<string, number>) || null,
+    attributes: (p as any).attributes,
+    bomAllergens: recipeAllergens(p),
+  });
+  const toggleCompare = (id: string) => setCompareIds(prev =>
+    prev.includes(id) ? prev.filter(x => x !== id) : prev.length >= 2 ? prev : [...prev, id]);
+
   const CHEF_PICKS_ID = '__chefs_picks__';
   const SORTED_FLAT_ID = '__sorted_flat__';
+  const NO_MACRO_DATA_ID = '__no_macro_data__';
 
   const MIN_SKELETON_DWELL = 300;
 
@@ -158,6 +185,11 @@ export function MenuPage() {
   // Rich media for the open product, lazily fetched on modal open. Empty = fall back to the
   // single image / gradient (today's behaviour). Server returns [] when the feature is gated off.
   const [detailMedia, setDetailMedia] = useState<ProductMedia[]>([]);
+  // Compare (council §8.2) — up to TWO dish ids selected via a visible affordance; ephemeral, not persisted.
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [compareOpen, setCompareOpen] = useState(false);
+  // Macro filter/sort lens (council §8.3) — ephemeral, not persisted. 'none' = off.
+  const [macroLens, setMacroLens] = useState<'none' | MacroLens>('none');
   const menuPrefsKey = `dos_menu_prefs_${slug}`;
   const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc' | 'name'>(() => {
     try {
@@ -190,6 +222,13 @@ export function MenuPage() {
   }, [menuPrefsKey, sortBy, filterAllergen, searchQuery]);
 
   const categories = data;
+
+  // Resolve the selected compare ids → products (order preserved). Drops ids that vanished from the menu.
+  const compareProducts = useMemo(() => {
+    const byId = new Map<string, Product>();
+    for (const cat of data) for (const p of cat.products) byId.set(p.id, p);
+    return compareIds.map(id => byId.get(id)).filter(Boolean) as Product[];
+  }, [data, compareIds]);
 
   const chefPicksCategory = useMemo((): MenuCategory | null => {
     const picks: Product[] = [];
@@ -226,13 +265,28 @@ export function MenuPage() {
     } else if (selectedCategory) {
       result = result.filter(p => p._catId === selectedCategory);
     }
-    if (sortBy === 'default' && !searchQuery && !filterAllergen && !selectedCategory) return categories;
+    const macroLensActive = FILTER_LENSES_ENABLED && macroLens !== 'none';
+    if (sortBy === 'default' && !searchQuery && !filterAllergen && !selectedCategory && !macroLensActive) return categories;
 
     // An active search/sort/filter that matches nothing must yield ZERO sections — never a
     // bare "All items" heading over blank space. Returning [] here lets the single empty-state
     // branch below fire for every path (the sorted-flat branch would otherwise emit one empty
     // category, hiding the empty-state).
     if (result.length === 0) return [];
+
+    // Macro lens (council §8.3 / #15): a GLOBAL numeric order over a raw macro, with no-bom dishes pulled
+    // into an EXPLICIT "no data" group (never ranked as 0). Takes precedence over the price/name sort.
+    if (macroLensActive) {
+      const items = result.map(p => {
+        const n = bomToNutrition(p);
+        const bom = getAttr(p, 'bom');
+        return { p, hasData: Array.isArray(bom) && bom.length > 0, kcal: n.kcal, protein: n.protein };
+      });
+      const { ranked, noData } = partitionByMacroLens(items, macroLens as MacroLens);
+      const sections: MenuCategory[] = [{ id: SORTED_FLAT_ID, name: t('client.all_items', 'All items'), sort_order: 0, products: ranked.map(i => i.p) }];
+      if (noData.length) sections.push({ id: NO_MACRO_DATA_ID, name: t('filter.no_nutrition_data', 'Nutrition not provided'), sort_order: 1, products: noData.map(i => i.p) });
+      return sections;
+    }
 
     // A non-default sort is a GLOBAL order ("cheapest first" etc.). Re-bucketing the
     // sorted list back into categories breaks monotonicity (each category restarts the
@@ -258,7 +312,7 @@ export function MenuPage() {
       else groups.push({ id: p._catId, name: p._catName, sort_order: 0, products: [p] });
     }
     return groups;
-  }, [categories, sortBy, filterAllergen, searchQuery, selectedCategory, t]);
+  }, [categories, sortBy, filterAllergen, searchQuery, selectedCategory, macroLens, t]);
 
   const allAllergens = useMemo(() => {
     const set = new Set<string>();
@@ -702,6 +756,34 @@ export function MenuPage() {
                 </motion.button>
               );
             })()}
+            {FILTER_LENSES_ENABLED && (
+            <span style={{ display: 'contents' }} data-testid="macro-lens">
+              {([
+                { lens: 'protein-desc' as const, label: t('filter.lens_protein_desc', 'Most protein'), tid: 'macro-lens-protein' },
+                { lens: 'kcal-asc' as const, label: t('filter.lens_kcal_asc', 'Calories: low to high'), tid: 'macro-lens-kcal' },
+              ]).map(({ lens, label, tid }) => {
+                const active = macroLens === lens;
+                return (
+                  <motion.button
+                    key={lens}
+                    data-testid={tid}
+                    onClick={() => setMacroLens(active ? 'none' : lens)}
+                    whileTap={prefersReduced ? undefined : { scale: 0.95 }}
+                    aria-pressed={active}
+                    className="px-3 h-9 rounded-full text-step-2xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]"
+                    style={{
+                      background: active ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
+                      color: active ? 'color-mix(in srgb, var(--brand-bg) 86%, #000)' : 'var(--brand-text-muted)',
+                      fontWeight: active ? 700 : 500,
+                    }}
+                  >
+                    <i className="ti ti-flask" style={{ fontSize: '0.8rem' }} aria-hidden="true" />
+                    <span>{label}</span>
+                  </motion.button>
+                );
+              })}
+            </span>
+            )}
             {ALLERGEN_FILTER_ENABLED && (
             // display:contents — the wrapper carries the testid without altering the flex toolbar layout.
             <span style={{ display: 'contents' }} data-testid="allergen-filter-chips">
@@ -866,10 +948,36 @@ export function MenuPage() {
                   return (
                   <motion.div
                     key={product.id}
+                    className="relative"
                     variants={prefersReduced
                       ? { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0 } } }
                       : { hidden: { opacity: 0, transform: 'translateY(6px)' }, visible: { opacity: 1, transform: 'translateY(0px)', transition: { duration: 0.18, ease: ease.out } } }}
                   >
+                    {COMPARISON_ENABLED && (() => {
+                      const picked = compareIds.includes(product.id);
+                      const full = compareIds.length >= 2 && !picked;
+                      return (
+                        <button
+                          type="button"
+                          data-testid="compare-toggle"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (!full) toggleCompare(product.id); }}
+                          disabled={full}
+                          aria-pressed={picked}
+                          aria-label={picked ? t('compare.remove', 'Remove from compare') : t('compare.add', 'Add to compare')}
+                          title={picked ? t('compare.remove', 'Remove from compare') : t('compare.add', 'Add to compare')}
+                          className="absolute top-1.5 left-1.5 z-10 min-w-[30px] min-h-[30px] flex items-center justify-center rounded-full border outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]"
+                          style={{
+                            background: picked ? 'var(--brand-primary)' : 'color-mix(in srgb, var(--brand-bg) 82%, transparent)',
+                            color: picked ? 'color-mix(in srgb, var(--brand-bg) 86%, #000)' : 'var(--brand-text)',
+                            borderColor: picked ? 'var(--brand-primary)' : 'var(--brand-border)',
+                            opacity: full ? 0.35 : 1,
+                            backdropFilter: 'blur(4px)',
+                          }}
+                        >
+                          <i className={picked ? 'ti ti-check' : 'ti ti-arrows-left-right'} style={{ fontSize: '0.85rem' }} aria-hidden="true" />
+                        </button>
+                      );
+                    })()}
                     <ProductCard product={{
                       id: product.id,
                       name: product.name,
@@ -910,6 +1018,40 @@ export function MenuPage() {
           })
         )}
        </main>
+
+      {/* Compare — floating selection bar (1–2 chosen) + the panel. Affordance-only (no long-press, FB-M4). */}
+      {COMPARISON_ENABLED && compareIds.length > 0 && !compareOpen && !detailProduct && (
+        <motion.div
+          className="fixed left-1/2 -translate-x-1/2 z-sticky w-[calc(100%-2rem)] max-w-md rounded-full shadow-lg flex items-center justify-between gap-2 px-3 py-2"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5.5rem)', background: 'var(--brand-surface-raised)', border: '1px solid var(--brand-border)' }}
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}
+          data-testid="compare-bar"
+        >
+          <button type="button" onClick={() => setCompareIds([])} className="text-step-2xs font-medium px-2 py-1" style={{ color: 'var(--brand-text-muted)' }} aria-label={t('compare.exit', 'Done')}>
+            <i className="ti ti-x" aria-hidden="true" /> {compareIds.length}/2
+          </button>
+          <span className="text-step-2xs flex-1 text-center" style={{ color: 'var(--brand-text-muted)' }}>{compareIds.length < 2 ? t('compare.pick_two', 'Pick 2 dishes to compare') : ''}</span>
+          <button
+            type="button"
+            data-testid="compare-open"
+            onClick={() => setCompareOpen(true)}
+            disabled={compareIds.length < 2}
+            className="text-step-2xs font-bold px-4 h-9 rounded-full disabled:opacity-40"
+            style={{ background: 'var(--brand-primary)', color: 'color-mix(in srgb, var(--brand-bg) 86%, #000)' }}
+          >
+            {t('compare.cta', 'Compare')}
+          </button>
+        </motion.div>
+      )}
+      <AnimatePresence>
+      {COMPARISON_ENABLED && compareOpen && compareProducts[0] && compareProducts[1] && (
+        <MenuComparePanel
+          a={toCompareInput(compareProducts[0])}
+          b={toCompareInput(compareProducts[1])}
+          onClose={() => setCompareOpen(false)}
+        />
+      )}
+      </AnimatePresence>
 
       {/* Product Detail Modal — z-modal sits above the sticky cart bar (z-sticky)
           so the two never stack; body scroll is locked while it's open. */}
