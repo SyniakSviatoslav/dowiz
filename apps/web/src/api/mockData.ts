@@ -386,7 +386,6 @@ export const MOCK: Record<string, Handler> = {
     ],
   }),
   'GET /owner/customers': () => ({ customers: CUSTOMERS }),
-  'POST /owner/customers/:id/reveal-contact': () => ({ phone: '+355 69 876 543', name: 'Sara Mancini' }),
   'GET /owner/settings': () => SN_LOCATION,
   'PATCH /owner/settings': () => ({ ok: true }),
   'POST /owner/onboarding': () => ({ ok: true, locationId: 'loc_new', slug: 'new-restaurant' }),

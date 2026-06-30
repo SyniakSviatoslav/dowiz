@@ -109,8 +109,8 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
       params = { location: String(paramValue) };
     } else if (selectedPreset.paramType === 'action' && paramValue) {
       params = { action: String(paramValue) };
-    } else if (selectedPreset.paramType === 'amount') {
-      params = {};
+    } else if (selectedPreset.paramType === 'amount' && paramValue) {
+      params = { amount: Number(paramValue) };
     }
 
     onSend(selectedPreset.key, params);
@@ -181,9 +181,14 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
                   key={preset.key}
                   type="button"
                   onClick={() => {
-                    setSelectedPreset(preset);
-                    if (!preset.paramType) {
+                    // A chip WITHOUT a param sends exactly once and opens no confirm bar.
+                    // Only a chip WITH a paramType opens the param-picker/confirm step.
+                    if (preset.paramType) {
+                      setSelectedPreset(preset);
+                    } else {
                       onSend(preset.key, {});
+                      setSelectedPreset(null);
+                      setParamValue('');
                     }
                   }}
                   className="px-3 py-1.5 min-h-[36px] text-xs rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-text)] transition-[background-color,color,border-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:bg-[var(--brand-primary)] hover:text-white hover:border-[var(--brand-primary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
@@ -197,7 +202,19 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
             </div>
           ) : (
             <div className="space-y-2">
-              {selectedPreset.paramType && (
+              {selectedPreset.paramType === 'amount' && (
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={1}
+                  value={paramValue}
+                  onChange={(e) => setParamValue(e.target.value)}
+                  placeholder={t('message.amount_placeholder', 'Amount')}
+                  className="w-full px-3 py-1.5 min-h-[36px] text-sm rounded-[var(--brand-radius)] border border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-text)] transition-[border-color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+                />
+              )}
+              {selectedPreset.paramType && selectedPreset.paramType !== 'amount' && (
                 <div className="flex flex-wrap gap-2">
                   {selectedPreset.paramOptions?.map((opt) => (
                     <button
@@ -224,7 +241,13 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
                 <button
                   type="button"
                   onClick={handleSend}
-                  disabled={selectedPreset.paramType ? !paramValue : false}
+                  disabled={
+                    selectedPreset.paramType === 'amount'
+                      ? !(Number(paramValue) > 0)
+                      : selectedPreset.paramType
+                        ? !paramValue
+                        : false
+                  }
                   className="flex-1 min-h-[44px] px-3 py-2 text-sm rounded-[var(--brand-radius)] bg-[var(--brand-primary)] text-[var(--brand-bg)] font-medium transition-[opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:active:scale-100"
                 >
                   {t('message.send', 'Send')}
