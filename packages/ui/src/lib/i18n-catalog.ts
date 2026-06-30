@@ -4051,4 +4051,20 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Zgjidh një kanal…',
     uk: 'Оберіть канал…',
   },
+  'checkout.pay_cash': {
+    en: 'Cash on delivery',
+    sq: 'Para në dorëzim',
+    uk: 'Готівка при доставці',
+  },
+  'checkout.pay_crypto': { en: 'Pay with crypto', sq: 'Paguaj me kripto', uk: 'Оплата криптою' },
+  'checkout.crypto_irreversible_title': {
+    en: 'Crypto payments are final',
+    sq: 'Pagesat me kripto janë përfundimtare',
+    uk: 'Криптоплатежі незворотні',
+  },
+  'checkout.crypto_irreversible_body': {
+    en: "Once confirmed on the blockchain, a crypto payment cannot be reversed. If your order is cancelled or undelivered, the venue refunds you manually to your wallet within 3 business days. You'll pay in USDT or USDC on a secure page.",
+    sq: 'Pasi konfirmohet në blockchain, pagesa me kripto nuk mund të kthehet. Nëse porosia anulohet ose nuk dorëzohet, lokali ju kthen manualisht në portofol brenda 3 ditëve pune. Do të paguani me USDT ose USDC në një faqe të sigurt.',
+    uk: 'Після підтвердження в блокчейні криптоплатіж не можна скасувати. Якщо замовлення скасовано або не доставлено, заклад повертає кошти вручну на ваш гаманець протягом 3 робочих днів. Ви платитимете USDT або USDC на захищеній сторінці.',
+  },
 };
