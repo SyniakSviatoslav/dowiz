@@ -202,10 +202,13 @@
   --z-modal: 400;
   --z-toast: 500;
 
-  /* ── Data-viz series (nutrition macros, charts) — categorical, brand-independent ── */
-  --chart-protein: #3b82f6; /* blue */
-  --chart-carbs:   #22c55e; /* green */
-  --chart-fat:     #f59e0b; /* amber */
+  /* ── Data-viz series (nutrition macros, charts) — categorical, brand-independent ──
+     Muted, desaturated trio (not the old Tailwind-500 brights): they sit calmly on the warm
+     storefront instead of clashing, while staying distinct (slate-blue / sage / honey) and legible
+     as small bars + glyphs on both light (cream) and dark surfaces. */
+  --chart-protein: #6f8fae; /* muted slate-blue */
+  --chart-carbs:   #7da583; /* muted sage green */
+  --chart-fat:     #c9a05f; /* muted honey/amber */
 }
 
 /* ── Theme Presets ── */
