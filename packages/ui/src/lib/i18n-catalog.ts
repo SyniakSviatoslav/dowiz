@@ -4046,4 +4046,9 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Këtë ia japim korrierit vetëm për dorëzimin, pastaj e fshijmë.',
     uk: 'Передаємо це курʼєру лише для доставки, потім видаляємо.',
   },
+  'checkout.communication_choose': {
+    en: 'Choose a channel…',
+    sq: 'Zgjidh një kanal…',
+    uk: 'Оберіть канал…',
+  },
 };

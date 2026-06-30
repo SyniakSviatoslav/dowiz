@@ -2,11 +2,11 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal, ease, duration, Textarea, estimateOrderTotal, type OrderTotalConfig } from '@deliveryos/ui';
+import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal, ease, duration, Textarea, Select, estimateOrderTotal, type OrderTotalConfig } from '@deliveryos/ui';
 import { CURRENCIES } from '@deliveryos/shared-types';
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_REGEX } from '@deliveryos/shared-types';
-import { MESSENGER_KINDS, messengerLabel, messengerIcon, messengerInputType, messengerIsPhone } from '../../lib/messenger.js';
+import { MESSENGER_KINDS, messengerLabel, messengerInputType, messengerIsPhone } from '../../lib/messenger.js';
 import { apiClient } from '../../lib/index.js';
 import { DishStats } from '../../components/client/DishStats.js';
 import { z } from 'zod';
@@ -98,105 +98,6 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 type DeliveryType = 'delivery' | 'pickup' | 'scheduled';
-
-interface MacroData { label: string; grams: number; color: string; kcalPer: number }
-function NutritionRing({ kcal, protein, fat, carbs }: { kcal: number; protein: number; fat: number; carbs: number }) {
-  const { t } = useI18n();
-  const prefersReducedMotion = useReducedMotion();
-  const CX = 52, R = 38, SW = 10;
-  const macros: MacroData[] = [
-    { label: t('nutrition.protein', 'Protein'), grams: protein, color: 'var(--chart-protein)', kcalPer: 4 },
-    { label: t('nutrition.carbs', 'Carbs'),     grams: carbs,   color: 'var(--chart-carbs)',   kcalPer: 4 },
-    { label: t('nutrition.fat', 'Fat'),         grams: fat,     color: 'var(--chart-fat)',     kcalPer: 9 },
-  ];
-  const totalEnergy = macros.reduce((s, m) => s + m.grams * m.kcalPer, 0);
-  let cumulative = 0;
-  const arcs = macros
-    .filter(m => m.grams > 0)
-    .map(m => {
-      const fraction = (m.grams * m.kcalPer) / totalEnergy;
-      const startOffset = cumulative;
-      cumulative += fraction;
-      return { ...m, fraction, startOffset };
-    });
-  const hasMacros = arcs.length > 0;
-  return (
-    <motion.div
-      initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-40px' }}
-      transition={{ duration: 0.35, ease: ease.out }}
-      className="rounded-[var(--brand-radius)] p-4 border"
-      style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}
-    >
-      <p className="text-step-2xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--brand-text-muted)' }}>
-        <i className="ti ti-flame mr-1" aria-hidden="true" />{t('checkout.order_nutrition', 'Order Nutrition')}
-      </p>
-      <div className="flex items-center gap-5">
-        <div className="relative shrink-0" style={{ width: CX * 2, height: CX * 2 }}>
-          <svg width={CX * 2} height={CX * 2} viewBox={`0 0 ${CX * 2} ${CX * 2}`} aria-hidden="true" style={{ transform: 'rotate(-90deg)' }}>
-            <circle cx={CX} cy={CX} r={R} fill="none" stroke="var(--brand-border)" strokeWidth={SW} />
-            {hasMacros ? arcs.map((arc, i) => (
-              <motion.circle
-                key={arc.label}
-                cx={CX} cy={CX} r={R}
-                fill="none"
-                stroke={arc.color}
-                strokeWidth={SW}
-                strokeLinecap="butt"
-                initial={{ pathLength: 0, pathOffset: arc.startOffset }}
-                animate={{ pathLength: arc.fraction, pathOffset: arc.startOffset }}
-                transition={{ duration: 0.9, delay: 0.15 + i * 0.18, ease: ease.out }}
-              />
-            )) : (
-              <motion.circle
-                cx={CX} cy={CX} r={R}
-                fill="none"
-                stroke="var(--brand-primary)"
-                strokeWidth={SW}
-                strokeLinecap="round"
-                initial={{ pathLength: 0, pathOffset: 0 }}
-                animate={{ pathLength: 0.78, pathOffset: 0 }}
-                transition={{ duration: 1.1, ease: ease.out }}
-              />
-            )}
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <motion.span
-              className="text-step-lg font-bold leading-none"
-              style={{ color: 'var(--brand-text)' }}
-              initial={{ opacity: 0, scale: 0.7 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.55, type: 'spring', stiffness: 220, damping: 18 }}
-            >
-              {Math.round(kcal)}
-            </motion.span>
-            <span className="text-step-2xs uppercase tracking-widest mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>kcal</span>
-          </div>
-        </div>
-        <div className="flex-1 space-y-2.5">
-          {hasMacros ? macros.filter(m => m.grams > 0).map((m, i) => (
-            <motion.div
-              key={m.label}
-              className="flex items-center gap-2"
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.35 + i * 0.1 }}
-            >
-              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: m.color }} />
-              <span className="text-step-xs flex-1" style={{ color: 'var(--brand-text-muted)' }}>{m.label}</span>
-              <span className="text-step-sm font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{Math.round(m.grams)}g</span>
-            </motion.div>
-          )) : (
-            <motion.p className="text-step-xs" style={{ color: 'var(--brand-text-muted)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
-              ~{Math.round(kcal)} kcal total
-            </motion.p>
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
 
 // §1 flow-simplification: CheckoutPage renders BOTH as the /checkout route (legacy/no-JS) and inside the
 // bottom-sheet over the menu (the primary flow). In sheet mode, `onClose` is provided so Back / empty-state
@@ -817,20 +718,16 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
                 {t('checkout.communication', 'Communication')} <span aria-hidden="true" style={{ color: 'var(--color-danger)' }}>*</span>
               </label>
               <p className="text-step-2xs mb-2" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.communication_why', 'The courier will message you about your order.')}</p>
-              <div role="radiogroup" aria-label={t('checkout.communication', 'Communication')} className="grid grid-cols-3 gap-2" data-testid="checkout-communication">
-                {MESSENGER_KINDS.map(k => {
-                  const active = messengerKind === k;
-                  return (
-                    <button key={k} type="button" role="radio" aria-checked={active} data-testid={`comm-kind-${k}`}
-                      onClick={() => { setMessengerKind(k); setMessengerHandle(''); setPhone(''); setPhoneError(''); setCommError(''); }}
-                      className="flex items-center gap-2 h-[44px] px-3 rounded-[var(--brand-radius-sm)] border text-step-xs font-semibold transition-[background-color,box-shadow,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]"
-                      style={{ background: active ? 'var(--brand-primary)' : 'var(--brand-surface-raised)', borderColor: active ? 'var(--brand-primary)' : 'var(--brand-border)', color: active ? 'var(--brand-primary-readable, #fff)' : 'var(--brand-text)' }}>
-                      <i className={messengerIcon(k)} aria-hidden="true" />
-                      <span className="truncate">{messengerLabel(k)}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <Select
+                value={messengerKind}
+                onChange={e => { setMessengerKind(e.target.value); setMessengerHandle(''); setPhone(''); setPhoneError(''); setCommError(''); }}
+                data-testid="checkout-communication"
+                aria-label={t('checkout.communication', 'Communication')}>
+                <option value="" disabled>{t('checkout.communication_choose', 'Choose a channel…')}</option>
+                {MESSENGER_KINDS.map(k => (
+                  <option key={k} value={k}>{messengerLabel(k)}</option>
+                ))}
+              </Select>
               {messengerKind && (
                 <div className="relative mt-2">
                   {messengerIsPhone(messengerKind) && <i className="ti ti-phone absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />}
@@ -857,24 +754,22 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
               {!sameReceiver && (
                 <div className="mt-3 space-y-2 rounded-[var(--brand-radius-sm)] border p-3" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)' }} data-testid="receiver-fields">
                   <input value={receiverName} onChange={e => { setReceiverName(e.target.value); setCommError(''); }} placeholder={t('checkout.receiver_name', 'Receiver’s name')} data-testid="receiver-name"
-                    className="w-full h-[44px] px-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                  <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t('checkout.communication', 'Communication')}>
-                    {MESSENGER_KINDS.map(k => {
-                      const active = receiverKind === k;
-                      return (
-                        <button key={k} type="button" role="radio" aria-checked={active} onClick={() => { setReceiverKind(k); setReceiverHandle(''); setCommError(''); }} data-testid={`receiver-kind-${k}`}
-                          className="inline-flex items-center gap-1 h-[36px] px-2.5 rounded-[var(--brand-radius-sm)] border text-step-2xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]"
-                          style={{ background: active ? 'var(--brand-primary)' : 'var(--brand-surface)', borderColor: active ? 'var(--brand-primary)' : 'var(--brand-border)', color: active ? 'var(--brand-primary-readable, #fff)' : 'var(--brand-text)' }}>
-                          <i className={messengerIcon(k)} aria-hidden="true" /><span>{messengerLabel(k)}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                    className="w-full h-[48px] px-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                  <Select
+                    value={receiverKind}
+                    onChange={e => { setReceiverKind(e.target.value); setReceiverHandle(''); setCommError(''); }}
+                    data-testid="receiver-communication"
+                    aria-label={t('checkout.communication', 'Communication')}>
+                    <option value="" disabled>{t('checkout.communication_choose', 'Choose a channel…')}</option>
+                    {MESSENGER_KINDS.map(k => (
+                      <option key={k} value={k}>{messengerLabel(k)}</option>
+                    ))}
+                  </Select>
                   {receiverKind && (
                     <input value={receiverHandle} onChange={e => { setReceiverHandle(e.target.value); setCommError(''); }}
                       type={messengerIsPhone(receiverKind) ? 'tel' : 'text'} data-testid="receiver-handle"
                       placeholder={messengerInputType(receiverKind) === 'phone' ? '+355 6X XXX XXXX' : messengerInputType(receiverKind) === 'username' ? '@username' : t('checkout.simplex_placeholder', 'Paste your SimpleX invite link')}
-                      className="w-full h-[44px] px-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                      className="w-full h-[48px] px-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                   )}
                   <p className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.receiver_privacy', 'We share this contact with the courier only to deliver this order, then delete it.')}</p>
                 </div>
@@ -988,7 +883,7 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
                 {instructionOption && (
                   <div className="relative">
                     <i className="ti ti-edit absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                    <input value={instructionCustom} onChange={e => setInstructionCustom(e.target.value)} placeholder={t('checkout.extra_notes', 'Extra notes...')} className="w-full h-[44px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                    <input value={instructionCustom} onChange={e => setInstructionCustom(e.target.value)} placeholder={t('checkout.extra_notes', 'Extra notes...')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
                   </div>
                 )}
               </div>
@@ -1055,7 +950,7 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
                     min={total}
                     value={cashAmount || ''}
                     onChange={e => setCashAmount(parseInt(e.target.value) || 0)}
-                    className="w-full h-[44px] pl-11 pr-3 outline-none text-step-sm font-bold border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]"
+                    className="w-full h-[48px] pl-11 pr-3 outline-none text-step-sm font-bold border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]"
                     style={{ background: 'var(--brand-surface)', borderColor: cashAmount > 0 && cashAmount < total ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }}
                     placeholder={String(total)}
                   />
@@ -1075,7 +970,7 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
                     value={tipAmount || ''}
                     data-testid="checkout-tip"
                     onChange={e => setTipAmount(Math.min(1000000, Math.max(0, parseInt(e.target.value) || 0)))}
-                    className="w-full h-[44px] pl-11 pr-3 outline-none text-step-sm font-bold border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]"
+                    className="w-full h-[48px] pl-11 pr-3 outline-none text-step-sm font-bold border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]"
                     style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
                     placeholder="0"
                   />
@@ -1097,15 +992,6 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
             </div>
           </div>
         </motion.div>
-
-        {hasNutrition && (
-          <NutritionRing
-            kcal={nutritionTotal.kcal}
-            protein={nutritionTotal.protein}
-            fat={nutritionTotal.fat}
-            carbs={nutritionTotal.carbs}
-          />
-        )}
 
         <motion.div
           initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}

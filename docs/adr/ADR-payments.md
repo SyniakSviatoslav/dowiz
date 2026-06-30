@@ -1,8 +1,13 @@
-# ADR — Payments (card · cash · crypto)
+# ADR-0017 — Payments (crypto-first, non-custodial · Plisio); cash unchanged; card deferred
 
-- **Status:** 🟡 **DRAFT — decision pending Triadic Council** (design-time; NO production code, NO migrations)
+- **Status:** 🟢 **APPROVED** (Triadic Council converged + RESOLVE round + operator decisions 2026-06-30).
+  Build **schema-rich / runtime-minimal, DARK** behind `PAYMENTS_PREPAID_ENABLED` + `PAYMENTS_CRYPTO_ENABLED`
+  (both default OFF). The launch flip is gated on the residual NEEDS-HUMAN below. Design-time artifact — code
+  + migrations are a separate, operator-gated act under Ship Discipline.
 - **Date:** 2026-06-30
 - **Red-line:** 🔴 MONEY · 🔴 RLS · 🔴 MIGRATION (forward-only) · 🔴 PCI (no PAN on our servers)
+- **Resolution:** `docs/design/payments/resolution.md` § "RESOLVE round (Plisio, crypto-first)" (the
+  build-ready C1/C2/C3 + H1/H2/H3 + crypto-specific resolutions; this ADR records the decisions).
 - **Proposal:** `docs/design/payments/proposal.md`
 - **Research:** `docs/design/payments/research.md`
 - **Bound by / extends:** `ADR-deliver-v2-cash-as-proof.md` (the cash-as-proof completion + `'hold'`
@@ -20,12 +25,21 @@ spine is cash-as-proof (`deliveryCompletion.ts`). Adding card/crypto **forks** t
 **prepaid** (paid before fulfillment) vs **pay-on-delivery** (today's cash). The undecided fact is the
 **Albania acquirer/PSP** (NEEDS-HUMAN) — the architecture must keep that choice un-baked behind one port.
 
-## Decision (DRAFT — to be ratified/amended by council)
+## Operator decision (RESOLVE round, ratified)
 
-1. **Provider-agnostic `PaymentProvider` port** (auth/capture/refund/verify-webhook) with adapters:
+**Crypto-first, non-custodial, provider = Plisio** (hosted non-custodial, funds **direct to the merchant
+wallet**, **USDT-TRC20 + USDC**, **stablecoin-only**, signature-verified HMAC webhook). **Card deferred**
+(`AlbaniaHppAdapter` designed-but-unbuilt; NH-1 acquirer open for a later round). `PAYMENTS_PROVIDER=plisio`
+selects `CryptoNonCustodialAdapter` behind the unchanged port. Crypto is the **first** prepaid rail, so the
+Counsel crypto-STOP (irreversibility disclosure + written refund SLA) is **live** and gates the launch flip.
+
+## Decision (APPROVED)
+
+1. **Provider-agnostic `PaymentProvider` port** (createCharge/capture/refund/verify-webhook) with adapters:
    `CashAdapter` (no-op; money truth stays in `courier_cash_ledger`), `AlbaniaHppAdapter`
-   (SAQ-A redirect/HPP), `CryptoNonCustodialAdapter` (non-custodial, awaiting-confirmation). Provider
-   vocabulary never leaks past `parseEvent`. **Acquirer choice is not baked in.**
+   (SAQ-A redirect/HPP — **deferred, unbuilt**), `CryptoNonCustodialAdapter` (**Plisio**, non-custodial,
+   awaiting-confirmation; `refund` = **UNSUPPORTED** → manual owner-review). Provider vocabulary never leaks
+   past `parseEvent`. **Acquirer choice is not baked in.**
 2. **`payment_status` state machine decoupled from `order_status`:**
    `unpaid → pending → authorized → paid → refunded` (+ `failed`). **COD stays `unpaid`** (cash spine
    authoritative, unchanged). **Prepaid** drives the full machine; fulfillment is **gated** on payment
@@ -55,14 +69,34 @@ our servers** (SAQ-A) · **cash-as-proof spine and `'hold'` primitive untouched*
 NO-COURIER-SCORING intact · webhook-as-SoT + insert-wins idempotency · claim-check (no PII/PAN in
 `payment_events.payload`) · no new connection pool / pg-boss queue (ADR-0001 budget).
 
-## Open / NEEDS-HUMAN (see proposal §10)
+## Resolved (RESOLVE round → resolution.md)
 
-- **OPEN-1** prepaid completion outcome (distinct from cash `paid_full`; carries money red-line).
-- **OPEN-2** prepaid refund trigger on refused/cancelled-on-door tail.
-- **OPEN-3** prepaid courier "collect nothing" screen + delivery-fee/tip handling.
-- **NH-1 (GATING)** Albania acquirer/PSP · **NH-2** capture policy · **NH-3** crypto stance ·
-  **NH-4** refund policy + fee bearer + irreversible-crypto workflow · **NH-5** Albania legal/tax/AML/
-  e-invoice · **NH-6** v1 scope confirmation.
+- **OPEN-1 / C1 — RESOLVED.** `delivered_prepaid` outcome in `completeDelivery`: skips the cash assert, writes
+  **no** courier `'hold'`; precondition `orders.payment_status='paid'` (409 `PREPAID_NOT_PAID` otherwise).
+  Cash path untouched.
+- **OPEN-2 / C2 — RESOLVED (reframed for irreversible crypto).** No auto provider refund. Refused/cancelled
+  tail appends a `payment_events('refund_due')` **owner-review obligation**; owner sends crypto back
+  out-of-band then records `refund_sent` → `refunded` (sticky). Unifies with Stage-21 NO-AUTO-DEDUCT.
+- **OPEN-3 — RESOLVED.** Prepaid courier screen = "PAID — hand over, collect nothing"; the immutable
+  `delivery_trace` (`payment_outcome='delivered_prepaid'`) is the dignified proof-of-handover (Counsel §5).
+  No courier till-debt; delivery-fee/tip bundling (Stage-21 NH#2) unaffected.
+- **C3 — RESOLVED.** Plisio HMAC-verified webhook; tenant via SECURITY DEFINER `payment_location_by_provider_ref`
+  → `set_config('app.current_tenant')`; RLS policy admits **both** member reads **and** the GUC writer
+  (`WITH CHECK` on `app.current_tenant`); insert-wins `UNIQUE(provider,provider_payment_id,type)`. **Depends on
+  B3 (NOBYPASSRLS+GUC)** — stated, not bypassed.
+- **H1/H2/H3 — RESOLVED.** Minute-cadence advisory-lock poll for `pending` prepaid (no new pool/queue);
+  status-guarded monotonic terminal states; Plisio HTTP never holds an operational-pool connection.
+- **NH-1 acquirer / NH-2 capture / NH-3 crypto stance / NH-6 scope — DECIDED by operator** (crypto-first,
+  non-custodial Plisio, stablecoin-only, card deferred).
+
+## Residual NEEDS-HUMAN (launch-gate, not build blockers)
+
+- **NH-RES-1** off-ramp (USDT-TRC20 Binance P2P / USDC regulated rail) — merchant treasury op, gates cash-out.
+- **NH-RES-2** refund-SLA copy + value of **Y** + irreversibility disclosure copy — gates the
+  `PAYMENTS_CRYPTO_ENABLED` flip (Counsel ETHICAL-STOP-1).
+- **NH-RES-3** non-custodial wallet-key custody procedure (backup / multisig / hardware) — gates launch.
+- **Carried:** NH-5 Albania legal/tax/AML/e-invoice for crypto (gating a real consumer launch);
+  NH-1 acquirer reopens for the deferred card round.
 
 ## Consequences
 
@@ -75,5 +109,8 @@ advisory-lock cron, Stage-21 contra) — zero new pools/queues.
 denormalized mirror that can drift (bounded by webhook-only-writer + reconciliation); enum values are
 forward-only/irreversible (additive only); FORCE-RLS is defense-in-depth until B3 NOBYPASSRLS lands.
 
-**Decision pending council.** This stub records the proposed shape; the council ratifies/amends, then the
-RESOLVE round addresses OPEN-1..3 and the human records NH-1..6 before any code.
+**APPROVED — build-ready, dark.** The council converged, the RESOLVE round (resolution.md) closed C1/C2/C3 +
+H1/H2/H3 + the crypto-specifics (await-confirmation, mismatch=owner-review, reorg/depeg/key-custody accepted
+or NEEDS-HUMAN), and the operator decided crypto-first / non-custodial Plisio / stablecoin-only / card
+deferred. The three residual NEEDS-HUMAN (NH-RES-1..3) gate the **flag flip to a real customer**, not the
+schema-rich/runtime-minimal build. Cash spine untouched; cash stays the default + failure-first floor.
