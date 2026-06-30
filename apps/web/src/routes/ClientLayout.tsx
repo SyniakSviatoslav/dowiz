@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher, SunlightToggle, PriceDisplay, useCurrency, derivePalette, isPaperSkinEnabled, paperSkinAttr, staggerChildren, listItem } from '@deliveryos/ui';
+import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher, PriceDisplay, useCurrency, derivePalette, isPaperSkinEnabled, paperSkinAttr, staggerChildren, listItem } from '@deliveryos/ui';
 import { formatMoney } from '@deliveryos/shared-types';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../lib/index.js';
@@ -150,7 +150,6 @@ function ClientLayoutInner() {
             {/* Persistent brand chrome — not the page <h1>; each route owns its own h1
                (menu hero, Checkout, Order) so the document has a single top heading. */}
             <div className="text-base font-bold flex-1 truncate" style={{ fontFamily: 'var(--brand-font-heading)' }}>{locationName || t('client.menu', 'Menu')}</div>
-            <SunlightToggle />
             <CurrencySwitcher />
             <LanguageSwitcher variant="full" allowed={supportedLocales} />
           </header>

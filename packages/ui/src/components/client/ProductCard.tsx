@@ -83,7 +83,6 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
           style={{ background: 'var(--brand-surface-raised)' }}
         >
           <motion.img
-            layoutId={`product-photo-${product.id}`}
             src={product.image}
             alt={product.name}
             className="w-full h-full object-cover"

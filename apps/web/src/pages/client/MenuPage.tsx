@@ -7,7 +7,6 @@ import type { ProductMedia } from '../../components/media/types';
 // business tier), so a storefront with no rich media downloads ~0 KB of these.
 const MediaGallery = lazy(() => import('../../components/media/MediaGallery').then(m => ({ default: m.MediaGallery })));
 const MediaRenderer = lazy(() => import('../../components/media').then(m => ({ default: m.MediaRenderer })));
-const RevealOverlay = lazy(() => import('../../components/media/RevealOverlay').then(m => ({ default: m.RevealOverlay })));
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput, computeAllergenSurface } from '@deliveryos/ui';
@@ -126,7 +125,6 @@ export function MenuPage() {
   // futile, so we show a "venue not found" state with an escape, not a retry button.
   const [notFound, setNotFound] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
-  const [activeTab, setActiveTab] = useState<string>('');
   const { addItem, bounceCart, reconcileToMenu } = useSharedCart();
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, string[]>>({});
@@ -136,7 +134,6 @@ export function MenuPage() {
   // Rich media for the open product, lazily fetched on modal open. Empty = fall back to the
   // single image / gradient (today's behaviour). Server returns [] when the feature is gated off.
   const [detailMedia, setDetailMedia] = useState<ProductMedia[]>([]);
-  const [revealDone, setRevealDone] = useState(false);
   const menuPrefsKey = `dos_menu_prefs_${slug}`;
   const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc' | 'name'>(() => {
     try {
@@ -159,6 +156,10 @@ export function MenuPage() {
       return typeof p?.searchQuery === 'string' ? p.searchQuery : '';
     } catch { return ''; }
   });
+  // Categories act as a single-select FILTER (owner directive): tapping a category
+  // narrows the menu to it; tapping "All" (or the same category again) clears it.
+  // Ephemeral — not persisted, so a fresh visit always shows the whole menu.
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   useEffect(() => {
     try { safeStorage.set(menuPrefsKey, JSON.stringify({ sortBy, filterAllergen, searchQuery })); } catch {}
@@ -192,7 +193,14 @@ export function MenuPage() {
     if (filterAllergen) {
       result = result.filter(p => bomToNutrition(p).allergens.includes(filterAllergen));
     }
-    if (sortBy === 'default' && !searchQuery && !filterAllergen) return categories;
+    // Category filter (single-select). Chef's Picks is a cross-category overlay, so it
+    // filters by the chef_pick attribute rather than a category id.
+    if (selectedCategory === CHEF_PICKS_ID) {
+      result = result.filter(p => (p as any).attributes?.chef_pick);
+    } else if (selectedCategory) {
+      result = result.filter(p => p._catId === selectedCategory);
+    }
+    if (sortBy === 'default' && !searchQuery && !filterAllergen && !selectedCategory) return categories;
 
     // An active search/sort/filter that matches nothing must yield ZERO sections — never a
     // bare "All items" heading over blank space. Returning [] here lets the single empty-state
@@ -211,7 +219,12 @@ export function MenuPage() {
       return [{ id: SORTED_FLAT_ID, name: t('client.all_items', 'All items'), sort_order: 0, products: sorted }];
     }
 
-    // sortBy === 'default' but a search/allergen filter is active → keep category grouping.
+    // Chef's Picks filter → one titled section (its products span real categories).
+    if (selectedCategory === CHEF_PICKS_ID) {
+      return [{ id: CHEF_PICKS_ID, name: t('client.chefs_picks', "Chef's Picks"), sort_order: 0, products: result }];
+    }
+
+    // sortBy === 'default' but a search/allergen/category filter is active → keep category grouping.
     const groups: MenuCategory[] = [];
     for (const p of result) {
       const g = groups.find(g => g.id === p._catId);
@@ -219,7 +232,7 @@ export function MenuPage() {
       else groups.push({ id: p._catId, name: p._catName, sort_order: 0, products: [p] });
     }
     return groups;
-  }, [categories, sortBy, filterAllergen, searchQuery, t]);
+  }, [categories, sortBy, filterAllergen, searchQuery, selectedCategory, t]);
 
   const allAllergens = useMemo(() => {
     const set = new Set<string>();
@@ -254,9 +267,6 @@ export function MenuPage() {
       setMenu(menuData);
       const cats = menuData.categories || [];
       setData(cats);
-      const hasChefPicks = cats.some(c => c.products.some(p => p.attributes?.chef_pick));
-      if (hasChefPicks) setActiveTab(CHEF_PICKS_ID);
-      else if (cats[0]) setActiveTab(cats[0].id);
     } catch (err) {
       console.error('[MenuPage] Failed to load menu:', err);
       setMenu(null);
@@ -303,6 +313,9 @@ export function MenuPage() {
   const isEmbed = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('embed') === 'true' || new URLSearchParams(window.location.search).get('activation') === '1');
   const [deliveryETA, setDeliveryETA] = useState<number | null>(null);
   const [geoStatus, setGeoStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+  // When the venue is closed the storefront stays fully browsable, but ordering is
+  // blocked: every add-to-cart path checks this flag and the CTA reflects it.
+  const isClosed = venueStatus === 'closed';
 
   useEffect(() => {
     if (!slug) return;
@@ -339,37 +352,14 @@ export function MenuPage() {
     );
   }, [locationInfo]);
 
-  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
-  useEffect(() => {
-    if (loading) return;
+  // Category tap = single-select filter. Toggling the active one (or "All" = null)
+  // clears it. Scroll the menu container back to the top so the narrowed list is
+  // visible from its start (avoids landing mid-page after the content shrinks).
+  const pickCategory = (id: string | null) => {
+    setSelectedCategory(prev => (prev === id ? null : id));
     const container = document.querySelector('.app-shell-main') as HTMLElement | null;
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) {
-          setActiveTab(entry.target.id);
-        }
-      }
-    }, {
-      root: container || null,
-      rootMargin: `-${stickyHeight + 8}px 0px -60% 0px`,
-    });
-
-    Object.values(sectionRefs.current).forEach(el => {
-      if (el) observer.observe(el);
-    });
-    return () => observer.disconnect();
-  }, [loading, categories, chefPicksCategory, stickyHeight]);
-
-  const handleScrollTo = (id: string) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    const container = document.querySelector('.app-shell-main') as HTMLElement | null;
-    if (container) {
-      const top = container.scrollTop + el.getBoundingClientRect().top - container.getBoundingClientRect().top - stickyHeight - 8;
-      container.scrollTo({ top, behavior: 'smooth' });
-    } else {
-      window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - scrollOffset, behavior: 'smooth' });
-    }
+    if (container) container.scrollTo({ top: 0, behavior: prefersReduced ? 'auto' : 'smooth' });
+    else window.scrollTo({ top: 0, behavior: prefersReduced ? 'auto' : 'smooth' });
   };
 
   const handleProductClick = (product: Product) => {
@@ -411,7 +401,6 @@ export function MenuPage() {
   // and the storefront is byte-identical to today.
   useEffect(() => {
     setDetailMedia([]);
-    setRevealDone(false);
     const pid = detailProduct?.id;
     if (!pid || !detailProduct?.primary_media_id || !slug) return;
     let cancelled = false;
@@ -507,7 +496,7 @@ export function MenuPage() {
   }, []);
 
   const handleAddDetail = () => {
-    if (!detailProduct || !detailProduct.available) return;
+    if (!detailProduct || !detailProduct.available || isClosed) return;
     addItem({
       id: makeCartItemId(detailProduct.id, modifierGroupSelection),
       productId: detailProduct.id,
@@ -523,7 +512,7 @@ export function MenuPage() {
   };
 
   const canAdd = (): boolean => {
-    if (!detailProduct || !detailProduct.available) return false;
+    if (!detailProduct || !detailProduct.available || isClosed) return false;
     const groups = detailProduct.modifier_groups || [];
     for (const g of groups) {
       if (!g.required) continue;
@@ -617,28 +606,28 @@ export function MenuPage() {
               </div>
             ) : (
               [
-                ...(chefPicksCategory ? [chefPicksCategory] : []),
-                ...categories,
+                { id: null as string | null, name: t('client.all', 'All'), count: categories.reduce((n, c) => n + c.products.filter(p => p.available).length, 0), isChef: false },
+                ...(chefPicksCategory ? [{ id: chefPicksCategory.id as string | null, name: chefPicksCategory.name, count: chefPicksCategory.products.filter(p => p.available).length, isChef: true }] : []),
+                ...categories.map(c => ({ id: c.id as string | null, name: c.name, count: c.products.filter(p => p.available).length, isChef: false })),
               ].map(cat => {
-                const count = cat.products.filter(p => p.available).length;
-                const isChefCat = cat.id === CHEF_PICKS_ID;
+                // Categories filter the menu (single-select). The active one gets the
+                // underline + primary text; aria-pressed conveys the toggle state.
+                const isActive = selectedCategory === cat.id;
                 return (
                   <motion.button
-                    key={cat.id}
+                    key={cat.id ?? '__all__'}
                     whileTap={prefersReduced ? undefined : { scale: 0.97 }}
-                    onClick={() => handleScrollTo(cat.id)}
-                    // In-page scroll nav, not a tab widget (no tabpanels) — use
-                    // aria-current, not role="tab" (axe: aria-required-parent).
-                    aria-current={activeTab === cat.id ? 'true' : undefined}
+                    onClick={() => pickCategory(cat.id)}
+                    aria-pressed={isActive}
                     className="h-11 flex items-center gap-1 px-3 whitespace-nowrap text-step-xs font-medium border-b-2 shrink-0 outline-none transition-colors duration-150 ease-out rounded-t-md focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
                     style={{
-                      color: activeTab === cat.id ? (isChefCat ? 'var(--brand-primary-readable)' : 'var(--brand-text)') : 'var(--brand-text-muted)',
-                      borderColor: activeTab === cat.id ? (isChefCat ? 'var(--brand-primary)' : 'var(--brand-primary)') : 'transparent',
+                      color: isActive ? (cat.isChef ? 'var(--brand-primary-readable)' : 'var(--brand-text)') : 'var(--brand-text-muted)',
+                      borderColor: isActive ? 'var(--brand-primary)' : 'transparent',
                     }}
                   >
-                    {isChefCat && <span style={{ fontSize: '0.7rem' }}>✦</span>}
+                    {cat.isChef && <span style={{ fontSize: '0.7rem' }}>✦</span>}
                     {cat.name}
-                    <span className="text-step-2xs text-[var(--brand-text-muted)]">({count})</span>
+                    <span className="text-step-2xs text-[var(--brand-text-muted)]">({cat.count})</span>
                   </motion.button>
                 );
               })
@@ -664,20 +653,29 @@ export function MenuPage() {
               />
             </div>
             <div className="w-px h-4 shrink-0" style={{ background: 'var(--brand-border)' }} />
-            {(['default', 'price-asc', 'price-desc', 'name'] as const).map(mode => (
-              <motion.button key={mode} onClick={() => setSortBy(mode)} whileTap={prefersReduced ? undefined : { scale: 0.95 }}
-                aria-label={t(`sort.${mode}`, mode)}
-                aria-pressed={sortBy === mode}
-                className="px-3 h-9 min-w-9 rounded-full text-step-2xs font-medium whitespace-nowrap shrink-0 flex items-center justify-center outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)]"
-                style={{
-                  background: sortBy === mode ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
-                  color: sortBy === mode ? 'color-mix(in srgb, var(--brand-bg) 86%, #000)' : 'var(--brand-text-muted)',
-                  fontWeight: sortBy === mode ? 700 : 500,
-                }}
-              >
-                {mode === 'default' ? <i className="ti ti-layout-list" style={{ fontSize: '0.65rem' }} /> : mode === 'price-asc' ? '↑ $' : mode === 'price-desc' ? '↓ $' : 'A–Z'}
-              </motion.button>
-            ))}
+            {/* Single price-sort toggle: tap cycles unsorted → price low→high → price high→low.
+                Replaces the old 4-button row (owner: merge price sorting into one control). */}
+            {(() => {
+              const priceActive = sortBy === 'price-asc' || sortBy === 'price-desc';
+              const next = sortBy === 'price-asc' ? 'price-desc' : sortBy === 'price-desc' ? 'default' : 'price-asc';
+              return (
+                <motion.button
+                  onClick={() => setSortBy(next as typeof sortBy)}
+                  whileTap={prefersReduced ? undefined : { scale: 0.95 }}
+                  aria-label={t('sort.by_price', 'Sort by price')}
+                  aria-pressed={priceActive}
+                  className="px-3 h-9 rounded-full text-step-2xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)]"
+                  style={{
+                    background: priceActive ? 'var(--brand-primary)' : 'var(--brand-surface-raised)',
+                    color: priceActive ? 'color-mix(in srgb, var(--brand-bg) 86%, #000)' : 'var(--brand-text-muted)',
+                    fontWeight: priceActive ? 700 : 500,
+                  }}
+                >
+                  <i className={`ti ${sortBy === 'price-asc' ? 'ti-sort-ascending-numbers' : sortBy === 'price-desc' ? 'ti-sort-descending-numbers' : 'ti-arrows-sort'}`} style={{ fontSize: '0.8rem' }} aria-hidden="true" />
+                  <span>{t('sort.price', 'Price')}</span>
+                </motion.button>
+              );
+            })()}
             {allAllergens.length > 0 && <div className="w-px h-4 shrink-0" style={{ background: 'var(--brand-border)' }} />}
             {allAllergens.map(a => {
               const s = getAllergenStyle(a);
@@ -708,13 +706,19 @@ export function MenuPage() {
       {venueStatus === 'closed' && (
         <motion.div
           data-testid="venue-closed-banner"
+          role="status"
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mx-4 my-3 px-4 py-3 rounded-xl border flex items-center gap-3 text-sm font-medium"
-          style={{ background: 'color-mix(in srgb, var(--brand-text-muted) 8%, transparent)', borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}
+          className="mx-4 my-3 px-4 py-3.5 rounded-2xl border-2 flex items-center gap-3 shadow-sm"
+          style={{ background: 'color-mix(in srgb, var(--color-danger, #dc2626) 12%, var(--brand-surface))', borderColor: 'color-mix(in srgb, var(--color-danger, #dc2626) 45%, transparent)' }}
         >
-          <i className="ti ti-clock-off text-lg shrink-0" />
-          <span>{t('client.delivery_closed', 'We are currently closed. Check back during opening hours.')}</span>
+          <span className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full" style={{ background: 'color-mix(in srgb, var(--color-danger, #dc2626) 18%, transparent)', color: 'var(--color-danger, #dc2626)' }}>
+            <i className="ti ti-clock-off text-xl" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-bold leading-tight" style={{ color: 'var(--brand-text)' }}>{t('client.closed_title', 'Currently closed')}</p>
+            <p className="text-step-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{t('client.closed_browse_hint', 'You can browse the full menu — ordering reopens during opening hours.')}</p>
+          </div>
         </motion.div>
       )}
       {venueStatus === 'busy' && (
@@ -786,7 +790,7 @@ export function MenuPage() {
               {t('client.no_results_hint', 'Try a different search or clear your filters to see the full menu.')}
             </p>
             <motion.button
-              onClick={() => { setSortBy('default'); setFilterAllergen(null); setSearchQuery(''); }}
+              onClick={() => { setSortBy('default'); setFilterAllergen(null); setSearchQuery(''); setSelectedCategory(null); }}
               whileTap={prefersReduced ? undefined : { scale: 0.97 }}
               className="px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
               style={{ background: 'var(--brand-primary-strong)' }}
@@ -798,8 +802,9 @@ export function MenuPage() {
           [
             // Chef's Picks is a curated overlay on the DEFAULT category order; a global
             // sort already reorders everything into one flat list, so prepending picks
-            // there would break the monotonic order. Only show it for 'default'.
-            ...(sortBy === 'default' && chefPicksCategory ? [chefPicksCategory] : []),
+            // there would break the monotonic order. Only show it for 'default' AND when
+            // no category filter is active (a filter already scopes the list).
+            ...(sortBy === 'default' && !selectedCategory && chefPicksCategory ? [chefPicksCategory] : []),
             ...displayCategories,
           ].map(category => {
             const isChefCat = category.id === CHEF_PICKS_ID;
@@ -807,7 +812,6 @@ export function MenuPage() {
             <motion.section
               key={category.id}
               id={category.id}
-              ref={el => { sectionRefs.current[category.id] = el }}
               className="mb-7"
               style={{ scrollMarginTop: scrollOffset + 'px' }}
               initial={prefersReduced ? false : { opacity: 0, transform: 'translateY(6px)' }}
@@ -857,6 +861,7 @@ export function MenuPage() {
                       e.preventDefault();
                       e.stopPropagation();
                       if (!product.available) return;
+                      if (isClosed) { showToast(t('client.closed_cannot_order', 'The restaurant is closed — ordering is paused until it reopens.'), 'info'); return; }
                       if (!product.modifier_groups?.length) {
                         addItem({ id: `cart_${product.id}`, productId: product.id, name: product.name, quantity: 1, price: product.price, options: {} });
                         bounceCart();
@@ -912,8 +917,7 @@ export function MenuPage() {
                   )}
                 </Suspense>
               ) : getImageUrl(detailProduct) && !imageLoadError ? (
-                <motion.img
-                  layoutId={`product-photo-${detailProduct.id}`}
+                <img
                   src={getImageUrl(detailProduct)!}
                   alt={detailProduct.name}
                   className="w-full h-full object-cover"
@@ -955,14 +959,6 @@ export function MenuPage() {
                       (the <h2> below). Repeating it on the photoless hero read as a
                       duplicate title. */}
                 </div>
-              )}
-              {/* Cinematic reveal — decorative Canvas-2D dissolve over the hero on open. Only
-                  with rich media; pointer-events:none so it never blocks Add-to-Cart; honours
-                  reduced-motion (instant). Code-split chunk, loaded only when media is present. */}
-              {detailMedia.length > 0 && !revealDone && (
-                <Suspense fallback={null}>
-                  <RevealOverlay active={!!detailProduct} onDone={() => setRevealDone(true)} />
-                </Suspense>
               )}
               <motion.button
                 whileTap={prefersReduced ? undefined : { scale: 0.95 }}
@@ -1274,15 +1270,17 @@ export function MenuPage() {
                   disabled={!canAdd()}
                   whileTap={prefersReduced || !canAdd() ? undefined : { scale: 0.97 }}
                   className="w-full sm:flex-1 min-w-0 h-[48px] text-[var(--brand-bg)] font-bold text-step-sm outline-none transition-[transform,opacity] duration-150 ease-out disabled:opacity-40 flex items-center justify-between gap-2 px-4 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
-                  style={{ background: detailProduct.available ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
+                  style={{ background: detailProduct.available && !isClosed ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
-                  {detailProduct.available ? (
+                  {!detailProduct.available ? (
+                    <span className="w-full text-center">{t('client.unavailable', 'Unavailable')}</span>
+                  ) : isClosed ? (
+                    <span className="w-full text-center">{t('client.closed_short', 'Currently closed')}</span>
+                  ) : (
                     <>
                       <span className="truncate min-w-0">{t('client.add_to_cart', 'Add to Cart')}</span>
                       <span className="font-extrabold shrink-0"><PriceDisplay amount={(detailProduct.price + calcModifierDelta()) * quantity} /></span>
                     </>
-                  ) : (
-                    <span className="w-full text-center">{t('client.unavailable', 'Unavailable')}</span>
                   )}
                 </motion.button>
               </div>
