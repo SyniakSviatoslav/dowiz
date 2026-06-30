@@ -3874,4 +3874,9 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Nuk e gjetëm këtë porosi. Lidhja mund të ketë skaduar ose të jetë e pasaktë.',
     uk: 'Ми не змогли знайти це замовлення. Посилання могло застаріти або бути неправильним.',
   },
+  'courier.order_delivered_banner': {
+    en: 'This delivery is complete — nothing more to do here.',
+    sq: "Kjo dorëzim u krye — s'ka më asgjë për të bërë këtu.",
+    uk: 'Цю доставку завершено — більше нічого робити.',
+  },
 };

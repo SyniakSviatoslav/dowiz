@@ -7,7 +7,10 @@ import { z } from 'zod';
 
 const CourierDetailsResponse = z.object({
   shifts: z.array(z.object({ id: z.string(), status: z.string(), started_at: z.string(), ended_at: z.string().nullable() })),
-  earnings: z.object({ today: z.number(), week: z.number(), month: z.number(), today_deliveries: z.number(), month_deliveries: z.number() }),
+  // Postgres SUM()/COUNT() serialize to JSON strings (e.g. "0"); the no-data
+  // fallback returns numbers. Coerce both shapes so a valid 200 never trips the
+  // parser into the "Could not load details" error state.
+  earnings: z.object({ today: z.coerce.number(), week: z.coerce.number(), month: z.coerce.number(), today_deliveries: z.coerce.number(), month_deliveries: z.coerce.number() }),
   history: z.array(z.any()),
 }).passthrough();
 

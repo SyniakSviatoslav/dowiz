@@ -102,6 +102,14 @@ export function DeliveryPage() {
     try {
       const data = await apiClient<typeof CourierTaskDetail>(`/courier/assignments/${id}`, { schema: CourierTaskDetail });
       setTask(data);
+      // BUGFIX: reconcile progress/terminal state from server truth so a RELOAD (or a missed live WS
+      // frame) never shows a stale actionable UI. The assignment is set to 'cancelled' when the order is
+      // cancelled mid-delivery (orderStatusService.ts) and 'delivered' on completion; previously
+      // orderClosed/pickedUp were only ever set from a live WS frame, so a reload showed the full
+      // pre-pickup UI on an already-cancelled or already-delivered task.
+      if (data.status === 'picked_up' || data.status === 'delivered') setPickedUp(true);
+      if (data.status === 'cancelled') setOrderClosed('CANCELLED');
+      else if (data.status === 'delivered') setOrderClosed('DELIVERED');
     } catch (err: any) {
       // DEV-ONLY mock so the courier UI can be previewed without a live assignment. In prod a
       // 404 (expired/reassigned) must NOT fabricate a fake drop-off the courier could act on —
@@ -475,10 +483,13 @@ export function DeliveryPage() {
             case worth surfacing (saves a wasted trip). Soft, not a wall; the human is never blocked. */}
         {orderClosed && (
           <div role="status" aria-live="polite" data-testid="courier-order-closed" className="rounded-[var(--brand-radius)] px-3 py-2 text-sm text-center font-medium" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--brand-text)' }}>
-            {t('courier.order_closed_banner', 'The restaurant closed this order. You can stop — no delivery needed.')}
+            {orderClosed === 'DELIVERED'
+              ? t('courier.order_delivered_banner', 'This delivery is complete — nothing more to do here.')
+              : t('courier.order_closed_banner', 'The restaurant closed this order. You can stop — no delivery needed.')}
           </div>
         )}
-        {!pickedUp ? (
+        {/* No pickup/deliver actions once the order is terminal (cancelled or already delivered). */}
+        {orderClosed ? null : !pickedUp ? (
           <motion.button
             onClick={handlePickup}
             disabled={pickupLoading}

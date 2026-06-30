@@ -323,7 +323,12 @@ export function MenuManagerPage() {
   };
 
   const handleSaveProduct = async () => {
-    if (!formName.trim() || !formPrice || !expandedCat) return;
+    // Category for this product: when EDITING, derive from the product itself so Save
+    // works from ANY view (default "All", filtered, or expanded) — expandedCat is null
+    // in the default view and must never gate the edit. When ADDING, openAddForm set
+    // expandedCat to the target category.
+    const targetCategoryId = editingProduct ? editingProduct.categoryId : expandedCat;
+    if (!formName.trim() || !formPrice || !targetCategoryId) return;
     const price = parseInt(formPrice);
     if (isNaN(price) || price <= 0) return;
     const prepTime = parseInt(formPrepTime);
@@ -339,7 +344,7 @@ export function MenuManagerPage() {
       prep_time_minutes: prepTime,
       description: formDesc || undefined,
       available: formAvailable,
-      categoryId: expandedCat,
+      categoryId: targetCategoryId,
       taste: hasTaste ? formTaste : undefined,
       stockCount: stock,
       recipeLines: hasRecipeLines ? formRecipeLines : undefined,
@@ -373,7 +378,7 @@ export function MenuManagerPage() {
       }
       closeForm();
       await fetchCategories();
-      await loadProducts(expandedCat);
+      await loadProducts(targetCategoryId);
       showToast(t('admin.product_saved', 'Product saved'), 'success');
     } catch (err) {
       console.error('[MenuManagerPage] save product failed:', err);

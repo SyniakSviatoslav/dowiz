@@ -4,7 +4,6 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
-import { RevealContactResponse } from '@deliveryos/shared-types';
 
 // The API returns a bare array of customers; older mocks wrapped it as
 // { customers: [...] }. Accept either so schema validation doesn't reject the
@@ -40,8 +39,6 @@ export function CRMPage() {
   const [error, setError] = useState(false);
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<'orders' | 'ltv' | 'name'>('orders');
-  const [revealing, setRevealing] = useState<string | null>(null);
-  const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
   const [analyticsCache, setAnalyticsCache] = useState<Record<string, any>>({});
   const [loadingAnalytics, setLoadingAnalytics] = useState<string | null>(null);
@@ -61,19 +58,12 @@ export function CRMPage() {
 
   useEffect(() => { loadCustomers(); }, [loadCustomers]);
 
-  const handleReveal = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    setRevealing(id);
-    try {
-      const res = await apiClient<typeof RevealContactResponse>(`/owner/customers/${id}/reveal-contact`, { method: 'POST', schema: RevealContactResponse });
-      setRevealed(prev => ({ ...prev, [id]: res.phone || '+355 69 XXX XXXX' }));
-    } catch (err) {
-      console.warn('[CRMPage] reveal contact failed:', err);
-      setRevealed(prev => ({ ...prev, [id]: '+355 69 876 543' }));
-    } finally {
-      setRevealing(null);
-    }
-  };
+  // Contact reveal is order-scoped by design — the only un-mask path is the
+  // audited POST /owner/locations/:loc/orders/:order/reveal-customer-contact.
+  // There is no customer-scoped reveal endpoint, so the CRM list shows the
+  // masked phone only and never fabricates a number. (Previously a dead
+  // /customers/:id/reveal-contact call 404'd and the catch rendered a hardcoded
+  // fake phone for every customer.)
 
   const toggleExpand = async (id: string) => {
     if (expandedCustomer === id) {
@@ -187,7 +177,7 @@ export function CRMPage() {
             <option value="name">{t('admin.name_az', 'Name A-Z')}</option>
           </Select>
           <Button variant="secondary" size="sm" onClick={() => {
-            const exportData = filtered.map(c => ({ name: c.name, phone: revealed[c.id] ? '***REDACTED***' : c.phone, orders: c.orders, ltv: c.ltv, lastOrder: c.lastOrder }));
+            const exportData = filtered.map(c => ({ name: c.name, phone: c.phone, orders: c.orders, ltv: c.ltv, lastOrder: c.lastOrder }));
             exportCSV(exportData, 'customers.csv');
           }}>
             <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
@@ -224,7 +214,6 @@ export function CRMPage() {
                 <th className="text-right p-3 font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.orders', 'Orders')}</th>
                 <th className="text-right p-3 font-medium hidden md:table-cell" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.ltv', 'LTV')}</th>
                 <th className="text-right p-3 font-medium hidden lg:table-cell" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.last_order', 'Last order')}</th>
-                <th className="p-3" />
               </tr>
             </thead>
             <tbody>
@@ -245,7 +234,7 @@ export function CRMPage() {
                       </div>
                     </td>
                     <td className="p-3 text-sm" style={{ color: 'var(--brand-text-muted)' }}>
-                      <span className="truncate block tabular-nums">{revealed[c.id] || c.phone}</span>
+                      <span className="truncate block tabular-nums">{c.phone}</span>
                     </td>
                     <td className="p-3 text-right font-medium">
                       <span className="inline-block px-2 py-0.5 rounded-full text-xs tabular-nums" style={{ background: c.orders > 15 ? 'rgba(5,150,105,0.1)' : 'var(--brand-surface-raised)', color: c.orders > 15 ? 'var(--color-success)' : 'var(--brand-text)' }}>
@@ -258,16 +247,10 @@ export function CRMPage() {
                     <td className="p-3 text-right tabular-nums hidden lg:table-cell whitespace-nowrap" style={{ color: 'var(--brand-text-muted)' }}>
                       {localizeRelativeTime(c.lastOrder)}
                     </td>
-                    <td className="p-3 text-right">
-                      <Button onClick={(e) => handleReveal(e, c.id)} disabled={!!revealed[c.id]} isLoading={revealing === c.id} size="sm">
-                        {revealed[c.id] ? <i className="ti ti-eye-check" /> : <i className="ti ti-eye" />}
-                        {revealed[c.id] ? '' : ` ${t('admin.reveal', 'Reveal')}`}
-                      </Button>
-                    </td>
                   </motion.tr>
                   {expandedCustomer === c.id && (
                     <tr className="bg-[var(--brand-bg)]">
-                      <td colSpan={6} className="p-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+                      <td colSpan={5} className="p-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
                         <CustomerDetail t={t} loading={loadingAnalytics === c.id} data={analyticsCache[c.id]} reduceMotion={reduceMotion} />
                       </td>
                     </tr>
@@ -291,9 +274,9 @@ export function CRMPage() {
                 className="rounded-[var(--brand-radius)] overflow-hidden"
                 style={{ boxShadow: 'var(--elev-1)', background: 'var(--brand-surface)' }}
               >
-                {/* Not a <button>: it wraps the Reveal <Button> (nested-interactive
-                    ×50). Expand-on-click is a mouse convenience; Reveal stays the
-                    keyboard-reachable action and the row data is visible unexpanded. */}
+                {/* A div, not a <button>: expand-on-click is a mouse convenience and
+                    all row data (name, masked phone, orders, LTV, last order) is
+                    visible unexpanded, so no interaction is keyboard-gated here. */}
                 <motion.div
                   onClick={() => toggleExpand(c.id)}
                   whileTap={reduceMotion ? undefined : { scale: 0.99 }}
@@ -302,7 +285,7 @@ export function CRMPage() {
                   <i className={`ti ti-chevron-${expanded ? 'down' : 'right'} text-[var(--brand-text-muted)] text-sm mt-0.5 shrink-0`} />
                   <div className="min-w-0 flex-1">
                     <div className="font-medium truncate" style={{ color: 'var(--brand-text)' }}>{c.name}</div>
-                    <div className="text-sm truncate tabular-nums" style={{ color: 'var(--brand-text-muted)' }}>{revealed[c.id] || c.phone}</div>
+                    <div className="text-sm truncate tabular-nums" style={{ color: 'var(--brand-text-muted)' }}>{c.phone}</div>
                     <div className="mt-2 flex items-center gap-3 text-xs flex-wrap" style={{ color: 'var(--brand-text-muted)' }}>
                       <span className="inline-flex items-center gap-1 tabular-nums">
                         <i className="ti ti-shopping-bag" /> {c.orders} {c.orders === 1 ? t('admin.order_lower', 'order') : t('admin.orders_lower', 'orders')}
@@ -315,12 +298,6 @@ export function CRMPage() {
                       </span>
                     </div>
                   </div>
-                  <span className="shrink-0">
-                    <Button onClick={(e) => { e.stopPropagation(); handleReveal(e, c.id); }} disabled={!!revealed[c.id]} isLoading={revealing === c.id} size="sm">
-                      {revealed[c.id] ? <i className="ti ti-eye-check" /> : <i className="ti ti-eye" />}
-                      {revealed[c.id] ? '' : ` ${t('admin.reveal', 'Reveal')}`}
-                    </Button>
-                  </span>
                 </motion.div>
                 {expanded && (
                   <div className="px-4 pb-4 border-t pt-4" style={{ borderColor: 'var(--brand-border)' }}>
