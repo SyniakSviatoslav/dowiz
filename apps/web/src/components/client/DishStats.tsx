@@ -369,29 +369,30 @@ export function DishStats({ macros, ingredients, variant = 'full', className }: 
     );
   }
 
-  // ── FULL (detail modal): roomy, brand cards.
+  // ── FULL (detail modal): ONE cohesive container — calorie ring + macros, a hairline divider,
+  // then the ingredient breakdown. (Operator directive: a single aesthetic container, not separate cards.)
   return (
-    <div data-testid="dish-stats" data-variant="full" className={`w-full flex flex-col gap-3 ${className ?? ''}`}>
+    <div data-testid="dish-stats" data-variant="full" className={`w-full rounded-2xl p-4 sm:p-5 flex flex-col gap-4 ${className ?? ''}`} style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
       {(showRing || hasMacros) && (
-        <div className="rounded-xl p-4 flex flex-col gap-4" style={{ background: 'var(--brand-surface)' }}>
-          <SectionHeading icon="ti ti-report-analytics">{t('client.nutrition', 'Nutrition')}</SectionHeading>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-            {showRing && (
-              <CalorieRing
-                size={ringSize}
-                stroke={ringStroke}
-                displayKcal={displayKcal}
-                segments={segments}
-                label={ringLabel}
-                caloriesLabel={t('nutrition.calories', 'Calories')}
-              />
-            )}
-            {hasMacros && <div className="flex-1 min-w-0">{macroRows}</div>}
-          </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
+          {showRing && (
+            <CalorieRing
+              size={ringSize}
+              stroke={ringStroke}
+              displayKcal={displayKcal}
+              segments={segments}
+              label={ringLabel}
+              caloriesLabel={t('nutrition.calories', 'Calories')}
+            />
+          )}
+          {hasMacros && <div className="flex-1 min-w-0">{macroRows}</div>}
         </div>
       )}
+      {hasIngredients && (showRing || hasMacros) && (
+        <div className="h-px w-full" style={{ background: 'var(--brand-border)' }} aria-hidden="true" />
+      )}
       {hasIngredients && (
-        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: 'var(--brand-surface)' }}>
+        <div className="w-full flex flex-col gap-2.5">
           <SectionHeading icon="ti ti-list-check">{t('client.ingredients', 'Ingredients')}</SectionHeading>
           {ingredientBars}
         </div>
