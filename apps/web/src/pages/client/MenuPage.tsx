@@ -702,8 +702,11 @@ export function MenuPage() {
                 </motion.button>
               );
             })()}
-            {ALLERGEN_FILTER_ENABLED && allAllergens.length > 0 && <div className="w-px h-4 shrink-0" style={{ background: 'var(--brand-border)' }} />}
-            {ALLERGEN_FILTER_ENABLED && allAllergens.map(a => {
+            {ALLERGEN_FILTER_ENABLED && (
+            // display:contents — the wrapper carries the testid without altering the flex toolbar layout.
+            <span style={{ display: 'contents' }} data-testid="allergen-filter-chips">
+            {allAllergens.length > 0 && <div className="w-px h-4 shrink-0" style={{ background: 'var(--brand-border)' }} />}
+            {allAllergens.map(a => {
               const s = getAllergenStyle(a);
               return (
                 <motion.button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)} whileTap={prefersReduced ? undefined : { scale: 0.95 }}
@@ -720,6 +723,8 @@ export function MenuPage() {
                 </motion.button>
               );
             })}
+            </span>
+            )}
           </div>
           {/* Right fade hint for horizontal scroll (matches category nav) */}
           <div className="absolute right-0 top-0 bottom-0 w-6 pointer-events-none" style={{ background: 'linear-gradient(to right, transparent, var(--brand-bg))' }} />
@@ -1141,7 +1146,7 @@ export function MenuPage() {
                     ) : (
                       <p className="text-step-2xs" data-testid="allergen-no-info" style={{ color: 'var(--brand-text-muted)' }}>{t('client.allergen_info_not_provided', 'Allergen info not provided')}</p>
                     )}
-                    <p className="text-step-2xs mt-2 italic" style={{ color: 'var(--brand-text-muted)' }}>{t('client.allergen_confirm_venue', 'Not a complete allergen list — please confirm with the venue for severe allergies.')}</p>
+                    <p className="text-step-2xs mt-2 italic" data-testid="allergen-reliance" style={{ color: 'var(--brand-text-muted)' }}>{t('client.allergen_confirm_venue', 'Not a complete allergen list — please confirm with the venue for severe allergies.')}</p>
                   </div>
                 );
               })()}
