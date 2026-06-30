@@ -28,6 +28,45 @@ function resolveMediaUrl(key: string | null | undefined): string | null {
   return /^https?:\/\//i.test(key) ? key : `/media/${key}`;
 }
 
+// P6-3 RICH PREVIEW — adapt a SHADOW tenant's read_preview_menu payload into the public read_public_menu
+// shape so the React storefront renders it with its real design (category tabs, cards, branding) instead
+// of the bare server-rendered list. The crucial differences vs the public menu (mapped to safe defaults):
+//   • is_preview:true — the SOLE signal the storefront flips into NON-ORDERABLE preview mode (no cart,
+//     no checkout, claim CTA). Never-orderability stays server-enforced too (a shadow is status='closed'
+//     + published_at NULL, so order creation is refused regardless of the client).
+//   • menu_version:0 / location_id:null — a shadow has no menu_versions row and we never expose its id.
+//   • is_available → available; no images / modifiers (a scraped shadow has neither). Allergens were
+//     already stripped inside read_preview_menu for unconfirmed place rows, so attributes pass through.
+function adaptPreviewMenu(preview: any): any {
+  const cats = Array.isArray(preview?.categories) ? preview.categories : [];
+  return {
+    is_preview: true,
+    menu_version: 0,
+    location_id: null,
+    location_name: preview?.name ?? '',
+    default_locale: preview?.default_locale ?? 'sq',
+    supported_locales: preview?.default_locale ? [preview.default_locale] : ['sq'],
+    currency: preview?.currency ?? { code: 'ALL', minor_unit: 0 },
+    categories: cats.map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      sort_order: c.sort_order ?? 0,
+      products: (Array.isArray(c.products) ? c.products : []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description ?? null,
+        price: p.price,
+        available: p.is_available !== false,
+        image_key: null,
+        primary_media_id: null,
+        prep_time_minutes: null,
+        attributes: p.attributes ?? null,
+        modifier_groups: [],
+      })),
+    })),
+  };
+}
+
 export default async function publicMenuRoutes(fastify: FastifyInstance) {
   const server = fastify.withTypeProvider<ZodTypeProvider>();
   // Read once at plugin registration — the flag is a deploy-time kill-switch, not
@@ -75,8 +114,23 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
   // location_id/name present) or null for an unknown location. Updates the cache on success.
   async function refreshMenu(key: string, slug: string, locale: string): Promise<any | null> {
     const res = await server.db.query(`SELECT read_public_menu($1, $2) as menu`, [slug, locale]);
-    const menu = res.rows[0]?.menu;
-    if (!menu) return null;
+    let menu = res.rows[0]?.menu;
+    if (!menu) {
+      // SHADOW fallback: read_public_menu is null for a never-live shadow tenant. Try the labeled
+      // preview (read_preview_menu — non-null ONLY for shadows: owner_id NULL + closed + published_at
+      // NULL) and adapt it to the public shape with is_preview:true. The storefront then renders the
+      // shadow with its real design in NON-ORDERABLE preview mode. If migration 070 isn't applied the
+      // fn is absent (42883) → treat as a genuine 404.
+      try {
+        const prev = await server.db.query(`SELECT read_preview_menu($1) as menu`, [slug]);
+        const preview = prev.rows[0]?.menu;
+        if (!preview) return null;
+        menu = adaptPreviewMenu(preview);
+      } catch (err: any) {
+        if (err?.code !== '42883') console.debug('[menu] preview fallback failed:', err?.message);
+        return null;
+      }
+    }
 
     // F2: location_id/name come straight from read_public_menu (migration 1790000000064),
     // so the route no longer needs a second query. Fallback for deploy/rollback skew where

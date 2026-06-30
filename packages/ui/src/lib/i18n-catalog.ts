@@ -4067,4 +4067,35 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Pasi konfirmohet në blockchain, pagesa me kripto nuk mund të kthehet. Nëse porosia anulohet ose nuk dorëzohet, lokali ju kthen manualisht në portofol brenda 3 ditëve pune. Do të paguani me USDT ose USDC në një faqe të sigurt.',
     uk: 'Після підтвердження в блокчейні криптоплатіж не можна скасувати. Якщо замовлення скасовано або не доставлено, заклад повертає кошти вручну на ваш гаманець протягом 3 робочих днів. Ви платитимете USDT або USDC на захищеній сторінці.',
   },
+  'preview.banner_title': {
+    en: 'Menu preview — not a live store',
+    sq: 'Pamje paraprake e menusë — jo dyqan i drejtpërdrejtë',
+    uk: 'Попередній перегляд меню — не справжній магазин',
+  },
+  'preview.banner_body': {
+    en: 'We built this from your public menu so you can see what online ordering would look like. It can’t take orders yet.',
+    sq: 'E ndërtuam këtë nga menuja juaj publike që të shihni si do të dukej porositja online. Ende nuk pranon porosi.',
+    uk: 'Ми створили це з вашого публічного меню, щоб показати вигляд онлайн-замовлення. Поки що не приймає замовлень.',
+  },
+  'preview.claim_cta': {
+    en: 'Is this your restaurant? Claim it',
+    sq: 'A është ky restoranti juaj? Pretendojeni',
+    uk: 'Це ваш ресторан? Підтвердіть власність',
+  },
+  'preview.claim_sent': { en: 'Request sent', sq: 'Kërkesa u dërgua', uk: 'Запит надіслано' },
+  'preview.claim_ack': {
+    en: 'Thanks! If this is your restaurant, we’ll verify ownership via your contact on file and send a claim link.',
+    sq: "Faleminderit! Nëse ky është restoranti juaj, do ta verifikojmë pronësinë përmes kontaktit tuaj dhe do t'ju dërgojmë një lidhje.",
+    uk: 'Дякуємо! Якщо це ваш ресторан, ми підтвердимо власність через ваш контакт і надішлемо посилання.',
+  },
+  'preview.cannot_order': {
+    en: 'This is a preview — it can’t take orders yet.',
+    sq: 'Kjo është pamje paraprake — ende nuk pranon porosi.',
+    uk: 'Це попередній перегляд — поки що не приймає замовлень.',
+  },
+  'preview.not_orderable': {
+    en: 'Preview only — not orderable',
+    sq: 'Vetëm pamje — pa porosi',
+    uk: 'Лише перегляд — не для замовлення',
+  },
 };

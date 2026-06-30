@@ -23,6 +23,9 @@ interface ProductCardProps {
   // cards (whose title sits at the top-left) must reserve a gutter so the toggle doesn't
   // cover the first characters of the name. Photo cards host the toggle over the image.
   compareGutter?: boolean;
+  // P6-3 preview: suppress the "+" add affordance entirely for a never-orderable shadow preview.
+  // The card stays fully browsable (tap → detail modal) but advertises no ordering action.
+  hideAdd?: boolean;
 }
 
 const TASTE_ICONS: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
@@ -47,7 +50,7 @@ const addBtnVariants = {
 // tap, which reads as a stuck/janky card. Gate the lift behind a hover-capable pointer.
 const canHover = typeof window !== 'undefined' && window.matchMedia?.('(hover: hover)').matches;
 
-export function ProductCard({ product, onAdd, onClick, compareGutter }: ProductCardProps) {
+export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd }: ProductCardProps) {
   const { t } = useI18n();
   const [imgError, setImgError] = useState(false);
   const isChefPick = !!product.chefPick;
@@ -125,6 +128,7 @@ export function ProductCard({ product, onAdd, onClick, compareGutter }: ProductC
         )}
         <div className={`flex items-start justify-between gap-1.5 ${reserveGutter && !isChefPick ? 'pl-7' : ''}`}>
           <h3 className={`font-semibold leading-tight line-clamp-2 flex-1 ${hasPhoto ? 'text-step-sm min-h-[2.5em]' : 'text-step-base'}`} style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
+          {!hideAdd && (
           <motion.button
             data-testid="menu-item-add"
             className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--brand-bg)] rounded-full mt-0.5 ${
@@ -144,6 +148,7 @@ export function ProductCard({ product, onAdd, onClick, compareGutter }: ProductC
           >
             <i className="ti ti-plus text-lg leading-none" />
           </motion.button>
+          )}
         </div>
         {product.description && (
           // Photoless cards earn an extra description line since they don't spend height on an image.
