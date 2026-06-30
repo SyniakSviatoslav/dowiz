@@ -793,6 +793,10 @@ fastify.register(acquisitionRoutes, {
   // an owner can stage media before launch. Operational pool (RLS) via withTenant.
   const { default: ownerProductMediaRoutes } = await import('./routes/owner/product-media.js');
   fastify.register(ownerProductMediaRoutes, { prefix: '/api/owner', db: pool, storage });
+
+  // Owner crypto-refund review (ADR-0017 C2) — DARK behind PAYMENTS_PREPAID_ENABLED (empty/404 otherwise).
+  const { default: ownerRefundsRoutes } = await import('./routes/owner/refunds.js');
+  fastify.register(ownerRefundsRoutes, { prefix: '/api/owner', db: pool });
   // B4 (ADR-admin-platform-authz) — the /api/admin plane. STRUCTURAL authority: a root-instance
   // onRequest gate (registerAdminPlaneGate) that runs verifyAuth → requirePlatformAdmin for every
   // request whose matched route pattern is under /api/admin — child, sibling, or future — by
