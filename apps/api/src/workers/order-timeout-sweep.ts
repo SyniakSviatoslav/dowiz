@@ -64,11 +64,12 @@ export class OrderTimeoutSweepWorker {
         // transition authority: PENDING→CANCELLED on timeout is a single fixed edge,
         // cancelled iff still pending, atomically. Cross-tenant (no location_id) by
         // design — recover every tenant's overdue orders in one pass.
-        const res = await client.query(
-          `UPDATE orders SET status = 'CANCELLED', timeout_at = NULL
-           WHERE status = 'PENDING' AND timeout_at IS NOT NULL AND timeout_at < now()
-           RETURNING id, location_id`
-        );
+        //
+        // B3 (NOBYPASSRLS): the cross-tenant UPDATE + audit INSERT touch FORCE-RLS
+        // tenant tables (orders, order_status_history) with no GUC, so they run inside
+        // the app_sweep_timeout_orders() SECURITY DEFINER fn (mirrors the exact WHERE
+        // guard + RETURNING; folds the order_status_history audit row in atomically).
+        const res = await client.query(`SELECT * FROM app_sweep_timeout_orders()`);
 
         if (!res.rowCount) return;
         console.log(`[OrderTimeoutSweep] recovered ${res.rowCount} overdue PENDING order(s)`);
@@ -78,16 +79,8 @@ export class OrderTimeoutSweepWorker {
           const orderId = row.id as string;
           const locationId = row.location_id as string;
 
-          // Audit trail (best-effort) — same actor as the handler.
-          try {
-            await client.query(
-              `INSERT INTO order_status_history (order_id, location_id, from_status, to_status, actor)
-               VALUES ($1, $2, 'PENDING', 'CANCELLED', 'system:timeout')`,
-              [orderId, locationId]
-            );
-          } catch (e) {
-            console.error(`[OrderTimeoutSweep] history insert failed for ${orderId}:`, e);
-          }
+          // Audit trail (order_status_history) is now written atomically inside
+          // app_sweep_timeout_orders() — see fn above.
 
           // Cross-surface live update — customer status page + owner dashboard.
           try {

@@ -27,9 +27,12 @@ export class DwellEscalationWorker {
 
     const client = await this.pool.connect();
     try {
-      // Check if alert is still active and not acknowledged
+      // Check if alert is still active and not acknowledged.
+      // B3 (NOBYPASSRLS): location_alerts keys on app_member_location_ids() (member
+      // identity); this worker is a system actor, so all location_alerts reads/writes
+      // here run through app_* SECURITY DEFINER fns that mirror the original SQL exactly.
       const alertRes = await client.query(
-        `SELECT status, acknowledged_at, escalation_level FROM location_alerts WHERE id = $1`,
+        `SELECT * FROM app_alert_state($1)`,
         [alertId],
       );
       if (alertRes.rowCount === 0) return;
@@ -40,8 +43,8 @@ export class DwellEscalationWorker {
 
       // Update escalation level
       await client.query(
-        `UPDATE location_alerts SET escalation_level = GREATEST(escalation_level, $1) WHERE id = $2`,
-        [tier, alertId],
+        `SELECT app_bump_alert_escalation($1, $2)`,
+        [alertId, tier],
       );
 
       const batchThreshold = parseInt(env.DWELL_BATCH_THRESHOLD || '10', 10);
@@ -49,8 +52,7 @@ export class DwellEscalationWorker {
       if (tier === 1) {
         // Native push (scaffold) — send to all active push targets
         const targetsRes = await client.query(
-          `SELECT id, address FROM owner_notification_targets
-           WHERE location_id = $1 AND channel = 'push' AND status = 'active'`,
+          `SELECT id, address FROM app_active_notification_targets($1, 'push')`,
           [locationId],
         );
 
@@ -76,8 +78,7 @@ export class DwellEscalationWorker {
         if (tier1Delivered) return;
 
         const targetsRes = await client.query(
-          `SELECT id, address FROM owner_notification_targets
-           WHERE location_id = $1 AND channel = 'telegram' AND status = 'active'`,
+          `SELECT id, address FROM app_active_notification_targets($1, 'telegram')`,
           [locationId],
         );
 
@@ -153,8 +154,7 @@ export class DwellEscalationWorker {
 
   private async countActiveAlerts(client: any, locationId: string, kind: string): Promise<number> {
     const res = await client.query(
-      `SELECT COUNT(*)::int AS cnt FROM location_alerts
-       WHERE location_id = $1 AND kind LIKE 'dwell_%' AND status = 'active' AND resolved_at IS NULL`,
+      `SELECT app_count_active_dwell_alerts($1) AS cnt`,
       [locationId],
     );
     return res.rows[0].cnt;
@@ -162,20 +162,17 @@ export class DwellEscalationWorker {
 
   private async wasTierDelivered(client: any, alertId: string, tier: number): Promise<boolean> {
     const res = await client.query(
-      `SELECT id FROM location_alerts WHERE id = $1 AND escalation_level >= $2`,
+      `SELECT app_alert_tier_reached($1, $2) AS reached`,
       [alertId, tier],
     );
-    return res.rowCount > 0;
+    return res.rows[0]?.reached === true;
   }
 
   private async logAttempt(client: any, alertId: string, tier: number, status: string | null, error: string | null) {
     const entry = { tier, time: new Date().toISOString(), status, error };
     await client.query(
-      `UPDATE location_alerts SET
-        attempts = COALESCE(attempts, '[]'::jsonb) || $1::jsonb,
-        last_error = $2
-       WHERE id = $3`,
-      [JSON.stringify([entry]), error, alertId],
+      `SELECT app_alert_log_attempt($1, $2::jsonb, $3)`,
+      [alertId, JSON.stringify([entry]), error],
     );
   }
 

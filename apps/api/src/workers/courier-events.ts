@@ -18,6 +18,27 @@ export class CourierEventsWorker {
     this.messageBus.subscribe(BUS_CHANNELS.ORDER_DELIVERED, async (msg) => this.handleAssignmentEvent(msg, 'delivered'));
   }
 
+  // B3: every DB read/write here is single-tenant — each inbound bus message carries a
+  // locationId (the courier-domain tenant). Pin app.current_tenant for the duration of a
+  // transaction so the Phase-1 policies on orders / courier_assignments / courier_positions /
+  // order_routes are satisfied once dowiz_app loses BYPASSRLS. (couriers has no RLS.)
+  // Transaction-local GUC → released on COMMIT/ROLLBACK; the pooled connection returns clean.
+  private async withTenant<T>(locationId: string, fn: (client: any) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
+      const out = await fn(client);
+      await client.query('COMMIT');
+      return out;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   private maskName(name: string): string {
     if (!name) return 'A***';
     return name.charAt(0) + '***';
@@ -28,9 +49,8 @@ export class CourierEventsWorker {
     return '+*** *** ' + phone.substring(phone.length - 4);
   }
 
-  private async fetchCourierDetailsAndOrder(courierId: string, orderId?: string, locationId?: string) {
-    const client = await this.pool.connect();
-    try {
+  private async fetchCourierDetailsAndOrder(courierId: string, locationId: string, orderId?: string) {
+    return this.withTenant(locationId, async (client: any) => {
       // Find active assignment
       let assignmentQuery = `
         SELECT a.order_id, o.delivery_lat, o.delivery_lng, a.status as assignment_status
@@ -80,21 +100,21 @@ export class CourierEventsWorker {
         destination: delivery_lat !== null && delivery_lng !== null ? { lat: Number(delivery_lat), lng: Number(delivery_lng) } : null,
         assignmentStatus: assignment_status
       };
-    } finally {
-      client.release();
-    }
+    });
   }
 
   // Latest known position for a courier, independent of any order assignment —
   // used to keep idle (on-shift but unassigned) couriers visible on the owner map.
-  private async fetchLatestPosition(courierId: string): Promise<{ lat: number; lng: number } | null> {
-    const res = await this.pool.query(
-      `SELECT lat, lng FROM courier_positions WHERE courier_id = $1 ORDER BY recorded_at DESC LIMIT 1`,
-      [courierId],
-    );
-    if (!res.rowCount) return null;
-    const { lat, lng } = res.rows[0];
-    return lat !== null && lng !== null ? { lat: Number(lat), lng: Number(lng) } : null;
+  private async fetchLatestPosition(courierId: string, locationId: string): Promise<{ lat: number; lng: number } | null> {
+    return this.withTenant(locationId, async (client: any) => {
+      const res = await client.query(
+        `SELECT lat, lng FROM courier_positions WHERE courier_id = $1 ORDER BY recorded_at DESC LIMIT 1`,
+        [courierId],
+      );
+      if (!res.rowCount) return null;
+      const { lat, lng } = res.rows[0];
+      return lat !== null && lng !== null ? { lat: Number(lat), lng: Number(lng) } : null;
+    });
   }
 
   private mapAssignmentStatusToDisplay(status: string): string {
@@ -126,13 +146,16 @@ export class CourierEventsWorker {
       // Durable copy so the planned route survives the Redis TTL / a flush. Advisory:
       // a failure here must never break the live route push below.
       try {
-        await this.pool.query(
-          `INSERT INTO order_routes (order_id, location_id, polyline, distance_meters, duration_seconds, updated_at)
+        // order_routes isolate policy keys on app.current_tenant — pin it for this insert.
+        await this.withTenant(locationId, (client: any) =>
+          client.query(
+            `INSERT INTO order_routes (order_id, location_id, polyline, distance_meters, duration_seconds, updated_at)
            VALUES ($1, $2, $3, $4, $5, now())
            ON CONFLICT (order_id) DO UPDATE
              SET polyline = EXCLUDED.polyline, distance_meters = EXCLUDED.distance_meters,
                  duration_seconds = EXCLUDED.duration_seconds, updated_at = now()`,
-          [orderId, locationId, JSON.stringify(route.polyline), route.distance_m, route.duration_s],
+            [orderId, locationId, JSON.stringify(route.polyline), route.distance_m, route.duration_s],
+          ),
         );
       } catch (err) {
         console.error('[CourierEvents] persist order_routes failed (advisory):', err);
@@ -154,7 +177,7 @@ export class CourierEventsWorker {
   async handlePositionUpdated(msg: { courierId: string; locationId: string; shiftId: string }) {
     // Always surface the courier on the owner live map — even when idle (no active
     // order). The dashboard tracks every on-shift courier, not only those mid-delivery.
-    const livePosition = await this.fetchLatestPosition(msg.courierId);
+    const livePosition = await this.fetchLatestPosition(msg.courierId, msg.locationId);
     if (livePosition) {
       await this.messageBus.publish(courierChannel(msg.locationId), {
         type: 'courier.position_updated',
@@ -164,7 +187,7 @@ export class CourierEventsWorker {
 
     // The customer-facing fan-out below only applies while the courier is actively
     // on an order.
-    const details = await this.fetchCourierDetailsAndOrder(msg.courierId);
+    const details = await this.fetchCourierDetailsAndOrder(msg.courierId, msg.locationId);
     if (!details) return;
 
     // Dispatch to customer WS — D1: do NOT push a single-number ETA to the customer; the honest
@@ -193,7 +216,7 @@ export class CourierEventsWorker {
   }
 
   async handleAssignmentEvent(msg: { orderId: string; locationId: string; courierId: string, cashCollected?: boolean }, statusOverride: string) {
-    const details = await this.fetchCourierDetailsAndOrder(msg.courierId, msg.orderId, msg.locationId);
+    const details = await this.fetchCourierDetailsAndOrder(msg.courierId, msg.locationId, msg.orderId);
     if (!details) return;
 
     if (statusOverride === 'heading_to_destination' && details.position && details.destination) {

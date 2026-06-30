@@ -31,7 +31,11 @@ export class CourierCronWorker {
     const client = await this.pool.connect();
     try {
       // P0-1: retention window is a named constant (COURIER_POSITION_RETENTION_INTERVAL).
-      await client.query(`DELETE FROM courier_positions WHERE recorded_at < now() - $1::interval`, [COURIER_POSITION_RETENTION_INTERVAL]);
+      // B3: this is a cross-tenant sweep — it deletes stale positions across ALL tenants in
+      // one pass, so there is no single app.current_tenant to set. Encapsulated in a
+      // SECURITY DEFINER fn (app_sweep_gps_purge) that mirrors the original DELETE and runs
+      // above RLS; worker just invokes it. Identical behavior under today's BYPASSRLS.
+      await client.query(`SELECT app_sweep_gps_purge($1::interval)`, [COURIER_POSITION_RETENTION_INTERVAL]);
     } catch (err) {
       console.error('Failed to purge GPS:', err);
       throw err;
@@ -45,25 +49,17 @@ export class CourierCronWorker {
     
     const client = await this.pool.connect();
     try {
-      await client.query('BEGIN');
-      
-      const res = await client.query(`
-        SELECT cs.id as shift_id, cs.courier_id, ca.order_id, ca.location_id
-        FROM courier_shifts cs
-        JOIN courier_assignments ca ON cs.id = ca.shift_id AND ca.status IN ('assigned', 'accepted', 'picked_up')
-        WHERE cs.status = 'on_delivery' 
-          AND cs.last_heartbeat_at < now() - $1::interval
-        FOR UPDATE SKIP LOCKED
-      `, [`${staleMs} milliseconds`]);
+      // B3: cross-tenant sweep — scans on_delivery shifts across ALL tenants AND writes
+      // location_alerts, which is membership-keyed (app_member_location_ids()) and so cannot
+      // be satisfied by app.current_tenant from a system worker (no membership). Both the
+      // cross-tenant scan (FOR UPDATE SKIP LOCKED) and the alert INSERT (ON CONFLICT DO NOTHING)
+      // are encapsulated in a single SECURITY DEFINER fn (app_sweep_stale_couriers) that mirrors
+      // the original SQL and runs above RLS. The fn returns every stale row so the worker still
+      // publishes one COURIER_STALE_HEARTBEAT per row (identical to the prior loop). Atomic single
+      // statement → locks held across the insert, same as the old BEGIN/COMMIT shape.
+      const res = await client.query(`SELECT shift_id, courier_id, order_id, location_id FROM app_sweep_stale_couriers($1::interval)`, [`${staleMs} milliseconds`]);
 
       for (const row of res.rows) {
-        // Create an alert
-        await client.query(`
-          INSERT INTO location_alerts (location_id, order_id, kind, status, escalation_level)
-          VALUES ($1, $2, 'courier_offline', 'active', 0)
-          ON CONFLICT DO NOTHING
-        `, [row.location_id, row.order_id]);
-
         // Publish event to trigger notification workflow
         await this.messageBus.publish(BUS_CHANNELS.COURIER_STALE_HEARTBEAT, {
           orderId: row.order_id,
@@ -71,10 +67,7 @@ export class CourierCronWorker {
           courierId: row.courier_id
         });
       }
-
-      await client.query('COMMIT');
     } catch (err) {
-      await client.query('ROLLBACK');
       console.error('Failed to check stale couriers:', err);
       throw err;
     } finally {

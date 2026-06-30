@@ -27,6 +27,11 @@ export class CourierDispatchWorker {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      // B3: courier dispatch acts on one order → its location. Pin the courier-domain
+      // tenant GUC so every courier_dispatch_queue / courier_shifts / courier_assignments
+      // query below satisfies the Phase-1 app.current_tenant policies once dowiz_app loses
+      // BYPASSRLS. Transaction-local — released at COMMIT/ROLLBACK.
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [locationId]);
 
       // Fetch the queue item
       const queueRes = await client.query(

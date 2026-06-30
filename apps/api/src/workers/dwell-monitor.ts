@@ -65,21 +65,14 @@ export class DwellMonitorWorker {
 
       if (!thresholdSec) continue;
 
-      const ordersRes = await client.query(`
-        SELECT o.id, o.status,
-               COALESCE(o.confirmed_at, o.created_at) AS status_updated_at
-        FROM orders o
-        WHERE o.location_id = $1
-          AND o.status = $2
-          AND COALESCE(o.confirmed_at, o.created_at) < now() - ($3 || ' seconds')::interval
-          AND NOT EXISTS (
-            SELECT 1 FROM location_alerts la
-            WHERE la.order_id = o.id
-              AND la.kind = $4
-              AND la.resolved_at IS NULL
-          )
-        LIMIT 50
-      `, [locationId, status, String(thresholdSec), kind]);
+      // B3 (NOBYPASSRLS): orders + location_alerts are FORCE-RLS; location_alerts keys
+      // on app_member_location_ids() (member identity, which a system worker lacks), so
+      // set_config('app.current_tenant') cannot admit it. The exact dwell-detection query
+      // (same WHERE guards, same 50-row cap) runs inside app_dwell_due_orders() DEFINER fn.
+      const ordersRes = await client.query(
+        `SELECT * FROM app_dwell_due_orders($1, $2, $3, $4)`,
+        [locationId, status, String(thresholdSec), kind]
+      );
 
       for (const order of ordersRes.rows) {
         const dwellSec = Math.floor((Date.now() - new Date(order.status_updated_at).getTime()) / 1000);
@@ -93,12 +86,12 @@ export class DwellMonitorWorker {
 
   private async createAlert(client: any, locationId: string, orderId: string, kind: string, dwellSeconds: number): Promise<string | null> {
     try {
-      const res = await client.query(`
-        INSERT INTO location_alerts (location_id, order_id, kind, status, escalation_level)
-        VALUES ($1, $2, $3, 'active', 0)
-        ON CONFLICT DO NOTHING
-        RETURNING id
-      `, [locationId, orderId, kind]);
+      // B3 (NOBYPASSRLS): location_alerts INSERT WITH CHECK keys on app_member_location_ids()
+      // → wrapped in app_dwell_create_alert() DEFINER fn (same ON CONFLICT DO NOTHING RETURNING id).
+      const res = await client.query(
+        `SELECT * FROM app_dwell_create_alert($1, $2, $3)`,
+        [locationId, orderId, kind]
+      );
       if (res.rowCount === 0) return null;
 
       const alertId = res.rows[0].id;
@@ -118,9 +111,11 @@ export class DwellMonitorWorker {
   private async scheduleEscalation(client: any, alertId: string, orderId: string, locationId: string, kind: string) {
     const tier2Delay = parseInt(env.DWELL_TIER2_DELAY_MS || '30000', 10);
 
-    // Resolve active Telegram targets for this location
+    // Resolve active Telegram targets for this location.
+    // B3 (NOBYPASSRLS): owner_notification_targets keys on app_member_location_ids()
+    // → read via app_active_notification_targets() DEFINER fn (same active+channel filter).
     const targetsRes = await client.query(
-      `SELECT id FROM owner_notification_targets WHERE location_id = $1 AND status = 'active' AND channel = 'telegram'`,
+      `SELECT id FROM app_active_notification_targets($1, 'telegram')`,
       [locationId]
     );
 

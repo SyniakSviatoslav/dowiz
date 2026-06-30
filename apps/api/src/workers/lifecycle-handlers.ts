@@ -46,16 +46,14 @@ export class LifecycleHandlers {
     const client = await this.pool.connect();
     try {
       for (const kind of kindsToResolve) {
-        const res = await client.query(`
-          UPDATE location_alerts
-          SET status = 'resolved',
-              resolved_at = now(),
-              resolution_reason = $1
-          WHERE order_id = $2
-            AND kind = $3
-            AND resolved_at IS NULL
-          RETURNING id
-        `, [`lifecycle_${newStatus.toLowerCase()}`, orderId, kind]);
+        // B3 (NOBYPASSRLS): location_alerts is FORCE-RLS keyed on app_member_location_ids().
+        // This handler only has orderId (from the bus), never a member identity, and the
+        // resolve is keyed by order_id across whatever tenant owns it — so it runs inside
+        // app_resolve_order_alerts() DEFINER fn (mirrors the exact WHERE guards + RETURNING).
+        const res = await client.query(
+          `SELECT * FROM app_resolve_order_alerts($1, $2, $3)`,
+          [`lifecycle_${newStatus.toLowerCase()}`, orderId, kind]
+        );
 
         for (const row of res.rows) {
           // Cancel pending escalation jobs for this alert
