@@ -54,47 +54,25 @@ export default (async function onboardingRoutes(fastify: any, opts: any) {
 
     const client = await db.connect();
     try {
-      const slugCheck = await client.query(`SELECT id FROM locations WHERE slug = $1`, [body.slug]);
-      if (slugCheck.rowCount > 0) {
-        return reply.sendError(409, 'SLUG_TAKEN', 'Slug already taken');
-      }
-
-      // 2. Find or create org for this owner
-      const orgRes = await client.query(
-        `SELECT id FROM organizations WHERE owner_id = $1 LIMIT 1`,
-        [userId],
-      );
+      // 2-5. Atomic owner bootstrap (org + location + owner membership + menu v1). B3: the FIRST membership
+      // can't self-satisfy the member RLS policy (chicken-and-egg), so this runs in a SECURITY DEFINER fn
+      // (mirrors claim_transfer). Slug uniqueness is checked inside the fn (raises 23505).
       let orgId: string;
-      if (orgRes.rowCount > 0) {
-        orgId = orgRes.rows[0].id;
-      } else {
-        // Create a personal org for this owner
-        const newOrg = await client.query(
-          `INSERT INTO organizations (id, name, owner_id) VALUES ($1, $2, $3) RETURNING id`,
-          [crypto.randomUUID(), `${body.name} Org`, userId],
+      let locId: string;
+      try {
+        const boot = await client.query(
+          `SELECT org_id, location_id FROM bootstrap_owner($1, $2, $3, $4, $5, $6, $7)`,
+          [userId, body.name, body.slug, body.phone, body.currency_code, body.default_locale, body.supported_locales],
         );
-        orgId = newOrg.rows[0].id;
+        orgId = boot.rows[0].org_id;
+        locId = boot.rows[0].location_id;
+      } catch (e: any) {
+        if (e?.code === '23505') return reply.sendError(409, 'SLUG_TAKEN', 'Slug already taken');
+        throw e;
       }
-
-      // 3. Create location
-      const locId = crypto.randomUUID();
-      await client.query(
-        `INSERT INTO locations (id, org_id, slug, name, phone, currency_code, default_locale, supported_locales, status, widget_enabled, delivery_fee_flat)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', true, 0)`,
-        [locId, orgId, body.slug, body.name, body.phone, body.currency_code, body.default_locale, body.supported_locales],
-      );
-
-      // 4. Create membership
-      await client.query(
-        `INSERT INTO memberships (user_id, location_id, role) VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING`,
-        [userId, locId],
-      );
-
-      // 5. Create menu_versions row with v1
-      await client.query(
-        `INSERT INTO menu_versions (location_id, version) VALUES ($1, 1) ON CONFLICT DO NOTHING`,
-        [locId],
-      );
+      // B3: the owner membership now exists → set member context so the subsequent onboarding_state UPDATE +
+      // menu seed (member-keyed FORCE-RLS tables) are admitted under NOBYPASSRLS.
+      await client.query(`SELECT set_config('app.user_id', $1, false)`, [userId]);
 
       // 6. Initialize onboarding_state
       const initState = {
