@@ -354,48 +354,20 @@ export default async function authRoutes(fastify: FastifyInstance) {
     try {
       await client.query('BEGIN');
 
-      const inviteRes = await client.query(
-        `SELECT id, location_id, used_at, expires_at FROM courier_invites WHERE code_hash = $1 FOR UPDATE`,
-        [codeHash]
-      );
-
-      if (inviteRes.rowCount === 0) throw new Error('Invalid code');
-      const invite = inviteRes.rows[0];
-
-      if (invite.used_at) throw new Error('Code already used');
-      if (invite.expires_at < new Date()) throw new Error('Code expired');
-
-      // Upsert User
-      const userRes = await client.query(
-        `INSERT INTO users (phone, display_name) 
-         VALUES ($1, $2)
-         ON CONFLICT (phone) DO UPDATE SET display_name = EXCLUDED.display_name
-         RETURNING id`,
-        [phone, name]
-      );
-      // Wait, users does not have UNIQUE(phone) in core-identity migration! 
-      // Let me check if `phone` is UNIQUE. `email citext UNIQUE, google_sub text UNIQUE`. `phone text`.
-      // If `phone` is not unique, ON CONFLICT will fail. I will use standard select/insert.
+      // B3: validate invite + upsert user + create FIRST courier membership + mark used — atomically in a
+      // SECURITY DEFINER fn (the first membership can't self-satisfy the member RLS policy; courier_invites is
+      // app.current_tenant-keyed and this path has no GUC). Mirrors the prior inline logic exactly.
       let userId: string;
-      const existingUser = await client.query(`SELECT id FROM users WHERE phone = $1`, [phone]);
-      if (existingUser.rowCount > 0) {
-        userId = existingUser.rows[0].id;
-        await client.query(`UPDATE users SET display_name = $1 WHERE id = $2`, [name, userId]);
-      } else {
-        const newUser = await client.query(`INSERT INTO users (phone, display_name) VALUES ($1, $2) RETURNING id`, [phone, name]);
-        userId = newUser.rows[0].id;
+      try {
+        const act = await client.query(`SELECT user_id, location_id FROM activate_courier($1, $2, $3)`, [codeHash, phone, name]);
+        userId = act.rows[0].user_id;
+      } catch (e: any) {
+        const m = String(e?.message || '');
+        if (m.includes('INVALID_CODE')) throw new Error('Invalid code');
+        if (m.includes('CODE_USED')) throw new Error('Code already used');
+        if (m.includes('CODE_EXPIRED')) throw new Error('Code expired');
+        throw e;
       }
-
-      // Create Membership
-      await client.query(
-        `INSERT INTO memberships (user_id, location_id, role)
-         VALUES ($1, $2, 'courier')
-         ON CONFLICT (user_id, location_id, role) DO UPDATE SET status = 'active'`,
-        [userId, invite.location_id]
-      );
-
-      // Mark used
-      await client.query(`UPDATE courier_invites SET used_at = now() WHERE id = $1`, [invite.id]);
 
       // Issue tokens
       const familyId = crypto.randomUUID();

@@ -228,15 +228,11 @@ export async function hardDeleteShadow(pool: Pool, acquisitionSourceId: string):
       [acquisitionSourceId],
     );
     await client.query(`DELETE FROM provision_grants WHERE acquisition_source_id = $1`, [acquisitionSourceId]);
-    if (row?.location_id) {
-      await client.query(`DELETE FROM products WHERE location_id = $1`, [row.location_id]);
-      await client.query(`DELETE FROM categories WHERE location_id = $1`, [row.location_id]);
-      await client.query(`DELETE FROM menu_versions WHERE location_id = $1`, [row.location_id]);
-      await client.query(`DELETE FROM locations WHERE id = $1`, [row.location_id]);
-    }
-    if (row?.org_id) {
-      await client.query(`DELETE FROM organizations WHERE id = $1 AND owner_id IS NULL`, [row.org_id]);
-    }
+    // B3: the member-keyed shadow rows (products/categories/menu_versions/locations/organizations) have no
+    // policy admitting a GUC-less DELETE — the shadow has owner_id NULL (no member). Erase via a SECURITY
+    // DEFINER fn so the decline/GDPR erasure ACTUALLY removes rows post-flip (the audit's erasure-can't-
+    // propagate fix). owner_id IS NULL guard inside the fn — a claimed tenant is never erased here.
+    await client.query(`SELECT erase_shadow_tenant($1, $2)`, [row?.location_id ?? null, row?.org_id ?? null]);
     await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK');
