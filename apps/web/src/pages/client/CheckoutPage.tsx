@@ -2,10 +2,11 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal, ease, duration, Select, Textarea, estimateOrderTotal, type OrderTotalConfig } from '@deliveryos/ui';
+import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal, ease, duration, Textarea, estimateOrderTotal, type OrderTotalConfig } from '@deliveryos/ui';
 import { CURRENCIES } from '@deliveryos/shared-types';
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_REGEX } from '@deliveryos/shared-types';
+import { MESSENGER_KINDS, messengerLabel, messengerIcon, messengerInputType, messengerIsPhone } from '../../lib/messenger.js';
 import { apiClient } from '../../lib/index.js';
 import { DishStats } from '../../components/client/DishStats.js';
 import { z } from 'zod';
@@ -221,6 +222,12 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
   // UX-2 optional messenger contact (Telegram/WhatsApp/Viber) so the courier can text.
   const [messengerKind, setMessengerKind] = useState('');
   const [messengerHandle, setMessengerHandle] = useState('');
+  const [commError, setCommError] = useState('');
+  // "Deliver to someone else" — same-receiver checked by default (ships to the customer).
+  const [sameReceiver, setSameReceiver] = useState(true);
+  const [receiverName, setReceiverName] = useState('');
+  const [receiverKind, setReceiverKind] = useState('');
+  const [receiverHandle, setReceiverHandle] = useState('');
   // UX-3 optional entry-anchor photo (uploaded to R2 before the order exists).
   const [entryPhotoKey, setEntryPhotoKey] = useState('');
   const [entryPhotoPreview, setEntryPhotoPreview] = useState('');
@@ -430,13 +437,36 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
     e.preventDefault();
     setOrderError('');
     if (items.length === 0 || !slug || !locationId) return;
-    const e164 = normalizeAlbanianPhone(phone);
-    if (!e164 || !PHONE_E164_REGEX.test(e164)) {
-      setPhoneError(t('checkout.phone_invalid', 'Enter a valid phone number (+355...)'));
+    // Communication is REQUIRED (ADR-0016). Phone-yielding kinds (phone/whatsapp/viber/signal) validate as a
+    // phone — that value also flows to `customer.phone` so the per-phone throttle/OTP/dedup keep working.
+    // Telegram (username) / SimpleX (text) are phone-less by design.
+    if (!messengerKind) {
+      setCommError(t('checkout.comm_required', 'Choose how the courier can reach you'));
       return;
     }
-    if (e164 !== phone) setPhone(e164); // reflect the normalized value back in the field
-    setPhoneError('');
+    setCommError('');
+    if (messengerIsPhone(messengerKind)) {
+      const e164 = normalizeAlbanianPhone(phone);
+      if (!e164 || !PHONE_E164_REGEX.test(e164)) {
+        setPhoneError(t('checkout.phone_invalid', 'Enter a valid phone number (+355...)'));
+        return;
+      }
+      if (e164 !== phone) setPhone(e164);
+      setPhoneError('');
+    } else {
+      if (!messengerHandle.trim()) {
+        setCommError(messengerKind === 'telegram'
+          ? t('checkout.comm_username_required', 'Enter your @username')
+          : t('checkout.comm_handle_required', 'Enter your contact'));
+        return;
+      }
+      setPhoneError('');
+    }
+    // Receiver ("deliver to someone else") — when not the customer, require name + channel + handle.
+    if (!sameReceiver && (!receiverName.trim() || !receiverKind || !receiverHandle.trim())) {
+      setCommError(t('checkout.receiver_required', 'Add the receiver’s name and how to reach them'));
+      return;
+    }
     
     // §3 contextually-required door detail (council-ratified): entrance/apartment are REQUIRED only when the
     // map-pin is LOW-confidence (the customer never placed a precise pin → pinLocation null), because that is
@@ -486,12 +516,16 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
           type: deliveryType === 'pickup' ? 'pickup' : 'delivery',
           items: orderItems,
           customer: {
-            phone: normalizeAlbanianPhone(phone),
+            // Phone-yielding kinds carry a real phone (→ per-phone throttle/OTP/dedup). Telegram/SimpleX are
+            // phone-less (omit → server makes no customer row, IP-throttle floor) — ADR-0016.
+            phone: messengerIsPhone(messengerKind) ? normalizeAlbanianPhone(phone) : undefined,
             name: customerName || undefined,
-            ...(messengerKind && messengerHandle.trim()
-              ? { messenger_kind: messengerKind, messenger_handle: messengerHandle.trim() }
-              : {}),
+            messenger_kind: messengerKind,
+            messenger_handle: messengerIsPhone(messengerKind) ? normalizeAlbanianPhone(phone) : messengerHandle.trim(),
           },
+          ...(sameReceiver ? {} : {
+            receiver: { name: receiverName.trim(), messenger_kind: receiverKind, handle: receiverHandle.trim() },
+          }),
           ...(entryPhotoKey ? { delivery_photo_key: entryPhotoKey } : {}),
           ...(tipAmount > 0 ? { tip_amount: tipAmount } : {}),
           // Pickup orders carry no delivery pin/address (no delivery fee).
@@ -775,30 +809,76 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
                 <input required value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t('checkout.name_placeholder', 'Your name')} autoComplete="name" className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
               </div>
             </div>
+            {/* Communication (ADR-0016): REQUIRED channel + per-kind input. Phone-yielding kinds
+                (phone/whatsapp/viber/signal) drive `phone` (throttle/OTP/dedup); Telegram=username,
+                SimpleX=text-only. The phone field is folded into the Phone kind's input. */}
             <div>
-              <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.phone', 'Phone')}</label>
-              <div className="relative">
-                <i className="ti ti-phone absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                <input required value={phone} onChange={e => { setPhone(e.target.value); setPhoneError(''); }} onBlur={() => setPhone(p => normalizeAlbanianPhone(p))} placeholder="+355 6X XXX XXXX" title="+355 followed by 7-14 digits" type="tel" inputMode="tel" autoComplete="tel" data-testid="checkout-phone" className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: phoneError ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                {phoneError && <p role="alert" className="text-step-xs mt-1" style={{ color: 'var(--color-danger)' }}>{phoneError}</p>}
+              <label className="text-step-sm font-bold mb-1 block" style={{ color: 'var(--brand-text)' }}>
+                {t('checkout.communication', 'Communication')} <span aria-hidden="true" style={{ color: 'var(--color-danger)' }}>*</span>
+              </label>
+              <p className="text-step-2xs mb-2" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.communication_why', 'The courier will message you about your order.')}</p>
+              <div role="radiogroup" aria-label={t('checkout.communication', 'Communication')} className="grid grid-cols-3 gap-2" data-testid="checkout-communication">
+                {MESSENGER_KINDS.map(k => {
+                  const active = messengerKind === k;
+                  return (
+                    <button key={k} type="button" role="radio" aria-checked={active} data-testid={`comm-kind-${k}`}
+                      onClick={() => { setMessengerKind(k); setMessengerHandle(''); setPhone(''); setPhoneError(''); setCommError(''); }}
+                      className="flex items-center gap-2 h-[44px] px-3 rounded-[var(--brand-radius-sm)] border text-step-xs font-semibold transition-[background-color,box-shadow,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]"
+                      style={{ background: active ? 'var(--brand-primary)' : 'var(--brand-surface-raised)', borderColor: active ? 'var(--brand-primary)' : 'var(--brand-border)', color: active ? 'var(--brand-primary-readable, #fff)' : 'var(--brand-text)' }}>
+                      <i className={messengerIcon(k)} aria-hidden="true" />
+                      <span className="truncate">{messengerLabel(k)}</span>
+                    </button>
+                  );
+                })}
               </div>
+              {messengerKind && (
+                <div className="relative mt-2">
+                  {messengerIsPhone(messengerKind) && <i className="ti ti-phone absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />}
+                  <input
+                    value={messengerIsPhone(messengerKind) ? phone : messengerHandle}
+                    onChange={e => { const v = e.target.value; if (messengerIsPhone(messengerKind)) { setPhone(v); setPhoneError(''); } else { setMessengerHandle(v); } setCommError(''); }}
+                    onBlur={messengerIsPhone(messengerKind) ? () => setPhone(p => normalizeAlbanianPhone(p)) : undefined}
+                    type={messengerIsPhone(messengerKind) ? 'tel' : 'text'} inputMode={messengerIsPhone(messengerKind) ? 'tel' : undefined}
+                    autoComplete={messengerIsPhone(messengerKind) ? 'tel' : 'off'}
+                    aria-label={t('checkout.communication_handle', 'Your contact')} data-testid="checkout-comm-handle"
+                    placeholder={messengerInputType(messengerKind) === 'phone' ? '+355 6X XXX XXXX' : messengerInputType(messengerKind) === 'username' ? '@username' : t('checkout.simplex_placeholder', 'Paste your SimpleX invite link')}
+                    className="w-full h-[48px] pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]"
+                    style={{ paddingLeft: messengerIsPhone(messengerKind) ? '2.5rem' : '0.75rem', background: 'var(--brand-surface-raised)', borderColor: (phoneError || commError) ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                </div>
+              )}
+              {(phoneError || commError) && <p role="alert" className="text-step-xs mt-1" style={{ color: 'var(--color-danger)' }}>{phoneError || commError}</p>}
             </div>
-            {/* UX-2: optional messenger so the courier can text instead of call */}
+            {/* "Deliver to someone else" — same-receiver checked by default; else a receiver contact + notice. */}
             <div>
-              <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.messenger', 'Messenger (optional)')}</label>
-              <div className="flex gap-2">
-                <Select value={messengerKind} onChange={e => setMessengerKind(e.target.value)} aria-label={t('checkout.messenger', 'Messenger (optional)')} data-testid="checkout-messenger-kind">
-                  <option value="">{t('checkout.messenger_none', '—')}</option>
-                  <option value="telegram">Telegram</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="viber">Viber</option>
-                </Select>
-                <input value={messengerHandle} onChange={e => setMessengerHandle(e.target.value)} disabled={!messengerKind}
-                  required={!!messengerKind}
-                  aria-label={t('checkout.messenger_handle_label', 'Your messenger handle')}
-                  placeholder={messengerKind === 'telegram' ? '@username' : '+355 6X XXX XXXX'} data-testid="checkout-messenger-handle"
-                  className="flex-1 min-w-0 h-[48px] px-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)] disabled:opacity-50" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-              </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={sameReceiver} onChange={e => { setSameReceiver(e.target.checked); setCommError(''); }} data-testid="checkout-same-receiver" className="w-4 h-4" style={{ accentColor: 'var(--brand-primary)' }} />
+                <span className="text-step-sm" style={{ color: 'var(--brand-text)' }}>{t('checkout.same_receiver', 'I am the receiver')}</span>
+              </label>
+              {!sameReceiver && (
+                <div className="mt-3 space-y-2 rounded-[var(--brand-radius-sm)] border p-3" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)' }} data-testid="receiver-fields">
+                  <input value={receiverName} onChange={e => { setReceiverName(e.target.value); setCommError(''); }} placeholder={t('checkout.receiver_name', 'Receiver’s name')} data-testid="receiver-name"
+                    className="w-full h-[44px] px-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                  <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t('checkout.communication', 'Communication')}>
+                    {MESSENGER_KINDS.map(k => {
+                      const active = receiverKind === k;
+                      return (
+                        <button key={k} type="button" role="radio" aria-checked={active} onClick={() => { setReceiverKind(k); setReceiverHandle(''); setCommError(''); }} data-testid={`receiver-kind-${k}`}
+                          className="inline-flex items-center gap-1 h-[36px] px-2.5 rounded-[var(--brand-radius-sm)] border text-step-2xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]"
+                          style={{ background: active ? 'var(--brand-primary)' : 'var(--brand-surface)', borderColor: active ? 'var(--brand-primary)' : 'var(--brand-border)', color: active ? 'var(--brand-primary-readable, #fff)' : 'var(--brand-text)' }}>
+                          <i className={messengerIcon(k)} aria-hidden="true" /><span>{messengerLabel(k)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {receiverKind && (
+                    <input value={receiverHandle} onChange={e => { setReceiverHandle(e.target.value); setCommError(''); }}
+                      type={messengerIsPhone(receiverKind) ? 'tel' : 'text'} data-testid="receiver-handle"
+                      placeholder={messengerInputType(receiverKind) === 'phone' ? '+355 6X XXX XXXX' : messengerInputType(receiverKind) === 'username' ? '@username' : t('checkout.simplex_placeholder', 'Paste your SimpleX invite link')}
+                      className="w-full h-[44px] px-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+                  )}
+                  <p className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.receiver_privacy', 'We share this contact with the courier only to deliver this order, then delete it.')}</p>
+                </div>
+              )}
             </div>
             {/* UX-3: optional entrance photo (delivery only) — camera or gallery */}
             {deliveryType !== 'pickup' && (

@@ -60,6 +60,7 @@ import ownerPromotionRoutes from '../routes/owner/promotions.js';
 import ownerFallbackRoutes from '../routes/owner/fallback.js';
 import ownerRevealContactRoutes from '../routes/owner/reveal-contact.js';
 import publicFallbackConfigRoutes from '../routes/public/fallback-config.js';
+import publicVoiceConfigRoutes from '../routes/public/voice-config.js';
 import ratesRoutes from '../routes/public/rates.js';
 
 export interface CoreRouteDeps {
@@ -148,4 +149,6 @@ export async function registerCoreRoutes(fastify: FastifyInstance, deps: CoreRou
 
   fastify.register(ratesRoutes, { db: pool });
   fastify.register(publicFallbackConfigRoutes, { db: pool });
+  fastify.register(publicVoiceConfigRoutes); // voice-control runtime kill-switch (ADR-0015 §9) — no db
+
 }

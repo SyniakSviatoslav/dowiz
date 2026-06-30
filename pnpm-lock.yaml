@@ -435,6 +435,12 @@ importers:
         specifier: ^5.6.2
         version: 5.9.3
 
+  packages/voice:
+    devDependencies:
+      typescript:
+        specifier: ^5.6.2
+        version: 5.9.3
+
   spikes/stage3-queue:
     dependencies:
       '@deliveryos/config':

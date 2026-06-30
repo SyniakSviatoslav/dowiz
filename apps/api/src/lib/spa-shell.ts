@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isVoiceEnabled } from './voice-flag.js';
 
 export const BOT_UA = /bot|crawl|spider|slurp|mediapartners|facebookexternalhit|embedly|quora|pinterest|whatsapp|telegram|slackbot|twitter|linkedinbot|discord|google|bing|yandex|baidu|duckduck|applebot|petalbot|semrush|ahrefs/i;
 
@@ -147,7 +148,15 @@ export async function serveSpaShell(reply: any, db: any, slug: string): Promise<
     try { r2ImgSrc = ' ' + new URL(r2PublicUrl).origin; } catch { /* ignore */ }
   }
 
-  const csp = `default-src 'self'; img-src 'self' data: https:${r2ImgSrc}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://plausible.io; worker-src 'self' blob:; connect-src 'self' https://cdn.jsdelivr.net https://tiles.openfreemap.org https://router.project-osrm.org https://en.wikipedia.org https://plausible.io; frame-ancestors ${frameAncestors}`;
+  // Voice-control (ADR-0015 §9): widen connect-src to the R2 origin ONLY while voice is live, so the
+  // model fetch is allowed. Gated on the SAME predicate as GET /api/public/voice-config (breaker R2-E)
+  // so a VOICE_KILL closes this origin too; while dark the hardened CSP is byte-unchanged (R2-C/L1).
+  let r2ConnectSrc = '';
+  if (r2PublicUrl && isVoiceEnabled()) {
+    try { r2ConnectSrc = ' ' + new URL(r2PublicUrl).origin; } catch { /* ignore */ }
+  }
+
+  const csp = `default-src 'self'; img-src 'self' data: https:${r2ImgSrc}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://plausible.io; worker-src 'self' blob:; connect-src 'self' https://cdn.jsdelivr.net https://tiles.openfreemap.org https://router.project-osrm.org https://en.wikipedia.org https://plausible.io${r2ConnectSrc}; frame-ancestors ${frameAncestors}`;
 
   reply.header('Content-Security-Policy', csp);
   reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');

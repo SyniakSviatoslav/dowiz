@@ -4007,4 +4007,43 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Eksporto si JSON',
     uk: 'Експортувати як JSON',
   },
+  'checkout.communication': { en: 'Communication', sq: 'Komunikimi', uk: "Зв'язок" },
+  'checkout.communication_why': {
+    en: 'The courier will message you about your order.',
+    sq: "Korrieri do t'ju shkruajë për porosinë.",
+    uk: "Кур'єр напише вам щодо замовлення.",
+  },
+  'checkout.communication_handle': { en: 'Your contact', sq: 'Kontakti juaj', uk: 'Ваш контакт' },
+  'checkout.comm_required': {
+    en: 'Choose how the courier can reach you',
+    sq: "Zgjidhni si t'ju kontaktojë korrieri",
+    uk: "Оберіть, як кур'єру звʼязатися з вами",
+  },
+  'checkout.comm_username_required': {
+    en: 'Enter your @username',
+    sq: 'Shkruani @username tuaj',
+    uk: 'Введіть ваш @username',
+  },
+  'checkout.comm_handle_required': {
+    en: 'Enter your contact',
+    sq: 'Shkruani kontaktin tuaj',
+    uk: 'Введіть ваш контакт',
+  },
+  'checkout.simplex_placeholder': {
+    en: 'Paste your SimpleX invite link',
+    sq: 'Ngjisni lidhjen tuaj SimpleX',
+    uk: 'Вставте ваше посилання SimpleX',
+  },
+  'checkout.same_receiver': { en: 'I am the receiver', sq: 'Unë jam marrësi', uk: 'Я отримувач' },
+  'checkout.receiver_name': { en: "Receiver's name", sq: 'Emri i marrësit', uk: "Ім'я отримувача" },
+  'checkout.receiver_required': {
+    en: "Add the receiver's name and how to reach them",
+    sq: 'Shtoni emrin dhe kontaktin e marrësit',
+    uk: 'Додайте імʼя отримувача та контакт',
+  },
+  'checkout.receiver_privacy': {
+    en: 'We share this with the courier only to deliver this order, then delete it.',
+    sq: 'Këtë ia japim korrierit vetëm për dorëzimin, pastaj e fshijmë.',
+    uk: 'Передаємо це курʼєру лише для доставки, потім видаляємо.',
+  },
 };
