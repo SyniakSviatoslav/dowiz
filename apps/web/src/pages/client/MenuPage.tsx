@@ -1022,21 +1022,24 @@ export function MenuPage() {
       {/* Compare — floating selection bar (1–2 chosen) + the panel. Affordance-only (no long-press, FB-M4). */}
       {COMPARISON_ENABLED && compareIds.length > 0 && !compareOpen && !detailProduct && (
         <motion.div
-          className="fixed left-1/2 -translate-x-1/2 z-sticky w-[calc(100%-2rem)] max-w-md rounded-full shadow-lg flex items-center justify-between gap-2 px-3 py-2"
+          className="fixed left-1/2 -translate-x-1/2 z-sticky w-[calc(100%-2rem)] max-w-md rounded-full shadow-lg flex items-center gap-2 px-3 py-2"
           style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5.5rem)', background: 'var(--brand-surface-raised)', border: '1px solid var(--brand-border)' }}
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          transition={{ duration: prefersReduced ? 0 : 0.18 }}
           data-testid="compare-bar"
         >
-          <button type="button" onClick={() => setCompareIds([])} className="text-step-2xs font-medium px-2 py-1" style={{ color: 'var(--brand-text-muted)' }} aria-label={t('compare.exit', 'Done')}>
+          <button type="button" onClick={() => setCompareIds([])} className="text-step-2xs font-medium px-2 py-1 shrink-0" style={{ color: 'var(--brand-text-muted)' }} aria-label={t('compare.exit', 'Done')}>
             <i className="ti ti-x" aria-hidden="true" /> {compareIds.length}/2
           </button>
-          <span className="text-step-2xs flex-1 text-center" style={{ color: 'var(--brand-text-muted)' }}>{compareIds.length < 2 ? t('compare.pick_two', 'Pick 2 dishes to compare') : ''}</span>
+          {compareIds.length < 2 && (
+            <span className="text-step-2xs flex-1 min-w-0 truncate text-center" style={{ color: 'var(--brand-text-muted)' }}>{t('compare.pick_two', 'Pick 2 dishes to compare')}</span>
+          )}
           <button
             type="button"
             data-testid="compare-open"
             onClick={() => setCompareOpen(true)}
             disabled={compareIds.length < 2}
-            className="text-step-2xs font-bold px-4 h-9 rounded-full disabled:opacity-40"
+            className="text-step-2xs font-bold px-4 h-9 rounded-full disabled:opacity-40 shrink-0 ml-auto"
             style={{ background: 'var(--brand-primary)', color: 'color-mix(in srgb, var(--brand-bg) 86%, #000)' }}
           >
             {t('compare.cta', 'Compare')}
