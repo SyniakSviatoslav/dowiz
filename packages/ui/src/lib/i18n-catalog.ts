@@ -3930,4 +3930,14 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Ne kurrë nuk i shesim ose ndajmë të dhënat tuaja me palë të treta ose reklamues — përdoren vetëm për të përmbushur porosinë tuaj.',
     uk: 'Ми ніколи не продаємо й не передаємо ваші дані третім сторонам чи рекламодавцям — вони використовуються лише для виконання вашого замовлення.',
   },
+  'client.contact_whatsapp': {
+    en: 'Message on WhatsApp',
+    sq: 'Shkruani në WhatsApp',
+    uk: 'Написати у WhatsApp',
+  },
+  'client.call_restaurant': {
+    en: 'Call the restaurant',
+    sq: 'Telefononi restorantin',
+    uk: 'Зателефонувати в ресторан',
+  },
 };
