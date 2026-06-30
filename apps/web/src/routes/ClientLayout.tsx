@@ -151,7 +151,10 @@ function ClientLayoutInner() {
                (menu hero, Checkout, Order) so the document has a single top heading. */}
             <div className="text-base font-bold flex-1 truncate" style={{ fontFamily: 'var(--brand-font-heading)' }}>{locationName || t('client.menu', 'Menu')}</div>
             <CurrencySwitcher />
-            <LanguageSwitcher variant="full" allowed={supportedLocales} />
+            {/* Mobile: a single-button language dropdown (the full SQ|EN|UA segmented control
+                crowded the header next to the logo, name + currency). Desktop keeps the segment. */}
+            <span className="sm:hidden"><LanguageSwitcher variant="compact" allowed={supportedLocales} /></span>
+            <span className="hidden sm:inline-flex"><LanguageSwitcher variant="full" allowed={supportedLocales} /></span>
           </header>
           <div className="app-shell-main">
             <Outlet />
