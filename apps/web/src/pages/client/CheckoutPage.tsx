@@ -753,7 +753,7 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
             <div className="space-y-4">
               <div>
                 <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.pin_on_map', 'Tap the map to set your delivery location')}</label>
-                <MapWithPin className="h-48 w-full rounded-[var(--brand-radius-sm)]" initialCenter={locationCenter} onPinChange={setPinLocation} confirmLabel={t('common.confirm')} placeholder={t('checkout.pin_on_map', 'Tap the map to set your delivery location')} />
+                <MapWithPin className="h-48 w-full rounded-[var(--brand-radius-sm)]" initialCenter={locationCenter} onPinChange={setPinLocation} confirmLabel={t('common.confirm')} placeholder={t('checkout.pin_on_map', 'Tap the map to set your delivery location')} myLocationLabel={t('checkout.my_location', 'My location')} />
               </div>
               <div>
                 <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.street_address', 'Street address')}</label>
