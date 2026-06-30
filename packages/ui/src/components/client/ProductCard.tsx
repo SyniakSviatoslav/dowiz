@@ -19,6 +19,10 @@ interface ProductCardProps {
   };
   onAdd: (e: React.MouseEvent) => void;
   onClick?: (e: React.MouseEvent) => void;
+  // When the parent overlays a compare-toggle on the card's top-left corner, photoless
+  // cards (whose title sits at the top-left) must reserve a gutter so the toggle doesn't
+  // cover the first characters of the name. Photo cards host the toggle over the image.
+  compareGutter?: boolean;
 }
 
 const TASTE_ICONS: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
@@ -43,13 +47,16 @@ const addBtnVariants = {
 // tap, which reads as a stuck/janky card. Gate the lift behind a hover-capable pointer.
 const canHover = typeof window !== 'undefined' && window.matchMedia?.('(hover: hover)').matches;
 
-export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
+export function ProductCard({ product, onAdd, onClick, compareGutter }: ProductCardProps) {
   const { t } = useI18n();
   const [imgError, setImgError] = useState(false);
   const isChefPick = !!product.chefPick;
   // HIGH-1: photoless items render text-first (no fake placeholder slot), so the card
   // only reserves a photo area when there is a real photo to show.
   const hasPhoto = !!product.image && !imgError;
+  // Photoless cards put the title at the top-left, exactly where the parent overlays the
+  // compare-toggle — reserve a left gutter on the leading row so the name isn't clipped.
+  const reserveGutter = !!compareGutter && !hasPhoto;
   // HIGH-2: the card carries ESSENTIALS only — name, price, short description, and at
   // most ONE taste cue (the dominant axis). The full taste profile, allergens, nutrition
   // and ingredients all live in the detail modal, so the grid stays scannable instead of
@@ -112,11 +119,11 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
       <div className={`flex flex-col flex-1 gap-1 min-h-0 ${hasPhoto ? 'p-2.5' : 'p-3.5'}`}>
         {/* Photoless cards have no image corner to host the chef-pick cue, so it surfaces inline. */}
         {!hasPhoto && isChefPick && (
-          <span className="self-start text-step-2xs font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 mb-0.5" style={{ background: 'color-mix(in srgb, var(--brand-primary) 14%, transparent)', color: 'var(--brand-primary-readable)' }}>
+          <span className={`self-start text-step-2xs font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 mb-0.5 ${reserveGutter ? 'ml-7' : ''}`} style={{ background: 'color-mix(in srgb, var(--brand-primary) 14%, transparent)', color: 'var(--brand-primary-readable)' }}>
             ✦ {t('client.chefs_pick_badge', "Chef's Pick")}
           </span>
         )}
-        <div className="flex items-start justify-between gap-1.5">
+        <div className={`flex items-start justify-between gap-1.5 ${reserveGutter && !isChefPick ? 'pl-7' : ''}`}>
           <h3 className={`font-semibold leading-tight line-clamp-2 flex-1 ${hasPhoto ? 'text-step-sm min-h-[2.5em]' : 'text-step-base'}`} style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
           <motion.button
             data-testid="menu-item-add"

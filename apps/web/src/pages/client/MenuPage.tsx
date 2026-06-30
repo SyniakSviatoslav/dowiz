@@ -16,6 +16,7 @@ import type { CompareDish } from './MenuComparePanel.js';
 import { DishStats } from '../../components/client/DishStats.js';
 import type { DishIngredient } from '../../components/client/DishStats.js';
 import { StylizedMap } from '../../components/client/StylizedMap.js';
+import { SatelliteMap } from '../../components/client/SatelliteMap.js';
 import type { MacroLens } from '@deliveryos/ui';
 
 // Allergen FILTER — gated OFF by default (council menu-characteristics-model FB-C1, recorded human
@@ -416,11 +417,14 @@ export function MenuPage() {
   const HEADER_H = 56;
   const scrollOffset = HEADER_H + stickyHeight + 8;
 
-  interface LocationInfo { lat: number; lng: number; googleRating?: number | null; googleReviewCount?: number | null; isOpen?: boolean; status?: 'open' | 'closed' | 'busy'; closesAt?: string | null; }
+  interface LocationInfo { id?: string; lat: number; lng: number; googleRating?: number | null; googleReviewCount?: number | null; isOpen?: boolean; status?: 'open' | 'closed' | 'busy'; closesAt?: string | null; }
   // MENU-AVAILABILITY · venue state (open|closed|busy) decoupled from lat/lng so it
   // surfaces even when geo is absent. `busy` is a distinct eater-facing state.
   const [venueStatus, setVenueStatus] = useState<'open' | 'closed' | 'busy' | null>(null);
   const [locationInfo, setLocationInfo] = useState<LocationInfo | null>(null);
+  // Hero background video (self-hosted in R2, served by /media). Per-location convention key; if the
+  // object 404s (no video for this venue) the <video> onError flips this off → the stylized map shows.
+  const [heroVideoOk, setHeroVideoOk] = useState(true);
   // UX-1 storefront footer links — decoupled from geo so they show even without lat/lng.
   const [storeLinks, setStoreLinks] = useState<{ mapsUrl?: string | null; instagram?: string | null; facebook?: string | null; phone?: string | null }>({});
   const [storeAddress, setStoreAddress] = useState<string | null>(null);
@@ -438,7 +442,7 @@ export function MenuPage() {
       .then(r => r.ok ? r.json() : null)
       .then((d: any) => {
         if (!d) return;
-        if (d.lat && d.lng) setLocationInfo({ lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount, isOpen: d.isOpen, status: d.status, closesAt: d.closesAt ?? null });
+        if (d.lat && d.lng) setLocationInfo({ id: d.id, lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount, isOpen: d.isOpen, status: d.status, closesAt: d.closesAt ?? null });
         // Derive venue state from the contract status; fall back to the legacy isOpen
         // boolean for older payloads (busy only ever comes from the new `status` field).
         setVenueStatus(d.status ?? (d.isOpen === false ? 'closed' : 'open'));
@@ -543,6 +547,15 @@ export function MenuPage() {
       if (main) main.style.overflow = prevMain;
       document.body.style.overflow = prevBody;
     };
+  }, [detailProduct]);
+
+  // Close the product modal on Escape — the X / grabber / backdrop close it, but a
+  // role="dialog" aria-modal sheet should also dismiss on Escape (keyboard a11y).
+  useEffect(() => {
+    if (!detailProduct) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeDetail(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, [detailProduct]);
 
   const toggleModifier = (groupId: string, modifierId: string, group: ModifierGroup) => {
@@ -661,8 +674,18 @@ export function MenuPage() {
           Google rating + reviews link + venue state + closing time, over a stylized-map backdrop (no API).
           The big vendor title was removed (redundant with the header). */}
       <section data-testid="vendor-info" className="relative w-full h-[150px] md:h-[180px] flex items-end overflow-hidden">
-        {/* Stylized-map backdrop (no photo field exists yet; when one does, prefer it here). */}
+        {/* Backdrop: the venue's self-hosted Google video (R2 → /media) when present, else the stylized map.
+            The video onError (404 = no video for this venue) reveals the map beneath. */}
         <div className="absolute inset-0"><StylizedMap className="w-full h-full" /></div>
+        {locationInfo?.id && heroVideoOk && (
+          <video
+            className="absolute inset-0 w-full h-full object-cover"
+            src={`/media/${locationInfo.id}/hero/video.mp4`}
+            autoPlay muted loop playsInline preload="metadata"
+            aria-hidden="true"
+            onError={() => setHeroVideoOk(false)}
+          />
+        )}
         {/* Dark scrim so the overlaid white text stays ≥4.5:1 on any tenant palette. */}
         <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.66) 0%, rgba(0,0,0,0.34) 48%, rgba(0,0,0,0.12) 100%)' }} />
         <motion.div
@@ -1032,6 +1055,7 @@ export function MenuPage() {
                       taste: getAttr(product, 'taste'),
                       chefPick: !!product.attributes?.chef_pick,
                     }}
+                    compareGutter={COMPARISON_ENABLED}
                     onClick={() => handleProductClick(product)}
                     onAdd={(e) => {
                       e.preventDefault();
@@ -1489,13 +1513,13 @@ export function MenuPage() {
             {mapsHref ? (
               <a href={mapsHref} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')}
                  className="relative block h-40 sm:h-full min-h-[10rem] overflow-hidden group outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset">
-                <StylizedMap />
+                {locationInfo?.lat != null && locationInfo?.lng != null ? <SatelliteMap lat={locationInfo.lat} lng={locationInfo.lng} className="w-full h-full" /> : <StylizedMap />}
                 <span className="absolute bottom-2 left-2 text-step-2xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1" style={{ background: 'color-mix(in srgb, var(--brand-bg) 78%, transparent)', color: 'var(--brand-text)' }}>
                   <i className="ti ti-map-pin" aria-hidden="true" /> {t('client.view_on_maps', 'View on Google Maps')}
                 </span>
               </a>
             ) : (
-              <div className="relative h-40 sm:h-full min-h-[10rem] overflow-hidden"><StylizedMap /></div>
+              <div className="relative h-40 sm:h-full min-h-[10rem] overflow-hidden">{locationInfo?.lat != null && locationInfo?.lng != null ? <SatelliteMap lat={locationInfo.lat} lng={locationInfo.lng} className="w-full h-full" /> : <StylizedMap />}</div>
             )}
             {/* RIGHT — identity + address + contact */}
             <div className="px-5 py-7 flex flex-col gap-2 justify-center">
