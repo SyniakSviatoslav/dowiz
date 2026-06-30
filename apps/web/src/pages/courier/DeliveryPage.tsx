@@ -40,6 +40,7 @@ export function DeliveryPage() {
   const { t } = useI18n();
   const reduceMotion = useReducedMotion();
   const [messages, setMessages] = useState<any[]>([]);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [pickedUp, setPickedUp] = useState(false);
   const [pickupLoading, setPickupLoading] = useState(false);
   const [cashCollected, setCashCollected] = useState<number | null>(null);
@@ -63,6 +64,7 @@ export function DeliveryPage() {
 
   const handleSendMessage = useCallback(async (presetKey: string, params?: Record<string, unknown>) => {
     if (!orderId) return;
+    setSendError(null);
     try {
       const data = await apiClient<typeof MessageSendResponse>(`/orders/${orderId}/messages`, {
         method: 'POST',
@@ -73,9 +75,13 @@ export function DeliveryPage() {
         setMessages(prev => [...prev, data.message]);
       }
     } catch (err) {
+      // BUGFIX: surface send failures (e.g. a 409 NOT_CASH_PAYMENT from the cu_prepare_cash chip on an
+      // order with no declared cash_pay_with) — the old console.warn-only swallow left the courier
+      // tapping a dead chip with zero feedback.
       console.warn('[DeliveryPage] send message failed:', err);
+      setSendError(t('courier.message_send_failed', 'Message could not be sent. Please try again.'));
     }
-  }, [orderId]);
+  }, [orderId, t]);
 
   const handleMarkRead = useCallback(async () => {
     if (!orderId) return;
@@ -464,6 +470,11 @@ export function DeliveryPage() {
           )}
         </div>
 
+        {sendError && (
+          <div role="alert" aria-live="assertive" data-testid="courier-send-error" className="mt-3 rounded-[var(--brand-radius)] px-3 py-2 text-sm text-center font-medium" style={{ background: 'var(--status-cancelled-light)', border: '1px solid var(--status-cancelled-border)', color: 'var(--color-danger)' }}>
+            {sendError}
+          </div>
+        )}
         {/* eslint-disable jsx-a11y/aria-role */}
         <MessageThread
           orderId={orderId!}

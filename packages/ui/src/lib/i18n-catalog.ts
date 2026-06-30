@@ -3879,4 +3879,21 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: "Kjo dorëzim u krye — s'ka më asgjë për të bërë këtu.",
     uk: 'Цю доставку завершено — більше нічого робити.',
   },
+  'courier.message_send_failed': {
+    en: 'Message could not be sent. Please try again.',
+    sq: 'Mesazhi nuk u dërgua. Provo përsëri.',
+    uk: 'Не вдалося надіслати повідомлення. Спробуйте ще раз.',
+  },
+  'sort.default': { en: 'Default order', sq: 'Renditja parazgjedhur', uk: 'Стандартний порядок' },
+  'sort.price-asc': {
+    en: 'Price: low to high',
+    sq: 'Çmimi: nga i ulët te i lartë',
+    uk: 'Ціна: від низької до високої',
+  },
+  'sort.price-desc': {
+    en: 'Price: high to low',
+    sq: 'Çmimi: nga i lartë te i ulët',
+    uk: 'Ціна: від високої до низької',
+  },
+  'sort.name': { en: 'Name A–Z', sq: 'Emri A–Z', uk: 'Назва А–Я' },
 };
