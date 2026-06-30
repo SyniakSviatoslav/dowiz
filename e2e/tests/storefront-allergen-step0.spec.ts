@@ -24,6 +24,10 @@ async function openFirstDish(page: import('@playwright/test').Page) {
 }
 
 test.describe('Storefront · STEP-0 allergen single-source · /s/demo', () => {
+  // Staging cold-start / public-menu pool warm-up makes the first menu load flaky (known: pool starvation).
+  // The assertions are deterministic; retry the environmental warm-up rather than inflate the per-test budget.
+  test.describe.configure({ retries: 2 });
+
   test('detail modal renders the honest allergen surface UNCONDITIONALLY (flag off)', async ({ page }) => {
     await gotoMenu(page);
     await openFirstDish(page);

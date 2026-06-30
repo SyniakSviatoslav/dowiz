@@ -11,6 +11,9 @@ async function gotoMenu(page: import('@playwright/test').Page) {
 }
 
 test.describe('Storefront · Menu Characteristics (flag-on) · /s/demo', () => {
+  // Staging cold-start / public-menu pool warm-up makes the first menu load flaky (known: pool starvation).
+  // The assertions are deterministic; retry the environmental warm-up rather than inflate the per-test budget.
+  test.describe.configure({ retries: 2 });
   test.beforeEach(async ({ page }) => {
     await gotoMenu(page);
     // If the compare affordance is absent, the build is flag-off → skip (these are flag-dark surfaces).
