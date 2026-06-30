@@ -38,6 +38,11 @@ export interface InsertOrderInput {
   type: string;
   messengerKind: string | null;
   messengerHandle: string | null;
+  // "Deliver to someone else" — the receiver's own contact (nullable; same-receiver = null). 🔴 GDPR:
+  // anonymizer nulls these (non-consenting third party).
+  receiverName: string | null;
+  receiverMessengerKind: string | null;
+  receiverHandle: string | null;
   deliveryPhotoKey: string | null;
   tipAmount: number | undefined;
   orderItemRows: PricedOrderItemRow[];
@@ -76,9 +81,10 @@ export async function insertOrderWithItems(
       metadata,
       preflight,
       customer_messenger_kind, customer_messenger_handle,
-      delivery_photo_key, tip_amount
+      delivery_photo_key, tip_amount,
+      receiver_name, receiver_messenger_kind, receiver_handle
      )
-     VALUES ($1, $2, $20, 'PENDING', $3, $4, $5, $6, $7, $8, $9, $10, 'cash', $11, $12, $13, $14, $15, $16, $17, $18, $19, $21, $22, $23, $24)
+     VALUES ($1, $2, $20, 'PENDING', $3, $4, $5, $6, $7, $8, $9, $10, 'cash', $11, $12, $13, $14, $15, $16, $17, $18, $19, $21, $22, $23, $24, $25, $26, $27)
      RETURNING id, status, subtotal, total, created_at::text, timeout_at::text`,
     [
       input.locationId, input.resolvedCustomerId, input.deliveryAddressText, input.pin?.lat ?? null, input.pin?.lng ?? null,
@@ -92,6 +98,7 @@ export async function insertOrderWithItems(
       input.messengerKind || null, input.messengerHandle || null,
       input.deliveryPhotoKey || null,
       input.tipAmount || 0,
+      input.receiverName || null, input.receiverMessengerKind || null, input.receiverHandle || null,
     ],
   );
   const order = orderRes.rows[0];

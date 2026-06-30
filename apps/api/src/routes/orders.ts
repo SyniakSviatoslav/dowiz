@@ -551,6 +551,11 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         type: input.type,
         messengerKind: (cust as any)?.messenger_kind ?? null,
         messengerHandle: (cust as any)?.messenger_handle ?? null,
+        // "Deliver to someone else" — receiver's own contact (null when delivering to the customer).
+        // Pass-through (DB CHECK is the kind gate, like customer messenger_kind); only when fully present.
+        receiverName: ((input as any).receiver?.name || '').trim() || null,
+        receiverMessengerKind: (input as any).receiver?.messenger_kind ?? null,
+        receiverHandle: ((input as any).receiver?.handle || '').trim() || null,
         deliveryPhotoKey: (input as any).delivery_photo_key ?? null,
         tipAmount: (input as any).tip_amount,
         orderItemRows,

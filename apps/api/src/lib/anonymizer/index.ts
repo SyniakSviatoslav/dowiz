@@ -212,6 +212,10 @@ export class AnonymizerService {
          SET client_ip_hash = NULL,
              delivery_address = NULL,
              delivery_instructions = NULL,
+             customer_messenger_handle = NULL,
+             receiver_name = NULL,
+             receiver_handle = NULL,
+             receiver_messenger_kind = NULL,
              anonymized_at = now()
          WHERE id = $1`,
         [orderId],
