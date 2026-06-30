@@ -110,6 +110,36 @@ describe('characteristics — allergen surface (#5 floor + #4-positive)', () => 
   });
 });
 
+// Guardrail #12 (STEP-0 single-allergen-source, permanent ratchet) — the storefront filter predicate and
+// every render path derive the allergen set from computeAllergenSurface (declared∪recipe), NEVER a
+// recipe-only accessor. The load-bearing case the FULL-BUILD round grounded in live code (FB-C1): a
+// declared-only allergen dish (owner listed it, no recipe/bom) must be RETAINED by a "contains X" view and
+// must SURFACE the warning — a recipe-only predicate would silently drop it (a live false-negative).
+describe('characteristics — single allergen source (#12 STEP-0)', () => {
+  // Mirrors MenuPage.allergenSurfaceOf: computeAllergenSurface(attributes, recipeAllergens(p)).
+  const surfaceOf = (attributes: any, recipe: string[] = []) => computeAllergenSurface(attributes, recipe);
+  // The exact storefront filter predicate (MenuPage.tsx): allergenSurfaceOf(p).known.includes(target).
+  const containsFilter = (attributes: any, recipe: string[], target: string) =>
+    surfaceOf(attributes, recipe).known.includes(target);
+
+  it('#12: a DECLARED-ONLY allergen dish (no recipe/bom) is RETAINED by a "contains milk" view', () => {
+    const declaredOnly = { allergen_status: 'listed', declared_allergens: ['milk'] };
+    assert.equal(containsFilter(declaredOnly, [], 'milk'), true, 'declared-only dish dropped by contains-milk — FB-C1 regression');
+    // and it surfaces the warning (hasInfo true, milk in known) on every non-gated surface
+    const s = surfaceOf(declaredOnly, []);
+    assert.equal(s.hasInfo, true);
+    assert.ok(s.known.includes('milk'));
+  });
+
+  it('#12: a recipe-only predicate would have DROPPED it — the regression this guardrail blocks', () => {
+    // Proof the old recipe-only basis is unsafe: the recipe array alone has no "milk".
+    const recipeOnly: string[] = [];
+    assert.equal(recipeOnly.includes('milk'), false); // recipe-only → false (dropped)
+    // The converged predicate keeps it (declared∪recipe) → true.
+    assert.equal(containsFilter({ allergen_status: 'listed', declared_allergens: ['milk'] }, recipeOnly, 'milk'), true);
+  });
+});
+
 // Guardrail #8 — comparison of two dishes: allergen cells explicit-BOTH (never blank), directional markers
 // only on the non-regulated axes, never a macro/global winner.
 describe('characteristics — comparison (#8 explicit-both + no regulated/global winner)', () => {

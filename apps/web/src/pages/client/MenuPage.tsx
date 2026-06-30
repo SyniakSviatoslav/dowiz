@@ -12,6 +12,13 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput, computeAllergenSurface } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 
+// Allergen FILTER — gated OFF by default (council menu-characteristics-model FB-C1, recorded human
+// decision). The filter PREDICATE is converged onto computeAllergenSurface (declared∪recipe) regardless,
+// so a declared-only allergen dish can never be dropped from a "contains X" view; but over near-empty
+// coverage a visible "contains X" filter risks a "dishes not shown ⇒ safe" false-read, so the CHIPS stay
+// dark until a positive-only human sign-off. Re-enable = flip the flag (predicate is already correct).
+const ALLERGEN_FILTER_ENABLED = (import.meta as any).env?.VITE_MENU_ALLERGEN_FILTER === 'true';
+
 interface ProductModifier {
   id: string;
   name: string;
@@ -95,22 +102,39 @@ export function MenuPage() {
     return [];
   };
 
+  // Macro nutrition + ingredients ONLY. Allergens are NOT returned here (STEP-0 single-source contract,
+  // council #12): a recipe-only allergen array must never be the basis of a safety read. Recipe-derived
+  // allergens are extracted by recipeAllergens() solely to be UNIONED with the owner declaration inside
+  // computeAllergenSurface (allergenSurfaceOf), the one allergen source on every storefront surface.
   const bomToNutrition = (p: Product) => {
     const bom = getAttr(p, 'bom');
-    if (!Array.isArray(bom) || bom.length === 0) return { kcal: 0, protein: 0, fat: 0, carbs: 0, allergens: [], ingredients: [] };
+    if (!Array.isArray(bom) || bom.length === 0) return { kcal: 0, protein: 0, fat: 0, carbs: 0, ingredients: [] };
     let kcal = 0, protein = 0, fat = 0, carbs = 0;
-    const allergens = new Set<string>();
     const ingredients: string[] = [];
     for (const line of bom) {
       if (typeof line.kcal === 'number') kcal += line.kcal;
       if (typeof line.proteinG === 'number') protein += line.proteinG;
       if (typeof line.fatG === 'number') fat += line.fatG;
       if (typeof line.carbsG === 'number') carbs += line.carbsG;
-      extractLineAllergens(line).forEach((a: string) => allergens.add(a));
       if (line.supplyName && line.kind !== 'packaging' && line.kind !== 'utensil') ingredients.push(line.supplyName);
     }
-    return { kcal: Math.round(kcal), protein: Math.round(protein), fat: Math.round(fat), carbs: Math.round(carbs), allergens: Array.from(allergens), ingredients };
+    return { kcal: Math.round(kcal), protein: Math.round(protein), fat: Math.round(fat), carbs: Math.round(carbs), ingredients };
   };
+
+  // Recipe-derived allergens — the UNION INPUT only, never a safety output on its own. Its single consumer
+  // is allergenSurfaceOf (computeAllergenSurface), which conservatively unions it with the owner's L3
+  // declaration so a base-dish allergen can never be dropped by attestation status (council #4-positive).
+  const recipeAllergens = (p: Product): string[] => {
+    const bom = getAttr(p, 'bom');
+    if (!Array.isArray(bom)) return [];
+    const set = new Set<string>();
+    for (const line of bom) extractLineAllergens(line).forEach((a: string) => set.add(a));
+    return Array.from(set);
+  };
+
+  // The ONE allergen source on every storefront surface (filter predicate, detail modal, and — when shipped
+  // — the card unit + comparison). PRESENCE-only, conservative declared∪recipe union (council STEP-0 / #12).
+  const allergenSurfaceOf = (p: Product) => computeAllergenSurface((p as any).attributes, recipeAllergens(p));
 
   const CHEF_PICKS_ID = '__chefs_picks__';
   const SORTED_FLAT_ID = '__sorted_flat__';
@@ -190,8 +214,10 @@ export function MenuPage() {
       const q = searchQuery.toLowerCase();
       result = result.filter(p => p.name.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q));
     }
-    if (filterAllergen) {
-      result = result.filter(p => bomToNutrition(p).allergens.includes(filterAllergen));
+    // Predicate converged onto the single allergen source (declared∪recipe) so a declared-only "contains X"
+    // dish is never dropped (council #12). Only applied when the filter is enabled (flag default off).
+    if (ALLERGEN_FILTER_ENABLED && filterAllergen) {
+      result = result.filter(p => allergenSurfaceOf(p).known.includes(filterAllergen));
     }
     // Category filter (single-select). Chef's Picks is a cross-category overlay, so it
     // filters by the chef_pick attribute rather than a category id.
@@ -676,8 +702,8 @@ export function MenuPage() {
                 </motion.button>
               );
             })()}
-            {allAllergens.length > 0 && <div className="w-px h-4 shrink-0" style={{ background: 'var(--brand-border)' }} />}
-            {allAllergens.map(a => {
+            {ALLERGEN_FILTER_ENABLED && allAllergens.length > 0 && <div className="w-px h-4 shrink-0" style={{ background: 'var(--brand-border)' }} />}
+            {ALLERGEN_FILTER_ENABLED && allAllergens.map(a => {
               const s = getAllergenStyle(a);
               return (
                 <motion.button key={a} onClick={() => setFilterAllergen(filterAllergen === a ? null : a)} whileTap={prefersReduced ? undefined : { scale: 0.95 }}
@@ -851,7 +877,6 @@ export function MenuPage() {
                       protein: nutrition.protein || undefined,
                       fat: nutrition.fat || undefined,
                       carbs: nutrition.carbs || undefined,
-                      allergens: nutrition.allergens.length ? nutrition.allergens : undefined,
                       ingredients: nutrition.ingredients.length ? nutrition.ingredients : undefined,
                       taste: getAttr(product, 'taste'),
                       chefPick: !!product.attributes?.chef_pick,
@@ -1087,35 +1112,13 @@ export function MenuPage() {
               )}
 
               {(() => {
-                const bomAllergens = bomToNutrition(detailProduct).allergens;
-                // Flag OFF (today): legacy — show recipe-derived allergens only when present, nothing otherwise.
-                const charsOn = (import.meta as any).env?.VITE_MENU_CHARACTERISTICS_ENABLED === 'true';
-                if (!charsOn) {
-                  if (bomAllergens.length === 0) return null;
-                  return (
-                    <div className="rounded-xl p-4" style={{ background: 'rgba(220,38,38,0.06)', borderColor: 'rgba(220,38,38,0.15)', borderWidth: 1 }}>
-                      <h3 className="text-xs font-semibold uppercase tracking-wider mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
-                        <i className="ti ti-alert-triangle" /> {t('client.allergens', 'Allergens')}
-                      </h3>
-                      <div className="flex flex-wrap gap-1.5">
-                        {bomAllergens.map(a => {
-                          const s = getAllergenStyle(a);
-                          return (
-                            <span key={a} className="px-2 py-0.5 rounded font-semibold text-step-2xs uppercase" style={{ background: s.bg, color: s.text }}>
-                              {t(`allergen.${a.toLowerCase()}`, a)}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                }
-                // Flag ON — DETAIL-FLOOR-ONLY honest surface (council menu-characteristics-model #5/#5d).
-                // PRESENCE only (absence is NEVER shown). Conservative union of the owner's L3 declaration and
-                // recipe-derived allergens so a warning is never hidden. No allergens known → the floor, never
-                // a blank (data-absence must never read as a clean allergen state). The reliance bound is
-                // ALWAYS attached so a partial declaration can't read as the complete truth.
-                const { known } = computeAllergenSurface((detailProduct as any).attributes, bomAllergens);
+                // STEP-0 (council #12/#5/#5d) — the allergen surface is UNCONDITIONAL (no flag) and reads the
+                // single source allergenSurfaceOf. PRESENCE only (absence is NEVER shown). Conservative union
+                // of the owner's L3 declaration and recipe-derived allergens so a warning is never hidden. No
+                // allergens known → the floor ("info not provided"), NEVER a blank (data-absence must never
+                // read as a clean allergen state). The reliance bound is ALWAYS attached so a partial
+                // declaration can't read as the complete truth.
+                const { known } = allergenSurfaceOf(detailProduct);
                 return (
                   <div className="rounded-xl p-4" style={{ background: 'rgba(220,38,38,0.06)', borderColor: 'rgba(220,38,38,0.15)', borderWidth: 1 }} data-testid="allergen-surface">
                     <h3 className="text-xs font-semibold uppercase tracking-wider mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>

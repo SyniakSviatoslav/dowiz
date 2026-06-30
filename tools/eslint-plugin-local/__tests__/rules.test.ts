@@ -83,3 +83,21 @@ test('no-permissive-status-assertion — red on expect([..]).toContain(x), green
     ],
   });
 });
+
+test('no-recipe-only-allergen-read — red on bomToNutrition(p).allergens in the storefront, green via computeAllergenSurface', () => {
+  rt.run('no-recipe-only-allergen-read', plugin.rules['no-recipe-only-allergen-read'], {
+    valid: [
+      // converged single source — the only allowed allergen basis
+      { code: 'const s = computeAllergenSurface(p.attributes, recipeAllergens(p)); s.known.includes(x)', filename: '/r/__fixtures__/menu.tsx' },
+      { code: 'allergenSurfaceOf(p).known.includes(filterAllergen)', filename: '/r/__fixtures__/menu.tsx' },
+      // macro reads off bomToNutrition are fine (not a safety read)
+      { code: 'const n = bomToNutrition(p); n.kcal > 0', filename: '/r/__fixtures__/menu.tsx' },
+      // non-storefront file → rule is inert even on the recipe-only read
+      { code: 'bomToNutrition(p).allergens.includes(x)', filename: '/r/apps/web/src/other.tsx' },
+    ],
+    invalid: [
+      { code: 'bomToNutrition(p).allergens.includes(filterAllergen)', filename: '/r/__fixtures__/menu.tsx', errors: 1 },
+      { code: 'const a = bomToNutrition(detailProduct).allergens', filename: '/r/__fixtures__/menu.tsx', errors: 1 },
+    ],
+  });
+});
