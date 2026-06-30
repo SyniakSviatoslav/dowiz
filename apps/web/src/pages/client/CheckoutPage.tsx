@@ -254,7 +254,6 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
   const [apartmentError, setApartmentError] = useState('');
   const [placing, setPlacing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const [cityFact, setCityFact] = useState<string | null>(null);
   const [currencyCode, setCurrencyCode] = useState<string>('ALL');
   // Phone-verification (OTP) state — only engaged when the backend signals
   // `requiresOtp` on a soft_confirm. Otherwise checkout behaves exactly as before.
@@ -282,18 +281,6 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
           hasDistanceTiers: info.hasDistanceTiers === true,
         });
         if (info.lng && info.lat) setLocationCenter([info.lng, info.lat]);
-        if (info.address) {
-          const parts = info.address.split(',');
-          const city = parts.length > 1 ? parts[parts.length - 1].trim() : parts[0].trim();
-          if (city) {
-            fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(city)}`)
-              .then(r => r.json())
-              .then((wiki: any) => {
-                if (wiki.extract) setCityFact(wiki.extract.split('.')[0] + '.');
-              })
-              .catch(() => {/* silently ignore */});
-          }
-        }
       })
       .catch((err) => {
         console.debug('[CheckoutPage] failed to load location info:', err);
@@ -934,22 +921,6 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
           </div>
         </motion.div>
 
-        {cityFact && (
-          <motion.div
-            initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: duration.slow, ease: ease.out }}
-            className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)' }}>
-            <div className="flex items-start gap-3">
-              <span className="text-xl shrink-0 mt-0.5">🌍</span>
-              <div>
-                <p className="text-step-2xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.did_you_know', 'Did you know?')}</p>
-                <p className="text-step-sm leading-relaxed" style={{ color: 'var(--brand-text)' }}>{cityFact}</p>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
         {hasNutrition && (
           <NutritionRing
             kcal={nutritionTotal.kcal}
@@ -1095,17 +1066,14 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
       )}
 
       {/* #5 — privacy notice at the point of consent. Warm, plain sq/en/uk; states
-          what we collect, who sees it (this restaurant + its courier — truthful to
-          tenant isolation), and that identifying details are removed on request via
-          the restaurant (anonymize-not-delete; no self-service button, no hard
-          retention number the runtime can't yet positively prove). */}
+          what we collect and emphasises that the data is never sold or shared with
+          third parties or advertisers (used only to fulfil the order). */}
       <div data-testid="checkout-privacy-notice" className="px-4 py-3 rounded-[var(--brand-radius)] border text-xs leading-relaxed" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text-muted)' }}>
         <p className="font-semibold mb-1" style={{ color: 'var(--brand-text)' }}>
           <i className="ti ti-lock mr-1" />{t('checkout.privacy.title', 'Your data')}
         </p>
         <p>{t('checkout.privacy.what', 'To deliver your order we collect your name, phone, address and (if you add it) a door photo.')}</p>
-        <p className="mt-1">{t('checkout.privacy.who', 'Only this restaurant and its courier can see it — no other restaurant.')}</p>
-        <p className="mt-1">{t('checkout.privacy.removal', 'We keep it only as long as needed for your orders and remove the details that identify you on request — contact the restaurant.')}</p>
+        <p className="mt-1">{t('checkout.privacy.never_sold', 'We never sell or share your information with third parties or advertisers — it\'s used only to fulfil your order.')}</p>
       </div>
 
       <StickyActionBar>

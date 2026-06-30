@@ -3710,7 +3710,11 @@ export const catalog: Record<string, CatalogEntry> = {
   },
   'cart.decrease': { en: 'Decrease quantity', sq: 'Ulni sasinë', uk: 'Зменшити кількість' },
   'cart.increase': { en: 'Increase quantity', sq: 'Rritni sasinë', uk: 'Збільшити кількість' },
-  'cart.free_delivery_label': { en: 'Free delivery progress', sq: 'Progresi i dorëzimit falas', uk: 'Прогрес безкоштовної доставки' },
+  'cart.free_delivery_label': {
+    en: 'Free delivery progress',
+    sq: 'Progresi i dorëzimit falas',
+    uk: 'Прогрес безкоштовної доставки',
+  },
   'map.unavailable': {
     en: 'Live location unavailable',
     sq: 'Vendndodhja drejtpërdrejt e padisponueshme',
@@ -3898,4 +3902,32 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: 'Ціна: від високої до низької',
   },
   'sort.name': { en: 'Name A–Z', sq: 'Emri A–Z', uk: 'Назва А–Я' },
+  'sort.by_price': { en: 'Sort by price', sq: 'Rendit sipas çmimit', uk: 'Сортувати за ціною' },
+  'sort.price': { en: 'Price', sq: 'Çmimi', uk: 'Ціна' },
+  'client.all': { en: 'All', sq: 'Të gjitha', uk: 'Усі' },
+  'client.closed_cannot_order': {
+    en: 'The restaurant is closed — ordering is paused until it reopens.',
+    sq: 'Restoranti është i mbyllur — porositë janë pezulluar derisa të rihapet.',
+    uk: 'Ресторан зачинено — замовлення призупинено до повторного відкриття.',
+  },
+  'client.closed_short': {
+    en: 'Currently closed',
+    sq: 'Aktualisht i mbyllur',
+    uk: 'Зараз зачинено',
+  },
+  'client.closed_title': {
+    en: 'Currently closed',
+    sq: 'Aktualisht i mbyllur',
+    uk: 'Зараз зачинено',
+  },
+  'client.closed_browse_hint': {
+    en: 'You can browse the full menu — ordering reopens during opening hours.',
+    sq: 'Mund të shfletoni menunë e plotë — porositja rihapet gjatë orarit të punës.',
+    uk: 'Ви можете переглядати все меню — замовлення відкриється у робочі години.',
+  },
+  'checkout.privacy.never_sold': {
+    en: "We never sell or share your information with third parties or advertisers — it's used only to fulfil your order.",
+    sq: 'Ne kurrë nuk i shesim ose ndajmë të dhënat tuaja me palë të treta ose reklamues — përdoren vetëm për të përmbushur porosinë tuaj.',
+    uk: 'Ми ніколи не продаємо й не передаємо ваші дані третім сторонам чи рекламодавцям — вони використовуються лише для виконання вашого замовлення.',
+  },
 };
