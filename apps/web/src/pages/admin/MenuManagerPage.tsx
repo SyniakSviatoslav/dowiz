@@ -517,6 +517,15 @@ export function MenuManagerPage() {
     }
   };
 
+  // Selecting a category re-scopes the grid; if the user was scrolled deep the browser
+  // clamps the scroll abruptly (the "page jumps" complaint). Reset to the top deliberately
+  // so the category change is a controlled transition, not a yank.
+  const scrollMainTop = () => {
+    const m = document.querySelector('.app-shell-main') as HTMLElement | null;
+    const smooth = !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    (m ?? window).scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' });
+  };
+
 
   // Filtered/sorted products
   const getAllProducts = (catId: string): Product[] => {
@@ -689,12 +698,12 @@ export function MenuManagerPage() {
       {/* Category tabs */}
       {!loading && categories.length > 0 && (
         <div className="flex overflow-x-auto hide-scrollbar gap-1 pb-1 snap-x snap-mandatory sticky top-0 z-10" style={{ background: 'var(--brand-bg)', WebkitMaskImage: 'linear-gradient(to right, #000 92%, transparent)', maskImage: 'linear-gradient(to right, #000 92%, transparent)' }}>
-          <motion.button onClick={() => setSelectedCategory(null)} whileTap={{ scale: 0.97 }} aria-pressed={selectedCategory === null}
+          <motion.button onClick={() => { setSelectedCategory(null); scrollMainTop(); }} whileTap={{ scale: 0.97 }} aria-pressed={selectedCategory === null}
             className={`px-3 py-1.5 text-xs font-medium rounded-md outline-none transition-[color,background-color,box-shadow] duration-150 [transition-timing-function:var(--ease-soft)] snap-start shrink-0 whitespace-nowrap focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${selectedCategory === null ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)] border border-transparent'}`}>
             {t('common.all', 'All')}
           </motion.button>
           {categories.map(cat => (
-            <motion.button key={cat.id} onClick={async () => { setSelectedCategory(cat.id); await toggleExpand(cat.id); }} whileTap={{ scale: 0.97 }} aria-pressed={selectedCategory === cat.id}
+            <motion.button key={cat.id} onClick={async () => { setSelectedCategory(cat.id); scrollMainTop(); await toggleExpand(cat.id); }} whileTap={{ scale: 0.97 }} aria-pressed={selectedCategory === cat.id}
               className={`max-w-[11rem] px-3 py-1.5 text-xs font-medium rounded-md outline-none transition-[color,background-color,box-shadow] duration-150 [transition-timing-function:var(--ease-soft)] snap-start shrink-0 whitespace-nowrap focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${selectedCategory === cat.id ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] shadow-sm border border-[var(--brand-primary)]' : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)] border border-transparent'}`}>
               <span className="inline-flex items-center gap-1 max-w-full align-bottom"><span className="truncate">{cat.name}</span> <span className="text-step-2xs text-[var(--brand-text-muted)] shrink-0">({cat.productCount ?? cat.products?.length ?? 0})</span></span>
             </motion.button>

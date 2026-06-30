@@ -255,6 +255,14 @@ export function DashboardPage() {
     });
   };
 
+  // Filtering shrinks the list while the user may be scrolled deep; the browser then
+  // CLAMPS the scroll position abruptly (reads as a jarring jump). Reset the scroll
+  // container to the top deliberately so a filter change is a controlled transition.
+  const scrollMainTop = () => {
+    const m = document.querySelector('.app-shell-main') as HTMLElement | null;
+    (m ?? window).scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+  };
+
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     if (newStatus === 'REJECTED' || newStatus === 'CANCELLED') {
       const confirmed = await confirm({
@@ -492,11 +500,11 @@ export function DashboardPage() {
               </div>
               <div className="flex bg-[var(--brand-surface)] border rounded-lg overflow-hidden p-0.5 shrink-0" role="tablist" aria-label={t('admin.view_mode', 'View mode')} style={{ borderColor: 'var(--brand-border)' }}>
                 <motion.button role="tab" whileTap={{ scale: 0.97 }} aria-selected={viewMode === 'live'}
-                  onClick={() => { setViewMode('live'); setStatusFilter('all'); }}
+                  onClick={() => { setViewMode('live'); setStatusFilter('all'); scrollMainTop(); }}
                   className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${viewMode === 'live' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)] border border-transparent'}`}
                 >{t('admin.live', 'Live')}</motion.button>
                 <motion.button role="tab" whileTap={{ scale: 0.97 }} aria-selected={viewMode === 'history'}
-                  onClick={() => { setViewMode('history'); setStatusFilter('all'); }}
+                  onClick={() => { setViewMode('history'); setStatusFilter('all'); scrollMainTop(); }}
                   className={`w-16 sm:w-20 px-3 py-1 text-sm font-medium rounded-md whitespace-nowrap transition-colors duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 ${viewMode === 'history' ? 'bg-[var(--brand-primary-light)] text-[var(--brand-text)] border border-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)] border border-transparent'}`}
                 >{t('courier.history', 'History')}</motion.button>
               </div>
@@ -526,9 +534,8 @@ export function DashboardPage() {
                 aria-label="Search orders by name or ID"
                 containerClassName="flex-1 sm:flex-none sm:w-48"
               />
-              <motion.button onClick={() => exportCSV(filteredOrders, 'orders.csv')} whileTap={{ scale: 0.97 }} title={t('tooltip.export_csv', 'Export as CSV')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-[transform,box-shadow,background-color] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] [@media(hover:hover)]:hover:bg-[var(--brand-surface)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 shrink-0" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)', color: 'var(--brand-text)', minHeight: 'var(--tap-min)' }}>
-                <i className="ti ti-download"></i> {t('admin.export_csv', 'Export CSV')}
-              </motion.button>
+              {/* Owner directive: Export CSV removed from the toolbar (the prominent control is
+                  the Newest-first sort below). CSV export lives at the page bottom as a quiet link. */}
             </div>
           </div>
 
@@ -538,7 +545,7 @@ export function DashboardPage() {
               {STATUSES.map(s => (
                   <motion.button
                   key={s}
-                  onClick={() => setStatusFilter(s)}
+                  onClick={() => { setStatusFilter(s); scrollMainTop(); }}
                   whileTap={{ scale: 0.97 }}
                   aria-pressed={statusFilter === s}
                   title={t('tooltip.filter_status', 'Filter by status')}
@@ -699,6 +706,21 @@ export function DashboardPage() {
             ))}
           </AnimatePresence>
         </motion.div>
+      )}
+
+      {/* Quiet CSV export — demoted from the toolbar (owner directive); shown under the
+          list only when there are orders to export. */}
+      {!loading && !error && filteredOrders.length > 0 && (
+        <div className="flex justify-end -mt-1">
+          <button
+            type="button"
+            onClick={() => exportCSV(filteredOrders, 'orders.csv')}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)] underline-offset-2 hover:underline rounded px-1 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
+            title={t('tooltip.export_csv', 'Export as CSV')}
+          >
+            <i className="ti ti-download text-step-2xs" /> {t('admin.export_csv', 'Export CSV')}
+          </button>
+        </div>
       )}
 
       {/* Live Courier Map */}
