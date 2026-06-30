@@ -15,6 +15,7 @@ import { MenuComparePanel } from './MenuComparePanel.js';
 import type { CompareDish } from './MenuComparePanel.js';
 import { DishStats } from '../../components/client/DishStats.js';
 import type { DishIngredient } from '../../components/client/DishStats.js';
+import { StylizedMap } from '../../components/client/StylizedMap.js';
 import type { MacroLens } from '@deliveryos/ui';
 
 // Allergen FILTER — gated OFF by default (council menu-characteristics-model FB-C1, recorded human
@@ -402,7 +403,7 @@ export function MenuPage() {
   const HEADER_H = 56;
   const scrollOffset = HEADER_H + stickyHeight + 8;
 
-  interface LocationInfo { lat: number; lng: number; googleRating?: number | null; googleReviewCount?: number | null; isOpen?: boolean; status?: 'open' | 'closed' | 'busy'; }
+  interface LocationInfo { lat: number; lng: number; googleRating?: number | null; googleReviewCount?: number | null; isOpen?: boolean; status?: 'open' | 'closed' | 'busy'; closesAt?: string | null; }
   // MENU-AVAILABILITY · venue state (open|closed|busy) decoupled from lat/lng so it
   // surfaces even when geo is absent. `busy` is a distinct eater-facing state.
   const [venueStatus, setVenueStatus] = useState<'open' | 'closed' | 'busy' | null>(null);
@@ -424,7 +425,7 @@ export function MenuPage() {
       .then(r => r.ok ? r.json() : null)
       .then((d: any) => {
         if (!d) return;
-        if (d.lat && d.lng) setLocationInfo({ lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount, isOpen: d.isOpen, status: d.status });
+        if (d.lat && d.lng) setLocationInfo({ lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount, isOpen: d.isOpen, status: d.status, closesAt: d.closesAt ?? null });
         // Derive venue state from the contract status; fall back to the legacy isOpen
         // boolean for older payloads (busy only ever comes from the new `status` field).
         setVenueStatus(d.status ?? (d.isOpen === false ? 'closed' : 'open'));
@@ -643,54 +644,57 @@ export function MenuPage() {
   return (
     <div className="relative min-h-screen pb-28">
 
-      {/* Hero Section */}
-      <section className="relative w-full h-[160px] md:h-[200px] flex items-end overflow-hidden" style={{ background: 'linear-gradient(160deg, var(--brand-surface-raised) 0%, var(--brand-accent) 50%, var(--brand-primary) 100%)' }}>
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, color-mix(in srgb, var(--brand-bg) 80%, transparent) 0%, color-mix(in srgb, var(--brand-bg) 40%, transparent) 50%, color-mix(in srgb, var(--brand-bg) 5%, transparent) 100%)' }} />
-        {/* Solid dark scrim band behind the title. The hero gradient fades to a light/pink
-            --brand-primary at the bottom — exactly where the title sits — so on light themes
-            --brand-text loses contrast. This bottom-anchored near-black scrim guarantees the
-            title stays ≥4.5:1 regardless of the tenant palette. */}
-        <div className="absolute inset-x-0 bottom-0 h-3/5" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.30) 45%, transparent 100%)' }} />
-        <div className="absolute inset-0 opacity-[0.06]" style={{ background: 'radial-gradient(ellipse at 30% 50%, color-mix(in srgb, var(--brand-primary) 20%, transparent) 0%, transparent 60%)' }} />
-        <div className="absolute inset-0 opacity-[0.03]" style={{ background: 'radial-gradient(ellipse at 70% 30%, color-mix(in srgb, var(--brand-text) 15%, transparent) 0%, transparent 50%)' }} />
+      {/* Vendor info zone — between the header (which already shows the name+logo) and the categories.
+          Google rating + reviews link + venue state + closing time, over a stylized-map backdrop (no API).
+          The big vendor title was removed (redundant with the header). */}
+      <section data-testid="vendor-info" className="relative w-full h-[150px] md:h-[180px] flex items-end overflow-hidden">
+        {/* Stylized-map backdrop (no photo field exists yet; when one does, prefer it here). */}
+        <div className="absolute inset-0"><StylizedMap className="w-full h-full" /></div>
+        {/* Dark scrim so the overlaid white text stays ≥4.5:1 on any tenant palette. */}
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.66) 0%, rgba(0,0,0,0.34) 48%, rgba(0,0,0,0.12) 100%)' }} />
         <motion.div
-          className="relative z-10 w-full px-5 pb-5"
+          className="relative z-10 w-full px-5 pb-4 flex flex-col gap-2"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: ease.out }}
         >
-          <motion.div
-            className="flex items-center gap-1.5 text-step-xs font-medium mb-1.5"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4, delay: 0.15 }}
-            style={{ color: 'rgba(255,255,255,0.82)', textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}
-          >
-            {locationInfo?.googleRating != null ? (
-              <>
+          {/* Rating + reviews (owner-entered Google data) */}
+          <div className="flex items-center gap-2 flex-wrap text-step-xs font-medium" style={{ color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
+            {locationInfo?.googleRating != null && (
+              <span className="inline-flex items-center gap-1">
                 <span className="inline-flex gap-0.5" style={{ color: 'var(--color-warning)' }}>
-                  {[1,2,3,4,5].map(i => <i key={i} className={`ti ${i <= Math.round(locationInfo.googleRating!) ? 'ti-star-filled' : 'ti-star'}`} style={{ fontSize: '0.7rem' }} />)}
+                  {[1,2,3,4,5].map(i => <i key={i} className={`ti ${i <= Math.round(locationInfo.googleRating!) ? 'ti-star-filled' : 'ti-star'}`} style={{ fontSize: '0.78rem' }} />)}
                 </span>
-                <span style={{ color: '#ffffff', fontWeight: 600 }}>{locationInfo.googleRating.toFixed(1)}</span>
-                {locationInfo.googleReviewCount != null && <span className="opacity-70">({locationInfo.googleReviewCount})</span>}
-              </>
-            ) : null}
-            {geoStatus !== 'denied' && deliveryETA != null && (
-              <>
-                {locationInfo?.googleRating != null && <span className="mx-1.5 opacity-40">·</span>}
-                <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} />
-                <span>~{deliveryETA} min</span>
-              </>
+                <span style={{ color: '#ffffff', fontWeight: 700 }}>{locationInfo.googleRating.toFixed(1)}</span>
+                {locationInfo.googleReviewCount != null && <span className="opacity-75">({locationInfo.googleReviewCount})</span>}
+              </span>
             )}
-          </motion.div>
-          <h1 className="text-step-xl md:text-step-2xl font-bold leading-tight" style={{ color: '#ffffff', fontFamily: 'var(--brand-font-heading)', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>
-            {menu?.location_name || t('client.menu', 'Menu')}
-          </h1>
-          {venueStatus && (
-            <div className="mt-2">
-              <StateChip state={venueStatus} scope="venue" data-testid="venue-state-chip" />
-            </div>
-          )}
+            {storeLinks.mapsUrl && (
+              <a href={storeLinks.mapsUrl} target="_blank" rel="noopener noreferrer" data-testid="vendor-reviews-link"
+                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-semibold outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                 style={{ background: 'rgba(255,255,255,0.16)', color: '#ffffff', backdropFilter: 'blur(4px)' }}>
+                <i className="ti ti-brand-google" style={{ fontSize: '0.8rem' }} aria-hidden="true" />
+                {t('client.read_reviews_google', 'Reviews on Google')}
+                <i className="ti ti-external-link" style={{ fontSize: '0.7rem' }} aria-hidden="true" />
+              </a>
+            )}
+          </div>
+          {/* Venue state + closing time + delivery ETA */}
+          <div className="flex items-center gap-2 flex-wrap text-step-xs" style={{ color: 'rgba(255,255,255,0.88)', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
+            {venueStatus && <StateChip state={venueStatus} scope="venue" data-testid="venue-state-chip" />}
+            {locationInfo?.closesAt && venueStatus !== 'closed' && (
+              <span data-testid="vendor-closes-at" className="inline-flex items-center gap-1">
+                <i className="ti ti-tools-kitchen-2" style={{ fontSize: '0.72rem' }} aria-hidden="true" />
+                {t('client.closes_at', 'closes {{time}}', { time: locationInfo.closesAt })}
+              </span>
+            )}
+            {geoStatus !== 'denied' && deliveryETA != null && (
+              <span className="inline-flex items-center gap-1">
+                <i className="ti ti-bike" style={{ fontSize: '0.72rem' }} aria-hidden="true" />
+                ~{deliveryETA} min
+              </span>
+            )}
+          </div>
         </motion.div>
       </section>
 
@@ -1459,29 +1463,6 @@ export function MenuPage() {
             : null);
         const iconCls = "text-lg inline-flex items-center justify-center w-10 h-10 rounded-full outline-none transition-[color,transform] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]";
         const iconSty = { color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' } as React.CSSProperties;
-        // The stylized map graphic (pure SVG, brand-tinted) with a pin. Decorative — aria-hidden.
-        const StylizedMap = (
-          <svg viewBox="0 0 320 180" className="w-full h-full" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-            <rect width="320" height="180" fill="var(--brand-surface)" />
-            <g stroke="var(--brand-border)" strokeWidth="6" opacity="0.9">
-              <path d="M-10 60 L330 40" /><path d="M-10 130 L330 150" />
-              <path d="M70 -10 L50 190" /><path d="M210 -10 L230 190" />
-            </g>
-            <g stroke="var(--brand-border)" strokeWidth="2" opacity="0.55">
-              <path d="M-10 95 L330 92" /><path d="M140 -10 L150 190" />
-            </g>
-            <g fill="color-mix(in srgb, var(--brand-primary) 9%, var(--brand-surface))">
-              <rect x="86" y="48" width="50" height="34" rx="3" /><rect x="244" y="60" width="46" height="40" rx="3" />
-              <rect x="92" y="150" width="60" height="34" rx="3" /><rect x="246" y="150" width="50" height="30" rx="3" />
-            </g>
-            {/* Vendor pin */}
-            <g transform="translate(160 86)">
-              <ellipse cx="0" cy="30" rx="14" ry="4" fill="color-mix(in srgb, var(--brand-primary) 30%, transparent)" />
-              <path d="M0 28 C-13 8 -14 -2 -14 -8 A14 14 0 1 1 14 -8 C14 -2 13 8 0 28 Z" fill="var(--brand-primary)" />
-              <circle cx="0" cy="-8" r="5.5" fill="var(--brand-bg)" />
-            </g>
-          </svg>
-        );
         return (
         <footer className="mt-12 border-t" style={{ borderColor: 'var(--brand-border)' }}>
           <div className="grid grid-cols-1 sm:grid-cols-2">
@@ -1489,13 +1470,13 @@ export function MenuPage() {
             {mapsHref ? (
               <a href={mapsHref} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')}
                  className="relative block h-40 sm:h-full min-h-[10rem] overflow-hidden group outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset">
-                {StylizedMap}
+                <StylizedMap />
                 <span className="absolute bottom-2 left-2 text-step-2xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1" style={{ background: 'color-mix(in srgb, var(--brand-bg) 78%, transparent)', color: 'var(--brand-text)' }}>
                   <i className="ti ti-map-pin" aria-hidden="true" /> {t('client.view_on_maps', 'View on Google Maps')}
                 </span>
               </a>
             ) : (
-              <div className="relative h-40 sm:h-full min-h-[10rem] overflow-hidden">{StylizedMap}</div>
+              <div className="relative h-40 sm:h-full min-h-[10rem] overflow-hidden"><StylizedMap /></div>
             )}
             {/* RIGHT — identity + address + contact */}
             <div className="px-5 py-7 flex flex-col gap-2 justify-center">
