@@ -719,60 +719,64 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
             courier_option, courier_phone, primary_color, logo_url, test_order_completed } = request.body as any;
 
     let locId = await getLocationId(request);
-    if (!locId) {
-      // Brand-new owner (no location yet) — PROVISION their first storefront here.
-      // The wizard's "publish" is this call; previously it 401'd (getLocationId is
-      // null for a fresh owner), and the client turned that into a logout, so a new
-      // owner could never finish onboarding. Create org + location + membership,
-      // then continue with menu/theme below. The location starts as a DRAFT
-      // (published_at NULL) — going order-capable happens via the activation gate.
-      const userId = await getOwnerUserId(request);
-      if (!userId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
-      if (!name || !phone || !slug) return reply.sendError(400, 'VALIDATION_FAILED', 'name, phone and slug are required');
-      const taken = await db.query(`SELECT 1 FROM locations WHERE slug = $1`, [slug]);
-      if (taken.rowCount > 0) return reply.sendError(409, 'SLUG_TAKEN', 'Slug already taken');
-      const orgRes = await db.query(`SELECT id FROM organizations WHERE owner_id = $1 LIMIT 1`, [userId]);
-      let orgId = orgRes.rows[0]?.id;
-      if (!orgId) {
-        const o = await db.query(`INSERT INTO organizations (id, name, owner_id) VALUES ($1, $2, $3) RETURNING id`, [crypto.randomUUID(), `${name} Org`, userId]);
-        orgId = o.rows[0].id;
-      }
-      locId = crypto.randomUUID();
-      await db.query(
-        `INSERT INTO locations (id, org_id, slug, name, phone, status, widget_enabled, delivery_fee_flat, lat, lng, delivery_radius_km)
-         VALUES ($1, $2, $3, $4, $5, 'open', true, 0, $6, $7, $8)`,
-        [locId, orgId, slug, name, phone, lat ?? null, lng ?? null, delivery_radius_km ?? null],
-      );
-      await db.query(`INSERT INTO memberships (user_id, location_id, role) VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING`, [userId, locId]);
-    } else {
-      await db.query(
-        `UPDATE locations SET name = COALESCE($1, name), phone = COALESCE($2, phone),
-         lat = COALESCE($3, lat), lng = COALESCE($4, lng),
-         delivery_radius_km = COALESCE($5, delivery_radius_km) WHERE id = $6`,
-        [name || null, phone || null, lat ?? null, lng ?? null, delivery_radius_km ?? null, locId]
-      );
-    }
-
-    if (Array.isArray(menu_items)) {
-      for (const item of menu_items) {
-        if (item.name && item.price) {
-          const pid = crypto.randomUUID();
-          await db.query(
-            `INSERT INTO products (id, location_id, name, price, description, is_available)
-             VALUES ($1, $2, $3, $4, $5, true) ON CONFLICT DO NOTHING`,
-            [pid, locId, item.name, item.price, item.description || null]
+    const userId = await getOwnerUserId(request);
+    if (!userId) return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
+    // B3: all writes below are member-keyed FORCE-RLS — run on a checked-out client with member context set
+    // (set_config persists across statements on a single client, unlike pool.query). The brand-new-owner
+    // first-create can't self-satisfy the member policy → SECURITY DEFINER bootstrap_owner (the membership it
+    // creates makes the subsequent member-context writes admissible).
+    const client = await db.connect();
+    try {
+      await client.query(`SELECT set_config('app.user_id', $1, false)`, [userId]);
+      if (!locId) {
+        // Brand-new owner (no location yet) — PROVISION their first storefront (DRAFT; activation gate later).
+        if (!name || !phone || !slug) return reply.sendError(400, 'VALIDATION_FAILED', 'name, phone and slug are required');
+        try {
+          const boot = await client.query(
+            `SELECT location_id FROM bootstrap_owner($1, $2, $3, $4, $5, $6, $7)`,
+            [userId, name, slug, phone, 'ALL', 'sq', ['sq']],
           );
+          locId = boot.rows[0].location_id;
+        } catch (e: any) {
+          if (e?.code === '23505') return reply.sendError(409, 'SLUG_TAKEN', 'Slug already taken');
+          throw e;
+        }
+        await client.query(
+          `UPDATE locations SET lat = $1, lng = $2, delivery_radius_km = $3 WHERE id = $4`,
+          [lat ?? null, lng ?? null, delivery_radius_km ?? null, locId],
+        );
+      } else {
+        await client.query(
+          `UPDATE locations SET name = COALESCE($1, name), phone = COALESCE($2, phone),
+           lat = COALESCE($3, lat), lng = COALESCE($4, lng),
+           delivery_radius_km = COALESCE($5, delivery_radius_km) WHERE id = $6`,
+          [name || null, phone || null, lat ?? null, lng ?? null, delivery_radius_km ?? null, locId]
+        );
+      }
+
+      if (Array.isArray(menu_items)) {
+        for (const item of menu_items) {
+          if (item.name && item.price) {
+            const pid = crypto.randomUUID();
+            await client.query(
+              `INSERT INTO products (id, location_id, name, price, description, is_available)
+               VALUES ($1, $2, $3, $4, $5, true) ON CONFLICT DO NOTHING`,
+              [pid, locId, item.name, item.price, item.description || null]
+            );
+          }
         }
       }
-    }
 
-    const cleanLogo = logo_url ? validateImageKey(logo_url) : null;
-    if (primary_color || cleanLogo) {
-      await db.query(
-        `INSERT INTO location_themes (location_id, primary_color, logo_url) VALUES ($1, $2, $3)
-         ON CONFLICT (location_id) DO UPDATE SET primary_color = COALESCE($2, location_themes.primary_color), logo_url = COALESCE($3, location_themes.logo_url)`,
-        [locId, primary_color || null, cleanLogo]
-      );
+      const cleanLogo = logo_url ? validateImageKey(logo_url) : null;
+      if (primary_color || cleanLogo) {
+        await client.query(
+          `INSERT INTO location_themes (location_id, primary_color, logo_url) VALUES ($1, $2, $3)
+           ON CONFLICT (location_id) DO UPDATE SET primary_color = COALESCE($2, location_themes.primary_color), logo_url = COALESCE($3, location_themes.logo_url)`,
+          [locId, primary_color || null, cleanLogo]
+        );
+      }
+    } finally {
+      client.release();
     }
 
     return reply.send({ success: true, slug, url: `https://${slug}.dowiz.org` });
