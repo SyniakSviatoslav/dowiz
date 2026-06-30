@@ -3999,4 +3999,6 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'mbyllet {{time}}',
     uk: 'зачиняється о {{time}}',
   },
+  'checkout.your_order': { en: 'Your order', sq: 'Porosia juaj', uk: 'Ваше замовлення' },
+  'checkout.item_count': { en: '{{n}} items', sq: '{{n}} artikuj', uk: '{{n}} товарів' },
 };
