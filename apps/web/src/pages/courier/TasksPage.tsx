@@ -19,7 +19,7 @@ export function TasksPage() {
   const [onShift, setOnShift] = useState(false);
   const navigate = useNavigate();
   const [actionError, setActionError] = useState<string | null>(null);
-  const { play: playPing } = useSound('/sounds/ping.mp3');
+  const { play: playPing } = useSound('/sounds/ping.wav');
   const { t } = useI18n();
 
   // Extract courier ID from JWT stored in localStorage

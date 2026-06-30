@@ -40,7 +40,7 @@ export function DashboardPage() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [readiness, setReadiness] = useState<{ menu: boolean; phone: boolean; address: boolean; couriers: boolean; branding: boolean; placeOrder: boolean; telegram: boolean }>({ menu: false, phone: false, address: false, couriers: false, branding: false, placeOrder: false, telegram: false });
 
-  const { start: startPing, stop: stopPing, unlock: unlockSound, armed: soundArmed } = useSound('/sounds/ping.mp3');
+  const { start: startPing, stop: stopPing, unlock: unlockSound, armed: soundArmed } = useSound('/sounds/ping.wav');
   const { trigger: haptic } = useHaptics();
   const { alertSoundEnabled, toggleAlertSound } = useSoundPrefs();
   // A new PENDING order is "unacknowledged" until the owner accepts/rejects it
