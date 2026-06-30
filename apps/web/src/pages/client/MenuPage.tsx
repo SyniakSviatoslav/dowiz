@@ -998,7 +998,13 @@ export function MenuPage() {
                 {category.name}
               </h2>
               <motion.div
-                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 px-4"
+                className={`grid gap-3 px-4 ${
+                  // A single-product category in a 2-col grid leaves a stranded empty cell; cap it to
+                  // one card-width column on mobile so the lone card reads as deliberate, not broken.
+                  category.products.length === 1
+                    ? 'grid-cols-1 max-w-[200px] sm:max-w-none sm:grid-cols-3 lg:grid-cols-4'
+                    : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
+                }`}
                 variants={{ visible: { transition: { staggerChildren: prefersReduced ? 0 : 0.03 } } }}
                 initial="hidden"
                 whileInView="visible"
