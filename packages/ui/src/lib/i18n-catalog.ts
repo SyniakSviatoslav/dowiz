@@ -3989,4 +3989,14 @@ export const catalog: Record<string, CatalogEntry> = {
   'compare.cheaper': { en: 'cheaper', sq: 'më lirë', uk: 'дешевше' },
   'compare.faster': { en: 'faster', sq: 'më shpejt', uk: 'швидше' },
   'compare.pick_one_more': { en: 'pick 1 more', sq: 'zgjidh edhe 1', uk: 'виберіть ще 1' },
+  'client.read_reviews_google': {
+    en: 'Reviews on Google',
+    sq: 'Vlerësime në Google',
+    uk: 'Відгуки в Google',
+  },
+  'client.closes_at': {
+    en: 'closes {{time}}',
+    sq: 'mbyllet {{time}}',
+    uk: 'зачиняється о {{time}}',
+  },
 };

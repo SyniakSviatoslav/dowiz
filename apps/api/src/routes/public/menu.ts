@@ -276,9 +276,11 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
       }
       if (!r) return reply.sendError(404, 'NOT_FOUND', 'Not found');
 
-      // Compute isOpen from hours_json + delivery_paused
+      // Compute isOpen from hours_json + delivery_paused. Also surface today's CLOSE time (HH:MM) so the
+      // storefront can show "Open · closes 22:00" under the state badge.
       let isOpen = !(r.delivery_paused ?? false);
-      if (isOpen && r.hours_json) {
+      let closesAt: string | null = null;
+      if (r.hours_json) {
         try {
           const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
           const now = new Date();
@@ -288,12 +290,15 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
             if (dayData.isOpen === false) {
               isOpen = false;
             } else if (dayData.open && dayData.close) {
-              const [oh, om] = dayData.open.split(':').map(Number);
-              const [ch, cm] = dayData.close.split(':').map(Number);
-              const nowMins = now.getHours() * 60 + now.getMinutes();
-              const openMins = oh * 60 + om;
-              const closeMins = ch * 60 + cm;
-              isOpen = nowMins >= openMins && nowMins < closeMins;
+              closesAt = String(dayData.close);
+              if (isOpen) {
+                const [oh, om] = dayData.open.split(':').map(Number);
+                const [ch, cm] = dayData.close.split(':').map(Number);
+                const nowMins = now.getHours() * 60 + now.getMinutes();
+                const openMins = oh * 60 + om;
+                const closeMins = ch * 60 + cm;
+                isOpen = nowMins >= openMins && nowMins < closeMins;
+              }
             }
           }
         } catch { /* ignore parse errors */ }
@@ -325,6 +330,7 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
         phone: r.phone ?? null,
         isOpen,
         status,
+        closesAt,
         googleRating: r.google_rating != null ? Number(r.google_rating) : null,
         googleReviewCount: r.google_review_count != null ? Number(r.google_review_count) : null,
         googleMapsUrl: r.google_maps_url ?? null,
