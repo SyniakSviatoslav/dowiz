@@ -151,3 +151,24 @@ export function compareDishes(a: CompareDishInput, b: CompareDishInput): DishCom
     },
   };
 }
+
+// ── MACRO FILTER/SORT LENS (council §8.3 + guardrail #15) ────────────────────────────────────────────────
+// A no-data dish is NOT a 0-value dish. Sorting by a macro must place dishes WITHOUT nutrition data in an
+// explicit "no data" bucket, NEVER inline at the bottom of the numeric rank (where a no-bom protein:0 would
+// masquerade as "lowest protein"). The lens checks DATA PRESENCE (hasData), not the numeric 0 — a real
+// kcal:0 / protein:0 dish that HAS data stays ranked; only data-absent dishes drop to the bucket.
+// Sort over RAW kcal/protein is a neutral fact; a "light"/"healthy" verdict is the regulated subset (deferred).
+export type MacroLens = 'kcal-asc' | 'kcal-desc' | 'protein-asc' | 'protein-desc';
+export interface MacroLensItem {
+  hasData: boolean; // true iff the dish has a bom (nutrition is known) — independent of the numeric value
+  kcal: number;
+  protein: number;
+}
+export function partitionByMacroLens<T extends MacroLensItem>(items: readonly T[], lens: MacroLens): { ranked: T[]; noData: T[] } {
+  const noData = items.filter((i) => !i.hasData);
+  const withData = items.filter((i) => i.hasData);
+  const [axis, dir] = lens.split('-') as ['kcal' | 'protein', 'asc' | 'desc'];
+  const val = (i: T) => (axis === 'kcal' ? i.kcal : i.protein);
+  withData.sort((a, b) => (dir === 'asc' ? val(a) - val(b) : val(b) - val(a)));
+  return { ranked: withData, noData };
+}

@@ -9,6 +9,7 @@ import {
   regulatedSubsetActive,
   computeAllergenSurface,
   compareDishes,
+  partitionByMacroLens,
 } from '../characteristics.js';
 
 // Guardrail #6 (council menu-characteristics-model) — the deterministic ratchet that gates the descriptive
@@ -169,5 +170,61 @@ describe('characteristics — comparison (#8 explicit-both + no regulated/global
     const c = compareDishes(nuts, nodata) as Record<string, unknown>;
     assert.ok(!('lower' in (c.taste as object)));
     assert.ok(!('macros' in c) && !('kcal' in c), 'no macro winner axis may exist');
+  });
+});
+
+// Guardrail #11 (compare arrows only on price/prep — bound to VITE_MENU_CHARACTERISTICS_COMPARISON). A
+// directional "lower wins" marker is a NEUTRAL fact only for price (cheaper) and prep-time (faster). It may
+// NEVER appear on a macro (a kcal "wins" arrow is a regulated lightness verdict, R2-H1), on taste, or as a
+// global "better dish" winner. RED if compareDishes grows a directional marker anywhere but price/prepTime.
+describe('characteristics — compare arrows only price/prep (#11)', () => {
+  const a = { id: 'a', name: 'A', price: 500, prepTimeMinutes: 10, taste: { spicy: 3 }, attributes: { allergen_status: 'listed', declared_allergens: ['nuts'] } };
+  const b = { id: 'b', name: 'B', price: 700, prepTimeMinutes: 20, taste: { sweet: 2 }, attributes: { allergen_status: 'unset' } };
+
+  it('the ONLY keys carrying a directional `lower` marker are price + prepTime', () => {
+    const c = compareDishes(a, b) as Record<string, any>;
+    const directional = Object.keys(c).filter(k => c[k] && typeof c[k] === 'object' && 'lower' in c[k]);
+    assert.deepEqual(directional.sort(), ['prepTime', 'price']);
+  });
+
+  it('no global/winner/better field exists on the comparison', () => {
+    const c = compareDishes(a, b) as Record<string, unknown>;
+    for (const forbidden of ['winner', 'better', 'best', 'overall', 'healthier', 'recommended']) {
+      assert.ok(!(forbidden in c), `comparison must not carry a "${forbidden}" verdict`);
+    }
+    // exact shape — only the four neutral axes
+    assert.deepEqual(Object.keys(c).sort(), ['allergens', 'prepTime', 'price', 'taste']);
+  });
+});
+
+// Guardrail #15 (macro sort/filter lens no-data bucket — bound to VITE_MENU_CHARACTERISTICS_FILTER). A
+// no-bom dish must land in the explicit "no data" bucket, NEVER numerically ranked as 0 (where it would
+// masquerade as "lowest protein/calories"). A REAL zero (hasData:true, value 0) stays ranked — tri-state.
+describe('characteristics — macro lens no-data bucket (#15)', () => {
+  const items = [
+    { id: 'p1', hasData: true, kcal: 500, protein: 20 },
+    { id: 'nb', hasData: false, kcal: 0, protein: 0 }, // no bom — must NOT be ranked as 0
+    { id: 'p2', hasData: true, kcal: 300, protein: 5 },
+    { id: 'z', hasData: true, kcal: 0, protein: 0 },    // a REAL zero — stays ranked
+  ];
+
+  it('#15: a no-bom dish goes to the noData bucket, never inline in the numeric rank', () => {
+    const { ranked, noData } = partitionByMacroLens(items, 'protein-asc');
+    assert.deepEqual(noData.map(i => i.id), ['nb']);
+    assert.ok(!ranked.some(i => i.id === 'nb'), 'no-data dish leaked into the ranked list');
+  });
+
+  it('#15: a REAL zero-value dish (hasData) stays ranked and sorts at the low end, distinct from no-data', () => {
+    const { ranked, noData } = partitionByMacroLens(items, 'protein-asc');
+    assert.equal(ranked[0]!.id, 'z'); // real protein:0 ranks lowest
+    assert.ok(!noData.some(i => i.id === 'z'));
+    // ranked ascending by protein: z(0) < p2(5) < p1(20)
+    assert.deepEqual(ranked.map(i => i.id), ['z', 'p2', 'p1']);
+  });
+
+  it('descending kcal ranks by value; no-data still excluded', () => {
+    const { ranked, noData } = partitionByMacroLens(items, 'kcal-desc');
+    assert.deepEqual(ranked.map(i => i.id), ['p1', 'p2', 'z']);
+    assert.deepEqual(noData.map(i => i.id), ['nb']);
   });
 });
