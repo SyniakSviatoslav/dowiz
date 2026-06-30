@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Button, Input, Select, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle, useToast, staggerChildren, cardEntry, SearchInput } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
@@ -206,13 +206,95 @@ function MenuScheduleEditor({ categories }: { categories: Category[] }) {
   );
 }
 
+// A self-contained toolbar dropdown: trigger button + desktop popover / mobile sheet. Replaces the two
+// near-identical inline Sort + Availability blocks (each ~40 lines, duplicated desktop+MobilePicker logic).
+interface FilterMenuOption<T extends string> { value: T; label: string; icon: string }
+function FilterMenu<T extends string>({ triggerIcon, triggerLabel, title, options, value, onSelect, active, isMobile }: {
+  triggerIcon: string;
+  triggerLabel?: string;
+  title: string;
+  options: FilterMenuOption<T>[];
+  value: T;
+  onSelect: (v: T) => void;
+  active?: boolean;
+  isMobile: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <motion.button onClick={() => setOpen(true)} whileTap={{ scale: 0.97 }} aria-label={title} aria-haspopup="listbox" aria-expanded={open}
+        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
+        style={{ background: 'var(--brand-surface)', borderColor: active ? 'var(--brand-primary)' : 'var(--brand-border)', color: active ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
+        <i className={`${triggerIcon} text-base`} />
+        {triggerLabel && <span className="hidden sm:inline text-xs">{triggerLabel}</span>}
+      </motion.button>
+      {isMobile ? (
+        <MobilePicker
+          open={open}
+          onClose={() => setOpen(false)}
+          title={title}
+          options={options}
+          selectedValue={value}
+          onSelect={(opt) => { onSelect(opt.value as T); setOpen(false); }}
+        />
+      ) : open && (
+        <>
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div role="listbox" className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[150px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            {options.map(opt => (
+              <motion.button key={opt.value} role="option" aria-selected={value === opt.value} onClick={() => { onSelect(opt.value); setOpen(false); }} whileTap={{ scale: 0.97 }}
+                className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${value === opt.value ? 'font-semibold' : ''}`}
+                style={{ color: value === opt.value ? 'var(--brand-primary-readable)' : 'var(--brand-text)' }}>
+                <i className={opt.icon} style={{ fontSize: '0.8rem' }} />
+                <span className="flex-1 text-left">{opt.label}</span>
+                {value === opt.value && <i className="ti ti-check" style={{ color: 'var(--brand-primary)', fontSize: '0.7rem' }} />}
+              </motion.button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// "Add category" as a self-managed control: a compact button that reveals an inline name field on demand,
+// instead of a permanently-crammed text input + icon button in the filter toolbar.
+function AddCategoryControl({ onAdd }: { onAdd: (name: string) => void }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
+  const submit = () => { const n = name.trim(); if (!n) return; onAdd(n); setName(''); setOpen(false); };
+  if (!open) {
+    return (
+      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+        <i className="ti ti-plus" /> {t('admin.add_category', 'Add category')}
+      </Button>
+    );
+  }
+  return (
+    <div className="flex gap-1.5 items-center">
+      <input ref={inputRef} value={name} onChange={e => setName(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { setOpen(false); setName(''); } }}
+        placeholder={t('admin.new_category', 'New category...')} aria-label={t('admin.new_category', 'New category...')}
+        className="w-36 sm:w-44 h-9 px-3 rounded-lg border text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
+        style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
+      <Button size="sm" onClick={submit} disabled={!name.trim()}><i className="ti ti-check" /></Button>
+      <button onClick={() => { setOpen(false); setName(''); }} aria-label={t('common.cancel', 'Cancel')} className="px-2 h-9 text-sm" style={{ color: 'var(--brand-text-muted)' }}>
+        <i className="ti ti-x" />
+      </button>
+    </div>
+  );
+}
+
 export function MenuManagerPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
   const { confirm, dialog: confirmDialog } = useConfirm();
   const isMobile = useIsMobile();
   const { categories, setCategories, loading, error, productsLoading, refresh: fetchCategories, loadProducts } = useMenuData();
-  const [newCategoryName, setNewCategoryName] = useState('');
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
 
@@ -268,8 +350,6 @@ export function MenuManagerPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'name' | 'price-asc' | 'price-desc'>('name');
   const [filterAvailable, setFilterAvailable] = useState<'all' | 'available' | 'unavailable'>('all');
-  const [sortOpen, setSortOpen] = useState(false);
-  const [availOpen, setAvailOpen] = useState(false);
 
   // Load all products when "All" category is selected
   useEffect(() => {
@@ -423,10 +503,9 @@ export function MenuManagerPage() {
     }
   };
 
-  const handleAddCategory = async () => {
-    const name = newCategoryName.trim();
+  const handleAddCategory = async (rawName: string) => {
+    const name = rawName.trim();
     if (!name) return;
-    setNewCategoryName('');
     try {
       await apiClient('/owner/menu/categories', { method: 'POST', body: { name } });
       await fetchCategories();
@@ -560,8 +639,8 @@ export function MenuManagerPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-5">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Header — title/stats on the left, the two PRIMARY actions (add category, import) grouped on the right. */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{t('admin.menu_manager', 'Menu Manager')}</h2>
           {!error && (
@@ -570,9 +649,12 @@ export function MenuManagerPage() {
             </p>
           )}
         </div>
-        <Button onClick={() => setShowImport(true)} variant="ghost" size="sm">
-          <i className="ti ti-file-import" /> {t('admin.import_pdf', 'Import PDF')}
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <AddCategoryControl onAdd={handleAddCategory} />
+          <Button onClick={() => setShowImport(true)} variant="ghost" size="sm">
+            <i className="ti ti-file-import" /> {t('admin.import_pdf', 'Import PDF')}
+          </Button>
+        </div>
       </div>
 
       {/* MENU-AVAILABILITY · schedule / mealtime editor (additive, collapsed by default) */}
@@ -588,111 +670,36 @@ export function MenuManagerPage() {
         </div>
       )}
 
-      {/* Toolbar: search, filter, sort, add category */}
-      <div className="flex flex-wrap gap-2">
+      {/* Filter toolbar — search + sort + availability (each a self-contained FilterMenu). */}
+      <div className="flex items-center gap-2">
         <SearchInput value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder={t('admin.search_products', 'Search products...')}
-          containerClassName="flex-1 min-w-[200px]" />
-
-        {/* Sort */}
-        <div className="relative">
-          <motion.button onClick={() => setSortOpen(true)} whileTap={{ scale: 0.97 }} aria-label={t('admin.sort_products', 'Sort products')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
-            style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
-            <i className="ti ti-arrows-sort text-base" />
-            <span className="hidden sm:inline text-xs">{sortBy === 'name' ? t('admin.name_az', 'Name A-Z') : sortBy === 'price-asc' ? t('admin.price_asc', 'Price asc') : t('admin.price_desc', 'Price desc')}</span>
-          </motion.button>
-          {isMobile ? (
-            <MobilePicker
-              open={sortOpen}
-              onClose={() => setSortOpen(false)}
-              title={t('admin.sort_products', 'Sort products')}
-              options={[
-                { value: 'name', label: t('admin.name_az', 'Name A-Z'), icon: 'ti ti-sort-az' },
-                { value: 'price-asc', label: t('admin.price_asc', 'Price asc'), icon: 'ti ti-sort-ascending' },
-                { value: 'price-desc', label: t('admin.price_desc', 'Price desc'), icon: 'ti ti-sort-descending' },
-              ]}
-              selectedValue={sortBy}
-              onSelect={(opt) => { setSortBy(opt.value as any); setSortOpen(false); }}
-            />
-          ) : sortOpen && (
-            <>
-              {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-              <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
-              <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[140px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-                {[
-                  { value: 'name', label: t('admin.name_az', 'Name A-Z'), icon: 'ti ti-sort-az' },
-                  { value: 'price-asc', label: t('admin.price_asc', 'Price asc'), icon: 'ti ti-sort-ascending' },
-                  { value: 'price-desc', label: t('admin.price_desc', 'Price desc'), icon: 'ti ti-sort-descending' },
-                ].map(opt => (
-                  <motion.button key={opt.value} onClick={() => { setSortBy(opt.value as any); setSortOpen(false); }} whileTap={{ scale: 0.97 }}
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${sortBy === opt.value ? 'font-semibold' : ''}`}
-                    style={{ color: sortBy === opt.value ? 'var(--brand-primary-readable)' : 'var(--brand-text)' }}>
-                    <i className={opt.icon} style={{ fontSize: '0.8rem' }} />
-                    <span className="flex-1">{opt.label}</span>
-                    {sortBy === opt.value && <i className="ti ti-check" style={{ color: 'var(--brand-primary)', fontSize: '0.7rem' }} />}
-                  </motion.button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Availability filter */}
-        <div className="relative">
-          <motion.button onClick={() => setAvailOpen(true)} whileTap={{ scale: 0.97 }} aria-label={t('admin.filter_availability', 'Filter by availability')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
-            style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: filterAvailable !== 'all' ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
-            <i className="ti ti-filter text-base" />
-          </motion.button>
-          {isMobile ? (
-            <MobilePicker
-              open={availOpen}
-              onClose={() => setAvailOpen(false)}
-              title={t('admin.filter_availability', 'Filter by availability')}
-              options={[
-                { value: 'all', label: t('admin.all_items', 'All items'), icon: 'ti ti-list' },
-                { value: 'available', label: t('menu.available', 'Available'), icon: 'ti ti-circle-check' },
-                { value: 'unavailable', label: t('menu.stop_listed', 'Stop-listed'), icon: 'ti ti-circle-x' },
-              ]}
-              selectedValue={filterAvailable}
-              onSelect={(opt) => { setFilterAvailable(opt.value as any); setAvailOpen(false); }}
-            />
-          ) : availOpen && (
-            <>
-              {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-              <div className="fixed inset-0 z-40" onClick={() => setAvailOpen(false)} />
-              <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[150px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-                {[
-                  { value: 'all', label: t('admin.all_items', 'All items'), icon: 'ti ti-list' },
-                  { value: 'available', label: t('menu.available', 'Available'), icon: 'ti ti-circle-check' },
-                  { value: 'unavailable', label: t('menu.stop_listed', 'Stop-listed'), icon: 'ti ti-circle-x' },
-                ].map(opt => (
-                  <motion.button key={opt.value} onClick={() => { setFilterAvailable(opt.value as any); setAvailOpen(false); }} whileTap={{ scale: 0.97 }}
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${filterAvailable === opt.value ? 'font-semibold' : ''}`}
-                    style={{ color: filterAvailable === opt.value ? 'var(--brand-primary-readable)' : 'var(--brand-text)' }}>
-                    <i className={opt.icon} style={{ fontSize: '0.8rem' }} />
-                    <span className="flex-1">{opt.label}</span>
-                    {filterAvailable === opt.value && <i className="ti ti-check" style={{ color: 'var(--brand-primary)', fontSize: '0.7rem' }} />}
-                  </motion.button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="flex gap-2 items-center">
-          <input value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
-            placeholder={t('admin.new_category', 'New category...')}
-            aria-label={t('admin.new_category', 'New category...')}
-            className="w-32 sm:w-40 h-10 px-3 rounded-lg border text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
-            style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-          <motion.button onClick={handleAddCategory} whileTap={{ scale: 0.97 }} aria-label={t('admin.add_category', 'Add category')}
-            className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium shrink-0 border border-[var(--brand-primary)] outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 active:scale-[0.98]"
-            style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-text)' }}>
-            <i className="ti ti-plus text-sm" />
-          </motion.button>
-        </div>
+          containerClassName="flex-1 min-w-0" />
+        <FilterMenu
+          isMobile={isMobile}
+          triggerIcon="ti ti-arrows-sort"
+          triggerLabel={sortBy === 'name' ? t('admin.name_az', 'Name A-Z') : sortBy === 'price-asc' ? t('admin.price_asc', 'Price asc') : t('admin.price_desc', 'Price desc')}
+          title={t('admin.sort_products', 'Sort products')}
+          value={sortBy}
+          onSelect={(v) => setSortBy(v)}
+          options={[
+            { value: 'name', label: t('admin.name_az', 'Name A-Z'), icon: 'ti ti-sort-az' },
+            { value: 'price-asc', label: t('admin.price_asc', 'Price asc'), icon: 'ti ti-sort-ascending' },
+            { value: 'price-desc', label: t('admin.price_desc', 'Price desc'), icon: 'ti ti-sort-descending' },
+          ]}
+        />
+        <FilterMenu
+          isMobile={isMobile}
+          triggerIcon="ti ti-filter"
+          active={filterAvailable !== 'all'}
+          title={t('admin.filter_availability', 'Filter by availability')}
+          value={filterAvailable}
+          onSelect={(v) => setFilterAvailable(v)}
+          options={[
+            { value: 'all', label: t('admin.all_items', 'All items'), icon: 'ti ti-list' },
+            { value: 'available', label: t('menu.available', 'Available'), icon: 'ti ti-circle-check' },
+            { value: 'unavailable', label: t('menu.stop_listed', 'Stop-listed'), icon: 'ti ti-circle-x' },
+          ]}
+        />
       </div>
 
       {/* Category tabs */}
