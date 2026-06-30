@@ -39,8 +39,8 @@ test.describe('Admin Orders · Batch 4', () => {
   test('toolbar has the Newest-first sort, CSV demoted below the list', async ({ page, request }) => {
     await authOwner(page, request);
     await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle' });
-    // Sort control present (defaults to Newest).
-    await expect(page.getByRole('button', { name: /Newest|Sort|Rendit|Найнов/i }).first()).toBeVisible({ timeout: 15000 });
+    // Sort control present (locale-agnostic: the sort picker is the only listbox trigger).
+    await expect(page.locator('button[aria-haspopup="listbox"]').first()).toBeVisible({ timeout: 15000 });
     // The Export CSV control, if present, is NOT inside the sticky header toolbar.
     const headerCsv = page.locator('.sticky').getByRole('button', { name: /Export CSV|CSV/i });
     await expect(headerCsv).toHaveCount(0);
