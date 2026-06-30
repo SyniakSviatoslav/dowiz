@@ -207,11 +207,15 @@ export function MenuPage() {
   // Rich media for the open product, lazily fetched on modal open. Empty = fall back to the
   // single image / gradient (today's behaviour). Server returns [] when the feature is gated off.
   const [detailMedia, setDetailMedia] = useState<ProductMedia[]>([]);
-  // Compare (council §8.2) — up to TWO dish ids selected via a visible affordance; ephemeral, not persisted.
-  const [compareIds, setCompareIds] = useState<string[]>([]);
+  // Compare (council §8.2) — up to TWO dish ids; PERSISTED so a reload keeps the selection.
+  const [compareIds, setCompareIds] = useState<string[]>(() => {
+    try { const p = JSON.parse(safeStorage.get(`dos_menu_prefs_${slug}`) || 'null'); return Array.isArray(p?.compareIds) ? p.compareIds.filter((x: any) => typeof x === 'string').slice(0, 2) : []; } catch { return []; }
+  });
   const [compareOpen, setCompareOpen] = useState(false);
-  // Macro filter/sort lens (council §8.3) — ephemeral, not persisted. 'none' = off.
-  const [macroLens, setMacroLens] = useState<'none' | MacroLens>('none');
+  // Macro filter/sort lens (council §8.3) — PERSISTED. 'none' = off.
+  const [macroLens, setMacroLens] = useState<'none' | MacroLens>(() => {
+    try { const p = JSON.parse(safeStorage.get(`dos_menu_prefs_${slug}`) || 'null'); return (['none', 'kcal-asc', 'kcal-desc', 'protein-asc', 'protein-desc'] as const).includes(p?.macroLens) ? p.macroLens : 'none'; } catch { return 'none'; }
+  });
   const menuPrefsKey = `dos_menu_prefs_${slug}`;
   const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc' | 'name'>(() => {
     try {
@@ -234,14 +238,23 @@ export function MenuPage() {
       return typeof p?.searchQuery === 'string' ? p.searchQuery : '';
     } catch { return ''; }
   });
-  // Categories act as a single-select FILTER (owner directive): tapping a category
-  // narrows the menu to it; tapping "All" (or the same category again) clears it.
-  // Ephemeral — not persisted, so a fresh visit always shows the whole menu.
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  // Categories act as a single-select FILTER: tapping a category narrows the menu to it; tapping "All"
+  // (or the same category again) clears it. PERSISTED so a reload keeps the chosen category.
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(() => {
+    try { const p = JSON.parse(safeStorage.get(`dos_menu_prefs_${slug}`) || 'null'); return typeof p?.selectedCategory === 'string' ? p.selectedCategory : null; } catch { return null; }
+  });
 
+  // Persist all storefront UI state so a reload restores it (category, sort, filter, search, lens, compare).
   useEffect(() => {
-    try { safeStorage.set(menuPrefsKey, JSON.stringify({ sortBy, filterAllergen, searchQuery })); } catch {}
-  }, [menuPrefsKey, sortBy, filterAllergen, searchQuery]);
+    try { safeStorage.set(menuPrefsKey, JSON.stringify({ sortBy, filterAllergen, searchQuery, selectedCategory, macroLens, compareIds })); } catch {}
+  }, [menuPrefsKey, sortBy, filterAllergen, searchQuery, selectedCategory, macroLens, compareIds]);
+
+  // Drop a persisted category that no longer exists once the menu loads (stale pref → show All, not blank).
+  useEffect(() => {
+    if (selectedCategory && selectedCategory !== CHEF_PICKS_ID && data.length > 0 && !data.some(c => c.id === selectedCategory)) {
+      setSelectedCategory(null);
+    }
+  }, [data, selectedCategory, CHEF_PICKS_ID]);
 
   const categories = data;
 
@@ -1104,22 +1117,38 @@ export function MenuPage() {
             exit={prefersReduced ? { opacity: 0 } : { transform: 'translateY(18px) scale(0.97)', opacity: 0, transition: { duration: 0.18, ease: ease.soft } }}
             transition={prefersReduced ? { duration: 0.15 } : { type: 'spring', stiffness: 340, damping: 32 }}
           >
-            {/* Mobile dismiss handle — a grabber bar (tap to close) for the bottom-sheet, easing dismissal. */}
-            <button
-              type="button"
-              onClick={closeDetail}
-              aria-label={t('common.close', 'Close')}
-              className="md:hidden absolute top-0 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center w-20 h-6 pt-2"
-            >
-              <span className="block w-10 h-1.5 rounded-full" style={{ background: 'color-mix(in srgb, var(--brand-text) 45%, transparent)' }} />
-            </button>
+            {/* STICKY dismiss bar — pinned to the top of the (scrollable) sheet so Close is ALWAYS reachable,
+                including after scrolling down (the old in-image button scrolled away — that was the mobile
+                "hard to close" pain). Zero-height + transparent; only the controls capture taps. */}
+            <div className="sticky top-0 z-30 h-0 pointer-events-none">
+              <motion.button
+                type="button"
+                whileTap={prefersReduced ? undefined : { scale: 0.95 }}
+                onClick={closeDetail}
+                aria-label={t('common.close', 'Close')}
+                className="pointer-events-auto absolute top-3 right-3 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]"
+                style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)', border: '1px solid var(--brand-border)' }}
+              >
+                <i className="ti ti-x text-2xl" />
+              </motion.button>
+              {/* Mobile grabber — tap to close (a familiar bottom-sheet dismiss affordance). */}
+              <button
+                type="button"
+                onClick={closeDetail}
+                aria-label={t('common.close', 'Close')}
+                className="md:hidden pointer-events-auto absolute top-1.5 left-1/2 -translate-x-1/2 flex items-center justify-center w-24 h-7"
+              >
+                <span className="block w-10 h-1.5 rounded-full" style={{ background: 'color-mix(in srgb, var(--brand-text) 55%, transparent)' }} />
+              </button>
+            </div>
             {/* Image — taller hero with more room; the photo is shown in FULL (object-contain) over a
                 blurred fill of itself, so nothing is cropped (operator directive: "display full images"). */}
-            <div className="relative w-full aspect-[4/3] md:aspect-[16/10] flex items-center justify-center overflow-hidden" style={{ background: 'var(--brand-surface-raised)' }}>
+            <div className="relative w-full overflow-hidden" style={{ background: 'var(--brand-surface-raised)' }}>
               {detailMedia.length > 0 ? (
                 // Rich media (ADR-0002): gallery for >1, single renderer for 1. Suspense shows
                 // the primary image while the code-split chunk loads → no flash. A renderer
                 // failure degrades to its poster (handled inside MediaRenderer), never throws.
+                <div className="relative w-full aspect-[4/3] md:aspect-[16/10] flex items-center justify-center">
                 <Suspense fallback={getImageUrl(detailProduct) ? (
                   <img src={getImageUrl(detailProduct)!} alt={detailProduct.name} className="w-full h-full object-cover" />
                 ) : null}>
@@ -1129,23 +1158,23 @@ export function MenuPage() {
                     <MediaRenderer media={detailMedia[0]!} active posterFallbackUrl={getImageUrl(detailProduct) || undefined} />
                   )}
                 </Suspense>
+                </div>
               ) : getImageUrl(detailProduct) && !imageLoadError ? (
-                <>
-                  {/* Blurred cover fill so the contained full image never sits on dead bars. */}
-                  <img src={getImageUrl(detailProduct)!} alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover" style={{ filter: 'blur(24px)', transform: 'scale(1.1)', opacity: 0.5 }} />
-                  <img
-                    src={getImageUrl(detailProduct)!}
-                    alt={detailProduct.name}
-                    className="relative w-full h-full object-contain"
-                    onError={() => setImageLoadError(true)}
-                  />
-                </>
+                // FULL image — shown at its natural ratio (w-full h-auto), so every side is visible and
+                // nothing is cropped or letterboxed (operator directive). Height capped so a tall portrait
+                // photo can't dominate the sheet.
+                <img
+                  src={getImageUrl(detailProduct)!}
+                  alt={detailProduct.name}
+                  className="block w-full h-auto max-h-[68vh] object-contain"
+                  onError={() => setImageLoadError(true)}
+                />
               ) : (
                 // Crafted on-brand no-photo fallback (mirrors ProductCard): warm
                 // brand-tinted gradient + faint dotted texture + a cutlery glyph in
-                // a soft medallion, with the dish name — never a dead grey box.
+                // a soft medallion. Needs an explicit height → wrapped in an aspect box.
                 <div
-                  className="absolute inset-0 flex flex-col items-center justify-center gap-3 select-none"
+                  className="relative w-full aspect-[4/3] md:aspect-[16/10] flex flex-col items-center justify-center gap-3 select-none"
                   style={{
                     background:
                       'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 16%, var(--brand-surface)) 0%, var(--brand-surface-raised) 55%, color-mix(in srgb, var(--brand-primary) 8%, var(--brand-surface)) 100%)',
@@ -1177,17 +1206,7 @@ export function MenuPage() {
                       duplicate title. */}
                 </div>
               )}
-              <motion.button
-                whileTap={prefersReduced ? undefined : { scale: 0.95 }}
-                className="absolute top-3 right-3 min-w-[48px] min-h-[48px] rounded-full flex items-center justify-center shadow-lg outline-none transition-transform duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
-                style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)', border: '1px solid var(--brand-border)' }}
-                onClick={closeDetail}
-                aria-label={t('common.close', 'Close')}
-              >
-                <i className="ti ti-x text-2xl" />
-              </motion.button>
-              {/* Nutrition overlay removed (operator directive): the full nutrition viz lives in the body
-                  below (DishStats), so the hero image stays clean and uncovered. */}
+              {/* Close lives in the sticky bar above (always reachable while scrolling). */}
             </div>
 
             {/* Content — gentle rise after the hero photo morphs into place */}
