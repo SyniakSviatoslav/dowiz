@@ -37,23 +37,28 @@ export class CourierOfferSweepWorker {
       try {
         // Guarded transition: status='offered' AND past deadline → 'offered_expired'. Cross-tenant (one pass).
         // The order row is deliberately not touched.
-        const res = await client.query(
-          `UPDATE courier_assignments
-              SET status='offered_expired', cancelled_at=now(), cancellation_reason='offer_timeout'
-            WHERE status='offered' AND offered_expires_at < now()
-          RETURNING order_id, location_id`,
-        );
+        // B3: this UPDATE spans courier_assignments across ALL tenants in a single pass, so there
+        // is no single app.current_tenant to set. Encapsulated in a SECURITY DEFINER fn
+        // (app_sweep_expired_offers) that mirrors the original UPDATE … RETURNING and runs above RLS.
+        const res = await client.query(`SELECT order_id, location_id FROM app_sweep_expired_offers()`);
         if (!res.rowCount) return;
         console.log(`[CourierOfferSweep] expired ${res.rowCount} unanswered offer(s) → re-offered`);
         for (const row of res.rows) {
           try {
+            // The re-enqueue is single-tenant (this expired offer → its location). courier_dispatch_queue
+            // is keyed on app.current_tenant (Phase-1 isolate policy), so pin the GUC per row inside a
+            // txn. Session-level advisory lock above survives these inner transactions.
+            await client.query('BEGIN');
+            await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [row.location_id]);
             await client.query(
               `INSERT INTO courier_dispatch_queue (order_id, location_id, enqueued_at) VALUES ($1,$2,now())
                ON CONFLICT (order_id) DO UPDATE SET attempts = courier_dispatch_queue.attempts + 1`,
               [row.order_id, row.location_id],
             );
+            await client.query('COMMIT');
             await this.messageBus.publish(dashboardChannel(row.location_id), { type: 'offer_expired', orderId: row.order_id });
           } catch (e) {
+            await client.query('ROLLBACK').catch(() => {});
             console.error(`[CourierOfferSweep] re-enqueue failed for ${row.order_id}:`, e);
           }
         }

@@ -162,14 +162,11 @@ export class ReconciliationWorker {
 
   // ── M4: delivered cash matches total ──
   private async checkDeliveredCashMatch(): Promise<ReconCheckResult> {
+    // B3/NOBYPASSRLS: courier_assignments is FORCE-RLS keyed on app.current_tenant — a context-free
+    // cross-tenant scan returns 0 rows after the flip. Encapsulate in a SECURITY DEFINER fn (owner
+    // BYPASSRLS) that mirrors the SQL exactly. See app_recon_delivered_cash_mismatch().
     const res = await this.pool.query(
-      `SELECT a.id, a.order_id, a.cash_amount, o.total
-       FROM courier_assignments a
-       JOIN orders o ON o.id = a.order_id
-       WHERE a.cash_collected = true
-         AND a.cash_amount IS NOT NULL
-         AND a.cash_amount != o.total
-       LIMIT 20`
+      `SELECT * FROM app_recon_delivered_cash_mismatch()`
     );
     return {
       checkId: 'M4', status: res.rows.length === 0 ? 'PASS' : 'DRIFT',
@@ -197,13 +194,10 @@ export class ReconciliationWorker {
 
   // ── O2: open shifts > 24h ──
   private async checkOpenShifts(): Promise<ReconCheckResult> {
+    // B3/NOBYPASSRLS: courier_shifts is FORCE-RLS keyed on app.current_tenant — cross-tenant scan returns
+    // 0 rows after the flip. SECURITY DEFINER fn mirrors the SQL exactly. See app_recon_open_shifts().
     const res = await this.pool.query(
-      `SELECT id, courier_id, location_id, started_at
-       FROM courier_shifts
-       WHERE status IN ('available', 'on_delivery')
-         AND started_at < now() - interval '24 hours'
-       ORDER BY started_at
-       LIMIT 20`
+      `SELECT * FROM app_recon_open_shifts()`
     );
     return {
       checkId: 'O2', status: res.rows.length === 0 ? 'PASS' : 'DRIFT',
@@ -290,11 +284,15 @@ export class ReconciliationWorker {
 
   // ── F1/F2: FK orphans ──
   private async checkMissingFKs(): Promise<ReconCheckResult> {
+    // orders is admitted context-free by its anonymous_select policy (app_current_user() IS NULL), so the
+    // missing-location scan needs no DEFINER wrapper. courier_assignments is FORCE-RLS keyed on
+    // app.current_tenant → the missing-courier scan MUST go through a SECURITY DEFINER fn (owner BYPASSRLS),
+    // else it silently returns 0 rows and the FK-orphan check false-PASSes. See app_recon_assignments_missing_courier().
     const missingLocation = await this.pool.query(
       `SELECT o.id FROM orders o LEFT JOIN locations l ON l.id = o.location_id WHERE l.id IS NULL LIMIT 10`
     );
     const missingCourier = await this.pool.query(
-      `SELECT a.id FROM courier_assignments a LEFT JOIN couriers c ON c.id = a.courier_id WHERE c.id IS NULL LIMIT 10`
+      `SELECT * FROM app_recon_assignments_missing_courier()`
     );
     const total = missingLocation.rows.length + missingCourier.rows.length;
     return {

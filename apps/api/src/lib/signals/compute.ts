@@ -113,11 +113,10 @@ export async function computeSignals(
   // 2. Phone velocity
   if (params.phoneHash) {
     for (const w of VELOCITY_WINDOWS) {
+      // B3: velocity_events SELECT is member-keyed; callers (signal-raiser/anon-checkout) have no member
+      // GUC → read the single-location count via the DEFINER count fn (works under NOBYPASSRLS).
       const velRes = await pool.query(
-        `SELECT COUNT(*)::int AS cnt FROM velocity_events
-         WHERE location_id = $1 AND phone_hash = $2
-           AND kind = 'order_placed'
-           AND window_started_at > now() - ($3 || ' seconds')::interval`,
+        `SELECT app_velocity_phone_count($1, $2, $3) AS cnt`,
         [params.locationId, params.phoneHash, String(w.seconds)],
       );
       const count = velRes.rows[0]?.cnt ?? 0;
@@ -136,11 +135,9 @@ export async function computeSignals(
   // 3. IP velocity
   if (params.clientIpHash) {
     for (const w of IP_VELOCITY_WINDOWS) {
+      // B3: see phone-velocity note — DEFINER count fn for the GUC-less single-location IP count.
       const velRes = await pool.query(
-        `SELECT COUNT(*)::int AS cnt FROM velocity_events
-         WHERE location_id = $1 AND client_ip_hash = $2
-           AND kind = 'order_placed'
-           AND window_started_at > now() - ($3 || ' seconds')::interval`,
+        `SELECT app_velocity_ip_count($1, $2, $3) AS cnt`,
         [params.locationId, params.clientIpHash, String(w.seconds)],
       );
       const count = velRes.rows[0]?.cnt ?? 0;

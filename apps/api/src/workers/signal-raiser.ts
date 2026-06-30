@@ -34,20 +34,12 @@ export class SignalRaiserWorker {
       }
 
       try {
-        // Find locations with activity in last 24h
-        const locsRes = await client.query(`
-          SELECT DISTINCT v.location_id,
-                 v.phone_hash, v.client_ip_hash,
-                 ve.customer_id
-          FROM velocity_events v
-          LEFT JOIN LATERAL (
-            SELECT customer_id FROM orders
-            WHERE location_id = v.location_id
-              AND created_at > now() - interval '24 hours'
-            LIMIT 1
-          ) ve ON true
-          WHERE v.window_started_at > now() - interval '24 hours'
-        `);
+        // Find locations with activity in last 24h.
+        // B3/NOBYPASSRLS: velocity_events is FORCE-RLS keyed on app_member_location_ids() (member-scoped,
+        // no anon-SELECT policy) — a context-free cross-tenant scan returns 0 rows after the flip. The
+        // whole all-tenant read goes through a SECURITY DEFINER fn (owner BYPASSRLS) mirroring the SQL
+        // exactly. See app_sweep_velocity_active_locations().
+        const locsRes = await client.query(`SELECT * FROM app_sweep_velocity_active_locations()`);
 
         // Group by location_id for per-location signal computation
         const locationMap = new Map<string, { phoneHashes: Set<string>; ipHashes: Set<string>; customerIds: Set<string> }>();
@@ -106,19 +98,13 @@ export class SignalRaiserWorker {
     for (const sig of signals) {
       if (!customerId) continue; // need customer_id to persist
 
-      // De-dup: skip if same kind raised within 1h
-      const existingRes = await client.query(
-        `SELECT id FROM customer_signals
-         WHERE customer_id = $1 AND kind = $2
-           AND raised_at > now() - interval '1 hour'`,
-        [customerId, sig.kind],
-      );
-      if (existingRes.rowCount > 0) continue;
-
+      // B3/NOBYPASSRLS: customer_signals is FORCE-RLS keyed on app_member_location_ids() (member-scoped) —
+      // this system worker has no member identity, so neither app.current_tenant nor app.user_id satisfies
+      // the policy. The de-dup read + insert are folded into a single SECURITY DEFINER fn (owner BYPASSRLS)
+      // that mirrors the SQL exactly: skip (return NULL) if the same kind was raised within 1h, else INSERT
+      // RETURNING id. See app_raise_customer_signal().
       const res = await client.query(
-        `INSERT INTO customer_signals (customer_id, location_id, kind, severity, evidence)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id`,
+        `SELECT app_raise_customer_signal($1, $2, $3, $4, $5::jsonb) AS id`,
         [customerId, locationId, sig.kind, sig.severity, JSON.stringify(sig.evidence)],
       );
       const signalId = res.rows[0]?.id;
