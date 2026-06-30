@@ -10,6 +10,35 @@ const SENSITIVE_HEADERS = new Set([
   'cookie', 'authorization', 'set-cookie', 'x-api-key',
 ]);
 
+// Query-string params that carry bearer credentials / secrets and MUST NOT reach
+// any log sink. The realtime WS authenticates via `?token=<JWT>` (useWebSocket.ts /
+// status/ws.ts), and the Pino `req` serializer logs `req.url` raw — so without this
+// the full JWT lands in app/Fly/aggregator logs on every WS upgrade. See
+// docs/design/ws-token-in-url/escalation.md (P1).
+const SENSITIVE_QUERY_PARAMS = new Set([
+  'token', 'access_token', 'refresh_token', 'api_key', 'apikey',
+  'key', 'secret', 'password', 'pwd', 'jwt', 'auth',
+]);
+
+/** Redact secret-bearing query params from a request URL, preserving path + benign params. */
+export function redactUrlSecrets(rawUrl: string): string {
+  if (typeof rawUrl !== 'string') return rawUrl;
+  const qIdx = rawUrl.indexOf('?');
+  if (qIdx === -1) return rawUrl;
+  const path = rawUrl.slice(0, qIdx);
+  const query = rawUrl.slice(qIdx + 1);
+  if (!query) return rawUrl;
+  const redacted = query.split('&').map(pair => {
+    const eq = pair.indexOf('=');
+    const key = eq === -1 ? pair : pair.slice(0, eq);
+    if (SENSITIVE_QUERY_PARAMS.has(decodeURIComponent(key).toLowerCase())) {
+      return `${key}=[REDACTED]`;
+    }
+    return pair;
+  }).join('&');
+  return `${path}?${redacted}`;
+}
+
 const SENSITIVE_KEYS = new Set([
   'email', 'phone', 'phone_encrypted', 'email_encrypted',
   'password', 'secret', 'token', 'private_key', 'api_key',
@@ -82,7 +111,7 @@ export function getFastifyLoggerConfig(): Record<string, unknown> {
     serializers: {
       req: (req: any) => ({
         method: req.method,
-        url: req.url,
+        url: redactUrlSecrets(req.url),
         hostname: req.hostname,
         remoteAddress: req.ip,
       }),
