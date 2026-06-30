@@ -31,13 +31,16 @@
 import type { MigrationBuilder } from 'node-pg-migrate';
 
 export async function up(pgm: MigrationBuilder): Promise<void> {
+  // RETARGETED 2026-06-30: the LIVE operational role is `dowiz_app` (staging/prod DATABASE_URL_OPERATIONAL);
+  // `deliveryos_api_user` is legacy/nologin. Flip BOTH (idempotent, exception-swallowed per role) so the
+  // migration is correct on any environment. The GUC-coverage remediation (Phase 1 mig 077 policies + Phase 2
+  // migs 078/079 worker DEFINER fns) MUST already be applied + the code deployed-dark before this runs.
   pgm.sql(`
     DO
     $$
     BEGIN
-      EXECUTE 'ALTER ROLE deliveryos_api_user NOBYPASSRLS';
-    EXCEPTION WHEN OTHERS THEN
-      -- Ignore if the role is absent (fresh/local DB) or the statement is not permitted.
+      BEGIN EXECUTE 'ALTER ROLE dowiz_app NOBYPASSRLS'; EXCEPTION WHEN OTHERS THEN END;
+      BEGIN EXECUTE 'ALTER ROLE deliveryos_api_user NOBYPASSRLS'; EXCEPTION WHEN OTHERS THEN END;
     END
     $$;
   `);
