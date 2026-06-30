@@ -4001,4 +4001,10 @@ export const catalog: Record<string, CatalogEntry> = {
   },
   'checkout.your_order': { en: 'Your order', sq: 'Porosia juaj', uk: 'Ваше замовлення' },
   'checkout.item_count': { en: '{{n}} items', sq: '{{n}} artikuj', uk: '{{n}} товарів' },
+  'admin.export_json': { en: 'Export JSON', sq: 'Eksporto JSON', uk: 'Експорт JSON' },
+  'tooltip.export_json': {
+    en: 'Export as JSON',
+    sq: 'Eksporto si JSON',
+    uk: 'Експортувати як JSON',
+  },
 };
