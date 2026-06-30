@@ -7,7 +7,23 @@ import { CURRENCIES } from '@deliveryos/shared-types';
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_REGEX } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
+import { DishStats } from '../../components/client/DishStats.js';
 import { z } from 'zod';
+
+// Per-product nutrition summed from its BOM food lines (mirrors the storefront derivation) — for the
+// collapsible order summary. Packaging/utensil lines excluded; missing data → zeros.
+function productNutritionFromBom(attributes: any): { kcal: number; protein: number; fat: number; carbs: number } {
+  const bom = attributes && typeof attributes === 'object' ? (attributes as any).bom : null;
+  const acc = { kcal: 0, protein: 0, fat: 0, carbs: 0 };
+  if (!Array.isArray(bom)) return acc;
+  for (const l of bom) {
+    if (typeof l?.kcal === 'number') acc.kcal += l.kcal;
+    if (typeof l?.proteinG === 'number') acc.protein += l.proteinG;
+    if (typeof l?.fatG === 'number') acc.fat += l.fatG;
+    if (typeof l?.carbsG === 'number') acc.carbs += l.carbsG;
+  }
+  return { kcal: Math.round(acc.kcal), protein: Math.round(acc.protein), fat: Math.round(acc.fat), carbs: Math.round(acc.carbs) };
+}
 
 // Albania has no other realistic country here, so accept how people actually type
 // their number — local "069...", "0 69 ...", "00355...", bare "69..." — and coerce
@@ -193,6 +209,11 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
   const currencySymbol = CURRENCIES[activeCurrency]?.symbol ?? activeCurrency;
   const prefersReducedMotion = useReducedMotion();
 
+  // Order-summary accordion (subtle, collapsed by default) — items + photos + combined price + nutrition.
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  // productId → { image, per-unit nutrition } from the public menu (for thumbnails + combined nutrition).
+  const [orderMenuMap, setOrderMenuMap] = useState<Record<string, { image?: string; kcal: number; protein: number; fat: number; carbs: number }>>({});
+
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('delivery');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
@@ -330,6 +351,32 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
     } catch {}
   }, [slug]);
 
+  // Fetch the menu once to enrich the order summary with product thumbnails + per-unit nutrition.
+  // Best-effort: if it fails the summary still shows names/qty/price (no photos/nutrition).
+  useEffect(() => {
+    if (!slug) return;
+    let cancelled = false;
+    fetch(`/public/locations/${slug}/menu`)
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: any) => {
+        if (cancelled || !d) return;
+        const map: Record<string, { image?: string; kcal: number; protein: number; fat: number; carbs: number }> = {};
+        const walk = (x: any) => {
+          if (Array.isArray(x)) { x.forEach(walk); return; }
+          if (x && typeof x === 'object') {
+            if (Array.isArray(x.products)) for (const p of x.products) {
+              if (p?.id) map[p.id] = { image: p.imageUrl || undefined, ...productNutritionFromBom(p.attributes) };
+            }
+            for (const k of Object.keys(x)) if (k !== 'products') walk(x[k]);
+          }
+        };
+        walk(d);
+        setOrderMenuMap(map);
+      })
+      .catch(() => { /* best-effort */ });
+    return () => { cancelled = true; };
+  }, [slug]);
+
   useEffect(() => {
     if (!slug) return;
     try {
@@ -364,13 +411,14 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
   // lower-bound (subtotal+tax) used only for display; the cash-422 backstop catches any under-quote.
   const total = estimate.total ?? subtotal + taxTotal;
 
-  const hasNutrition = items.some((item: any) => (item as any).kcal != null);
-  const nutritionTotal = items.reduce((acc, item: any) => ({
-    kcal: acc.kcal + ((item as any).kcal ?? 0) * item.quantity,
-    protein: acc.protein + ((item as any).protein ?? 0) * item.quantity,
-    fat: acc.fat + ((item as any).fat ?? 0) * item.quantity,
-    carbs: acc.carbs + ((item as any).carbs ?? 0) * item.quantity,
-  }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
+  // Per-unit nutrition comes from the fetched menu map (cart items don't carry it); fall back to any
+  // fields a cart item happens to have. Combined = Σ per-unit × quantity.
+  const nutritionOf = (item: any) => orderMenuMap[item.productId] ?? { kcal: (item as any).kcal ?? 0, protein: (item as any).protein ?? 0, fat: (item as any).fat ?? 0, carbs: (item as any).carbs ?? 0 };
+  const nutritionTotal = items.reduce((acc, item: any) => {
+    const n = nutritionOf(item);
+    return { kcal: acc.kcal + (n.kcal ?? 0) * item.quantity, protein: acc.protein + (n.protein ?? 0) * item.quantity, fat: acc.fat + (n.fat ?? 0) * item.quantity, carbs: acc.carbs + (n.carbs ?? 0) * item.quantity };
+  }, { kcal: 0, protein: 0, fat: 0, carbs: 0 });
+  const hasNutrition = nutritionTotal.kcal > 0;
 
   const orderItems = items.map(i => ({
     product_id: i.productId,
@@ -663,6 +711,55 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
       )}
 
       <form id="checkout-form" onSubmit={handlePlaceOrder} className="space-y-6">
+        {/* Order summary — subtle collapsed accordion at the very top: items (photos), combined price,
+            combined nutrition. Revealed on tap; quiet by default so it doesn't dominate the form. */}
+        <div className="rounded-[var(--brand-radius)] border overflow-hidden" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }} data-testid="order-summary">
+          <button
+            type="button"
+            onClick={() => setSummaryOpen(o => !o)}
+            aria-expanded={summaryOpen}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
+          >
+            <span className="inline-flex items-center gap-2 min-w-0">
+              <i className="ti ti-receipt text-lg shrink-0" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
+              <span className="text-step-sm font-semibold truncate" style={{ color: 'var(--brand-text)' }}>
+                {t('checkout.your_order', 'Your order')} · {t('checkout.item_count', '{{n}} items', { n: items.reduce((s, i) => s + i.quantity, 0) })}
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-2 shrink-0">
+              <span className="text-step-sm font-bold" style={{ color: 'var(--brand-primary-readable, var(--brand-text))' }}><PriceDisplay amount={total} /></span>
+              <i className={`ti ti-chevron-${summaryOpen ? 'up' : 'down'}`} aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
+            </span>
+          </button>
+          {summaryOpen && (
+            <div className="px-4 pb-4 pt-1 border-t flex flex-col gap-3" style={{ borderColor: 'var(--brand-border)' }}>
+              {/* Item rows */}
+              <ul className="flex flex-col gap-2 mt-2">
+                {items.map(item => {
+                  const img = orderMenuMap[item.productId]?.image;
+                  return (
+                    <li key={item.id} className="flex items-center gap-3">
+                      {img ? (
+                        <img src={img} alt="" aria-hidden="true" className="w-11 h-11 rounded-lg object-cover shrink-0" style={{ background: 'var(--brand-surface-raised)' }} />
+                      ) : (
+                        <span className="w-11 h-11 rounded-lg shrink-0 flex items-center justify-center" style={{ background: 'var(--brand-surface-raised)' }}><i className="ti ti-tools-kitchen-2" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} /></span>
+                      )}
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-step-sm font-medium truncate" style={{ color: 'var(--brand-text)' }}>{item.name}</span>
+                        <span className="block text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>× {item.quantity}</span>
+                      </span>
+                      <span className="text-step-sm font-semibold shrink-0 tabular-nums" style={{ color: 'var(--brand-text)' }}><PriceDisplay amount={item.price * item.quantity} size="sm" /></span>
+                    </li>
+                  );
+                })}
+              </ul>
+              {/* Combined nutrition — reuse the DishStats viz over the whole-order totals (no ingredients). */}
+              {hasNutrition && (
+                <DishStats variant="compact" macros={nutritionTotal} className="pt-1" />
+              )}
+            </div>
+          )}
+        </div>
         <motion.div
           initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
