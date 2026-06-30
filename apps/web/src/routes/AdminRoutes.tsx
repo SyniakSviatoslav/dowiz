@@ -26,8 +26,10 @@ const FlowTestPage = import.meta.env.DEV
 
 const ALL_NAV_ITEMS = [
   { key: 'admin.activation', href: '/admin/activation', icon: 'ti ti-rocket' },
-  { key: 'admin.dashboard', href: '/admin', icon: 'ti ti-layout-dashboard' },
-  { key: 'admin.orders', href: '/admin/orders', icon: 'ti ti-clipboard-list' },
+  // Owner directive: no separate "Dashboard" — admins land directly on Orders. The
+  // index route (/admin) already renders the orders page (DashboardPage via AdminHome),
+  // so "Orders" points at /admin and is the home tab. /admin/orders stays as a deep-link alias.
+  { key: 'admin.orders', href: '/admin', icon: 'ti ti-clipboard-list' },
   { key: 'admin.menu', href: '/admin/menu', icon: 'ti ti-tools-kitchen-2' },
   { key: 'admin.supplies', href: '/admin/supplies', icon: 'ti ti-packages' },
   { key: 'admin.promotions', href: '/admin/promotions', icon: 'ti ti-ticket' },
