@@ -42,11 +42,13 @@ interface MacroDef {
   color: string;
 }
 
-// protein = strong primary · carbs = ~55% primary · fat = ~30% primary.
+// Distinct, harmonious macro hues (the shared chart tokens) + a distinct glyph each, so the
+// ring segments, bars and legend dots read apart at a glance — instead of three muddy shades
+// of the same brand yellow. Ingredient bars stay on-brand (a different data class).
 const MACROS: readonly MacroDef[] = [
-  { key: 'protein', labelKey: 'nutrition.protein', icon: 'ti ti-droplet', kcalPerG: 4, color: 'var(--brand-primary)' },
-  { key: 'fat', labelKey: 'nutrition.fat', icon: 'ti ti-droplet-half', kcalPerG: 9, color: 'color-mix(in srgb, var(--brand-primary) 30%, var(--brand-surface))' },
-  { key: 'carbs', labelKey: 'nutrition.carbs', icon: 'ti ti-droplet-filled', kcalPerG: 4, color: 'color-mix(in srgb, var(--brand-primary) 55%, var(--brand-surface))' },
+  { key: 'protein', labelKey: 'nutrition.protein', icon: 'ti ti-meat', kcalPerG: 4, color: 'var(--chart-protein)' },
+  { key: 'fat', labelKey: 'nutrition.fat', icon: 'ti ti-droplet', kcalPerG: 9, color: 'var(--chart-fat)' },
+  { key: 'carbs', labelKey: 'nutrition.carbs', icon: 'ti ti-bread', kcalPerG: 4, color: 'var(--chart-carbs)' },
 ];
 
 const INGREDIENT_BAR_COLOR = 'color-mix(in srgb, var(--brand-primary) 70%, var(--brand-surface))';

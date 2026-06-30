@@ -1150,19 +1150,20 @@ export function MenuPage() {
                 whileTap={prefersReduced ? undefined : { scale: 0.95 }}
                 onClick={closeDetail}
                 aria-label={t('common.close', 'Close')}
-                className="pointer-events-auto absolute top-3 right-3 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]"
-                style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)', border: '1px solid var(--brand-border)' }}
+                className="pointer-events-auto absolute top-2.5 right-2.5 min-w-[48px] min-h-[48px] rounded-full flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+                style={{ background: 'var(--brand-surface)', color: 'var(--brand-text)', border: '1px solid var(--brand-border)', boxShadow: 'var(--elev-3, 0 4px 16px rgba(0,0,0,0.35))' }}
               >
                 <i className="ti ti-x text-2xl" />
               </motion.button>
-              {/* Mobile grabber — tap to close (a familiar bottom-sheet dismiss affordance). */}
+              {/* Mobile grabber — a generous, center-reachable tap-to-close (the natural bottom-sheet
+                  dismiss; far easier one-handed than the top-corner X on a tall sheet). */}
               <button
                 type="button"
                 onClick={closeDetail}
                 aria-label={t('common.close', 'Close')}
-                className="md:hidden pointer-events-auto absolute top-1.5 left-1/2 -translate-x-1/2 flex items-center justify-center w-24 h-7"
+                className="md:hidden pointer-events-auto absolute top-0 left-1/2 -translate-x-1/2 flex items-center justify-center w-32 h-11"
               >
-                <span className="block w-10 h-1.5 rounded-full" style={{ background: 'color-mix(in srgb, var(--brand-text) 55%, transparent)' }} />
+                <span className="block w-12 h-[5px] rounded-full" style={{ background: 'color-mix(in srgb, var(--brand-text) 60%, transparent)' }} />
               </button>
             </div>
             {/* Image — taller hero with more room; the photo is shown in FULL (object-contain) over a
