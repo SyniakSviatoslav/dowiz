@@ -99,6 +99,9 @@ interface MenuResponse {
   currency: { code: string; minor_unit: number } | string;
   location_name?: string;
   categories: MenuCategory[];
+  // P6-3: true ONLY for an unclaimed SHADOW served via read_preview_menu. The storefront flips into
+  // a NON-ORDERABLE preview (no cart/checkout, honest banner + claim CTA) — same design, can't order.
+  is_preview?: boolean;
 }
 
 const getCurrency = (m: MenuResponse | null): string => {
@@ -435,6 +438,13 @@ export function MenuPage() {
   // When the venue is closed the storefront stays fully browsable, but ordering is
   // blocked: every add-to-cart path checks this flag and the CTA reflects it.
   const isClosed = venueStatus === 'closed';
+  // P6-3 preview (unclaimed shadow): the storefront renders its real design but is NEVER-orderable
+  // (stronger than 'closed' — there is no "reopens later"). Every add-to-cart path is blocked, the
+  // cart/checkout never render (cart stays empty), and the server refuses orders too (status='closed').
+  const isPreview = menu?.is_preview === true;
+  const orderingDisabled = isClosed || isPreview;
+  // Owner-initiated "this is my restaurant" request from the preview CTA lives below, after useToast().
+  const [claimRequested, setClaimRequested] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -599,6 +609,19 @@ export function MenuPage() {
 
   const { showToast } = useToast();
 
+  // P6-3 preview CTA — owner-initiated "this is my restaurant" request (no token here; the real
+  // token-bound claim link is delivered out-of-band per the Art-14 notice). POSTs the generic
+  // /claim/request signal, which always returns a generic ack (never reveals whether a slug is a
+  // claimable shadow). Declared after useToast() so showToast is in scope (no TDZ).
+  const requestClaim = useCallback(async () => {
+    if (!slug || claimRequested) return;
+    setClaimRequested(true);
+    try {
+      await fetch('/api/claim/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug }) });
+    } catch { /* generic ack regardless of network outcome */ }
+    showToast(t('preview.claim_ack', 'Thanks! If this is your restaurant, we’ll verify ownership via your contact on file and send a claim link.'), 'success');
+  }, [slug, claimRequested, showToast, t]);
+
   // F9: reconcile a persisted cart to the freshly-loaded menu. A cart can outlive a
   // price/availability change (localStorage survives across sessions); without this the
   // customer only discovers the drift as a server hard-block after filling out checkout.
@@ -624,7 +647,7 @@ export function MenuPage() {
   }, []);
 
   const handleAddDetail = () => {
-    if (!detailProduct || !detailProduct.available || isClosed) return;
+    if (!detailProduct || !detailProduct.available || orderingDisabled) return;
     addItem({
       id: makeCartItemId(detailProduct.id, modifierGroupSelection),
       productId: detailProduct.id,
@@ -640,7 +663,7 @@ export function MenuPage() {
   };
 
   const canAdd = (): boolean => {
-    if (!detailProduct || !detailProduct.available || isClosed) return false;
+    if (!detailProduct || !detailProduct.available || orderingDisabled) return false;
     const groups = detailProduct.modifier_groups || [];
     for (const g of groups) {
       if (!g.required) continue;
@@ -717,8 +740,9 @@ export function MenuPage() {
           </div>
           {/* Venue state + closing time + delivery ETA */}
           <div className="flex items-center gap-2 flex-wrap text-step-xs" style={{ color: 'rgba(255,255,255,0.88)', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
-            {venueStatus && <StateChip state={venueStatus} scope="venue" data-testid="venue-state-chip" />}
-            {locationInfo?.closesAt && venueStatus !== 'closed' && (
+            {/* A shadow has no real hours — suppress the open/closed chip + closing time in preview mode. */}
+            {!isPreview && venueStatus && <StateChip state={venueStatus} scope="venue" data-testid="venue-state-chip" />}
+            {!isPreview && locationInfo?.closesAt && venueStatus !== 'closed' && (
               <span data-testid="vendor-closes-at" className="inline-flex items-center gap-1">
                 <i className="ti ti-tools-kitchen-2" style={{ fontSize: '0.72rem' }} aria-hidden="true" />
                 {t('client.closes_at', 'closes {{time}}', { time: locationInfo.closesAt })}
@@ -875,9 +899,42 @@ export function MenuPage() {
         )}
       </div>
 
+      {/* P6-3 preview banner — an unclaimed SHADOW rendered with its real design but never-orderable.
+          Honest label ("not a live store" — the H3 invariant text) + an owner claim CTA. Shown INSTEAD
+          of the open/closed/busy banners (a shadow has no real hours, so its derived status is noise). */}
+      {isPreview && (
+        <motion.div
+          data-testid="venue-preview-banner"
+          role="status"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mx-4 my-3 px-4 py-3.5 rounded-2xl border-2 flex items-start gap-3 shadow-sm"
+          style={{ background: 'color-mix(in srgb, var(--brand-primary) 10%, var(--brand-surface))', borderColor: 'color-mix(in srgb, var(--brand-primary) 40%, transparent)' }}
+        >
+          <span className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full" style={{ background: 'color-mix(in srgb, var(--brand-primary) 18%, transparent)', color: 'var(--brand-primary-readable, var(--brand-primary))' }}>
+            <i className="ti ti-eye text-xl" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold leading-tight" style={{ color: 'var(--brand-text)' }}>{t('preview.banner_title', 'Menu preview — not a live store')}</p>
+            <p className="text-step-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{t('preview.banner_body', 'We built this from your public menu so you can see what online ordering would look like. It can’t take orders yet.')}</p>
+            <button
+              type="button"
+              data-testid="preview-claim-cta"
+              onClick={requestClaim}
+              disabled={claimRequested}
+              className="mt-2 inline-flex items-center gap-1.5 px-3.5 h-9 rounded-full text-step-xs font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)] disabled:opacity-60"
+              style={{ background: 'var(--brand-primary)', color: 'color-mix(in srgb, var(--brand-bg) 86%, #000)' }}
+            >
+              <i className={`ti ${claimRequested ? 'ti-check' : 'ti-discount-check'} text-base`} />
+              {claimRequested ? t('preview.claim_sent', 'Request sent') : t('preview.claim_cta', 'Is this your restaurant? Claim it')}
+            </button>
+          </div>
+        </motion.div>
+      )}
+
       {/* Venue state banner — closed vs busy are distinct eater-facing states.
           `busy` (kitchen busy / raised ETA) is NOT closed: ordering stays open. */}
-      {venueStatus === 'closed' && (
+      {!isPreview && venueStatus === 'closed' && (
         <motion.div
           data-testid="venue-closed-banner"
           role="status"
@@ -1062,11 +1119,13 @@ export function MenuPage() {
                       chefPick: !!product.attributes?.chef_pick,
                     }}
                     compareGutter={COMPARISON_ENABLED}
+                    hideAdd={isPreview}
                     onClick={() => handleProductClick(product)}
                     onAdd={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       if (!product.available) return;
+                      if (isPreview) { showToast(t('preview.cannot_order', 'This is a preview — it can’t take orders yet.'), 'info'); return; }
                       if (isClosed) { showToast(t('client.closed_cannot_order', 'The restaurant is closed — ordering is paused until it reopens.'), 'info'); return; }
                       if (!product.modifier_groups?.length) {
                         addItem({ id: `cart_${product.id}`, productId: product.id, name: product.name, quantity: 1, price: product.price, options: {} });
@@ -1479,10 +1538,12 @@ export function MenuPage() {
                   disabled={!canAdd()}
                   whileTap={prefersReduced || !canAdd() ? undefined : { scale: 0.97 }}
                   className="flex-1 min-w-0 h-[46px] text-[var(--brand-bg)] font-bold text-step-sm outline-none transition-[transform,opacity] duration-150 ease-out disabled:opacity-40 flex items-center justify-between gap-2 px-4 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
-                  style={{ background: detailProduct.available && !isClosed ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
+                  style={{ background: detailProduct.available && !orderingDisabled ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
                   {!detailProduct.available ? (
                     <span className="w-full text-center">{t('client.unavailable', 'Unavailable')}</span>
+                  ) : isPreview ? (
+                    <span className="w-full text-center">{t('preview.not_orderable', 'Preview only — not orderable')}</span>
                   ) : isClosed ? (
                     <span className="w-full text-center">{t('client.closed_short', 'Currently closed')}</span>
                   ) : (

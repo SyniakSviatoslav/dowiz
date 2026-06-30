@@ -18,16 +18,26 @@ export default (async function ssrRoutes(fastify: any, opts: any) {
   fastify.get('/s/:slug', async (request: any, reply: any) => {
     const { slug } = request.params as any;
 
-    // P6-3 (D): a SHADOW tenant gets the honest labeled preview (humans AND bots) — generic OG (H3) +
-    // noindex + never-orderable. read_preview_menu returns non-null ONLY for shadows (owner_id NULL +
-    // closed + published_at NULL). If migration 070 isn't applied yet, the fn is absent → fall through
-    // to the real-tenant path (where the B2 shadow guard still suppresses the real name as a safety net).
+    // P6-3 (D): a SHADOW tenant is never-orderable + noindex + generic-OG. read_preview_menu returns
+    // non-null ONLY for shadows (owner_id NULL + closed + published_at NULL). Split by client:
+    //   • BOTS / no-JS unfurlers → the bare server-rendered labeled preview (renderShadowPreview): it
+    //     carries the honest banner + menu in static HTML with GENERIC OG (H3 — no real name in meta),
+    //     so a pasted link never doxes the unconsented venue and crawlers get readable content.
+    //   • HUMANS → the real React storefront via serveSpaShell, which ALREADY serves shadows with
+    //     noindex + generic OG (owner_id NULL branch). The SPA fetches the menu (/public/.../menu now
+    //     falls back to the preview, flagged is_preview) and renders it in NON-ORDERABLE preview mode —
+    //     same design as a live store, no cart/checkout, claim CTA. The richer P6-3 honest preview.
+    // If migration 070 isn't applied the fn is absent (42883) → fall through to the real-tenant path
+    // (where serveSpaShell's B2 shadow guard still suppresses the real name as a safety net).
     try {
       const previewRes = await db.query('SELECT read_preview_menu($1) AS m', [slug]);
       const previewMenu = previewRes.rows[0]?.m;
       if (previewMenu) {
         reply.header('X-Robots-Tag', 'noindex, nofollow');
-        return reply.type('text/html').send(renderShadowPreview(previewMenu));
+        if (isBot(request.headers['user-agent'])) {
+          return reply.type('text/html').send(renderShadowPreview(previewMenu));
+        }
+        return serveSpaShell(reply, db, slug);
       }
     } catch (err: any) {
       if (err?.code !== '42883') console.debug('[ssr] preview lookup failed:', err?.message); // 42883 = fn not yet migrated
