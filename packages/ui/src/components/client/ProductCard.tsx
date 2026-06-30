@@ -142,7 +142,7 @@ export function ProductCard({ product, onAdd, onClick, compareGutter }: ProductC
             variants={product.isAvailable ? addBtnVariants : undefined}
             whileTap={product.isAvailable ? 'tap' : undefined}
           >
-            <i className="ti ti-plus text-sm leading-none" />
+            <i className="ti ti-plus text-lg leading-none" />
           </motion.button>
         </div>
         {product.description && (
@@ -155,14 +155,13 @@ export function ProductCard({ product, onAdd, onClick, compareGutter }: ProductC
         {/* HIGH-2: full ingredients / allergen / nutrition detail intentionally omitted from
             the card — it all lives one tap away in the detail modal. */}
 
-        <div className="flex items-center justify-between gap-2 mt-auto pt-1">
-          <div className="flex items-baseline gap-1 min-w-0">
-            <PriceDisplay amount={product.price} size="md" style={{ color: 'var(--brand-primary-readable, var(--brand-text))', fontWeight: 800 }} />
-          </div>
-          {/* Right rail: dominant taste cue + COOKING-time pill (not delivery time). The prep
-              indicator sits at the bottom-right end, clear of the 44x44 add button up in the
-              title row, and stays on one line on narrow 2-col cards via whitespace-nowrap. */}
-          <div className="flex items-center gap-1.5 shrink-0">
+        {/* Footer: price + meta. flex-wrap so on a narrow 2-col card the meta drops to its own
+            line instead of colliding with a wide price (the "1500 ALL~15 min" overlap bug). */}
+        <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 mt-auto pt-1.5">
+          <PriceDisplay amount={product.price} size="md" style={{ color: 'var(--brand-primary-readable, var(--brand-text))', fontWeight: 800 }} />
+          {/* Meta rail: dominant taste cue + COOKING-time (not delivery). shrink-0 + nowrap keeps
+              it intact; when it can't fit beside the price, flex-wrap moves the whole rail below. */}
+          <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
             {/* HIGH-2: a single dominant taste cue — the full taste profile is in the modal. */}
             {dominantTaste && (
               <span
