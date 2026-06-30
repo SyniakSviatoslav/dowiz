@@ -307,7 +307,7 @@ export function MenuPage() {
   const [venueStatus, setVenueStatus] = useState<'open' | 'closed' | 'busy' | null>(null);
   const [locationInfo, setLocationInfo] = useState<LocationInfo | null>(null);
   // UX-1 storefront footer links — decoupled from geo so they show even without lat/lng.
-  const [storeLinks, setStoreLinks] = useState<{ mapsUrl?: string | null; instagram?: string | null; facebook?: string | null }>({});
+  const [storeLinks, setStoreLinks] = useState<{ mapsUrl?: string | null; instagram?: string | null; facebook?: string | null; phone?: string | null }>({});
   const [storeAddress, setStoreAddress] = useState<string | null>(null);
   // Hide the footer in embed/activation-preview contexts (target=_blank is unreliable in iframes).
   const isEmbed = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('embed') === 'true' || new URLSearchParams(window.location.search).get('activation') === '1');
@@ -327,7 +327,7 @@ export function MenuPage() {
         // Derive venue state from the contract status; fall back to the legacy isOpen
         // boolean for older payloads (busy only ever comes from the new `status` field).
         setVenueStatus(d.status ?? (d.isOpen === false ? 'closed' : 'open'));
-        setStoreLinks({ mapsUrl: d.googleMapsUrl ?? null, instagram: d.socialInstagram ?? null, facebook: d.socialFacebook ?? null });
+        setStoreLinks({ mapsUrl: d.googleMapsUrl ?? null, instagram: d.socialInstagram ?? null, facebook: d.socialFacebook ?? null, phone: d.phone ?? null });
         setStoreAddress(d.address ?? null);
       })
       .catch(() => {});
@@ -1301,25 +1301,50 @@ export function MenuPage() {
           {storeAddress && (
             <div className="text-xs max-w-xs" style={{ color: 'var(--brand-text-muted)' }}>{storeAddress}</div>
           )}
-          {(storeLinks.mapsUrl || storeLinks.instagram || storeLinks.facebook) && (
-            <div className="flex items-center justify-center gap-4 mt-1">
-              {storeLinks.mapsUrl && (
-                <a href={storeLinks.mapsUrl} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')} className="text-xl inline-flex items-center justify-center w-11 h-11 rounded-full outline-none transition-[color,transform,box-shadow] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' }}>
-                  <i className="ti ti-map-pin" />
-                </a>
-              )}
-              {storeLinks.instagram && (
-                <a href={storeLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-xl inline-flex items-center justify-center w-11 h-11 rounded-full outline-none transition-[color,transform,box-shadow] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' }}>
-                  <i className="ti ti-brand-instagram" />
-                </a>
-              )}
-              {storeLinks.facebook && (
-                <a href={storeLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-xl inline-flex items-center justify-center w-11 h-11 rounded-full outline-none transition-[color,transform,box-shadow] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' }}>
-                  <i className="ti ti-brand-facebook" />
-                </a>
-              )}
-            </div>
-          )}
+          {(() => {
+            // Contact rail. WhatsApp + tap-to-call are derived from the venue phone (this
+            // market's restaurant numbers are WhatsApp mobiles). Maps falls back to a real
+            // coordinate search link when no explicit URL is set. Each link renders only when
+            // its datum is present — fake placeholders are cleared at the data layer, so they
+            // simply don't appear.
+            const waDigits = storeLinks.phone ? storeLinks.phone.replace(/\D/g, '') : '';
+            const mapsHref = storeLinks.mapsUrl
+              || (locationInfo?.lat != null && locationInfo?.lng != null
+                ? `https://www.google.com/maps/search/?api=1&query=${locationInfo.lat},${locationInfo.lng}`
+                : null);
+            if (!mapsHref && !waDigits && !storeLinks.phone && !storeLinks.instagram && !storeLinks.facebook) return null;
+            const cls = "text-xl inline-flex items-center justify-center w-11 h-11 rounded-full outline-none transition-[color,transform,box-shadow] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]";
+            const sty = { color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' } as React.CSSProperties;
+            return (
+              <div className="flex items-center justify-center gap-3 mt-1">
+                {mapsHref && (
+                  <a href={mapsHref} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')} className={cls} style={sty}>
+                    <i className="ti ti-map-pin" />
+                  </a>
+                )}
+                {waDigits && (
+                  <a href={`https://wa.me/${waDigits}`} target="_blank" rel="noopener noreferrer" aria-label={t('client.contact_whatsapp', 'Message on WhatsApp')} className={cls} style={sty}>
+                    <i className="ti ti-brand-whatsapp" />
+                  </a>
+                )}
+                {storeLinks.phone && (
+                  <a href={`tel:${storeLinks.phone}`} aria-label={t('client.call_restaurant', 'Call the restaurant')} className={cls} style={sty}>
+                    <i className="ti ti-phone" />
+                  </a>
+                )}
+                {storeLinks.instagram && (
+                  <a href={storeLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className={cls} style={sty}>
+                    <i className="ti ti-brand-instagram" />
+                  </a>
+                )}
+                {storeLinks.facebook && (
+                  <a href={storeLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className={cls} style={sty}>
+                    <i className="ti ti-brand-facebook" />
+                  </a>
+                )}
+              </div>
+            );
+          })()}
         </footer>
       )}
 

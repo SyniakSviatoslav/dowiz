@@ -218,7 +218,7 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
   async function refreshInfoRow(slug: string): Promise<any | null> {
     const res = await server.db.query(
       `SELECT l.id, l.name, l.slug, l.currency_code, l.currency_minor_unit, l.default_locale,
-              l.lat, l.lng, l.delivery_paused, l.hours_json, l.address, l.kitchen_busy_until,
+              l.lat, l.lng, l.delivery_paused, l.hours_json, l.address, l.phone, l.kitchen_busy_until,
               l.delivery_fee_flat, l.free_delivery_threshold, l.min_order_value,
               l.tax_rate, l.price_includes_tax,
               -- mirrors the server fee ladder (orders.ts): the distance-tiered path is taken iff
@@ -322,6 +322,7 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
         lat: r.lat != null ? Number(r.lat) : null,
         lng: r.lng != null ? Number(r.lng) : null,
         address: r.address ?? null,
+        phone: r.phone ?? null,
         isOpen,
         status,
         googleRating: r.google_rating != null ? Number(r.google_rating) : null,
