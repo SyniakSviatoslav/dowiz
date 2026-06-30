@@ -210,17 +210,19 @@ function ClientLayoutInner() {
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
                         <button
+                          aria-label={t('cart.decrease', 'Decrease quantity')}
                           onClick={() => updateQuantity(item.id, item.quantity - 1)}
                           className="min-w-[44px] min-h-[44px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95 flex items-center justify-center"
                         >
-                          <i className="ti ti-minus text-sm" />
+                          <i className="ti ti-minus text-sm" aria-hidden="true" />
                         </button>
                         <span className="text-[var(--brand-text)] font-medium w-6 text-center">{item.quantity}</span>
                         <button
+                          aria-label={t('cart.increase', 'Increase quantity')}
                           onClick={() => updateQuantity(item.id, item.quantity + 1)}
                           className="min-w-[44px] min-h-[44px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95 flex items-center justify-center"
                         >
-                          <i className="ti ti-plus text-sm" />
+                          <i className="ti ti-plus text-sm" aria-hidden="true" />
                         </button>
                       </div>
                     </motion.div>
@@ -238,7 +240,7 @@ function ClientLayoutInner() {
                         <p className="text-sm mb-1.5 text-[var(--brand-text-muted)]">
                           {t('cart.free_delivery_progress', 'Add {{amount}} more for free delivery', { amount: formatMoney(fdRemaining, activeCurrency, eurRate ?? undefined) })}
                         </p>
-                        <div className="h-1.5 rounded-full overflow-hidden bg-[var(--brand-border)]" role="progressbar" aria-valuenow={fdPct} aria-valuemin={0} aria-valuemax={100}>
+                        <div className="h-1.5 rounded-full overflow-hidden bg-[var(--brand-border)]" role="progressbar" aria-label={t('cart.free_delivery_label', 'Free delivery progress')} aria-valuenow={fdPct} aria-valuemin={0} aria-valuemax={100}>
                           <div className="h-full rounded-full bg-[var(--brand-primary)] transition-[width] duration-300" style={{ width: `${fdPct}%` }} />
                         </div>
                       </div>

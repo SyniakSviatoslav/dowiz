@@ -13,6 +13,7 @@ interface MapWithPinProps {
   onPinChange?: (lngLat: LngLatLike) => void;
   confirmLabel?: string;
   placeholder?: string;
+  myLocationLabel?: string;
 }
 
 function getCurrentPosition(): Promise<GeolocationPosition> {
@@ -36,6 +37,7 @@ export function MapWithPin({
   onPinChange,
   confirmLabel = 'Confirm location',
   placeholder = 'Tap the map to place your delivery pin',
+  myLocationLabel = 'My Location',
 }: MapWithPinProps) {
   const [pin, setPin] = useState<LngLatLike | null>(initialPin || null);
   const [confirmed, setConfirmed] = useState(false);
@@ -88,7 +90,8 @@ export function MapWithPin({
           borderColor: 'var(--brand-border)',
           color: 'var(--brand-primary)',
         }}
-        title="My Location"
+        title={myLocationLabel}
+        aria-label={myLocationLabel}
       >
         {locating ? (
           <i className="ti ti-loader animate-spin text-base" />

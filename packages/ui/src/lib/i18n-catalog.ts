@@ -3362,6 +3362,7 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: 'Торкніться карти, щоб задати місце доставки',
   },
   'checkout.street_address': { en: 'Street address', sq: 'Adresa e rrugës', uk: 'Адреса (вулиця)' },
+  'checkout.my_location': { en: 'My location', sq: 'Vendndodhja ime', uk: 'Моє місцезнаходження' },
   'admin.analytics_unavailable': {
     en: 'Analytics unavailable',
     sq: 'Analitika e padisponueshme',
@@ -3709,6 +3710,7 @@ export const catalog: Record<string, CatalogEntry> = {
   },
   'cart.decrease': { en: 'Decrease quantity', sq: 'Ulni sasinë', uk: 'Зменшити кількість' },
   'cart.increase': { en: 'Increase quantity', sq: 'Rritni sasinë', uk: 'Збільшити кількість' },
+  'cart.free_delivery_label': { en: 'Free delivery progress', sq: 'Progresi i dorëzimit falas', uk: 'Прогрес безкоштовної доставки' },
   'map.unavailable': {
     en: 'Live location unavailable',
     sq: 'Vendndodhja drejtpërdrejt e padisponueshme',

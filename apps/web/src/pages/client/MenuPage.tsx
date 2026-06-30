@@ -1049,14 +1049,19 @@ export function MenuPage() {
                       <i className="ti ti-flask" /> {t('common.taste', 'Taste')}
                     </h3>
                     <div className="flex flex-wrap gap-x-4 gap-y-2">
-                      {entries.map(([axis, level]) => (
-                        <span key={axis} className="inline-flex items-center gap-1 text-sm" style={{ color: 'var(--brand-text-muted)' }}>
-                          <i className={icons[axis]} style={{ fontSize: '0.75rem' }} />
-                          {Array.from({ length: level as number }).map((_, i) => (
-                            <i key={i} className={icons[axis]} style={{ fontSize: '0.65rem' }} />
-                          ))}
-                        </span>
-                      ))}
+                      {entries.map(([axis, level]) => {
+                        const label = t(`admin.taste_${axis}`, axis);
+                        return (
+                          <span key={axis} className="inline-flex items-center gap-1.5 text-sm" style={{ color: 'var(--brand-text-muted)' }} aria-label={`${label}: ${level}`}>
+                            <span className="font-medium">{label}</span>
+                            <span className="inline-flex items-center gap-0.5" aria-hidden="true">
+                              {Array.from({ length: level as number }).map((_, i) => (
+                                <i key={i} className={icons[axis]} style={{ fontSize: '0.7rem' }} />
+                              ))}
+                            </span>
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
                 );
