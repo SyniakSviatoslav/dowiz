@@ -14,7 +14,9 @@ test.describe('Sunlight Mode', () => {
     const owner = (await (await request.post(`${BASE}/api/auth/local/login`, { data: { email: 'test@dowiz.com', password: 'test123456' } })).json()).access_token;
     const courier = (await (await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'courier' } })).json()).access_token;
 
-    for (const [route, token] of [['/courier', courier], ['/admin', owner], ['/s/demo', null]] as const) {
+    // Storefront (/s/:slug) intentionally has NO sunlight toggle (owner: one theme) — see the
+    // dedicated "storefront has no sunlight toggle" test below. Admin + courier keep it.
+    for (const [route, token] of [['/courier', courier], ['/admin', owner]] as const) {
       await page.addInitScript((t) => { try { localStorage.setItem('dowiz-sunlight', 'on'); if (t) localStorage.setItem('dos_access_token', t); } catch {} }, token);
       await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(800);
@@ -25,10 +27,10 @@ test.describe('Sunlight Mode', () => {
     }
   });
 
-  test('header toggle turns Sunlight Mode on from a clean state', async ({ page }) => {
-    await page.goto(`${BASE}/s/demo`, { waitUntil: 'networkidle' });
-    await page.evaluate(() => { try { localStorage.removeItem('dowiz-sunlight'); } catch {} });
-    await page.reload({ waitUntil: 'networkidle' });
+  test('header toggle turns Sunlight Mode on from a clean state (admin)', async ({ page, request }) => {
+    const owner = (await (await request.post(`${BASE}/api/auth/local/login`, { data: { email: 'test@dowiz.com', password: 'test123456' } })).json()).access_token;
+    await page.addInitScript((t) => { try { localStorage.setItem('dos_access_token', t); localStorage.removeItem('dowiz-sunlight'); } catch {} }, owner);
+    await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(800);
 
     const toggle = page.getByTestId('sunlight-toggle').first();
@@ -37,5 +39,11 @@ test.describe('Sunlight Mode', () => {
     await expect(page.locator('html')).toHaveAttribute('data-sunlight', 'on');
     const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(luminance(bg)).toBeGreaterThan(220);
+  });
+
+  test('storefront has NO sunlight toggle (owner: one theme)', async ({ page }) => {
+    await page.goto(`${BASE}/s/demo`, { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('sunlight-toggle')).toHaveCount(0);
   });
 });
