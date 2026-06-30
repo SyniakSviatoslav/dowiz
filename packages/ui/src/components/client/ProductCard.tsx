@@ -151,24 +151,34 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
         <div className="flex items-center justify-between gap-2 mt-auto pt-1">
           <div className="flex items-baseline gap-1 min-w-0">
             <PriceDisplay amount={product.price} size="md" style={{ color: 'var(--brand-primary-readable, var(--brand-text))', fontWeight: 800 }} />
+          </div>
+          {/* Right rail: dominant taste cue + COOKING-time pill (not delivery time). The prep
+              indicator sits at the bottom-right end, clear of the 44x44 add button up in the
+              title row, and stays on one line on narrow 2-col cards via whitespace-nowrap. */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* HIGH-2: a single dominant taste cue — the full taste profile is in the modal. */}
+            {dominantTaste && (
+              <span
+                className="inline-flex items-center"
+                style={{ color: 'color-mix(in srgb, var(--brand-text) 62%, transparent)' }}
+                title={TASTE_LABELS[dominantTaste[0]] || dominantTaste[0]}
+                aria-label={TASTE_LABELS[dominantTaste[0]] || dominantTaste[0]}
+              >
+                <i className={TASTE_ICONS[dominantTaste[0]]} style={{ fontSize: '0.85rem' }} />
+              </span>
+            )}
             {product.prepTimeMinutes != null && (
-              <span className="inline-flex items-center gap-0.5 text-step-2xs font-medium whitespace-nowrap" style={{ color: 'var(--brand-text-muted)' }}>
-                <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} aria-hidden="true" />
+              <span
+                className="inline-flex items-center gap-0.5 text-step-2xs font-medium whitespace-nowrap"
+                style={{ color: 'var(--brand-text-muted)' }}
+                title={t('product.prep_cooking_time', 'Cooking time (not delivery)')}
+                aria-label={t('product.prep_cooking_time', 'Cooking time (not delivery)')}
+              >
+                <i className="ti ti-tools-kitchen-2" style={{ fontSize: '0.7rem' }} aria-hidden="true" />
                 {t('product.prep_minutes', '~{{n}} min', { n: product.prepTimeMinutes })}
               </span>
             )}
           </div>
-          {/* HIGH-2: a single dominant taste cue — the full taste profile is in the modal. */}
-          {dominantTaste && (
-            <span
-              className="inline-flex items-center shrink-0"
-              style={{ color: 'color-mix(in srgb, var(--brand-text) 62%, transparent)' }}
-              title={TASTE_LABELS[dominantTaste[0]] || dominantTaste[0]}
-              aria-label={TASTE_LABELS[dominantTaste[0]] || dominantTaste[0]}
-            >
-              <i className={TASTE_ICONS[dominantTaste[0]]} style={{ fontSize: '0.85rem' }} />
-            </span>
-          )}
         </div>
       </div>
     </motion.article>

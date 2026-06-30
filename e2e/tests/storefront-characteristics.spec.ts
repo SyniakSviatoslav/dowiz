@@ -20,18 +20,24 @@ test.describe('Storefront · Menu Characteristics (flag-on) · /s/demo', () => {
     if (await page.getByTestId('compare-toggle').count() === 0) test.skip(true, 'characteristics flags off in this build');
   });
 
-  test('COMPARE: pick two dishes → panel shows both, arrows only on price/prep, reliance bound present', async ({ page }) => {
-    const toggles = page.getByTestId('compare-toggle');
-    await toggles.nth(0).click();
-    await toggles.nth(1).click();
-    // selection bar appears with 2/2 and an enabled Compare CTA
-    await expect(page.getByTestId('compare-bar')).toBeVisible();
+  test('COMPARE: pick two dishes → bar shows names, panel shows both + nutrition viz, no verdict/allergens', async ({ page }) => {
+    // Pick two dishes that HAVE nutrition (a BOM) so DishStats renders in both columns.
+    const toggleFor = (name: string) =>
+      page.locator('div.relative', { has: page.locator('[data-testid=menu-item]', { hasText: name }) }).getByTestId('compare-toggle').first();
+    await toggleFor('Crunchy Ebi Sunset').click();
+    await toggleFor('Crispy Sunset').click();
+    // selection bar appears; it shows the selected dish NAME(s), not just a count
+    const bar = page.getByTestId('compare-bar');
+    await expect(bar).toBeVisible();
+    expect(((await bar.innerText()) || '').replace(/\s+/g, '')).not.toMatch(/^×?2\/2.*Compare$/i); // not just "2/2 … Compare"
     await page.getByTestId('compare-open').click();
     const panel = page.getByTestId('compare-panel');
     await expect(panel).toBeVisible();
-    // the reliance bound rides every allergen surface, including comparison (#8/#5d)
-    await expect(page.getByTestId('compare-allergen-reliance')).toBeVisible();
-    // no global "winner"/"healthier" verdict text leaks into the panel (facts-not-verdict, #11)
+    // both dishes carry the DishStats nutrition viz (2 columns)
+    await expect(panel.getByTestId('dish-stats')).toHaveCount(2);
+    // allergens are frozen — no reliance bound / allergen copy in the panel
+    await expect(panel.getByText(/not a complete allergen list/i)).toHaveCount(0);
+    // facts-not-verdict (#11): no global winner/healthier verdict
     await expect(panel).not.toContainText(/winner|healthier|best dish/i);
   });
 

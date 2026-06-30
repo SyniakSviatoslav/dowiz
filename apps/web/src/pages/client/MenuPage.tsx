@@ -12,7 +12,10 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput, computeAllergenSurface, partitionByMacroLens } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 import { MenuComparePanel } from './MenuComparePanel.js';
-import type { CompareDishInput, MacroLens } from '@deliveryos/ui';
+import type { CompareDish } from './MenuComparePanel.js';
+import { DishStats } from '../../components/client/DishStats.js';
+import type { DishIngredient } from '../../components/client/DishStats.js';
+import type { MacroLens } from '@deliveryos/ui';
 
 // Allergen FILTER — gated OFF by default (council menu-characteristics-model FB-C1, recorded human
 // decision). The filter PREDICATE is converged onto computeAllergenSurface (declared∪recipe) regardless,
@@ -30,6 +33,11 @@ const ALLERGEN_FILTER_ENABLED = (import.meta as any).env?.VITE_MENU_ALLERGEN_FIL
 const CHARACTERISTICS_ENABLED = (import.meta as any).env?.VITE_MENU_CHARACTERISTICS_ENABLED === 'true';
 const COMPARISON_ENABLED = (import.meta as any).env?.VITE_MENU_CHARACTERISTICS_COMPARISON === 'true';
 const FILTER_LENSES_ENABLED = (import.meta as any).env?.VITE_MENU_CHARACTERISTICS_FILTER === 'true';
+
+// Allergen DISPLAY freeze (operator directive 2026-06-30): the whole allergen surface is hidden from the
+// storefront for now. The computeAllergenSurface single-source library + STEP-0 contract + guardrails #12
+// stay intact underneath (dormant) — re-enabling is this one flag, not a rebuild. Default OFF = frozen.
+const ALLERGENS_ENABLED = false;
 
 interface ProductModifier {
   id: string;
@@ -148,17 +156,30 @@ export function MenuPage() {
   // — the card unit + comparison). PRESENCE-only, conservative declared∪recipe union (council STEP-0 / #12).
   const allergenSurfaceOf = (p: Product) => computeAllergenSurface((p as any).attributes, recipeAllergens(p));
 
-  // Compare input — allergens ride recipeAllergens() into compareDishes → computeAllergenSurface (the single
-  // source, #12). Never reads bomToNutrition().allergens.
-  const toCompareInput = (p: Product): CompareDishInput => ({
-    id: p.id,
-    name: p.name,
-    price: p.price,
-    prepTimeMinutes: p.prep_time_minutes ?? null,
-    taste: (getAttr(p, 'taste') as Record<string, number>) || null,
-    attributes: (p as any).attributes,
-    bomAllergens: recipeAllergens(p),
-  });
+  // Per-ingredient breakdown from the BOM (food lines only) for the DishStats viz: name + declared
+  // amount (qty/unit, e.g. "Tuna 100 g") + its kcal contribution. Packaging/utensils excluded.
+  const dishIngredients = (p: Product): DishIngredient[] => {
+    const bom = getAttr(p, 'bom');
+    if (!Array.isArray(bom)) return [];
+    return bom
+      .filter((l: any) => l && l.supplyName && l.kind !== 'packaging' && l.kind !== 'utensil')
+      .map((l: any) => ({ name: String(l.supplyName), qty: Number(l.qty) || 0, unit: String(l.unit || 'g'), kcal: Number(l.kcal) || 0 }));
+  };
+
+  // Compare input — macros + per-ingredient breakdown for the DishStats viz. Allergens are frozen, so the
+  // compare panel carries no allergen data.
+  const toCompareInput = (p: Product): CompareDish => {
+    const n = bomToNutrition(p);
+    return {
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      prepTimeMinutes: p.prep_time_minutes ?? null,
+      taste: (getAttr(p, 'taste') as Record<string, number>) || null,
+      macros: { kcal: n.kcal, protein: n.protein, fat: n.fat, carbs: n.carbs },
+      ingredients: dishIngredients(p),
+    };
+  };
   const toggleCompare = (id: string) => setCompareIds(prev =>
     prev.includes(id) ? prev.filter(x => x !== id) : prev.length >= 2 ? prev : [...prev, id]);
 
@@ -255,7 +276,7 @@ export function MenuPage() {
     }
     // Predicate converged onto the single allergen source (declared∪recipe) so a declared-only "contains X"
     // dish is never dropped (council #12). Only applied when the filter is enabled (flag default off).
-    if (ALLERGEN_FILTER_ENABLED && filterAllergen) {
+    if (ALLERGENS_ENABLED && ALLERGEN_FILTER_ENABLED && filterAllergen) {
       result = result.filter(p => allergenSurfaceOf(p).known.includes(filterAllergen));
     }
     // Category filter (single-select). Chef's Picks is a cross-category overlay, so it
@@ -759,9 +780,9 @@ export function MenuPage() {
             {FILTER_LENSES_ENABLED && (
             <span style={{ display: 'contents' }} data-testid="macro-lens">
               {([
-                { lens: 'protein-desc' as const, label: t('filter.lens_protein_desc', 'Most protein'), tid: 'macro-lens-protein' },
-                { lens: 'kcal-asc' as const, label: t('filter.lens_kcal_asc', 'Calories: low to high'), tid: 'macro-lens-kcal' },
-              ]).map(({ lens, label, tid }) => {
+                { lens: 'protein-desc' as const, label: t('filter.lens_protein_desc', 'Most protein'), tid: 'macro-lens-protein', icon: 'ti ti-droplet' },
+                { lens: 'kcal-asc' as const, label: t('filter.lens_kcal_asc', 'Calories: low to high'), tid: 'macro-lens-kcal', icon: 'ti ti-flame' },
+              ]).map(({ lens, label, tid, icon }) => {
                 const active = macroLens === lens;
                 return (
                   <motion.button
@@ -777,14 +798,14 @@ export function MenuPage() {
                       fontWeight: active ? 700 : 500,
                     }}
                   >
-                    <i className="ti ti-flask" style={{ fontSize: '0.8rem' }} aria-hidden="true" />
+                    <i className={icon} style={{ fontSize: '0.8rem' }} aria-hidden="true" />
                     <span>{label}</span>
                   </motion.button>
                 );
               })}
             </span>
             )}
-            {ALLERGEN_FILTER_ENABLED && (
+            {ALLERGENS_ENABLED && ALLERGEN_FILTER_ENABLED && (
             // display:contents — the wrapper carries the testid without altering the flex toolbar layout.
             <span style={{ display: 'contents' }} data-testid="allergen-filter-chips">
             {allAllergens.length > 0 && <div className="w-px h-4 shrink-0" style={{ background: 'var(--brand-border)' }} />}
@@ -1031,9 +1052,12 @@ export function MenuPage() {
           <button type="button" onClick={() => setCompareIds([])} className="text-step-2xs font-medium px-2 py-1 shrink-0" style={{ color: 'var(--brand-text-muted)' }} aria-label={t('compare.exit', 'Done')}>
             <i className="ti ti-x" aria-hidden="true" /> {compareIds.length}/2
           </button>
-          {compareIds.length < 2 && (
-            <span className="text-step-2xs flex-1 min-w-0 truncate text-center" style={{ color: 'var(--brand-text-muted)' }}>{t('compare.pick_two', 'Pick 2 dishes to compare')}</span>
-          )}
+          <span className="text-step-2xs flex-1 min-w-0 truncate text-center font-medium" style={{ color: 'var(--brand-text)' }}>
+            {compareProducts.map(p => p.name).join('  vs  ')}
+            {compareProducts.length === 1 && (
+              <span className="font-normal" style={{ color: 'var(--brand-text-muted)' }}> · {t('compare.pick_one_more', 'pick 1 more')}</span>
+            )}
+          </span>
           <button
             type="button"
             data-testid="compare-open"
@@ -1076,8 +1100,18 @@ export function MenuPage() {
             exit={prefersReduced ? { opacity: 0 } : { transform: 'translateY(18px) scale(0.97)', opacity: 0, transition: { duration: 0.18, ease: ease.soft } }}
             transition={prefersReduced ? { duration: 0.15 } : { type: 'spring', stiffness: 340, damping: 32 }}
           >
-            {/* Image */}
-            <div className="relative w-full aspect-[16/9] md:aspect-[2/1] flex items-center justify-center overflow-hidden" style={{ background: 'var(--brand-surface-raised)' }}>
+            {/* Mobile dismiss handle — a grabber bar (tap to close) for the bottom-sheet, easing dismissal. */}
+            <button
+              type="button"
+              onClick={closeDetail}
+              aria-label={t('common.close', 'Close')}
+              className="md:hidden absolute top-0 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center w-20 h-6 pt-2"
+            >
+              <span className="block w-10 h-1.5 rounded-full" style={{ background: 'color-mix(in srgb, var(--brand-text) 45%, transparent)' }} />
+            </button>
+            {/* Image — taller hero with more room; the photo is shown in FULL (object-contain) over a
+                blurred fill of itself, so nothing is cropped (operator directive: "display full images"). */}
+            <div className="relative w-full aspect-[4/3] md:aspect-[16/10] flex items-center justify-center overflow-hidden" style={{ background: 'var(--brand-surface-raised)' }}>
               {detailMedia.length > 0 ? (
                 // Rich media (ADR-0002): gallery for >1, single renderer for 1. Suspense shows
                 // the primary image while the code-split chunk loads → no flash. A renderer
@@ -1092,12 +1126,16 @@ export function MenuPage() {
                   )}
                 </Suspense>
               ) : getImageUrl(detailProduct) && !imageLoadError ? (
-                <img
-                  src={getImageUrl(detailProduct)!}
-                  alt={detailProduct.name}
-                  className="w-full h-full object-cover"
-                  onError={() => setImageLoadError(true)}
-                />
+                <>
+                  {/* Blurred cover fill so the contained full image never sits on dead bars. */}
+                  <img src={getImageUrl(detailProduct)!} alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover" style={{ filter: 'blur(24px)', transform: 'scale(1.1)', opacity: 0.5 }} />
+                  <img
+                    src={getImageUrl(detailProduct)!}
+                    alt={detailProduct.name}
+                    className="relative w-full h-full object-contain"
+                    onError={() => setImageLoadError(true)}
+                  />
+                </>
               ) : (
                 // Crafted on-brand no-photo fallback (mirrors ProductCard): warm
                 // brand-tinted gradient + faint dotted texture + a cutlery glyph in
@@ -1137,24 +1175,15 @@ export function MenuPage() {
               )}
               <motion.button
                 whileTap={prefersReduced ? undefined : { scale: 0.95 }}
-                className="absolute top-4 right-4 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center backdrop-blur-md outline-none transition-transform duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
-                style={{ background: 'color-mix(in srgb, var(--brand-bg) 50%, transparent)', color: 'var(--color-on-primary)' }}
+                className="absolute top-3 right-3 min-w-[48px] min-h-[48px] rounded-full flex items-center justify-center shadow-lg outline-none transition-transform duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
+                style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)', border: '1px solid var(--brand-border)' }}
                 onClick={closeDetail}
                 aria-label={t('common.close', 'Close')}
               >
-                <i className="ti ti-x text-xl" />
+                <i className="ti ti-x text-2xl" />
               </motion.button>
-              {detailProduct.available && bomToNutrition(detailProduct).kcal > 0 && (
-                <div className="absolute bottom-3 left-3 z-10">
-                  <span className="text-step-2xs font-medium px-2 py-1 rounded-md flex items-center gap-1.5" style={{ background: 'color-mix(in srgb, var(--brand-bg) 60%, transparent)', color: 'var(--color-on-primary)' }}>
-                    <i className="ti ti-flame" style={{ fontSize: '0.7rem' }} />
-                    {bomToNutrition(detailProduct).kcal} {t('nutrition.calories', 'kcal')}
-                    {bomToNutrition(detailProduct).protein > 0 && <span className="opacity-70">· {t('nutrition.protein', 'P')}{bomToNutrition(detailProduct).protein}g</span>}
-                    {bomToNutrition(detailProduct).fat > 0 && <span className="opacity-70">· {t('nutrition.fat', 'F')}{bomToNutrition(detailProduct).fat}g</span>}
-                    {bomToNutrition(detailProduct).carbs > 0 && <span className="opacity-70">· {t('nutrition.carbs', 'C')}{bomToNutrition(detailProduct).carbs}g</span>}
-                  </span>
-                </div>
-              )}
+              {/* Nutrition overlay removed (operator directive): the full nutrition viz lives in the body
+                  below (DishStats), so the hero image stays clean and uncovered. */}
             </div>
 
             {/* Content — gentle rise after the hero photo morphs into place */}
@@ -1176,7 +1205,8 @@ export function MenuPage() {
                         </span>
                       )}
                     </div>
-                    <h2 className="text-xl font-bold leading-tight" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{detailProduct.name}</h2>
+                    {/* Body font (not the heading serif) to match the menu card title — opened/closed consistency. */}
+                    <h2 className="text-xl font-bold leading-tight" style={{ color: 'var(--brand-text)' }}>{detailProduct.name}</h2>
                     {!detailProduct.available && (
                       <span className="inline-block mt-1.5 text-step-2xs font-semibold px-2 py-0.5 rounded" style={{ background: 'rgba(220,38,38,0.1)', color: 'var(--color-danger)' }}>
                         {t('client.unavailable', 'Unavailable')}
@@ -1193,9 +1223,15 @@ export function MenuPage() {
                       <PriceDisplay amount={detailProduct.price + calcModifierDelta()} />
                     </div>
                     {detailProduct.prep_time_minutes != null && (
-                      <span className="inline-flex items-center gap-0.5 text-step-2xs font-medium whitespace-nowrap mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>
-                        <i className="ti ti-clock" style={{ fontSize: '0.75rem' }} aria-hidden="true" />
+                      <span
+                        className="inline-flex items-center gap-1 text-step-2xs font-medium whitespace-nowrap mt-0.5"
+                        style={{ color: 'var(--brand-text-muted)' }}
+                        title={t('product.prep_cooking_time', 'Cooking time (not delivery)')}
+                        aria-label={t('product.prep_cooking_time', 'Cooking time (not delivery)')}
+                      >
+                        <i className="ti ti-tools-kitchen-2" style={{ fontSize: '0.75rem' }} aria-hidden="true" />
                         {t('product.prep_minutes', '~{{n}} min', { n: detailProduct.prep_time_minutes })}
+                        <span style={{ opacity: 0.7 }}>· {t('product.prep_cooking_label', 'cooking')}</span>
                       </span>
                     )}
                   </motion.div>
@@ -1238,36 +1274,17 @@ export function MenuPage() {
                 );
               })()}
 
-              {/* Nutrition Section */}
-              {(bomToNutrition(detailProduct).kcal > 0) && (
-                <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)' }}>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
-                    <i className="ti ti-report-analytics" /> {t('client.nutrition', 'Nutrition')}
-                  </h3>
-                  <div className="grid grid-cols-4 gap-3 text-center">
-                      {[
-                        { key: 'nutrition.calories', value: bomToNutrition(detailProduct).kcal, icon: 'ti ti-flame' },
-                        { key: 'nutrition.protein', value: bomToNutrition(detailProduct).protein, icon: 'ti ti-droplet' },
-                        { key: 'nutrition.fat', value: bomToNutrition(detailProduct).fat, icon: 'ti ti-droplet-half' },
-                        { key: 'nutrition.carbs', value: bomToNutrition(detailProduct).carbs, icon: 'ti ti-droplet-filled' },
-                      ].map(n => n.value > 0 && (
-                        <div key={n.key} className="flex flex-col items-center gap-1">
-                          <i className={n.icon} style={{ fontSize: '1rem', color: 'var(--brand-text-muted)' }} />
-                          <span className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{n.value}</span>
-                          <span className="text-step-2xs font-medium" style={{ color: 'var(--brand-text-muted)' }}>{t(n.key)}</span>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
-
+              {/* Nutrition + ingredients — the DishStats data-viz (calorie ring + macro split + per-ingredient
+                  bars with declared BOM amounts). Replaces the old 4-number grid and the chip list. */}
               {(() => {
-                // STEP-0 (council #12/#5/#5d) — the allergen surface is UNCONDITIONAL (no flag) and reads the
-                // single source allergenSurfaceOf. PRESENCE only (absence is NEVER shown). Conservative union
-                // of the owner's L3 declaration and recipe-derived allergens so a warning is never hidden. No
-                // allergens known → the floor ("info not provided"), NEVER a blank (data-absence must never
-                // read as a clean allergen state). The reliance bound is ALWAYS attached so a partial
-                // declaration can't read as the complete truth.
+                const n = bomToNutrition(detailProduct);
+                return <DishStats variant="full" macros={{ kcal: n.kcal, protein: n.protein, fat: n.fat, carbs: n.carbs }} ingredients={dishIngredients(detailProduct)} />;
+              })()}
+
+              {ALLERGENS_ENABLED && (() => {
+                // FROZEN (ALLERGENS_ENABLED=false). When re-enabled this is the STEP-0 single-source surface
+                // (council #12/#5/#5d): allergenSurfaceOf = computeAllergenSurface (declared∪recipe), PRESENCE
+                // only, floor on empty, reliance bound always attached. Architecture preserved, display off.
                 const { known } = allergenSurfaceOf(detailProduct);
                 return (
                   <div className="rounded-xl p-4" style={{ background: 'rgba(220,38,38,0.06)', borderColor: 'rgba(220,38,38,0.15)', borderWidth: 1 }} data-testid="allergen-surface">
@@ -1295,21 +1312,6 @@ export function MenuPage() {
                   </div>
                 );
               })()}
-
-              {(bomToNutrition(detailProduct).ingredients.length > 0) && (
-                <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)' }}>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
-                    <i className="ti ti-list-check" /> {t('client.ingredients', 'Ingredients')}
-                  </h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    {bomToNutrition(detailProduct).ingredients.map((ing, i) => (
-                      <span key={i} className="text-step-2xs px-2 py-0.5 rounded-md" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text)' }}>
-                        {ing}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Modifier Groups */}
               {(detailProduct.modifier_groups || []).length > 0 && (
@@ -1393,9 +1395,9 @@ export function MenuPage() {
                 </div>
               )}
 
-              {/* Quantity + Add to Cart */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-                <div className="flex items-center self-start shrink-0 rounded-xl p-1" style={{ background: 'var(--brand-surface)' }}>
+              {/* Quantity + Add to Cart — always ONE row (stepper + a compact add button). */}
+              <div className="flex flex-row items-center gap-2 pt-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+                <div className="flex items-center shrink-0 rounded-xl p-1" style={{ background: 'var(--brand-surface)' }}>
                   <motion.button
                     onClick={() => setQuantity(q => Math.max(1, q - 1))}
                     whileTap={prefersReduced ? undefined : { scale: 0.92 }}
@@ -1422,7 +1424,7 @@ export function MenuPage() {
                   onClick={handleAddDetail}
                   disabled={!canAdd()}
                   whileTap={prefersReduced || !canAdd() ? undefined : { scale: 0.97 }}
-                  className="w-full sm:flex-1 min-w-0 h-[48px] text-[var(--brand-bg)] font-bold text-step-sm outline-none transition-[transform,opacity] duration-150 ease-out disabled:opacity-40 flex items-center justify-between gap-2 px-4 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
+                  className="flex-1 min-w-0 h-[46px] text-[var(--brand-bg)] font-bold text-step-sm outline-none transition-[transform,opacity] duration-150 ease-out disabled:opacity-40 flex items-center justify-between gap-2 px-4 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
                   style={{ background: detailProduct.available && !isClosed ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
                   {!detailProduct.available ? (
@@ -1446,60 +1448,92 @@ export function MenuPage() {
       {/* Storefront footer — always closes the page (outside embed/activation
           preview). Restaurant identity + address, with Google Maps + socials when
           set. Each absent link simply doesn't render. */}
-      {!isEmbed && (
-        <footer className="mt-12 px-4 pt-8 pb-10 border-t flex flex-col items-center gap-3 text-center" style={{ borderColor: 'var(--brand-border)' }}>
-          <div className="text-base font-bold" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
-            {menu?.location_name || t('client.menu', 'Menu')}
-          </div>
-          {storeAddress && (
-            <div className="text-xs max-w-xs" style={{ color: 'var(--brand-text-muted)' }}>{storeAddress}</div>
-          )}
-          {(() => {
-            // Contact rail. WhatsApp + tap-to-call are derived from the venue phone (this
-            // market's restaurant numbers are WhatsApp mobiles). Maps falls back to a real
-            // coordinate search link when no explicit URL is set. Each link renders only when
-            // its datum is present — fake placeholders are cleared at the data layer, so they
-            // simply don't appear.
-            const waDigits = storeLinks.phone ? storeLinks.phone.replace(/\D/g, '') : '';
-            const mapsHref = storeLinks.mapsUrl
-              || (locationInfo?.lat != null && locationInfo?.lng != null
-                ? `https://www.google.com/maps/search/?api=1&query=${locationInfo.lat},${locationInfo.lng}`
-                : null);
-            if (!mapsHref && !waDigits && !storeLinks.phone && !storeLinks.instagram && !storeLinks.facebook) return null;
-            const cls = "text-xl inline-flex items-center justify-center w-11 h-11 rounded-full outline-none transition-[color,transform,box-shadow] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] [@media(hover:hover)]:hover:-translate-y-0.5 active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]";
-            const sty = { color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' } as React.CSSProperties;
-            return (
-              <div className="flex items-center justify-center gap-3 mt-1">
-                {mapsHref && (
-                  <a href={mapsHref} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')} className={cls} style={sty}>
-                    <i className="ti ti-map-pin" />
-                  </a>
-                )}
-                {waDigits && (
-                  <a href={`https://wa.me/${waDigits}`} target="_blank" rel="noopener noreferrer" aria-label={t('client.contact_whatsapp', 'Message on WhatsApp')} className={cls} style={sty}>
-                    <i className="ti ti-brand-whatsapp" />
-                  </a>
-                )}
-                {storeLinks.phone && (
-                  <a href={`tel:${storeLinks.phone}`} aria-label={t('client.call_restaurant', 'Call the restaurant')} className={cls} style={sty}>
-                    <i className="ti ti-phone" />
-                  </a>
-                )}
-                {storeLinks.instagram && (
-                  <a href={storeLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className={cls} style={sty}>
-                    <i className="ti ti-brand-instagram" />
-                  </a>
-                )}
-                {storeLinks.facebook && (
-                  <a href={storeLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className={cls} style={sty}>
-                    <i className="ti ti-brand-facebook" />
-                  </a>
-                )}
+      {!isEmbed && (() => {
+        // Two-column footer: LEFT = a stylized (decorative, not a live tile) map with the vendor pin,
+        // clickable through to real Maps; RIGHT = identity + address + the contact number (tap-to-call)
+        // and the WhatsApp/socials rail. Each link renders only when its datum exists.
+        const waDigits = storeLinks.phone ? storeLinks.phone.replace(/\D/g, '') : '';
+        const mapsHref = storeLinks.mapsUrl
+          || (locationInfo?.lat != null && locationInfo?.lng != null
+            ? `https://www.google.com/maps/search/?api=1&query=${locationInfo.lat},${locationInfo.lng}`
+            : null);
+        const iconCls = "text-lg inline-flex items-center justify-center w-10 h-10 rounded-full outline-none transition-[color,transform] duration-150 ease-out [@media(hover:hover)]:hover:text-[var(--brand-primary)] active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]";
+        const iconSty = { color: 'var(--brand-text-muted)', background: 'var(--brand-surface)' } as React.CSSProperties;
+        // The stylized map graphic (pure SVG, brand-tinted) with a pin. Decorative — aria-hidden.
+        const StylizedMap = (
+          <svg viewBox="0 0 320 180" className="w-full h-full" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <rect width="320" height="180" fill="var(--brand-surface)" />
+            <g stroke="var(--brand-border)" strokeWidth="6" opacity="0.9">
+              <path d="M-10 60 L330 40" /><path d="M-10 130 L330 150" />
+              <path d="M70 -10 L50 190" /><path d="M210 -10 L230 190" />
+            </g>
+            <g stroke="var(--brand-border)" strokeWidth="2" opacity="0.55">
+              <path d="M-10 95 L330 92" /><path d="M140 -10 L150 190" />
+            </g>
+            <g fill="color-mix(in srgb, var(--brand-primary) 9%, var(--brand-surface))">
+              <rect x="86" y="48" width="50" height="34" rx="3" /><rect x="244" y="60" width="46" height="40" rx="3" />
+              <rect x="92" y="150" width="60" height="34" rx="3" /><rect x="246" y="150" width="50" height="30" rx="3" />
+            </g>
+            {/* Vendor pin */}
+            <g transform="translate(160 86)">
+              <ellipse cx="0" cy="30" rx="14" ry="4" fill="color-mix(in srgb, var(--brand-primary) 30%, transparent)" />
+              <path d="M0 28 C-13 8 -14 -2 -14 -8 A14 14 0 1 1 14 -8 C14 -2 13 8 0 28 Z" fill="var(--brand-primary)" />
+              <circle cx="0" cy="-8" r="5.5" fill="var(--brand-bg)" />
+            </g>
+          </svg>
+        );
+        return (
+        <footer className="mt-12 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2">
+            {/* LEFT — stylized map + pin */}
+            {mapsHref ? (
+              <a href={mapsHref} target="_blank" rel="noopener noreferrer" aria-label={t('client.view_on_maps', 'View on Google Maps')}
+                 className="relative block h-40 sm:h-full min-h-[10rem] overflow-hidden group outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset">
+                {StylizedMap}
+                <span className="absolute bottom-2 left-2 text-step-2xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1" style={{ background: 'color-mix(in srgb, var(--brand-bg) 78%, transparent)', color: 'var(--brand-text)' }}>
+                  <i className="ti ti-map-pin" aria-hidden="true" /> {t('client.view_on_maps', 'View on Google Maps')}
+                </span>
+              </a>
+            ) : (
+              <div className="relative h-40 sm:h-full min-h-[10rem] overflow-hidden">{StylizedMap}</div>
+            )}
+            {/* RIGHT — identity + address + contact */}
+            <div className="px-5 py-7 flex flex-col gap-2 justify-center">
+              <div className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
+                {menu?.location_name || t('client.menu', 'Menu')}
               </div>
-            );
-          })()}
+              {storeAddress && (
+                <div className="text-xs leading-relaxed" style={{ color: 'var(--brand-text-muted)' }}>{storeAddress}</div>
+              )}
+              {storeLinks.phone && (
+                <a href={`tel:${storeLinks.phone}`} className="text-sm font-semibold inline-flex items-center gap-1.5 mt-1 w-fit outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] rounded" style={{ color: 'var(--brand-text)' }} aria-label={t('client.call_restaurant', 'Call the restaurant')}>
+                  <i className="ti ti-phone" aria-hidden="true" style={{ color: 'var(--brand-primary)' }} /> {storeLinks.phone}
+                </a>
+              )}
+              {(waDigits || storeLinks.instagram || storeLinks.facebook) && (
+                <div className="flex items-center gap-2 mt-2">
+                  {waDigits && (
+                    <a href={`https://wa.me/${waDigits}`} target="_blank" rel="noopener noreferrer" aria-label={t('client.contact_whatsapp', 'Message on WhatsApp')} className={iconCls} style={iconSty}>
+                      <i className="ti ti-brand-whatsapp" />
+                    </a>
+                  )}
+                  {storeLinks.instagram && (
+                    <a href={storeLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className={iconCls} style={iconSty}>
+                      <i className="ti ti-brand-instagram" />
+                    </a>
+                  )}
+                  {storeLinks.facebook && (
+                    <a href={storeLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className={iconCls} style={iconSty}>
+                      <i className="ti ti-brand-facebook" />
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </footer>
-      )}
+        );
+      })()}
 
     </div>
   );

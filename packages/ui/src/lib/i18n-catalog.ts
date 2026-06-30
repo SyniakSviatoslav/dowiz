@@ -3980,4 +3980,13 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Kalori: lartë→ulët',
     uk: 'Калорії: більше→менше',
   },
+  'product.prep_cooking_time': {
+    en: 'Cooking time (not delivery)',
+    sq: 'Koha e gatimit (jo dorëzimi)',
+    uk: 'Час приготування (не доставки)',
+  },
+  'product.prep_cooking_label': { en: 'cooking', sq: 'gatim', uk: 'готується' },
+  'compare.cheaper': { en: 'cheaper', sq: 'më lirë', uk: 'дешевше' },
+  'compare.faster': { en: 'faster', sq: 'më shpejt', uk: 'швидше' },
+  'compare.pick_one_more': { en: 'pick 1 more', sq: 'zgjidh edhe 1', uk: 'виберіть ще 1' },
 };
