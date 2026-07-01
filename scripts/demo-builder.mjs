@@ -310,6 +310,11 @@ function loadConfig() {
     secret,
     file: resolve(file),
     sendInvite: flags.has('--send-invite'), // outreach is OFF by default (preview-only)
+    // LAYER 2.5 — Maps enrichment (real venue identity: hero/logo/hours/rating/address + brand colour from the
+    // sign). Default ON so a demo is never shipped as an anonymous cuisine-guess; --no-maps skips it for a fast
+    // preview. The scrape RECORDS out.maps_directive; the operator R2+DB seam (tools/demo-builder/enrich-run.mjs
+    // + seam-enrich-wire.cjs) applies the bytes — same sandbox→container split as the theme seam.
+    enrichMaps: !flags.has('--no-maps'),
   };
 }
 
@@ -410,6 +415,30 @@ async function processItem(item, ctx) {
     out.theme_directive = { location_id: spine.json.location_id, ...out.palette };
   }
 
+  // ── LAYER 2.5 — MAPS ENRICHMENT (venue identity). The gap the loop USED to miss: a coherent palette + menu
+  // is not a real storefront — the /s/artepasta bar has a real hero photo, logo, weekly hours, Google rating
+  // and a brand colour pulled from the sign. Scrape it from Google Maps (public listing data) and record a
+  // directive for the operator R2+DB seam. Best-effort: a miss records a warning, never fails the demo.
+  if (cfg.enrichMaps && out.location_id) {
+    try {
+      const { enrichFromMaps } = await import('../tools/demo-builder/maps-enrich.mjs');
+      const mp = await enrichFromMaps({ name: item.name, city: item.city || 'durres' });
+      if (mp.ok) {
+        // real brand colour from the sign supersedes the cuisine seed (AA is re-derived by the storefront).
+        if (mp.brandColor) { out.palette.primary_color = mp.brandColor; if (out.theme_directive) out.theme_directive.primary_color = mp.brandColor; }
+        out.maps_directive = {
+          location_id: out.location_id, matched_name: mp.matchedName,
+          address: mp.address ?? null, lat: mp.lat ?? null, lng: mp.lng ?? null, phone: mp.phone ?? null,
+          google_rating: mp.googleRating ?? null, google_review_count: mp.googleReviewCount ?? null,
+          google_maps_url: mp.googleMapsUrl ?? null, hours_json: mp.hoursJson ?? null,
+          brand_color: mp.brandColor ?? null, hero_url: mp.heroUrl ?? null, has_hero: Boolean(mp.heroUrl),
+        };
+        if (!mp.heroUrl) out.warnings.push('maps-enrich: no hero photo (logo/background will be missing)');
+        if (!mp.hoursJson) out.warnings.push('maps-enrich: hours gated → operator applies demo default');
+      } else out.warnings.push(`maps-enrich: ${mp.reason || 'no match on Maps'} — venue identity missing`);
+    } catch (e) { out.warnings.push(`maps-enrich-error: ${String(e?.message || e)}`); }
+  }
+
   // STAGE 3 — API verify (PROVISIONED→VERIFIED). Field-gated on verified===true (empty shadow → 409).
   if (state === 'PROVISIONED') {
     const v = await post('/internal/acquisition/claim/verify', { acquisition_source_id: id });
@@ -482,8 +511,10 @@ async function main() {
     if (r.state) line += ` state=${r.state}`;
     if (r.menu_stats) line += ` menu=${r.menu_stats.nItems}items/${r.menu_stats.nCats}cats`;
     if (r.palette) line += ` theme=${r.palette.primary_color}`;
+    if (r.maps_directive) line += ` maps=[rating:${r.maps_directive.google_rating ?? '-'} hero:${r.maps_directive.has_hero ? 'y' : 'n'} brand:${r.maps_directive.brand_color ?? '-'}]`;
     if (r.reason) line += ` — ${r.reason}`;
     console.log(line);
+    if (r.maps_directive) console.log(`           enrich: run tools/demo-builder/enrich-run.mjs → seam-enrich-wire.cjs to apply hero/logo/hours/rating (R2+DB)`);
     if (r.preview_url) console.log(`           preview: ${r.preview_url}`);
     if (r.claim_url) console.log(`           claim/decline: ${r.claim_url}`);
     for (const w of r.warnings || []) console.log(`           ⚠ ${w}`);
