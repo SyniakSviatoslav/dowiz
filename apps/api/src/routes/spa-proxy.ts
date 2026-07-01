@@ -561,12 +561,16 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
            google_place_id = COALESCE($9, location_themes.google_place_id),
            social_instagram = COALESCE($10, location_themes.social_instagram),
            social_facebook = COALESCE($11, location_themes.social_facebook),
-           heading_font = COALESCE($12, location_themes.heading_font),
-           body_font = COALESCE($13, location_themes.body_font)`,
+           -- Fonts use SET-when-provided (not COALESCE): an explicit null CLEARS the pick (picker's
+           -- "Default (by cuisine)"), while an omitted key keeps the current value. $14/$15 = "was the
+           -- key present in the request body" (undefined ⇒ keep; null ⇒ clear; id ⇒ set).
+           heading_font = CASE WHEN $14 THEN $12 ELSE location_themes.heading_font END,
+           body_font = CASE WHEN $15 THEN $13 ELSE location_themes.body_font END`,
         [ctx.locId, parsed.primaryColor || null, parsed.bgColor || null, parsed.textColor || null, logoUrl,
          parsed.googleRating ?? null, parsed.googleReviewCount ?? null, parsed.googleMapsUrl ?? null,
          parsed.googlePlaceId || null, parsed.socialInstagram || null, parsed.socialFacebook || null,
-         parsed.headingFont || null, parsed.bodyFont || null]
+         parsed.headingFont ?? null, parsed.bodyFont ?? null,
+         parsed.headingFont !== undefined, parsed.bodyFont !== undefined]
       );
       return client.query(
         `SELECT primary_color, bg_color, text_color, logo_url, heading_font, body_font, google_rating, google_review_count, google_maps_url, google_place_id, social_instagram, social_facebook
