@@ -67,6 +67,34 @@ async function scrapeSocials(website) {
   } catch { return {}; }
 }
 
+// ── Stage 2b — VENUE business signal (public data only; NO personal profiling of the owner) ─────────────
+// Derives targeting signals from the BUSINESS, not the person: tenure, momentum, quality, price, and the
+// sharpest one — is the venue already on a commission aggregator (→ actively paying ~30% → receptive to a
+// 0%-commission pitch). This is what "new/old? looking to cut costs?" actually resolves to, done lawfully.
+async function buildVenueSignal(d) {
+  const sig = [];
+  const rc = d.reviews ? Number(String(d.reviews).replace(/[^\d]/g, '')) : null;
+  if (rc != null) {
+    const tenure = rc < 30 ? 'NEW / early (few reviews) — likely still finding footing, open to tools that bring orders'
+      : rc < 200 ? 'ESTABLISHING (moderate review base) — has traction, weighing how to grow without more platform fees'
+      : 'ESTABLISHED (large review base) — steady demand; the pitch is keeping margin, not chasing volume';
+    sig.push(`- **Tenure/momentum:** ~${rc} reviews → ${tenure}.`);
+  }
+  if (d.rating) sig.push(`- **Quality:** ${d.rating}★ — lead by appreciating the food/craft (never critique). High rating = they care about the product; a polished own-storefront matches that pride.`);
+  // Aggregator presence = the cost-pressure signal. Best-effort public check (Wolt discovery search).
+  let onWolt = null;
+  try {
+    const city = (d.address || '').split(',').slice(-2, -1)[0]?.trim() || 'Durres';
+    const r = await fetch(`https://restaurant-api.wolt.com/v1/pages/search?q=${encodeURIComponent(d.name)}&lat=${(d.latlng || '').split(',')[0] || ''}&lon=${(d.latlng || '').split(',')[1] || ''}`, { headers: { 'user-agent': 'Mozilla/5.0' } });
+    if (r.ok) { const j = await r.json(); const hit = JSON.stringify(j).toLowerCase().includes((d.name || '').toLowerCase().split(' ')[0]); onWolt = hit; }
+  } catch { onWolt = null; }
+  if (onWolt === true) sig.push('- **💡 COST-PRESSURE (strong):** appears on Wolt → already paying ~30% commission per order → the "porositë drejt te ti, pa komision" line is the most relevant thing you can say. Lead value here.');
+  else if (onWolt === false) sig.push('- **Cost-pressure:** not clearly found on Wolt — check Glovo/Wolt manually; if on either, that commission is your sharpest angle.');
+  else sig.push('- **Cost-pressure:** aggregator check inconclusive — manually verify Wolt/Glovo presence (already-on-aggregator = paying commission = strongest receptivity signal).');
+  sig.push('- **Deeper (optional next pass):** read the recent reviews for delivery mentions/complaints and read Maps "popular times" for peak-hours load — both public, both sharpen timing. NOT the owner\'s private life.');
+  return sig.join('\n');
+}
+
 // ── Stage 3 — communication strategy from observable signals + the Albanian warm-list playbook ──────────
 function buildStrategy(d) {
   const s = [];
@@ -97,7 +125,7 @@ function draftAlbanian(d, reach, demoUrl) {
   ].join('\n');
 }
 
-function packet(d, reach, socials, demoUrl, demoLive) {
+function packet(d, reach, socials, demoUrl, demoLive, venueSignal) {
   const wa = reach.whatsapp;
   return `# Offer packet · ${d.name}
 
@@ -125,10 +153,13 @@ one real personal detail, get the Albanian verified by a native, then YOU send. 
 - **Phone:** ${d.phone || '—'}
 - _Owner personal name: not reliably public from OSINT — keep it to the venue name unless you truly know it._
 
-## 4 · Communication strategy (how to talk to THIS venue)
+## 4 · Venue signal (public BUSINESS data — targeting, not personal profiling)
+${venueSignal}
+
+## 5 · Communication strategy (how to talk to THIS venue)
 ${buildStrategy(d)}
 
-## 5 · DM draft — Albanian (scaffold, 5 blocks) · ⚠️ native review required
+## 6 · DM draft — Albanian (scaffold, 5 blocks) · ⚠️ native review required
 \`\`\`
 ${draftAlbanian(d, reach, demoUrl)}
 \`\`\`
@@ -137,7 +168,7 @@ no strings. · I turned your menu into an online shop you can try yourself: <dem
 straight to you — your customers and data, no Glovo commission. · If you like it, I'll show you in 15 min how
 to launch; if not, just tell me — no problem.
 
-## 6 · Send checklist
+## 7 · Send checklist
 - [ ] Demo opens & works on a phone (no login)
 - [ ] One REAL detail swapped into block 1 (a dish, a visit) — never identical copy across the 50
 - [ ] Name spelled with correct ë/ç
@@ -156,7 +187,8 @@ to launch; if not, just tell me — no problem.
   const demoUrl = `${BASE}/s/${useSlug}`;
   let demoLive = false;
   try { const r = await fetch(`${BASE}/public/locations/${useSlug}/menu`); demoLive = r.ok; } catch {}
-  const md = packet(d, reach, socials, demoUrl, demoLive);
+  const venueSignal = await buildVenueSignal(d);
+  const md = packet(d, reach, socials, demoUrl, demoLive, venueSignal);
   const dir = resolve('loops/offers'); mkdirSync(dir, { recursive: true });
   const out = resolve(dir, `${useSlug}-offer.md`);
   writeFileSync(out, md);
