@@ -446,6 +446,9 @@ export function MenuPage() {
   // cart/checkout never render (cart stays empty), and the server refuses orders too (status='closed').
   const isPreview = menu?.is_preview === true;
   const orderingDisabled = isClosed || isPreview;
+  // Claim CTA is HIDDEN for now (owner directive 2026-07-01): the preview banner instead pitches what the
+  // demo could become. Flip to true to re-expose the claim flow (handler + copy kept intact below).
+  const SHOW_CLAIM_CTA = false;
   // Owner-initiated "this is my restaurant" request from the preview CTA lives below, after useToast().
   const [claimRequested, setClaimRequested] = useState(false);
 
@@ -789,13 +792,20 @@ export function MenuPage() {
           </div>
           {/* Venue state + closing time + delivery ETA */}
           <div className="flex items-center gap-2 flex-wrap text-step-xs" style={{ color: 'rgba(255,255,255,0.88)', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
-            {/* A shadow has no real hours — suppress the open/closed chip + closing time in preview mode. */}
-            {!isPreview && venueStatus && <StateChip state={venueStatus} scope="venue" data-testid="venue-state-chip" />}
-            {!isPreview && locationInfo?.closesAt && venueStatus !== 'closed' && (
-              <span data-testid="vendor-closes-at" className="inline-flex items-center gap-1">
-                <i className="ti ti-tools-kitchen-2" style={{ fontSize: '0.72rem' }} aria-hidden="true" />
-                {t('client.closes_at', 'closes {{time}}', { time: locationInfo.closesAt })}
-              </span>
+            {/* An unclaimed shadow isn't a live store → always show CLOSED (owner directive 2026-07-01).
+                A real tenant shows its derived open/closed state + today's closing time from hours_json. */}
+            {isPreview ? (
+              <StateChip state="closed" scope="venue" data-testid="venue-state-chip" />
+            ) : (
+              <>
+                {venueStatus && <StateChip state={venueStatus} scope="venue" data-testid="venue-state-chip" />}
+                {locationInfo?.closesAt && venueStatus !== 'closed' && (
+                  <span data-testid="vendor-closes-at" className="inline-flex items-center gap-1">
+                    <i className="ti ti-tools-kitchen-2" style={{ fontSize: '0.72rem' }} aria-hidden="true" />
+                    {t('client.closes_at', 'closes {{time}}', { time: locationInfo.closesAt })}
+                  </span>
+                )}
+              </>
             )}
             {geoStatus !== 'denied' && deliveryETA != null && (
               <span className="inline-flex items-center gap-1">
@@ -965,19 +975,37 @@ export function MenuPage() {
             <i className="ti ti-eye text-xl" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold leading-tight" style={{ color: 'var(--brand-text)' }}>{t('preview.banner_title', 'Menu preview — not a live store')}</p>
-            <p className="text-step-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{t('preview.banner_body', 'We built this from your public menu so you can see what online ordering would look like. It can’t take orders yet.')}</p>
-            <button
-              type="button"
-              data-testid="preview-claim-cta"
-              onClick={requestClaim}
-              disabled={claimRequested}
-              className="mt-2 inline-flex items-center gap-1.5 px-3.5 h-9 rounded-full text-step-xs font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)] disabled:opacity-60"
-              style={{ background: 'var(--brand-primary)', color: 'color-mix(in srgb, var(--brand-bg) 86%, #000)' }}
-            >
-              <i className={`ti ${claimRequested ? 'ti-check' : 'ti-discount-check'} text-base`} />
-              {claimRequested ? t('preview.claim_sent', 'Request sent') : t('preview.claim_cta', 'Is this your restaurant? Claim it')}
-            </button>
+            <p className="text-sm font-bold leading-tight" style={{ color: 'var(--brand-text)' }}>{t('preview.demo_title', 'This is a demo — built from your public menu')}</p>
+            <p className="text-step-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>{t('preview.demo_body', 'It’s a preview, not a live store yet. But it could be your own online delivery service — storefront, admin CRM and courier management included:')}</p>
+            {/* The pitch: the features that actually matter to an independent restaurant. Zero-commission and
+                data-ownership lead — they’re the reason to leave the aggregators. */}
+            <ul className="mt-2 grid gap-1.5 text-step-xs" style={{ color: 'var(--brand-text)' }}>
+              {[
+                { icon: 'ti-percentage', k: 'preview.feat_commission', d: '0% commission — keep every cent (the big apps take ~30%)' },
+                { icon: 'ti-database', k: 'preview.feat_data', d: 'Your customers & data are yours — no middleman owns them' },
+                { icon: 'ti-layout-dashboard', k: 'preview.feat_crm', d: 'Full admin CRM — orders, menu, promos & analytics' },
+                { icon: 'ti-bike', k: 'preview.feat_courier', d: 'Built-in courier management & live delivery tracking' },
+                { icon: 'ti-palette', k: 'preview.feat_brand', d: 'Your brand, your storefront — this very page' },
+              ].map((f) => (
+                <li key={f.k} className="flex items-start gap-2">
+                  <i className={`ti ${f.icon} shrink-0 mt-0.5`} style={{ color: 'var(--brand-primary-readable, var(--brand-primary))', fontSize: '0.95rem' }} aria-hidden="true" />
+                  <span className="leading-snug">{t(f.k, f.d)}</span>
+                </li>
+              ))}
+            </ul>
+            {SHOW_CLAIM_CTA && (
+              <button
+                type="button"
+                data-testid="preview-claim-cta"
+                onClick={requestClaim}
+                disabled={claimRequested}
+                className="mt-2 inline-flex items-center gap-1.5 px-3.5 h-9 rounded-full text-step-xs font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)] disabled:opacity-60"
+                style={{ background: 'var(--brand-primary)', color: 'color-mix(in srgb, var(--brand-bg) 86%, #000)' }}
+              >
+                <i className={`ti ${claimRequested ? 'ti-check' : 'ti-discount-check'} text-base`} />
+                {claimRequested ? t('preview.claim_sent', 'Request sent') : t('preview.claim_cta', 'Is this your restaurant? Claim it')}
+              </button>
+            )}
           </div>
         </motion.div>
       )}
