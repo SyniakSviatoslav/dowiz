@@ -25,7 +25,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startMock } from './mock-internal.mjs';
 import { startFakeStorefront } from './fake-storefront.mjs';
-import { gateMenu, normalizeMenu, derivePaletteTriple, contrastRatio, assertPreviewDom } from '../../scripts/demo-builder.mjs';
+import { gateMenu, normalizeMenu, derivePaletteTriple, contrastRatio, assertPreviewDom, fontPairingForCuisine } from '../../scripts/demo-builder.mjs';
+// Leaf module (no React) — safe to import in node. The storefront's font allowlist is the source of truth;
+// this pins the demo-builder's provision-time font seeds to it so a drift can't ship an unloadable font.
+import { FONT_ALLOWLIST } from '../../packages/ui/dist/theme/fonts.js';
 
 const ORCH = new URL('../../scripts/demo-builder.mjs', import.meta.url).pathname;
 const SECRET = 'dry-run-secret-xyz';
@@ -105,6 +108,14 @@ async function main() {
   assert(assertPreviewDom({ html: goodDom, consoleErrors: 1, robots: 'noindex' }).pass === false, 'L3 FAILS on a console error');
   assert(assertPreviewDom({ html: goodDom + '<button data-testid="menu-item-add">+</button>', robots: 'noindex' }).pass === false, 'L3 FAILS an ORDERABLE render (B3 never-orderable enforced in the DOM)');
   assert(assertPreviewDom({ html: goodDom, robots: '' }).pass === false, 'L3 FAILS a render missing noindex');
+
+  // Layer 2b — font seed sync: every cuisine's font pairing must reference a real storefront allowlist id,
+  // else the storefront silently falls back (an unloadable font). Guards the demo-builder↔ui duplication.
+  const ALLOWED = new Set(Object.keys(FONT_ALLOWLIST));
+  for (const cuisine of ['italian', 'pizzeria', 'sushi', 'burger', 'cafe', 'kebab', 'mediterranean', 'indian', 'vegan', 'seafood', 'grill', 'dessert', 'unknown-xyz', '']) {
+    const { heading_font, body_font } = fontPairingForCuisine(cuisine);
+    assert(ALLOWED.has(heading_font) && ALLOWED.has(body_font), `L2b ${cuisine || 'default'} font pairing (${heading_font}/${body_font}) ∈ storefront allowlist`);
+  }
 
   // ─────────────────────────────────────────────────────────────────────────────────────────────────────
   console.log('\nPART B — end-to-end pipeline proof (real orchestrator × faithful mock × fake storefront):\n');

@@ -1,5 +1,6 @@
 export * from './theme/ThemeProvider.js';
 export * from './theme/palette.js';
+export * from './theme/fonts.js';
 export { isPaperSkinEnabled, paperSkinAttr } from './theme/paperSkin.js';
 export { PaperIllustration } from './components/PaperIllustration.js';
 export type { PaperIllustrationName, PaperIllustrationProps } from './components/PaperIllustration.js';

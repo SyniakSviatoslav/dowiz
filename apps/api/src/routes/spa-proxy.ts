@@ -15,6 +15,11 @@ const brandSchema = z.object({
   bgColor: z.string().regex(HEX_COLOR).optional().nullable(),
   textColor: z.string().regex(HEX_COLOR).optional().nullable(),
   logoUrl: z.string().max(1000).optional().nullable(),
+  // Per-tenant font ids (allowlist in @deliveryos/ui fonts.ts). Bounded id charset — injection-safe and
+  // forward-compatible (a new allowlist font needs no API change). The admin picker only offers real ids;
+  // an unknown value degrades safely client-side (fontStack→default, googleFontsHref drops it).
+  headingFont: z.string().regex(/^[a-z][a-z0-9]{1,23}$/).optional().nullable(),
+  bodyFont: z.string().regex(/^[a-z][a-z0-9]{1,23}$/).optional().nullable(),
   googleRating: z.number().min(0).max(5).optional().nullable(),
   googleReviewCount: z.number().int().nonnegative().optional().nullable(),
   googleMapsUrl: z.string().max(500).optional().nullable(),
@@ -487,13 +492,16 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const locId = locRes.rows[0].id;
     const locName = locRes.rows[0].name;
     const themeRes = await db.query(
-      `SELECT primary_color, bg_color, text_color, logo_url FROM location_themes WHERE location_id = $1`,
+      `SELECT primary_color, bg_color, text_color, logo_url, heading_font, body_font FROM location_themes WHERE location_id = $1`,
       [locId]
     );
     const t = themeRes.rows[0] || {};
     return reply.send({
       primaryColor: t.primary_color || null, bgColor: t.bg_color || null,
       textColor: t.text_color || null, logoUrl: t.logo_url || null, locationName: locName,
+      // Per-tenant font ids (allowlist). Null → the SPA resolves the default pairing (Playfair/Inter).
+      // The client validates the id against its allowlist, so a stale/unknown value degrades safely.
+      headingFont: t.heading_font || null, bodyFont: t.body_font || null,
       supportedLocales: Array.isArray(locRes.rows[0].supported_locales) ? locRes.rows[0].supported_locales : null,
     });
   });
@@ -505,6 +513,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const res = await withTenant(db, ctx.userId, async (client) =>
       client.query(
         `SELECT primary_color, bg_color, text_color, logo_url, frame_ancestors,
+                heading_font, body_font,
                 google_rating, google_review_count, google_maps_url,
                 google_place_id, social_instagram, social_facebook
          FROM location_themes WHERE location_id = $1`,
@@ -519,6 +528,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       bgColor: t.bg_color || null,
       textColor: t.text_color || null,
       logoUrl: t.logo_url || null,
+      headingFont: t.heading_font || null,
+      bodyFont: t.body_font || null,
       frameAncestors: t.frame_ancestors || null,
       googleRating: t.google_rating != null ? Number(t.google_rating) : null,
       googleReviewCount: t.google_review_count != null ? Number(t.google_review_count) : null,
@@ -537,8 +548,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const logoUrl = parsed.logoUrl ? validateImageKey(parsed.logoUrl) : null;
     const res = await withTenant(db, ctx.userId, async (client) => {
       await client.query(
-        `INSERT INTO location_themes (location_id, primary_color, bg_color, text_color, logo_url, google_rating, google_review_count, google_maps_url, google_place_id, social_instagram, social_facebook)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        `INSERT INTO location_themes (location_id, primary_color, bg_color, text_color, logo_url, google_rating, google_review_count, google_maps_url, google_place_id, social_instagram, social_facebook, heading_font, body_font)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          ON CONFLICT (location_id) DO UPDATE SET
            primary_color = COALESCE($2, location_themes.primary_color),
            bg_color = COALESCE($3, location_themes.bg_color),
@@ -549,13 +560,16 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
            google_maps_url = COALESCE($8, location_themes.google_maps_url),
            google_place_id = COALESCE($9, location_themes.google_place_id),
            social_instagram = COALESCE($10, location_themes.social_instagram),
-           social_facebook = COALESCE($11, location_themes.social_facebook)`,
+           social_facebook = COALESCE($11, location_themes.social_facebook),
+           heading_font = COALESCE($12, location_themes.heading_font),
+           body_font = COALESCE($13, location_themes.body_font)`,
         [ctx.locId, parsed.primaryColor || null, parsed.bgColor || null, parsed.textColor || null, logoUrl,
          parsed.googleRating ?? null, parsed.googleReviewCount ?? null, parsed.googleMapsUrl ?? null,
-         parsed.googlePlaceId || null, parsed.socialInstagram || null, parsed.socialFacebook || null]
+         parsed.googlePlaceId || null, parsed.socialInstagram || null, parsed.socialFacebook || null,
+         parsed.headingFont || null, parsed.bodyFont || null]
       );
       return client.query(
-        `SELECT primary_color, bg_color, text_color, logo_url, google_rating, google_review_count, google_maps_url, google_place_id, social_instagram, social_facebook
+        `SELECT primary_color, bg_color, text_color, logo_url, heading_font, body_font, google_rating, google_review_count, google_maps_url, google_place_id, social_instagram, social_facebook
          FROM location_themes WHERE location_id = $1`,
         [ctx.locId]
       );
@@ -563,6 +577,7 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
     const t = res.rows[0] || {};
     return reply.send({
       primaryColor: t.primary_color, bgColor: t.bg_color, textColor: t.text_color, logoUrl: t.logo_url,
+      headingFont: t.heading_font ?? null, bodyFont: t.body_font ?? null,
       googleRating: t.google_rating != null ? Number(t.google_rating) : null,
       googleReviewCount: t.google_review_count != null ? Number(t.google_review_count) : null,
       googleMapsUrl: t.google_maps_url ?? null,
@@ -583,12 +598,14 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
 
     let primary: string | undefined, bg: string | undefined, text: string | undefined;
     let logoUrl: string | undefined, name: string | undefined;
+    let headingFont: string | undefined, bodyFont: string | undefined;
     const sources: string[] = [];
 
     if (typeof body.website === 'string' && body.website.trim()) {
       try {
         const sig = await extractFromWebsite(body.website.trim());
         primary = sig.primary; bg = sig.bg; text = sig.text; logoUrl = sig.logoUrl; name = sig.name;
+        headingFont = sig.headingFont; bodyFont = sig.bodyFont;
         sources.push(...sig.sources);
       } catch (e: any) {
         (request as any).log?.warn?.({ err: e?.message }, '[brand/generate] website extract failed');
@@ -609,8 +626,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       }
     }
 
-    if (!primary && !bg && !text) {
-      return reply.status(422).send({ error: 'no_signal', message: 'Could not detect brand colours from the website or logo.' });
+    if (!primary && !bg && !text && !headingFont && !bodyFont) {
+      return reply.status(422).send({ error: 'no_signal', message: 'Could not detect brand colours or fonts from the website or logo.' });
     }
     return reply.send({
       primaryColor: normalizeHex(primary) || null,
@@ -618,6 +635,8 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       textColor: normalizeHex(text) || null,
       logoUrl: logoUrl || null,
       name: name || null,
+      headingFont: headingFont || null,
+      bodyFont: bodyFont || null,
       sources,
     });
   });

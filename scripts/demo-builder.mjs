@@ -181,6 +181,31 @@ export function derivePaletteTriple({ cuisine, primary, bg } = {}) {
   return { primary_color: toHex(primaryRgb), bg_color: toHex(bgRgb), text_color: toHex(text) };
 }
 
+// Cuisine → default font pairing (allowlist ids). MIRRORS packages/ui/src/theme/fonts.ts
+// (CUISINE_FONT_PAIRINGS) — the storefront is the source of truth; this is the provision-time seed, kept
+// in sync the same way the palette math is duplicated here. The ids MUST exist in that allowlist (a unit
+// test asserts membership). Written to location_themes.heading_font/body_font; the owner can override.
+const CUISINE_FONTS = {
+  italian: { heading: 'fraunces', body: 'dmsans' }, pizza: { heading: 'fraunces', body: 'dmsans' },
+  pizzeria: { heading: 'fraunces', body: 'dmsans' }, trattoria: { heading: 'fraunces', body: 'dmsans' },
+  sushi: { heading: 'cormorant', body: 'dmsans' }, japanese: { heading: 'cormorant', body: 'dmsans' },
+  seafood: { heading: 'cormorant', body: 'dmsans' },
+  burger: { heading: 'bebas', body: 'inter' }, american: { heading: 'bebas', body: 'inter' },
+  grill: { heading: 'bebas', body: 'inter' },
+  cafe: { heading: 'fraunces', body: 'inter' }, coffee: { heading: 'fraunces', body: 'inter' },
+  bakery: { heading: 'fraunces', body: 'inter' }, dessert: { heading: 'fraunces', body: 'inter' },
+  kebab: { heading: 'dmsans', body: 'dmsans' }, turkish: { heading: 'dmsans', body: 'dmsans' },
+  mediterranean: { heading: 'cormorant', body: 'inter' }, indian: { heading: 'cormorant', body: 'inter' },
+  vegan: { heading: 'fraunces', body: 'inter' },
+};
+export const DEFAULT_FONTS = { heading: 'playfair', body: 'inter' };
+
+/** Cuisine → {heading_font, body_font} allowlist ids for location_themes (default pairing if unknown). */
+export function fontPairingForCuisine(cuisine) {
+  const p = CUISINE_FONTS[String(cuisine ?? '').toLowerCase().trim()] ?? DEFAULT_FONTS;
+  return { heading_font: p.heading, body_font: p.body };
+}
+
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════
 // LAYER 3 — visual acceptance gate. assertPreviewDom is PURE + shared by both the live Playwright path and
 // the hermetic dry-run probe, so the gate LOGIC (assert rendered DOM, not HTTP 200) is what gets certified.
@@ -331,7 +356,7 @@ async function processItem(item, ctx) {
   }
 
   // LAYER 2: derive the palette triple (persisted to location_themes via the operator DB seam post-spine).
-  out.palette = derivePaletteTriple({ cuisine: item.cuisine, primary: item.primary, bg: item.bg });
+  out.palette = { ...derivePaletteTriple({ cuisine: item.cuisine, primary: item.primary, bg: item.bg }), ...fontPairingForCuisine(item.cuisine) };
 
   // STAGE 0 — idempotent create / resume read.
   const c = await post('/internal/acquisition', { place_id: item.place_id });

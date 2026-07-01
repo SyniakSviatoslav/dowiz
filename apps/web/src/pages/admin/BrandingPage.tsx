@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, Input, ColorInput, FormField, SkeletonBase, useI18n, useToast, ease, duration, contrastRatio, parseColor } from '@deliveryos/ui';
+import { Button, Input, ColorInput, FormField, Select, SkeletonBase, useI18n, useToast, ease, duration, contrastRatio, parseColor, FONT_ALLOWLIST, fontIdsForRole, googleFontsHref } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
@@ -37,6 +37,8 @@ export function BrandingPage() {
   const [socialFacebook, setSocialFacebook] = useState('');
   const [website, setWebsite] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [headingFont, setHeadingFont] = useState('');
+  const [bodyFont, setBodyFont] = useState('');
 
   // A 'var(--…)' colour means "unset" — strip it so we never store/preview the
   // literal token string in place of a real hex value.
@@ -57,6 +59,8 @@ export function BrandingPage() {
       if (res.googlePlaceId) setGooglePlaceId(res.googlePlaceId);
       if (res.socialInstagram) setSocialInstagram(res.socialInstagram);
       if (res.socialFacebook) setSocialFacebook(res.socialFacebook);
+      if (res.headingFont) setHeadingFont(res.headingFont);
+      if (res.bodyFont) setBodyFont(res.bodyFont);
     }).catch(() => {}).finally(() => setInitLoading(false));
     apiClient<any>('/owner/settings').then((res: any) => {
       if (res.slug) {
@@ -112,6 +116,8 @@ export function BrandingPage() {
           googlePlaceId: googlePlaceId || null,
           socialInstagram: socialInstagram || null,
           socialFacebook: socialFacebook || null,
+          headingFont: headingFont || null,
+          bodyFont: bodyFont || null,
         }
       });
       showToast(t('common.saved', 'Branding saved'), 'success');
@@ -143,8 +149,10 @@ export function BrandingPage() {
         return next;
       });
       if (res.logoUrl) setLogoUrl(res.logoUrl);
+      if (res.headingFont) { setHeadingFont(res.headingFont); applied = true; }
+      if (res.bodyFont) { setBodyFont(res.bodyFont); applied = true; }
       showToast(
-        applied ? t('admin.brand_generated', 'Brand colours detected — review and Save') : t('admin.brand_no_signal', 'No brand colours found'),
+        applied ? t('admin.brand_generated', 'Brand colours & fonts detected — review and Save') : t('admin.brand_no_signal', 'No brand colours found'),
         applied ? 'success' : 'error',
       );
     } catch {
@@ -162,9 +170,9 @@ export function BrandingPage() {
   const postTheme = useCallback((win: Window | null | undefined) => {
     if (!win) return;
     const primary = concrete(config.primary), bg = concrete(config.bg), text = concrete(config.text);
-    if (!primary && !bg && !text) return; // nothing set yet → leave stored theme
-    win.postMessage({ type: 'branding_preview_theme', primary, bg, text }, '*');
-  }, [config.primary, config.bg, config.text]);
+    if (!primary && !bg && !text && !headingFont && !bodyFont) return; // nothing set yet → leave stored theme
+    win.postMessage({ type: 'branding_preview_theme', primary, bg, text, headingFont: headingFont || null, bodyFont: bodyFont || null }, '*');
+  }, [config.primary, config.bg, config.text, headingFont, bodyFont]);
 
   // Listen for iframe ready ping, respond with current logo + theme.
   useEffect(() => {
@@ -190,6 +198,15 @@ export function BrandingPage() {
   useEffect(() => {
     postTheme(previewRef.current?.contentWindow);
   }, [postTheme]);
+
+  // Load every non-base allowlist font once so the picker dropdowns preview in their real face.
+  useEffect(() => {
+    const href = googleFontsHref(Object.keys(FONT_ALLOWLIST));
+    if (!href || document.querySelector(`link[data-font-picker]`)) return;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet'; link.href = href; link.setAttribute('data-font-picker', '');
+    document.head.appendChild(link);
+  }, []);
 
   // AA contrast guardrail: derivePalette auto-corrects body TEXT on the live storefront,
   // but the brand PRIMARY (the price colour) is never nudged — a pale primary on a pale
@@ -318,6 +335,34 @@ export function BrandingPage() {
             )}
           </motion.div>
           <motion.div {...sectionMotion(2)} className={cardCls}>
+            <h3 className="font-semibold text-lg">{t('admin.fonts', 'Fonts')}</h3>
+            <p className="text-xs text-[var(--brand-text-muted)]">{t('admin.fonts_hint', 'The typeface for your menu titles and descriptions. Leave as-is to keep the default for your cuisine.')}</p>
+            <Select
+              label={t('admin.font_heading', 'Headings & product titles')}
+              data-testid="font-heading-select"
+              value={headingFont}
+              onChange={(e) => setHeadingFont(e.target.value)}
+              style={{ fontFamily: headingFont ? FONT_ALLOWLIST[headingFont as keyof typeof FONT_ALLOWLIST]?.stack : undefined }}
+            >
+              <option value="">{t('admin.font_default', 'Default (by cuisine)')}</option>
+              {fontIdsForRole('heading').map((id) => (
+                <option key={id} value={id} style={{ fontFamily: FONT_ALLOWLIST[id].stack }}>{FONT_ALLOWLIST[id].label}</option>
+              ))}
+            </Select>
+            <Select
+              label={t('admin.font_body', 'Body & descriptions')}
+              data-testid="font-body-select"
+              value={bodyFont}
+              onChange={(e) => setBodyFont(e.target.value)}
+              style={{ fontFamily: bodyFont ? FONT_ALLOWLIST[bodyFont as keyof typeof FONT_ALLOWLIST]?.stack : undefined }}
+            >
+              <option value="">{t('admin.font_default', 'Default (by cuisine)')}</option>
+              {fontIdsForRole('body').map((id) => (
+                <option key={id} value={id} style={{ fontFamily: FONT_ALLOWLIST[id].stack }}>{FONT_ALLOWLIST[id].label}</option>
+              ))}
+            </Select>
+          </motion.div>
+          <motion.div {...sectionMotion(3)} className={cardCls}>
             <h3 className="font-semibold text-lg">{t('admin.logo', 'Logo')}</h3>
             <p className="text-xs text-[var(--brand-text-muted)]">{t('admin.logo_hint', 'Recommended: 512x512px PNG with transparent background. Max 2MB.')}</p>
             <div className="flex items-start gap-4">

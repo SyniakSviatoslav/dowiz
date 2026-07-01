@@ -17,8 +17,74 @@ export interface BrandSignal {
   text?: string;
   logoUrl?: string;
   name?: string;
+  /** Detected storefront font ids (allowlist), when the site uses a font we can render. */
+  headingFont?: string;
+  bodyFont?: string;
   /** which signals contributed, for UI transparency / debugging */
   sources: string[];
+}
+
+// Storefront font allowlist mirror (id → family/role). MUST stay in sync with
+// packages/ui/src/theme/fonts.ts (FONT_ALLOWLIST) — a font-extractor test asserts membership. We can
+// only map a detected family to a font the storefront actually LOADS, so anything off-allowlist is
+// correctly ignored (the cuisine default stands).
+const FONT_TABLE: Array<{ id: string; family: string; role: 'heading' | 'body' | 'both' }> = [
+  { id: 'playfair', family: 'playfair display', role: 'heading' },
+  { id: 'cormorant', family: 'cormorant garamond', role: 'heading' },
+  { id: 'dmserif', family: 'dm serif display', role: 'heading' },
+  { id: 'fraunces', family: 'fraunces', role: 'heading' },
+  { id: 'yeseva', family: 'yeseva one', role: 'heading' },
+  { id: 'spacegrotesk', family: 'space grotesk', role: 'heading' },
+  { id: 'bebas', family: 'bebas neue', role: 'heading' },
+  { id: 'poppins', family: 'poppins', role: 'both' },
+  { id: 'montserrat', family: 'montserrat', role: 'both' },
+  { id: 'inter', family: 'inter', role: 'body' },
+  { id: 'dmsans', family: 'dm sans', role: 'both' },
+];
+
+/** Map a raw font-family token to an allowlist entry (first family in the stack, quotes/space-normalised). */
+function matchFont(rawFamily: string): { id: string; role: 'heading' | 'body' | 'both' } | undefined {
+  const first = rawFamily.split(',')[0]!.replace(/["']/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return FONT_TABLE.find((f) => f.family === first);
+}
+
+/**
+ * Detect the site's heading/body fonts, restricted to families the storefront can render (allowlist).
+ * Signals, strongest first: Google-Fonts families (the site's deliberate brand type), then font-family
+ * on heading/body selectors. Returns only ids we can actually load; unknown families → undefined.
+ */
+export function detectFonts(html: string, css: string): { headingFont?: string; bodyFont?: string } {
+  const blob = css + '\n' + html;
+  const gf: string[] = [];
+  // Google Fonts families from <link>/@import css2 (family=Playfair+Display:...) and css (family=Name).
+  for (const m of blob.matchAll(/fonts\.googleapis\.com\/css2?\?([^"')]+)/gi)) {
+    for (const fam of m[1]!.matchAll(/family=([^&:]+)/gi)) {
+      gf.push(decodeURIComponent(fam[1]!).replace(/\+/g, ' '));
+    }
+  }
+  // @font-face families (self-hosted brand fonts).
+  for (const m of blob.matchAll(/@font-face\s*\{[^}]*font-family\s*:\s*([^;}]+)/gi)) gf.push(m[1]!);
+  // Heading vs body font-family declarations.
+  const headingFams: string[] = [];
+  const bodyFams: string[] = [];
+  for (const m of blob.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    const sel = m[1]!.toLowerCase();
+    const decl = m[2]!.match(/font-family\s*:\s*([^;}]+)/i)?.[1];
+    if (!decl) continue;
+    if (/\b(h1|h2|h3|h4|h5|h6)\b|title|heading|display|headline/.test(sel)) headingFams.push(decl);
+    if (/\bbody\b|:root|html/.test(sel)) bodyFams.push(decl);
+  }
+  const firstMatch = (fams: string[], want: 'heading' | 'body') => {
+    for (const f of fams) {
+      const hit = matchFont(f);
+      if (hit && (hit.role === want || hit.role === 'both')) return hit.id;
+    }
+    return undefined;
+  };
+  return {
+    headingFont: firstMatch([...headingFams, ...gf], 'heading'),
+    bodyFont: firstMatch([...bodyFams, ...gf], 'body'),
+  };
 }
 
 // ── colour helpers ─────────────────────────────────────────────────────────
@@ -137,6 +203,11 @@ export function extractFromHtml(html: string, css: string, baseUrl?: string): Br
     .replace(/\s*[|\-–—]\s*(menu|home|official site|restaurant).*$/i, '')
     .replace(/\s+(menu|restaurant|official)$/i, '').trim();
   if (rawName) { sig.name = rawName.slice(0, 80); sources.push(siteName ? 'og:site_name' : 'title'); }
+
+  // 6) Fonts: heading/body, restricted to storefront-renderable (allowlist) families.
+  const fonts = detectFonts(html, css);
+  if (fonts.headingFont) { sig.headingFont = fonts.headingFont; sources.push('css:font-heading'); }
+  if (fonts.bodyFont) { sig.bodyFont = fonts.bodyFont; sources.push('css:font-body'); }
 
   return sig;
 }

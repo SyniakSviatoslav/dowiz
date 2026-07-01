@@ -12,6 +12,7 @@
 // — safe to run on the server (theme storage) and the client (ThemeProvider).
 
 import type { ThemeConfig } from './ThemeProvider.js';
+import { fontStack } from './fonts.js';
 
 interface RGB { r: number; g: number; b: number }
 
@@ -92,6 +93,9 @@ export interface PaletteInput {
   text?: string | null;
   surface?: string | null;
   accent?: string | null;
+  /** Allowlist font ids (see fonts.ts). Unknown/absent → the default pairing's face. */
+  headingFont?: string | null;
+  bodyFont?: string | null;
 }
 
 /**
@@ -160,5 +164,7 @@ export function derivePalette(input: PaletteInput): ThemeConfig {
     text: toHex(text),
     textMuted: toHex(textMuted),
     border: toHex(border),
+    fontHeading: fontStack(input.headingFont, 'heading'),
+    fontBody: fontStack(input.bodyFont, 'body'),
   };
 }
