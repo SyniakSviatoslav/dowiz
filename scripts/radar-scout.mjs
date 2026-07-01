@@ -65,13 +65,20 @@ function score(v) {
   // Independent-scale: chains (very high volume) are less likely to switch — taper above ~1500.
   const chainPenalty = reviews > 1500 ? clamp((reviews - 1500) / 4000, 0, 0.45) : 0;
   // Fit: a food vendor we can serve. (20 / partial)
-  const isFood = /restaurant|cafe|coffee|pizz|bar|fast food|bakery|bistro|trattoria|kebab|burger|food|grill|pasticeri|resto/i.test(v.meta + ' ' + v.name);
+  const hay = (v.meta + ' ' + v.name).toLowerCase();
+  const isFood = /restaurant|cafe|coffee|pizz|bar|fast food|bakery|bistro|trattoria|kebab|burger|food|grill|pasticeri|resto/i.test(hay);
   const fitScore = isFood ? 20 : 8;
-  const raw = (qualityScore + activityScore + fitScore) * (1 - chainPenalty);
+  // DELIVERY-INTENT (the decisive weight for a delivery-storefront pitch): food that travels + venues that
+  // already do delivery rank up; destination dine-in (seaside/fine-dining/steakhouse) ranks down.
+  let intent = 0.7, intentTag = 'mixed (could deliver)';
+  if (/pizz|piceri|pasta|pastarell|burger|kebab|fast food|sushi|fried|wok|sandwich|bakery|pasticeri|gelato|dessert|byrek|street|fixhtim|snack/.test(hay)) { intent = 1.0; intentTag = 'delivery-native'; }
+  else if (/seaside|harbor|harbour|marine|\bmare\b|fish|seafood|peshk|aragost|lobster|steakhouse|fine|lounge|rooftop|beach|resort/.test(hay)) { intent = 0.45; intentTag = 'destination dine-in (weak delivery fit)'; }
+  const intentMult = 0.5 + 0.5 * intent; // 0.45→0.725, 0.7→0.85, 1.0→1.0
+  const raw = (qualityScore + activityScore + fitScore) * (1 - chainPenalty) * intentMult;
   if (rating) why.push(`${rating}★${revConf < 0.5 ? ' (few reviews → unproven)' : ''}`);
   if (reviews) why.push(`${reviews} rev${reviews > 1500 ? ' (chain-scale ↓)' : reviews < 40 ? ' (new ↑receptive)' : ''}`);
-  if (isFood) why.push('food fit'); else why.push('fit unclear');
-  return { score: Math.round(raw * 10) / 10, why };
+  why.push(`delivery: ${intentTag}`);
+  return { score: Math.round(raw * 10) / 10, deliveryIntent: intent, why };
 }
 
 (async () => {

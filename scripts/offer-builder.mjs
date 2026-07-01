@@ -113,15 +113,14 @@ function buildStrategy(d) {
 function draftAlbanian(d, reach, demoUrl) {
   const nameGuess = d.name || 'restoranti';
   return [
-    `Përshëndetje! Ju shkruaj për ${nameGuess} — e kam pasur qejf vendin/menunë tuaj. 👋   // BLOCK 1: warm recognition — swap in a REAL detail (a dish, a visit, the ${d.rating || ''}★)`,
+    `Tungjatjeta! 👋 Ju shkruaj për ${nameGuess}${d.rating ? ` — s'çudi që keni ${d.rating} yje` : ''}.   // BLOCK 1: WHY OPEN — it's about THEIR place, swap in a real detail (a dish/visit)`,
     ``,
-    `Bëra diçka për ju, pa asnjë detyrim.   // BLOCK 2: bridge — "I made something", not "I want something"`,
+    `E mora menunë tuaj dhe e ktheva në një dyqan online, që thjesht ta provoni vetë:   // BLOCK 2: THE HOOK — a thing already MADE for them`,
+    `${demoUrl}   // BLOCK 3: the demo link`,
     ``,
-    `E ktheva menunë tuaj në një dyqan online që mund ta provoni vetë këtu: ${demoUrl}   // BLOCK 3: the demo — THEIR menu, try it yourself`,
+    `Kështu porositë — dhe ~30% që u shkojnë aplikacioneve — vijnë drejt te ju; klientët mbeten tuajt.   // BLOCK 4: WHAT'S IN IT FOR ME`,
     ``,
-    `Kështu porositë vijnë drejt te ju — klientët dhe të dhënat tuaja, pa komisionin e Glovo-s.   // BLOCK 4: value in their terms`,
-    ``,
-    `Nëse ju pëlqen, ta tregoj për 15 minuta si niset; nëse jo, thjesht më thoni — pa problem. 🙏   // BLOCK 5: soft, two-way CTA`,
+    `Nëse ju pëlqen, ta tregoj për 15 min si niset. Nëse jo, thjesht më thoni — pa problem. 🙏   // BLOCK 5: WHY RESPOND — done already, easy yes/no`,
   ].join('\n');
 }
 
@@ -142,16 +141,23 @@ async function composeDraft(d, venueSignal, demoUrl) {
   const prompt = `You are a NATIVE Albanian (Tosk, Albania) copywriter helping a founder write ONE warm outreach DM to a
 restaurant owner who ALREADY agreed once to test a product (warm lead, prior consent).
 
-Write ONE short message in natural, warm, human Albanian — MAX 5 short lines. Structure, one line each:
-1) warm recognition of THEIR place + one real detail (use the rating if given);
-2) bridge: "I made something for you, no obligation" (a made thing, not a promise);
-3) the demo of THEIR menu with the link;
-4) value in THEIR terms: orders come straight to them, their customers & data stay theirs, no aggregator commission;
-5) soft two-way CTA: if you like it I'll show you in 15 min how to start; if not, just tell me — no problem.
+WRITE IT FROM THE OWNER'S POV. Before writing, satisfy the 4 questions a busy owner asks in 2 seconds:
+  • Why would I even OPEN this? → line 1 must prove it's about MY place specifically, from someone real —
+    not a blast. Name the venue + one true detail.
+  • What grabs my attention? → a concrete thing ALREADY MADE for me (my own menu, live), not "an offer".
+  • What's in it for ME? → the money I lose to Glovo/Wolt stays mine; my customers stay mine. In my terms.
+  • Why RESPOND? → it's already done, one tap to see it, dead-easy yes/no, zero pressure.
 
-HARD RULES: never use words like "falas", "kursim", "mundësi" (post-1997 scam triggers); never question their
-competence or say anything is wrong on their side; no religion; no pressure; sound like a real person, not
-marketing; keep it SHORT. Output ONLY the Albanian message text (you may use 1-2 tasteful emojis). Nothing else.
+Then write ONE message in natural, warm, HUMAN Albanian — SHORT, CLEAR, HONEST. Max 5 short lines, one role each:
+1) recognition of THEIR place + one real detail (rating if given) — proves it's personal;
+2) the hook = a made thing: "I turned YOUR menu into a working online shop, so you could just try it";
+3) the demo link;
+4) what's in it for them: orders (and the ~30% you pay the apps) come straight to you, your customers stay yours;
+5) soft two-way CTA: like it → I'll show you in 15 min how to start; if not → just say, no problem.
+
+HARD RULES: never "falas"/"kursim"/"mundësi" (post-1997 scam triggers); never question their competence or imply
+anything's wrong on their side; no religion; no pressure; no marketing-speak or adjectives-as-value — let the
+made thing carry it; be honest (it's a demo, not live yet). Output ONLY the Albanian message (1-2 tasteful emojis ok).
 
 VENUE: ${d.name} · ${d.address || ''} · rating ${d.rating || '—'}${d.reviews ? ` (${d.reviews})` : ''}
 DEMO LINK: ${demoUrl}
@@ -251,7 +257,7 @@ to launch; if not, just tell me — no problem.
   let demoLive = false;
   try { const r = await fetch(`${BASE}/public/locations/${useSlug}/menu`); demoLive = r.ok; } catch {}
   const venueSignal = await buildVenueSignal(d);
-  const composed = await composeDraft(d, venueSignal, demoUrl);
+  const composed = argv.includes('--no-compose') ? null : await composeDraft(d, venueSignal, demoUrl);
   console.error(`[offer-builder] compose: ${composed ? 'ok (' + composed.model + ')' : 'skipped/failed → scaffold'}`);
   const md = packet(d, reach, socials, demoUrl, demoLive, venueSignal, composed);
   const dir = resolve('loops/offers'); mkdirSync(dir, { recursive: true });
