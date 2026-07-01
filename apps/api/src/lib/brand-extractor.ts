@@ -38,6 +38,8 @@ const FONT_TABLE: Array<{ id: string; family: string; role: 'heading' | 'body' |
   { id: 'bebas', family: 'bebas neue', role: 'heading' },
   { id: 'poppins', family: 'poppins', role: 'both' },
   { id: 'montserrat', family: 'montserrat', role: 'both' },
+  { id: 'quicksand', family: 'quicksand', role: 'both' },
+  { id: 'nunito', family: 'nunito', role: 'both' },
   { id: 'inter', family: 'inter', role: 'body' },
   { id: 'dmsans', family: 'dm sans', role: 'both' },
 ];
