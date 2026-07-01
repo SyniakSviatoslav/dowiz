@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher, PriceDisplay, useCurrency, derivePalette, isPaperSkinEnabled, paperSkinAttr, staggerChildren, listItem } from '@deliveryos/ui';
+import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher, PriceDisplay, useCurrency, derivePalette, googleFontsHref, isPaperSkinEnabled, paperSkinAttr, staggerChildren, listItem } from '@deliveryos/ui';
 import { formatMoney } from '@deliveryos/shared-types';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../lib/index.js';
@@ -15,10 +15,29 @@ const PublicThemeResponse = z.object({
   primaryColor: z.string().nullable().optional(),
   bgColor: z.string().nullable().optional(),
   textColor: z.string().nullable().optional(),
+  // Per-tenant font ids (allowlist, see @deliveryos/ui fonts.ts). Server sends the cuisine default
+  // when the owner hasn't picked one; an unknown id resolves to the default face client-side.
+  headingFont: z.string().nullable().optional(),
+  bodyFont: z.string().nullable().optional(),
   supportedLocales: z.array(z.string()).nullable().optional(),
 }).passthrough();
 import { CartProvider, useSharedCart } from '../lib/CartProvider.js';
 import { CheckoutPage } from '../pages/client/CheckoutPage.js';
+
+// Inject the Google-Fonts <link> for any non-base tenant font, once. Idempotent (dedup by href) and
+// egress-safe: googleFontsHref builds the URL from allowlist ids only, dropping anything unknown, so a
+// tampered/unknown id can never produce an arbitrary fetch. Base families are already in index.html.
+function ensureGoogleFonts(ids: Array<string | null | undefined>) {
+  if (typeof document === 'undefined') return;
+  const href = googleFontsHref(ids);
+  if (!href) return;
+  if (document.querySelector(`link[data-tenant-font][href="${href}"]`)) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = href;
+  link.setAttribute('data-tenant-font', '');
+  document.head.appendChild(link);
+}
 
 function ClientLayoutInner() {
   const { slug } = useParams<{ slug: string }>();
@@ -83,7 +102,8 @@ function ClientLayoutInner() {
         setLogoUrl(e.data.logoUrl);
       }
       if (e.data?.type === 'branding_preview_theme') {
-        setTheme(derivePalette({ primary: e.data.primary, bg: e.data.bg, text: e.data.text }));
+        ensureGoogleFonts([e.data.headingFont, e.data.bodyFont]);
+        setTheme(derivePalette({ primary: e.data.primary, bg: e.data.bg, text: e.data.text, headingFont: e.data.headingFont, bodyFont: e.data.bodyFont }));
       }
     };
     window.addEventListener('message', handleMessage);
@@ -114,8 +134,12 @@ function ClientLayoutInner() {
         setSupportedLocales(res.supportedLocales || undefined);
         // Derive every remaining token from the tenant's primary/bg/text so a light
         // theme never inherits dark default surfaces (the dark-text-on-dark bug).
-        const hasTheme = res.primaryColor || res.bgColor || res.textColor;
-        setTheme(hasTheme ? derivePalette({ primary: res.primaryColor, bg: res.bgColor, text: res.textColor }) : null);
+        const hasTheme = res.primaryColor || res.bgColor || res.textColor || res.headingFont || res.bodyFont;
+        // Load any non-base tenant font (base families are already in index.html) before applying it,
+        // so the title paints in the real face rather than flashing the fallback. Egress-safe: the URL
+        // is built from our allowlist ids only (googleFontsHref drops anything unknown).
+        ensureGoogleFonts([res.headingFont, res.bodyFont]);
+        setTheme(hasTheme ? derivePalette({ primary: res.primaryColor, bg: res.bgColor, text: res.textColor, headingFont: res.headingFont, bodyFont: res.bodyFont }) : null);
       })
       .catch(() => setTheme(null));
 
@@ -140,7 +164,10 @@ function ClientLayoutInner() {
   return (
     <ThemeProvider theme={theme || undefined}>
       <ToastProvider>
-        <div {...paperSkinAttr()} className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] font-sans" style={isPaperSkinEnabled() ? undefined : { ['--brand-font-heading' as any]: "'Playfair Display', 'Cormorant Garamond', Georgia, serif" }}>
+        {/* Heading/body fonts now come from the per-tenant theme (ThemeProvider sets --brand-font-heading /
+            --brand-font-body on :root from the cuisine default or the owner's pick). No inline override here —
+            an inline style on this div would shadow the :root value for the whole subtree. */}
+        <div {...paperSkinAttr()} className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] font-sans">
           <header className="sticky top-0 z-sticky h-14 bg-[var(--brand-bg)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] flex items-center px-4 gap-3 shrink-0">
             {logoUrl ? (
               // Hide on load failure instead of showing a broken-image icon (e.g. a stale

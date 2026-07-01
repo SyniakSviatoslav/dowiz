@@ -25,6 +25,13 @@ export interface ThemeConfig {
   text: string;
   textMuted: string;
   border: string;
+  /**
+   * Resolved CSS font stacks (NOT allowlist ids) applied to --brand-font-heading / --brand-font-body.
+   * Optional: derivePalette always supplies them (cuisine default at minimum); hand-built literals may
+   * omit them and the tokens.css defaults stand.
+   */
+  fontHeading?: string;
+  fontBody?: string;
 }
 
 interface ThemeContextType {
@@ -57,6 +64,8 @@ export function ThemeProvider({
       '--brand-text',
       '--brand-text-muted',
       '--brand-border',
+      '--brand-font-heading',
+      '--brand-font-body',
     ];
     const prev: Record<string, string> = {};
     vars.forEach(v => { prev[v] = root.style.getPropertyValue(v); });
@@ -83,6 +92,8 @@ export function ThemeProvider({
       applyVar('--brand-text', theme.text);
       applyVar('--brand-text-muted', theme.textMuted);
       applyVar('--brand-border', theme.border);
+      applyVar('--brand-font-heading', theme.fontHeading);
+      applyVar('--brand-font-body', theme.fontBody);
     } else {
       vars.forEach(v => root.style.removeProperty(v));
     }

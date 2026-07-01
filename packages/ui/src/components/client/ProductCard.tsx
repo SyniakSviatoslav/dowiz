@@ -127,7 +127,7 @@ export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd }:
           </span>
         )}
         <div className={`flex items-start justify-between gap-1.5 ${reserveGutter && !isChefPick ? 'pl-7' : ''}`}>
-          <h3 className={`font-semibold leading-tight line-clamp-2 flex-1 ${hasPhoto ? 'text-step-sm min-h-[2.5em]' : 'text-step-base'}`} style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
+          <h3 className={`font-semibold leading-tight line-clamp-2 flex-1 ${hasPhoto ? 'text-step-sm min-h-[2.5em]' : 'text-step-base'}`} style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{product.name}</h3>
           {!hideAdd && (
           <motion.button
             data-testid="menu-item-add"
@@ -152,7 +152,7 @@ export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd }:
         </div>
         {product.description && (
           // Photoless cards earn an extra description line since they don't spend height on an image.
-          <p className={`text-step-2xs leading-snug ${hasPhoto ? 'line-clamp-2' : 'line-clamp-3'}`} style={{ color: 'var(--brand-text-muted)' }}>
+          <p className={`text-step-2xs leading-snug ${hasPhoto ? 'line-clamp-2' : 'line-clamp-3'}`} style={{ color: 'var(--brand-text-muted)', fontFamily: 'var(--brand-font-body)' }}>
             {product.description}
           </p>
         )}
