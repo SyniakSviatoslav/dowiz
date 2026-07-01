@@ -1,0 +1,953 @@
+{
+  "at": "2026-07-01T06:52:15.685Z",
+  "base_url": "https://dowiz-staging.fly.dev",
+  "storefront_base": "https://dowiz-staging.fly.dev",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 1,
+    "invited": 0,
+    "needs_review": 0,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "gmaps:0x134fdb3c68de013d:0xada5292cc9e31ae1",
+      "name": "ArtePasta",
+      "slug": "artepasta",
+      "warnings": [],
+      "menu_stats": {
+        "nCats": 11,
+        "nItems": 50,
+        "descRatio": 1
+      },
+      "menu_draft": {
+        "categories": [
+          {
+            "name": "Pasta",
+            "sort_order": 0,
+            "products": [
+              {
+                "name": "Pasta Piramida",
+                "price": 990,
+                "description": "Signature pasta with porcini, a rich mushroom cream, stracciatella and walnuts.",
+                "sort_order": 0,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Porcini mushrooms"
+                    },
+                    {
+                      "supplyName": "Mushroom cream"
+                    },
+                    {
+                      "supplyName": "Stracciatella"
+                    },
+                    {
+                      "supplyName": "Walnuts"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Pasta Casarecce San Daniele",
+                "price": 930,
+                "description": "Casarecce with San Daniele prosciutto, pistachio, cream and mushrooms.",
+                "sort_order": 1,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "San Daniele prosciutto"
+                    },
+                    {
+                      "supplyName": "Pistachio"
+                    },
+                    {
+                      "supplyName": "Cream"
+                    },
+                    {
+                      "supplyName": "Mushrooms"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Pasta Arte",
+                "price": 930,
+                "description": "The house special: gnocchi with four cheeses, shrimp, mustard and honey.",
+                "sort_order": 2,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Gnocchi"
+                    },
+                    {
+                      "supplyName": "Four cheeses"
+                    },
+                    {
+                      "supplyName": "Shrimp"
+                    },
+                    {
+                      "supplyName": "Mustard"
+                    },
+                    {
+                      "supplyName": "Honey"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Tagliatelle Carne & Tartufo",
+                "price": 880,
+                "description": "Tagliatelle with beef, garlic, truffle cream, parmigiano and mushrooms.",
+                "sort_order": 3,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Beef"
+                    },
+                    {
+                      "supplyName": "Garlic"
+                    },
+                    {
+                      "supplyName": "Truffle cream"
+                    },
+                    {
+                      "supplyName": "Parmigiano"
+                    },
+                    {
+                      "supplyName": "Mushrooms"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Rigatoni Notte Umbria",
+                "price": 880,
+                "description": "Rigatoni with onion, mushrooms and porcini.",
+                "sort_order": 4,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Onion"
+                    },
+                    {
+                      "supplyName": "Mushrooms"
+                    },
+                    {
+                      "supplyName": "Porcini"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Linguine Carbonara",
+                "price": 710,
+                "description": "Roman classic — pancetta, egg, pecorino romano and black pepper.",
+                "sort_order": 5,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Pancetta"
+                    },
+                    {
+                      "supplyName": "Egg"
+                    },
+                    {
+                      "supplyName": "Pecorino romano"
+                    },
+                    {
+                      "supplyName": "Black pepper"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Linguine Frutti di Mare",
+                "price": 710,
+                "description": "Seafood linguine with shrimp, calamari, mussels and parsley.",
+                "sort_order": 6,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Shrimp"
+                    },
+                    {
+                      "supplyName": "Calamari"
+                    },
+                    {
+                      "supplyName": "Mussels"
+                    },
+                    {
+                      "supplyName": "Parsley"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Linguine Genovese",
+                "price": 710,
+                "description": "Linguine with pesto, pancetta, onion, basil and cherry tomatoes.",
+                "sort_order": 7,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Pesto"
+                    },
+                    {
+                      "supplyName": "Pancetta"
+                    },
+                    {
+                      "supplyName": "Onion"
+                    },
+                    {
+                      "supplyName": "Basil"
+                    },
+                    {
+                      "supplyName": "Cherry tomatoes"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Rigatoni Quattro Formaggi",
+                "price": 710,
+                "description": "Four-cheese rigatoni — parmigiano, gorgonzola, pecorino grana and honey.",
+                "sort_order": 8,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Parmigiano"
+                    },
+                    {
+                      "supplyName": "Gorgonzola"
+                    },
+                    {
+                      "supplyName": "Pecorino grana"
+                    },
+                    {
+                      "supplyName": "Honey"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Rigatoni Prato Verde",
+                "price": 710,
+                "description": "Rigatoni with arugula, mozzarella, pesto, basil and pine nuts.",
+                "sort_order": 9,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Arugula"
+                    },
+                    {
+                      "supplyName": "Mozzarella"
+                    },
+                    {
+                      "supplyName": "Pesto"
+                    },
+                    {
+                      "supplyName": "Basil"
+                    },
+                    {
+                      "supplyName": "Pine nuts"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Tagliatelle Affumicata",
+                "price": 710,
+                "description": "Smoked tagliatelle with pesto, parsley, garlic, onion, basil and pancetta.",
+                "sort_order": 10,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Pesto"
+                    },
+                    {
+                      "supplyName": "Parsley"
+                    },
+                    {
+                      "supplyName": "Garlic"
+                    },
+                    {
+                      "supplyName": "Onion"
+                    },
+                    {
+                      "supplyName": "Basil"
+                    },
+                    {
+                      "supplyName": "Pancetta"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Tagliatelle Gamberi e Zucchine",
+                "price": 660,
+                "description": "Tagliatelle with shrimp, zucchini and parsley.",
+                "sort_order": 11,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Shrimp"
+                    },
+                    {
+                      "supplyName": "Zucchini"
+                    },
+                    {
+                      "supplyName": "Parsley"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Tagliatelle Prosciutto di Parma",
+                "price": 660,
+                "description": "Tagliatelle with broccoli, cooked ham and cream.",
+                "sort_order": 12,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Broccoli"
+                    },
+                    {
+                      "supplyName": "Cooked ham"
+                    },
+                    {
+                      "supplyName": "Cream"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Rigatoni Arrabbiata",
+                "price": 600,
+                "description": "Spicy rigatoni with garlic, chili, onion, tomato sauce and parsley.",
+                "sort_order": 13,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Garlic"
+                    },
+                    {
+                      "supplyName": "Chili"
+                    },
+                    {
+                      "supplyName": "Onion"
+                    },
+                    {
+                      "supplyName": "Tomato sauce"
+                    },
+                    {
+                      "supplyName": "Parsley"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Spaghetti All'Amatriciana",
+                "price": 600,
+                "description": "Spaghetti with bacon, basil, onion, tomato sauce and parmigiano.",
+                "sort_order": 14,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Bacon"
+                    },
+                    {
+                      "supplyName": "Basil"
+                    },
+                    {
+                      "supplyName": "Onion"
+                    },
+                    {
+                      "supplyName": "Tomato sauce"
+                    },
+                    {
+                      "supplyName": "Parmigiano"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Spaghetti Al Pomodoro",
+                "price": 600,
+                "description": "Spaghetti with tomato sauce, basil, garlic and parmigiano.",
+                "sort_order": 15,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Tomato sauce"
+                    },
+                    {
+                      "supplyName": "Basil"
+                    },
+                    {
+                      "supplyName": "Garlic"
+                    },
+                    {
+                      "supplyName": "Parmigiano"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Tagliatelle Bolognese",
+                "price": 600,
+                "description": "Tagliatelle with slow-cooked ground beef ragù, parmigiano and parsley.",
+                "sort_order": 16,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Ground beef"
+                    },
+                    {
+                      "supplyName": "Tomato sauce"
+                    },
+                    {
+                      "supplyName": "Parmigiano"
+                    },
+                    {
+                      "supplyName": "Parsley"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Tagliatelle Al Tartufo",
+                "price": 600,
+                "description": "Tagliatelle in truffle cream with parmigiano and galette.",
+                "sort_order": 17,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Truffle cream"
+                    },
+                    {
+                      "supplyName": "Parmigiano"
+                    },
+                    {
+                      "supplyName": "Galette"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Spaghetti Aglio Olio e Peperoncino",
+                "price": 550,
+                "description": "Garlic, chili, parsley, olive oil and black pepper.",
+                "sort_order": 18,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Garlic"
+                    },
+                    {
+                      "supplyName": "Chili"
+                    },
+                    {
+                      "supplyName": "Parsley"
+                    },
+                    {
+                      "supplyName": "Olive oil"
+                    },
+                    {
+                      "supplyName": "Black pepper"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Spaghetti Al Pesto",
+                "price": 500,
+                "description": "Spaghetti with pesto, basil, parmigiano and pine nuts.",
+                "sort_order": 19,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Pesto"
+                    },
+                    {
+                      "supplyName": "Basil"
+                    },
+                    {
+                      "supplyName": "Parmigiano"
+                    },
+                    {
+                      "supplyName": "Pine nuts"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Lasagna",
+                "price": 550,
+                "description": "Traditional baked lasagna with beef ragù, béchamel and parmigiano.",
+                "sort_order": 20,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Beef ragù"
+                    },
+                    {
+                      "supplyName": "Béchamel"
+                    },
+                    {
+                      "supplyName": "Parmigiano"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Gnocchi",
+            "sort_order": 1,
+            "products": [
+              {
+                "name": "Gnocchi alla Toscana",
+                "price": 770,
+                "description": "Potato gnocchi in mushroom sauce with basil, truffle cream and stracciatella.",
+                "sort_order": 0,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Mushroom sauce"
+                    },
+                    {
+                      "supplyName": "Basil"
+                    },
+                    {
+                      "supplyName": "Truffle cream"
+                    },
+                    {
+                      "supplyName": "Stracciatella"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Gnocchi alla Sorrentina",
+                "price": 710,
+                "description": "Potato gnocchi with mozzarella, tomato sauce, parmigiano and basil.",
+                "sort_order": 1,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Mozzarella"
+                    },
+                    {
+                      "supplyName": "Tomato sauce"
+                    },
+                    {
+                      "supplyName": "Parmigiano"
+                    },
+                    {
+                      "supplyName": "Basil"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Ravioli",
+            "sort_order": 2,
+            "products": [
+              {
+                "name": "Ravioli Rosé",
+                "price": 820,
+                "description": "Ravioli in rosé sauce with cream, tomato, burrata and mushrooms.",
+                "sort_order": 0,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Cream"
+                    },
+                    {
+                      "supplyName": "Tomato sauce"
+                    },
+                    {
+                      "supplyName": "Burrata"
+                    },
+                    {
+                      "supplyName": "Mushrooms"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Ravioli Pere e Noci",
+                "price": 820,
+                "description": "Pear-and-walnut ravioli with parmigiano, honey and gorgonzola.",
+                "sort_order": 1,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Pear"
+                    },
+                    {
+                      "supplyName": "Walnuts"
+                    },
+                    {
+                      "supplyName": "Parmigiano"
+                    },
+                    {
+                      "supplyName": "Honey"
+                    },
+                    {
+                      "supplyName": "Gorgonzola"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Ravioli Spinach",
+                "price": 770,
+                "description": "Spinach ravioli with cheese cream and truffle cream.",
+                "sort_order": 2,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Spinach"
+                    },
+                    {
+                      "supplyName": "Cheese cream"
+                    },
+                    {
+                      "supplyName": "Truffle cream"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Ravioli Gamberoni",
+                "price": 770,
+                "description": "Prawn ravioli with tomato sauce, zucchini and garlic.",
+                "sort_order": 3,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Prawns"
+                    },
+                    {
+                      "supplyName": "Tomato sauce"
+                    },
+                    {
+                      "supplyName": "Zucchini"
+                    },
+                    {
+                      "supplyName": "Garlic"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Antipasti",
+            "sort_order": 3,
+            "products": [
+              {
+                "name": "Antipasta Arte",
+                "price": 1100,
+                "description": "A sharing board of crudo ham, mortadella, spicy salami, gorgonzola and mozzarella.",
+                "sort_order": 0,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Prosciutto crudo"
+                    },
+                    {
+                      "supplyName": "Mortadella"
+                    },
+                    {
+                      "supplyName": "Spicy salami"
+                    },
+                    {
+                      "supplyName": "Gorgonzola"
+                    },
+                    {
+                      "supplyName": "Mozzarella"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Salads",
+            "sort_order": 4,
+            "products": [
+              {
+                "name": "Sallata Arte",
+                "price": 550,
+                "description": "Arugula salad with walnuts, cherry tomatoes, vinaigrette and pomegranate.",
+                "sort_order": 0,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Arugula"
+                    },
+                    {
+                      "supplyName": "Walnuts"
+                    },
+                    {
+                      "supplyName": "Cherry tomatoes"
+                    },
+                    {
+                      "supplyName": "Vinaigrette"
+                    },
+                    {
+                      "supplyName": "Pomegranate"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Sallata Chef",
+                "price": 490,
+                "description": "Mixed-leaf salad with cherry tomatoes, ricotta and galette.",
+                "sort_order": 1,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Mixed salad"
+                    },
+                    {
+                      "supplyName": "Cherry tomatoes"
+                    },
+                    {
+                      "supplyName": "Ricotta"
+                    },
+                    {
+                      "supplyName": "Galette"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Dessert",
+            "sort_order": 5,
+            "products": [
+              {
+                "name": "Tiramisu",
+                "price": 380,
+                "description": "Classic tiramisu with mascarpone, espresso-soaked savoiardi and cocoa.",
+                "sort_order": 0,
+                "attributes": {
+                  "bom": [
+                    {
+                      "supplyName": "Mascarpone"
+                    },
+                    {
+                      "supplyName": "Savoiardi"
+                    },
+                    {
+                      "supplyName": "Espresso"
+                    },
+                    {
+                      "supplyName": "Cocoa"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Wine",
+            "sort_order": 6,
+            "products": [
+              {
+                "name": "House White Wine (Bottle)",
+                "price": 1980,
+                "description": "House white wine, full bottle.",
+                "sort_order": 0
+              },
+              {
+                "name": "House Red Wine (Bottle)",
+                "price": 1980,
+                "description": "House red wine, full bottle.",
+                "sort_order": 1
+              },
+              {
+                "name": "House Wine (Small Bottle)",
+                "price": 1100,
+                "description": "House wine, small bottle.",
+                "sort_order": 2
+              }
+            ]
+          },
+          {
+            "name": "Beer",
+            "sort_order": 7,
+            "products": [
+              {
+                "name": "Birra Moretti 0.66 L",
+                "price": 600,
+                "description": "Italian lager, 0.66 L bottle.",
+                "sort_order": 0
+              }
+            ]
+          },
+          {
+            "name": "Soft Drinks",
+            "sort_order": 8,
+            "products": [
+              {
+                "name": "Coca-Cola",
+                "price": 190,
+                "description": "Chilled Coca-Cola.",
+                "sort_order": 0
+              },
+              {
+                "name": "Coca-Cola Zero",
+                "price": 190,
+                "description": "Chilled Coca-Cola Zero.",
+                "sort_order": 1
+              },
+              {
+                "name": "Fanta Portokall",
+                "price": 190,
+                "description": "Orange Fanta.",
+                "sort_order": 2
+              },
+              {
+                "name": "Fanta Exotic",
+                "price": 190,
+                "description": "Exotic Fanta.",
+                "sort_order": 3
+              },
+              {
+                "name": "Lemon Soda",
+                "price": 190,
+                "description": "Chilled lemon soda.",
+                "sort_order": 4
+              },
+              {
+                "name": "Orange Soda",
+                "price": 190,
+                "description": "Chilled orange soda.",
+                "sort_order": 5
+              },
+              {
+                "name": "Red Bull",
+                "price": 330,
+                "description": "Red Bull energy drink.",
+                "sort_order": 6
+              }
+            ]
+          },
+          {
+            "name": "Bio Juices",
+            "sort_order": 9,
+            "products": [
+              {
+                "name": "Pomegranate Juice (Bio)",
+                "price": 310,
+                "description": "Cold-pressed organic pomegranate juice.",
+                "sort_order": 0
+              },
+              {
+                "name": "Blueberry Juice (Bio)",
+                "price": 200,
+                "description": "Organic blueberry juice.",
+                "sort_order": 1
+              },
+              {
+                "name": "Apple Juice (Bio)",
+                "price": 200,
+                "description": "Organic apple juice.",
+                "sort_order": 2
+              },
+              {
+                "name": "Peach Juice (Bio)",
+                "price": 200,
+                "description": "Organic peach juice.",
+                "sort_order": 3
+              }
+            ]
+          },
+          {
+            "name": "Water",
+            "sort_order": 10,
+            "products": [
+              {
+                "name": "Glass Water 0.75 L",
+                "price": 200,
+                "description": "Still water, 0.75 L glass bottle.",
+                "sort_order": 0
+              },
+              {
+                "name": "Glass Water 0.5 L",
+                "price": 140,
+                "description": "Still water, 0.5 L glass bottle.",
+                "sort_order": 1
+              },
+              {
+                "name": "Detox Water",
+                "price": 130,
+                "description": "Infused detox water.",
+                "sort_order": 2
+              },
+              {
+                "name": "Kids Water",
+                "price": 110,
+                "description": "Small still water for kids.",
+                "sort_order": 3
+              }
+            ]
+          }
+        ]
+      },
+      "palette": {
+        "primary_color": "#e11b22",
+        "bg_color": "#faf6f0",
+        "text_color": "#111111"
+      },
+      "source_id": "f793f049-9a99-4712-8ca4-fef23241057a",
+      "org_id": "cbb95842-9ce9-4499-913a-10395ff82811",
+      "location_id": "4ff90813-4d0f-4f72-bfe0-ef9488ff10be",
+      "theme_directive": {
+        "location_id": "4ff90813-4d0f-4f72-bfe0-ef9488ff10be",
+        "primary_color": "#e11b22",
+        "bg_color": "#faf6f0",
+        "text_color": "#111111"
+      },
+      "visual_gate": {
+        "pass": true,
+        "viewports": {
+          "mobile": {
+            "url": "https://dowiz-staging.fly.dev/s/artepasta",
+            "itemCount": 50,
+            "consoleErrors": 0,
+            "addCount": 0,
+            "cartCount": 0,
+            "orderBtns": 0,
+            "noindex": true
+          },
+          "desktop": {
+            "url": "https://dowiz-staging.fly.dev/s/artepasta",
+            "itemCount": 50,
+            "consoleErrors": 0,
+            "addCount": 0,
+            "cartCount": 0,
+            "orderBtns": 0,
+            "noindex": true
+          }
+        },
+        "mode": "playwright",
+        "exitCode": 0
+      },
+      "outcome": "certified-preview",
+      "state": "VERIFIED",
+      "preview_url": "https://dowiz-staging.fly.dev/s/artepasta"
+    }
+  ]
+}
