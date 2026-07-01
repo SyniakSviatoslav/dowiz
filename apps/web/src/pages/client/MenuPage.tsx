@@ -710,6 +710,10 @@ export function MenuPage() {
 
   const getImageUrl = (product: Product): string | null => {
     if (product.imageUrl) return product.imageUrl;
+    // Brand-ingest photo: a display-only full URL on attributes (survives the shadow preview's bom-strip),
+    // so scraped menu photos render pre-claim. A real uploaded image_key still wins over it above.
+    const attrImg = (product as any).attributes?.image_url;
+    if (typeof attrImg === 'string' && /^https?:\/\//.test(attrImg)) return attrImg;
     if (!product.image_key) return null;
     if (product.image_key.startsWith('data:') || product.image_key.startsWith('http://') || product.image_key.startsWith('https://')) {
       return product.image_key;
@@ -1401,6 +1405,13 @@ export function MenuPage() {
                 {detailProduct.description && (
                   <p className="text-sm mt-2 leading-relaxed" style={{ color: 'var(--brand-text)' }}>{detailProduct.description}</p>
                 )}
+                {/* Original-language description under the translation (brand-ingest keeps both: EN + source). */}
+                {(() => {
+                  const sq = (detailProduct as any).attributes?.description_sq;
+                  return typeof sq === 'string' && sq.trim() ? (
+                    <p className="text-step-xs mt-1 leading-relaxed italic" style={{ color: 'var(--brand-text-muted)' }} lang="sq">{sq.trim()}</p>
+                  ) : null;
+                })()}
               </div>
 
               {/* Taste Section */}
@@ -1441,7 +1452,12 @@ export function MenuPage() {
                   Sourced from the BOM food lines (packaging/utensils already excluded by bomToNutrition).
                   Hidden when the dish carries no structured ingredients (e.g. the description already lists them). */}
               {(() => {
-                const names = bomToNutrition(detailProduct).ingredients;
+                // Prefer the display-only ingredients list (brand-ingest; survives the shadow bom-strip),
+                // else derive from the BOM (post-claim / owner-authored dishes).
+                const attrIng = (detailProduct as any).attributes?.ingredients;
+                const names = Array.isArray(attrIng) && attrIng.length
+                  ? attrIng.filter((s: unknown): s is string => typeof s === 'string' && s.trim().length > 0)
+                  : bomToNutrition(detailProduct).ingredients;
                 if (names.length === 0) return null;
                 return (
                   <div>
