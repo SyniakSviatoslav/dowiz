@@ -56,6 +56,7 @@ Both run with operator Postgres creds (staging: see MEMORY staging-db-access rec
 |---|---|---|---|---|
 | 2026-07-01 | tools/demo-builder/dry-run.mjs (anti-cheat, mock+fake-storefront) | GREEN 43/43 | no | CERTIFIED; PART A pure L1/L2/L3 (14) + PART B pipeline A–E (29) |
 | 2026-07-01 | FIRST LIVE RUN — Eljo's Pizza (pizzeria, Durrës) → /s/eljos-pizza, staging, preview-only | CERTIFIED-PREVIEW | no | 14 items/5 cats, theme #c1352b/#fbf6ee, gate green mobile+desktop, 0 invites. source_id 76c7f09a…, location_id 79acd75e…. Menu hand-authored (RestaurantGuru had no menu — placeholder "upload menu" page). Both DB seams run from inside the staging container (pg via npm-i in /tmp; DATABASE_URL_MIGRATIONS). |
+| 2026-07-01 | REUSE — ArtePasta (italian, Durrës) → /s/artepasta, staging, preview-only | CERTIFIED-PREVIEW | no | 16 items/6 cats, theme #3f7d4f/#fbf6ee, gate green (16 items ×2, 0 console err), 0 invites, ~11.5s total. CERTIFIED on FIRST pass-2 (gate fix held). Menu hand-authored (Wolt has it but API-locked/CSR; RG none). Metrics report: loops/reports/demo-builder-run-artepasta-2026-07-01.md. |
 
 ## Live-run recipe (proven 2026-07-01, Eljo's)
 Authored-menu prospect ⇒ two passes + two container-side DB seams:

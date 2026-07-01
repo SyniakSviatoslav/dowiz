@@ -1,0 +1,26 @@
+[
+  {
+    "place_id": "gmaps:0x134fdb3c68de013d:0xada5292cc9e31ae1",
+    "slug": "artepasta",
+    "name": "ArtePasta",
+    "cuisine": "italian",
+    "menu": [
+      { "name": "Bruschetta al Pomodoro", "category": "Antipasti", "price": 350, "description": "Bukë e thekur me domate të freskëta, hudhër, borzilok dhe vaj ulliri extra virgjër." },
+      { "name": "Tagliere Misto", "category": "Antipasti", "price": 650, "description": "Përzgjedhje sallamesh italiane dhe djathërash të pjekur, me ullinj dhe grissini." },
+      { "name": "Spaghetti alla Carbonara", "category": "Pasta", "price": 700, "description": "Spageti me vezë, guanciale, Pecorino Romano dhe piper të sapobluar." },
+      { "name": "Tagliatelle al Ragù", "category": "Pasta", "price": 750, "description": "Tagliatelle të freskëta me ragù viçi të gatuar ngadalë sipas traditës bolonjeze." },
+      { "name": "Penne all'Arrabbiata", "category": "Pasta", "price": 600, "description": "Penne me salcë domatesh pikante, hudhër, spec djegës dhe majdanoz." },
+      { "name": "Lasagne alla Bolognese", "category": "Pasta", "price": 800, "description": "Shtresa brumi me ragù, beshamel dhe Parmigiano, pjekur në furrë." },
+      { "name": "Gnocchi al Pesto Genovese", "category": "Pasta", "price": 700, "description": "Njoke patatesh të buta me pesto borziloku, pinjol dhe Parmigiano." },
+      { "name": "Fettuccine ai Funghi Porcini", "category": "Pasta", "price": 850, "description": "Fettuccine me kërpudha porcini, krem të lehtë dhe majdanoz të freskët." },
+      { "name": "Risotto ai Funghi", "category": "Risotto", "price": 800, "description": "Oriz Arborio me kërpudha të përziera, gjalpë dhe Parmigiano të grirë." },
+      { "name": "Risotto alla Marinara", "category": "Risotto", "price": 900, "description": "Risotto me fruta deti të freskëta, domate cherry dhe një prekje verë të bardhë." },
+      { "name": "Insalata Caprese", "category": "Insalata", "price": 550, "description": "Mozzarella fiordilatte, domate të pjekura në diell dhe borzilok me vaj ulliri." },
+      { "name": "Insalata Mista", "category": "Insalata", "price": 400, "description": "Përzierje jeshiljesh të freskëta, domate, kastravec dhe salcë balsamike." },
+      { "name": "Tiramisù", "category": "Dolce", "price": 400, "description": "Ëmbëlsira klasike me savoiardi, mascarpone, kafe espresso dhe kakao." },
+      { "name": "Panna Cotta", "category": "Dolce", "price": 350, "description": "Krem i butë vanilje me salcë frutash pylli." },
+      { "name": "Ujë Natyral 0.5L", "category": "Pije", "price": 100, "description": "Ujë i pijshëm natyral, shishe 0.5L." },
+      { "name": "Coca-Cola 0.33L", "category": "Pije", "price": 150, "description": "Pije freskuese e ftohtë, shishe qelqi 0.33L." }
+    ]
+  }
+]
