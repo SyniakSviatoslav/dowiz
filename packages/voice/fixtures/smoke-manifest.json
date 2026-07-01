@@ -1,0 +1,3 @@
+[
+  { "wav": "jfk-en-16k.wav", "locale": "en", "expected_kind": null, "transcript_contains": "country" }
+]

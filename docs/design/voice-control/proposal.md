@@ -605,6 +605,21 @@ research artifact**, governed independently:
 - **Phase 0 — PoC / decision gate.** Engine + Web Worker + `whisper-base` (q8) from R2, a
   transcribe-only debug overlay on `/s/:slug`, flag-dark. Capture the §4.2 sq/en/uk corpus on real
   devices. **GATE = §4.2 rule** → decides whether Phase 2 is scheduled.
+  - **BUILD STATUS (2026-07-01, operator "unblock + build the engine").** The engine is BUILT in
+    `packages/voice` and dep-optional-by-construction: `WhisperProvider` (source: yields
+    `AsyncIterable<IntentProposal>`, holds zero handler — R2-F/M3) + a `Transcriber` port +
+    `TransformersTranscriber` (real `@huggingface/transformers` whisper-base, greedy/temperature-0
+    decode, loaded via a NON-LITERAL dynamic import so the Phase-0 safety core still typechecks +
+    builds with **zero ML dependency** — the true-dark invariant, L2). Engine-loop wiring is proven
+    by a `FakeTranscriber` unit test (the H1 CI-deterministic half; 49/49 voice tests green). The
+    real-audio harness (`scripts/audio-eval.ts`, the H1 harness-deterministic half) runs the real
+    provider over a WAV manifest and scores IRA + dangerous-misfire (one-sided Wilson upper bound) +
+    fail-quiet per locale. **REAL-MODEL SMOKE PROVEN:** `Xenova/whisper-base` (cpu/q8) transcribed a
+    16 kHz clip verbatim through the committed engine and the matcher correctly fail-quieted (no
+    intent) on non-command speech, ~3.2 s/clip cold. **Still gated / NOT done:** the ML dep is NOT
+    committed into the deploy image (deploy-weight decision — flag to operator); the browser MicFab +
+    ConfirmationGate UI is Phase-1 code held behind **R-J demand-evidence (NEEDS-HUMAN)**; the §4.2
+    launch corpus is the separate **C2-consented** dataset (R-I). The smoke fixture is `packages/voice/fixtures/`.
 - **Phase 1 — Client-facing storefront (menu + checkout-read-only) — the ACTIVE BUILD SCOPE.**
   MicFab on MenuPage; client intent pack (add / filter / sort / macro / compare / search) **plus
   the two checkout READ_ONLY intents** ("read my order" → reads the user's own cart + total; "go to

@@ -11,4 +11,8 @@ export type { VoiceHandlers } from './confirmation-gate.js';
 export { matchIntent, MIN_CONFIDENCE } from './matcher.js';
 export type { Locale, MenuContext, SortKey, MacroLens } from './matcher.js';
 export { MockProvider } from './mock-provider.js';
+export { WhisperProvider } from './whisper-provider.js';
+export type { Transcriber, PcmAudio } from './transcriber.js';
+export { TransformersTranscriber } from './transformers-transcriber.js';
+export type { TransformersTranscriberOptions } from './transformers-transcriber.js';
 export { normalize } from './normalize.js';
