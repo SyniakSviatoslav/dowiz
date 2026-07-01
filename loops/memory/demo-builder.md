@@ -27,6 +27,25 @@ invent phantom endpoints (M6), demo-builder uses the SAME sanctioned operator DB
    from the run report's `theme_directive`. The storefront's `derivePalette` expands the triple into the full token set.
 Both run with operator Postgres creds (staging: see MEMORY staging-db-access recipe). The loop RECORDS the exact directive per prospect.
 
+## Brand-asset seams (added 2026-07-01 · ArtePasta real-identity build)
+Real venue identity from Google-Maps/Wolt → storefront. Storefront support (mapped): logo ✅, colors ✅,
+menu-item photos ✅ (all DB/R2 seams); hero=video-only (image needs a render change); per-tenant font ❌.
+- **Menu (real)**: `tools/demo-builder/wolt-menu-extract.mjs` parses a Wolt venue page's inline item JSON
+  (name/price÷100/description/image, no API key) → normalize (translate SQ→EN, categorise, ingredients).
+- **Re-seed an already-provisioned shadow** (menu changed): `SELECT erase_shadow_tenant(loc,org)` — but DELETE
+  `location_themes` FIRST (fn doesn't, FK blocks) — then reset the source `state='ENRICHED', menu_draft=NEW,
+  org_id/location_id=NULL`, then loop pass 2 re-spines. migrations role = `postgres` (BYPASSRLS) so DB works;
+  the ops `/provision/hard-delete` endpoint 500'd (API role can't run the DEFINER fn).
+- **Logo seam**: sharp-crop the sign from a Maps photo → 512² webp → PUT to R2 `locations/{id}/logo.webp`
+  (`@aws-sdk/client-s3`, ContentType `image/webp` — the R2 gotcha) → `UPDATE location_themes.logo_url =
+  getImageUrl(key)` (`{APP_BASE}/images/{key}` when R2_PUBLIC_URL unset). Header renders it (ClientLayout).
+- **Ingredient BADGES on a shadow are BLOCKED**: `read_preview_menu` does `attributes - 'bom'` (C2 allergen
+  gate) so bom-derived badges vanish pre-claim. FIX (todo): emit a display-only `attributes.ingredients`
+  string[] (survives the strip) + the storefront badge block reads it. Do NOT weaken C2.
+- **Hero (todo)**: signage photo as top background needs MenuPage to render an `<img>` hero (today: video at
+  `/media/{id}/hero/video.mp4` → StylizedMap fallback). **Font (todo)**: storefront hardcodes serif; wire a
+  per-tenant heading/body font. Both are SHARED-render changes (regress-radius on /s/demo) + need a web deploy.
+
 ## Уроки (lessons learned)
 - 2026-07-01 — BUILD+CERTIFY. The loop's whole reason to exist is the gap the raw provisioner leaves: the raw provisioner
   stops at API `verified:true`, which only proves the preview endpoint served + has ≥1 item. That is NOT "looks like a demo."
