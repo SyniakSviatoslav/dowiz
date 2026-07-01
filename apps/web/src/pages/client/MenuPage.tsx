@@ -13,7 +13,6 @@ import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenSty
 import { useSharedCart } from '../../lib/CartProvider.js';
 import { MenuComparePanel } from './MenuComparePanel.js';
 import type { CompareDish } from './MenuComparePanel.js';
-import { DishStats } from '../../components/client/DishStats.js';
 import type { DishIngredient } from '../../components/client/DishStats.js';
 import { StylizedMap } from '../../components/client/StylizedMap.js';
 import type { MacroLens } from '@deliveryos/ui';
@@ -1232,10 +1231,10 @@ export function MenuPage() {
                 aria-label={t('common.close', 'Close')}
                 // High-contrast dark scrim + white X so Close is unmistakable over ANY hero (photo or
                 // surface, light or dark theme) — the old surface-coloured button blended into photos on mobile.
-                className="pointer-events-auto absolute top-2.5 right-2.5 min-w-[48px] min-h-[48px] rounded-full flex items-center justify-center outline-none backdrop-blur-sm focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2"
-                style={{ background: 'rgba(0,0,0,0.55)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.28)', boxShadow: '0 4px 16px rgba(0,0,0,0.45)' }}
+                className="pointer-events-auto absolute top-3 right-3 min-w-[56px] min-h-[56px] rounded-full flex items-center justify-center outline-none backdrop-blur-sm focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2"
+                style={{ background: 'rgba(0,0,0,0.68)', color: '#ffffff', border: '1.5px solid rgba(255,255,255,0.42)', boxShadow: '0 6px 20px rgba(0,0,0,0.5)' }}
               >
-                <i className="ti ti-x text-2xl" />
+                <i className="ti ti-x text-3xl" />
               </motion.button>
               {/* Mobile grabber — a generous, center-reachable tap-to-close (the natural bottom-sheet
                   dismiss; far easier one-handed than the top-corner X on a tall sheet). */}
@@ -1243,11 +1242,11 @@ export function MenuPage() {
                 type="button"
                 onClick={closeDetail}
                 aria-label={t('common.close', 'Close')}
-                className="md:hidden pointer-events-auto absolute top-2 left-1/2 -translate-x-1/2 flex items-center justify-center px-4 h-8 rounded-full backdrop-blur-sm"
-                style={{ background: 'rgba(0,0,0,0.4)' }}
+                className="md:hidden pointer-events-auto absolute top-2.5 left-1/2 -translate-x-1/2 flex items-center justify-center px-7 h-9 rounded-full backdrop-blur-sm"
+                style={{ background: 'rgba(0,0,0,0.5)' }}
               >
                 {/* White bar on a dark scrim pill — reads on any hero (a bare grabber vanished on photos). */}
-                <span className="block w-10 h-[5px] rounded-full" style={{ background: 'rgba(255,255,255,0.92)' }} />
+                <span className="block w-12 h-[6px] rounded-full" style={{ background: 'rgba(255,255,255,0.95)' }} />
               </button>
             </div>
             {/* Image — taller hero with more room; the photo is shown in FULL (object-contain) over a
@@ -1406,11 +1405,31 @@ export function MenuPage() {
                 );
               })()}
 
-              {/* Nutrition + ingredients — the DishStats data-viz (calorie ring + macro split + per-ingredient
-                  bars with declared BOM amounts). Replaces the old 4-number grid and the chip list. */}
+              {/* Ingredients — simple badge chips (operator directive: no nutrition infographics; the calorie
+                  ring / macro bars / per-ingredient bar chart read as clutter and the amounts are unreliable).
+                  Sourced from the BOM food lines (packaging/utensils already excluded by bomToNutrition).
+                  Hidden when the dish carries no structured ingredients (e.g. the description already lists them). */}
               {(() => {
-                const n = bomToNutrition(detailProduct);
-                return <DishStats variant="full" macros={{ kcal: n.kcal, protein: n.protein, fat: n.fat, carbs: n.carbs }} ingredients={dishIngredients(detailProduct)} />;
+                const names = bomToNutrition(detailProduct).ingredients;
+                if (names.length === 0) return null;
+                return (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
+                      <i className="ti ti-salad" /> {t('client.ingredients', 'Ingredients')}
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {names.map((name, i) => (
+                        <span
+                          key={`${name}-${i}`}
+                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium"
+                          style={{ background: 'var(--brand-surface)', color: 'var(--brand-text)', border: '1px solid color-mix(in srgb, var(--brand-primary) 16%, transparent)' }}
+                        >
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
               })()}
 
               {ALLERGENS_ENABLED && (() => {
