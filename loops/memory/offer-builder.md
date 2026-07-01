@@ -16,11 +16,27 @@ Callable loop: 1 Google-Maps location → a ready-to-review warm-outreach OFFER 
 5. **Albanian DM draft** — 5-block scaffold, slot-filled; ⚠️ NATIVE REVIEW required before sending.
 6. **Send checklist.**
 
-## ETHICS (baked in, not optional)
-PUBLIC BUSINESS data only. NO covert individual psychological profiling (manipulation; backfires on a
-high-trust/honor market). NO auto-send — the packet is PREPARED for a human to review + send. Warm list =
+## ETHICS (baked in, not optional) — a hard line, held 2026-07-01
+PUBLIC BUSINESS data only. NO auto-send — the packet is PREPARED for a human to review + send. Warm list =
 prior consent; still one soft follow-up MAX, honour opt-outs. Mirrors the repo's outreach posture
 (preview-by-default, Art-14 notice = a separate human act; "no unconsented outreach out of a bulk run").
+- **DECLINED (operator asked; refused):** compiling a PERSONAL dossier on the individual owner — age,
+  marital status, children, home geo, personal interests → a psychological profile. Reasons: (1) Albania DPA
+  is GDPR-aligned; legitimate-interest covers a BUSINESS contact, not family/children/age profiling without
+  consent; (2) hard personal line regardless of jurisdiction — no surveillance profiles of private
+  individuals for persuasion; (3) it BACKFIRES on a high-trust/honor market (hinting you snooped = creepy =
+  contact closed forever). The effective + lawful substitute is the VENUE signal below.
+- **Owner name** only if THEY published it in a business context (own site/business page). No people-search
+  DBs. Nothing beyond the name.
+
+## Stage 2b — VENUE signal (the lawful, sharper "profiling")
+Targets the BUSINESS, not the person: tenure/momentum (review count + dates → new/established/growing),
+quality (rating + review themes), price tier, and the KILLER signal — already on a commission aggregator
+(Wolt/Glovo present → paying ~30% → most receptive to the 0%-commission pitch; demo-builder already knows
+which prospects came from Wolt). Optional deeper pass: recent-review delivery mentions + Maps "popular
+times" peak load. All public, all business-level. Answers "new/old? cutting costs?" without touching a
+private life. The Wolt discovery-API check is best-effort (geo/endpoint flaky) → falls back to "verify
+manually" rather than fabricating.
 
 ## Albanian warm-list playbook (operator, 2026-07-01)
 - WARM (already said "yes" to testing) → ONE message, demo FIRST, call as a soft P.S. (not a hook-question —
