@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import { RuleTester } from 'eslint';
+import tsParser from '@typescript-eslint/parser';
 import plugin from '../src/index.js';
+
+// A TS-parser RuleTester for rules that inspect TypeScript-only AST (type annotations).
+const tsrt = new RuleTester({ languageOptions: { parser: tsParser } });
 
 // RuleTester (ESLint 9 flat) — espree/JS by default; our code samples are valid JS.
 // The rules gate on filename (`.test.ts`/`.spec.ts`), so each case sets `filename`.
@@ -98,6 +102,35 @@ test('no-recipe-only-allergen-read — red on bomToNutrition(p).allergens in the
     invalid: [
       { code: 'bomToNutrition(p).allergens.includes(filterAllergen)', filename: '/r/__fixtures__/menu.tsx', errors: 1 },
       { code: 'const a = bomToNutrition(detailProduct).allergens', filename: '/r/__fixtures__/menu.tsx', errors: 1 },
+    ],
+  });
+});
+
+test('no-voice-engine-callback — red on a callback/handler param in packages/voice exported signatures, green on data/object-port params', () => {
+  tsrt.run('no-voice-engine-callback', plugin.rules['no-voice-engine-callback'], {
+    valid: [
+      // object port (interface with a method) — not a function-typed param
+      { code: 'export interface Transcriber { transcribe(a: Float32Array): Promise<string>; }', filename: '/r/packages/voice/src/transcriber.ts' },
+      // handlers OBJECT param — TSTypeReference, not a function type (the sink legitimately holds handlers)
+      { code: 'export class Gate { constructor(private h: VoiceHandlers) {} }', filename: '/r/packages/voice/src/confirmation-gate.ts' },
+      // plain data params
+      { code: 'export function matchIntent(t: string, l: string): void {}', filename: '/r/packages/voice/src/matcher.ts' },
+      // AsyncIterable of data is a data stream, not a callback
+      { code: 'export class E { async *intents(u: AsyncIterable<Float32Array>): AsyncIterableIterator<string> { yield ""; } }', filename: '/r/packages/voice/src/whisper-provider.ts' },
+      // a NON-exported helper is inert (only the exported public boundary is the engine surface)
+      { code: 'function helper(cb: (x: number) => void): void { cb(1); }', filename: '/r/packages/voice/src/matcher.ts' },
+      // #private method is not public surface
+      { code: 'export class E { #onResult(cb: (x: number) => void) { cb(1); } }', filename: '/r/packages/voice/src/whisper-provider.ts' },
+      // a function-typed param OUTSIDE packages/voice is inert (rule is scoped)
+      { code: 'export function f(cb: (x: number) => void): void { cb(1); }', filename: '/r/apps/web/src/thing.ts' },
+    ],
+    invalid: [
+      { code: 'export function wireEngine(handler: (p: unknown) => void): void { handler(null); }', filename: '/r/packages/voice/src/engine.ts', errors: 1 },
+      { code: 'export class E { constructor(private onIntent: (p: unknown) => void) {} }', filename: '/r/packages/voice/src/engine.ts', errors: 1 },
+      { code: 'export class E { on(event: string, cb: (p: unknown) => void): void {} }', filename: '/r/packages/voice/src/engine.ts', errors: 1 },
+      { code: 'export interface Src { subscribe(onResult: (p: unknown) => void): void; }', filename: '/r/__fixtures__/bad-voice-engine-callback.ts', errors: 1 },
+      // a union that includes a function type is still a callback surface
+      { code: 'export function f(cb: null | ((p: unknown) => void)): void {}', filename: '/r/packages/voice/src/engine.ts', errors: 1 },
     ],
   });
 });

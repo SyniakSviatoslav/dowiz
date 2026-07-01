@@ -678,5 +678,71 @@ export default {
         };
       },
     },
+    'no-voice-engine-callback': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'disallow function-typed parameters in packages/voice exported signatures — the voice ENGINE is a source that yields readonly IntentProposal data and must accept no callback/handler param a write-capable closure could ride in on; the ConfirmationGate is the sole write sink (council voice-control ADR-0015 §6, breaker R2-F/M3)' },
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, '/');
+        // Scope: the voice engine package + this rule's OWN fixtures (…voice…) for the red→green proof.
+        // (Fixture match is name-scoped so it never touches other rules' fixtures.)
+        const inVoice = /\/packages\/voice\/src\//.test(filename)
+          || /\/__fixtures__\/[^/]*voice[^/]*\.(ts|tsx)$/.test(filename);
+        const isTest = /\.(spec|test)\.(ts|tsx|js|jsx)$/.test(filename);
+        if (!inVoice || isTest) return {};
+
+        // A parameter TYPE that is (or unions/parenthesizes) a function/constructor type. NOTE: an object
+        // param like `handlers: VoiceHandlers` is a TSTypeReference — NOT flagged — even though that
+        // interface's PROPERTIES are functions; the sink (ConfirmationGate) legitimately holds handlers.
+        const isFnType = (t) => {
+          if (!t) return false;
+          if (t.type === 'TSFunctionType' || t.type === 'TSConstructorType') return true;
+          if (t.type === 'TSParenthesizedType') return isFnType(t.typeAnnotation);
+          if (t.type === 'TSUnionType' || t.type === 'TSIntersectionType') return (t.types || []).some(isFnType);
+          return false;
+        };
+        const paramType = (p0) => {
+          // A constructor `private x: T` is a TSParameterProperty wrapping the real parameter.
+          const p = p0 && p0.type === 'TSParameterProperty' ? p0.parameter : p0;
+          const b = !p ? p : p.type === 'AssignmentPattern' ? p.left : p.type === 'RestElement' ? p.argument : p;
+          return b && b.typeAnnotation && b.typeAnnotation.typeAnnotation;
+        };
+        const check = (params) => {
+          for (const p of params || []) {
+            if (isFnType(paramType(p))) {
+              context.report({
+                node: p,
+                message: 'function-typed parameter on a voice engine signature — the engine must accept no callback/handler param (it yields readonly IntentProposal data; the ConfirmationGate is the sole write sink). Pass data or an object port, not a closure. (ADR-0015 §6 / R2-F)',
+              });
+            }
+          }
+        };
+        // Only EXPORTED signatures are the public engine boundary; a private helper is inert.
+        const exported = (node) => {
+          let n = node;
+          while (n) {
+            if (n.type === 'ClassDeclaration' || n.type === 'FunctionDeclaration' ||
+                n.type === 'TSInterfaceDeclaration' || n.type === 'TSTypeAliasDeclaration') {
+              return !!(n.parent && (n.parent.type === 'ExportNamedDeclaration' || n.parent.type === 'ExportDefaultDeclaration'));
+            }
+            n = n.parent;
+          }
+          return false;
+        };
+
+        return {
+          FunctionDeclaration(node) { if (exported(node)) check(node.params); },
+          TSDeclareFunction(node) { if (exported(node)) check(node.params); },
+          MethodDefinition(node) {
+            if (node.key && node.key.type === 'PrivateIdentifier') return; // #private isn't public surface
+            if (node.accessibility === 'private') return;
+            if (exported(node)) check(node.value && node.value.params);
+          },
+          TSMethodSignature(node) { if (exported(node)) check(node.params); }, // interface: on()/subscribe(cb)
+          TSConstructSignatureDeclaration(node) { if (exported(node)) check(node.params); },
+        };
+      },
+    },
   },
 };
