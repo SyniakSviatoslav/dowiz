@@ -81,7 +81,18 @@ export function normalizeMenu(items) {
       price: p?.price,
       description: isNonEmptyStr(p?.description) ? p.description.trim() : undefined,
       sort_order: pi,
-      ...(p?.bom ? { attributes: { bom: p.bom } } : {}),
+      // Rich attributes from the brand-ingest layer. bom is the allergen surface (stripped on the shadow
+      // preview by read_preview_menu's `attributes - 'bom'`); ingredients/image_url/description_sq are
+      // display-only keys that SURVIVE that strip, so real photos, ingredient badges and the bilingual
+      // (EN + original) description render pre-claim without touching the allergen gate.
+      ...(() => {
+        const a = {};
+        if (p?.bom) a.bom = p.bom;
+        if (Array.isArray(p?.ingredients) && p.ingredients.length) a.ingredients = p.ingredients;
+        if (isNonEmptyStr(p?.image_url)) a.image_url = p.image_url.trim();
+        if (isNonEmptyStr(p?.description_sq)) a.description_sq = p.description_sq.trim();
+        return Object.keys(a).length ? { attributes: a } : {};
+      })(),
     })),
   }));
   return { categories };
