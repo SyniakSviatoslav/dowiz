@@ -1,0 +1,111 @@
+# demo-builder loop — turn a prospect restaurant into a POLISHED, claimable demo storefront at /s/:slug that
+# mirrors the /s/demo (Dubin & Sushi) quality bar, then PROVE the preview renders. WRAPS the shipped raw
+# provisioner (acquisition-bulk-provision + the /internal pipeline) and ADDS the three "make it look good"
+# layers the raw provisioner lacks: menu-quality gate · coherent branding · visual acceptance gate.
+id: demo-builder
+version: 0.1
+status: CERTIFIED          # M1–M11 green + anti-cheat dry-run 43/43 (loops/reports/demo-builder-0.1.md)
+intent: "From a prospect (name + place + optional website/menu + cuisine) stand up a demo-quality, claimable, never-orderable shadow storefront at /s/:slug, then verify it actually renders — preview-only by default."
+problem_signature: "operator wants a SELLABLE demo storefront per prospect (not just a raw shadow): a real-looking menu, a coherent brand palette, and a machine-verified render — with no low-quality demos shipped and no unconsented outreach."
+trigger: "node scripts/demo-builder.mjs <prospects.json>            (preview-only; add --send-invite to also mint the claim token)"
+role_mindset: "Demo-quality steward: only certify a storefront that would actually make the sale — real menu, tasteful brand, a page that renders clean and never-orderable. Reject thin menus BEFORE provisioning; trust the RENDER, not the HTTP 200; never reach out to a real owner without an explicit flag."
+
+preconditions:
+  - "PROVISION_BASE_URL set to the target deployment (NEVER prod for a dry-run/test); STOREFRONT_BASE_URL optional (defaults to PROVISION_BASE_URL)."
+  - "PROVISION_OPS_SECRET set (the x-provision-ops-secret) — fail-closed 404 without it; the loop exits 2 on missing config, never silently no-ops."
+  - "The /internal acquisition surface is live on the target (route.ts mounted + PROVISION_OPS_SECRET configured; migrations 068–071 applied)."
+  - "Prospect rows present: {place_id, slug, name, website_url? , menu[]? , cuisine?, phone?, invited_contact?} — need website_url (AI extract) OR menu[] (operator/authored)."
+  - "For the LIVE visual gate: Playwright installed (pnpm exec playwright) — mobile + desktop projects run against /s/:slug."
+
+scope_class: B             # WRITES shadow tenants (owner_id NULL / status closed / published_at NULL) via the real API + operator DB seam for palette/non-AI menu; never publishes, never mutates real tenants or product code
+
+execution_skills:          # each is a real, shipped operation (grep route.ts / provisioning.ts) — zero phantom skills
+  - "POST /internal/acquisition {place_id}                         (idempotent create + CURRENT-state read — resume seam)"
+  - "POST /internal/acquisition/extract {acquisition_source_id, website_url}  (SOURCED→ENRICHED; AI H4 verdict = menu-quality gate for website menus)"
+  - "POST /internal/acquisition/provision/mint {acquisition_source_id}        (~5min provisioning token)"
+  - "POST /internal/acquisition/provision/spine {…, token, name, slug, phone?}  (writes the shadow spine + menu_draft; REQUIRES ENRICHED)"
+  - "POST /internal/acquisition/claim/verify {acquisition_source_id}          (API preview-renders + has-items GATE → verified:true)"
+  - "POST /internal/acquisition/claim/mint {…, invited_contact, base_url}     (OPT-IN: claim invite; token rides #token= fragment) — off by default"
+  - "Layer-3 VISUAL GATE: pnpm exec playwright test e2e/tests/demo-builder-visual.spec.ts --project=mobile --project=desktop  (real render assertions + console-error capture)"
+  - "Layer-1 gateMenu / normalizeMenu + Layer-2 derivePaletteTriple (packages/ui palette math port) — pure, in scripts/demo-builder.mjs"
+  - "Operator DB seam (non-AI menu + palette persistence): UPDATE acquisition_sources.menu_draft + advance ENRICHED; INSERT location_themes(location_id, primary/bg/text) — documented in loops/memory/demo-builder.md (same sanctioned seam the sibling loop certified)"
+
+goal: "Every prospect reaches a TERMINAL OUTCOME — certified-preview (provisioned + themed + visual-gate PASS, no outreach) | invited (also minted a real claim token, only with --send-invite) | needs-review (recorded reason) | skipped-already-done — with per-item palette/menu stats, the preview/claim URLs, and the visual-gate artifact."
+
+verification: >
+  Machine gates on the REAL parsed field/render after every stage (NOT HTTP 200):
+  L1 gateMenu(draft).ok (≥2 cats, ≥6 items, ≥50% descriptions, integer prices) → else needs-review:LOW_QUALITY, NEVER provisioned;
+  extract → result.state==='ENRICHED' (LOW_QUALITY/MENU_NOT_FOUND → needs-review); spine → 201 && isUuid(org_id&&location_id);
+  verify → json.verified===true; L3 VISUAL GATE → assertPreviewDom (≥3 rendered menu-item cards, banner+claim CTA present, 0 console errors,
+  no menu-item-add/cart-open/checkout, noindex) across mobile+desktop → else needs-review:VISUAL_GATE_FAILED; claim/mint (opt-in) → 201 && non-empty token.
+  Proven by the anti-cheat dry-run (43/43): a broken storefront that renders EMPTY/ERRORED/ORDERABLE/NOINDEXLESS with API verified:true is
+  needs-review, not certified — a status-only loop would falsely certify all four.
+
+iron_principles:
+  - no-fake-green            # certify on the RENDERED DOM (assertPreviewDom) + response FIELDs, never the status code alone
+  - quality-before-provision # gateMenu blocks a thin demo BEFORE any spine (mirror the LOW_QUALITY exit) — never stand up an embarrassing storefront
+  - render-verified-not-assumed  # a source can be API-verified:true yet FAIL the visual gate → needs-review (the differentiator over the raw provisioner)
+  - never-orderable          # status closed / published_at NULL (B3) AND the visual gate asserts no order affordance in the render
+  - preview-only-by-default  # no claim/outreach without --send-invite; even then, only mint the token — delivery is a separate human act
+  - never-spine-an-exit-state    # MENU_NOT_FOUND/LOW_QUALITY/MANUAL_REVIEW → record + skip; org_id stays null
+  - idempotent-resume        # read CURRENT state first; jump to the right stage; never double-provision / re-mint
+  - secret-never-printed     # PROVISION_OPS_SECRET only ever leaves as the x-provision-ops-secret header
+  - fail-closed              # missing config → exit 2; rejected secret (404) → needs-review, never a faked success
+
+loop_body: [SENSE, DIAGNOSE, ACT, VERIFY, REPEAT]   # per prospect: SENSE=read state · DIAGNOSE=menu-quality+resume stage · ACT=provision+theme · VERIFY=API field + VISUAL GATE · REPEAT=next prospect
+
+exit_conditions: >
+  ALL must hold to finish a PROSPECT: it lands in exactly one of {certified-preview, invited, needs-review, skipped-already-done}.
+  certified-preview REQUIRES: menu-quality PASS (or website-extract ENRICHED) AND spine 201 (real FKs) AND API verified===true AND the
+  Layer-3 VISUAL GATE PASS on mobile AND desktop (rendered items ≥ floor, banner+CTA present, 0 console errors, never-orderable, noindex).
+  invited additionally REQUIRES --send-invite AND a real claim token. No "until it looks ok".
+  The RUN finishes when every prospect has an outcome; a per-run JSON artifact is written to loops/runs/ and the summary
+  {attempted, certified_preview, invited, needs_review, skipped_already_done, send_invite} printed. Process exit 3 iff any needs-review; exit 2 on missing config.
+
+gates:
+  - "Target-URL gate: operator confirms PROVISION_BASE_URL / STOREFRONT_BASE_URL is the intended deployment — NEVER prod for a test (this writes real shadow rows)."
+  - "Menu-quality gate (false turn = a thin, embarrassing demo): a menu below the bar MUST NOT be provisioned — gateMenu fails BEFORE mint/spine."
+  - "Visual acceptance gate (false turn = a broken demo shipped as 'done'): a source that is API-verified but renders empty/errored/orderable MUST land needs-review, never certified."
+  - "Outreach gate: minting/sending a claim invite is opt-in (--send-invite) — the default run never contacts a real owner."
+
+proof_artifacts:
+  - "loops/reports/demo-builder-0.1.md   (M1–M11 + the 43/43 anti-cheat dry-run)"
+  - "loops/runs/demo-builder-<ts>.json    (per-run lossless: summary + per-item outcome + palette + preview/claim URLs + visual-gate result)"
+  - "e2e/artifacts/demo-builder-visual-<slug>.json  (live visual-gate per-viewport render facts: itemCount, consoleErrors, never-orderable counts, noindex)"
+  - "tools/demo-builder/dry-run.mjs + mock-internal.mjs + fake-storefront.mjs  (the re-runnable anti-cheat certification harness)"
+
+out_of_scope:
+  - "Publishing a tenant (status closed / published_at NULL is invariant — claiming + publishing is the OWNER's act via /claim)."
+  - "The AI extraction internals (menu-extractor/extraction-orchestrator) — treated as the fallible external stage; its LOW_QUALITY/MENU_NOT_FOUND verdict → needs-review."
+  - "Delivering the Art-14 notice / actually contacting the restaurant (even with --send-invite the loop only MINTS the token; delivery is a separate human/ops step)."
+  - "Touching production API/DB SCHEMA or product code — the loop uses the shipped endpoints + the documented operator DB seam only; no new endpoints (no phantom skills)."
+  - "Any /api (non-/internal) surface, real-tenant data, auth, RLS, or money paths."
+
+escalation: >
+  MISSING capability or an unexpected state → record the prospect as needs-review with the exact reason and CONTINUE; never invent a transition.
+  A whole-surface 404 (OPS_AUTH_404 on every prospect) → STOP and raise to the operator (secret wrong or surface disabled), do not retry-loop.
+  A repeated visual-gate failure on a prospect the API keeps marking verified → escalate as a RENDER regression (the storefront/theme is broken), not a per-item skip.
+  An operator menu (menu[]) present but the source is not yet ENRICHED → needs-review:NEEDS_ENRICH_SEAM (the operator must run the documented DB enrich seam first) — surfaced, not silently dropped.
+
+skills_required: [node>=18 (native fetch), pnpm exec playwright (live visual gate), read PROVISION_BASE_URL/STOREFRONT_BASE_URL/PROVISION_OPS_SECRET from env, the live /internal surface + deployed /s/:slug on the target, operator Postgres access for the non-AI menu + palette DB seam]
+
+harness:
+  always_emit_report: true   # standing RULE — every run prints its full report (stdout) + writes loops/runs/demo-builder-<ts>.json
+  artifacts: loops/runs/demo-builder-*.json
+  note: "Operator-runtime loop (not a code-mutation loop); the per-run report + the e2e visual-gate artifact ARE the §5 artifacts. Token/eco telemetry N/A (no agent session / git mutation)."
+
+memory_file: loops/memory/demo-builder.md
+verification_report: loops/reports/demo-builder-0.1.md
+
+test_seam: >
+  Full live certification is blocked by the extract stage's real-site+AI dependency AND a live Playwright browser.
+  The orchestration / quality-gate / branding / VISUAL-GATE logic is certified against a state-machine-faithful mock
+  (tools/demo-builder/mock-internal.mjs) + a configurable fake storefront (tools/demo-builder/fake-storefront.mjs) that
+  serves good vs empty/errored/orderable/noindexless renders — the visual gate runs via the hermetic HTTP probe
+  (DEMO_BUILDER_VISUAL_MODE=probe) feeding the SAME assertPreviewDom the live Playwright spec asserts. The three added
+  layers are ALSO unit-proven directly (PART A). To exercise LIVE: (1) provision a website-mode prospect on staging,
+  (2) for a non-AI menu, run the operator DB enrich seam (UPDATE acquisition_sources.menu_draft + advance ENRICHED),
+  (3) write location_themes via the DB theme seam, (4) run the loop with DEMO_BUILDER_VISUAL_MODE unset so the live
+  Playwright spec (e2e/tests/demo-builder-visual.spec.ts) drives the gate against the deployed /s/:slug.
+
+build_status: BUILT+CERTIFIED (anti-cheat dry-run 43/43 green, 2026-07-01); not yet run against a live deployment.
