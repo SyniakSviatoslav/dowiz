@@ -39,12 +39,17 @@ menu-item photos ✅ (all DB/R2 seams); hero=video-only (image needs a render ch
 - **Logo seam**: sharp-crop the sign from a Maps photo → 512² webp → PUT to R2 `locations/{id}/logo.webp`
   (`@aws-sdk/client-s3`, ContentType `image/webp` — the R2 gotcha) → `UPDATE location_themes.logo_url =
   getImageUrl(key)` (`{APP_BASE}/images/{key}` when R2_PUBLIC_URL unset). Header renders it (ClientLayout).
-- **Ingredient BADGES on a shadow are BLOCKED**: `read_preview_menu` does `attributes - 'bom'` (C2 allergen
-  gate) so bom-derived badges vanish pre-claim. FIX (todo): emit a display-only `attributes.ingredients`
-  string[] (survives the strip) + the storefront badge block reads it. Do NOT weaken C2.
-- **Hero (todo)**: signage photo as top background needs MenuPage to render an `<img>` hero (today: video at
-  `/media/{id}/hero/video.mp4` → StylizedMap fallback). **Font (todo)**: storefront hardcodes serif; wire a
-  per-tenant heading/body font. Both are SHARED-render changes (regress-radius on /s/demo) + need a web deploy.
+- **Ingredient BADGES on a shadow — ✅ CLOSED (b3f75ed5, 2026-07-01)**: `read_preview_menu` does
+  `attributes - 'bom'` (C2 allergen gate) so bom-derived badges vanish pre-claim. FIX SHIPPED: normalizeMenu
+  emits display-only `attributes.ingredients` string[] + `image_url` + `description_sq` — all three SURVIVE
+  the `- 'bom'` strip (only `bom` is removed). MenuPage: getImageUrl falls back to `attributes.image_url`
+  (uploaded image_key still wins), ingredient block prefers `attributes.ingredients` else BOM, modal shows
+  `attributes.description_sq` (`p[lang=sq]`) under the EN desc. C2 NOT weakened (bom still stripped; proven
+  bom=0 on the live preview payload). Proof: `e2e/tests/storefront-brand-ingest.spec.ts` green mobile+desktop
+  on staging v230 (/s/artepasta: 38 photos, 31 ingredient lists, 28 sq descriptions).
+- **Hero — ✅ CLOSED (0c713c64)**: signage photo renders as a still `<img>` backdrop behind vendor-info.
+- **Font (todo)**: storefront hardcodes serif; wire a per-tenant heading/body font (SHARED-render change,
+  regress-radius on /s/demo, needs a web deploy).
 
 ## Уроки (lessons learned)
 - 2026-07-01 — BUILD+CERTIFY. The loop's whole reason to exist is the gap the raw provisioner leaves: the raw provisioner
@@ -76,6 +81,7 @@ menu-item photos ✅ (all DB/R2 seams); hero=video-only (image needs a render ch
 | 2026-07-01 | tools/demo-builder/dry-run.mjs (anti-cheat, mock+fake-storefront) | GREEN 43/43 | no | CERTIFIED; PART A pure L1/L2/L3 (14) + PART B pipeline A–E (29) |
 | 2026-07-01 | FIRST LIVE RUN — Eljo's Pizza (pizzeria, Durrës) → /s/eljos-pizza, staging, preview-only | CERTIFIED-PREVIEW | no | 14 items/5 cats, theme #c1352b/#fbf6ee, gate green mobile+desktop, 0 invites. source_id 76c7f09a…, location_id 79acd75e…. Menu hand-authored (RestaurantGuru had no menu — placeholder "upload menu" page). Both DB seams run from inside the staging container (pg via npm-i in /tmp; DATABASE_URL_MIGRATIONS). |
 | 2026-07-01 | REUSE — ArtePasta (italian, Durrës) → /s/artepasta, staging, preview-only | CERTIFIED-PREVIEW | no | 16 items/6 cats, theme #3f7d4f/#fbf6ee, gate green (16 items ×2, 0 console err), 0 invites, ~11.5s total. CERTIFIED on FIRST pass-2 (gate fix held). Menu hand-authored (Wolt has it but API-locked/CSR; RG none). Metrics report: loops/reports/demo-builder-run-artepasta-2026-07-01.md. |
+| 2026-07-01 | REAL-IDENTITY REBUILD — ArtePasta re-seeded with the Wolt-extracted menu (50 items/11 cats), red brand #e11b22, + brand-ingest DISPLAY attributes | SHIPPED (b3f75ed5→d738b316, staging v230) | no | Closed the ingredient-badge + hero todos. Live preview now: 38 real Wolt photos, 31 ingredient-badge lists, 28 Albanian (sq) descriptions, all pre-claim, still never-orderable + noindex + bom-stripped. Proof e2e/tests/storefront-brand-ingest.spec.ts green mobile+desktop. DB already re-seeded from a prior seam run; this session shipped only the render + plumbing + proof. |
 
 ## Live-run recipe (proven 2026-07-01, Eljo's)
 Authored-menu prospect ⇒ two passes + two container-side DB seams:
