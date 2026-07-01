@@ -4098,4 +4098,48 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Vetëm pamje — pa porosi',
     uk: 'Лише перегляд — не для замовлення',
   },
+  'preview.demo_title': {
+    en: 'This is a demo — built from your public menu',
+    sq: 'Kjo është një demo — ndërtuar nga menuja juaj publike',
+    uk: 'Це демо — створене з вашого публічного меню',
+  },
+  'preview.demo_body': {
+    en: "It's a preview, not a live store yet. But it could be your own online delivery service — storefront, admin CRM and courier management included:",
+    sq: 'Është pamje paraprake, jo ende dyqan aktiv. Por mund të jetë shërbimi juaj online i dorëzimit — dyqani, paneli CRM dhe menaxhimi i korrierëve, të gjitha brenda:',
+    uk: "Це попередній перегляд, ще не активний магазин. Але це може бути ваш власний онлайн-сервіс доставки — вітрина, CRM та керування кур'єрами включені:",
+  },
+  'preview.feat_commission': {
+    en: '0% commission — keep every cent (the big apps take ~30%)',
+    sq: '0% komision — mbani çdo qindarkë (aplikacionet e mëdha marrin ~30%)',
+    uk: '0% комісії — залишайте кожну копійку (великі застосунки беруть ~30%)',
+  },
+  'preview.feat_data': {
+    en: 'Your customers & data are yours — no middleman owns them',
+    sq: 'Klientët dhe të dhënat janë tuajat — asnjë ndërmjetës nuk i zotëron',
+    uk: 'Ваші клієнти й дані — ваші, жоден посередник ними не володіє',
+  },
+  'preview.feat_crm': {
+    en: 'Full admin CRM — orders, menu, promos & analytics',
+    sq: 'Panel i plotë CRM — porositë, menuja, promocionet dhe analitika',
+    uk: 'Повний адмін-CRM — замовлення, меню, промо й аналітика',
+  },
+  'preview.feat_courier': {
+    en: 'Built-in courier management & live delivery tracking',
+    sq: 'Menaxhim i korrierëve dhe gjurmim i dorëzimit në kohë reale',
+    uk: "Вбудоване керування кур'єрами та відстеження доставки",
+  },
+  'preview.feat_brand': {
+    en: 'Your brand, your storefront — this very page',
+    sq: 'Brendi juaj, dyqani juaj — pikërisht kjo faqe',
+    uk: 'Ваш бренд, ваша вітрина — саме ця сторінка',
+  },
+  'client.opening_hours': { en: 'Opening hours', sq: 'Orari', uk: 'Години роботи' },
+  'client.closed_day': { en: 'Closed', sq: 'Mbyllur', uk: 'Зачинено' },
+  'client.day_monday': { en: 'Monday', sq: 'E hënë', uk: 'Понеділок' },
+  'client.day_tuesday': { en: 'Tuesday', sq: 'E martë', uk: 'Вівторок' },
+  'client.day_wednesday': { en: 'Wednesday', sq: 'E mërkurë', uk: 'Середа' },
+  'client.day_thursday': { en: 'Thursday', sq: 'E enjte', uk: 'Четвер' },
+  'client.day_friday': { en: 'Friday', sq: 'E premte', uk: "П'ятниця" },
+  'client.day_saturday': { en: 'Saturday', sq: 'E shtunë', uk: 'Субота' },
+  'client.day_sunday': { en: 'Sunday', sq: 'E diel', uk: 'Неділя' },
 };
