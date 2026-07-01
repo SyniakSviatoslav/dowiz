@@ -754,7 +754,9 @@ export function MenuPage() {
             onError={() => setHeroImg('none')}
           />
         )}
-        {locationInfo?.id && heroVideoOk && (
+        {/* Only try the video once the still hero photo is confirmed absent (404) — a venue WITH a still
+            image (brand-ingest sign photo) should never fire a wasteful video request that 404s the console. */}
+        {locationInfo?.id && heroImg === 'none' && heroVideoOk && (
           <video
             className="absolute inset-0 w-full h-full object-cover"
             src={`/media/${locationInfo.id}/hero/video.mp4`}
