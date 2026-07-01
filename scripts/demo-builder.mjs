@@ -227,8 +227,9 @@ export function assertPreviewDom({ html = '', consoleErrors = 0, robots = '' } =
   if (itemCount < MIN_RENDERED_ITEMS) reasons.push(`only ${itemCount} menu items rendered (< ${MIN_RENDERED_ITEMS})`);
   // honest preview banner present (testid OR the verbatim static-preview label).
   if (!/venue-preview-banner/.test(html) && !/not a live store/.test(lc)) reasons.push('honest preview banner missing');
-  // claim CTA present.
-  if (!/preview-claim-cta/.test(html) && !/claim this preview|is this your restaurant/.test(lc)) reasons.push('claim CTA missing');
+  // The preview must explain itself — the demo-pitch banner (claim CTA is hidden by design now; the banner
+  // carries the "this is a demo …" pitch instead). "demo" is language-neutral (en+sq both contain it).
+  if (!/venue-preview-banner/.test(html) && !/\bdemo\b|not a live store/.test(lc)) reasons.push('demo-pitch banner missing');
   // zero console errors (the "renders clean" bar).
   if (consoleErrors > 0) reasons.push(`${consoleErrors} console error(s) on the page`);
   // NEVER-ORDERABLE (B3) — verified in the DOM, not assumed: no add/cart affordance, no order buttons.

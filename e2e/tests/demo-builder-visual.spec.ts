@@ -49,7 +49,7 @@ function recordArtifact(project: string, payload: Record<string, unknown>) {
   await page.getByTestId('menu-item').first().waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
   const itemCount = await page.getByTestId('menu-item').count();
   await expect(page.getByTestId('venue-preview-banner')).toBeVisible();
-  await expect(page.getByTestId('preview-claim-cta')).toBeVisible();
+  // Claim CTA is hidden by design (SHOW_CLAIM_CTA=false) — the banner now carries the demo pitch instead.
 
   // NEVER-ORDERABLE (B3) — verified in the render, not assumed.
   const addCount = await page.getByTestId('menu-item-add').count();
