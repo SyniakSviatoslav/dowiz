@@ -1,0 +1,499 @@
+[
+ {
+  "slug": "dyrrah-mare",
+  "name": "Dyrrah Mare",
+  "cuisine": "seafood",
+  "primary": "#1f6f8b",
+  "bg": "#f2f6f7",
+  "menu": [
+   {
+    "name": "Karkalec Bregu 300 Gr",
+    "category": "Peshk & Detare",
+    "price": 1980,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3af914c92ea2cbf060260",
+    "sort_order": 0
+   },
+   {
+    "name": "Penne me Gjalpë",
+    "category": "Pasta",
+    "price": 440,
+    "image_url": "https://imageproxy.wolt.com/assets/67d156168df525635d5e5089",
+    "sort_order": 1
+   },
+   {
+    "name": "Caprese",
+    "category": "Të tjera",
+    "price": 660,
+    "description": "Mozzarella, domate, borzilok, vaj ulliri",
+    "description_sq": "Mozzarella, domate, borzilok, vaj ulliri",
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb772cc4a3916eb96218f",
+    "sort_order": 2
+   },
+   {
+    "name": "Kallamar 300 Gr",
+    "category": "Peshk & Detare",
+    "price": 1150,
+    "image_url": "https://imageproxy.wolt.com/assets/67d156108df525635d5e507f",
+    "sort_order": 3
+   },
+   {
+    "name": "Çezar",
+    "category": "Të tjera",
+    "price": 605,
+    "description": "Iceberg, kaçkavall, bukë e thekur, pulë, krem",
+    "description_sq": "Iceberg, kaçkavall, bukë e thekur, pulë, krem",
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb773cc4a3916eb962192",
+    "sort_order": 4
+   },
+   {
+    "name": "Fileto Mesdhetare 300 Gr",
+    "category": "Të tjera",
+    "price": 1870,
+    "description": "Fileto levreku, pomodorini, speca, ullinj, barzilok",
+    "description_sq": "Fileto levreku, pomodorini, speca, ullinj, barzilok",
+    "sort_order": 5
+   },
+   {
+    "name": "Pescado",
+    "category": "Peshk & Detare",
+    "price": 1200,
+    "description": "Peshk, lakër, krem, avokado",
+    "description_sq": "Peshk, lakër, krem, avokado",
+    "image_url": "https://imageproxy.wolt.com/assets/67d156138df525635d5e5083",
+    "sort_order": 6
+   },
+   {
+    "name": "Pacheri Mesdhetare",
+    "category": "Të tjera",
+    "price": 990,
+    "image_url": "https://imageproxy.wolt.com/assets/67d1560d8df525635d5e5078",
+    "sort_order": 7
+   },
+   {
+    "name": "Antipastë Italiane",
+    "category": "Antipasti & Sallata",
+    "price": 1540,
+    "description": "Miks djathërash, sallam, proshutë",
+    "description_sq": "Miks djathërash, sallam, proshutë",
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb773cc4a3916eb962193",
+    "sort_order": 8
+   },
+   {
+    "name": "Sepje Grill 300 Gr",
+    "category": "Mish & Grill",
+    "price": 1150,
+    "image_url": "https://imageproxy.wolt.com/assets/67d156108df525635d5e5081",
+    "sort_order": 9
+   },
+   {
+    "name": "Fagottino Tartufi",
+    "category": "Të tjera",
+    "price": 880,
+    "image_url": "https://imageproxy.wolt.com/assets/67d1560d8df525635d5e5075",
+    "sort_order": 10
+   },
+   {
+    "name": "Levrek i Butë",
+    "category": "Peshk & Detare",
+    "price": 1320,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb77acc4a3916eb96219c",
+    "sort_order": 11
+   },
+   {
+    "name": "Sallatë Oktapodi",
+    "category": "Antipasti & Sallata",
+    "price": 1100,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceba318df525635d5e0e72",
+    "sort_order": 12
+   },
+   {
+    "name": "Spaghetti Alla Carbonara",
+    "category": "Pasta",
+    "price": 880,
+    "image_url": "https://imageproxy.wolt.com/assets/67d156108df525635d5e507e",
+    "sort_order": 13
+   },
+   {
+    "name": "Djathëra Platter",
+    "category": "Të tjera",
+    "price": 1320,
+    "description": "Mix djathërash",
+    "description_sq": "Mix djathërash",
+    "image_url": "https://imageproxy.wolt.com/assets/67d3f7e48cd179206b1db756",
+    "sort_order": 14
+   },
+   {
+    "name": "Supë Peshku",
+    "category": "Të tjera",
+    "price": 605,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3aef598e739d976cf369b",
+    "sort_order": 15
+   },
+   {
+    "name": "Merluc 300 Gr",
+    "category": "Të tjera",
+    "price": 960,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb77acc4a3916eb96219b",
+    "sort_order": 16
+   },
+   {
+    "name": "Panzanella",
+    "category": "Të tjera",
+    "price": 605,
+    "description": "Rukola, domate, barzilok, bukë e thekur, bajame",
+    "description_sq": "Rukola, domate, barzilok, bukë e thekur, bajame",
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb772cc4a3916eb962191",
+    "sort_order": 17
+   },
+   {
+    "name": "Gobernador",
+    "category": "Peshk & Detare",
+    "price": 1200,
+    "description": "Karkalec, djathë, speca, qepë, domate, krem",
+    "description_sq": "Karkalec, djathë, speca, qepë, domate, krem",
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb8c78df525635d5e0e35",
+    "sort_order": 18
+   },
+   {
+    "name": "Al Cabron",
+    "category": "Mish & Grill",
+    "price": 1100,
+    "description": "Mish, qepë të karamelizuara",
+    "description_sq": "Mish, qepë të karamelizuara",
+    "image_url": "https://imageproxy.wolt.com/assets/67d156168df525635d5e5088",
+    "sort_order": 19
+   },
+   {
+    "name": "Supë Pule",
+    "category": "Mish & Grill",
+    "price": 440,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb777cc4a3916eb962197",
+    "sort_order": 20
+   },
+   {
+    "name": "Linguine Karkalce & Kungull",
+    "category": "Pasta",
+    "price": 935,
+    "image_url": "https://imageproxy.wolt.com/assets/67d1560d8df525635d5e5074",
+    "sort_order": 21
+   },
+   {
+    "name": "Kroketa Peshku",
+    "category": "Të tjera",
+    "price": 1540,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3af0c98e739d976cf36a0",
+    "sort_order": 22
+   },
+   {
+    "name": "Fettuccine Bolognese",
+    "category": "Pasta",
+    "price": 770,
+    "image_url": "https://imageproxy.wolt.com/assets/67d1560d8df525635d5e5077",
+    "sort_order": 23
+   },
+   {
+    "name": "Dyrrah",
+    "category": "Të tjera",
+    "price": 880,
+    "description": "Rukola, iceberg, burrata, gjethe rrepe, rrepkë, boronicë, bajame",
+    "description_sq": "Rukola, iceberg, burrata, gjethe rrepe, rrepkë, boronicë, bajame",
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb772cc4a3916eb962190",
+    "sort_order": 24
+   },
+   {
+    "name": "Risotto Al Porcini",
+    "category": "Pasta",
+    "price": 825,
+    "image_url": "https://imageproxy.wolt.com/assets/67d156108df525635d5e5080",
+    "sort_order": 25
+   },
+   {
+    "name": "Karkalec Viola 300 Gr ",
+    "category": "Peshk & Detare",
+    "price": 2300,
+    "image_url": "https://imageproxy.wolt.com/assets/67d156138df525635d5e5084",
+    "sort_order": 26
+   },
+   {
+    "name": "Greke",
+    "category": "Të tjera",
+    "price": 495,
+    "description": "Domate, kastravec, speca, qepë, djathë i bardhë, vaj ulliri",
+    "description_sq": "Domate, kastravec, speca, qepë, djathë i bardhë, vaj ulliri",
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb777cc4a3916eb962196",
+    "sort_order": 27
+   },
+   {
+    "name": "Midhje",
+    "category": "Peshk & Detare",
+    "price": 700,
+    "image_url": "https://imageproxy.wolt.com/assets/685570662ae352e4b7d18159",
+    "sort_order": 28
+   },
+   {
+    "name": "Street Corn Chicken",
+    "category": "Mish & Grill",
+    "price": 900,
+    "description": "Mish pule, misër, qepë",
+    "description_sq": "Mish pule, misër, qepë",
+    "image_url": "https://imageproxy.wolt.com/assets/67d156168df525635d5e508b",
+    "sort_order": 29
+   },
+   {
+    "name": "Risotto me Karkaleca & Gorgonzola",
+    "category": "Pasta",
+    "price": 935,
+    "image_url": "https://imageproxy.wolt.com/assets/67d156108df525635d5e507d",
+    "sort_order": 30
+   },
+   {
+    "name": "Kallamarë me Spinaq",
+    "category": "Peshk & Detare",
+    "price": 990,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb76dcc4a3916eb96218c",
+    "sort_order": 31
+   },
+   {
+    "name": "Scampi Krudo",
+    "category": "Të tjera",
+    "price": 770,
+    "image_url": "https://imageproxy.wolt.com/assets/67d15607bcb2f443170dc605",
+    "sort_order": 32
+   },
+   {
+    "name": "Oktapod 300 Gr",
+    "category": "Peshk & Detare",
+    "price": 1250,
+    "image_url": "https://imageproxy.wolt.com/assets/67d156138df525635d5e5087",
+    "sort_order": 33
+   },
+   {
+    "name": "Dyrra Toke Platter",
+    "category": "Të tjera",
+    "price": 2970,
+    "description": "Salami, ham, mortadela, artichokes, cerry tomatoes, brusche-ta, anchovies, burrata, spicy cheese, corn bred, olives",
+    "description_sq": "Salami, ham, mortadela, artichokes, cerry tomatoes, brusche-ta, anchovies, burrata, spicy cheese, corn bred, olives",
+    "image_url": "https://imageproxy.wolt.com/assets/67d15607bcb2f443170dc604",
+    "sort_order": 34
+   },
+   {
+    "name": "Ravioli me Kallamar & Spinaq",
+    "category": "Pasta",
+    "price": 1100,
+    "sort_order": 35
+   },
+   {
+    "name": "Supë Krem Peshku",
+    "category": "Të tjera",
+    "price": 605,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbac124bfc8a04be5647c",
+    "sort_order": 36
+   },
+   {
+    "name": "Koc i Butë",
+    "category": "Të tjera",
+    "price": 1320,
+    "sort_order": 37
+   },
+   {
+    "name": "Carpaccio Levreku",
+    "category": "Të tjera",
+    "price": 1100,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb76dcc4a3916eb962189",
+    "sort_order": 38
+   },
+   {
+    "name": "Pulpo",
+    "category": "Peshk & Detare",
+    "price": 1300,
+    "description": "Oktapod, avokado, limon jeshil, pomodorini, kastravec, speca, turshi",
+    "description_sq": "Oktapod, avokado, limon jeshil, pomodorini, kastravec, speca, turshi",
+    "image_url": "https://imageproxy.wolt.com/assets/67f3af724c92ea2cbf06025d",
+    "sort_order": 39
+   },
+   {
+    "name": "Tempura Miks",
+    "category": "Të tjera",
+    "price": 1980,
+    "description": "Miks fruta deti",
+    "description_sq": "Miks fruta deti",
+    "sort_order": 40
+   },
+   {
+    "name": "Penne Salcë Domate",
+    "category": "Pasta",
+    "price": 605,
+    "image_url": "https://imageproxy.wolt.com/assets/67d156168df525635d5e508a",
+    "sort_order": 41
+   },
+   {
+    "name": "Casarecce me Karkaleca & Shparg",
+    "category": "Të tjera",
+    "price": 990,
+    "image_url": "https://imageproxy.wolt.com/assets/67d1560d8df525635d5e5076",
+    "sort_order": 42
+   },
+   {
+    "name": "Kërpudha në Krem Djathi",
+    "category": "Të tjera",
+    "price": 770,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb76dcc4a3916eb96218d",
+    "sort_order": 43
+   },
+   {
+    "name": "Linguine me Fruta Deti",
+    "category": "Pasta",
+    "price": 880,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb777cc4a3916eb962198",
+    "sort_order": 44
+   },
+   {
+    "name": "Qofte Peshku",
+    "category": "Mish & Grill",
+    "price": 1400,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb9f48df525635d5e0e64",
+    "sort_order": 45
+   },
+   {
+    "name": "Salmon Gravlax",
+    "category": "Peshk & Detare",
+    "price": 1100,
+    "description": "Salmon norvegjez i marinuar",
+    "description_sq": "Salmon norvegjez i marinuar",
+    "image_url": "https://imageproxy.wolt.com/assets/67d15607bcb2f443170dc607",
+    "sort_order": 46
+   },
+   {
+    "name": "Risotto me Fruta Deti",
+    "category": "Pasta",
+    "price": 880,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb777cc4a3916eb962199",
+    "sort_order": 47
+   },
+   {
+    "name": "Sallatë Deti",
+    "category": "Antipasti & Sallata",
+    "price": 1100,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceba2d8df525635d5e0e70",
+    "sort_order": 48
+   },
+   {
+    "name": "Karkaleca me Krem Parmigiano",
+    "category": "Të tjera",
+    "price": 1100,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb76dcc4a3916eb96218b",
+    "sort_order": 49
+   },
+   {
+    "name": "Carpaccio Oktapodi",
+    "category": "Të tjera",
+    "price": 1100,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb76dcc4a3916eb96218a",
+    "sort_order": 50
+   },
+   {
+    "name": "Supë Perimesh",
+    "category": "Të tjera",
+    "price": 440,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb777cc4a3916eb962195",
+    "sort_order": 51
+   },
+   {
+    "name": "Karkaleca Krudo",
+    "category": "Të tjera",
+    "price": 660,
+    "image_url": "https://imageproxy.wolt.com/assets/67d15607bcb2f443170dc606",
+    "sort_order": 52
+   },
+   {
+    "name": "Dyrrah Mix Platter",
+    "category": "Peshk & Detare",
+    "price": 3850,
+    "description": "Karkaleca, levrek, oktapod, salmon",
+    "description_sq": "Karkaleca, levrek, oktapod, salmon",
+    "image_url": "https://imageproxy.wolt.com/assets/67d15607bcb2f443170dc608",
+    "sort_order": 53
+   },
+   {
+    "name": "Linguine me Fruta Deti",
+    "category": "Pasta",
+    "price": 1200,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb8c78df525635d5e0e35",
+    "sort_order": 54
+   },
+   {
+    "name": "Gobernador",
+    "category": "Peshk & Detare",
+    "price": 605,
+    "description": "Karkalec, djathë, speca, qepë, domate, krem",
+    "description_sq": "Karkalec, djathë, speca, qepë, domate, krem",
+    "image_url": "https://imageproxy.wolt.com/assets/67f3aef598e739d976cf369b",
+    "sort_order": 55
+   },
+   {
+    "name": "Supë Peshku",
+    "category": "Të tjera",
+    "price": 935,
+    "image_url": "https://imageproxy.wolt.com/assets/67d1560d8df525635d5e5074",
+    "sort_order": 56
+   },
+   {
+    "name": "Linguine Karkalce & Kungull",
+    "category": "Pasta",
+    "price": 770,
+    "image_url": "https://imageproxy.wolt.com/assets/67d1560d8df525635d5e5077",
+    "sort_order": 57
+   },
+   {
+    "name": "Fettuccine Bolognese",
+    "category": "Pasta",
+    "price": 605,
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb773cc4a3916eb962192",
+    "sort_order": 58
+   },
+   {
+    "name": "Çezar",
+    "category": "Të tjera",
+    "price": 1100,
+    "description": "Iceberg, kaçkavall, bukë e thekur, pulë, krem",
+    "description_sq": "Iceberg, kaçkavall, bukë e thekur, pulë, krem",
+    "image_url": "https://imageproxy.wolt.com/assets/67ceba2d8df525635d5e0e70",
+    "sort_order": 59
+   },
+   {
+    "name": "Sallatë Deti",
+    "category": "Antipasti & Sallata",
+    "price": 1200,
+    "image_url": "https://imageproxy.wolt.com/assets/67d156138df525635d5e5083",
+    "sort_order": 60
+   },
+   {
+    "name": "Pescado",
+    "category": "Peshk & Detare",
+    "price": 495,
+    "description": "Peshk, lakër, krem, avokado",
+    "description_sq": "Peshk, lakër, krem, avokado",
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb777cc4a3916eb962196",
+    "sort_order": 61
+   },
+   {
+    "name": "Greke",
+    "category": "Të tjera",
+    "price": 880,
+    "description": "Domate, kastravec, speca, qepë, djathë i bardhë, vaj ulliri",
+    "description_sq": "Domate, kastravec, speca, qepë, djathë i bardhë, vaj ulliri",
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb772cc4a3916eb962190",
+    "sort_order": 62
+   },
+   {
+    "name": "Dyrrah",
+    "category": "Të tjera",
+    "price": 440,
+    "description": "Rukola, iceberg, burrata, gjethe rrepe, rrepkë, boronicë, bajame",
+    "description_sq": "Rukola, iceberg, burrata, gjethe rrepe, rrepkë, boronicë, bajame",
+    "image_url": "https://imageproxy.wolt.com/assets/67ceb777cc4a3916eb962197",
+    "sort_order": 63
+   }
+  ]
+ }
+]
