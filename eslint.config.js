@@ -44,6 +44,7 @@ export default tseslint.config(
       'local/no-raw-courier-ws-send': 'error', // ADR-0013: courier fan-out MUST go through the relay guard (C1)
       'local/no-admin-prefix-register': 'error', // ADR-admin-platform-authz (B4): /api/admin mounts only via server.ts
       'local/no-recipe-only-allergen-read': 'error', // menu-characteristics-model STEP-0 (#12): storefront allergen surface = computeAllergenSurface only
+      'local/no-voice-engine-callback': 'error', // ADR-0015 §6 / R2-F: the voice engine accepts no callback/handler param (no write-capable closure crosses the source→sink boundary)
       'local/no-arbitrary-tailwind': 'warn',
       // Phase-B type-scale: error-level (zero violations after migration → locks the win).
       'local/no-arbitrary-font-size': 'error',
@@ -110,6 +111,7 @@ export default tseslint.config(
       '@typescript-eslint/prefer-optional-chain': 'off',
       '@typescript-eslint/prefer-nullish-coalescing': 'off',
       'local/no-permissive-status-assertion': 'warn',
+      'local/no-voice-engine-callback': 'warn', // the bad-* fixture intentionally trips it; error-level is proven in the RuleTester
     },
   }
 );
