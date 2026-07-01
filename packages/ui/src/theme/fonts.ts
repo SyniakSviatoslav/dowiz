@@ -37,6 +37,8 @@ export const FONT_ALLOWLIST = {
   bebas:        { label: 'Bebas Neue',         family: 'Bebas Neue',         stack: `'Bebas Neue', ${SANS}`,          googleSpec: 'Bebas+Neue',                             role: 'heading', base: false },
   poppins:      { label: 'Poppins',            family: 'Poppins',            stack: `'Poppins', ${SANS}`,             googleSpec: 'Poppins:wght@400;500;600;700',           role: 'both',    base: false },
   montserrat:   { label: 'Montserrat',         family: 'Montserrat',         stack: `'Montserrat', ${SANS}`,          googleSpec: 'Montserrat:wght@400;500;600;700',        role: 'both',    base: false },
+  quicksand:    { label: 'Quicksand',          family: 'Quicksand',          stack: `'Quicksand', ${SANS}`,           googleSpec: 'Quicksand:wght@400;500;600;700',         role: 'both',    base: false },
+  nunito:       { label: 'Nunito',             family: 'Nunito',             stack: `'Nunito', ${SANS}`,              googleSpec: 'Nunito:wght@400;500;600;700',            role: 'both',    base: false },
   inter:        { label: 'Inter',              family: 'Inter',              stack: `'Inter', ${SANS}`,               googleSpec: 'Inter:wght@400;500;600;700',             role: 'body',    base: true },
   dmsans:       { label: 'DM Sans',            family: 'DM Sans',            stack: `'DM Sans', ${SANS}`,             googleSpec: 'DM+Sans:wght@400;500;600;700',           role: 'both',    base: true },
 } satisfies Record<string, FontSpec>;
