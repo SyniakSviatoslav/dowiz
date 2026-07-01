@@ -434,6 +434,7 @@ export function MenuPage() {
   // UX-1 storefront footer links — decoupled from geo so they show even without lat/lng.
   const [storeLinks, setStoreLinks] = useState<{ mapsUrl?: string | null; instagram?: string | null; facebook?: string | null; phone?: string | null }>({});
   const [storeAddress, setStoreAddress] = useState<string | null>(null);
+  const [storeHours, setStoreHours] = useState<Array<{ day: string; isOpen: boolean; open: string | null; close: string | null }> | null>(null);
   // Hide the footer in embed/activation-preview contexts (target=_blank is unreliable in iframes).
   const isEmbed = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('embed') === 'true' || new URLSearchParams(window.location.search).get('activation') === '1');
   const [deliveryETA, setDeliveryETA] = useState<number | null>(null);
@@ -464,6 +465,7 @@ export function MenuPage() {
         setVenueStatus(d.status ?? (d.isOpen === false ? 'closed' : 'open'));
         setStoreLinks({ mapsUrl: d.googleMapsUrl ?? null, instagram: d.socialInstagram ?? null, facebook: d.socialFacebook ?? null, phone: d.phone ?? null });
         setStoreAddress(d.address ?? null);
+        setStoreHours(Array.isArray(d.weeklyHours) ? d.weeklyHours : null);
       })
       .catch(() => {});
   }, [slug]);
@@ -1707,6 +1709,27 @@ export function MenuPage() {
                     </a>
                   </>
                 )}
+              </div>
+            )}
+            {storeHours && storeHours.length > 0 && (
+              <div className="mt-2 w-full max-w-[16rem] text-step-xs" style={{ color: 'var(--brand-text-muted)' }} data-testid="footer-hours">
+                <div className="flex items-center justify-center gap-1.5 mb-1.5 font-semibold" style={{ color: 'var(--brand-text)' }}>
+                  <i className="ti ti-clock" aria-hidden="true" style={{ color: 'var(--brand-primary)' }} />
+                  {t('client.opening_hours', 'Opening hours')}
+                </div>
+                <ul className="grid gap-0.5">
+                  {storeHours.map((h) => {
+                    // hours_json day order is Mon..Sun; JS getDay() is Sun=0..Sat=6 → map to that order.
+                    const idx = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].indexOf(h.day);
+                    const isToday = ((new Date().getDay() + 6) % 7) === idx;
+                    return (
+                      <li key={h.day} className="flex items-center justify-between gap-4" style={isToday ? { color: 'var(--brand-text)', fontWeight: 600 } : undefined}>
+                        <span className="capitalize">{t(`client.day_${h.day}`, h.day)}</span>
+                        <span>{h.isOpen && h.open && h.close ? `${h.open} – ${h.close}` : t('client.closed_day', 'Closed')}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             )}
             {storeLinks.phone && (

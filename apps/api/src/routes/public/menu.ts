@@ -366,6 +366,20 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
       const isBusy = isOpen && busyUntil != null && busyUntil.getTime() > Date.now();
       const status: 'open' | 'closed' | 'busy' = !isOpen ? 'closed' : isBusy ? 'busy' : 'open';
 
+      // Normalized weekly opening hours for the storefront footer (Mon..Sun). Each entry carries the
+      // raw open/close HH:MM (or closed) — the client renders the day labels via i18n. Null when the
+      // venue has no hours_json (footer simply omits the block). Day keys mirror the isOpen computation.
+      const weeklyHours = (() => {
+        if (!r.hours_json || typeof r.hours_json !== 'object') return null;
+        const order = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        const out = order.map((d) => {
+          const dd = (r.hours_json as Record<string, any>)[d];
+          if (!dd || typeof dd !== 'object' || dd.isOpen === false) return { day: d, isOpen: false, open: null, close: null };
+          return { day: d, isOpen: true, open: dd.open ? String(dd.open) : null, close: dd.close ? String(dd.close) : null };
+        });
+        return out.some((e) => e.isOpen) ? out : null;
+      })();
+
       return reply.send({
         id: r.id, name: r.name, slug: r.slug,
         currency_code: r.currency_code, currency_minor_unit: r.currency_minor_unit,
@@ -385,6 +399,7 @@ export default async function publicMenuRoutes(fastify: FastifyInstance) {
         isOpen,
         status,
         closesAt,
+        weeklyHours,
         googleRating: r.google_rating != null ? Number(r.google_rating) : null,
         googleReviewCount: r.google_review_count != null ? Number(r.google_review_count) : null,
         googleMapsUrl: r.google_maps_url ?? null,
