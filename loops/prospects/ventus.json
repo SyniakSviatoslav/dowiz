@@ -1,0 +1,382 @@
+[
+ {
+  "slug": "ventus",
+  "name": "Ventus Harbor",
+  "cuisine": "seafood",
+  "primary": "#1f6f8b",
+  "bg": "#f2f6f7",
+  "menu": [
+   {
+    "name": "Ventus",
+    "category": "Të tjera",
+    "price": 1000,
+    "description": "Crudo ham, arugula, pomodorini, grana, mozzarella, tomato sauce",
+    "description_sq": "Crudo ham, arugula, pomodorini, grana, mozzarella, tomato sauce",
+    "image_url": "https://imageproxy.wolt.com/assets/67dad421043b8c23299626c5",
+    "sort_order": 0
+   },
+   {
+    "name": "Seafood Risotto",
+    "category": "Pasta",
+    "price": 950,
+    "description": "Cuttlefish, squid, shrimp, mussels",
+    "description_sq": "Cuttlefish, squid, shrimp, mussels",
+    "sort_order": 1
+   },
+   {
+    "name": "Fish Soup",
+    "category": "Antipasti & Sallata",
+    "price": 500,
+    "sort_order": 2
+   },
+   {
+    "name": "Mushrooms Today",
+    "category": "Të tjera",
+    "price": 800,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad423043b8c23299626c9",
+    "sort_order": 3
+   },
+   {
+    "name": "Mix Crudo",
+    "category": "Të tjera",
+    "price": 3800,
+    "description": "2-3 people.",
+    "description_sq": "2-3 people.",
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c68cd179206b1dfaa0",
+    "sort_order": 4
+   },
+   {
+    "name": "Paccheri with Fish Ragu",
+    "category": "Peshk & Detare",
+    "price": 1200,
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c28cd179206b1dfa90",
+    "sort_order": 5
+   },
+   {
+    "name": "Salmon Fillet With Vegetables",
+    "category": "Peshk & Detare",
+    "price": 1400,
+    "sort_order": 6
+   },
+   {
+    "name": "Tuna Fillet With Arugula And Tomatoes",
+    "category": "Mish & Grill",
+    "price": 1400,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad41c043b8c23299626b5",
+    "sort_order": 7
+   },
+   {
+    "name": "4 Cheeses",
+    "category": "Të tjera",
+    "price": 850,
+    "description": "Gorgonzola grana, parmigiano, mozzarella",
+    "description_sq": "Gorgonzola grana, parmigiano, mozzarella",
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c88cd179206b1dfaa3",
+    "sort_order": 8
+   },
+   {
+    "name": "Fried Mix",
+    "category": "Peshk & Detare",
+    "price": 1500,
+    "description": "Cuttlefish, squid, shrimp",
+    "description_sq": "Cuttlefish, squid, shrimp",
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c48cd179206b1dfa98",
+    "sort_order": 9
+   },
+   {
+    "name": "Tuna Fillet",
+    "category": "Mish & Grill",
+    "price": 1400,
+    "sort_order": 10
+   },
+   {
+    "name": "Casarecce with Shrimp and Pumpkin",
+    "category": "Peshk & Detare",
+    "price": 950,
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c38cd179206b1dfa93",
+    "sort_order": 11
+   },
+   {
+    "name": "Tiramisu",
+    "category": "Ëmbëlsira",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad41f043b8c23299626bd",
+    "sort_order": 12
+   },
+   {
+    "name": "Linguine with Seafood",
+    "category": "Pasta",
+    "price": 950,
+    "description": "Cuttlefish, squid, shrimp, mussels",
+    "description_sq": "Cuttlefish, squid, shrimp, mussels",
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c28cd179206b1dfa91",
+    "sort_order": 13
+   },
+   {
+    "name": "Octopus With Spicy Sauce And Croutons",
+    "category": "Të tjera",
+    "price": 1200,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad423043b8c23299626c8",
+    "sort_order": 14
+   },
+   {
+    "name": "Soup of the day",
+    "category": "Antipasti & Sallata",
+    "price": 450,
+    "sort_order": 15
+   },
+   {
+    "name": "Baby Potatoes With Truffles",
+    "category": "Të tjera",
+    "price": 550,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad424043b8c23299626cf",
+    "sort_order": 16
+   },
+   {
+    "name": "Ventus Salad",
+    "category": "Antipasti & Sallata",
+    "price": 700,
+    "description": "Leaf mix, viola grasshopper, strawberries, grana, corn, citrus sauce",
+    "description_sq": "Leaf mix, viola grasshopper, strawberries, grana, corn, citrus sauce",
+    "image_url": "https://imageproxy.wolt.com/assets/67d804ca8cd179206b1dfaa9",
+    "sort_order": 17
+   },
+   {
+    "name": "Vegetable Soup",
+    "category": "Antipasti & Sallata",
+    "price": 400,
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c98cd179206b1dfaa8",
+    "sort_order": 18
+   },
+   {
+    "name": "Grilled Seabream",
+    "category": "Të tjera",
+    "price": 1300,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad419043b8c23299626b2",
+    "sort_order": 19
+   },
+   {
+    "name": "Seafood",
+    "category": "Peshk & Detare",
+    "price": 1000,
+    "description": "Squid, shrimp, mozzarella, tomato sauce",
+    "description_sq": "Squid, shrimp, mozzarella, tomato sauce",
+    "image_url": "https://imageproxy.wolt.com/assets/67dad421043b8c23299626c4",
+    "sort_order": 20
+   },
+   {
+    "name": "Octopus Salad",
+    "category": "Antipasti & Sallata",
+    "price": 1200,
+    "sort_order": 21
+   },
+   {
+    "name": "Cold Seafood Salad",
+    "category": "Antipasti & Sallata",
+    "price": 1200,
+    "description": "Cuttlefish, squid, viola shrimp, mussels",
+    "description_sq": "Cuttlefish, squid, viola shrimp, mussels",
+    "image_url": "https://imageproxy.wolt.com/assets/67d804ca8cd179206b1dfaaa",
+    "sort_order": 22
+   },
+   {
+    "name": "Devil",
+    "category": "Të tjera",
+    "price": 800,
+    "description": "Spicy salami, mozzarella, tomato sauce",
+    "description_sq": "Spicy salami, mozzarella, tomato sauce",
+    "image_url": "https://imageproxy.wolt.com/assets/67dad421043b8c23299626c3",
+    "sort_order": 23
+   },
+   {
+    "name": "White Cheese With Crust And Jam",
+    "category": "Të tjera",
+    "price": 550,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad424043b8c23299626cd",
+    "sort_order": 24
+   },
+   {
+    "name": "Grilled Shrimp",
+    "category": "Peshk & Detare",
+    "price": 1400,
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c48cd179206b1dfa96",
+    "sort_order": 25
+   },
+   {
+    "name": "Marinated Anchovies",
+    "category": "Të tjera",
+    "price": 550,
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c68cd179206b1dfa9d",
+    "sort_order": 26
+   },
+   {
+    "name": "Focaccia",
+    "category": "Të tjera",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c68cd179206b1dfa9f",
+    "sort_order": 27
+   },
+   {
+    "name": "Ice Cream Souffle",
+    "category": "Të tjera",
+    "price": 400,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad41f043b8c23299626c0",
+    "sort_order": 28
+   },
+   {
+    "name": "Capricious",
+    "category": "Të tjera",
+    "price": 800,
+    "description": "Ham, mushrooms, peppers, olives, mozzarella, tomato sauce",
+    "description_sq": "Ham, mushrooms, peppers, olives, mozzarella, tomato sauce",
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c88cd179206b1dfaa5",
+    "sort_order": 29
+   },
+   {
+    "name": "Trileche",
+    "category": "Të tjera",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad41f043b8c23299626bc",
+    "sort_order": 30
+   },
+   {
+    "name": "Kaçkavall Cheese With Sesame And Honey",
+    "category": "Të tjera",
+    "price": 550,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad424043b8c23299626ce",
+    "sort_order": 31
+   },
+   {
+    "name": "Arugula Salad",
+    "category": "Antipasti & Sallata",
+    "price": 600,
+    "description": "Arugula, anchovies, strawberries, almonds",
+    "description_sq": "Arugula, anchovies, strawberries, almonds",
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c68cd179206b1dfa9c",
+    "sort_order": 32
+   },
+   {
+    "name": "ham",
+    "category": "Të tjera",
+    "price": 700,
+    "description": "Ham cotto, mushrooms, mozzarella, tomato sauce",
+    "description_sq": "Ham cotto, mushrooms, mozzarella, tomato sauce",
+    "image_url": "https://imageproxy.wolt.com/assets/67dad421043b8c23299626c2",
+    "sort_order": 33
+   },
+   {
+    "name": "Salmon Fillet With Boiled Vegetables",
+    "category": "Peshk & Detare",
+    "price": 1400,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad41c043b8c23299626b8",
+    "sort_order": 34
+   },
+   {
+    "name": "Dubai Chocolate",
+    "category": "Të tjera",
+    "price": 400,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad41f043b8c23299626be",
+    "sort_order": 35
+   },
+   {
+    "name": "Grilled Sea Bass",
+    "category": "Të tjera",
+    "price": 1300,
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c48cd179206b1dfa95",
+    "sort_order": 36
+   },
+   {
+    "name": "tone",
+    "category": "Të tjera",
+    "price": 800,
+    "description": "Tuna, olives, mozzarella, tomato sauce",
+    "description_sq": "Tuna, olives, mozzarella, tomato sauce",
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c88cd179206b1dfaa2",
+    "sort_order": 37
+   },
+   {
+    "name": "Margarita",
+    "category": "Të tjera",
+    "price": 550,
+    "description": "Mozzarella, tomato sauce",
+    "description_sq": "Mozzarella, tomato sauce",
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c48cd179206b1dfa99",
+    "sort_order": 38
+   },
+   {
+    "name": "Fish Croquettes",
+    "category": "Peshk & Detare",
+    "price": 600,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad421043b8c23299626c1",
+    "sort_order": 39
+   },
+   {
+    "name": "Grill Mix",
+    "category": "Peshk & Detare",
+    "price": 2200,
+    "description": "Cuttlefish, squid, shrimp, fish",
+    "description_sq": "Cuttlefish, squid, shrimp, fish",
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c48cd179206b1dfa97",
+    "sort_order": 40
+   },
+   {
+    "name": "Ice Cream Souffle",
+    "category": "Të tjera",
+    "price": 1300,
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c48cd179206b1dfa95",
+    "sort_order": 41
+   },
+   {
+    "name": "Grilled Sea Bass",
+    "category": "Të tjera",
+    "price": 400,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad41f043b8c23299626be",
+    "sort_order": 42
+   },
+   {
+    "name": "Dubai Chocolate",
+    "category": "Të tjera",
+    "price": 550,
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c68cd179206b1dfa9d",
+    "sort_order": 43
+   },
+   {
+    "name": "Marinated Anchovies",
+    "category": "Të tjera",
+    "price": 1400,
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c48cd179206b1dfa96",
+    "sort_order": 44
+   },
+   {
+    "name": "Grilled Shrimp",
+    "category": "Peshk & Detare",
+    "price": 950,
+    "image_url": "https://imageproxy.wolt.com/assets/67d804c28cd179206b1dfa91",
+    "sort_order": 45
+   },
+   {
+    "name": "Linguine with Seafood",
+    "category": "Pasta",
+    "price": 350,
+    "description": "Cuttlefish, squid, shrimp, mussels",
+    "description_sq": "Cuttlefish, squid, shrimp, mussels",
+    "image_url": "https://imageproxy.wolt.com/assets/67dad41f043b8c23299626bd",
+    "sort_order": 46
+   },
+   {
+    "name": "Tiramisu",
+    "category": "Ëmbëlsira",
+    "price": 1400,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad41c043b8c23299626b5",
+    "sort_order": 47
+   },
+   {
+    "name": "Tuna Fillet With Arugula And Tomatoes",
+    "category": "Mish & Grill",
+    "price": 800,
+    "image_url": "https://imageproxy.wolt.com/assets/67dad423043b8c23299626c9",
+    "sort_order": 48
+   }
+  ]
+ }
+]

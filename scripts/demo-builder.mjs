@@ -109,10 +109,14 @@ export function gateMenu(draft) {
   const nItems = products.length;
   const withDesc = products.filter((p) => isNonEmptyStr(p?.description)).length;
   const descRatio = nItems > 0 ? withDesc / nItems : 0;
+  // A menu is "rich enough" if it's well-DESCRIBED or well-PHOTOGRAPHED — a fully-photographed authentic menu
+  // (common on Wolt) is demo-quality even with sparse text. image_url lives on attributes (survives C2 strip).
+  const withImg = products.filter((p) => isNonEmptyStr(p?.attributes?.image_url)).length;
+  const imgRatio = nItems > 0 ? withImg / nItems : 0;
 
   if (nCats < MIN_CATEGORIES) reasons.push(`too few categories (${nCats} < ${MIN_CATEGORIES})`);
   if (nItems < MIN_ITEMS) reasons.push(`too few items (${nItems} < ${MIN_ITEMS})`);
-  if (descRatio < MIN_DESC_RATIO) reasons.push(`too few descriptions (${(descRatio * 100) | 0}% < ${MIN_DESC_RATIO * 100}%)`);
+  if (descRatio < MIN_DESC_RATIO && imgRatio < MIN_DESC_RATIO) reasons.push(`menu not rich enough: ${(descRatio * 100) | 0}% described AND ${(imgRatio * 100) | 0}% photographed (need ≥${MIN_DESC_RATIO * 100}% of one)`);
   for (const p of products) {
     if (!isNonEmptyStr(p?.name)) { reasons.push('a product has a blank name'); break; }
   }
@@ -122,7 +126,7 @@ export function gateMenu(draft) {
       break;
     }
   }
-  return { ok: reasons.length === 0, reasons, stats: { nCats, nItems, descRatio: +descRatio.toFixed(2) } };
+  return { ok: reasons.length === 0, reasons, stats: { nCats, nItems, descRatio: +descRatio.toFixed(2), imgRatio: +imgRatio.toFixed(2) } };
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════
