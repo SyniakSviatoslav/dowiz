@@ -81,3 +81,18 @@ Per-run learnings for the mobile (390px) polish loop. Append one block per run.
   + "~15 min" ETA + Telefono + "Shënoni si të Marrë" CTA. **The iter-3b capture limitation is closed.**
 - **Lesson:** a "hard infra limit" can become tractable when it's worth routing through the proper gate —
   the council turned a risky `body.courierId` impersonation into a safe synthetic-only fixture.
+
+### 2026-06-30 · REUSE run — post-redesign QA gate (storefront+admin, characteristics flags ON)
+- Dispatched by loop-orchestrator after the big storefront redesign + vendor-zone + allergen-freeze.
+- SENSE: mobile(390)+desktop(1280) over 10 surfaces → `audit/qa-loop/`. DIAGNOSE vs Mobile Rubric + checklist
+  (allergens-frozen, i18n sq/en/uk, console, persistence). **8/10 PASS**, no logic/contract/security escalations.
+- FIXED (verified-real, FE-only): **F1** compare-toggle (`absolute top-1.5 left-1.5`, ~36px) CLIPPED photoless
+  card titles ("Cola"→"ola") on both bp → ProductCard gained `compareGutter` prop reserving a left gutter on
+  the photoless title/badge row; MenuPage passes `compareGutter={COMPARISON_ENABLED}`. **F2** product modal
+  (role=dialog) had NO Escape handler → added a keydown Esc→closeDetail effect.
+- FLAG-ONLY: F3 add-to-cart label truncates beside price (by-design); F4 one product image 404 (Margherita
+  stale pre-R2 image_key) = data.
+- **Lessons:** (1) an absolute-positioned card overlay WILL clip text on photoless cards — reserve a gutter.
+  (2) every role=dialog needs an Esc handler (grabber/X/backdrop aren't enough for a11y). (3) the big-redesign
+  batch held up (allergens frozen, i18n parity, persistence, compare-no-verdict all PASS first try). (4) ui/dist
+  is gitignored → a new ProductCard prop needs `pnpm --filter @deliveryos/ui build` before apps/web tsc sees it.
