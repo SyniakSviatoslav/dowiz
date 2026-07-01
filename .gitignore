@@ -72,3 +72,6 @@ scratch-*.mjs
 graphify-out/
 # NVIDIA SkillSpector — operator security tool (agent-skill scanner), not app code
 tools/skillspector/
+
+# offer-builder output packets contain business contact info (public, but keep outreach targets out of git)
+loops/offers/
