@@ -55,6 +55,33 @@ menu-item photos ✅ (all DB/R2 seams); hero=video-only (image needs a render ch
 - **Font (todo)**: storefront hardcodes serif; wire a per-tenant heading/body font (SHARED-render change,
   regress-radius on /s/demo, needs a web deploy).
 
+## Maps enrichment — LAYER 2.5, now codified into the loop (2026-07-01)
+The loop USED to stop at menu+palette+fonts, so demos rendered as anonymous cuisine-guesses (grey StylizedMap
+hero, no logo, no rating, no hours) — the gap vs the hand-enriched /s/artepasta. Now automated + default-ON.
+- **`tools/demo-builder/maps-enrich.mjs`** — headless Playwright scrape of a venue's PUBLIC Google-Maps listing
+  (no API key): matched name, address, lat/lng (+canonical `/maps/place/` url from the `!3d…!4d…` on the place
+  anchor — cheap, NO `page.content()` which stalls the Maps DOM), phone, `google_rating`(+review count),
+  today/weekly hours, and the header/sign photo (first lh3 `googleusercontent`, size-bumped `=w1600-h1200-k-no`).
+  Brand colour = dominant *vivid* (sat≥0.45) bucket of the hero via sharp; a muddy average → null (keep the
+  cuisine seed). **CRITICAL PERF GOTCHA:** call `page.setDefaultTimeout(4000)` right after `newPage()` — a
+  zero-match `getAttribute` otherwise blocks the DEFAULT 30s each, and 3 in a row blew the per-venue budget
+  (3/9 venues hit the 90s batch timeout until this was set; retry after the fix → all 3 green). Also bound the
+  hero `fetch` with `AbortSignal.timeout(15000)`.
+- **`tools/demo-builder/enrich-run.mjs`** — batches N venues → scrapes → converts hero to webp (`1600×1200`
+  cover) + a square `512²` logo (both `position:'attention'`) → emits base64 packets. Per-venue 90s hard cap;
+  writes packets INCREMENTALLY so a mid-batch kill keeps progress. sharp isn't a direct dep → `createRequire`
+  from `apps/api/`.
+- **`tools/demo-builder/seam-enrich-wire.cjs`** (in-container seam) — PutObject hero→R2 `{loc}/hero/cover.webp`
+  + logo→`locations/{loc}/logo.webp`; `UPDATE locations SET address,lat,lng,hours_json,phone,public_phone`;
+  `UPDATE location_themes SET primary_color(brand),google_rating,google_review_count,google_maps_url,logo_url`.
+  Deps: `npm i pg @aws-sdk/client-s3` in /tmp. **Transfer the (multi-MB) packets.json via STDIN** (`base64 |
+  flyctl ssh console -C "cat > … ; base64 -d …"`) — too big for a `-C` arg; do the install+decode+run in ONE
+  ssh session so it stays on one machine (flyctl picks a different machine per call → /tmp not shared).
+- **Loop wiring**: `scripts/demo-builder.mjs` runs Layer 2.5 after spine (default on; `--no-maps` to skip),
+  records `out.maps_directive` + overrides `palette.primary_color` with the sign colour. Persisting bytes is
+  still the operator seam (sandbox can't reach R2/DB) — the run report prints the enrich-run reminder.
+  hours precedence: real weekly scrape > today's close+default open > demo default daily 11:00–23:00.
+
 ## Уроки (lessons learned)
 - 2026-07-01 — BUILD+CERTIFY. The loop's whole reason to exist is the gap the raw provisioner leaves: the raw provisioner
   stops at API `verified:true`, which only proves the preview endpoint served + has ≥1 item. That is NOT "looks like a demo."
@@ -86,6 +113,10 @@ menu-item photos ✅ (all DB/R2 seams); hero=video-only (image needs a render ch
 | 2026-07-01 | FIRST LIVE RUN — Eljo's Pizza (pizzeria, Durrës) → /s/eljos-pizza, staging, preview-only | CERTIFIED-PREVIEW | no | 14 items/5 cats, theme #c1352b/#fbf6ee, gate green mobile+desktop, 0 invites. source_id 76c7f09a…, location_id 79acd75e…. Menu hand-authored (RestaurantGuru had no menu — placeholder "upload menu" page). Both DB seams run from inside the staging container (pg via npm-i in /tmp; DATABASE_URL_MIGRATIONS). |
 | 2026-07-01 | REUSE — ArtePasta (italian, Durrës) → /s/artepasta, staging, preview-only | CERTIFIED-PREVIEW | no | 16 items/6 cats, theme #3f7d4f/#fbf6ee, gate green (16 items ×2, 0 console err), 0 invites, ~11.5s total. CERTIFIED on FIRST pass-2 (gate fix held). Menu hand-authored (Wolt has it but API-locked/CSR; RG none). Metrics report: loops/reports/demo-builder-run-artepasta-2026-07-01.md. |
 | 2026-07-01 | REAL-IDENTITY REBUILD — ArtePasta re-seeded with the Wolt-extracted menu (50 items/11 cats), red brand #e11b22, + brand-ingest DISPLAY attributes | SHIPPED (b3f75ed5→d738b316, staging v230) | no | Closed the ingredient-badge + hero todos. Live preview now: 38 real Wolt photos, 31 ingredient-badge lists, 28 Albanian (sq) descriptions, all pre-claim, still never-orderable + noindex + bom-stripped. Proof e2e/tests/storefront-brand-ingest.spec.ts green mobile+desktop. DB already re-seeded from a prior seam run; this session shipped only the render + plumbing + proof. |
+| 2026-07-01 | REUSE — Idua (traditional, Durrës) → /s/idua, staging, preview-only | CERTIFIED-PREVIEW | no | 65 items/5 cats, theme #8a5a2b/#f6efe4 playfair/inter, imgRatio 0.94 (gate passes on photos, descRatio 0), live Playwright gate green mobile+desktop (0 console err, never-orderable, noindex). source_id 9e93a7a5…. |
+| 2026-07-01 | REUSE BATCH — next-4 queued Wolt prospects (lamuse·dyrrah-mare·ventus·aragosta), staging, preview-only | CERTIFIED-PREVIEW 4/4 | no | Full 2-pass + 2-seam recipe: pass1(sandbox)→NEEDS_ENRICH_SEAM ×4 → enrich seam (container pg, UPDATE …SET menu_draft,state='ENRICHED' by place_id) → pass2 mint/spine/verify + LIVE Playwright gate green ×4 → theme seam (upsert location_themes, seafood #1f6f8b cormorant/dmsans; L'Amuse mediterranean #2f7d76 cormorant/inter). Menus 26/64/49/63 items, all pass on imgRatio (0.88–1.0). Independent probe: SSR items match, add-affordance 0, x-robots noindex,nofollow. 0 invites. loc ids 0e199b4e/3b68d283/d5b616c6/6e5f9d72. |
+| 2026-07-01 | MAPS-ENRICH ALL 9 demos (idua·lamuse·dyrrah-mare·ventus·aragosta·casa-mia·otantik·liriada·apollonia) + codified Layer 2.5 into the loop | ENRICHED 9/9 | 3 timed out then GREEN on retry | Closed the gap vs /s/artepasta: every demo now has a REAL Maps hero photo (R2 cover.webp), square logo, Google rating (4.6–4.9), address, lat/lng, weekly hours (2 scraped, rest demo-default), and a brand colour from the sign (all warm interior tones #75643d–#a55e52; vivid-gated). New tools maps-enrich/enrich-run/seam-enrich-wire; demo-builder.mjs Layer 2.5 default-on (--no-maps). Verified: info endpoint returns rating+7day hours+mapsUrl; /media/{id}/hero/cover.webp = 200 image/webp; screenshot parity with artepasta (logo+hero+★rating+Closed chip). Root-cause of the 3 timeouts: missing page.setDefaultTimeout → 30s zero-match getAttribute stalls. Anti-cheat dry-run still GREEN after the loop edit. |
+| 2026-07-01 | SOURCE+BUILD BATCH — 4 fresh Durrës venues discovered from Wolt (casa-mia·otantik·liriada·apollonia), staging, preview-only | CERTIFIED-PREVIEW 4/4 | no | End-to-end from discovery: Wolt restaurant-api (lat/lon Durrës, 181 venues, name+slug) works FROM SANDBOX (the old 503 scrape-block has cleared — wolt.com venue pages fetch 200 from sandbox too, so demo-from-wolt runs locally now, no container needed for extract). Cross-referenced radar-durr-s (123 venues) via matchOnWolt token-set → ranked fresh (excluded already-done venues under their Wolt canonical slugs: ventus-harbor/aragosta-restaurant/dyrrah-mare-restaurant/idua-durres). Picked 4 DISTINCT-palette cuisines to avoid the identical-seafood-teal problem: italian #3f7d4f fraunces/dmsans · turkish #b5471f dmsans/dmsans · traditional #8a5a2b playfair/inter · mediterranean #2f7d76 cormorant/inter. Menus 82/85/80/99 items (otantik+liriada desc 0 but imgRatio 0.92/0.93 → gate passes on photos). Same 2-pass+2-seam. loc ids 6a4c9477/1cf75181/374fb596/bc5458e7. |
 
 ## Live-run recipe (proven 2026-07-01, Eljo's)
 Authored-menu prospect ⇒ two passes + two container-side DB seams:
