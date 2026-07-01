@@ -21,11 +21,12 @@ test.describe('Storefront · Menu Characteristics (flag-on) · /s/demo', () => {
   });
 
   test('COMPARE: pick two dishes → bar shows names, panel shows both + nutrition viz, no verdict/allergens', async ({ page }) => {
-    // Pick two dishes that HAVE nutrition (a BOM) so DishStats renders in both columns.
+    // Pick two dishes that HAVE nutrition (a BOM) so DishStats renders in both columns. The compare toggle
+    // is a sibling button of the card article within its wrapper → target it precisely via the shared parent.
     const toggleFor = (name: string) =>
-      page.locator('div.relative', { has: page.locator('[data-testid=menu-item]', { hasText: name }) }).getByTestId('compare-toggle').first();
-    await toggleFor('Crunchy Ebi Sunset').click();
-    await toggleFor('Crispy Sunset').click();
+      page.locator('[data-testid=menu-item]', { hasText: name }).first().locator('xpath=../button[@data-testid="compare-toggle"]');
+    const a = toggleFor('Crunchy Ebi Sunset'); await a.scrollIntoViewIfNeeded(); await a.click();
+    const b = toggleFor('Crispy Sunset'); await b.scrollIntoViewIfNeeded(); await b.click();
     // selection bar appears; it shows the selected dish NAME(s), not just a count
     const bar = page.getByTestId('compare-bar');
     await expect(bar).toBeVisible();
