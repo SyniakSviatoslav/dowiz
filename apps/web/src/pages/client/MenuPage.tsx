@@ -240,23 +240,16 @@ export function MenuPage() {
       return typeof p?.searchQuery === 'string' ? p.searchQuery : '';
     } catch { return ''; }
   });
-  // Categories act as a single-select FILTER: tapping a category narrows the menu to it; tapping "All"
-  // (or the same category again) clears it. PERSISTED so a reload keeps the chosen category.
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(() => {
-    try { const p = JSON.parse(safeStorage.get(`dos_menu_prefs_${slug}`) || 'null'); return typeof p?.selectedCategory === 'string' ? p.selectedCategory : null; } catch { return null; }
-  });
+  // The category chip currently highlighted in the jump-nav — DERIVED from scroll position by the
+  // scroll-spy (below), not a filter and not persisted (a saved highlight would flash the wrong chip
+  // before the first scroll tick corrects it). Starts null → "All" is lit until the user scrolls/taps.
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  // Persist all storefront UI state so a reload restores it (category, sort, filter, search, lens, compare).
+  // Persist storefront UI state so a reload restores it (sort, filter, search, lens, compare). Category
+  // highlight is intentionally excluded — it is derived from scroll, not a user choice worth restoring.
   useEffect(() => {
-    try { safeStorage.set(menuPrefsKey, JSON.stringify({ sortBy, filterAllergen, searchQuery, selectedCategory, macroLens, compareIds })); } catch {}
-  }, [menuPrefsKey, sortBy, filterAllergen, searchQuery, selectedCategory, macroLens, compareIds]);
-
-  // Drop a persisted category that no longer exists once the menu loads (stale pref → show All, not blank).
-  useEffect(() => {
-    if (selectedCategory && selectedCategory !== CHEF_PICKS_ID && data.length > 0 && !data.some(c => c.id === selectedCategory)) {
-      setSelectedCategory(null);
-    }
-  }, [data, selectedCategory, CHEF_PICKS_ID]);
+    try { safeStorage.set(menuPrefsKey, JSON.stringify({ sortBy, filterAllergen, searchQuery, macroLens, compareIds })); } catch {}
+  }, [menuPrefsKey, sortBy, filterAllergen, searchQuery, macroLens, compareIds]);
 
   const categories = data;
 
@@ -295,15 +288,11 @@ export function MenuPage() {
     if (ALLERGENS_ENABLED && ALLERGEN_FILTER_ENABLED && filterAllergen) {
       result = result.filter(p => allergenSurfaceOf(p).known.includes(filterAllergen));
     }
-    // Category filter (single-select). Chef's Picks is a cross-category overlay, so it
-    // filters by the chef_pick attribute rather than a category id.
-    if (selectedCategory === CHEF_PICKS_ID) {
-      result = result.filter(p => (p as any).attributes?.chef_pick);
-    } else if (selectedCategory) {
-      result = result.filter(p => p._catId === selectedCategory);
-    }
+    // Categories are NO LONGER a filter — tapping a chip scroll-jumps to that section (see
+    // pickCategory) with every other category still on the page. selectedCategory is now only the
+    // scroll-spy highlight, so it must not narrow the list here.
     const macroLensActive = FILTER_LENSES_ENABLED && macroLens !== 'none';
-    if (sortBy === 'default' && !searchQuery && !filterAllergen && !selectedCategory && !macroLensActive) return categories;
+    if (sortBy === 'default' && !searchQuery && !filterAllergen && !macroLensActive) return categories;
 
     // An active search/sort/filter that matches nothing must yield ZERO sections — never a
     // bare "All items" heading over blank space. Returning [] here lets the single empty-state
@@ -336,12 +325,7 @@ export function MenuPage() {
       return [{ id: SORTED_FLAT_ID, name: t('client.all_items', 'All items'), sort_order: 0, products: sorted }];
     }
 
-    // Chef's Picks filter → one titled section (its products span real categories).
-    if (selectedCategory === CHEF_PICKS_ID) {
-      return [{ id: CHEF_PICKS_ID, name: t('client.chefs_picks', "Chef's Picks"), sort_order: 0, products: result }];
-    }
-
-    // sortBy === 'default' but a search/allergen/category filter is active → keep category grouping.
+    // sortBy === 'default' but a search/allergen filter is active → keep category grouping.
     const groups: MenuCategory[] = [];
     for (const p of result) {
       const g = groups.find(g => g.id === p._catId);
@@ -349,7 +333,7 @@ export function MenuPage() {
       else groups.push({ id: p._catId, name: p._catName, sort_order: 0, products: [p] });
     }
     return groups;
-  }, [categories, sortBy, filterAllergen, searchQuery, selectedCategory, macroLens, t]);
+  }, [categories, sortBy, filterAllergen, searchQuery, macroLens, t]);
 
   const allAllergens = useMemo(() => {
     const set = new Set<string>();
@@ -495,15 +479,47 @@ export function MenuPage() {
     );
   }, [locationInfo]);
 
-  // Category tap = single-select filter. Toggling the active one (or "All" = null)
-  // clears it. Scroll the menu container back to the top so the narrowed list is
-  // visible from its start (avoids landing mid-page after the content shrinks).
+  // Category tap = JUMP-NAV anchor, not a filter. Scroll-jump to that category's section with every
+  // other category still on the page ("All" = null jumps to the top). A global price-sort / macro-lens
+  // collapses the menu into one flat section (no per-category anchors to land on), so clear those first
+  // and run the scroll after the grouped sections are back in the DOM (double-rAF flushes the re-render).
   const pickCategory = (id: string | null) => {
-    setSelectedCategory(prev => (prev === id ? null : id));
-    const container = document.querySelector('.app-shell-main') as HTMLElement | null;
-    if (container) container.scrollTo({ top: 0, behavior: prefersReduced ? 'auto' : 'smooth' });
-    else window.scrollTo({ top: 0, behavior: prefersReduced ? 'auto' : 'smooth' });
+    setSelectedCategory(id);
+    if (sortBy !== 'default') setSortBy('default');
+    if (FILTER_LENSES_ENABLED && macroLens !== 'none') setMacroLens('none');
+    const run = () => {
+      const container = document.querySelector('.app-shell-main') as HTMLElement | null;
+      if (id === null) {
+        if (container) container.scrollTo({ top: 0, behavior: prefersReduced ? 'auto' : 'smooth' });
+        else window.scrollTo({ top: 0, behavior: prefersReduced ? 'auto' : 'smooth' });
+        return;
+      }
+      document.getElementById(id)?.scrollIntoView({ behavior: prefersReduced ? 'auto' : 'smooth', block: 'start' });
+    };
+    requestAnimationFrame(() => requestAnimationFrame(run));
   };
+
+  // Scroll-spy — keep the active chip in sync with manual scrolling: highlight the section currently
+  // sitting just under the sticky header. The chip is a position indicator now (categories don't
+  // filter). Skipped in a flat sort/lens view, which has no per-category sections to track.
+  useEffect(() => {
+    if (loading) return;
+    if (sortBy !== 'default' || (FILTER_LENSES_ENABLED && macroLens !== 'none')) return;
+    const root = document.querySelector('.app-shell-main') as HTMLElement | null;
+    const sections = Array.from(document.querySelectorAll<HTMLElement>('main section[id]'));
+    if (!sections.length) return;
+    const io = new IntersectionObserver(
+      entries => {
+        const hit = entries
+          .filter(e => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (hit) setSelectedCategory(hit.target.id);
+      },
+      { root, rootMargin: `-${scrollOffset + 4}px 0px -62% 0px`, threshold: 0 },
+    );
+    sections.forEach(s => io.observe(s));
+    return () => io.disconnect();
+  }, [loading, sortBy, macroLens, searchQuery, filterAllergen, scrollOffset, displayCategories]);
 
   const handleProductClick = (product: Product) => {
     // Activation tool: when embedded with ?activation=1, tapping an item edits it in
@@ -789,8 +805,9 @@ export function MenuPage() {
                 ...(chefPicksCategory ? [{ id: chefPicksCategory.id as string | null, name: chefPicksCategory.name, count: chefPicksCategory.products.filter(p => p.available).length, isChef: true }] : []),
                 ...categories.map(c => ({ id: c.id as string | null, name: c.name, count: c.products.filter(p => p.available).length, isChef: false })),
               ].map(cat => {
-                // Categories filter the menu (single-select). The active one gets the
-                // underline + primary text; aria-pressed conveys the toggle state.
+                // Categories are jump-nav anchors (tap = scroll to that section; every item stays
+                // visible). The active one — the section currently under the sticky header, tracked by
+                // the scroll-spy — gets the underline + primary text; aria-current marks it for AT.
                 const isActive = selectedCategory === cat.id;
                 return (
                   <motion.button
@@ -1045,11 +1062,10 @@ export function MenuPage() {
           </div>
         ) : (
           [
-            // Chef's Picks is a curated overlay on the DEFAULT category order; a global
-            // sort already reorders everything into one flat list, so prepending picks
-            // there would break the monotonic order. Only show it for 'default' AND when
-            // no category filter is active (a filter already scopes the list).
-            ...(sortBy === 'default' && !selectedCategory && chefPicksCategory ? [chefPicksCategory] : []),
+            // Chef's Picks is a curated overlay on the DEFAULT grouped order; a global sort/lens
+            // reorders everything into one flat list and a search/allergen filter already scopes it,
+            // so the overlay only shows in the pure default browse (its own chip scroll-jumps to it).
+            ...(sortBy === 'default' && !searchQuery && !filterAllergen && !(FILTER_LENSES_ENABLED && macroLens !== 'none') && chefPicksCategory ? [chefPicksCategory] : []),
             ...displayCategories,
           ].map(category => {
             const isChefCat = category.id === CHEF_PICKS_ID;
