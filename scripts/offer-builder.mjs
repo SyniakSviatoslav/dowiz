@@ -19,6 +19,7 @@
 import { chromium } from '@playwright/test';
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { checkWolt } from '../tools/demo-builder/aggregator-check.mjs';
 
 const argv = process.argv.slice(2);
 const query = argv.find((a) => !a.startsWith('--'));
@@ -81,16 +82,12 @@ async function buildVenueSignal(d) {
     sig.push(`- **Tenure/momentum:** ~${rc} reviews → ${tenure}.`);
   }
   if (d.rating) sig.push(`- **Quality:** ${d.rating}★ — lead by appreciating the food/craft (never critique). High rating = they care about the product; a polished own-storefront matches that pride.`);
-  // Aggregator presence = the cost-pressure signal. Best-effort public check (Wolt discovery search).
-  let onWolt = null;
-  try {
-    const city = (d.address || '').split(',').slice(-2, -1)[0]?.trim() || 'Durres';
-    const r = await fetch(`https://restaurant-api.wolt.com/v1/pages/search?q=${encodeURIComponent(d.name)}&lat=${(d.latlng || '').split(',')[0] || ''}&lon=${(d.latlng || '').split(',')[1] || ''}`, { headers: { 'user-agent': 'Mozilla/5.0' } });
-    if (r.ok) { const j = await r.json(); const hit = JSON.stringify(j).toLowerCase().includes((d.name || '').toLowerCase().split(' ')[0]); onWolt = hit; }
-  } catch { onWolt = null; }
-  if (onWolt === true) sig.push('- **💡 COST-PRESSURE (strong):** appears on Wolt → already paying ~30% commission per order → the "porositë drejt te ti, pa komision" line is the most relevant thing you can say. Lead value here.');
-  else if (onWolt === false) sig.push('- **Cost-pressure:** not clearly found on Wolt — check Glovo/Wolt manually; if on either, that commission is your sharpest angle.');
-  else sig.push('- **Cost-pressure:** aggregator check inconclusive — manually verify Wolt/Glovo presence (already-on-aggregator = paying commission = strongest receptivity signal).');
+  // Aggregator presence = the cost-pressure signal (robust: Wolt city-list + token-set match).
+  const [lat, lon] = (d.latlng || ',').split(',');
+  const w = lat && lon ? await checkWolt(d.name, lat, lon) : { on: null, match: null, listSize: 0 };
+  if (w.on === true) sig.push(`- **💡 COST-PRESSURE (HOT):** on Wolt as "${w.match}" → already paying ~30% commission → lead with "porositë drejt te ju, pa komision". Angle: keep the money you already lose.`);
+  else if (w.on === false) sig.push(`- **Cost-pressure (angle B):** NOT on Wolt (${w.listSize} venues checked) → likely self-delivers/phone-orders or no online ordering. Angle: get online ordering WITHOUT giving 30% to anyone — a fresh channel, not a switch. (Check Glovo too.)`);
+  else sig.push('- **Cost-pressure:** aggregator check inconclusive (no lat/lon or Wolt list unavailable) — verify Wolt/Glovo manually.');
   sig.push('- **Deeper (optional next pass):** read the recent reviews for delivery mentions/complaints and read Maps "popular times" for peak-hours load — both public, both sharpen timing. NOT the owner\'s private life.');
   return sig.join('\n');
 }
