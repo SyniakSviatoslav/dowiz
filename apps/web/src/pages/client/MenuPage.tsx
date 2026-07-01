@@ -426,6 +426,11 @@ export function MenuPage() {
   // Hero background video (self-hosted in R2, served by /media). Per-location convention key; if the
   // object 404s (no video for this venue) the <video> onError flips this off → the stylized map shows.
   const [heroVideoOk, setHeroVideoOk] = useState(true);
+  // A venue can supply a still HERO IMAGE (its storefront/sign photo) at the same /media convention as the
+  // video. 'loading' until it resolves; 'ok' → render it AND give the band real height so the photo reads as
+  // a backdrop, not a strip; 'none' → 404, fall through to the video / stylized-map (unchanged for tenants
+  // without a photo, e.g. /s/demo).
+  const [heroImg, setHeroImg] = useState<'loading' | 'ok' | 'none'>('loading');
   // UX-1 storefront footer links — decoupled from geo so they show even without lat/lng.
   const [storeLinks, setStoreLinks] = useState<{ mapsUrl?: string | null; instagram?: string | null; facebook?: string | null; phone?: string | null }>({});
   const [storeAddress, setStoreAddress] = useState<string | null>(null);
@@ -726,10 +731,20 @@ export function MenuPage() {
       {/* Vendor info zone — between the header (which already shows the name+logo) and the categories.
           Google rating + reviews link + venue state + closing time, over a stylized-map backdrop (no API).
           The big vendor title was removed (redundant with the header). */}
-      <section data-testid="vendor-info" className="relative w-full h-[150px] md:h-[180px] flex items-end overflow-hidden">
-        {/* Backdrop: the venue's self-hosted Google video (R2 → /media) when present, else the stylized map.
-            The video onError (404 = no video for this venue) reveals the map beneath. */}
+      <section data-testid="vendor-info" className={`relative w-full flex items-end overflow-hidden ${heroImg === 'ok' ? 'h-[240px] md:h-[320px]' : 'h-[150px] md:h-[180px]'}`}>
+        {/* Backdrop precedence: still hero photo (storefront/sign) → self-hosted Google video → stylized map.
+            Each onError (404) reveals the layer beneath, so a venue with none of them still gets the map. */}
         <div className="absolute inset-0"><StylizedMap className="w-full h-full" /></div>
+        {locationInfo?.id && heroImg !== 'none' && (
+          <img
+            src={`/media/${locationInfo.id}/hero/cover.webp`}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-cover"
+            onLoad={() => setHeroImg('ok')}
+            onError={() => setHeroImg('none')}
+          />
+        )}
         {locationInfo?.id && heroVideoOk && (
           <video
             className="absolute inset-0 w-full h-full object-cover"
