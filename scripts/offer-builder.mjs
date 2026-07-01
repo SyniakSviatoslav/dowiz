@@ -17,7 +17,7 @@
 //   (needs @playwright/test's chromium; run from repo root)
 // ══════════════════════════════════════════════════════════════════════════════════════════════════════
 import { chromium } from '@playwright/test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const argv = process.argv.slice(2);
@@ -125,7 +125,58 @@ function draftAlbanian(d, reach, demoUrl) {
   ].join('\n');
 }
 
-function packet(d, reach, socials, demoUrl, demoLive, venueSignal) {
+// ── Stage 5b — LLM compose: auto-draft the per-venue Albanian message from the packet (optional) ────────
+// All the cultural rules are baked into the prompt. Returns null on any failure → the scaffold stands.
+// Needs OPENROUTER_API_KEY in env (run `node --env-file=.env scripts/offer-builder.mjs …`). Still native-review.
+function loadOpenrouterKey() {
+  if (process.env.OPENROUTER_API_KEY) return process.env.OPENROUTER_API_KEY;
+  try { const t = readFileSync(resolve('.env'), 'utf8'); const m = t.match(/^OPENROUTER_API_KEY=(.+)$/m); return m ? m[1].trim() : null; } catch { return null; }
+}
+async function composeDraft(d, venueSignal, demoUrl) {
+  const key = loadOpenrouterKey();
+  if (!key) return null;
+  // Paid primary (needs OpenRouter credits) → free fallbacks (work when not rate-limited). Override with
+  // OPENROUTER_MODEL. Current 2026 slugs; refresh from https://openrouter.ai/api/v1/models if they 404.
+  const models = (process.env.OPENROUTER_MODEL ? [process.env.OPENROUTER_MODEL]
+    : ['google/gemini-3.5-flash', 'meta-llama/llama-3.3-70b-instruct:free', 'qwen/qwen3-next-80b-a3b-instruct:free']);
+  const prompt = `You are a NATIVE Albanian (Tosk, Albania) copywriter helping a founder write ONE warm outreach DM to a
+restaurant owner who ALREADY agreed once to test a product (warm lead, prior consent).
+
+Write ONE short message in natural, warm, human Albanian — MAX 5 short lines. Structure, one line each:
+1) warm recognition of THEIR place + one real detail (use the rating if given);
+2) bridge: "I made something for you, no obligation" (a made thing, not a promise);
+3) the demo of THEIR menu with the link;
+4) value in THEIR terms: orders come straight to them, their customers & data stay theirs, no aggregator commission;
+5) soft two-way CTA: if you like it I'll show you in 15 min how to start; if not, just tell me — no problem.
+
+HARD RULES: never use words like "falas", "kursim", "mundësi" (post-1997 scam triggers); never question their
+competence or say anything is wrong on their side; no religion; no pressure; sound like a real person, not
+marketing; keep it SHORT. Output ONLY the Albanian message text (you may use 1-2 tasteful emojis). Nothing else.
+
+VENUE: ${d.name} · ${d.address || ''} · rating ${d.rating || '—'}${d.reviews ? ` (${d.reviews})` : ''}
+DEMO LINK: ${demoUrl}
+SIGNAL (for your framing, do NOT quote verbatim): ${venueSignal.replace(/\n/g, ' ').slice(0, 400)}`;
+  for (const model of models) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model, max_tokens: 600, temperature: 0.7, messages: [{ role: 'user', content: prompt }] }),
+        });
+        if (res.status === 429 && attempt === 1) { console.error(`[offer-builder] compose ${model} → 429, retrying`); await new Promise((r) => setTimeout(r, 4000)); continue; }
+        if (!res.ok) { console.error(`[offer-builder] compose ${model} → ${res.status}, next`); break; }
+        const j = await res.json();
+        const text = j?.choices?.[0]?.message?.content?.trim();
+        if (text) return { text, model };
+        break;
+      } catch (e) { console.error(`[offer-builder] compose ${model} err: ${e.message}`); break; }
+    }
+  }
+  return null;
+}
+
+function packet(d, reach, socials, demoUrl, demoLive, venueSignal, composed) {
   const wa = reach.whatsapp;
   return `# Offer packet · ${d.name}
 
@@ -159,10 +210,22 @@ ${venueSignal}
 ## 5 · Communication strategy (how to talk to THIS venue)
 ${buildStrategy(d)}
 
-## 6 · DM draft — Albanian (scaffold, 5 blocks) · ⚠️ native review required
+## 6 · DM draft — Albanian · ⚠️ native review required before sending
+${composed ? `_Auto-composed (${composed.model}). A draft, not final — a native speaker still verifies tone (insider, not outsider)._
+\`\`\`
+${composed.text}
+\`\`\`
+
+<details><summary>Fallback scaffold (5 blocks, if you prefer to write it yourself)</summary>
+
 \`\`\`
 ${draftAlbanian(d, reach, demoUrl)}
 \`\`\`
+</details>` : `_(No auto-draft — OPENROUTER_API_KEY missing, out of credits, or rate-limited. Scaffold below; add
+credits or set OPENROUTER_MODEL to a model your key can use, then re-run.)_
+\`\`\`
+${draftAlbanian(d, reach, demoUrl)}
+\`\`\``}
 **English gloss:** Hi! I'm writing about <venue> — I really liked your place/menu. · I made something for you,
 no strings. · I turned your menu into an online shop you can try yourself: <demo>. · This way orders come
 straight to you — your customers and data, no Glovo commission. · If you like it, I'll show you in 15 min how
@@ -188,7 +251,9 @@ to launch; if not, just tell me — no problem.
   let demoLive = false;
   try { const r = await fetch(`${BASE}/public/locations/${useSlug}/menu`); demoLive = r.ok; } catch {}
   const venueSignal = await buildVenueSignal(d);
-  const md = packet(d, reach, socials, demoUrl, demoLive, venueSignal);
+  const composed = await composeDraft(d, venueSignal, demoUrl);
+  console.error(`[offer-builder] compose: ${composed ? 'ok (' + composed.model + ')' : 'skipped/failed → scaffold'}`);
+  const md = packet(d, reach, socials, demoUrl, demoLive, venueSignal, composed);
   const dir = resolve('loops/offers'); mkdirSync(dir, { recursive: true });
   const out = resolve(dir, `${useSlug}-offer.md`);
   writeFileSync(out, md);
