@@ -23,8 +23,12 @@ The shipped /internal surface has NO endpoint to (a) set a non-AI `menu_draft` o
 invent phantom endpoints (M6), demo-builder uses the SAME sanctioned operator DB seam the sibling acquisition loop certified:
 1. **Enrich seam** (non-AI menu): `UPDATE acquisition_sources SET menu_draft = $draft WHERE id = $src;` then advance to ENRICHED
    (the loop's `normalizeMenu` + `gateMenu` produce/validate `$draft`; the spine reads `menu_draft` and writes products in-tx).
-2. **Theme seam** (palette): after spine returns `location_id`, `INSERT INTO location_themes (location_id, primary_color, bg_color, text_color) VALUES (…)`
-   from the run report's `theme_directive`. The storefront's `derivePalette` expands the triple into the full token set.
+2. **Theme seam** (palette + fonts): after spine returns `location_id`, `INSERT INTO location_themes (location_id,
+   primary_color, bg_color, text_color, heading_font, body_font) VALUES (…)` from the run report's `theme_directive`
+   (which now carries `heading_font`/`body_font` allowlist ids from `fontPairingForCuisine(cuisine)` — mig 084 added
+   the two columns). The storefront's `derivePalette` expands the colour triple; ThemeProvider applies the font ids
+   (a base font needs no load; a non-base id gets a Google-Fonts `<link>` injected client-side). Owner overrides via
+   the admin BrandingPage font pickers. Font id allowlist + cuisine map: `packages/ui/src/theme/fonts.ts` (SoT).
 Both run with operator Postgres creds (staging: see MEMORY staging-db-access recipe). The loop RECORDS the exact directive per prospect.
 
 ## Brand-asset seams (added 2026-07-01 · ArtePasta real-identity build)
