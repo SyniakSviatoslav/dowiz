@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { useI18n } from '../lib/I18nProvider.js';
 import { PaperIllustration } from './PaperIllustration.js';
 import { ArtNouveauDivider } from './NomadicScene.js';
 import { isPaperSkinEnabled } from '../theme/paperSkin.js';
@@ -36,19 +35,6 @@ export function EmptyState({ title, description, icon, action, fullPage = false 
   // fullPage: this empty/error state IS the whole screen → vertically centre it so it doesn't
   // strand at the top with a large dead void below (esp. on mobile). See mobile-polish #10.
   return fullPage ? <div className="min-h-[68dvh] flex flex-col items-center justify-center">{card}</div> : card;
-}
-
-// --- OfflineBanner ---
-export function OfflineBanner({ fallbackPhone }: { fallbackPhone?: string }) {
-  const { t } = useI18n();
-  return (
-    <div className="fixed top-0 left-0 right-0 z-50 bg-[var(--color-warning-strong)] text-[var(--brand-text)] px-4 py-2 text-sm font-medium text-center shadow-md">
-      {t('common.offline', 'You are currently offline. Please check your internet connection.')}
-      {fallbackPhone && (
-        <span className="block mt-1">{t('common.call_us', 'Need help? Call us:')} <a href={`tel:${fallbackPhone}`} className="underline font-bold">{fallbackPhone}</a></span>
-      )}
-    </div>
-  );
 }
 
 // --- WSStatusDot ---

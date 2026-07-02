@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, Modal, useI18n } from '../../index.js';
+import { Button, ResponsiveDialog, useI18n } from '../../index.js';
 import { ease, duration } from '../../lib/motion.js';
 
 interface OTPModalProps {
@@ -93,7 +93,7 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
   };
 
   return (
-    <Modal isOpen={open} onClose={onClose} title={t('otp.title', 'Confirm your number')}>
+    <ResponsiveDialog open={open} onClose={onClose} title={t('otp.title', 'Confirm your number')}>
       <div className="space-y-4">
         <p className="text-sm" style={{ color: 'var(--brand-text-muted)' }}>
           {t('otp.sent_to', 'We sent a 6-digit code to')}{' '}
@@ -172,6 +172,6 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
           </button>
         </div>
       </div>
-    </Modal>
+    </ResponsiveDialog>
   );
 }
