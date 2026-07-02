@@ -1,4 +1,0 @@
-# Phase C eval layer — small, decoupled Python CI job (DeepEval is Python-first).
-deepeval
-openai
-langfuse

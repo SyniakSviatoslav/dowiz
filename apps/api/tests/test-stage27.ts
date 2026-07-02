@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { loadEnv } from '@deliveryos/config';
 import { createSessionPool } from '@deliveryos/db';
 import { signAuthToken } from '@deliveryos/platform';
-import { evaluatePreflight, type PreflightInput } from '../../../packages/core/preflight/evaluatePreflight.js';
+import { evaluatePreflight, type PreflightInput } from '../src/lib/preflight.js';
 
 const env = loadEnv();
 const BASE = `http://127.0.0.1:${env.PORT || 3003}`;

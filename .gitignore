@@ -70,6 +70,16 @@ e2e/findings/round-*/
 scratch-*.mjs
 .claude/*.bak-*
 graphify-out/
+# Audit-session screenshot evidence (800+ files) + per-app screenshot debris
+/audit/
+apps/api/*.png
+# Loop-harness run artifacts + prospect packets (generated, may carry business contacts)
+loops/runs/
+loops/prospects/
+# Committed-by-accident classes: log dumps at root, python bytecode
+/*.txt
+__pycache__/
+*.pyc
 # NVIDIA SkillSpector — operator security tool (agent-skill scanner), not app code
 tools/skillspector/
 
