@@ -31,6 +31,11 @@ test.setTimeout(60_000);
 
 let api: APIRequestContext;
 let ownerToken = '';
+// Whether the admin plane's platform-admins migration is applied on the target. When dark it
+// fail-closes with 503 uniformly; when live it denies with the exact 401/403. Probed once in
+// beforeAll so each assertion can check the EXACT status for the actual deployment state
+// (test-integrity: no permissive status arrays — assert the one true expected code).
+let planeLive = false;
 
 const call = (token: string | undefined, e: typeof ENDPOINTS[number]) =>
   api.fetch(`${BASE}${e.path}`, { method: e.method, headers: token ? { authorization: `Bearer ${token}` } : {}, data: e.body });
@@ -40,15 +45,17 @@ test.beforeAll(async () => {
   const login = await api.post(`${BASE}/api/auth/local/login`, { data: OWNER });
   expect(login.ok(), 'owner REAL login').toBeTruthy();
   ownerToken = (await login.json()).access_token;
-  expect(ownerToken, 'owner token').toBeTruthy();
+  expect(ownerToken, 'owner token is a JWT').toMatch(/^eyJ[\w-]+\.[\w-]+\.[\w-]+$/);
+  // Probe plane state once: 503 = platform-admins migration not yet applied (admin plane dark).
+  const probe = await call(ownerToken, ENDPOINTS[0]);
+  planeLive = probe.status() !== 503;
 });
 
 test('CORE BOLA closure — an owner JWT is 403 on EVERY /api/admin endpoint (not 200/all-tenant)', async () => {
   for (const e of ENDPOINTS) {
     const r = await call(ownerToken, e);
-    // 403 = gated (the fix). 503 = migration not yet applied (admin plane dark). NEVER 200 (the bug).
-    expect([403, 503], `${e.method} ${e.path} → ${r.status()} (owner must NOT get 200)`).toContain(r.status());
-    expect(r.status(), `${e.method} ${e.path} must not 200 for an owner`).not.toBe(200);
+    // live → 403 (gated, the fix); dark → 503 (migration not yet applied). NEVER 200 (the bug).
+    expect(r.status(), `${e.method} ${e.path} → ${r.status()} (owner must be denied, not 200)`).toBe(planeLive ? 403 : 503);
     if (r.status() === 403) {
       // a JSON 403 envelope, NOT a 200 SPA shell (guards the double-prefix false-green)
       expect((r.headers()['content-type'] ?? ''), `${e.path} is JSON not index.html`).toContain('json');
@@ -59,8 +66,7 @@ test('CORE BOLA closure — an owner JWT is 403 on EVERY /api/admin endpoint (no
 test('an unauthenticated request is 401 on every admin endpoint', async () => {
   for (const e of ENDPOINTS) {
     const r = await call(undefined, e);
-    expect([401, 503], `${e.method} ${e.path} unauth → ${r.status()}`).toContain(r.status());
-    expect(r.status()).not.toBe(200);
+    expect(r.status(), `${e.method} ${e.path} unauth → ${r.status()}`).toBe(planeLive ? 401 : 503);
   }
 });
 
@@ -69,8 +75,8 @@ test('a courier/customer-shaped token (no userId) is 401/403, never 200', async 
   // the gate's no-userId branch; a garbage token 401s at verifyAuth.)
   for (const e of ENDPOINTS) {
     const r = await call('not-a-real-token', e);
-    expect([401, 403, 503]).toContain(r.status());
-    expect(r.status()).not.toBe(200);
+    // a garbage bearer 401s at verifyAuth when the plane is live; 503 when dark. Never 200.
+    expect(r.status(), `${e.method} ${e.path} garbage-token → ${r.status()}`).toBe(planeLive ? 401 : 503);
   }
 });
 
