@@ -265,6 +265,25 @@ async function main() {
       console.warn(`[API] Queue "${qName}" not pre-created: ${err.message}`);
     });
   }
+  // Observability: request counters/latency + live saturation gauges, exposed on a
+  // token-gated GET /metrics (dark unless METRICS_TOKEN is set). The pool gauges are
+  // the early-warning for the operational-pool starvation incident class.
+  registerMetrics(fastify, {
+    pg_pool_operational_total: () => pool.totalCount,
+    pg_pool_operational_idle: () => pool.idleCount,
+    pg_pool_operational_waiting: () => pool.waitingCount,
+    pg_pool_session_total: () => messageBusPool.totalCount,
+    pg_pool_session_idle: () => messageBusPool.idleCount,
+    pg_pool_session_waiting: () => messageBusPool.waitingCount,
+    ws_connections: () => (fastify.wss ? fastify.wss.clients.size : 0),
+    pgboss_jobs_pending: async () => {
+      const r = await messageBusPool.query(
+        `SELECT COUNT(*) AS cnt FROM pgboss.job WHERE state IN ('created','retry','active')`
+      );
+      return Number(r.rows[0]?.cnt ?? NaN);
+    },
+  });
+
   // Verify queue table existence in pgboss schema
   try {
     const queueCheck = await messageBusPool.query(
