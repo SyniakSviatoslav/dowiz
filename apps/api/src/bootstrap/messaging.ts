@@ -77,6 +77,28 @@ export function registerNotifySubscriptions(messageBus: MessageBus, queueBoss: P
     }
   });
 
+  // ADR-dispatch-recovery (ETHICAL-STOP-1): dispatch exhaustion must be SEEN — this channel
+  // previously had zero subscribers, so the terminal escalation vanished into the void.
+  // Claim-check clean (opaque orderId/locationId only): owner Telegram-ops alert + an HONEST
+  // customer push ("arranging your courier / slight delay" — never a false "on its way").
+  // The durable trace is orders.dispatch_exhausted_at, committed before this event fires.
+  messageBus.subscribe(BUS_CHANNELS.ORDER_DISPATCH_FAILED, async (payload: any) => {
+    try {
+      await tgSend('order.dispatch_failed', payload.orderId, payload.locationId);
+    } catch (err) {
+      console.error('[Notify] Failed to send order.dispatch_failed telegram job', err);
+    }
+    try {
+      await queueBoss.send(QUEUE_NAMES.NOTIFY_CUSTOMER_STATUS, {
+        orderId: payload.orderId,
+        locationId: payload.locationId,
+        event: 'DISPATCH_DELAYED',
+      });
+    } catch (err) {
+      console.error('[Notify] Failed to enqueue dispatch-delayed customer push', err);
+    }
+  });
+
   messageBus.subscribe(BUS_CHANNELS.ORDER_CONFIRMED, async (payload: any) => {
     try {
       await tgSend('order.confirmed', payload.orderId, payload.locationId);

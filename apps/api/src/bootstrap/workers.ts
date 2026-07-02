@@ -1,11 +1,18 @@
-// @ts-nocheck
 // Background worker startup extracted from server.ts main(). This is the BODY of
 // the boot-budget Promise.race IIFE — the race + WORKER_BOOT_BUDGET_MS timeout +
 // the "continue to listen" catch REMAIN in main() (boot resilience, incident
 // 2026-06-21: the menu must serve even when workers are degraded). This function
 // only constructs + starts the workers in their original order and returns the
-// heartbeat handles main() needs for shutdown. @ts-nocheck mirrors server.ts so
-// no new type surface is introduced by the move.
+// heartbeat handles main() needs for shutdown.
+import type { Pool } from 'pg';
+import type { PgBoss, Job } from 'pg-boss';
+import type { MessageBus, PgBossQueueProvider } from '@deliveryos/platform';
+import type {
+  NotificationWorker,
+  NotifyDispatchJob,
+  CustomerStatusJob,
+  TelegramSendJob,
+} from '../notifications/workers/index.js';
 import { QUEUE_NAMES } from '../lib/registry.js';
 import { WorkerHeartbeat } from '../lib/worker/heartbeat.js';
 import { LivenessChecker } from '../workers/liveness-checker.js';
@@ -23,15 +30,15 @@ import { DeliveryTraceRetentionWorker } from '../workers/delivery-trace-retentio
 import { registerNotifySubscriptions } from './messaging.js';
 
 export interface BackgroundWorkerDeps {
-  pool: any;
-  backupPool: any;
-  queue: any;
-  messageBus: any;
-  notifyWorker: any;
+  pool: Pool;
+  backupPool: Pool;
+  queue: PgBossQueueProvider;
+  messageBus: MessageBus;
+  notifyWorker: NotificationWorker;
 }
 
 export interface BackgroundWorkerHandles {
-  heartbeats: any[];
+  heartbeats: WorkerHeartbeat[];
 }
 
 /**
@@ -43,9 +50,11 @@ export async function startBackgroundWorkers(deps: BackgroundWorkerDeps): Promis
   const { pool, backupPool, queue, messageBus, notifyWorker } = deps;
 
   // Register pg-boss notify workers (queue.work wraps pg-boss v10 array-of-jobs).
-  await queue.work(QUEUE_NAMES.NOTIFY_DISPATCH, async (data: any) => notifyWorker.handleDispatch({ data }));
-  await queue.work(QUEUE_NAMES.NOTIFY_CUSTOMER_STATUS, async (data: any) => notifyWorker.handleCustomerStatus({ data }));
-  await queue.work(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, async (data: any) => notifyWorker.handleTelegramSend({ data }));
+  // queue.work delivers ONLY job.data; the handlers read only job.data, so the
+  // reconstructed `{ data }` shell is asserted to the handlers' Job<T> parameter.
+  await queue.work(QUEUE_NAMES.NOTIFY_DISPATCH, async (data: any) => notifyWorker.handleDispatch({ data } as Job<NotifyDispatchJob>));
+  await queue.work(QUEUE_NAMES.NOTIFY_CUSTOMER_STATUS, async (data: any) => notifyWorker.handleCustomerStatus({ data } as Job<CustomerStatusJob>));
+  await queue.work(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, async (data: any) => notifyWorker.handleTelegramSend({ data } as Job<TelegramSendJob>));
   console.log('[API] pg-boss workers registered');
 
   const { CourierDispatchWorker } = await import('../workers/courier-dispatch.js');
@@ -94,12 +103,20 @@ export async function startBackgroundWorkers(deps: BackgroundWorkerDeps): Promis
   await anonymizerRetentionWorker.start();
   await gdprErasureWorker.start();
 
-  // P31 — Worker Heartbeats (critical workers)
+  // P31 — Worker Heartbeats. ADR-dispatch-recovery R3′ (B5): the set below MUST equal
+  // ReconciliationWorker A6.EXPECTED_WORKERS (8 ids) — the heartbeat is a cadence-independent
+  // 15s timer proving the PROCESS is alive, so hourly/nightly workers beat too. Instrumenting
+  // the missing 4 (instead of trimming A6) keeps backup-hourly (data-recovery red-line) and
+  // liveness-checker (watcher-of-the-watcher, caught by nightly A6) monitored with no false DRIFT.
   const heartbeatConfigs = [
     { workerId: 'dispatcher', jobName: QUEUE_NAMES.COURIER_DISPATCH },
     { workerId: 'settlement-cron', jobName: QUEUE_NAMES.SETTLEMENT_CRON },
     { workerId: 'dwell-monitor', jobName: QUEUE_NAMES.DWELL_MONITOR },
     { workerId: 'anonymizer-retention', jobName: QUEUE_NAMES.ANONYMIZER_RETENTION },
+    { workerId: 'backup-hourly', jobName: QUEUE_NAMES.BACKUP_HOURLY },
+    { workerId: 'signal-raiser', jobName: QUEUE_NAMES.SIGNAL_RAISER },
+    { workerId: 'courier-stale_check', jobName: QUEUE_NAMES.COURIER_STALE_CHECK },
+    { workerId: 'liveness-checker', jobName: QUEUE_NAMES.LIVENESS_CHECK },
   ];
   const heartbeats = heartbeatConfigs.map((cfg) => {
     const hb = new WorkerHeartbeat(pool, cfg);
@@ -117,7 +134,10 @@ export async function startBackgroundWorkers(deps: BackgroundWorkerDeps): Promis
 
   // Currency Rates Refresh Worker (hourly, fetches ALL→EUR from fawazahmed0)
   const { RatesRefreshWorker } = await import('../workers/rates-refresh.js');
-  const ratesRefreshWorker = new RatesRefreshWorker(pool, queue.boss);
+  // FLAG (type-restore 2026-07-02): pg-boss VERSION SKEW — queue.boss is the v10 instance
+  // (packages/platform pins pg-boss ^10) while apps/api workers compile against pg-boss ^12
+  // types. The runtime object is v10; the assertion bridges the third-party version gap.
+  const ratesRefreshWorker = new RatesRefreshWorker(pool, queue.boss as unknown as PgBoss);
   await ratesRefreshWorker.start();
 
   // Soft access gate — notify + retention/reconcile crons run unconditionally (data
@@ -131,11 +151,23 @@ export async function startBackgroundWorkers(deps: BackgroundWorkerDeps): Promis
   const deliveryTraceRetentionWorker = new DeliveryTraceRetentionWorker(pool, queue.boss, messageBus);
   await deliveryTraceRetentionWorker.start();
 
-  registerNotifySubscriptions(messageBus, queue.boss);
+  // (same pg-boss v10-instance / v12-types version-skew assertion as RatesRefreshWorker below)
+  registerNotifySubscriptions(messageBus, queue.boss as unknown as PgBoss);
 
   // P31 — Worker Liveness Checker (singleton cron, 60s)
-  const livenessChecker = new LivenessChecker(pool, queue.boss, messageBus);
+  // (same pg-boss v10-instance / v12-types version-skew assertion as RatesRefreshWorker above)
+  const livenessChecker = new LivenessChecker(pool, queue.boss as unknown as PgBoss, messageBus);
   await livenessChecker.start();
+
+  // B5 (ADR-dispatch-recovery, Option R3′ — closes ADR-golive R9): the full READ-ONLY nightly
+  // ReconciliationWorker is re-registered. Its A6 worker-liveness check watches the true set of
+  // 8 heartbeating ids (see heartbeatConfigs above) so it yields no false DRIFT; nightly
+  // detection+alert complements the sweeps' sub-minute recovery. Zero mutations, one 03:00 UTC
+  // read burst on the existing pool.
+  const { ReconciliationWorker } = await import('../workers/reconciliation.js');
+  // pg-boss v10-instance/v12-types skew bridge (same as the 3 sites above; platform pins ^10)
+  const reconciliationWorker = new ReconciliationWorker(pool, queue.boss as unknown as PgBoss, messageBus);
+  await reconciliationWorker.start();
 
   // P5-5 — Free-tier watch (hourly, monitors Free tier limits)
   const { collectFreeTierMetrics } = await import('../workers/free-tier-watch.js');

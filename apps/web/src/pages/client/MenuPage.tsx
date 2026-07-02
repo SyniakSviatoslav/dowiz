@@ -11,6 +11,7 @@ import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput, computeAllergenSurface, partitionByMacroLens } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
+import { fetchVenueInfo } from '../../lib/publicApi.js';
 import { MenuComparePanel } from './MenuComparePanel.js';
 import type { CompareDish } from './MenuComparePanel.js';
 import type { DishIngredient } from '../../components/client/DishStats.js';
@@ -455,9 +456,8 @@ export function MenuPage() {
 
   useEffect(() => {
     if (!slug) return;
-    fetch(`/public/locations/${slug}/info`)
-      .then(r => r.ok ? r.json() : null)
-      .then((d: any) => {
+    fetchVenueInfo(slug)
+      .then((d) => {
         if (!d) return;
         if (d.lat && d.lng) setLocationInfo({ id: d.id, lat: d.lat, lng: d.lng, googleRating: d.googleRating, googleReviewCount: d.googleReviewCount, isOpen: d.isOpen, status: d.status, closesAt: d.closesAt ?? null });
         // Derive venue state from the contract status; fall back to the legacy isOpen

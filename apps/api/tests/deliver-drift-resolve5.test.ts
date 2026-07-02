@@ -55,13 +55,13 @@ maybe('D1a · IN_DELIVERY + picked_up → CANCELLED (honest terminal, food is ou
   const s = await seed({ asgStatus: 'picked_up' });
   const { bus } = capturingBus();
   const c = await pool.connect();
-  let reoffered: boolean;
+  let requeued: boolean;
   try {
     await c.query('BEGIN');
-    ({ reoffered } = await releaseBindingAndReoffer(c, { assignmentId: s.assignmentId, orderId: s.orderId, shiftId: s.shiftId, asgStatus: 'picked_up', ordStatus: 'IN_DELIVERY', locationId: s.locationId, reason: 'courier_cancelled: x' }, { messageBus: bus }));
+    ({ requeued } = await releaseBindingAndReoffer(c, { assignmentId: s.assignmentId, orderId: s.orderId, shiftId: s.shiftId, asgStatus: 'picked_up', ordStatus: 'IN_DELIVERY', locationId: s.locationId, reason: 'courier_cancelled: x' }, { messageBus: bus }));
     await c.query('COMMIT');
   } finally { c.release(); }
-  assert.equal(reoffered!, false);
+  assert.equal(requeued!, false);
   assert.equal((await pool.query(`SELECT status FROM orders WHERE id=$1`, [s.orderId])).rows[0].status, 'CANCELLED');
   assert.equal((await pool.query(`SELECT status FROM courier_assignments WHERE id=$1`, [s.assignmentId])).rows[0].status, 'cancelled');
 });
@@ -70,16 +70,16 @@ maybe('D1b · IN_DELIVERY + accepted → READY (NOT stuck IN_DELIVERY, NOT a fal
   const s = await seed({ asgStatus: 'accepted' });
   const { bus, calls } = capturingBus();
   const c = await pool.connect();
-  let reoffered: boolean;
+  let requeued: boolean;
   try {
     await c.query('BEGIN');
-    ({ reoffered } = await releaseBindingAndReoffer(c, { assignmentId: s.assignmentId, orderId: s.orderId, shiftId: s.shiftId, asgStatus: 'accepted', ordStatus: 'IN_DELIVERY', locationId: s.locationId, reason: 'courier_cancelled: x' }, { messageBus: bus }));
+    ({ requeued } = await releaseBindingAndReoffer(c, { assignmentId: s.assignmentId, orderId: s.orderId, shiftId: s.shiftId, asgStatus: 'accepted', ordStatus: 'IN_DELIVERY', locationId: s.locationId, reason: 'courier_cancelled: x' }, { messageBus: bus }));
     await c.query('COMMIT');
   } finally { c.release(); }
   // THE C-2 TRAP FIX: the order is back to assignable, not stranded IN_DELIVERY and not lyingly CANCELLED.
   assert.equal((await pool.query(`SELECT status FROM orders WHERE id=$1`, [s.orderId])).rows[0].status, 'READY');
   assert.equal((await pool.query(`SELECT courier_id FROM orders WHERE id=$1`, [s.orderId])).rows[0].courier_id, null, 'mirror cleared');
-  assert.equal(reoffered!, true);
+  assert.equal(requeued!, true);
   assert.equal((await pool.query(`SELECT count(*)::int n FROM courier_dispatch_queue WHERE order_id=$1`, [s.orderId])).rows[0].n, 1, 're-enqueued');
   // R2-5: NO false ORDER_CANCELLED for an order that actually reverted to READY.
   const sawCancelled = calls.some(k => JSON.stringify(k).includes('CANCELLED'));
@@ -90,16 +90,16 @@ maybe('D1c · flag-ON accept (order CONFIRMED, never advanced) → NO throw, sta
   const s = await seed({ orderStatus: 'CONFIRMED', asgStatus: 'accepted' });
   const { bus } = capturingBus();
   const c = await pool.connect();
-  let reoffered: boolean;
+  let requeued: boolean;
   try {
     await c.query('BEGIN');
     // R3-2: must NOT force a transition from CONFIRMED (would throw IllegalTransition and roll back the abort).
-    ({ reoffered } = await releaseBindingAndReoffer(c, { assignmentId: s.assignmentId, orderId: s.orderId, shiftId: s.shiftId, asgStatus: 'accepted', ordStatus: 'CONFIRMED', locationId: s.locationId, reason: 'courier_cancelled: x' }, { messageBus: bus }));
+    ({ requeued } = await releaseBindingAndReoffer(c, { assignmentId: s.assignmentId, orderId: s.orderId, shiftId: s.shiftId, asgStatus: 'accepted', ordStatus: 'CONFIRMED', locationId: s.locationId, reason: 'courier_cancelled: x' }, { messageBus: bus }));
     await c.query('COMMIT');
   } finally { c.release(); }
   assert.equal((await pool.query(`SELECT status FROM orders WHERE id=$1`, [s.orderId])).rows[0].status, 'CONFIRMED', 'pre-pickup order untouched');
   assert.equal((await pool.query(`SELECT status FROM courier_assignments WHERE id=$1`, [s.assignmentId])).rows[0].status, 'cancelled', 'binding always freed');
-  assert.equal(reoffered!, true);
+  assert.equal(requeued!, true);
 });
 
 // ── D2 (R2-6): IN_DELIVERY→READY through the machine writes order_status_history (the raw UPDATE did not). ──
