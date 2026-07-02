@@ -99,9 +99,6 @@ input:invalid, select:invalid, textarea:invalid {
 
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-/* Alias — some components use no-scrollbar; keep both working. */
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* Horizontal-scroll cue: fade the right edge so a clipped chip/tab row reads as "scroll for more"
    rather than "truncated". Pair with overflow-x-auto + hide-scrollbar on chip/tab/KPI strips. */
@@ -123,7 +120,7 @@ input:invalid, select:invalid, textarea:invalid {
 }
 
 .skeleton-block {
-  background: linear-gradient(90deg, var(--brand-surface) 25%, var(--brand-border) 50%, var(--brand-surface) 75%);
+  background: linear-gradient(90deg, var(--brand-surface) 25%, var(--brand-surface-raised) 50%, var(--brand-surface) 75%);
   background-size: 200% 100%;
   border-radius: var(--brand-radius-sm);
 }
@@ -134,7 +131,7 @@ input:invalid, select:invalid, textarea:invalid {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.12); }
   }
-  .skeleton-block { animation: shimmer 1.5s ease-in-out infinite; }
+  .skeleton-block { animation: shimmer 1.8s ease-in-out infinite; }
 }
 
 /* ── Soft breathing animations ── */

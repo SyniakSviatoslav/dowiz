@@ -243,16 +243,6 @@
 
 }
 
-/* ── Reduced motion: durations to 0 (state preserved via MotionConfig) ── */
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --motion-instant: 0ms;
-    --motion-fast: 0ms;
-    --motion-base: 0ms;
-    --motion-slow: 0ms;
-  }
-}
-
 /* ════════════════════════════════════════════════════════════════════════
    SUNLIGHT MODE — high-contrast outdoor theme (research: AAA ~7:1, flat).
    Toggled via html[data-sunlight="on"]. Uses !important to win over the

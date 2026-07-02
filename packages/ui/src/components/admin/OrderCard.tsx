@@ -224,7 +224,7 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
       </div>
 
       {/* Actions */}
-      <div className="pt-3 border-t border-[var(--brand-border)] flex gap-2 overflow-x-auto no-scrollbar" onClick={(e) => e.stopPropagation()}>
+      <div className="pt-3 border-t border-[var(--brand-border)] flex gap-2 overflow-x-auto hide-scrollbar" onClick={(e) => e.stopPropagation()}>
         {order.status === 'PENDING' && (
           <>
             <Button size="sm" data-testid="order-confirm" onClick={() => handleAction('CONFIRMED')} isLoading={loadingAction === 'CONFIRMED'}>{t('admin.accept', 'Accept')}</Button>

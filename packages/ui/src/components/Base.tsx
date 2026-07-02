@@ -8,12 +8,11 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
-  loading?: boolean;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className = '', variant = 'primary', size = 'md', isLoading, loading, children, ...props }, ref) => {
-    const isBusy = isLoading || loading;
+  ({ className = '', variant = 'primary', size = 'md', isLoading, children, ...props }, ref) => {
+    const isBusy = isLoading;
     let baseStyles = 'inline-flex items-center justify-center font-medium transition-all duration-200 focus-visible:outline-2 focus-visible:outline-[var(--brand-primary)] disabled:opacity-50 disabled:pointer-events-none rounded-[var(--brand-radius-btn)] active:scale-[0.98]';
     
     const variants = {

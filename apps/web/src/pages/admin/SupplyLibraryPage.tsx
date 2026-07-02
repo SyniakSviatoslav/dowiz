@@ -194,7 +194,7 @@ const SupplyForm = ({
       </div>
       <div className="flex justify-end gap-2 p-5 pt-3 border-t shrink-0" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
         <Button variant="ghost" size="sm" onClick={onCancel}>{t('common.cancel')}</Button>
-        <Button size="sm" loading={saving} onClick={handleSave}>{t('common.save')}</Button>
+        <Button size="sm" isLoading={saving} onClick={handleSave}>{t('common.save')}</Button>
       </div>
     </div>
   );

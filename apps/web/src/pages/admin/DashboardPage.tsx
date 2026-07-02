@@ -427,7 +427,7 @@ export function DashboardPage() {
 
       {/* Quick Stats Row — single horizontal-scroll strip on mobile (1 row, not 2) so a real order
           stays near the fold; a 5-col grid on ≥sm. */}
-      <div className="flex sm:grid sm:grid-cols-5 gap-3 stagger-children overflow-x-auto no-scrollbar scroll-fade-x sm:[mask-image:none] -mx-4 px-4 sm:mx-0 sm:px-0">
+      <div className="flex sm:grid sm:grid-cols-5 gap-3 stagger-children overflow-x-auto hide-scrollbar scroll-fade-x sm:[mask-image:none] -mx-4 px-4 sm:mx-0 sm:px-0">
         {[
           { label: t('order.pending', 'Pending'), value: stats.pending, color: 'var(--status-pending)', isCurrency: false, tooltip: t('tooltip.pending_orders', 'Orders awaiting confirmation') },
           { label: t('order.preparing', 'Preparing'), value: stats.inProgress, color: 'var(--status-preparing)', isCurrency: false, tooltip: t('tooltip.active_orders', 'Orders being prepared') },

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher, PriceDisplay, useCurrency, derivePalette, googleFontsHref, isPaperSkinEnabled, paperSkinAttr, staggerChildren, listItem } from '@deliveryos/ui';
+import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBar, ResponsiveDialog, AnimatedNumber, Pressable, CurrencySwitcher, PriceDisplay, useCurrency, derivePalette, googleFontsHref, staggerChildren, listItem } from '@deliveryos/ui';
 import { formatMoney } from '@deliveryos/shared-types';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../lib/index.js';
@@ -167,7 +167,7 @@ function ClientLayoutInner() {
         {/* Heading/body fonts now come from the per-tenant theme (ThemeProvider sets --brand-font-heading /
             --brand-font-body on :root from the cuisine default or the owner's pick). No inline override here —
             an inline style on this div would shadow the :root value for the whole subtree. */}
-        <div {...paperSkinAttr()} className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] font-sans">
+        <div className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] font-sans">
           <header className="sticky top-0 z-sticky h-14 bg-[var(--brand-bg)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] flex items-center px-4 gap-3 shrink-0">
             {logoUrl ? (
               // Hide on load failure instead of showing a broken-image icon (e.g. a stale
