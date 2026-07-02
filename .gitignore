@@ -64,3 +64,15 @@ scratch-*.mjs
 graphify-out/
 # NVIDIA SkillSpector — operator security tool (agent-skill scanner), not app code
 tools/skillspector/
+
+# plane-telemetry local working copy (model-calibration.md §3): the durable record is the
+# append-only telemetry/plane orphan branch, published via `plane-telemetry.mjs publish`. These
+# are the local scratch mirror + per-invocation debug dumps — never the source of truth, never
+# committed to a normal branch. loops/runs/dep-baseline.json (new-dep-scan.mjs) and any future
+# metrics.jsonl/routing.jsonl/registry.json ARE meant to be tracked — not covered by this block.
+loops/runs/predictions.jsonl
+loops/runs/plane-events-*.jsonl
+loops/runs/plane-guard-*.json
+loops/runs/inbox-cursor.json
+loops/runs/inbox.lock
+loops/runs/plane-telemetry-status.json
