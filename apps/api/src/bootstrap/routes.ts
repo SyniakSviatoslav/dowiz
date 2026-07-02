@@ -1,13 +1,15 @@
-// @ts-nocheck
 // Core route registration extracted verbatim from server.ts main() (the
 // contiguous fastify.register block). This is a mechanical move — same order,
 // same options, same flag gate, same dynamic localAuthRoutes import — so the
 // boot file's main() shrinks and route wiring lives in one named place. Order is
 // load-bearing (Fastify), so the sequence here is unchanged; order-sensitive tail
 // registrations (telegram webhook, mock-auth, the spa-proxy catch-all, admin
-// routes) stay in main() AFTER this call. @ts-nocheck mirrors server.ts so no new
-// type surface is introduced by the move.
-import type { FastifyInstance } from 'fastify';
+// routes) stay in main() AFTER this call.
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
+import type { Pool } from 'pg';
+import type { Env } from '@deliveryos/config';
+import type { MessageBus, PgBossQueueProvider } from '@deliveryos/platform';
+import type { MenuParserProvider, StorageProvider, TranslationProvider } from '../ports.js';
 
 import authRoutes from '../routes/auth.js';
 import courierRoutes from '../routes/couriers.js';
@@ -64,14 +66,14 @@ import publicVoiceConfigRoutes from '../routes/public/voice-config.js';
 import ratesRoutes from '../routes/public/rates.js';
 
 export interface CoreRouteDeps {
-  pool: any;
-  messageBus: any;
-  queue: any;
-  storage: any;
-  parsers: any;
-  translation: any;
+  pool: Pool;
+  messageBus: MessageBus;
+  queue: PgBossQueueProvider;
+  storage: StorageProvider;
+  parsers: Record<string, MenuParserProvider>;
+  translation: TranslationProvider;
   /** loadEnv() result — only ACCESS_GATE_PUBLIC_ENABLED is read here. */
-  env: any;
+  env: Env;
 }
 
 /**
@@ -145,9 +147,12 @@ export async function registerCoreRoutes(fastify: FastifyInstance, deps: CoreRou
   fastify.register(courierSettlementRoutes, { prefix: '/api/courier', db: pool, messageBus });
   fastify.register(courierAssignmentsRoutes, { prefix: '/api/courier', db: pool, messageBus });
   fastify.register(courierShiftsRoutes, { prefix: '/api/courier', db: pool, messageBus });
-  fastify.register(orderMessageRoutes, { db: pool, messageBus });
+  // order-messages.ts declares (fastify: any, opts: any) — register() infers an empty
+  // options generic from that; assert the options shape the plugin actually reads.
+  fastify.register(orderMessageRoutes as FastifyPluginAsync<{ db: Pool; messageBus: MessageBus }>, { db: pool, messageBus });
 
-  fastify.register(ratesRoutes, { db: pool });
+  // rates.ts self-casts to bare FastifyPluginAsync (opts generic lost) — assert its real options shape.
+  fastify.register(ratesRoutes as FastifyPluginAsync<{ db: Pool }>, { db: pool });
   fastify.register(publicFallbackConfigRoutes, { db: pool });
   fastify.register(publicVoiceConfigRoutes); // voice-control runtime kill-switch (ADR-0015 §9) — no db
 

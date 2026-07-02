@@ -1,6 +1,5 @@
-// @ts-nocheck
 import crypto from 'node:crypto';
-import Fastify from 'fastify';
+import Fastify, { type FastifyError, type FastifyPluginAsync } from 'fastify';
 import { loadEnv } from '@deliveryos/config';
 import { createOperationalPool } from '@deliveryos/db';
 import { RedisMessageBus, PgBossQueueProvider } from '@deliveryos/platform';
@@ -8,7 +7,8 @@ import { BUS_CHANNELS, QUEUE_NAMES, ALL_QUEUES, CUSTOMER_PUSH_EVENTS, orderChann
 import { assertSchemaCurrent } from './lib/schema-guard.js';
 import { SYNTHETIC_COURIER_EMAIL_HASH } from './lib/synthetic-courier.js';
 import Redis from 'ioredis';
-import pg from 'pg';
+import pg, { type Pool } from 'pg';
+import type { StorageProvider } from './ports.js';
 import { z, type ZodTypeAny } from 'zod';
 import healthRoutes from './routes/health.js';
 import { assertAccessRequestSchedules } from './workers/access-request-retention.js';
@@ -47,31 +47,11 @@ import acquisitionRoutes from './modules/acquisition/route.js';
 import spaProxyRoutes from './routes/spa-proxy.js';
 import telegramWebhookRoutes from './routes/telegram-webhook.js';
 import paymentsWebhookRoutes from './routes/payments-webhook.js';
-import { MemoryService, getMemoryService } from './lib/memory.js';
+import { getMemoryService } from './lib/memory.js';
 import { registerMetrics } from './lib/metrics.js';
 
-declare module 'fastify' {
-  interface FastifyInstance {
-    db: any;
-    redis: any;
-    wss: any;
-    memory: import('./lib/memory.js').MemoryService;
-  }
-  interface FastifyReply {
-    /**
-     * A2 (ADR-0010): emit the structured error envelope for a RETURN-based ad-hoc site (the
-     * drop-in for `reply.status(n).send({ error })`). Same envelope as setErrorHandler (shared
-     * builder), incl. server correlationId + x-correlation-id echo. `code` must be SCREAMING_SNAKE.
-     * Use this for sites that return mid-handler; THROW `new ApiError(...)` where a throw is cleaner.
-     */
-    sendError(
-      status: number,
-      code: string,
-      message: string,
-      opts?: import('./lib/api-error.js').ErrorEnvelopeOpts,
-    ): FastifyReply;
-  }
-}
+// The fastify instance/reply decoration merges (db, redis, wss, memory, sendError)
+// live in ./types/fastify.d.ts — shared, precisely typed, project-wide.
 
 async function main() {
   const env = loadEnv();
@@ -100,7 +80,13 @@ async function main() {
 
   const fastify = Fastify({
     logger: getFastifyLoggerConfig(),
-    maxHeaderSize: 32768,
+    // FLAG (type-restore 2026-07-02): Fastify v5 forwards ONLY the `http` sub-object to
+    // http.createServer (fastify/lib/server.js:338) — this top-level maxHeaderSize has
+    // NEVER been applied at runtime (Node's 16KB default governs). Types-only pass: keep
+    // the inert option (runtime-identical) behind a widening spread instead of silently
+    // dropping the intent; actually enforcing 32KB via `http: { maxHeaderSize }` is a
+    // behavior change that needs its own reviewed ship.
+    ...({ maxHeaderSize: 32768 } as object),
     bodyLimit: 10 * 1024 * 1024, // 10 MB (multipart uploads need it)
     // ADR-0010 (A1/B6): the correlation id is SERVER-AUTHORITATIVE — always generated
     // with crypto.randomUUID (governance), never read from an inbound header (that would
@@ -151,7 +137,7 @@ async function main() {
   
   // P34: Strict CORS — restrictive default; public routes override via hook
   fastify.register(fastifyCors, {
-    origin: (origin: string, cb: any) => {
+    origin: (origin, cb) => {
       if (!origin) return cb(null, true);
       cb(null, false);
     },
@@ -378,11 +364,13 @@ async function main() {
 
   // Allow POST with Content-Type: application/json but empty body
   fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
-    if (!body || body.trim() === '') {
+    // `parseAs: 'string'` guarantees a string at runtime; fastify's parser type unions in Buffer.
+    const text = body as string;
+    if (!text || text.trim() === '') {
       done(null, {});
     } else {
       try {
-        done(null, JSON.parse(body));
+        done(null, JSON.parse(text));
       } catch (e: any) {
           // Malformed JSON is a client error (400), not a 500.
           e.statusCode = 400;
@@ -403,7 +391,7 @@ async function main() {
   ];
   fastify.addHook('onRequest', async (request, reply) => {
     if (request.method === 'OPTIONS') return;
-    const url = request.url.split('?')[0];
+    const url = request.url.split('?')[0]!; // split() always yields ≥1 element
     // Test-only /dev + /api/dev endpoints (mock-auth, create-assignment, seed-data)
     // require BOTH the ALLOW_DEV_LOGIN flag AND the shared DEV_AUTH_SECRET (ADR-0003).
     // Fails closed: in production (flag off), they 404 as if they do not exist — never
@@ -439,7 +427,7 @@ async function main() {
   // migrated FE keeps working (code-preserving rollout). Business outcomes (soft_confirm/
   // hard_block `{outcome,reasons}`) never reach here — they are reply.send success-path
   // payloads, not thrown errors (regression trap / B2).
-  fastify.setErrorHandler((error, request, reply) => {
+  fastify.setErrorHandler<FastifyError>((error, request, reply) => {
     const correlationId = String(request.id); // server-authoritative; echoed for support
     reply.header('x-correlation-id', correlationId);
 
@@ -583,7 +571,7 @@ fastify.register(acquisitionRoutes, {
 
       const courierId = crypto.randomUUID();
       const locRes = await pool.query(`SELECT id FROM locations WHERE slug = 'demo' LIMIT 1`);
-      const locationId = locRes.rowCount > 0 ? locRes.rows[0].id : '1f609add-062a-4bb5-89bf-d695f963ede6';
+      const locationId = (locRes.rowCount ?? 0) > 0 ? locRes.rows[0].id : '1f609add-062a-4bb5-89bf-d695f963ede6';
       const accessToken = await signDevToken({ role: 'courier', sub: courierId, activeLocationId: locationId } as any, '1d');
       return reply.send({ access_token: accessToken, userId: courierId, activeLocationId: locationId });
     }
@@ -632,11 +620,11 @@ fastify.register(acquisitionRoutes, {
       `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1`, // P-d (ADR-0004)
       [userId]
     );
-    let activeLocationId = memberRes.rowCount > 0 ? memberRes.rows[0].location_id : undefined;
+    let activeLocationId = (memberRes.rowCount ?? 0) > 0 ? memberRes.rows[0].location_id : undefined;
 
     if (!activeLocationId) {
       const locRes = await pool.query(`SELECT id FROM locations WHERE slug = 'demo' LIMIT 1`);
-      if (locRes.rowCount > 0) {
+      if ((locRes.rowCount ?? 0) > 0) {
         await pool.query(
           `INSERT INTO memberships (user_id, location_id, role) VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING`,
           [userId, locRes.rows[0].id]
@@ -816,7 +804,9 @@ fastify.register(acquisitionRoutes, {
 
   // Owner crypto-refund review (ADR-0017 C2) — DARK behind PAYMENTS_PREPAID_ENABLED (empty/404 otherwise).
   const { default: ownerRefundsRoutes } = await import('./routes/owner/refunds.js');
-  fastify.register(ownerRefundsRoutes, { prefix: '/api/owner', db: pool });
+  // refunds.ts self-casts to bare FastifyPluginAsync (opts generic lost) — assert the
+  // options shape the plugin actually reads so register() accepts them.
+  fastify.register(ownerRefundsRoutes as FastifyPluginAsync<{ db: Pool }>, { prefix: '/api/owner', db: pool });
   // B4 (ADR-admin-platform-authz) — the /api/admin plane. STRUCTURAL authority: a root-instance
   // onRequest gate (registerAdminPlaneGate) that runs verifyAuth → requirePlatformAdmin for every
   // request whose matched route pattern is under /api/admin — child, sibling, or future — by
@@ -826,7 +816,12 @@ fastify.register(acquisitionRoutes, {
   const { registerAdminPlaneGate } = await import('./lib/platform-admin.js');
   registerAdminPlaneGate(fastify);
   const { default: adminPlane } = await import('./routes/admin/index.js');
-  fastify.register(adminPlane, { prefix: '/api/admin', db: pool, queue, storage });
+  // admin/index.ts types itself as bare FastifyPluginAsync (opts generic lost) — assert the
+  // options shape its children actually read so register() accepts them.
+  fastify.register(
+    adminPlane as FastifyPluginAsync<{ db: Pool; queue: PgBossQueueProvider; storage: StorageProvider }>,
+    { prefix: '/api/admin', db: pool, queue, storage },
+  );
 
   // SPA Fallback: Serve index.html for unknown GET requests matching SPA route patterns
   const SPA_ROUTES = ['/admin', '/courier', '/dashboard', '/s/', '/login', '/branding-preview', '/privacy'];
