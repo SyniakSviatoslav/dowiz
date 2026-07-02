@@ -230,12 +230,11 @@ export default (async function ownerSignalRoutes(fastify: any, opts: any) {
       );
 
       // Update order status to CANCELLED (canonical path via updateOrderStatus)
-      // ORDER-TRACKING: record the no-show reason on order_status_history (additive).
+      // ORDER-TRACKING: the no-show reason is recorded on order_status_history via the
+      // comment above — the former `UPDATE orders SET status_notes` referenced a column
+      // that never existed (42703), so this route 500-rolled-back on EVERY call since it
+      // shipped. order_status_history.comment is the single source for the reason.
       await updateOrderStatus(client, orderId, locationId, 'CANCELLED', { messageBus, comment: 'no_show' });
-      await client.query(
-        `UPDATE orders SET status_notes = 'no_show' WHERE id = $1`,
-        [orderId],
-      );
 
       return { customer_id };
     }).catch((err: any) => {
