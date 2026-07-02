@@ -48,10 +48,14 @@ export default (async function ownerPushRoutes(fastify: any, opts: any) {
         [existing.rows[0].id],
       );
     } else {
+      // user_id is NOT NULL with an FK to users and a DEFAULT gen_random_uuid() (mig
+      // 1790000000004) — omitting it inserts a random uuid that violates the FK, so this
+      // route 500'd on EVERY new subscription. Pass the authenticated owner explicitly,
+      // exactly like the telegram-webhook/telegram-poll insert sites do.
       await db.query(
-        `INSERT INTO owner_notification_targets (location_id, channel, address, status)
-         VALUES ($1, 'push', $2, 'active')`,
-        [locationId, address],
+        `INSERT INTO owner_notification_targets (location_id, channel, address, status, user_id)
+         VALUES ($1, 'push', $2, 'active', $3)`,
+        [locationId, address, user.userId],
       );
     }
 

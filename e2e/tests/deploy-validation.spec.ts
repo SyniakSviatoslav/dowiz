@@ -168,6 +168,7 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
 
   // ── 5. Public menu API: attributes shape contract ───────────────────
   test('5.1 — public menu returns attributes with taste+bom, NOT top-level kcal', async ({ request }) => {
+    test.setTimeout(90_000); // the poll below must outlive the 30s menu cache; default 30s test timeout kills it
     // The public menu has a 30s in-process stale-while-revalidate cache (the
     // storefront-blink fix) — a just-created product appears only after the TTL.
     // Poll past it instead of racing it (proven: visible at exactly t=30s).
