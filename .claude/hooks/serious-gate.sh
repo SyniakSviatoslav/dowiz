@@ -16,6 +16,20 @@ STATE="$ROOT/.claude/state"
 LOG="$ROOT/.claude/logs/classification.log"
 mkdir -p "$STATE" "$(dirname "$LOG")" 2>/dev/null || true
 
+
+# P1 telemetry (meta-loop 2026-07-02): one JSONL line per decision — the advisory layer was
+# unmeasurable (no lesson hit-counts, no deny/allow rates), so pruning/promotion ran blind.
+# Advisory: never fails the hook.
+HEV_LOG="$ROOT/.claude/logs/harness-events.jsonl"
+_hev() {
+  mkdir -p "$(dirname "$HEV_LOG")" 2>/dev/null || true
+  printf '{"ts":"%s","hook":"%s","event":"%s","target":"%s","detail":"%s"}\n' \
+    "$(date -Iseconds)" "$1" "$2" \
+    "$(printf '%s' "${3:-}" | tr '"\\' '..' | tr '\n' ' ' | cut -c1-200)" \
+    "$(printf '%s' "${4:-}" | tr '"\\' '..' | tr '\n' ' ' | cut -c1-200)" \
+    >>"$HEV_LOG" 2>/dev/null || true
+}
+
 INPUT="$(cat)"
 
 # --- parse the file path (jq → python3); on failure → fail-open ---
@@ -29,13 +43,16 @@ fi
 rel="${fp#"$ROOT"/}"
 
 # --- always pass: council/loop/config artifacts (else deadlock) ---
+# docs/* precision exemption (P1, post-edit-gates 06-29 precedent): markdown documents a
+# serious surface, it IS never one — ledger/ADR/reflection appends must not need clearance.
 case "$rel" in
-  docs/design/*|docs/adr/*|docs/governance/*|loops/*|.claude/*) exit 0 ;;
+  docs/*|loops/*|.claude/*) exit 0 ;;
 esac
 
 # --- human bypass (friction, not verdict; human is final) ---
 if [ -f "$STATE/serious-override" ]; then
   echo "$(date -Iseconds) ALLOW override $rel" >>"$LOG" 2>/dev/null || true
+  _hev serious-gate allow "$rel" override
   exit 0
 fi
 
@@ -58,11 +75,13 @@ if [ -f "$STATE/serious-cleared" ]; then
 fi
 if [ -n "$cleared_slug" ]; then
   echo "$(date -Iseconds) ALLOW cleared($cleared_slug) $rel" >>"$LOG" 2>/dev/null || true
+  _hev serious-gate allow "$rel" "cleared($cleared_slug)"
   exit 0
 fi
 
 # --- BLOCK: serious surface without an APPROVED (unexpired) plan ---
 echo "$(date -Iseconds) DENY serious-uncleared $rel" >>"$LOG" 2>/dev/null || true
+_hev serious-gate deny "$rel" serious-uncleared
 read -r -d '' REASON <<EOF
 🛑 serious-gate: «$rel» — серйозна поверхня (схема/контракт/гроші/RLS/auth/state-machine/WS/інтеграція).
 Це АВТОМАТИЧНИЙ gate, НЕ відмова користувача — дій, не зупиняйся.

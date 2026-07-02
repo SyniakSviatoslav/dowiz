@@ -11,6 +11,22 @@ N="${DOUBT_LOOP_N:-3}"
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "${CLAUDE_PROJECT_DIR:-$PWD}")"
 STATE_DIR="$ROOT/.claude/.loop-state"
 mkdir -p "$STATE_DIR" 2>/dev/null || true
+# stale counters bleed across sessions/tasks (12 found from 06-27) — purge after 7 days
+find "$STATE_DIR" -type f -mtime +7 -delete 2>/dev/null || true
+
+# P1 telemetry (meta-loop 2026-07-02): one JSONL line per decision — the advisory layer was
+# unmeasurable (no lesson hit-counts, no deny/allow rates), so pruning/promotion ran blind.
+# Advisory: never fails the hook.
+HEV_LOG="$ROOT/.claude/logs/harness-events.jsonl"
+_hev() {
+  mkdir -p "$(dirname "$HEV_LOG")" 2>/dev/null || true
+  printf '{"ts":"%s","hook":"%s","event":"%s","target":"%s","detail":"%s"}\n' \
+    "$(date -Iseconds)" "$1" "$2" \
+    "$(printf '%s' "${3:-}" | tr '"\\' '..' | tr '\n' ' ' | cut -c1-200)" \
+    "$(printf '%s' "${4:-}" | tr '"\\' '..' | tr '\n' ' ' | cut -c1-200)" \
+    >>"$HEV_LOG" 2>/dev/null || true
+}
+
 
 INPUT="$(cat)"
 
@@ -109,6 +125,7 @@ printf '%s' "$count" > "$CF" 2>/dev/null || true
 [ "$count" -lt "$N" ] && exit 0
 
 # --- AT/OVER threshold: MANDATORY escalation directive ---
+_hev loop-detector escalate "${TOOL}|${TARGET}" "count=$count sig=$ERRSIG"
 rm -f "$CF" 2>/dev/null || true   # reset so the directive isn't re-spammed every subsequent failure
 DIR="🔴 LOOP DETECTED — ${count} consecutive failures on the same signature [${TOOL} · ${TARGET:-<no-target>}${ERRSIG:+ · $ERRSIG}].
 This is a MANDATORY escalation (Doubt model, N=${N}) — do NOT attempt the same path a ${count}+1-th time the same way.

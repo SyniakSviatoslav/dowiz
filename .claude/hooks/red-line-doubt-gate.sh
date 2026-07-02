@@ -19,6 +19,20 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "${CLAUDE_PROJECT_DIR:
 STATE="$ROOT/.claude/state"
 mkdir -p "$STATE" 2>/dev/null || true
 
+
+# P1 telemetry (meta-loop 2026-07-02): one JSONL line per decision — the advisory layer was
+# unmeasurable (no lesson hit-counts, no deny/allow rates), so pruning/promotion ran blind.
+# Advisory: never fails the hook.
+HEV_LOG="$ROOT/.claude/logs/harness-events.jsonl"
+_hev() {
+  mkdir -p "$(dirname "$HEV_LOG")" 2>/dev/null || true
+  printf '{"ts":"%s","hook":"%s","event":"%s","target":"%s","detail":"%s"}\n' \
+    "$(date -Iseconds)" "$1" "$2" \
+    "$(printf '%s' "${3:-}" | tr '"\\' '..' | tr '\n' ' ' | cut -c1-200)" \
+    "$(printf '%s' "${4:-}" | tr '"\\' '..' | tr '\n' ' ' | cut -c1-200)" \
+    >>"$HEV_LOG" 2>/dev/null || true
+}
+
 INPUT="$(cat)"
 
 # --- extract file_path (jq → python3 → python → node) ---
@@ -56,8 +70,10 @@ printf '%s' "$REL" | grep -Eiq "$IRREVERSIBLE" && is_irrev=1
 if [ "$is_irrev" -eq 1 ]; then
   # Confirmation is a WINDOW, not a switch: file must exist AND be <60 min old.
   if [ -n "$(find "$STATE/redline-confirmed" -mmin -60 2>/dev/null)" ]; then
+    _hev red-line-gate allow "$REL" confirmed-window
     exit 0   # human cleared it within the last hour
   fi
+  _hev red-line-gate deny "$REL" irreversible-unconfirmed
   REASON="🛑 RED-LINE / IRREVERSIBLE: «$REL» is a migration — forward-only, not rollbackable on prod.
 Doubt model requires a HUMAN doubt-pass before this edit. Provide, then confirm:
   • options considered (alternatives to this migration / can it be additive-only?)
@@ -78,6 +94,7 @@ NOTE: this is ADVISORY-gated and complementary to protect-paths.sh (which alread
 fi
 
 # ============ RED-LINE (reversible): advisory doubt-pass reminder, never blocks ============
+_hev red-line-gate advise "$REL" doubt-pass
 CTX="🔶 RED-LINE doubt-pass required for «$REL» (auth/money/RLS/integration surface).
 Before this edit, state your doubt-pass (skill: doubt-escalation):
   1) OPTIONS considered — the 2–3 approaches you weighed;

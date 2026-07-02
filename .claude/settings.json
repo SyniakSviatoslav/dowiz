@@ -4,9 +4,11 @@
    "Bash(*)",
    "Edit(*)",
    "Write(*)",
+   "MultiEdit(*)",
    "Read(*)",
    "Glob(*)",
    "Grep(*)",
+   "PowerShell(*)",
    "WebFetch",
    "WebSearch",
    "Agent",
@@ -14,9 +16,13 @@
    "Skill",
    "TodoWrite",
    "NotebookEdit",
+   "ToolSearch",
+   "Workflow",
+   "Monitor",
    "mcp__repowise",
    "mcp__playwright-test",
-   "mcp__browser-use"
+   "mcp__browser-use",
+   "mcp__figma-remote-mcp"
   ],
   "deny": []
  },
