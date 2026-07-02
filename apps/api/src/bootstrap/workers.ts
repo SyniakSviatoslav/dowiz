@@ -103,12 +103,20 @@ export async function startBackgroundWorkers(deps: BackgroundWorkerDeps): Promis
   await anonymizerRetentionWorker.start();
   await gdprErasureWorker.start();
 
-  // P31 — Worker Heartbeats (critical workers)
+  // P31 — Worker Heartbeats. ADR-dispatch-recovery R3′ (B5): the set below MUST equal
+  // ReconciliationWorker A6.EXPECTED_WORKERS (8 ids) — the heartbeat is a cadence-independent
+  // 15s timer proving the PROCESS is alive, so hourly/nightly workers beat too. Instrumenting
+  // the missing 4 (instead of trimming A6) keeps backup-hourly (data-recovery red-line) and
+  // liveness-checker (watcher-of-the-watcher, caught by nightly A6) monitored with no false DRIFT.
   const heartbeatConfigs = [
     { workerId: 'dispatcher', jobName: QUEUE_NAMES.COURIER_DISPATCH },
     { workerId: 'settlement-cron', jobName: QUEUE_NAMES.SETTLEMENT_CRON },
     { workerId: 'dwell-monitor', jobName: QUEUE_NAMES.DWELL_MONITOR },
     { workerId: 'anonymizer-retention', jobName: QUEUE_NAMES.ANONYMIZER_RETENTION },
+    { workerId: 'backup-hourly', jobName: QUEUE_NAMES.BACKUP_HOURLY },
+    { workerId: 'signal-raiser', jobName: QUEUE_NAMES.SIGNAL_RAISER },
+    { workerId: 'courier-stale_check', jobName: QUEUE_NAMES.COURIER_STALE_CHECK },
+    { workerId: 'liveness-checker', jobName: QUEUE_NAMES.LIVENESS_CHECK },
   ];
   const heartbeats = heartbeatConfigs.map((cfg) => {
     const hb = new WorkerHeartbeat(pool, cfg);
@@ -150,6 +158,16 @@ export async function startBackgroundWorkers(deps: BackgroundWorkerDeps): Promis
   // (same pg-boss v10-instance / v12-types version-skew assertion as RatesRefreshWorker above)
   const livenessChecker = new LivenessChecker(pool, queue.boss as unknown as PgBoss, messageBus);
   await livenessChecker.start();
+
+  // B5 (ADR-dispatch-recovery, Option R3′ — closes ADR-golive R9): the full READ-ONLY nightly
+  // ReconciliationWorker is re-registered. Its A6 worker-liveness check watches the true set of
+  // 8 heartbeating ids (see heartbeatConfigs above) so it yields no false DRIFT; nightly
+  // detection+alert complements the sweeps' sub-minute recovery. Zero mutations, one 03:00 UTC
+  // read burst on the existing pool.
+  const { ReconciliationWorker } = await import('../workers/reconciliation.js');
+  // pg-boss v10-instance/v12-types skew bridge (same as the 3 sites above; platform pins ^10)
+  const reconciliationWorker = new ReconciliationWorker(pool, queue.boss as unknown as PgBoss, messageBus);
+  await reconciliationWorker.start();
 
   // P5-5 — Free-tier watch (hourly, monitors Free tier limits)
   const { collectFreeTierMetrics } = await import('../workers/free-tier-watch.js');

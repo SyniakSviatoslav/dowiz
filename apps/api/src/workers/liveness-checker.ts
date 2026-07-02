@@ -8,7 +8,9 @@ import { loadEnv } from '@deliveryos/config';
 const env = loadEnv();
 
 const STALE_MS = parseInt(env.WORKER_LIVENESS_STALE_MS || '60000', 10);
-const CRITICAL_WORKERS = (env.WORKER_CRITICAL_LIST || 'dispatcher,settlement-cron,dwell-monitor,anonymizer-retention')
+// Fallback mirrors the packages/config WORKER_CRITICAL_LIST default (ADR-dispatch-recovery R3′:
+// backup-hourly added — the data-recovery red-line gets a live 60s death-detection path).
+const CRITICAL_WORKERS = (env.WORKER_CRITICAL_LIST || 'dispatcher,settlement-cron,dwell-monitor,anonymizer-retention,backup-hourly')
   .split(',').map(w => w.trim());
 
 interface StaleWorker {

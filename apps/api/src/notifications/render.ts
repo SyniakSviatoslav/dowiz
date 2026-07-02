@@ -88,6 +88,7 @@ export function renderTelegramMessage(event: NotificationEvent, data: Notificati
     case 'delivery.flag_raised':
     case 'rating.low_received':
     case 'order.timeout_cancelled':
+    case 'order.dispatch_failed':
       return {
         text,
         reply_markup: locationUrl ? {
