@@ -10,6 +10,8 @@ import { attemptHonestDispatch } from '../lib/dispatch.js';
 import { getPaymentProvider, isPrepaidEnabled, isCryptoEnabled } from '../lib/payments/registry.js';
 import { evaluatePreflight } from '../lib/preflight.js';
 import { computeSignals } from '../lib/signals/compute.js';
+import { courierReadVerdict } from '../lib/courier-room-authz.js';
+import { clientIp } from '../lib/client-ip.js';
 import type { Pool } from 'pg';
 import crypto from 'crypto';
 
@@ -193,7 +195,10 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         cashPayWith,
         currencyCode: location.currency_code,
         menuVersion,
-        customerId: request.user?.role === 'customer' ? request.user.userId : 'anonymous',
+        // #8 (security-hardening-2026-07): the customer token carries no `userId` — its
+        // `sub` IS the customerId (jwt.ts issueCustomerToken). Reading `userId` yielded
+        // undefined → the idempotency fingerprint silently degraded to phone/IP.
+        customerId: request.user?.role === 'customer' ? request.user.sub : 'anonymous',
       });
 
       // 4. Preflight (E27) — check menu availability + signals + OTP before idempotency.
@@ -237,8 +242,13 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       // 4b. Per-phone order throttle (FX-4) — hard block, not advisory
       const phoneForSignals = cust?.phone || '';
       const phoneHash = phoneForSignals ? crypto.createHash('sha256').update(phoneForSignals.replace(/\D/g, '')).digest('hex') : undefined;
-      const clientIpHash = request.ip ? crypto.createHash('sha256').update(request.ip).digest('hex') : undefined;
-      const preflightCustomerId = request.user?.role === 'customer' ? request.user.userId : undefined;
+      // #9: key the per-IP order throttle on the REAL client IP (Fly-Client-IP via the shared
+      // resolver), NOT request.ip (the Fly edge socket, which collapses every client onto one
+      // hash → the throttle would either never fire or punish everyone together).
+      const clientIpForThrottle = clientIp(request);
+      const clientIpHash = clientIpForThrottle ? crypto.createHash('sha256').update(clientIpForThrottle).digest('hex') : undefined;
+      // #8: same as the requestHash above — the customer identity is `sub`, not `userId`.
+      const preflightCustomerId = request.user?.role === 'customer' ? request.user.sub : undefined;
 
       if (phoneHash) {
         const THROTTLE_WINDOW_SECONDS = 900; // 15 minutes
@@ -726,14 +736,22 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
     try {
       let result;
-      if (user?.role === 'owner' || user?.role === 'courier') {
+      if (user?.role === 'owner') {
+        // #1 (security-hardening-2026-07 / ADR-0004): authorize the read by a LIVE active
+        // owner membership, folded INTO the query as a JOIN — the JOIN is the tenant
+        // boundary. A bare `WHERE id=$1` leaks cross-tenant under the BYPASSRLS pool
+        // (RLS inert), and trusting the baked activeLocationId leaves an insider-removal
+        // read window. The JOIN 404s an owner with no live membership at the order's
+        // location AND resolves correctly for multi-location owners (any active membership).
         result = await withTenant(db, user.userId, async (client) => {
           const o = await client.query(
-            `SELECT id, location_id, customer_id, status, type, delivery_address,
-                    subtotal, total, payment_method, payment_outcome,
-                    created_at::text, timeout_at::text
-             FROM orders WHERE id = $1`,
-            [id]
+            `SELECT o.id, o.location_id, o.customer_id, o.status, o.type, o.delivery_address,
+                    o.subtotal, o.total, o.payment_method, o.payment_outcome,
+                    o.created_at::text, o.timeout_at::text
+             FROM orders o
+             JOIN memberships m ON m.location_id = o.location_id
+             WHERE o.id = $1 AND m.user_id = $2 AND m.role = 'owner' AND m.status = 'active'`,
+            [id, user.userId]
           );
 
           if (!o.rowCount || o.rowCount === 0) return null;
@@ -746,6 +764,38 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
 
           return { ...mapOrderRow(o.rows[0]), items: items.rows.map(mapItemRow) };
         });
+      } else if (user?.role === 'courier') {
+        // #1 (security-hardening-2026-07 / ADR-0013): authorize by a LIVE courier_assignments
+        // binding for THIS order via courierReadVerdict — the same liveness the WS fan-out
+        // guard uses. Binding-scoping is strictly narrower than location-scoping, so this
+        // closes cross-tenant, the insider-removal window (revoked binding → DENY), AND the
+        // within-tenant cross-customer PII read (a courier sees only orders it is bound to).
+        // The baked activeLocationId is never the authority — the live verdict is.
+        const verdict = await courierReadVerdict(db, user.sub, user.activeLocationId, id);
+        if (verdict === 'UNAVAILABLE') {
+          // Retryable pool/DB blip — fail CLOSED but distinguishable (never fail-open).
+          return reply.sendError(503, 'SERVICE_UNAVAILABLE', 'Service temporarily unavailable, please try again');
+        }
+        if (verdict !== 'ALLOW') {
+          return reply.sendError(404, 'NOT_FOUND', 'Not found');
+        }
+        // Verdict ALLOW authorizes exactly this order id → the point-read is now scoped.
+        const o = await db.query(
+          `SELECT id, location_id, customer_id, status, type, delivery_address,
+                  subtotal, total, payment_method, payment_outcome,
+                  created_at::text, timeout_at::text
+           FROM orders WHERE id = $1`,
+          [id]
+        );
+        if (!o.rowCount || o.rowCount === 0) {
+          return reply.sendError(404, 'NOT_FOUND', 'Not found');
+        }
+        const items = await db.query(
+          `SELECT id, product_id, name_snapshot, price_snapshot, quantity
+           FROM order_items WHERE order_id = $1`,
+          [id]
+        );
+        result = { ...mapOrderRow(o.rows[0]), items: items.rows.map(mapItemRow) };
       } else {
         // Customer or anonymous — session-style read
         const query = locationId

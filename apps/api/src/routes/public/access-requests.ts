@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { loadEnv } from '@deliveryos/config';
 import { QUEUE_NAMES } from '../../lib/registry.js';
 import { rejectReservedTld } from '../../lib/synthetic-courier.js';
+import { clientIp } from '../../lib/client-ip.js';
 
 // POST /api/access-requests — public "register interest" capture (ADR-soft-access-gate).
 // This route is ONLY registered when ACCESS_GATE_PUBLIC_ENABLED=true (server.ts); while
@@ -16,29 +17,10 @@ import { rejectReservedTld } from '../../lib/synthetic-courier.js';
 
 const env = loadEnv();
 
-const FLY_IP_HEADER = 'fly-client-ip';
-let lastFlyMissingWarnAt = 0;
-
-/**
- * Real client IP — reads `Fly-Client-IP` ONLY (R2-2). The Fly edge sets & overwrites it
- * on every request, so it is not client-injectable (unlike X-Forwarded-For, whose trust
- * fallthrough is deliberately REMOVED). Non-prod degrades to request.ip (deterministic,
- * never the client-controlled XFF). Prod with no header → fail closed to a single shared
- * bucket (degrade, never trust a spoofable header) + a throttled re-warn ≤1/min (R3-2).
- */
-export function clientIp(request: any): string {
-  const fly = request?.headers?.[FLY_IP_HEADER];
-  if (typeof fly === 'string' && fly.length > 0) return fly;
-  if (process.env.NODE_ENV !== 'production') {
-    return request?.ip ?? 'unknown';
-  }
-  const now = Date.now();
-  if (now - lastFlyMissingWarnAt > 60_000) {
-    lastFlyMissingWarnAt = now;
-    request?.log?.warn?.('[access-requests] Fly-Client-IP missing in production — rate-limit degraded to a shared bucket');
-  }
-  return 'shared:no-fly-ip';
-}
+// #9: real client-IP resolution moved to the shared lib/client-ip.ts (Fly-Client-IP only,
+// never X-Forwarded-For; IPv6-normalized; prod fail-closed). One source of truth; re-exported
+// for backwards-compatible importers/tests.
+export { clientIp };
 
 function hashIp(ip: string): string {
   return crypto.createHash('sha256').update(ip).digest('hex').slice(0, 16);

@@ -42,6 +42,10 @@ const STEPS = [
   // router's machine registry covered 2 of 16 loops — both drifts are now gated.
   { name: 'ledger row-number integrity (unique #N refs)', cmd: 'node scripts/guardrail-ledger-integrity.mjs', ci: true },
   { name: 'loop registry sync (registry.md → runs/registry.json)', cmd: 'node scripts/loops-registry-sync.mjs --check', ci: true },
+  // The 11 memory-corpus meta-patterns as ONE gate (memory-corpus-meta-patterns-2026-07-02): dark-first
+  // flag defaults, no masked-exit-code pipes, migration-drift ordering, every authority guardrail wired,
+  // the plane-maintainer autonomy envelope documented. Direct node invoke (package.json is protect-paths).
+  { name: 'plane-guard (11 meta-patterns → deterministic gate)', cmd: 'node scripts/plane-guard.mjs', ci: true },
 ].filter((s) => !CI_MODE || s.ci);
 
 function run(cmd: string): { ok: boolean; output: string } {
