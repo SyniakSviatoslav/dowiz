@@ -48,6 +48,7 @@ import spaProxyRoutes from './routes/spa-proxy.js';
 import telegramWebhookRoutes from './routes/telegram-webhook.js';
 import paymentsWebhookRoutes from './routes/payments-webhook.js';
 import { MemoryService, getMemoryService } from './lib/memory.js';
+import { registerMetrics } from './lib/metrics.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
