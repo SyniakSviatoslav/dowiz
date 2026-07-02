@@ -118,7 +118,9 @@ const EnvSchema = z.object({
   WORKER_HEARTBEAT_INTERVAL_MS: z.coerce.number().int().positive().default(15000),
   WORKER_LIVENESS_CHECK_MS: z.coerce.number().int().positive().default(60000),
   WORKER_LIVENESS_STALE_MS: z.coerce.number().int().positive().default(60000),
-  WORKER_CRITICAL_LIST: z.string().default('dispatcher,settlement-cron,dwell-monitor,anonymizer-retention'),
+  // ADR-dispatch-recovery R3′: backup-hourly (data-recovery red-line) gains the live 60s
+  // LivenessChecker path in addition to nightly Recon A6.
+  WORKER_CRITICAL_LIST: z.string().default('dispatcher,settlement-cron,dwell-monitor,anonymizer-retention,backup-hourly'),
   GIT_SHA: z.string().optional(),
   // P32 — Backup Verification
   DATABASE_URL_ADMIN: z.string().url().optional(),
@@ -140,7 +142,17 @@ const EnvSchema = z.object({
   COURIER_ACCEPT_WINDOW_MS: z.string().optional(),
   CANCEL_AFTER_DISPATCH_WINDOW_MS: z.string().optional(),
   COURIER_DISPATCH_MAX_ATTEMPTS: z.string().optional(),
-  COURIER_DISPATCH_RETRY_MS: z.string().optional(),
+  // COURIER_DISPATCH_RETRY_MS retired (ADR-dispatch-recovery): the in-worker 30s self-retry was
+  // deleted — the 60s CourierOfferSweep pump is the single dispatch retry cadence.
+  // 'assigned' acceptance timeout (ms; default 300000 = 5 min in the sweep). R-OPEN-1: must
+  // comfortably exceed the courier FE accept window (COURIER_ACCEPT_WINDOW_MS, 30s default).
+  COURIER_ASSIGN_ACCEPT_TIMEOUT_MS: z.string().optional(),
+  // ── Dispatch-exhaustion grace window (ADR-dispatch-recovery, R-NEEDS-HUMAN-1) ──
+  // 🔴 Ships FLAG-OFF until the operator ratifies at STOP-ETHICS: when 'true', an order whose
+  // dispatch_exhausted_at is older than DISPATCH_OWNER_GRACE_MS (default 900000 = 15 min) with
+  // no owner action auto-transitions to the customer-honest terminal CANCELLED + honest push.
+  DISPATCH_OWNER_GRACE_ENABLED: z.enum(['true', 'false']).default('false'),
+  DISPATCH_OWNER_GRACE_MS: z.string().optional(),
   COURIER_GPS_MAX_DIST_KM: z.string().optional(),
   FLY_MACHINE_ID: z.string().optional(),
   GROQ_ENDPOINT: z.string().optional(),
