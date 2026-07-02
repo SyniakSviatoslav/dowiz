@@ -62,10 +62,20 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       const payload = await verifyAuthToken(token);
       const claims = payload as any;
       if (claims.role !== 'owner') return null;
-      // Prefer activeLocationId from JWT (new auth system)
-      if (claims.activeLocationId) return claims.activeLocationId;
-      // Fall back to memberships lookup (legacy auth)
       const uid = claims.userId || claims.sub;
+      // #6 (ADR-0004): NEVER trust the baked JWT activeLocationId on its own — a removed or
+      // downgraded owner still holds a valid ≤24h token. Verify it against a LIVE active owner
+      // membership on every request (the canonical get-owner-location.ts re-check). A failed
+      // check denies immediately, not at token TTL.
+      if (claims.activeLocationId) {
+        const ok = await db.query(
+          `SELECT 1 FROM memberships
+           WHERE user_id = $1 AND location_id = $2 AND role = 'owner' AND status = 'active' LIMIT 1`,
+          [uid, claims.activeLocationId]
+        );
+        return ok.rows.length > 0 ? claims.activeLocationId : null;
+      }
+      // No baked location → resolve a current active owner membership (legacy auth).
       if (uid) {
         const res = await db.query(
           `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1`, // P-d (ADR-0004)
@@ -119,9 +129,17 @@ export default async function spaProxyRoutes(fastify: FastifyInstance, opts: { d
       if (claims.role !== 'owner') return null;
       const uid = claims.userId || claims.sub;
       if (!uid) return null;
-      // Prefer activeLocationId from JWT (new auth system)
-      if (claims.activeLocationId) return { locId: claims.activeLocationId, userId: uid };
-      // Fall back to memberships lookup (legacy auth)
+      // #6 (ADR-0004): live active-membership re-check — never trust the baked activeLocationId
+      // alone (a removed/downgraded owner keeps a valid ≤24h token). Mirrors getLocationId above.
+      if (claims.activeLocationId) {
+        const ok = await db.query(
+          `SELECT 1 FROM memberships
+           WHERE user_id = $1 AND location_id = $2 AND role = 'owner' AND status = 'active' LIMIT 1`,
+          [uid, claims.activeLocationId]
+        );
+        return ok.rows.length > 0 ? { locId: claims.activeLocationId, userId: uid } : null;
+      }
+      // No baked location → resolve a current active owner membership (legacy auth).
       const res = await db.query(
         `SELECT location_id FROM memberships WHERE user_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1`, // P-d (ADR-0004)
         [uid]

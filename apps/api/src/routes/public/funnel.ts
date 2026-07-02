@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { loadEnv } from '@deliveryos/config';
-import { clientIp } from './access-requests.js';
+import { clientIp } from '../../lib/client-ip.js';
 
 // POST /api/funnel — SENSOR-BUS §1.3 anonymous storefront-funnel ingest (ADR-0009).
 //

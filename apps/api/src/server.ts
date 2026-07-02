@@ -26,6 +26,7 @@ import { resolveSubdomainRewrite } from './lib/subdomain-rewrite.js';
 import { registerCoreRoutes } from './bootstrap/routes.js';
 import { initSentry, getSentry } from './lib/sentry.js';
 import securityHeadersPlugin from './lib/security/headers.js';
+import { clientIp } from './lib/client-ip.js';
 
 // Safe __dirname fallback for dual ESM/CJS bundling
 const dirName = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath((import.meta as any).url));
@@ -354,6 +355,13 @@ async function main() {
   await fastify.register(fastifyRateLimit, {
     max: 100,
     timeWindow: '1 minute',
+    // #9 (security-hardening 2026-07): key EVERY IP-keyed limiter on the REAL client IP
+    // (Fly-Client-IP only, never the client-injectable X-Forwarded-For). The auth/OTP/login
+    // limiters in auth.ts carry no keyGenerator, so they INHERIT this global one — a single
+    // resolver rekeys the whole brute-force surface onto the Fly-edge-guaranteed header.
+    // Without this, request.ip is the Fly edge socket → every client collapses into ONE
+    // bucket (false 429 storm for legit traffic; useless per-IP throttle). See lib/client-ip.ts.
+    keyGenerator: (request: any) => clientIp(request),
     // A3 (ADR-0010): @fastify/rate-limit THROWS this return value (index.js:333), so it must
     // be a throwable ApiError — returning a plain body made setErrorHandler read `.statusCode`
     // as undefined → 500. Throwing an ApiError routes the 429 through the ONE envelope source

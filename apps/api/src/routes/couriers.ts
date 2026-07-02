@@ -21,8 +21,16 @@ export default async function courierRoutes(fastify: FastifyInstance) {
 
     try {
       return await withTenant((fastify as any).db, user.userId, async (client) => {
-        // Double check location exists and is visible to the owner (due to RLS)
-        const locRes = await client.query(`SELECT 1 FROM locations WHERE id = $1`, [locationId]);
+        // #7 (security-hardening-2026-07): authorize the body `locationId` with an EXPLICIT
+        // membership-ownership predicate — do NOT rely on RLS visibility. The operational pool runs
+        // as a BYPASSRLS role, so `SELECT 1 FROM locations WHERE id=$1` returns ANY tenant's location
+        // → an owner could mint an invite bound to another tenant's location. Require a LIVE active
+        // owner membership for THIS specific location (ADR-0004 / requireLocationAccess semantics).
+        const locRes = await client.query(
+          `SELECT 1 FROM memberships
+           WHERE user_id = $1 AND location_id = $2 AND role = 'owner' AND status = 'active' LIMIT 1`,
+          [user.userId, locationId]
+        );
         if (locRes.rowCount === 0) {
           return reply.sendError(404, 'NOT_FOUND', 'Location not found');
         }
