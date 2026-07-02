@@ -91,9 +91,9 @@
   --status-in-delivery: #3B82F6;
   --status-delivered: #059669;
   --status-rejected: #DC2626;
-  --status-cancelled: #DC2626;
+  --status-cancelled: var(--status-rejected);
   --status-scheduled: #7C3AED;
-  --status-picked-up: #0D9488;
+  --status-picked-up: var(--status-ready);
 
   /* ── Status badge backgrounds (20% opacity) ── */
   --status-pending-bg: rgba(217, 119, 6, 0.2);
@@ -103,9 +103,9 @@
   --status-in-delivery-bg: rgba(59, 130, 246, 0.2);
   --status-delivered-bg: rgba(5, 150, 105, 0.2);
   --status-rejected-bg: rgba(220, 38, 38, 0.2);
-  --status-cancelled-bg: rgba(220, 38, 38, 0.2);
+  --status-cancelled-bg: var(--status-rejected-bg);
   --status-scheduled-bg: rgba(124, 58, 237, 0.2);
-  --status-picked-up-bg: rgba(13, 148, 136, 0.2);
+  --status-picked-up-bg: var(--status-ready-bg);
 
   /* ── Status badge borders (30% opacity) ── */
   --status-pending-border: rgba(217, 119, 6, 0.3);
@@ -115,9 +115,9 @@
   --status-in-delivery-border: rgba(59, 130, 246, 0.3);
   --status-delivered-border: rgba(5, 150, 105, 0.3);
   --status-rejected-border: rgba(220, 38, 38, 0.3);
-  --status-cancelled-border: rgba(220, 38, 38, 0.3);
+  --status-cancelled-border: var(--status-rejected-border);
   --status-scheduled-border: rgba(124, 58, 237, 0.3);
-  --status-picked-up-border: rgba(13, 148, 136, 0.3);
+  --status-picked-up-border: var(--status-ready-border);
 
   /* ── Status badge light backgrounds (10% opacity) ── */
   --status-pending-light: rgba(217, 119, 6, 0.1);
@@ -127,9 +127,9 @@
   --status-in-delivery-light: rgba(59, 130, 246, 0.1);
   --status-delivered-light: rgba(5, 150, 105, 0.1);
   --status-rejected-light: rgba(220, 38, 38, 0.1);
-  --status-cancelled-light: rgba(220, 38, 38, 0.1);
+  --status-cancelled-light: var(--status-rejected-light);
   --status-scheduled-light: rgba(124, 58, 237, 0.1);
-  --status-picked-up-light: rgba(13, 148, 136, 0.1);
+  --status-picked-up-light: var(--status-ready-light);
 
   /* ── Type scale (modular, additive) ──
      Exposed in Tailwind as `text-step-*` (NOT the default text-*, which stays
@@ -220,9 +220,9 @@
   --status-in-delivery: #93C5FD;
   --status-delivered: #34D399;
   --status-rejected: #F87171;
-  --status-cancelled: #F87171;
+  --status-cancelled: var(--status-rejected);
   --status-scheduled: #A78BFA;
-  --status-picked-up: #2DD4BF;
+  --status-picked-up: var(--status-ready);
   /* Semantic colours as TEXT (e.g. the "Vonesë!/Delay" label) — lightened to clear
      AA on the dark surface. Coloured FILLS use --color-*-strong, so this doesn't
      touch danger buttons / status banners / notification badges. */

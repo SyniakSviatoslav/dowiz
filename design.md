@@ -10,29 +10,14 @@ SaaS delivery platform for independent restaurants. Two UI layers:
 ALL colors via CSS custom properties. No hex values in components.
 `var(--brand-primary)` everywhere. Violation = refactor.
 
-## CSS Variables (Crimson Classic preset — default)
-```css
-:root {
-  --brand-primary:       #C1121F;
-  --brand-primary-hover: #9B0D17;
-  --brand-primary-light: #FFF0F1;
-  --brand-accent:        #F5F0E8;
-  --brand-bg:            #FFFFFF;
-  --brand-surface:       #F8F9FA;
-  --brand-text:          #1A1A1A;
-  --brand-text-muted:    #6B7280;
-  --brand-border:        #E5E7EB;
-  --brand-font-heading:  'DM Serif Display', serif;
-  --brand-font-body:     'DM Sans', sans-serif;
-  --brand-radius:        12px;
-  --brand-radius-sm:     6px;
-  --brand-radius-btn:    24px;
-  --color-success:       #059669;
-  --color-warning:       #D97706;
-  --color-danger:        #DC2626;
-  --color-info:          #2563EB;
-}
-```
+## CSS Variables (default: dark teal + gold)
+Single source of truth: `packages/ui/src/theme/tokens.css`. The `:root` default
+is the dark teal + gold identity (`--brand-primary: #d69a3d`, `--brand-bg: #061b1a`).
+Per-tenant theming is applied at runtime by `derivePalette` (inline vars from
+`location_themes`) — there are no static theme-preset classes. Semantic colors
+(`--color-success/warning/danger/info`) are brand-independent; buttons use
+`--brand-primary-strong` (AA-safe darkened fill) and text uses
+`--brand-primary-readable`.
 
 ## Typography
 - Headings (client menu only): DM Serif Display, 36px mobile / 48px desktop
@@ -49,8 +34,10 @@ Use only: 4 / 8 / 12 / 16 / 20 / 24 / 32 / 48 / 64px
 - Small elements: var(--brand-radius-sm) = 6px
 
 ## Tap targets (courier UI)
-- Standard actions: min 48px height
-- Critical actions (Delivered, Pickup): min 56px height
+- Standard actions: min 48px height (`h-tap-lg` / `min-h-tap-lg` = `--tap-courier`)
+- Client/admin actions: min 44px (`h-tap` / `min-h-tap` = `--tap-min`)
+- Critical actions (Delivered, Pickup): min 56px height (`--tap-critical`)
+- Never hardcode `h-[44px]`/`h-[48px]` — use the tap utilities.
 
 ## Component States (always implement all 4)
 Button: default / hover (primary-hover) / active (scale 0.98) / disabled (opacity 0.5)
