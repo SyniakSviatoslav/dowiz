@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Button, Input, Select, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle, useToast, staggerChildren, cardEntry, SearchInput } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
+import { fetchVenueInfo } from '../../lib/publicApi.js';
 import { z } from 'zod';
 import { useMenuData, type Product, type Category } from '../../hooks/useMenuData.js';
 
@@ -67,7 +68,7 @@ function KitchenBusyToggle() {
     apiClient<any>('/owner/settings').then((r: any) => {
       if (r?.id) setLocationId(r.id);
       if (r?.slug) {
-        fetch(`/public/locations/${r.slug}/info`).then(x => (x.ok ? x.json() : null))
+        fetchVenueInfo(r.slug)
           .then(d => { if (d?.status === 'busy') setBusy(true); }).catch(() => {});
       }
     }).catch(() => {});
