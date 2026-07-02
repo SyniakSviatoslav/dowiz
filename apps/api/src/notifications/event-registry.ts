@@ -63,6 +63,16 @@ export const EVENT_REGISTRY: Record<string, EventEntry> = {
     renderGroup: 'open_in_app',
     targetScope: 'order',
   },
+  // ADR-dispatch-recovery (ETHICAL-STOP-1): dispatch exhaustion — the owner MUST act
+  // (assign manually or cancel). Transactional category (unlisted → fail-safe default):
+  // never suppressed by prefs or quiet hours.
+  'order.dispatch_failed': {
+    type: 'order.dispatch_failed',
+    description: 'No courier found after max dispatch attempts — owner action needed',
+    quietHours: 'always',
+    renderGroup: 'open_in_app',
+    targetScope: 'order',
+  },
   'cash.reconcile_discrepancy': {
     type: 'cash.reconcile_discrepancy',
     description: 'Cash settlement has discrepancy',
