@@ -14,6 +14,7 @@ export type NotificationEventType =
   | 'order.substitution_needs_human'
   | 'order.dwell_escalation'
   | 'order.timeout_cancelled'
+  | 'order.dispatch_failed'
   | 'cash.reconcile_discrepancy'
   | 'delivery.flag_raised'
   | 'rating.low_received'

@@ -6,6 +6,7 @@ import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, M
 import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { messengerLink } from '../../lib/messenger.js';
+import { fetchVenueInfo } from '../../lib/publicApi.js';
 import { z } from 'zod';
 
 const MessagesResponse = z.object({
@@ -93,9 +94,8 @@ export function OrderStatusPage() {
   const [fallbackPhone, setFallbackPhone] = useState<string | null>(null);
   useEffect(() => {
     if (!slug) return;
-    fetch(`/public/locations/${slug}/info`)
-      .then(r => r.ok ? r.json() : null)
-      .then((d: any) => { if (d?.googlePlaceId) setGooglePlaceId(d.googlePlaceId); })
+    fetchVenueInfo(slug)
+      .then((d) => { if (d?.googlePlaceId) setGooglePlaceId(d.googlePlaceId); })
       .catch(() => {});
     fetch(`/api/public/locations/${slug}/fallback-config`)
       .then(r => r.ok ? r.json() : null)

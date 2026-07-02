@@ -2,43 +2,24 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, MapWithPin, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal, ease, duration, Textarea, Select, estimateOrderTotal, type OrderTotalConfig } from '@deliveryos/ui';
+import { Button, useI18n, StickyActionBar, PriceDisplay, useCurrency, OTPModal, ease, estimateOrderTotal, type OrderTotalConfig } from '@deliveryos/ui';
 import { CURRENCIES } from '@deliveryos/shared-types';
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_REGEX } from '@deliveryos/shared-types';
-import { MESSENGER_KINDS, messengerLabel, messengerInputType, messengerIsPhone } from '../../lib/messenger.js';
+import { messengerIsPhone } from '../../lib/messenger.js';
 import { apiClient } from '../../lib/index.js';
-import { DishStats } from '../../components/client/DishStats.js';
 import { z } from 'zod';
-
-// Per-product nutrition summed from its BOM food lines (mirrors the storefront derivation) — for the
-// collapsible order summary. Packaging/utensil lines excluded; missing data → zeros.
-function productNutritionFromBom(attributes: any): { kcal: number; protein: number; fat: number; carbs: number } {
-  const bom = attributes && typeof attributes === 'object' ? (attributes as any).bom : null;
-  const acc = { kcal: 0, protein: 0, fat: 0, carbs: 0 };
-  if (!Array.isArray(bom)) return acc;
-  for (const l of bom) {
-    if (typeof l?.kcal === 'number') acc.kcal += l.kcal;
-    if (typeof l?.proteinG === 'number') acc.protein += l.proteinG;
-    if (typeof l?.fatG === 'number') acc.fat += l.fatG;
-    if (typeof l?.carbsG === 'number') acc.carbs += l.carbsG;
-  }
-  return { kcal: Math.round(acc.kcal), protein: Math.round(acc.protein), fat: Math.round(acc.fat), carbs: Math.round(acc.carbs) };
-}
-
-// Albania has no other realistic country here, so accept how people actually type
-// their number — local "069...", "0 69 ...", "00355...", bare "69..." — and coerce
-// to the E.164 (+355...) the backend requires, instead of silently rejecting it.
-function normalizeAlbanianPhone(raw: string): string {
-  const compact = (raw || '').replace(/[\s()\-.]/g, '');
-  if (!compact) return raw;
-  if (compact.startsWith('+')) return compact;
-  let digits = compact.replace(/\D/g, '');
-  if (digits.startsWith('00')) return '+' + digits.slice(2);
-  if (digits.startsWith('355')) return '+' + digits;
-  if (digits.startsWith('0')) digits = digits.slice(1); // drop the national trunk 0
-  return digits ? '+355' + digits : raw;
-}
+import { normalizeAlbanianPhone } from './checkout/phone.js';
+import { requestPushPermission } from './checkout/push.js';
+import { OrderSummaryAccordion } from './checkout/OrderSummaryAccordion.js';
+import { ContactInfoSection } from './checkout/ContactInfoSection.js';
+import { DeliveryDetailsSection } from './checkout/DeliveryDetailsSection.js';
+import { PaymentSection } from './checkout/PaymentSection.js';
+import { OrderSummarySection } from './checkout/OrderSummarySection.js';
+import { useVenueInfo } from './checkout/useVenueInfo.js';
+import { useFallbackPhone } from './checkout/useFallbackPhone.js';
+import { useOrderMenuMap } from './checkout/useOrderMenuMap.js';
+import type { DeliveryType } from './checkout/types.js';
 
 const OrderCreateResponse = z.object({
   id: z.string(),
@@ -61,46 +42,6 @@ import { useSharedCart } from '../../lib/CartProvider.js';
 
 const isDevMode = () => typeof window !== 'undefined' && sessionStorage.getItem('dos_dev') === '1';
 
-async function requestPushPermission(_slug: string) {
-  if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
-  if (Notification.permission === 'granted') return;
-  if (Notification.permission === 'denied') return;
-  const result = await Notification.requestPermission();
-  if (result !== 'granted') return;
-  try {
-    const reg = await navigator.serviceWorker.register('/sw.js');
-    const publicKeyRes: any = await apiClient('/push/vapid-public-key');
-    const publicKey: string | undefined = publicKeyRes?.publicKey;
-    if (!publicKey) return;
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey) as any,
-    });
-    const p256dhKey = sub.getKey('p256dh');
-    const authKey = sub.getKey('auth');
-    if (!p256dhKey || !authKey) return;
-    await apiClient('/customer/push/subscribe', {
-      method: 'POST',
-      body: {
-        endpoint: sub.endpoint,
-        keys: { p256dh: btoa(String.fromCharCode(...new Uint8Array(p256dhKey))), auth: btoa(String.fromCharCode(...new Uint8Array(authKey))) },
-        opted_in: true,
-      },
-    });
-  } catch (err) {
-    console.debug('[CheckoutPage] push subscription failed:', err);
-  }
-}
-
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = atob(base64);
-  return Uint8Array.from(rawData.split('').map((c) => c.charCodeAt(0)));
-}
-
-type DeliveryType = 'delivery' | 'pickup' | 'scheduled';
-
 // §1 flow-simplification: CheckoutPage renders BOTH as the /checkout route (legacy/no-JS) and inside the
 // bottom-sheet over the menu (the primary flow). In sheet mode, `onClose` is provided so Back / empty-state
 // close the panel (cart intact, no page nav, no trap) instead of navigating the router.
@@ -113,13 +54,11 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
   const currencySymbol = CURRENCIES[activeCurrency]?.symbol ?? activeCurrency;
   const prefersReducedMotion = useReducedMotion();
 
-  // Order-summary accordion (subtle, collapsed by default) — items + photos + combined price + nutrition.
-  const [summaryOpen, setSummaryOpen] = useState(false);
   // Crypto prepaid (ADR-0017) — DARK behind VITE_PAYMENTS_CRYPTO_ENABLED. Cash-on-delivery stays the default.
   const CRYPTO_ENABLED = import.meta.env.VITE_PAYMENTS_CRYPTO_ENABLED === 'true';
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'crypto'>('cash');
-  // productId → { image, per-unit nutrition } from the public menu (for thumbnails + combined nutrition).
-  const [orderMenuMap, setOrderMenuMap] = useState<Record<string, { image?: string; kcal: number; protein: number; fat: number; carbs: number }>>({});
+  // productId → { image, per-unit nutrition } from the public menu (thumbnails + combined nutrition).
+  const orderMenuMap = useOrderMenuMap(slug);
 
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('delivery');
   const [address, setAddress] = useState('');
@@ -138,7 +77,6 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
   const [entryPhotoKey, setEntryPhotoKey] = useState('');
   const [entryPhotoPreview, setEntryPhotoPreview] = useState('');
   const [photoUploading, setPhotoUploading] = useState(false);
-  const entryFileRef = useRef<HTMLInputElement>(null);
   const uploadEntryPhoto = async (file: File) => {
     if (!file) return;
     setPhotoUploading(true);
@@ -151,22 +89,21 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
     } catch { /* optional — leave unset on failure */ } finally { setPhotoUploading(false); }
   };
   const [pinLocation, setPinLocation] = useState<LngLatLike | null>(null);
-  const [locationId, setLocationId] = useState<string | null>(null);
-  // Pickup card shows the REAL venue (name + address) from /info — never a hardcoded address.
-  const [pickupName, setPickupName] = useState('');
-  const [pickupAddress, setPickupAddress] = useState('');
-  // BUG-1: when /info fails, locationId stays null and every Place-Order submit is a
-  // silent no-op behind an active-looking button. Track the failure so we can DISABLE
-  // the button and show a humane, retryable message instead of failing silently.
-  const [locationLoadFailed, setLocationLoadFailed] = useState(false);
-  const [locationCenter, setLocationCenter] = useState<LngLatLike>([19.456, 41.324]); // Durrës default
+  // Venue identity + fee inputs from /info (ADR-0005 client MIRROR), including the
+  // BUG-1 locationLoadFailed flag that disables the Place-Order button on failure.
+  const {
+    locationId,
+    pickupName,
+    pickupAddress,
+    locationLoadFailed,
+    setLocationLoadFailed,
+    locationCenter,
+    feeInputs,
+    currencyCode,
+  } = useVenueInfo(slug);
   const [notes, setNotes] = useState('');
   const [cashAmount, setCashAmount] = useState<number>(0);
   const [tipAmount, setTipAmount] = useState<number>(0); // UX-4 optional courier tip
-  // Delivery-fee inputs from /info → drives the client total MIRROR (ADR-0005). Defaults degrade
-  // safely: until /info loads (or for distance-tiered venues) the fee is "unknown" and we never
-  // pre-quote an exact total/cash figure — the server total + the cash-422 backstop are authoritative.
-  const [feeInputs, setFeeInputs] = useState<{ deliveryFeeFlat: number | null; freeDeliveryThreshold: number | null; minOrderValue: number | null; taxRate: number; priceIncludesTax: boolean; hasDistanceTiers: boolean } | null>(null);
   const [orderError, setOrderError] = useState('');
   const orderErrorRef = useRef<HTMLDivElement>(null);
   // On a submit failure the form scrolls to top; the error banner sits at the bottom and was
@@ -174,10 +111,8 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
   useEffect(() => {
     if (orderError) orderErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [orderError]);
-  // #4 — restaurant phone for the failure fallback, cached on mount so the "call the
-  // restaurant" CTA never depends on a network fetch made under the same load that
-  // caused the failure. Null = no CTA (fail-soft to the generic toast).
-  const [fallbackPhone, setFallbackPhone] = useState<string | null>(null);
+  // #4 — restaurant phone for the failure fallback (cached on mount by the hook).
+  const fallbackPhone = useFallbackPhone(slug);
   const [showPhoneFallback, setShowPhoneFallback] = useState(false);
   const [instructionOption, setInstructionOption] = useState<string>('');
   const [instructionCustom, setInstructionCustom] = useState<string>('');
@@ -188,46 +123,13 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
   const [apartmentError, setApartmentError] = useState('');
   const [placing, setPlacing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const [currencyCode, setCurrencyCode] = useState<string>('ALL');
   // Phone-verification (OTP) state — only engaged when the backend signals
   // `requiresOtp` on a soft_confirm. Otherwise checkout behaves exactly as before.
   const [otpOpen, setOtpOpen] = useState(false);
   const [otpToken, setOtpToken] = useState<string | null>(null);
 
-    useEffect(() => {
+  useEffect(() => {
     if (!slug) return;
-    setLocationLoadFailed(false);
-    fetch(`/public/locations/${slug}/info`)
-      .then(r => { if (!r.ok) throw new Error(`info ${r.status}`); return r.json(); })
-      .then((info: any) => {
-        if (!info?.id) throw new Error('info: missing id');
-        setLocationLoadFailed(false);
-        setLocationId(info.id);
-        if (info.name) setPickupName(info.name);
-        if (info.address) setPickupAddress(info.address);
-        if (info.currency_code) setCurrencyCode(info.currency_code);
-        setFeeInputs({
-          deliveryFeeFlat: info.deliveryFeeFlat ?? null,
-          freeDeliveryThreshold: info.freeDeliveryThreshold ?? null,
-          minOrderValue: info.minOrderValue ?? null,
-          taxRate: typeof info.taxRate === 'number' ? info.taxRate : 0,
-          priceIncludesTax: info.priceIncludesTax !== false,
-          hasDistanceTiers: info.hasDistanceTiers === true,
-        });
-        if (info.lng && info.lat) setLocationCenter([info.lng, info.lat]);
-      })
-      .catch((err) => {
-        console.debug('[CheckoutPage] failed to load location info:', err);
-        setLocationId(null);
-        setLocationLoadFailed(true);
-      });
-    // Cache the restaurant phone NOW (on mount) for the order-failure fallback, so
-    // the CTA is available even when the order POST fails under DB/load pressure.
-    fetch(`/api/public/locations/${slug}/fallback-config`).then(r => r.json())
-      .then((cfg: any) => {
-        if (cfg && cfg.showPhoneOnError !== false && cfg.phone) setFallbackPhone(cfg.phone);
-      })
-      .catch(() => {/* fail-soft: no CTA, generic toast only */});
     try {
       const saved = safeStorage.get(`dos_last_delivery_${slug}`);
       if (saved) {
@@ -262,32 +164,6 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
         if (d.messengerHandle) setMessengerHandle(d.messengerHandle);
       }
     } catch {}
-  }, [slug]);
-
-  // Fetch the menu once to enrich the order summary with product thumbnails + per-unit nutrition.
-  // Best-effort: if it fails the summary still shows names/qty/price (no photos/nutrition).
-  useEffect(() => {
-    if (!slug) return;
-    let cancelled = false;
-    fetch(`/public/locations/${slug}/menu`)
-      .then(r => (r.ok ? r.json() : null))
-      .then((d: any) => {
-        if (cancelled || !d) return;
-        const map: Record<string, { image?: string; kcal: number; protein: number; fat: number; carbs: number }> = {};
-        const walk = (x: any) => {
-          if (Array.isArray(x)) { x.forEach(walk); return; }
-          if (x && typeof x === 'object') {
-            if (Array.isArray(x.products)) for (const p of x.products) {
-              if (p?.id) map[p.id] = { image: p.imageUrl || undefined, ...productNutritionFromBom(p.attributes) };
-            }
-            for (const k of Object.keys(x)) if (k !== 'products') walk(x[k]);
-          }
-        };
-        walk(d);
-        setOrderMenuMap(map);
-      })
-      .catch(() => { /* best-effort */ });
-    return () => { cancelled = true; };
   }, [slug]);
 
   useEffect(() => {
@@ -373,7 +249,7 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
       setCommError(t('checkout.receiver_required', 'Add the receiver’s name and how to reach them'));
       return;
     }
-    
+
     // §3 contextually-required door detail (council-ratified): entrance/apartment are REQUIRED only when the
     // map-pin is LOW-confidence (the customer never placed a precise pin → pinLocation null), because that is
     // exactly when the courier needs the door detail + a clarifying call the least-served customer can't take.
@@ -392,7 +268,7 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
     }
     setEntranceError('');
     setApartmentError('');
-    
+
     if (deliveryType === 'delivery' && !notes.trim()) {
       setOrderError(t('checkout.notes_required', 'Please describe how to find your location'));
       return;
@@ -656,437 +532,85 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
       )}
 
       <form id="checkout-form" onSubmit={handlePlaceOrder} className="space-y-6">
-        {/* Order summary — subtle collapsed accordion at the very top: items (photos), combined price,
-            combined nutrition. Revealed on tap; quiet by default so it doesn't dominate the form. */}
-        <div className="rounded-[var(--brand-radius)] border overflow-hidden" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }} data-testid="order-summary">
-          <button
-            type="button"
-            onClick={() => setSummaryOpen(o => !o)}
-            aria-expanded={summaryOpen}
-            className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
-          >
-            <span className="inline-flex items-center gap-2 min-w-0">
-              <i className="ti ti-receipt text-lg shrink-0" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-              <span className="text-step-sm font-semibold truncate" style={{ color: 'var(--brand-text)' }}>
-                {t('checkout.your_order', 'Your order')} · {t('checkout.item_count', '{{n}} items', { n: items.reduce((s, i) => s + i.quantity, 0) })}
-              </span>
-            </span>
-            <span className="inline-flex items-center gap-2 shrink-0">
-              <span className="text-step-sm font-bold" style={{ color: 'var(--brand-primary-readable, var(--brand-text))' }}><PriceDisplay amount={total} /></span>
-              <i className={`ti ti-chevron-${summaryOpen ? 'up' : 'down'}`} aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-            </span>
-          </button>
-          {summaryOpen && (
-            <div className="px-4 pb-4 pt-1 border-t flex flex-col gap-3" style={{ borderColor: 'var(--brand-border)' }}>
-              {/* Item rows */}
-              <ul className="flex flex-col gap-2 mt-2">
-                {items.map(item => {
-                  const img = orderMenuMap[item.productId]?.image;
-                  return (
-                    <li key={item.id} className="flex items-center gap-3">
-                      {img ? (
-                        <img src={img} alt="" aria-hidden="true" className="w-11 h-11 rounded-lg object-cover shrink-0" style={{ background: 'var(--brand-surface-raised)' }} />
-                      ) : (
-                        <span className="w-11 h-11 rounded-lg shrink-0 flex items-center justify-center" style={{ background: 'var(--brand-surface-raised)' }}><i className="ti ti-tools-kitchen-2" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} /></span>
-                      )}
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-step-sm font-medium truncate" style={{ color: 'var(--brand-text)' }}>{item.name}</span>
-                        <span className="block text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>× {item.quantity}</span>
-                      </span>
-                      <span className="text-step-sm font-semibold shrink-0 tabular-nums" style={{ color: 'var(--brand-text)' }}><PriceDisplay amount={item.price * item.quantity} size="sm" /></span>
-                    </li>
-                  );
-                })}
-              </ul>
-              {/* Combined nutrition — reuse the DishStats viz over the whole-order totals (no ingredients). */}
-              {hasNutrition && (
-                <DishStats variant="compact" macros={nutritionTotal} className="pt-1" />
-              )}
-            </div>
-          )}
-        </div>
-        <motion.div
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.25, ease: ease.out }}
-          className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
-          <h2 className="text-step-xl font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.contact_info', 'Contact Info')}</h2>
-          <div className="space-y-3">
-            <div>
-              <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.name', 'Name')}</label>
-              <div className="relative">
-                <i className="ti ti-user absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                <input required value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t('checkout.name_placeholder', 'Your name')} autoComplete="name" className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-              </div>
-            </div>
-            {/* Communication (ADR-0016): REQUIRED channel + per-kind input. Phone-yielding kinds
-                (phone/whatsapp/viber/signal) drive `phone` (throttle/OTP/dedup); Telegram=username,
-                SimpleX=text-only. The phone field is folded into the Phone kind's input. */}
-            <div>
-              <label className="text-step-sm font-bold mb-1 block" style={{ color: 'var(--brand-text)' }}>
-                {t('checkout.communication', 'Communication')} <span aria-hidden="true" style={{ color: 'var(--color-danger)' }}>*</span>
-              </label>
-              <p className="text-step-2xs mb-2" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.communication_why', 'The courier will message you about your order.')}</p>
-              <Select
-                value={messengerKind}
-                onChange={e => { setMessengerKind(e.target.value); setMessengerHandle(''); setPhone(''); setPhoneError(''); setCommError(''); }}
-                data-testid="checkout-communication"
-                aria-label={t('checkout.communication', 'Communication')}>
-                <option value="" disabled>{t('checkout.communication_choose', 'Choose a channel…')}</option>
-                {MESSENGER_KINDS.map(k => (
-                  <option key={k} value={k}>{messengerLabel(k)}</option>
-                ))}
-              </Select>
-              {messengerKind && (
-                <div className="relative mt-2">
-                  {messengerIsPhone(messengerKind) && <i className="ti ti-phone absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />}
-                  <input
-                    value={messengerIsPhone(messengerKind) ? phone : messengerHandle}
-                    onChange={e => { const v = e.target.value; if (messengerIsPhone(messengerKind)) { setPhone(v); setPhoneError(''); } else { setMessengerHandle(v); } setCommError(''); }}
-                    onBlur={messengerIsPhone(messengerKind) ? () => setPhone(p => normalizeAlbanianPhone(p)) : undefined}
-                    type={messengerIsPhone(messengerKind) ? 'tel' : 'text'} inputMode={messengerIsPhone(messengerKind) ? 'tel' : undefined}
-                    autoComplete={messengerIsPhone(messengerKind) ? 'tel' : 'off'}
-                    aria-label={t('checkout.communication_handle', 'Your contact')} data-testid="checkout-comm-handle"
-                    placeholder={messengerInputType(messengerKind) === 'phone' ? '+355 6X XXX XXXX' : messengerInputType(messengerKind) === 'username' ? '@username' : t('checkout.simplex_placeholder', 'Paste your SimpleX invite link')}
-                    className="w-full h-[48px] pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]"
-                    style={{ paddingLeft: messengerIsPhone(messengerKind) ? '2.5rem' : '0.75rem', background: 'var(--brand-surface-raised)', borderColor: (phoneError || commError) ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                </div>
-              )}
-              {(phoneError || commError) && <p role="alert" className="text-step-xs mt-1" style={{ color: 'var(--color-danger)' }}>{phoneError || commError}</p>}
-            </div>
-            {/* "Deliver to someone else" — same-receiver checked by default; else a receiver contact + notice. */}
-            <div>
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox" checked={sameReceiver} onChange={e => { setSameReceiver(e.target.checked); setCommError(''); }} data-testid="checkout-same-receiver" className="w-4 h-4" style={{ accentColor: 'var(--brand-primary)' }} />
-                <span className="text-step-sm" style={{ color: 'var(--brand-text)' }}>{t('checkout.same_receiver', 'I am the receiver')}</span>
-              </label>
-              {!sameReceiver && (
-                <div className="mt-3 space-y-2 rounded-[var(--brand-radius-sm)] border p-3" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)' }} data-testid="receiver-fields">
-                  <input value={receiverName} onChange={e => { setReceiverName(e.target.value); setCommError(''); }} placeholder={t('checkout.receiver_name', 'Receiver’s name')} data-testid="receiver-name"
-                    className="w-full h-[48px] px-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                  <Select
-                    value={receiverKind}
-                    onChange={e => { setReceiverKind(e.target.value); setReceiverHandle(''); setCommError(''); }}
-                    data-testid="receiver-communication"
-                    aria-label={t('checkout.communication', 'Communication')}>
-                    <option value="" disabled>{t('checkout.communication_choose', 'Choose a channel…')}</option>
-                    {MESSENGER_KINDS.map(k => (
-                      <option key={k} value={k}>{messengerLabel(k)}</option>
-                    ))}
-                  </Select>
-                  {receiverKind && (
-                    <input value={receiverHandle} onChange={e => { setReceiverHandle(e.target.value); setCommError(''); }}
-                      type={messengerIsPhone(receiverKind) ? 'tel' : 'text'} data-testid="receiver-handle"
-                      placeholder={messengerInputType(receiverKind) === 'phone' ? '+355 6X XXX XXXX' : messengerInputType(receiverKind) === 'username' ? '@username' : t('checkout.simplex_placeholder', 'Paste your SimpleX invite link')}
-                      className="w-full h-[48px] px-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                  )}
-                  <p className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.receiver_privacy', 'We share this contact with the courier only to deliver this order, then delete it.')}</p>
-                </div>
-              )}
-            </div>
-            {/* UX-3: optional entrance photo (delivery only) — camera or gallery */}
-            {deliveryType !== 'pickup' && (
-              <div>
-                <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entry_photo', 'Entrance photo (optional)')}</label>
-                <div className="flex items-center gap-3">
-                  <button type="button" onClick={() => entryFileRef.current?.click()} disabled={photoUploading}
-                    className="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 border rounded-[var(--brand-radius-sm)] cursor-pointer text-sm transition-[background-color,box-shadow,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 disabled:opacity-60"
-                    style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
-                    <i className="ti ti-camera" aria-hidden="true" />
-                    {photoUploading ? t('checkout.uploading', 'Uploading…') : (entryPhotoKey ? t('checkout.change_photo', 'Change photo') : t('checkout.add_photo', 'Add photo'))}
-                  </button>
-                  <input ref={entryFileRef} type="file" accept="image/*" className="hidden" data-testid="entry-photo-input" disabled={photoUploading}
-                    onChange={e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void uploadEntryPhoto(f); }} />
-                  {entryPhotoPreview && (
-                    <img src={entryPhotoPreview} alt={t('checkout.entry_photo', 'Entrance photo')} data-testid="entry-photo-preview" className="h-12 w-12 object-cover rounded-[var(--brand-radius-sm)] border" style={{ borderColor: 'var(--brand-border)' }} />
-                  )}
-                </div>
-                <p className="text-step-xs mt-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.entry_photo_hint', 'Helps the courier find your entrance.')}</p>
-              </div>
-            )}
-          </div>
-        </motion.div>
-        <motion.div
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.25, ease: ease.out, delay: 0.05 }}
-          className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
-          <h2 className="text-step-xl font-semibold mb-6" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.delivery_address')}</h2>
-          {/* §4 flow-simplification: order-type switch removed — delivery is the only live type (pickup/scheduled
-              deferred). deliveryType stays 'delivery' (the switch + pickup branches restore with the capability),
-              the payload still sends a valid type → no order-contract change. */}
+        <OrderSummaryAccordion
+          items={items}
+          total={total}
+          orderMenuMap={orderMenuMap}
+          hasNutrition={hasNutrition}
+          nutritionTotal={nutritionTotal}
+        />
 
-          {deliveryType === 'delivery' && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.pin_on_map', 'Tap the map to set your delivery location')}</label>
-                <MapWithPin className="h-48 w-full rounded-[var(--brand-radius-sm)]" initialCenter={locationCenter} onPinChange={setPinLocation} confirmLabel={t('common.confirm')} placeholder={t('checkout.pin_on_map', 'Tap the map to set your delivery location')} myLocationLabel={t('checkout.my_location', 'My location')} />
-              </div>
-              <div>
-                <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.street_address', 'Street address')}</label>
-                <div className="relative">
-                  <i className="ti ti-map-pin absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                  <input required value={address} onChange={e => setAddress(e.target.value)} data-testid="checkout-address" placeholder={t('checkout.street_address', 'Street address')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                </div>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.entrance')}{pinLocation != null && <span className="font-normal ml-1" style={{ color: 'var(--brand-text-muted)' }}>{t('common.optional', '(optional)')}</span>}</label>
-                  <div className="relative">
-                    <i className="ti ti-door-open absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                    <input required={pinLocation == null} value={entrance} onChange={e => setEntrance(e.target.value)} data-testid="checkout-entrance" placeholder={t('checkout.entrance_placeholder', 'Entrance number or name')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                  </div>
-                  {entranceError && <p role="alert" className="text-step-xs mt-1" style={{ color: 'var(--color-danger)' }}>{entranceError}</p>}
-                </div>
-                <div>
-                  <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.apartment')}{pinLocation != null && <span className="font-normal ml-1" style={{ color: 'var(--brand-text-muted)' }}>{t('common.optional', '(optional)')}</span>}</label>
-                  <div className="relative">
-                    <i className="ti ti-apartment absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                    <input required={pinLocation == null} value={apartment} onChange={e => setApartment(e.target.value)} data-testid="checkout-apartment" placeholder={t('checkout.apartment_placeholder', 'Apartment or unit number')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                  </div>
-                  {apartmentError && <p role="alert" className="text-step-xs mt-1" style={{ color: 'var(--color-danger)' }}>{apartmentError}</p>}
-                </div>
-              </div>
-              <div>
-                <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>
-                  {t('checkout.notes', 'How to find you')} <span style={{ color: 'var(--color-danger)' }}>*</span>
-                </label>
-                <div className="relative">
-                  <i className="ti ti-map-2 absolute left-3 top-3 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                  <Textarea
-                    required
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    rows={3}
-                    placeholder={t('checkout.notes_placeholder', 'Describe how to find the exact place: floor, building color, nearby landmark, gate code...')}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-step-sm font-bold mb-1.5 block" style={{ color: 'var(--brand-text)' }}>{t('checkout.dropoff_instructions', 'Dropoff instructions')}</label>
-                <div className="flex flex-wrap gap-2 mb-2" role="group" aria-label={t('checkout.dropoff_instructions', 'Dropoff instructions')}>
-                  {[
-                    { key: 'checkout.dropoff_door', val: 'Leave at door' },
-                    { key: 'checkout.dropoff_call', val: 'Call on arrival' },
-                    { key: 'checkout.dropoff_ring', val: 'Ring bell' },
-                    { key: 'checkout.dropoff_hand', val: 'Hand to me' },
-                    { key: 'checkout.dropoff_text', val: 'Text on arrival' },
-                  ].map((opt) => (
-                    <motion.button
-                      key={opt.key}
-                      type="button"
-                      whileTap={{ scale: 0.95 }}
-                      aria-pressed={instructionOption === opt.val}
-                      onClick={() => setInstructionOption(instructionOption === opt.val ? '' : opt.val)}
-                      className="px-3 py-1.5 text-step-xs rounded-[var(--brand-radius-btn)] border transition-[background-color,border-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1"
-                      style={{
-                        background: instructionOption === opt.val ? 'var(--brand-primary-light)' : 'var(--brand-surface-raised)',
-                        borderColor: instructionOption === opt.val ? 'var(--brand-primary)' : 'var(--brand-border)',
-                        color: instructionOption === opt.val ? 'var(--brand-text)' : 'var(--brand-text)',
-                      }}
-                    >{t(opt.key, opt.val)}</motion.button>
-                  ))}
-                </div>
-                {instructionOption && (
-                  <div className="relative">
-                    <i className="ti ti-edit absolute left-3 top-1/2 -translate-y-1/2 text-lg" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                    <input value={instructionCustom} onChange={e => setInstructionCustom(e.target.value)} placeholder={t('checkout.extra_notes', 'Extra notes...')} className="w-full h-[48px] pl-10 pr-3 outline-none text-step-sm border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }} />
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+        <ContactInfoSection
+          deliveryType={deliveryType}
+          customerName={customerName}
+          setCustomerName={setCustomerName}
+          phone={phone}
+          setPhone={setPhone}
+          phoneError={phoneError}
+          setPhoneError={setPhoneError}
+          commError={commError}
+          setCommError={setCommError}
+          messengerKind={messengerKind}
+          setMessengerKind={setMessengerKind}
+          messengerHandle={messengerHandle}
+          setMessengerHandle={setMessengerHandle}
+          sameReceiver={sameReceiver}
+          setSameReceiver={setSameReceiver}
+          receiverName={receiverName}
+          setReceiverName={setReceiverName}
+          receiverKind={receiverKind}
+          setReceiverKind={setReceiverKind}
+          receiverHandle={receiverHandle}
+          setReceiverHandle={setReceiverHandle}
+          entryPhotoKey={entryPhotoKey}
+          entryPhotoPreview={entryPhotoPreview}
+          photoUploading={photoUploading}
+          uploadEntryPhoto={uploadEntryPhoto}
+        />
 
-          {deliveryType === 'pickup' && (
-            <div className="space-y-4">
-              <div className="border rounded-[var(--brand-radius)] p-4" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
-                <h3 className="text-step-sm font-bold mb-1" style={{ color: 'var(--brand-text)' }}>{t('courier.pickup')}</h3>
-                <p className="text-step-sm mb-4" style={{ color: 'var(--brand-text-muted)' }}>
-                  {pickupName && <span className="block font-semibold" style={{ color: 'var(--brand-text)' }}>{pickupName}</span>}
-                  {pickupAddress || t('checkout.pickup_addr_tbd', 'Address shown after the restaurant confirms.')}
-                </p>
-                <div className="w-full h-[120px] rounded-[var(--brand-radius-sm)] relative overflow-hidden border flex items-center justify-center" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-border)' }}>
-                  <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(var(--brand-border) 1px, transparent 1px), linear-gradient(90deg, var(--brand-border) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
-                  <i className="ti ti-building-store text-3xl relative z-10" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-3 rounded-[var(--brand-radius-sm)] border" style={{ background: 'var(--color-info-light)', borderColor: 'var(--color-info)', color: 'var(--color-info)' }}>
-                <i className="ti ti-info-circle" aria-hidden="true" />
-                <p className="text-step-sm font-medium">{t('checkout.phone_hint')}</p>
-              </div>
-            </div>
-          )}
+        <DeliveryDetailsSection
+          deliveryType={deliveryType}
+          locationCenter={locationCenter}
+          pinLocation={pinLocation}
+          setPinLocation={setPinLocation}
+          address={address}
+          setAddress={setAddress}
+          entrance={entrance}
+          setEntrance={setEntrance}
+          entranceError={entranceError}
+          apartment={apartment}
+          setApartment={setApartment}
+          apartmentError={apartmentError}
+          notes={notes}
+          setNotes={setNotes}
+          instructionOption={instructionOption}
+          setInstructionOption={setInstructionOption}
+          instructionCustom={instructionCustom}
+          setInstructionCustom={setInstructionCustom}
+          pickupName={pickupName}
+          pickupAddress={pickupAddress}
+        />
 
-          {deliveryType === 'scheduled' && (
-            <div className="flex items-center gap-3 p-4 rounded-[var(--brand-radius)] border" style={{ background: 'var(--color-warning-light)', borderColor: 'var(--color-warning)' }}>
-              <i className="ti ti-clock text-lg shrink-0" aria-hidden="true" style={{ color: 'var(--color-warning)' }} />
-              <p className="text-step-sm font-medium" style={{ color: 'var(--brand-text)' }}>
-                {t('checkout.scheduled_coming_soon', 'Scheduled delivery coming soon. Please select Delivery or Pickup.')}
-              </p>
-            </div>
-          )}
-        </motion.div>
+        <PaymentSection
+          currencySymbol={currencySymbol}
+          total={total}
+          cashAmount={cashAmount}
+          setCashAmount={setCashAmount}
+          tipAmount={tipAmount}
+          setTipAmount={setTipAmount}
+        />
 
-        <motion.div
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.25, ease: ease.out, delay: 0.1 }}
-          className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
-          <h2 className="text-step-xl font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('checkout.payment_method')}</h2>
-          <div className="border rounded-[var(--brand-radius-sm)] p-3 mb-3" style={{ background: 'var(--brand-surface-raised)', borderColor: 'var(--brand-primary)' }}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <i className="ti ti-cash text-xl" aria-hidden="true" style={{ color: 'var(--brand-primary)' }} />
-                <div>
-                  <div className="text-step-sm font-bold" style={{ color: 'var(--brand-text)' }}>{t('checkout.cash')}</div>
-                  <div className="text-step-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.place_order')}</div>
-                </div>
-              </div>
-              <i className="ti ti-check" aria-hidden="true" style={{ color: 'var(--brand-primary)' }} />
-            </div>
-            <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-              <label htmlFor="cash-amount" className="text-step-xs font-semibold mb-1.5 block" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.cash_amount', 'Cash amount')}</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-step-sm font-bold" style={{ color: 'var(--brand-text-muted)' }}>{currencySymbol}</span>
-                  <input
-                    id="cash-amount"
-                    type="number"
-                    inputMode="decimal"
-                    min={total}
-                    value={cashAmount || ''}
-                    onChange={e => setCashAmount(parseInt(e.target.value) || 0)}
-                    className="w-full h-[48px] pl-11 pr-3 outline-none text-step-sm font-bold border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]"
-                    style={{ background: 'var(--brand-surface)', borderColor: cashAmount > 0 && cashAmount < total ? 'var(--color-danger)' : 'var(--brand-border)', color: 'var(--brand-text)' }}
-                    placeholder={String(total)}
-                  />
-                </div>
-              </div>
-              {/* UX-4: optional courier tip (single amount, replaces %-badges) */}
-              <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-                <label htmlFor="tip-amount" className="text-step-xs font-semibold mb-1.5 block" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_amount', 'Tip for courier (optional)')}</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-step-sm font-bold" style={{ color: 'var(--brand-text-muted)' }}>{currencySymbol}</span>
-                  <input
-                    id="tip-amount"
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    max={1000000}
-                    value={tipAmount || ''}
-                    data-testid="checkout-tip"
-                    onChange={e => setTipAmount(Math.min(1000000, Math.max(0, parseInt(e.target.value) || 0)))}
-                    className="w-full h-[48px] pl-11 pr-3 outline-none text-step-sm font-bold border rounded-[var(--brand-radius-sm)] transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:border-[var(--brand-primary)]"
-                    style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}
-                    placeholder="0"
-                  />
-                </div>
-                <p className="text-step-xs mt-1" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_hint', 'Goes entirely to your courier, in cash on delivery.')}</p>
-              </div>
-              {cashAmount > 0 && (
-                <div className="flex justify-between text-step-sm mt-2 px-1">
-                  {cashAmount >= total ? (
-                    <>
-                      <span style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.change', 'Change')}</span>
-                      <span className="font-bold" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={cashAmount - total} /></span>
-                    </>
-                  ) : (
-                    <span style={{ color: 'var(--color-danger)' }}>{t('checkout.cash_amount_too_low', 'Amount must be at least')} <PriceDisplay amount={total} /></span>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.25, ease: ease.out, delay: 0.15 }}
-          className="rounded-[var(--brand-radius)] p-4 border" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)', boxShadow: 'var(--elev-1)' }}>
-          <h2 className="text-step-xl font-semibold mb-4" style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{t('order.title')}</h2>
-          <div className="space-y-3 mb-4">
-            <div className="flex justify-between items-baseline gap-3 text-step-sm">
-              <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.subtotal')}</span>
-              <span className="shrink-0 tabular-nums"><PriceDisplay amount={subtotal} /></span>
-            </div>
-            {deliveryType === 'delivery' && (
-              <div className="flex justify-between items-baseline gap-3 text-step-sm">
-                <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.delivery_fee')}</span>
-                {feeKnown ? (
-                  <span className="shrink-0 tabular-nums"><PriceDisplay amount={deliveryFee} /></span>
-                ) : (
-                  // Distance-tiered venue — the fee depends on the delivery address and is finalised by
-                  // the server. We never invent a number we can't collect at the door (ADR-0005).
-                  <span className="shrink-0 text-step-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.fee_at_checkout', 'Calculated at checkout')}</span>
-                )}
-              </div>
-            )}
-            {taxTotal > 0 && (
-              <div className="flex justify-between items-baseline gap-3 text-step-sm">
-                <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.tax', 'Tax')}</span>
-                <span className="shrink-0 tabular-nums"><PriceDisplay amount={taxTotal} /></span>
-              </div>
-            )}
-            {tipAmount > 0 && (
-              <div className="flex justify-between items-baseline gap-3 text-step-sm" data-testid="checkout-tip-line">
-                <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('checkout.tip_for_courier', 'Tip for courier (cash)')}</span>
-                <span className="shrink-0 tabular-nums"><PriceDisplay amount={tipAmount} /></span>
-              </div>
-            )}
-            {hasNutrition && (
-              <div className="flex justify-between items-baseline gap-3 text-step-xs">
-                <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>≈ {t('menu.nutrition')}</span>
-                <span className="shrink-0 font-medium tabular-nums" style={{ color: 'var(--brand-text-muted)' }}>~{nutritionTotal.kcal} kcal</span>
-              </div>
-            )}
-          </div>
-          <div className="pt-4 border-t flex justify-between items-center gap-3" style={{ borderColor: 'var(--brand-border)' }}>
-            <span className="text-step-base font-bold min-w-0 truncate" style={{ color: 'var(--brand-text)' }}>{t('cart.total')}</span>
-            <motion.span
-              key={total}
-              data-testid="checkout-total"
-              className="shrink-0 tabular-nums"
-              initial={prefersReducedMotion ? false : { opacity: 0.4, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: duration.base, ease: ease.out }}
-            >
-              <PriceDisplay amount={total} size="lg" />
-            </motion.span>
-          </div>
-          {deliveryType === 'delivery' && !feeKnown && (
-            <p className="text-step-xs mt-1 text-right" style={{ color: 'var(--brand-text-muted)' }}>
-              {t('checkout.plus_delivery_fee', '+ delivery fee, calculated at checkout')}
-            </p>
-          )}
-          {tipAmount > 0 && (
-            <div className="flex justify-between items-center gap-3 text-step-sm mt-2" style={{ color: 'var(--brand-text-muted)' }} data-testid="checkout-cash-due">
-              <span className="min-w-0 truncate">{t('checkout.cash_to_courier', 'Cash to courier (incl. tip)')}</span>
-              <span className="shrink-0 tabular-nums"><PriceDisplay amount={total + tipAmount} /></span>
-            </div>
-          )}
-          {/* Pre-order ETA — there is no order yet, so this is a deliberately WIDE
-              approximate range that refines once the order is placed (the status page
-              then shows the honest server range). Delivery only; pickup has no ETA. */}
-          {deliveryType === 'delivery' && (
-            <div className="mt-4 pt-4 border-t flex items-start gap-2.5" style={{ borderColor: 'var(--brand-border)' }} data-testid="checkout-eta-estimate">
-              <i className="ti ti-clock text-lg shrink-0 mt-0.5" aria-hidden="true" style={{ color: 'var(--brand-text-muted)' }} />
-              <div className="min-w-0">
-                <div className="text-step-sm font-semibold tabular-nums" style={{ color: 'var(--brand-text)' }}>
-                  {t('order.eta_range', '{{low}}–{{high}} min', { low: 25, high: 45 })}
-                </div>
-                <p className="text-step-xs leading-snug" style={{ color: 'var(--brand-text-muted)' }}>
-                  {t('checkout.eta_estimate', 'Estimated time — refines after you place the order')}
-                </p>
-              </div>
-            </div>
-          )}
-        </motion.div>
+        <OrderSummarySection
+          deliveryType={deliveryType}
+          subtotal={subtotal}
+          feeKnown={feeKnown}
+          deliveryFee={deliveryFee}
+          taxTotal={taxTotal}
+          tipAmount={tipAmount}
+          total={total}
+          hasNutrition={hasNutrition}
+          nutritionKcal={nutritionTotal.kcal}
+        />
 
         {/* Payment method (ADR-0017) — DARK behind VITE_PAYMENTS_CRYPTO_ENABLED. Cash-on-delivery default. */}
         {CRYPTO_ENABLED && (

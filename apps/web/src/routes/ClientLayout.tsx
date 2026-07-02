@@ -22,6 +22,7 @@ const PublicThemeResponse = z.object({
   supportedLocales: z.array(z.string()).nullable().optional(),
 }).passthrough();
 import { CartProvider, useSharedCart } from '../lib/CartProvider.js';
+import { fetchVenueInfo } from '../lib/publicApi.js';
 import { CheckoutPage } from '../pages/client/CheckoutPage.js';
 
 // Inject the Google-Fonts <link> for any non-base tenant font, once. Idempotent (dedup by href) and
@@ -144,8 +145,7 @@ function ClientLayoutInner() {
       .catch(() => setTheme(null));
 
     // Free-delivery threshold for the cart nudge (server-cached /info; best-effort, never blocks the cart).
-    fetch(`/public/locations/${slug}/info`)
-      .then((r) => (r.ok ? r.json() : null))
+    fetchVenueInfo(slug)
       .then((info) => { if (info && info.freeDeliveryThreshold != null) setFreeDeliveryThreshold(Number(info.freeDeliveryThreshold)); })
       .catch(() => {});
 

@@ -35,7 +35,12 @@ export interface TelegramSendJob {
   attempt?: number;
 }
 
-const CUSTOMER_STATUS_EVENTS = ['CONFIRMED', 'IN_DELIVERY', 'DELIVERED'] as const;
+// ADR-dispatch-recovery (ETHICAL-STOP-1): DISPATCH_DELAYED is the HONEST courier-shortage push
+// ("arranging your courier — slight delay", never a false "on its way"); CANCELLED is the honest
+// terminal push used by the flag-gated grace-window auto-cancel. Neither is reachable from the
+// ORDER_STATUS bus fan-out (CUSTOMER_PUSH_EVENTS in lib/registry.ts stays confirmed/in_delivery/
+// delivered) — they are enqueued only by the dispatch-exhaustion consumer / grace pass.
+export const CUSTOMER_STATUS_EVENTS = ['CONFIRMED', 'IN_DELIVERY', 'DELIVERED', 'DISPATCH_DELAYED', 'CANCELLED'] as const;
 
 // TG_CATEGORY_GATING (default off): when on, prefs gating is by CATEGORY
 // (operational/quality, transactional always sent) instead of the legacy per-event
@@ -131,6 +136,10 @@ export class NotificationWorker {
         CONFIRMED: 'Order confirmed',
         IN_DELIVERY: 'On the way',
         DELIVERED: 'Delivered',
+        // Honest copy (ADR-dispatch-recovery): a courier shortage is a delay, not "on its way";
+        // a grace-window auto-cancel is a clear terminal.
+        DISPATCH_DELAYED: 'delayed — we are arranging your courier',
+        CANCELLED: 'Cancelled',
       };
       const shortId = order.id?.substring(0, 4).toUpperCase();
       const title = shortId
@@ -598,6 +607,7 @@ async handleTelegramSend(job: Job<TelegramSendJob>) {
       case 'order.substitution_needs_human':
       case 'order.dwell_escalation':
       case 'order.timeout_cancelled':
+      case 'order.dispatch_failed':
       case 'order.pending_aging':
       case 'order.ready_for_pickup':
       case 'delivery.flag_raised':

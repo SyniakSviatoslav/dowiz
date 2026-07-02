@@ -454,7 +454,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       // illegal transition) and re-offer. The old code hand-published an unconditional ORDER_CANCELLED that
       // LIED for an order reverting to READY and left an owner-forced IN_DELIVERY order stranded (no revert);
       // the rail + the post-commit binding_changed broadcast now carry the truthful resulting state.
-      const { reoffered } = await releaseBindingAndReoffer(
+      const { requeued } = await releaseBindingAndReoffer(
         client,
         { assignmentId: id, orderId: order_id, shiftId: shift_id, asgStatus: asg_status, ordStatus: ord_status, locationId, reason: `courier_cancelled: ${reason}` },
         { messageBus },
@@ -465,7 +465,8 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       await messageBus.publish(orderChannel(order_id), { type: 'binding_changed', orderId: order_id });
       await messageBus.publish(dashboardChannel(locationId), { type: 'assignment_aborted', orderId: order_id });
 
-      return reply.send({ success: true, reoffered });
+      // Honest signal (ADR-dispatch-recovery Q4): `requeued` — journal re-enqueue, not a re-offer.
+      return reply.send({ success: true, requeued });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -507,7 +508,7 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
 
       // (1)+(2): terminalize the binding + take the order-side action via the SHARED rail (the same one
       // /cancel uses) — abort always frees the assignment; the transition is guarded on the locked order status.
-      const { reoffered } = await releaseBindingAndReoffer(
+      const { requeued } = await releaseBindingAndReoffer(
         client,
         { assignmentId: id, orderId: order_id, shiftId: shift_id, asgStatus: asg_status, ordStatus: ord_status, locationId, reason },
         { messageBus },
@@ -519,7 +520,8 @@ export default (async function courierAssignmentsRoutes(fastify: any, opts: any)
       // when the order status itself is unchanged (the flag-ON branch).
       await messageBus.publish(orderChannel(order_id), { type: 'binding_changed', orderId: order_id });
       await messageBus.publish(dashboardChannel(locationId), { type: 'assignment_aborted', orderId: order_id });
-      return reply.send({ success: true, reoffered });
+      // Honest signal (ADR-dispatch-recovery Q4): `requeued` — journal re-enqueue, not a re-offer.
+      return reply.send({ success: true, requeued });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
