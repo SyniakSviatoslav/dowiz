@@ -278,9 +278,7 @@ test('Stage 36: Notification Infrastructure (NX-1..NX-6)', async (t) => {
   });
 
   // ─── Cleanup ──────────────────────────────────────────────────────
-  await t.test('cleanup', async () => {
-    // No-op: test data isolation via random UUIDs
-    // DB records cleaned up by retention policies / anonymizer
-    assert.ok(true);
-  });
+  // No cleanup step: test data isolation via random UUIDs; DB records are
+  // cleaned up by retention policies / anonymizer. (A decorative assert.ok(true)
+  // subtest lived here — removed, banned false-green class.)
 });

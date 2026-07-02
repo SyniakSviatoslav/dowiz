@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { loadEnv } from '@deliveryos/config';
 import { createSessionPool } from '@deliveryos/db';
 import { signAuthToken } from '@deliveryos/platform';
@@ -634,27 +635,37 @@ test('Stage 28: Push Notifications', async (t) => {
   });
 
   await t.test('R10.4: prune is best-effort — catch handler swallows errors', () => {
-    // The worker wraps the prune UPDATE in .catch(() => {})
-    // This is verified by code inspection — even if prune fails, the
-    // worker continues to the next device
-    assert.ok(true);
+    // The prune UPDATE must stay wrapped in a swallowing .catch so a failed
+    // prune never aborts delivery to the remaining devices.
+    const workerSrc = readFileSync(
+      new URL('../src/notifications/workers/index.ts', import.meta.url), 'utf8');
+    const pruneIdx = workerSrc.indexOf('WHERE vapid_endpoint = $1');
+    assert.ok(pruneIdx > -1, 'prune UPDATE not found in notifications worker');
+    assert.match(workerSrc.slice(pruneIdx, pruneIdx + 200), /\.catch\(\(\) => \{\}\)/,
+      'prune UPDATE is no longer best-effort (.catch swallow removed)');
   });
 
   // ═══════════════════════════════════════════════════════════════
   // RATE LIMIT TESTS
   // ═══════════════════════════════════════════════════════════════
-  await t.test('RL.1: owner subscribe rate-limited at 10/min', async () => {
-    // The route has rateLimit: { max: 10, timeWindow: '1 minute' }
-    // Verify the config exists by code inspection
-    assert.ok(true);
+  const ownerPushSrc = readFileSync(
+    new URL('../src/routes/owner/push.ts', import.meta.url), 'utf8');
+  const customerPushSrc = readFileSync(
+    new URL('../src/routes/customer/push.ts', import.meta.url), 'utf8');
+
+  await t.test('RL.1: owner subscribe rate-limited at 10/min', () => {
+    assert.match(ownerPushSrc, /rateLimit:\s*\{\s*max:\s*10,\s*timeWindow:\s*'1 minute'\s*\}/,
+      'owner push subscribe lost its 10/min rate limit');
   });
 
-  await t.test('RL.2: customer subscribe rate-limited at 10/min', async () => {
-    assert.ok(true);
+  await t.test('RL.2: customer subscribe rate-limited at 10/min', () => {
+    assert.match(customerPushSrc, /rateLimit:\s*\{\s*max:\s*10,\s*timeWindow:\s*'1 minute'\s*\}/,
+      'customer push subscribe lost its 10/min rate limit');
   });
 
-  await t.test('RL.3: customer unsubscribe rate-limited at 5/min', async () => {
-    assert.ok(true);
+  await t.test('RL.3: customer unsubscribe rate-limited at 5/min', () => {
+    assert.match(customerPushSrc, /rateLimit:\s*\{\s*max:\s*5,\s*timeWindow:\s*'1 minute'\s*\}/,
+      'customer push unsubscribe lost its 5/min rate limit');
   });
 
   // ═══════════════════════════════════════════════════════════════

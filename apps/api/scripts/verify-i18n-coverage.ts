@@ -2,7 +2,8 @@
 /**
  * verify-i18n-coverage.ts
  * Extracts all t('key') calls from frontend source and cross-references against
- * all 3 locales (sq, en, uk) in packages/ui/src/lib/i18n.ts.
+ * all 3 locales (sq, en, uk) in the key-major SSoT packages/ui/src/lib/i18n-catalog.ts
+ * (i18n.ts only DERIVES locale views from it — never parse i18n.ts for keys).
  * Exits 1 if any key is missing from any locale.
  */
 import { readFileSync, readdirSync, statSync } from 'fs';
@@ -10,7 +11,7 @@ import { join, extname, basename } from 'path';
 
 const UI_SRC = join(import.meta.dirname, '..', '..', '..', 'packages', 'ui', 'src');
 const WEB_SRC = join(import.meta.dirname, '..', '..', '..', 'apps', 'web', 'src');
-const I18N_FILE = join(UI_SRC, 'lib', 'i18n.ts');
+const I18N_FILE = join(UI_SRC, 'lib', 'i18n-catalog.ts');
 
 interface Locales {
   sq: Record<string, string>;
@@ -18,29 +19,26 @@ interface Locales {
   uk: Record<string, string>;
 }
 
+// Parse the key-major catalog: 'key.name': { en: '…', sq: '…', uk: '…' }.
+// Import the module instead of regexing? The catalog is plain data, but this script
+// must stay runnable without a TS build of packages/ui — so a line parser it is.
 function parseI18nFile(filePath: string): Locales {
   const content = readFileSync(filePath, 'utf-8');
   const locales: Locales = { sq: {}, en: {}, uk: {} };
 
-  let currentLocale: keyof Locales | null = null;
-  const lines = content.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const localeMatch = line.match(/^\s{2}(\w+):\s*\{/);
-    if (localeMatch && (localeMatch[1] === 'sq' || localeMatch[1] === 'en' || localeMatch[1] === 'uk')) {
-      currentLocale = localeMatch[1] as keyof Locales;
-      continue;
+  let currentKey: string | null = null;
+  for (const line of content.split('\n')) {
+    // "'client.foo_bar': {"  — a catalog entry opener (possibly single-line entry)
+    const keyMatch = line.match(/^\s*'([^']+)':\s*\{/);
+    if (keyMatch) currentKey = keyMatch[1];
+    if (!currentKey) continue;
+    // locale props on the opener line ("{ en: '…', sq: '…', uk: '…' }") or on their own lines
+    for (const loc of ['sq', 'en', 'uk'] as const) {
+      const re = new RegExp(`(?:[{,]\\s*|^\\s*)${loc}:\\s*['"\`]`);
+      if (re.test(line)) locales[loc][currentKey] = true as any;
     }
-    if (currentLocale && /^\s{2}\};/.test(line)) {
-      currentLocale = null;
-      continue;
-    }
-    if (currentLocale) {
-      const keyMatch = line.match(/'([^']+)':\s*(['"])/);
-      if (keyMatch) {
-        locales[currentLocale][keyMatch[1]] = true as any;
-      }
-    }
+    // entry closes ("}," on its own line, or a single-line "'key': { ... },")
+    if (/\},?\s*$/.test(line)) currentKey = null;
   }
   return locales;
 }

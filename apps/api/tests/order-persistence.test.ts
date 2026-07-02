@@ -82,7 +82,7 @@ test('insertOrderWithItems — orders INSERT receives the exact positional param
 
   const orderInsert = calls.find((c) => /INSERT INTO orders\b/.test(c.sql))!;
   assert.ok(orderInsert, 'orders INSERT issued');
-  // Positional $1..$24 — see the VALUES mapping in order-persistence.ts.
+  // Positional $1..$27 — see the VALUES mapping in order-persistence.ts.
   assert.deepEqual(orderInsert.params, [
     'loc-1', 'cust-1', 'Rruga X', 41.32, 19.45,
     1500, 200, 0, 0, 1700,
@@ -95,6 +95,7 @@ test('insertOrderWithItems — orders INSERT receives the exact positional param
     null, null,
     null,
     0, // tipAmount undefined → 0
+    null, null, null, // receiver_name / receiver_messenger_kind / receiver_handle (ADR-0016)
   ]);
 });
 

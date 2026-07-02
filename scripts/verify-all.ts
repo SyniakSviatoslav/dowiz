@@ -10,28 +10,32 @@ import { join } from 'node:path';
 const ROOT = process.cwd();
 const MIGRATIONS_DIR = join(ROOT, 'packages/db/migrations');
 
+// --ci: the static subset for GitHub Actions (no provisioned env/DB — verify:env/db/rls
+// need real connection strings; lint/typecheck already run as separate CI steps).
+const CI_MODE = process.argv.includes('--ci');
+
 const STEPS = [
-  { name: 'verify:env', cmd: 'pnpm verify:env' },
-  { name: 'verify:db', cmd: 'pnpm verify:db' },
-  { name: 'verify:rls', cmd: 'pnpm verify:rls' },
-  { name: 'verify:secrets', cmd: 'pnpm verify:secrets' },
-  { name: 'migration ordering', cmd: `tsx scripts/verify-migrations.ts` },
-  { name: 'lint', cmd: 'pnpm lint' },
-  { name: 'typecheck', cmd: 'pnpm typecheck' },
-  { name: 'i18n coverage', cmd: `tsx apps/api/scripts/verify-i18n-coverage.ts` },
-  { name: 'contrast audit', cmd: `tsx apps/api/scripts/verify-contrast.ts` },
-  { name: 'event wiring (NX)', cmd: 'pnpm verify:event-wiring' },
-  { name: 'connection lifecycle (NX)', cmd: 'pnpm verify:connection-lifecycle' },
-  { name: 'owner active-membership (ADR-0004 P-d)', cmd: 'pnpm guardrail:owner-active' },
-  { name: 'spike boundary (operating-model)', cmd: 'pnpm guardrail:spike-boundary' },
-  { name: 'deliver v2 parity + no-raw-cancel (ADR-deliver-v2)', cmd: 'pnpm guardrail:deliver-v2' },
-  { name: 'adversarial-corpus reachability (tooling-integration-eval G1)', cmd: 'pnpm guardrail:corpus-reachability' },
-  { name: 'license + forbidden-dep + env-classification (tooling-integration-eval G5)', cmd: 'pnpm guardrail:license' },
-  { name: 'hook matchers cover Edit|Write|MultiEdit (no gate bypass)', cmd: 'pnpm guardrail:hook-matchers' },
+  { name: 'verify:env', cmd: 'pnpm verify:env', ci: false },
+  { name: 'verify:db', cmd: 'pnpm verify:db', ci: false },
+  { name: 'verify:rls', cmd: 'pnpm verify:rls', ci: false },
+  { name: 'verify:secrets', cmd: 'pnpm verify:secrets', ci: true },
+  { name: 'migration ordering', cmd: `tsx scripts/verify-migrations.ts`, ci: true },
+  { name: 'lint', cmd: 'pnpm lint', ci: false },
+  { name: 'typecheck', cmd: 'pnpm typecheck', ci: false },
+  { name: 'i18n coverage', cmd: `tsx apps/api/scripts/verify-i18n-coverage.ts`, ci: true },
+  { name: 'contrast audit', cmd: `tsx apps/api/scripts/verify-contrast.ts`, ci: true },
+  { name: 'event wiring (NX)', cmd: 'pnpm verify:event-wiring', ci: true },
+  { name: 'connection lifecycle (NX)', cmd: 'pnpm verify:connection-lifecycle', ci: true },
+  { name: 'owner active-membership (ADR-0004 P-d)', cmd: 'pnpm guardrail:owner-active', ci: true },
+  { name: 'spike boundary (operating-model)', cmd: 'pnpm guardrail:spike-boundary', ci: true },
+  { name: 'deliver v2 parity + no-raw-cancel (ADR-deliver-v2)', cmd: 'pnpm guardrail:deliver-v2', ci: true },
+  { name: 'adversarial-corpus reachability (tooling-integration-eval G1)', cmd: 'pnpm guardrail:corpus-reachability', ci: true },
+  { name: 'license + forbidden-dep + env-classification (tooling-integration-eval G5)', cmd: 'pnpm guardrail:license', ci: true },
+  { name: 'hook matchers cover Edit|Write|MultiEdit (no gate bypass)', cmd: 'pnpm guardrail:hook-matchers', ci: true },
   // Invoked directly (no package.json script needed — package.json is protect-paths): the SECURITY
   // DEFINER search_path gate was authored (ledger #33) but never wired here, so it never ran. Wired.
-  { name: 'SECURITY DEFINER search_path pinned (pg-privilege-hardening, ledger #33)', cmd: 'node scripts/guardrail-definer-search-path.mjs' },
-];
+  { name: 'SECURITY DEFINER search_path pinned (pg-privilege-hardening, ledger #33)', cmd: 'node scripts/guardrail-definer-search-path.mjs', ci: true },
+].filter((s) => !CI_MODE || s.ci);
 
 function run(cmd: string): { ok: boolean; output: string } {
   try {

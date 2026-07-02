@@ -1,11 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
-import { createOperationalPool, createSessionPool } from '@deliveryos/db';
-import { loadEnv } from '@deliveryos/config';
 
-const env = loadEnv();
-void env; // loaded for side-effect parity with other phase5 specs
+// Live-stack integration test: needs a provisioned env + seeded DB. Importing
+// @deliveryos/db without DATABASE_URL_* crashes at module load (loadEnv is
+// module-scope there), so the import is dynamic and the test skips honestly.
+const PROVISIONED = !!(process.env.DATABASE_URL_SESSION && process.env.DATABASE_URL_OPERATIONAL);
+const skip = PROVISIONED ? false : 'requires provisioned env (DATABASE_URL_*) + seeded local stack';
+type DbModule = typeof import('@deliveryos/db');
+let createOperationalPool: DbModule['createOperationalPool'];
+let createSessionPool: DbModule['createSessionPool'];
 
 // Local UUID shape guard (this spec is under apps/api/tests, not e2e/ — inline regex).
 const UUID_RE =
@@ -96,7 +100,8 @@ async function setup() {
   }
 }
 
-test('H1: Adversarial cross-tenant RLS audit', async (t) => {
+test('H1: Adversarial cross-tenant RLS audit', { skip }, async (t) => {
+  ({ createOperationalPool, createSessionPool } = await import('@deliveryos/db'));
   await setup();
 
   const pool = createOperationalPool();

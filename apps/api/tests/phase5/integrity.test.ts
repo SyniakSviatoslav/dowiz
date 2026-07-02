@@ -1,12 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
-import { createSessionPool, createOperationalPool } from '@deliveryos/db';
-import { loadEnv } from '@deliveryos/config';
 
-const env = loadEnv();
+// Live-stack integration test: needs a provisioned env + seeded DB. Importing
+// @deliveryos/db without DATABASE_URL_* crashes at module load (loadEnv is
+// module-scope there), so the import is dynamic and the test skips honestly.
+const PROVISIONED = !!(process.env.DATABASE_URL_SESSION && process.env.DATABASE_URL_OPERATIONAL);
+const skip = PROVISIONED ? false : 'requires provisioned env (DATABASE_URL_*) + seeded local stack';
 
-test('H7: Integrity under concurrency', async (t) => {
+test('H7: Integrity under concurrency', { skip }, async (t) => {
+  const { createSessionPool, createOperationalPool } = await import('@deliveryos/db');
   const sessionPool = createSessionPool();
   const pool = createOperationalPool();
   t.after(async () => { await sessionPool.end(); await pool.end(); });

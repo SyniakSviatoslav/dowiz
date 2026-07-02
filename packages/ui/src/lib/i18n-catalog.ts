@@ -4142,4 +4142,114 @@ export const catalog: Record<string, CatalogEntry> = {
   'client.day_friday': { en: 'Friday', sq: 'E premte', uk: "П'ятниця" },
   'client.day_saturday': { en: 'Saturday', sq: 'E shtunë', uk: 'Субота' },
   'client.day_sunday': { en: 'Sunday', sq: 'E diel', uk: 'Неділя' },
+  'admin.fonts': { en: 'Fonts', sq: 'Shkronjat', uk: 'Шрифти' },
+  'admin.fonts_hint': {
+    en: 'The typeface for your menu titles and descriptions. Leave as-is to keep the default for your cuisine.',
+    sq: 'Shkronjat për titujt dhe përshkrimet e menusë. Lëreni siç është për të mbajtur parazgjedhjen e kuzhinës suaj.',
+    uk: 'Шрифт для назв і описів у меню. Залиште як є, щоб зберегти типовий для вашої кухні.',
+  },
+  'admin.font_heading': {
+    en: 'Headings & product titles',
+    sq: 'Titujt & emrat e produkteve',
+    uk: 'Заголовки та назви страв',
+  },
+  'admin.font_body': {
+    en: 'Body & descriptions',
+    sq: 'Teksti & përshkrimet',
+    uk: 'Основний текст і описи',
+  },
+  'admin.font_default': {
+    en: 'Default (by cuisine)',
+    sq: 'Parazgjedhur (sipas kuzhinës)',
+    uk: 'Типовий (за кухнею)',
+  },
+  'claim.title': {
+    en: 'Claim your restaurant',
+    sq: 'Merrni në pronësi restorantin tuaj',
+    uk: 'Отримайте свій ресторан',
+  },
+  'claim.intro': {
+    en: 'We built a working preview of your restaurant’s ordering page. Claim it to take ownership — then review and publish when you’re ready. Claiming does not make it public.',
+    sq: 'Ndërtuam një parapamje funksionale të faqes së porosive të restorantit tuaj. Merreni në pronësi — pastaj rishikoni dhe publikoni kur të jeni gati. Marrja në pronësi nuk e bën publike.',
+    uk: 'Ми створили робочий попередній перегляд сторінки замовлень вашого ресторану. Отримайте його у власність, а потім перегляньте й опублікуйте, коли будете готові. Отримання не робить сторінку публічною.',
+  },
+  'claim.accept': {
+    en: 'Claim this restaurant',
+    sq: 'Merr në pronësi këtë restorant',
+    uk: 'Отримати цей ресторан',
+  },
+  'claim.claiming': { en: 'Claiming…', sq: 'Duke e marrë…', uk: 'Отримання…' },
+  'claim.signin_to_claim': {
+    en: 'Sign in to claim',
+    sq: 'Hyni për ta marrë',
+    uk: 'Увійдіть, щоб отримати',
+  },
+  'claim.decline': {
+    en: 'This isn’t my restaurant — remove it',
+    sq: 'Ky nuk është restoranti im — hiqeni',
+    uk: 'Це не мій ресторан — видаліть його',
+  },
+  'claim.review_publish': {
+    en: 'Review & publish',
+    sq: 'Rishiko & publiko',
+    uk: 'Переглянути й опублікувати',
+  },
+  'claim.claimed_title': { en: 'It’s yours', sq: 'Është i juaji', uk: 'Він ваш' },
+  'claim.claimed_body': {
+    en: 'You now own this restaurant. Review your menu, prices and details — then publish to go live. Nothing is public until you publish.',
+    sq: 'Tani ky restorant është i juaji. Rishikoni menunë, çmimet dhe detajet — pastaj publikojeni. Asgjë nuk është publike derisa ta publikoni.',
+    uk: 'Тепер цей ресторан ваш. Перегляньте меню, ціни та деталі, а потім опублікуйте. Ніщо не є публічним, доки ви не опублікуєте.',
+  },
+  'claim.declined_title': { en: 'Removed', sq: 'U hoq', uk: 'Видалено' },
+  'claim.declined_body': {
+    en: 'We’ve deleted the preview we built. Nothing of yours remains. Sorry for the intrusion.',
+    sq: 'E fshimë parapamjen që ndërtuam. Asgjë e juaja nuk ka mbetur. Na falni për shqetësimin.',
+    uk: 'Ми видалили створений попередній перегляд. Нічого вашого не залишилося. Перепрошуємо за турботу.',
+  },
+  'claim.no_token': {
+    en: 'This page needs a valid claim link. Open the link from the message we sent you.',
+    sq: 'Kjo faqe kërkon një link të vlefshëm. Hapni linkun nga mesazhi që ju dërguam.',
+    uk: 'Ця сторінка потребує дійсного посилання. Відкрийте посилання з повідомлення, яке ми вам надіслали.',
+  },
+  'claim.err_expired': {
+    en: 'This claim link has expired or was already used. Ask us for a fresh one.',
+    sq: 'Ky link ka skaduar ose është përdorur tashmë. Na kërkoni një të ri.',
+    uk: 'Це посилання прострочене або вже використане. Попросіть у нас нове.',
+  },
+  'claim.err_already': {
+    en: 'This restaurant has already been claimed.',
+    sq: 'Ky restorant tashmë është marrë në pronësi.',
+    uk: 'Цей ресторан уже отримано.',
+  },
+  'claim.err_contact': {
+    en: 'This claim link was sent to a different contact. Sign in with the invited account.',
+    sq: 'Ky link u dërgua te një kontakt tjetër. Hyni me llogarinë e ftuar.',
+    uk: 'Це посилання надіслано іншому контакту. Увійдіть із запрошеного облікового запису.',
+  },
+  'claim.err_contact_required': {
+    en: 'This link can’t be claimed online. Please contact us to complete the claim.',
+    sq: 'Ky link nuk mund të merret online. Ju lutemi na kontaktoni për ta përfunduar.',
+    uk: 'Це посилання не можна активувати онлайн. Зв’яжіться з нами, щоб завершити.',
+  },
+  'claim.err_generic': {
+    en: 'Something went wrong completing the claim. Please try again.',
+    sq: 'Diçka shkoi keq. Ju lutemi provoni sërish.',
+    uk: 'Щось пішло не так. Спробуйте ще раз.',
+  },
+  'client.allergen_declared_to_contain': {
+    en: 'Declared to contain',
+    sq: 'Deklaruar se përmban',
+    uk: 'Заявлено, що містить',
+  },
+  'client.allergen_info_not_provided': {
+    en: 'Allergen info not provided',
+    sq: 'Informacioni për alergjenët nuk është dhënë',
+    uk: 'Інформація про алергени відсутня',
+  },
+  'client.allergen_confirm_venue': {
+    en: 'Not a complete allergen list — please confirm with the venue for severe allergies.',
+    sq: 'Lista e alergjenëve nuk është e plotë — për alergji të rënda konfirmoni me restorantin.',
+    uk: 'Список алергенів неповний — за серйозних алергій уточніть у закладі.',
+  },
+  'message.amount_placeholder': { en: 'Amount', sq: 'Shuma', uk: 'Сума' },
 };
