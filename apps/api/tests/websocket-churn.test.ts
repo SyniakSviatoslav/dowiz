@@ -1,8 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
-import { RedisMessageBus, issueCustomerToken } from '@deliveryos/platform';
-import { createSessionPool } from '@deliveryos/db';
+
+// Live-stack test: importing @deliveryos/db (directly or via @deliveryos/platform's
+// message-bus) without DATABASE_URL_* crashes at module load (loadEnv is
+// module-scope there) — dynamic imports + honest skip.
+const PROVISIONED = !!(process.env.DATABASE_URL_SESSION && process.env.DATABASE_URL_OPERATIONAL);
+const skip = PROVISIONED ? false : 'requires provisioned env (DATABASE_URL_*) + local stack on :3000';
 
 // P1-WSDUP regression: websocket.ts subscribeToRoom registers exactly one
 // messageBus handler per room. Before the fix, re-creating a room (a member
@@ -29,7 +33,9 @@ function once(ws: WebSocket, type: string, timeoutMs = 4000): Promise<any> {
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-test('P1-WSDUP: one delivery per event after reconnect churn', async () => {
+test('P1-WSDUP: one delivery per event after reconnect churn', { skip }, async () => {
+  const { createSessionPool } = await import('@deliveryos/db');
+  const { RedisMessageBus, issueCustomerToken } = await import('@deliveryos/platform');
   const pool = createSessionPool();
   let orderId: string;
   let locationId: string;

@@ -286,6 +286,9 @@ export function llmCacheSet(key: string, value: string): void {
   }
   llmCache.set(key, { value, expires: Date.now() + LLM_CACHE_TTL_MS });
 }
+export function llmCacheClear(): void {
+  llmCache.clear();
+}
 
 export class AiOcrParser implements MenuParserProvider {
   readonly id = 'ai-ocr';

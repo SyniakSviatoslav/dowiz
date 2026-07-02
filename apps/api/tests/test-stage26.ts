@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { loadEnv } from '@deliveryos/config';
 import { createSessionPool } from '@deliveryos/db';
 import { signAuthToken, verifyAuthToken } from '@deliveryos/platform';
@@ -121,9 +122,12 @@ test('Stage 26: Anti-Fake Signals (P4-3)', async (t) => {
   });
 
   await t.test('R2.4: acknowledge shifts last_no_show_at by -7 days', () => {
-    // Already covered by R2.1-2.3 (unit tests of the pure function)
-    // The API acknowledge route shifts the timestamp
-    assert.ok(true);
+    // The acknowledge route must keep the -7d forgiveness shift (floored at -90d).
+    const signalsSrc = readFileSync(
+      new URL('../src/routes/owner/signals.ts', import.meta.url), 'utf8');
+    assert.match(signalsSrc,
+      /SET last_no_show_at = GREATEST\(last_no_show_at - interval '7 days', now\(\) - interval '90 days'\)/,
+      "acknowledge no longer shifts last_no_show_at by -7 days (forgiveness decay removed)");
   });
 
   await t.test('R2.5: counter alone without recent no-show => no or low signal', () => {

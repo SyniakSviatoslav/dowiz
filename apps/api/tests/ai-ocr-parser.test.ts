@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import http from 'http';
-import { AiOcrParser } from '../src/lib/ai-ocr-parser.js';
+import { AiOcrParser, llmCacheClear } from '../src/lib/ai-ocr-parser.js';
 
 // Minimal valid PDF with text content (base64 encoded)
 // Contains: "Pizza Margherita 8.50 EUR" and "Pasta Carbonara 12.00 EUR"
@@ -212,6 +212,7 @@ test('AiOcrParser - OpenRouter provider: selected via OPENROUTER_API_KEY, return
 });
 
 test('AiOcrParser - live LLM returns non-JSON: returns parse error', async () => {
+  llmCacheClear(); // same provider/model/prompt as the valid-JSON test above — don't serve its cached response
   const { port, server } = await startMockLLm((_body) => ({
     response: 'this is not json at all'
   }));
@@ -237,6 +238,7 @@ test('AiOcrParser - live LLM returns non-JSON: returns parse error', async () =>
 });
 
 test('AiOcrParser - live LLM returns invalid schema: returns parse error', async () => {
+  llmCacheClear();
   const { port, server } = await startMockLLm((_body) => ({
     response: JSON.stringify({ foo: 'bar' })
   }));
@@ -261,7 +263,8 @@ test('AiOcrParser - live LLM returns invalid schema: returns parse error', async
   assert.strictEqual(res.summary.valid, 0);
 });
 
-test('AiOcrParser - live LLM returns 500: returns parse error', async () => {
+test('AiOcrParser - live LLM returns 500: degrades to heuristic with a warning', async () => {
+  llmCacheClear();
   const { port, server } = await startMockLLm((_body) => {
     // This will never be called because we override the handler below
     return { response: '' };
@@ -289,11 +292,18 @@ test('AiOcrParser - live LLM returns 500: returns parse error', async () => {
   process.env.LLM_ENDPOINT = prevEndpoint;
   errServer.close();
 
-  assert.strictEqual(res.summary.errors, 1);
-  assert.strictEqual(res.summary.valid, 0);
+  // Approved degrade path: an LLM outage falls back to the zero-dependency
+  // heuristic structurer (a reviewable draft, warning surfaced) — never 0 products.
+  assert.strictEqual(res.summary.errors, 0);
+  assert.ok(res.draft.products.length > 0, 'heuristic fallback must still produce a draft');
+  assert.ok(
+    res.issues.some(i => i.code === 'PARSE_ERROR' && i.severity === 'warning' && /fell back to heuristic/.test(i.message)),
+    'fallback must be surfaced as a warning'
+  );
 });
 
-test('AiOcrParser - LLM endpoint unreachable: returns parse error', async () => {
+test('AiOcrParser - LLM endpoint unreachable: degrades to heuristic with a warning', async () => {
+  llmCacheClear();
   const prevEndpoint = process.env.LLM_ENDPOINT;
   process.env.LLM_ENDPOINT = 'http://localhost:1/api/generate';
 
@@ -306,8 +316,13 @@ test('AiOcrParser - LLM endpoint unreachable: returns parse error', async () => 
 
   process.env.LLM_ENDPOINT = prevEndpoint;
 
-  assert.strictEqual(res.summary.errors, 1);
-  assert.strictEqual(res.summary.valid, 0);
+  // Approved degrade path (see the 500 test above): outage → heuristic draft + warning.
+  assert.strictEqual(res.summary.errors, 0);
+  assert.ok(res.draft.products.length > 0, 'heuristic fallback must still produce a draft');
+  assert.ok(
+    res.issues.some(i => i.code === 'PARSE_ERROR' && i.severity === 'warning' && /fell back to heuristic/.test(i.message)),
+    'fallback must be surfaced as a warning'
+  );
 });
 
 // ═══════════════════════════════════════════════════════════════════

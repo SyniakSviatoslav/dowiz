@@ -35,7 +35,7 @@ const FAMILY = 'fam-1';
 // A fake db modelling ONE refresh-token row. The guarded UPDATE is the atomicity
 // primitive: it flips used only while still false, returning rowCount accordingly.
 function makeDb(initialUsed = false) {
-  const state = { used: initialUsed, deletedFamilies: [] as string[] };
+  const state = { used: initialUsed, deletedFamilies: [] as string[], rotations: 0 };
   const db = {
     state,
     query: async (sql: string, params: any[] = []) => {
@@ -47,11 +47,23 @@ function makeDb(initialUsed = false) {
         state.used = true;                       // claim wins
         return { rowCount: 1, rows: [{ id: 'tok-1' }] };
       }
+      // Benign-concurrent detector: "was a token in this family created in the last N seconds?"
+      // Models a sibling request's freshly-INSERTed rotation token.
+      if (/SELECT 1 FROM auth_refresh_tokens WHERE family_id/i.test(sql)) {
+        return state.rotations > 0 ? { rowCount: 1, rows: [{ '?column?': 1 }] } : { rowCount: 0, rows: [] };
+      }
+      // P-c (ADR-0004): live owner-membership re-derive on every refresh.
+      if (/SELECT location_id FROM memberships/i.test(sql)) {
+        return { rowCount: 1, rows: [{ location_id: 'loc-1' }] };
+      }
       if (/DELETE FROM auth_refresh_tokens WHERE family_id/i.test(sql)) {
         state.deletedFamilies.push(params[0]);
         return { rowCount: 1, rows: [] };
       }
-      if (/INSERT INTO auth_refresh_tokens/i.test(sql)) return { rowCount: 1, rows: [] };
+      if (/INSERT INTO auth_refresh_tokens/i.test(sql)) {
+        state.rotations += 1;                    // new rotation token in the family
+        return { rowCount: 1, rows: [] };
+      }
       return { rowCount: 0, rows: [] };
     },
   };
@@ -61,7 +73,11 @@ function makeDb(initialUsed = false) {
 async function buildApp(db: any) {
   const Fastify = (await import('fastify')).default;
   const { default: authRoutes } = await import('../src/routes/auth.js');
+  const { registerReplySendError } = await import('../src/lib/reply-send-error.js');
   const app = Fastify();
+  // Same decorator server.ts registers (ADR-0010 A2) — without it every
+  // reply.sendError route 500s in a bare test app.
+  registerReplySendError(app as any);
   // Mirror server.ts: native Zod safeParse validator (the routes use Zod schemas).
   app.setValidatorCompiler(({ schema }: any) => (data: any) => {
     const r = schema.safeParse(data);
@@ -69,6 +85,9 @@ async function buildApp(db: any) {
   });
   (app as any).decorate('db', db);
   (app as any).decorate('redis', { setex: async () => {}, get: async () => null });
+  // server.ts decorates verifyAuth (used by /auth/logout's preHandler); the
+  // refresh tests never hit it — a pass-through keeps route registration valid.
+  (app as any).decorate('verifyAuth', async () => {});
   await app.register(authRoutes);
   await app.ready();
   return app;
@@ -96,7 +115,7 @@ test('/auth/refresh atomic rotation (#5)', async (t) => {
     await app.close();
   });
 
-  await t.test('TWO concurrent refreshes of the same token → exactly one 200, one 401 (race closed)', async () => {
+  await t.test('TWO concurrent refreshes of the same token → exactly one 200 (race closed)', async () => {
     const db = makeDb(false);
     const app = await buildApp(db);
     const [a, b] = await Promise.all([
@@ -104,8 +123,31 @@ test('/auth/refresh atomic rotation (#5)', async (t) => {
       app.inject({ method: 'POST', url: '/auth/refresh', payload: { refresh_token: 'r1' } }),
     ]);
     const codes = [a.statusCode, b.statusCode].sort();
-    assert.deepEqual(codes, [200, 401], 'exactly one request may win the rotation; the loser is rejected');
-    assert.deepEqual(db.state.deletedFamilies, [FAMILY], 'the losing (reuse) request revokes the family');
+    // The single-use invariant: exactly ONE winner ever mints tokens. The loser is
+    // rejected either as a benign concurrent sibling (soft 409, no revoke — the
+    // winner's rotation INSERT already landed) or, if it raced ahead of that INSERT,
+    // via the reuse path (401 + family revoked). Never two 200s.
+    assert.equal(codes[0], 200, 'exactly one request wins the rotation');
+    assert.ok(codes[1] === 401 || codes[1] === 409, `loser must be rejected (got ${codes[1]})`);
+    if (codes[1] === 401) {
+      assert.deepEqual(db.state.deletedFamilies, [FAMILY], 'a 401 loser means the reuse path revoked the family');
+    } else {
+      assert.deepEqual(db.state.deletedFamilies, [], 'a benign 409 loser must NOT revoke the family');
+    }
+    await app.close();
+  });
+
+  await t.test('sibling refresh right after a rotation → soft 409 concurrent_refresh, family kept', async () => {
+    const db = makeDb(false);
+    const app = await buildApp(db);
+    const first = await app.inject({ method: 'POST', url: '/auth/refresh', payload: { refresh_token: 'r1' } });
+    assert.equal(first.statusCode, 200, 'first refresh rotates normally');
+    // Same (now-used) token again, with a fresh rotation in the family (two tabs /
+    // StrictMode / parallel 401-retries): benign concurrent loser, NOT a breach.
+    const second = await app.inject({ method: 'POST', url: '/auth/refresh', payload: { refresh_token: 'r1' } });
+    assert.equal(second.statusCode, 409, 'benign concurrent sibling gets a soft 409');
+    assert.equal(second.json().error, 'concurrent_refresh');
+    assert.deepEqual(db.state.deletedFamilies, [], 'family must NOT be revoked on a benign concurrent refresh');
     await app.close();
   });
 });

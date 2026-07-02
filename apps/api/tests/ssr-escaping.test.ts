@@ -13,6 +13,7 @@ function fakePool() {
     currency_code: 'EUR', currency_minor_unit: 2,
     default_locale: 'en', supported_locales: ['en'],
     address: 'Rruga A & B', public_phone: null, hours_json: null, geo: null,
+    owner_id: 'u1', // claimed tenant — the P6-2 shadow gate hides unowned venues
   };
   const menu = {
     menu_version: 1, default_locale: 'en', supported_locales: ['en'],
@@ -102,6 +103,7 @@ test('JSON-LD cannot break out of the <script> tag', async () => {
     id: 'l1', name: 'Evil</script><script>alert(1)</script>', slug: 'x',
     currency_code: 'EUR', currency_minor_unit: 2, default_locale: 'en',
     supported_locales: ['en'], address: 'A', public_phone: null, hours_json: null, geo: null,
+    owner_id: 'u1', // claimed tenant — the P6-2 shadow gate hides unowned venues
   };
   const menu = {
     menu_version: 1, default_locale: 'en', supported_locales: ['en'],
