@@ -56,7 +56,6 @@ input:invalid, select:invalid, textarea:invalid {
 .safe-bottom { padding-bottom: var(--safe-bottom); }
 .safe-left   { padding-left:   var(--safe-left); }
 .safe-right  { padding-right:  var(--safe-right); }
-.safe-inset  { padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left); }
 
 /* ── App shell: full-height with dynamic viewport ── */
 .app-shell  { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
@@ -123,20 +122,6 @@ input:invalid, select:invalid, textarea:invalid {
   box-shadow: var(--elev-2);
 }
 
-.card-interactive {
-  cursor: pointer;
-  transition: transform var(--motion-fast) var(--ease-out), box-shadow var(--motion-base) var(--ease-out), border-color var(--motion-base) var(--ease-out);
-}
-.card-interactive:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--elev-3);
-  border-color: color-mix(in srgb, var(--brand-primary) 30%, transparent);
-}
-.card-interactive:active {
-  transform: translateY(0);
-  box-shadow: var(--elev-1);
-}
-
 .skeleton-block {
   background: linear-gradient(90deg, var(--brand-surface) 25%, var(--brand-border) 50%, var(--brand-surface) 75%);
   background-size: 200% 100%;
@@ -157,23 +142,9 @@ input:invalid, select:invalid, textarea:invalid {
   .breathe {
     animation: breathe 4s ease-in-out infinite;
   }
-  .breathe-slow {
-    animation: breathe 6s ease-in-out infinite;
-  }
-  .breathe-fast {
-    animation: breathe 2s ease-in-out infinite;
-  }
   @keyframes breathe {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.85; transform: scale(1.015); }
-  }
-
-  .pulse-subtle {
-    animation: pulse-subtle 3s ease-in-out infinite;
-  }
-  @keyframes pulse-subtle {
-    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand-primary) 30%, transparent); }
-    50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--brand-primary) 0%, transparent); }
   }
 
   .float {
@@ -209,14 +180,6 @@ input:invalid, select:invalid, textarea:invalid {
     to { opacity: 1; }
   }
 
-  .animate-slide-up {
-    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  @keyframes slideUp {
-    from { transform: translateY(100%); }
-    to { transform: translateY(0); }
-  }
-
   .scale-in {
     animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
@@ -234,15 +197,6 @@ input:invalid, select:invalid, textarea:invalid {
     background: linear-gradient(90deg, var(--brand-surface) 25%, var(--brand-surface-raised) 50%, var(--brand-surface) 75%);
     background-size: 200% 100%;
     animation: shimmer 1.8s ease-in-out infinite;
-  }
-
-  /* Status dot pulse */
-  .dot-pulse {
-    animation: dotPulse 2s ease-in-out infinite;
-  }
-  @keyframes dotPulse {
-    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 currentColor; }
-    50% { opacity: 0.6; box-shadow: 0 0 0 4px transparent; }
   }
 
   /* Stagger children animation */
@@ -272,72 +226,6 @@ input:invalid, select:invalid, textarea:invalid {
     transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
   }
 
-  /* ── Parallax effects ── */
-  .parallax-wrapper {
-    overflow: hidden;
-    position: relative;
-  }
-  .parallax-slow {
-    transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  }
-  .parallax-fast {
-    transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  }
-
-  /* ── Glow effects ── */
-  .glow-primary {
-    animation: glowPrimary 3s ease-in-out infinite;
-  }
-  @keyframes glowPrimary {
-    0%, 100% { box-shadow: 0 0 12px color-mix(in srgb, var(--brand-primary) 15%, transparent), 0 0 24px color-mix(in srgb, var(--brand-primary) 5%, transparent); }
-    50% { box-shadow: 0 0 20px color-mix(in srgb, var(--brand-primary) 25%, transparent), 0 0 40px color-mix(in srgb, var(--brand-primary) 10%, transparent); }
-  }
-
-  /* ── Ripple effect for buttons ── */
-  .ripple-surface {
-    position: relative;
-    overflow: hidden;
-  }
-  .ripple-surface::after {
-    content: '';
-    display: block;
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background-image: radial-gradient(circle, rgba(255,255,255,0.3) 10%, transparent 10.01%);
-    background-repeat: no-repeat;
-    background-position: 50%;
-    transform: scale(10, 10);
-    opacity: 0;
-    transition: transform 0.5s, opacity 1s;
-  }
-  .ripple-surface:active::after {
-    transform: scale(0, 0);
-    opacity: 0.3;
-    transition: 0s;
-  }
-
-  /* ── Soft reveal on scroll ── */
-  .reveal-on-scroll {
-    opacity: 0;
-    transform: translateY(16px);
-    transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .reveal-on-scroll.revealed {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  /* ── Gentle tilt on hover ── */
-  .tilt-hover {
-    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
-    perspective: 800px;
-  }
-  .tilt-hover:hover {
-    transform: translateY(-4px) rotateX(2deg) rotateY(-1deg);
-    box-shadow: 0 16px 40px rgba(0,0,0,0.18);
-  }
-
   /* ── Subtle border glow ── */
   .border-glow {
     transition: border-color 0.4s ease, box-shadow 0.4s ease;
@@ -348,60 +236,11 @@ input:invalid, select:invalid, textarea:invalid {
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand-primary) 10%, transparent);
   }
 
-  /* ── Number counter animation ── */
-  .count-up {
-    display: inline-block;
-  }
-
-  /* ── Skeleton shimmer v2 ── */
-  .skeleton-shimmer {
-    position: relative;
-    overflow: hidden;
-  }
-  .skeleton-shimmer::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(255,255,255,0.05) 50%,
-      transparent 100%
-    );
-    animation: shimmerMove 1.8s ease-in-out infinite;
-  }
-  @keyframes shimmerMove {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
-  }
-
-  /* ── Drawing attention pulse ── */
-  .attention-ring {
-    animation: attentionRing 2.5s ease-in-out infinite;
-  }
-  @keyframes attentionRing {
-    0%, 100% {
-      box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand-primary) 40%, transparent);
-    }
-    50% {
-      box-shadow: 0 0 0 8px color-mix(in srgb, var(--brand-primary) 0%, transparent);
-    }
-  }
-
   /* ── Smooth width transition for progress bars ── */
   .progress-animate {
     transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  /* ── Icon wiggle ── */
-  .icon-wiggle:hover i {
-    animation: iconWiggle 0.4s ease;
-  }
-  @keyframes iconWiggle {
-    0%, 100% { transform: rotate(0); }
-    25% { transform: rotate(-8deg); }
-    75% { transform: rotate(8deg); }
-  }
 }
 
 

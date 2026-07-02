@@ -95,14 +95,6 @@ export function FormField({
   );
 }
 
-// --- BrandLogo ---
-export function BrandLogo({ name, logoUrl }: { name: string; logoUrl?: string | null }) {
-  if (logoUrl) {
-    return <img src={logoUrl} alt={name} className="h-8 object-contain" />;
-  }
-  return <span className="font-bold text-xl text-[var(--brand-primary)]" style={{ fontFamily: 'var(--brand-font-heading)' }}>{name}</span>;
-}
-
 // --- PriceDisplay ---
 export { PriceDisplay } from './atoms/PriceDisplay.js';
 
