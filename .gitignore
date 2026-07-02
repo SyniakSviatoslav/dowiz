@@ -74,7 +74,13 @@ graphify-out/
 /audit/
 apps/api/*.png
 # Loop-harness run artifacts + prospect packets (generated, may carry business contacts)
-loops/runs/
+# P2 (meta-loop 2026-07-02): the design doc promises "permanent + lossless" run history, but the
+# whole dir was ignored — history lived only on one VM. The compact metrics/routing/registry
+# files are now tracked; the heavy gz run-records and business-contact packets stay local.
+loops/runs/*
+!loops/runs/metrics.jsonl
+!loops/runs/routing.jsonl
+!loops/runs/registry.json
 loops/prospects/
 # Committed-by-accident classes: log dumps at root, python bytecode
 /*.txt

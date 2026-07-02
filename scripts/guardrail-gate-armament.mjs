@@ -16,10 +16,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const ROOT = process.cwd();
-const HOOKS = join(ROOT, '.claude/hooks');
+// GATE_HOOKS_DIR: test a STAGED copy of the hooks before the operator applies them (.claude is
+// a protect-paths zone, so upgrades are staged in the scratchpad and proven here first).
+const HOOKS = process.env.GATE_HOOKS_DIR || join(ROOT, '.claude/hooks');
+// V2 = hooks carry the P1 harness-events telemetry; those cases are version-gated so this
+// guardrail stays green while the applied hooks are still V1.
+const V2 = readFileSync(join(HOOKS, 'serious-gate.sh'), 'utf8').includes('harness-events');
 const FIX = mkdtempSync(join(tmpdir(), 'gate-armament-'));
 const STATE = join(FIX, '.claude/state');
 mkdirSync(STATE, { recursive: true });
+const EVENTS = join(FIX, '.claude/logs/harness-events.jsonl');
+const eventsHas = (frag) => existsSync(EVENTS) && readFileSync(EVENTS, 'utf8').includes(frag);
 
 const env = { ...process.env, CLAUDE_PROJECT_DIR: FIX };
 delete env.GIT_DIR;
@@ -94,6 +101,24 @@ check('plain command allowed', bash('ls -la apps/').status === 0);
 check('read-only access to protected path allowed', bash('cat .claude/hooks/serious-gate.sh').status === 0);
 check('stderr-scrub: hook run with 2>/dev/null allowed', bash('bash .claude/hooks/serious-gate.sh 2>/dev/null').status === 0);
 check('feature-branch push allowed', bash('git push origin feat/some-branch').status === 0);
+
+// ── V2 (P1 telemetry + docs exemption) — version-gated ─────────────────────
+if (V2) {
+  console.log('V2 (harness-events + docs exemption):');
+  writeFileSync(clearedPath, '');
+  const docsEdit = runHook('serious-gate.sh', { file_path: join(FIX, 'docs/regressions/REGRESSION-LEDGER.md') });
+  check('docs/* (ledger append) passes without clearance (ALLOW)', docsEdit.status === 0 && !denies(docsEdit));
+  check('serious-gate DENY leaves a harness-events line', eventsHas('"hook":"serious-gate","event":"deny"'));
+  check('guard-bash block leaves a harness-events line', eventsHas('"hook":"guard-bash","event":"block"'));
+
+  // pre-edit-lessons: fixture INDEX + lesson → injection + hit-count event
+  mkdirSync(join(FIX, 'docs/lessons'), { recursive: true });
+  writeFileSync(join(FIX, 'docs/lessons/INDEX.md'), '| TRIGGER | file |\n|---|---|\n| packages/ui/src/theme/**.css | docs/lessons/test-lesson.md |\n');
+  writeFileSync(join(FIX, 'docs/lessons/test-lesson.md'), 'TRIGGER: packages/ui/src/theme/**.css\nACTION: test action fires\nLINK: docs/regressions/REGRESSION-LEDGER.md\n');
+  const inject = runHook('pre-edit-lessons.sh', { file_path: join(FIX, 'packages/ui/src/theme/foo.css') });
+  check('pre-edit-lessons injects a matched lesson', (inject.stdout || '').includes('test action fires'));
+  check('lesson injection leaves a hit-count event', eventsHas('"hook":"pre-edit-lessons","event":"inject"'));
+}
 
 rmSync(FIX, { recursive: true, force: true });
 

@@ -38,6 +38,10 @@ const STEPS = [
   // Governance gates must be ARMED, not just registered: stale clearance files held serious-gate +
   // red-line-gate open 06-21→07-02 and the Bash lane was ungoverned (P0 gate-rearm 2026-07-02).
   { name: 'gate armament (serious/red-line/bash hooks deny stale, allow fresh)', cmd: 'node scripts/guardrail-gate-armament.mjs', ci: true },
+  // Meta-loop P2/P3 (2026-07-02): ledger "#N" refs were ambiguous (4 duplicated numbers) and the
+  // router's machine registry covered 2 of 16 loops — both drifts are now gated.
+  { name: 'ledger row-number integrity (unique #N refs)', cmd: 'node scripts/guardrail-ledger-integrity.mjs', ci: true },
+  { name: 'loop registry sync (registry.md → runs/registry.json)', cmd: 'node scripts/loops-registry-sync.mjs --check', ci: true },
 ].filter((s) => !CI_MODE || s.ci);
 
 function run(cmd: string): { ok: boolean; output: string } {
