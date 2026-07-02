@@ -241,7 +241,7 @@ function ClientLayoutInner() {
                         <button
                           aria-label={t('cart.decrease', 'Decrease quantity')}
                           onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          className="min-w-[44px] min-h-[44px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95 flex items-center justify-center"
+                          className="min-w-[44px] min-h-tap rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95 flex items-center justify-center"
                         >
                           <i className="ti ti-minus text-sm" aria-hidden="true" />
                         </button>
@@ -249,7 +249,7 @@ function ClientLayoutInner() {
                         <button
                           aria-label={t('cart.increase', 'Increase quantity')}
                           onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          className="min-w-[44px] min-h-[44px] rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95 flex items-center justify-center"
+                          className="min-w-[44px] min-h-tap rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] hover:bg-[var(--brand-border)] transition-colors active:scale-95 flex items-center justify-center"
                         >
                           <i className="ti ti-plus text-sm" aria-hidden="true" />
                         </button>

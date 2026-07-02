@@ -149,7 +149,7 @@ export function EarningsPage() {
             <button
               type="button"
               onClick={fetchEarnings}
-              className="inline-flex items-center gap-2 min-h-[44px] px-5 rounded-[var(--brand-radius-btn)] bg-[var(--brand-primary)] text-[var(--brand-on-primary)] font-semibold transition-[transform,box-shadow,opacity] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 hover:hover:shadow-[var(--elev-2)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
+              className="inline-flex items-center gap-2 min-h-tap px-5 rounded-[var(--brand-radius-btn)] bg-[var(--brand-primary)] text-[var(--brand-on-primary)] font-semibold transition-[transform,box-shadow,opacity] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 hover:hover:shadow-[var(--elev-2)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
             >
               <i className="ti ti-refresh" aria-hidden="true" />
               {t('common.retry', 'Retry')}

@@ -4252,4 +4252,14 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: 'Список алергенів неповний — за серйозних алергій уточніть у закладі.',
   },
   'message.amount_placeholder': { en: 'Amount', sq: 'Shuma', uk: 'Сума' },
+  'promotions.load_error_title': {
+    en: 'Could not load promotions',
+    sq: 'Promocionet nuk u ngarkuan dot',
+    uk: 'Не вдалося завантажити акції',
+  },
+  'activation.preview_load_failed_desc': {
+    en: 'Check your connection and try again.',
+    sq: 'Kontrolloni lidhjen dhe provoni përsëri.',
+    uk: "Перевірте з'єднання і спробуйте ще раз.",
+  },
 };

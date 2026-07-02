@@ -248,14 +248,14 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
                         ? !paramValue
                         : false
                   }
-                  className="flex-1 min-h-[44px] px-3 py-2 text-sm rounded-[var(--brand-radius)] bg-[var(--brand-primary)] text-[var(--brand-bg)] font-medium transition-[opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:active:scale-100"
+                  className="flex-1 min-h-tap px-3 py-2 text-sm rounded-[var(--brand-radius)] bg-[var(--brand-primary)] text-[var(--brand-bg)] font-medium transition-[opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:active:scale-100"
                 >
                   {t('message.send', 'Send')}
                 </button>
                 <button
                   type="button"
                   onClick={() => { setSelectedPreset(null); setParamValue(''); }}
-                  className="min-h-[44px] px-3 py-2 text-sm rounded-[var(--brand-radius)] border border-[var(--brand-border)] text-[var(--brand-text)] transition-[background-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:bg-[var(--brand-surface)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+                  className="min-h-tap px-3 py-2 text-sm rounded-[var(--brand-radius)] border border-[var(--brand-border)] text-[var(--brand-text)] transition-[background-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:bg-[var(--brand-surface)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
                 >
                   {t('common.cancel', 'Cancel')}
                 </button>

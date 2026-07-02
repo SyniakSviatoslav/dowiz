@@ -2,7 +2,7 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PHONE_E164_PATTERN } from '@deliveryos/shared-types';
-import { Button, Input, FormField, EmptyState, useI18n } from '@deliveryos/ui';
+import { Button, Input, FormField, EmptyState, Spinner, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 import { CourierInviteRedeemResponse } from '@deliveryos/shared-types';
@@ -118,7 +118,7 @@ export function CourierInvitePage() {
     return (
       <div className="min-h-screen bg-[var(--brand-bg)] flex items-center justify-center p-6 text-[var(--brand-text)]">
         <div className="text-center space-y-4">
-          <div className="animate-spin h-8 w-8 border-2 border-brand-primary border-t-transparent rounded-full mx-auto" />
+          <Spinner size={32} className="mx-auto text-[var(--brand-primary)]" />
           <p className="text-sm text-[var(--brand-text-muted)]">{t('courier.invite.loading', 'Loading invite details...')}</p>
         </div>
       </div>

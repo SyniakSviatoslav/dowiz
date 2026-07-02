@@ -98,6 +98,16 @@ const config: Config = {
         '12': 'var(--space-12)',
         '16': 'var(--space-16)',
       },
+      // Tap-target heights from the existing --tap-* tokens (tokens.css:11-12) —
+      // replaces the h-[44px]/h-[48px] magic numbers scattered across pages.
+      height: {
+        tap: 'var(--tap-min)',
+        'tap-lg': 'var(--tap-courier)',
+      },
+      minHeight: {
+        tap: 'var(--tap-min)',
+        'tap-lg': 'var(--tap-courier)',
+      },
       boxShadow: {
         'elevation-1': 'var(--elevation-1)',
         'elevation-2': 'var(--elevation-2)',

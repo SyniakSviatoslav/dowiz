@@ -41,5 +41,6 @@ export { Select } from './components/atoms/Select.js';
 export { SearchInput } from './components/atoms/SearchInput.js';
 export { Textarea } from './components/atoms/Textarea.js';
 export { SegmentedControl } from './components/atoms/SegmentedControl.js';
+export { Spinner } from './components/atoms/Spinner.js';
 export type { SegmentOption } from './components/atoms/SegmentedControl.js';
 

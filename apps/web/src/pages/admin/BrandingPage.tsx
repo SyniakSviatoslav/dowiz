@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, Input, ColorInput, FormField, Select, SkeletonBase, useI18n, useToast, ease, duration, contrastRatio, parseColor, FONT_ALLOWLIST, fontIdsForRole, googleFontsHref } from '@deliveryos/ui';
+import { Button, Input, ColorInput, Spinner, FormField, Select, SkeletonBase, useI18n, useToast, ease, duration, contrastRatio, parseColor, FONT_ALLOWLIST, fontIdsForRole, googleFontsHref } from '@deliveryos/ui';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
@@ -381,7 +381,7 @@ export function BrandingPage() {
               <div className="shrink-0 w-20 h-20 rounded-[var(--brand-radius)] border border-[var(--brand-border)] overflow-hidden bg-[var(--brand-surface-raised)] flex items-center justify-center relative">
                 {logoUploading && (
                   <div className="absolute inset-0 flex items-center justify-center bg-[var(--brand-surface)]/70 z-10" aria-live="polite">
-                    <i className="ti ti-loader-2 animate-spin text-xl" style={{ color: 'var(--brand-primary)' }} aria-hidden="true" />
+                    <Spinner size={20} className="text-[var(--brand-primary)]" />
                     <span className="sr-only">{t('admin.uploading', 'Uploading…')}</span>
                   </div>
                 )}

@@ -162,7 +162,7 @@ export function TasksPage() {
           title={t('common.error', 'Error')}
           description={error}
           action={
-            <Button type="button" variant="primary" className="min-h-[44px]" onClick={() => { setError(''); fetchTasks(); }}>
+            <Button type="button" variant="primary" className="min-h-tap" onClick={() => { setError(''); fetchTasks(); }}>
               {t('common.retry', 'Try again')}
             </Button>
           }
@@ -176,7 +176,7 @@ export function TasksPage() {
             : t('courier.offline_desc', 'Go online from the Shift tab to start receiving deliveries.')}
           icon={isPaperSkinEnabled() ? <PaperIllustration name="island" animated className="mx-auto max-w-[200px]" /> : <i className={onShift ? 'ti ti-checkup-list' : 'ti ti-zzz'} aria-hidden="true" />}
           action={!onShift ? (
-            <Button type="button" variant="primary" className="min-h-[44px]" onClick={() => navigate('/courier/shift')}>
+            <Button type="button" variant="primary" className="min-h-tap" onClick={() => navigate('/courier/shift')}>
               {t('courier.go_online', 'Go to Shift')}
             </Button>
           ) : undefined}

@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { MapLibreBase, type LngLatLike } from './MapLibreBase.js';
+import { Spinner } from '../atoms/Spinner.js';
 
 function getCSSVar(name: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback;
@@ -94,7 +95,7 @@ export function MapWithPin({
         aria-label={myLocationLabel}
       >
         {locating ? (
-          <i className="ti ti-loader animate-spin text-base" />
+          <Spinner />
         ) : (
           <i className="ti ti-crosshair text-base" />
         )}

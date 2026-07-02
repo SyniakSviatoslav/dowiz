@@ -131,7 +131,7 @@ export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd }:
           {!hideAdd && (
           <motion.button
             data-testid="menu-item-add"
-            className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--brand-bg)] rounded-full mt-0.5 ${
+            className={`shrink-0 min-w-[44px] min-h-tap flex items-center justify-center text-[var(--brand-bg)] rounded-full mt-0.5 ${
               product.isAvailable ? 'cursor-pointer' : 'opacity-30 cursor-not-allowed'
             }`}
             style={{ background: 'var(--brand-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}

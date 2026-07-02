@@ -318,11 +318,12 @@ export function PromotionsPage() {
         {loading ? (
           <div className="space-y-2">{[1,2,3,4,5].map(i => <SkeletonBase key={i} className="h-24 w-full rounded-[var(--brand-radius)]" />)}</div>
         ) : error ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-            <i className="ti ti-alert-circle text-4xl" style={{ color: 'var(--color-danger)', opacity: 0.5 }} />
-            <p className="text-sm max-w-sm" style={{ color: 'var(--brand-text)' }}>{error}</p>
-            <Button variant="outline" size="sm" onClick={load}><i className="ti ti-refresh" /> {t('common.retry')}</Button>
-          </div>
+          <EmptyState
+            icon={<i className="ti ti-alert-circle" />}
+            title={t('promotions.load_error_title', 'Could not load promotions')}
+            description={error}
+            action={<Button variant="outline" size="sm" onClick={load}><i className="ti ti-refresh" /> {t('common.retry')}</Button>}
+          />
         ) : promotions.length === 0 ? (
           <div data-testid="empty-state">
             <EmptyState

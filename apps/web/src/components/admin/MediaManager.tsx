@@ -25,7 +25,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { useI18n, useToast, useConfirm } from '@deliveryos/ui';
+import { Spinner, useI18n, useToast, useConfirm } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 
 export type MediaKind = 'image' | 'video' | 'spin' | 'model';
@@ -251,7 +251,7 @@ export function MediaManager({ productId, enabled, slug, onPrimaryChange }: Medi
         </label>
         <label className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border cursor-pointer ${uploading ? 'opacity-60 pointer-events-none' : ''}`}
           style={{ background: 'var(--brand-primary-light)', borderColor: 'var(--brand-primary)', color: 'var(--brand-text)' }}>
-          <i className={uploading ? 'ti ti-loader animate-spin' : 'ti ti-upload'} />
+          {uploading ? <Spinner size={14} /> : <i className="ti ti-upload" />}
           {uploading ? (progress || t('admin.media_uploading', 'Uploading…')) : t('admin.media_add', 'Add media')}
           <input type="file" accept={ACCEPT} onChange={handleUpload} className="hidden" disabled={uploading} />
         </label>
@@ -263,7 +263,7 @@ export function MediaManager({ productId, enabled, slug, onPrimaryChange }: Medi
 
       {loading ? (
         <div className="flex justify-center py-4">
-          <i className="ti ti-loader animate-spin text-lg" style={{ color: 'var(--brand-primary)' }} />
+          <Spinner size={18} className="text-[var(--brand-primary)]" />
         </div>
       ) : media.length === 0 ? (
         <p className="text-xs py-3 text-center" style={{ color: 'var(--brand-text-muted)' }}>

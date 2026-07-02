@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Select, useI18n } from '@deliveryos/ui';
+import { Button, Select, Spinner, useI18n } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 import { AssignCourierResponse, ProductResponse } from '@deliveryos/shared-types';
@@ -237,7 +237,7 @@ export function FlowTestPage() {
   const getStepIcon = (status: FlowStep['status']) => {
     switch (status) {
       case 'done': return <i className="ti ti-circle-check-filled text-[var(--color-success)]" />;
-      case 'active': return <i className="ti ti-loader animate-spin text-[var(--brand-primary)]" />;
+      case 'active': return <Spinner className="text-[var(--brand-primary)]" />;
       case 'error': return <i className="ti ti-circle-x-filled text-[var(--color-danger)]" />;
       default: return <i className="ti ti-circle-dashed text-[var(--brand-text-muted)]" />;
     }

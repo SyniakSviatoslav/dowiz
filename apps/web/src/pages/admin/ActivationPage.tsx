@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { apiClient } from '../../lib/index.js';
-import { useI18n, useToast, SkeletonBase, ease, duration } from '@deliveryos/ui';
+import { useI18n, useToast, SkeletonBase, EmptyState, Button, ease, duration } from '@deliveryos/ui';
 
 // Menu-first onboarding — split-screen activation tool (O2).
 // Left: the gate checklist + Publish. Right: the live draft storefront preview.
@@ -251,7 +251,7 @@ export function ActivationPage() {
               disabled={!status?.canPublish || publishing}
               animate={justPublished && !reduceMotion ? { scale: [1, 1.04, 1] } : undefined}
               transition={{ duration: duration.slow, ease: ease.out }}
-              className="w-full min-h-[44px] py-3 rounded-[var(--brand-radius)] font-bold transition-[box-shadow,transform,opacity] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] shadow-[var(--elev-1)] [@media(hover:hover)]:hover:shadow-[var(--elev-2)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+              className="w-full min-h-tap py-3 rounded-[var(--brand-radius)] font-bold transition-[box-shadow,transform,opacity] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] shadow-[var(--elev-1)] [@media(hover:hover)]:hover:shadow-[var(--elev-2)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
               style={{ background: 'var(--brand-primary-strong)', color: 'var(--color-on-primary)' }}
             >
               {publishing ? t('activation.publishing', 'Publishing…') : t('activation.publish', 'Publish storefront')}
@@ -263,7 +263,7 @@ export function ActivationPage() {
             )}
           </>
         ) : (
-          <a href={`/s/${slug}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 w-full min-h-[44px] py-3 rounded-[var(--brand-radius)] font-bold text-center transition-[box-shadow,transform] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] shadow-[var(--elev-1)] [@media(hover:hover)]:hover:shadow-[var(--elev-2)] [@media(hover:hover)]:hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]" style={{ background: 'var(--brand-primary-strong)', color: 'var(--color-on-primary, var(--brand-on-primary, #fff))' }}>
+          <a href={`/s/${slug}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 w-full min-h-tap py-3 rounded-[var(--brand-radius)] font-bold text-center transition-[box-shadow,transform] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] shadow-[var(--elev-1)] [@media(hover:hover)]:hover:shadow-[var(--elev-2)] [@media(hover:hover)]:hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]" style={{ background: 'var(--brand-primary-strong)', color: 'var(--color-on-primary, var(--brand-on-primary, #fff))' }}>
             {t('activation.view_live', 'View live storefront')} <i className="ti ti-external-link" aria-hidden />
           </a>
         )}
@@ -275,12 +275,13 @@ export function ActivationPage() {
     <div className="h-full w-full relative" style={{ background: 'var(--brand-bg)' }}>
       {settingsError ? (
         // Don't leave the pane stuck on "Loading…" when settings failed to load — offer a retry.
-        <div className="flex flex-col items-center justify-center h-full text-center px-6 gap-3" style={{ color: 'var(--brand-text-muted)' }}>
-          <i className="ti ti-plug-connected-x text-3xl" style={{ color: 'var(--color-warning)' }} aria-hidden="true" />
-          <p className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>{t('activation.preview_load_failed', "Couldn't load your storefront preview.")}</p>
-          <button onClick={() => window.location.reload()} className="inline-flex items-center gap-1.5 px-4 py-2 min-h-[44px] rounded-[var(--brand-radius)] text-sm font-semibold transition-[box-shadow,transform] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] shadow-[var(--elev-1)] [@media(hover:hover)]:hover:shadow-[var(--elev-2)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]" style={{ background: 'var(--brand-primary-strong)', color: 'var(--color-on-primary)' }}>
-            <i className="ti ti-refresh" aria-hidden />{t('common.retry', 'Retry')}
-          </button>
+        <div className="flex flex-col items-center justify-center h-full px-6">
+          <EmptyState
+            icon={<i className="ti ti-plug-connected-x" />}
+            title={t('activation.preview_load_failed', "Couldn't load your storefront preview.")}
+            description={t('activation.preview_load_failed_desc', 'Check your connection and try again.')}
+            action={<Button size="sm" onClick={() => window.location.reload()}><i className="ti ti-refresh" aria-hidden /> {t('common.retry', 'Retry')}</Button>}
+          />
         </div>
       ) : !status ? (
         // Loading → skeleton of a storefront card, not a bare spinner.
@@ -316,7 +317,7 @@ export function ActivationPage() {
             role="tab"
             aria-selected={tab === tk}
             onClick={() => setTab(tk)}
-            className="flex-1 min-h-[44px] py-3 text-sm font-semibold transition-colors duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
+            className="flex-1 min-h-tap py-3 text-sm font-semibold transition-colors duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-inset"
             style={{ color: tab === tk ? 'var(--brand-primary)' : 'var(--brand-text-muted)', borderBottom: tab === tk ? '2px solid var(--brand-primary)' : '2px solid transparent' }}
           >
             {tk === 'edit' ? t('activation.tab_edit', 'Checklist') : t('activation.tab_preview', 'Preview')}
@@ -355,12 +356,12 @@ export function ActivationPage() {
             >
               <h3 className="font-bold mb-3" style={{ color: 'var(--brand-text)' }}>{t('activation.edit_item', 'Edit menu item')}</h3>
               <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--brand-text)' }}>{t('activation.item_name', 'Name')}</label>
-              <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full mb-3 px-3 py-2.5 min-h-[44px] rounded-[var(--brand-radius-sm)] outline-none transition-[box-shadow] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary)]" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }} />
+              <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full mb-3 px-3 py-2.5 min-h-tap rounded-[var(--brand-radius-sm)] outline-none transition-[box-shadow] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary)]" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }} />
               <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--brand-text)' }}>{t('activation.item_price', 'Price (minor units, e.g. 850 = 8.50)')}</label>
-              <input value={editPrice} onChange={(e) => setEditPrice(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" className="w-full mb-4 px-3 py-2.5 min-h-[44px] rounded-[var(--brand-radius-sm)] outline-none transition-[box-shadow] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary)]" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }} />
+              <input value={editPrice} onChange={(e) => setEditPrice(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" className="w-full mb-4 px-3 py-2.5 min-h-tap rounded-[var(--brand-radius-sm)] outline-none transition-[box-shadow] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary)]" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }} />
               <div className="flex gap-2">
-                <button onClick={() => setEditing(null)} className="flex-1 py-2.5 min-h-[44px] rounded-[var(--brand-radius-sm)] font-semibold transition-[background-color,transform] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }}>{t('common.cancel', 'Cancel')}</button>
-                <button onClick={saveProduct} disabled={savingProduct} className="flex-1 py-2.5 min-h-[44px] rounded-[var(--brand-radius-sm)] font-semibold transition-[box-shadow,transform,opacity] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] shadow-[var(--elev-1)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)] disabled:opacity-50 disabled:shadow-none" style={{ background: 'var(--brand-primary-strong)', color: 'var(--color-on-primary)' }}>{savingProduct ? t('common.saving', 'Saving…') : t('common.save', 'Save')}</button>
+                <button onClick={() => setEditing(null)} className="flex-1 py-2.5 min-h-tap rounded-[var(--brand-radius-sm)] font-semibold transition-[background-color,transform] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]" style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)' }}>{t('common.cancel', 'Cancel')}</button>
+                <button onClick={saveProduct} disabled={savingProduct} className="flex-1 py-2.5 min-h-tap rounded-[var(--brand-radius-sm)] font-semibold transition-[box-shadow,transform,opacity] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] shadow-[var(--elev-1)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)] disabled:opacity-50 disabled:shadow-none" style={{ background: 'var(--brand-primary-strong)', color: 'var(--color-on-primary)' }}>{savingProduct ? t('common.saving', 'Saving…') : t('common.save', 'Save')}</button>
               </div>
             </motion.div>
           </motion.div>

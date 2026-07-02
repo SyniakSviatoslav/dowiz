@@ -510,7 +510,7 @@ export function SettingsPage() {
                 const dayData = (settings.hoursJson[day as keyof WeeklySchedule] || DEFAULT_SCHEDULE[day]) as DaySchedule;
                 return (
                   <div key={day} className="contents">
-                    <div className="flex items-center min-h-[44px] px-3 rounded-[var(--brand-radius-sm,8px)] border border-[var(--brand-border)] bg-[var(--brand-bg)] font-medium text-sm capitalize text-[var(--brand-text)] truncate">
+                    <div className="flex items-center min-h-tap px-3 rounded-[var(--brand-radius-sm,8px)] border border-[var(--brand-border)] bg-[var(--brand-bg)] font-medium text-sm capitalize text-[var(--brand-text)] truncate">
                       {t(`admin.days.${day}`, day)}
                     </div>
                     <div
@@ -711,9 +711,9 @@ export function SettingsPage() {
                     title={t('admin.phone_format_hint', '+355 followed by 7-14 digits')}
                     aria-invalid={fallbackPhoneError ? true : undefined}
                     aria-describedby={fallbackPhoneError ? 'settings-fallbackPhone-error' : undefined}
-                    className="flex-1 min-h-[44px]"
+                    className="flex-1 min-h-tap"
                   />
-                  <Button type="button" onClick={handleFallbackSave} isLoading={fallbackSaving} variant="ghost" className="min-h-[44px]">
+                  <Button type="button" onClick={handleFallbackSave} isLoading={fallbackSaving} variant="ghost" className="min-h-tap">
                     {t('common.save', 'Save')}
                   </Button>
                 </div>
