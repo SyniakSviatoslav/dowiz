@@ -7,8 +7,11 @@ import type { BreakerConfig, BreakerState, BreakerReason } from './types.js';
 export const DEFAULT_BREAKER: BreakerConfig = {
   K: 3, // stall after 3 non-improving iterations
   maxIter: 25,
-  budgetUsd: Number.POSITIVE_INFINITY,
-  timeCapMs: Number.POSITIVE_INFINITY,
+  // Finite by default (meta-loop P2 2026-07-02): Infinity meant the cost/time dimensions of the
+  // breaker had never bound anything — the one real telemetry datapoint was a $62.88 run. A loop
+  // that legitimately needs more declares it in its card's harness: node; the default must stop.
+  budgetUsd: 75,
+  timeCapMs: 4 * 60 * 60 * 1000, // 4h wall-clock
 };
 
 export function initBreaker(): BreakerState {
