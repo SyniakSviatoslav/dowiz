@@ -361,4 +361,10 @@ test('send with env unset: skips CLEANLY (exit 0) but LOUDLY, and the skip lands
   assert.match(r.stderr, /TELEGRAM SKIPPED — env unset/);
   const line = cli(['digest', '--status-line'], { root });
   assert.match(line.stdout, /telegram=skipped:env_unset · push=none/);
+  // The skip must ALSO be a durable EVENT (publishable), not only the box-local status file —
+  // gap found on the first cloud run: the ephemeral box died with the only record of the skip.
+  const events = readLocal(root).filter((e) => e.run_id === 'rS' && e.target === 'telegram');
+  assert.equal(events.length, 1, 'send outcome must be recorded as an event');
+  assert.equal(events[0].outcome, 'skipped');
+  assert.match(events[0].detail, /telegram=skipped:env_unset/);
 });

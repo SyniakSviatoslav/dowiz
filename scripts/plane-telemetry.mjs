@@ -518,6 +518,23 @@ async function tgApi(token, method, body, isForm = false) {
   return res.ok;
 }
 
+// Send outcomes must survive the ephemeral box: record them as EVENTS (published with the run),
+// not only in the box-local status file. Gap found on the first cloud run (2026-07-02): the
+// telegram skip was invisible from the durable record.
+function recordSendOutcome(runId, statusStr) {
+  const ts = nowIso();
+  let detail;
+  try { detail = redactFreeText(`telegram=${statusStr}`).text.slice(0, DETAIL_CAP); } catch { detail = 'telegram=[redactor_error]'; }
+  const outcome = statusStr.startsWith('sent') ? 'pass' : statusStr.startsWith('skipped') ? 'skipped' : 'error';
+  appendJsonl(join(RUNS_DIR, eventsFileName(monthOf(ts))), {
+    schema_version: SCHEMA_VERSION, event_id: randomUUID(), run_id: runId,
+    nonce: process.env.PLANE_TELEMETRY_NONCE || randomUUID(),
+    seq: readLocalEvents().filter((e) => e.run_id === runId).length,
+    ts, emitter: 'cli', kind: 'report', step: 'SEND', outcome,
+    target: 'telegram', detail, tags: ['#plane', '#report', `#${outcome}`],
+  });
+}
+
 async function cmdSend(args) {
   const runId = String(args['run-id'] || deriveRunId());
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -530,6 +547,7 @@ async function cmdSend(args) {
     console.error('║ events are still written locally + publishable to the branch.  ║');
     console.error('╚════════════════════════════════════════════════════════════════╝');
     writeStatus({ telegram: { status: 'skipped:env_unset', ts: nowIso(), run_id: runId } });
+    recordSendOutcome(runId, 'skipped:env_unset');
     return 0;
   }
   const events = filterSchema(dedupeEvents(readLocalEvents()));
@@ -560,9 +578,12 @@ async function cmdSend(args) {
       } else if (!docOk) status = 'sent:doc_failed';
     }
     writeStatus({ telegram: { status, ts: nowIso(), run_id: runId } });
+    recordSendOutcome(runId, status);
     console.error(`[plane-telemetry] telegram: ${status}`);
   } catch (e) {
-    writeStatus({ telegram: { status: `failed:${String(e.message).slice(0, 60)}`, ts: nowIso(), run_id: runId } });
+    const failStatus = `failed:${String(e.message).slice(0, 60)}`;
+    writeStatus({ telegram: { status: failStatus, ts: nowIso(), run_id: runId } });
+    recordSendOutcome(runId, failStatus);
     console.error(`[plane-telemetry] telegram failed (non-fatal): ${e.message}`);
   }
   return 0; // a dead Telegram can never fail a run
