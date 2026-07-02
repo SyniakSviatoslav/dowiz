@@ -1,11 +1,18 @@
-// @ts-nocheck
 // Background worker startup extracted from server.ts main(). This is the BODY of
 // the boot-budget Promise.race IIFE — the race + WORKER_BOOT_BUDGET_MS timeout +
 // the "continue to listen" catch REMAIN in main() (boot resilience, incident
 // 2026-06-21: the menu must serve even when workers are degraded). This function
 // only constructs + starts the workers in their original order and returns the
-// heartbeat handles main() needs for shutdown. @ts-nocheck mirrors server.ts so
-// no new type surface is introduced by the move.
+// heartbeat handles main() needs for shutdown.
+import type { Pool } from 'pg';
+import type { PgBoss, Job } from 'pg-boss';
+import type { MessageBus, PgBossQueueProvider } from '@deliveryos/platform';
+import type {
+  NotificationWorker,
+  NotifyDispatchJob,
+  CustomerStatusJob,
+  TelegramSendJob,
+} from '../notifications/workers/index.js';
 import { QUEUE_NAMES } from '../lib/registry.js';
 import { WorkerHeartbeat } from '../lib/worker/heartbeat.js';
 import { LivenessChecker } from '../workers/liveness-checker.js';
@@ -23,15 +30,15 @@ import { DeliveryTraceRetentionWorker } from '../workers/delivery-trace-retentio
 import { registerNotifySubscriptions } from './messaging.js';
 
 export interface BackgroundWorkerDeps {
-  pool: any;
-  backupPool: any;
-  queue: any;
-  messageBus: any;
-  notifyWorker: any;
+  pool: Pool;
+  backupPool: Pool;
+  queue: PgBossQueueProvider;
+  messageBus: MessageBus;
+  notifyWorker: NotificationWorker;
 }
 
 export interface BackgroundWorkerHandles {
-  heartbeats: any[];
+  heartbeats: WorkerHeartbeat[];
 }
 
 /**
@@ -43,9 +50,11 @@ export async function startBackgroundWorkers(deps: BackgroundWorkerDeps): Promis
   const { pool, backupPool, queue, messageBus, notifyWorker } = deps;
 
   // Register pg-boss notify workers (queue.work wraps pg-boss v10 array-of-jobs).
-  await queue.work(QUEUE_NAMES.NOTIFY_DISPATCH, async (data: any) => notifyWorker.handleDispatch({ data }));
-  await queue.work(QUEUE_NAMES.NOTIFY_CUSTOMER_STATUS, async (data: any) => notifyWorker.handleCustomerStatus({ data }));
-  await queue.work(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, async (data: any) => notifyWorker.handleTelegramSend({ data }));
+  // queue.work delivers ONLY job.data; the handlers read only job.data, so the
+  // reconstructed `{ data }` shell is asserted to the handlers' Job<T> parameter.
+  await queue.work(QUEUE_NAMES.NOTIFY_DISPATCH, async (data: any) => notifyWorker.handleDispatch({ data } as Job<NotifyDispatchJob>));
+  await queue.work(QUEUE_NAMES.NOTIFY_CUSTOMER_STATUS, async (data: any) => notifyWorker.handleCustomerStatus({ data } as Job<CustomerStatusJob>));
+  await queue.work(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, async (data: any) => notifyWorker.handleTelegramSend({ data } as Job<TelegramSendJob>));
   console.log('[API] pg-boss workers registered');
 
   const { CourierDispatchWorker } = await import('../workers/courier-dispatch.js');
@@ -117,7 +126,10 @@ export async function startBackgroundWorkers(deps: BackgroundWorkerDeps): Promis
 
   // Currency Rates Refresh Worker (hourly, fetches ALL→EUR from fawazahmed0)
   const { RatesRefreshWorker } = await import('../workers/rates-refresh.js');
-  const ratesRefreshWorker = new RatesRefreshWorker(pool, queue.boss);
+  // FLAG (type-restore 2026-07-02): pg-boss VERSION SKEW — queue.boss is the v10 instance
+  // (packages/platform pins pg-boss ^10) while apps/api workers compile against pg-boss ^12
+  // types. The runtime object is v10; the assertion bridges the third-party version gap.
+  const ratesRefreshWorker = new RatesRefreshWorker(pool, queue.boss as unknown as PgBoss);
   await ratesRefreshWorker.start();
 
   // Soft access gate — notify + retention/reconcile crons run unconditionally (data
@@ -131,10 +143,12 @@ export async function startBackgroundWorkers(deps: BackgroundWorkerDeps): Promis
   const deliveryTraceRetentionWorker = new DeliveryTraceRetentionWorker(pool, queue.boss, messageBus);
   await deliveryTraceRetentionWorker.start();
 
-  registerNotifySubscriptions(messageBus, queue.boss);
+  // (same pg-boss v10-instance / v12-types version-skew assertion as RatesRefreshWorker below)
+  registerNotifySubscriptions(messageBus, queue.boss as unknown as PgBoss);
 
   // P31 — Worker Liveness Checker (singleton cron, 60s)
-  const livenessChecker = new LivenessChecker(pool, queue.boss, messageBus);
+  // (same pg-boss v10-instance / v12-types version-skew assertion as RatesRefreshWorker above)
+  const livenessChecker = new LivenessChecker(pool, queue.boss as unknown as PgBoss, messageBus);
   await livenessChecker.start();
 
   // P5-5 — Free-tier watch (hourly, monitors Free tier limits)
