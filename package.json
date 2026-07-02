@@ -72,7 +72,7 @@
     "verify:ccc-secrets": "node --test --import tsx tools/ccc/tests/secret-scan.test.ts",
     "verify:menu-parse": "tsx apps/api/tests/menu-parse/run.ts",
     "ccc": "tsx tools/ccc/src/cli.ts",
-    "verify:event-wiring": "tsx --env-file=.env apps/api/scripts/verify-event-wiring.ts",
+    "verify:event-wiring": "tsx apps/api/scripts/verify-event-wiring.ts",
     "verify:schema-queries": "tsx --env-file=.env apps/api/scripts/verify-schema-queries.ts",
     "verify:connection-lifecycle": "tsx scripts/verify-connection-lifecycle.ts",
     "verify:n2": "tsx --env-file=.env apps/api/tests/verify-n2.ts",

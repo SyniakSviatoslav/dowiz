@@ -244,3 +244,44 @@ early. Same canon as `read_public_menu`/`app_is_shadow_location`.
 `COURIER_OFFER_HANDSHAKE_ENABLED` (default off) gates the offer→accept runtime; schema lands inert ("schema
 rich, runtime minimal"). Crumb-recording ships unflagged (pure passive recording, no behavior change). Turn the
 handshake on only when the courier-app accept/decline UI is ready.
+
+## Addendum — dispatch-exhausted grace-cancel routed through the machine (2026-07-02)
+
+- **Status:** Accepted (design-time). Ships WITH the code (merge-gated per Counsel).
+- **Context:** the offer-sweep Pass-4 grace-cancel (`courier-offer-sweep.ts`, flag-off
+  `DISPATCH_OWNER_GRACE_ENABLED`) did a **raw** `UPDATE orders SET status='CANCELLED'` — R3-3 violation
+  blocking prod. Root cause: `order-machine.ts` owns no `CONFIRMED/PREPARING/READY→CANCELLED` edge, so
+  `updateOrderStatus`/`assertTransition` could not express a no-courier terminal for a pre-IN_DELIVERY order.
+  Full analysis + breaker/counsel rounds: `docs/design/deliver-v2-offer-sweep-cancel/`.
+- **Decision (Option A + coupling-fix — keeps the machine the SINGLE transition authority):**
+  1. **Widen `order-machine.ts` `TRANSITIONS`** — add `CANCELLED` to `CONFIRMED`, `PREPARING`, `READY` (the
+     same additive-edge pattern this ADR used for `IN_DELIVERY→{CANCELLED,READY}`). These are **SYSTEM-only**
+     terminal edges. Pinned by an **exhaustive `assertTransition` test** so the widening is conscious and
+     future drift fails red.
+  2. **Owner-exposure closed at the route layer** — the two owner PATCH sites that pipe request `newStatus`
+     into `updateOrderStatus` (`routes/orders.ts`, `owner/dashboard.ts::transitionOrder`) call a shared
+     `assertOwnerTargetAllowed(from,to)` that rejects owner-requested `CANCELLED` from
+     `{CONFIRMED,PREPARING,READY}` → `403 CANCEL_NOT_PERMITTED`. Machine = *what is possible*; route = *who is
+     allowed*. Existing owner cancels (`PENDING→CANCELLED`, no-show `IN_DELIVERY→CANCELLED`) preserved.
+  3. **Pass-4 routed through `updateOrderStatus`** (system actor) inside the worker tx — no new raw UPDATE, no
+     new export, `RAW_CANCEL_ALLOW` unchanged (R3-3 satisfied by a real funnel, not laundering — Option B, a
+     colocated `cancelUndispatchableOrder` export, was WITHDRAWN because it was owner-callable + guardrail-blind).
+  4. **`ORDER_CANCELLED` fan-out is a POST-commit caller responsibility** — the worker publishes
+     `BUS_CHANNELS.ORDER_CANCELLED` after COMMIT (mirrors `signals.ts`) so `lifecycle-handlers` resolves dwell
+     alerts + `boss.cancel`s pending `notify.dispatch.*` escalation jobs (else a grace-cancelled order keeps
+     open dwell alerts and fires a contradictory escalation after the cancel).
+  5. **R2-3 fold extended** — `updateOrderStatus` terminalizes any active assignment on **any**
+     `newStatus==='CANCELLED'` (idempotent; previously IN_DELIVERY-only), so a widened edge can never strand a
+     binding. Cash-safe: terminalizing writes no `'hold'` (the ledger row is written only by `completeDelivery`
+     at DELIVERED).
+- 🔴 **STOP-REFUND-BEFORE-GRACE (pre-registered ETHICAL-STOP, attaches to the grace-cancel enablement
+  council):** `DISPATCH_OWNER_GRACE_ENABLED` and prepaid (`PAYMENTS_CRYPTO_ENABLED`/`PREPAID`) must **NOT be
+  co-enabled** until a paid-prepaid grace-cancel writes a `refund_due` obligation (or is proven impossible by
+  state). Grace-cancel routes through `updateOrderStatus`, not `completeDelivery`, so it emits no `refund_due`
+  — a paid customer could be silently cancelled with no refund-of-record. Friction, not veto: it pauses
+  co-enablement pending a recorded human decision; either flag alone, and the dark code, are unaffected.
+  Owner: payments council + grace-cancel council jointly.
+- **Cash-as-proof preserved:** no completion path changed; no ledger/trace write added anywhere; the grace
+  path (no courier by precondition, re-checked under lock) creates no hold.
+- **Deferred:** exposing the widened edge to **owners** (cancel-a-preparing-order) is a product decision owned
+  by the grace-cancel STOP-ETHICS council; until then the route guard keeps it SYSTEM-only.
