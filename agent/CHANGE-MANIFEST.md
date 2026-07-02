@@ -2,22 +2,32 @@
 
 CLASSIFICATION: build   # one of: spike | build | audit | challenge  (§1 — routes the governance mode)
 
-FINDING-id: fe-polish-qa-loop-2026-06-23
-Intent: fix — apply the FE-polish + QA loop findings (cosmetic tap targets inline; one contract bug).
+FINDING-id: p0-gate-rearm-2026-07-02
+Intent: fix — enact P0 of the meta-loop audit (human-approved 2026-07-02): rearm the silently
+disarmed governance gates, govern the Bash lane, wire verify:all --ci into CI, broaden default
+agent permissions.
 
 Touched files:
-- packages/ui/src/components/atoms/{Button,Input,SunlightToggle,CurrencySwitcher}.tsx — tap targets
-  to ≥44px (WCAG 2.5.5): md/lg Button + Input + SunlightToggle (36→44) + CurrencySwitcher (30→44).
-- apps/api/src/routes/orders.ts — PATCH /orders/:id/status used a bare StatusUpdateInput.parse()
-  outside the try → a bad `status` enum threw a ZodError the global handler didn't normalize → raw
-  500. Switched to .safeParse() → typed 400 (matches the create route; client input ≠ 5xx).
-- e2e/tests/polish-qa-loop.spec.ts — proof (login controls ≥44px; PATCH bad-enum → 400).
+- .claude/hooks/serious-gate.sh — clearance becomes per-line `slug|expiry-epoch` (legacy bare
+  slugs = expired); the 7-slug accumulated serious-cleared no longer holds the gate open.
+- .claude/hooks/red-line-doubt-gate.sh — redline-confirmed releases the irreversible gate only
+  while <60 min old (the 2026-06-23 confirmation held it open for 9 days).
+- .claude/hooks/guard-bash.sh + .claude/settings.json — Bash lane governed: protect-paths parity
+  for Bash mutations, human-only override files, push-main/prod-deploy blocks; registered as a
+  Bash PreToolUse matcher. Staging deploy stays allowed (Ship Discipline) — the old verbatim
+  guard blocked it, which is why it was unregistered.
+- .claude/commands/council.md — GO step appends `slug|expiry(+72h)` so clearance self-expires.
+- .claude/state/{serious-cleared,redline-confirmed} — truncated / retired (stale since 06-21/06-23).
+- scripts/guardrail-hook-matchers.mjs — also asserts guard-bash.sh registered under Bash (red→green).
+- scripts/guardrail-gate-armament.mjs (new) — hermetic hook simulation: DENY on stale clearance,
+  ALLOW on fresh, Bash protected-write blocked. Wired into verify-all.ts (ci:true).
+- .github/workflows/ci.yml — validate job runs `pnpm verify:all --ci` (was wired nowhere).
+- .claude/settings.json permissions.allow + .claude/agents/librarian.md tools — broader defaults
+  (WebFetch/WebSearch/Agent/MCP servers; librarian gets Write+Edit within its existing path contract).
 
-Proof: ui rebuilt, web+api typecheck green; Playwright polish-qa-loop on staging.
+NOTE: .claude/ and .github/ edits are protect-paths zones — applied via staged copy under explicit
+per-change human approval ("yes, enact P0", 2026-07-02), the manual-approval path the hook mandates.
 
-FLAG-only (not patched — per the QA/FE loops): map null-coord console warnings (3rd-party tile
-style, not our coords); logo.webp 404 (stale demo location logo_url — FE fallback already correct);
-notifications/status returns duplicated channel rows (LOW contract noise, separate fix); PATCH-500
-guardrail/regression carried by the spec. Filter-pill h-9 + KPI-zero mute left as deliberate LOW.
+Proof: guardrail-hook-matchers red→green; guardrail-gate-armament green; pnpm verify:all --ci green.
 
 # Reminder (§5): a well-proven FAIL / MISSING / BLOCKED is a SUCCESSFUL run, equal to PASS.

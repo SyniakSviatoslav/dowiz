@@ -6,7 +6,17 @@
    "Write(*)",
    "Read(*)",
    "Glob(*)",
-   "Grep(*)"
+   "Grep(*)",
+   "WebFetch",
+   "WebSearch",
+   "Agent",
+   "Task",
+   "Skill",
+   "TodoWrite",
+   "NotebookEdit",
+   "mcp__repowise",
+   "mcp__playwright-test",
+   "mcp__browser-use"
   ],
   "deny": []
  },
@@ -45,6 +55,15 @@
      {
       "type": "command",
       "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/red-line-doubt-gate.sh\""
+     }
+    ]
+   },
+   {
+    "matcher": "Bash",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh\""
      }
     ]
    }
