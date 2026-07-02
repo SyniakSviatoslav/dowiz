@@ -44,3 +44,8 @@ Use the system-architect subagent on: «Прочитай breaker-findings.md і 
 На GO STOP-DESIGN-B — зніми блок коду для цієї зміни: `echo "<slug>|$(($(date +%s)+259200))" >> .claude/state/serious-cleared` (діє 72 год, потім gate озброюється сам; рядки без expiry НЕ відкривають gate). Повідом людину, що gate відкрито для `<slug>`, і нагадай: після відвантаження зміни **очисти** маркер, щоб озброїти gate знову: `: > .claude/state/serious-cleared`.
 
 ДИСЦИПЛІНА: не пиши продакшн-код. Не дозволяй архітектору маркувати власні знахідки «вирішено» без раунду Ламача/Counsel. Веди артефакти як живі файли. Між раундами не питай зайвого — лише на STOP-гейтах (A / ETHICS / B).
+
+## Телеметрія (обов'язково — фініш БУДЬ-ЯКОГО результату)
+На success/stall/abort виклич finalize харнесу за інструкцією `harness:` вузла картки loops/<id>.yaml
+(tools/loop-harness §5 LOOP REPORT → loops/runs/metrics.jsonl). Пропуск finalize = незавершений запуск
+(P2 2026-07-02: 6 телеметрія-рядків на 19 петель — прогони губились).

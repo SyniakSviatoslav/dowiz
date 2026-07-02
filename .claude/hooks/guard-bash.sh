@@ -42,7 +42,24 @@ process.stdin.on('end', () => {
 CMD=$(_extract_cmd)
 [ -z "$CMD" ] && exit 0
 
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "${CLAUDE_PROJECT_DIR:-$PWD}")"
+
+# P1 telemetry (meta-loop 2026-07-02): one JSONL line per decision — the advisory layer was
+# unmeasurable (no lesson hit-counts, no deny/allow rates), so pruning/promotion ran blind.
+# Advisory: never fails the hook.
+HEV_LOG="$ROOT/.claude/logs/harness-events.jsonl"
+_hev() {
+  mkdir -p "$(dirname "$HEV_LOG")" 2>/dev/null || true
+  printf '{"ts":"%s","hook":"%s","event":"%s","target":"%s","detail":"%s"}\n' \
+    "$(date -Iseconds)" "$1" "$2" \
+    "$(printf '%s' "${3:-}" | tr '"\\' '..' | tr '\n' ' ' | cut -c1-200)" \
+    "$(printf '%s' "${4:-}" | tr '"\\' '..' | tr '\n' ' ' | cut -c1-200)" \
+    >>"$HEV_LOG" 2>/dev/null || true
+}
+
+
 _block() {
+  _hev guard-bash block "$(printf '%s' "$CMD" | cut -c1-160)" "$1"
   echo "BLOCKED (guard-bash): $1" >&2
   exit 2
 }

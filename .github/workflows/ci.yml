@@ -34,6 +34,12 @@ jobs:
       - name: Lint Gates
         run: pnpm lint:gates
 
+      # P0 gate-rearm (2026-07-02): verify:all --ci was authored (b517972d) but wired into NO
+      # workflow, so the static guardrail subset (i18n, contrast, NX wiring, DEFINER search_path,
+      # owner-active, deliver-v2, gate-armament...) only ran when someone remembered. Now it gates CI.
+      - name: Verify-all static gates (--ci)
+        run: pnpm verify:all --ci
+
       - name: Verify migrations ordering
         run: pnpm verify:migrations
 

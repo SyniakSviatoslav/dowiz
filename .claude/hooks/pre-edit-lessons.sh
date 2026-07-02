@@ -10,6 +10,20 @@ INPUT=$(cat)
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "${CLAUDE_PROJECT_DIR:-$PWD}")"
 INDEX="$ROOT/docs/lessons/INDEX.md"
+
+# P1 telemetry (meta-loop 2026-07-02): one JSONL line per decision — the advisory layer was
+# unmeasurable (no lesson hit-counts, no deny/allow rates), so pruning/promotion ran blind.
+# Advisory: never fails the hook.
+HEV_LOG="$ROOT/.claude/logs/harness-events.jsonl"
+_hev() {
+  mkdir -p "$(dirname "$HEV_LOG")" 2>/dev/null || true
+  printf '{"ts":"%s","hook":"%s","event":"%s","target":"%s","detail":"%s"}\n' \
+    "$(date -Iseconds)" "$1" "$2" \
+    "$(printf '%s' "${3:-}" | tr '"\\' '..' | tr '\n' ' ' | cut -c1-200)" \
+    "$(printf '%s' "${4:-}" | tr '"\\' '..' | tr '\n' ' ' | cut -c1-200)" \
+    >>"$HEV_LOG" 2>/dev/null || true
+}
+
 [ -f "$INDEX" ] || exit 0
 
 # Parse a JSON string field without requiring jq (same fallback chain as protect-paths.sh).
@@ -128,6 +142,7 @@ while IFS='|' read -r _ trig fpath _; do
   LINK=$(awk -F': ' '/^LINK:/ {sub(/^LINK:[[:space:]]*/,""); print; exit}' "$LESSON")
 
   [ -z "$ACTION" ] && continue
+  _hev pre-edit-lessons inject "$REL" "$fpath"
   EMITTED="${EMITTED}LESSON [$fpath]\n  ACTION: ${ACTION}\n  LINK: ${LINK}\n\n"
 done < "$INDEX"
 
