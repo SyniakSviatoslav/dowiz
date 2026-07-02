@@ -23,6 +23,10 @@ let categoryId: string;
 const TS = Date.now();
 const COURIER_EMAIL = `courier-e2e-${TS}@test.com`;
 const COURIER_PASSWORD = 'test-password-123!';
+// Delivery pin/courier GPS must be VENUE-RELATIVE, never hardcoded — the demo venue
+// moved (Tirana→Durrës) and hardcoded coords 422 NOT_DELIVERABLE on the range check.
+// Set from /public/locations/demo/info in beforeAll; ~0.002° ≈ 200m offset stays in range.
+let venuePin = { lat: 41.33, lng: 19.82 };
 
 test.describe.configure({ mode: 'serial' });
 
@@ -37,6 +41,14 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
     const authBody = await authRes.json();
     authToken = authBody.access_token;
     activeLocationId = authBody.activeLocationId;
+
+    const venueInfoRes = await request.get(`${BASE}/public/locations/demo/info`, { timeout: 30000 });
+    if (venueInfoRes.ok()) {
+      const info = await venueInfoRes.json();
+      if (typeof info.lat === 'number' && typeof info.lng === 'number') {
+        venuePin = { lat: info.lat + 0.002, lng: info.lng + 0.002 };
+      }
+    }
 
     const catRes = await request.post(`${BASE}/api/owner/menu/categories`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -117,7 +129,7 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
         type: 'delivery',
         items: [{ product_id: pid, quantity: 1 }],
         customer: { phone: `+3556000${String(TS).slice(-4)}`, name: 'E2E Test' },
-        delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga e Barrikadave, Tirana' },
+        delivery: { pin: venuePin, address_text: 'Rruga e Barrikadave 10' },
         payment: { method: 'cash' },
         idempotency_key: crypto.randomUUID(),
         acknowledged_codes: ['velocity'], // ack the anti-fake-signals speed-bump so a setup order is never soft-blocked
@@ -179,7 +191,7 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
         locationId: activeLocationId, type: 'delivery',
         items: [{ product_id: productId, quantity: 1 }],
         customer: { phone: `+3556001${String(TS).slice(-4)}`, name: 'Reject Test' },
-        delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga Reject' },
+        delivery: { pin: venuePin, address_text: 'Rruga Reject' },
         payment: { method: 'cash' },
         idempotency_key: crypto.randomUUID(),
       },
@@ -343,7 +355,7 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
           locationId: activeLocationId, type: 'delivery',
           items: [{ product_id: productId, quantity: 1 }],
           customer: { phone: `+3556003${String(TS).slice(-4)}`, name: 'Assignment Test' },
-          delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga Assign' },
+          delivery: { pin: venuePin, address_text: 'Rruga Assign' },
           payment: { method: 'cash' },
           idempotency_key: crypto.randomUUID(),
         },
@@ -402,19 +414,19 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
 
     const startRes = await request.post(`${BASE}/api/courier/me/shift/start`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
-      data: { lat: 41.3275, lng: 19.8187 },
+      data: { lat: venuePin.lat, lng: venuePin.lng },
     });
     expect(startRes.status()).toBe(200);
 
     const transRes = await request.post(`${BASE}/api/courier/shifts/transition`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
-      data: { to: 'available', lat: 41.3275, lng: 19.8187 },
+      data: { to: 'available', lat: venuePin.lat, lng: venuePin.lng },
     });
     expect(transRes.status()).toBe(200);
 
     const pingRes = await request.post(`${BASE}/api/courier/shifts/ping`, {
       headers: { Authorization: `Bearer ${courierJwt}` },
-      data: { lat: 41.3275, lng: 19.8187, accuracy_meters: 10 },
+      data: { lat: venuePin.lat, lng: venuePin.lng, accuracy_meters: 10 },
     });
     expect(pingRes.status()).toBe(200);
 

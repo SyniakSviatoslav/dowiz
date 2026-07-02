@@ -23,7 +23,8 @@ export default async function productRoutes(fastify: FastifyInstance) {
           name: z.string().min(1),
           description: z.string().optional().nullable(),
           price: z.number().int().nonnegative(),
-          prep_time_minutes: z.number().int().min(1).max(1440),
+          // Optional with the DB's DEFAULT 15 (mig 065) — absent must not 400 (deploy-validation 4.2)
+          prep_time_minutes: z.number().int().min(1).max(1440).default(15),
           available: z.boolean().default(true),
           image_key: z.string().optional().nullable(),
           attributes: z.record(z.any()).optional().nullable(),
@@ -350,7 +351,8 @@ export default async function productRoutes(fastify: FastifyInstance) {
         body: z.object({
           name: z.string().min(1).max(200),
           price: z.number().int().nonnegative(),
-          prep_time_minutes: z.number().int().min(1).max(1440),
+          // Optional with the DB's DEFAULT 15 (mig 065) — absent must not 400 (deploy-validation 4.2)
+          prep_time_minutes: z.number().int().min(1).max(1440).default(15),
           description: z.string().max(2000).optional().nullable(),
           available: z.boolean().optional(),
           category_id: z.string().uuid().optional().nullable(),
