@@ -53,3 +53,29 @@ share one DB and interfere (proven flake: access-requests consent gate vs rate-l
   reason when `DATABASE_URL_*` is absent — they do NOT fail the validate job.
 - Backlog: `proposed-sense4-ci/APPLY.md` (2026-06-26, LHCI schedule trigger) was never applied —
   consider batching both in one reviewed ci.yml commit.
+
+## Other protected-zone changes from this session (operator apply)
+
+### fly.toml — web VM memory 512mb → 1gb
+
+The backend review verdict: memory breaks first (512mb hosts Fastify + ~20 in-process
+workers + all WebSockets + the AI-OCR parser; first symptom = OOM/GC stalls dropping WS).
+
+```toml
+[[vm]]
+  processes = ["web"]
+  memory = "1gb"
+```
+
+### apps/web/package.json — remove the dead `three` dependency
+
+`PaperScene/DeliverySwan/SwanHero` (the only importers) were deleted as dead code this
+session (zero import sites — verified). Remove from `dependencies`: `"three": "^0.184.0"`,
+and from `devDependencies`: `"@types/three": "^0.184.1"`, then `pnpm install`.
+
+### METRICS_TOKEN secret (enables the new /metrics endpoint)
+
+`GET /metrics` (request counters/latency, pg-pool saturation, pg-boss depth, WS count)
+ships DARK — it 404s until the secret exists. To enable on staging:
+`flyctl secrets set METRICS_TOKEN=<random-32> -a dowiz-staging`, then scrape with
+`Authorization: Bearer <token>`.
