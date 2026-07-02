@@ -14,14 +14,18 @@ import { join } from 'node:path';
 const ROOT = process.cwd();
 const SETTINGS = join(ROOT, '.claude/settings.json');
 // Hooks that gate edits and MUST see every edit tool (file → which event it lives under).
+// guard-bash.sh (2026-07-02, P0 gate-rearm): the Bash lane bypassed EVERY edit gate — a heredoc/
+// sed -i/node script via Bash could mutate protected paths ungoverned (the guard existed but was
+// unregistered since 43a018c1). It must stay registered under a Bash matcher.
+const EDIT_TOOLS = ['Edit', 'Write', 'MultiEdit'];
 const MUST_COVER = [
-  { hook: 'protect-paths.sh', event: 'PreToolUse' },
-  { hook: 'serious-gate.sh', event: 'PreToolUse' },
-  { hook: 'pre-edit-lessons.sh', event: 'PreToolUse' },
-  { hook: 'red-line-doubt-gate.sh', event: 'PreToolUse' },
-  { hook: 'post-edit-gates.sh', event: 'PostToolUse' },
+  { hook: 'protect-paths.sh', event: 'PreToolUse', tools: EDIT_TOOLS },
+  { hook: 'serious-gate.sh', event: 'PreToolUse', tools: EDIT_TOOLS },
+  { hook: 'pre-edit-lessons.sh', event: 'PreToolUse', tools: EDIT_TOOLS },
+  { hook: 'red-line-doubt-gate.sh', event: 'PreToolUse', tools: EDIT_TOOLS },
+  { hook: 'post-edit-gates.sh', event: 'PostToolUse', tools: EDIT_TOOLS },
+  { hook: 'guard-bash.sh', event: 'PreToolUse', tools: ['Bash'] },
 ];
-const REQUIRED_TOOLS = ['Edit', 'Write', 'MultiEdit'];
 
 if (!existsSync(SETTINGS)) {
   console.error(`✗ guardrail-hook-matchers: ${SETTINGS} not found.`);
@@ -30,7 +34,7 @@ if (!existsSync(SETTINGS)) {
 const cfg = JSON.parse(readFileSync(SETTINGS, 'utf8'));
 const errors = [];
 
-for (const { hook, event } of MUST_COVER) {
+for (const { hook, event, tools: required } of MUST_COVER) {
   const entries = (cfg.hooks?.[event] || []).filter((e) =>
     (e.hooks || []).some((h) => (h.command || '').includes(hook)),
   );
@@ -40,15 +44,15 @@ for (const { hook, event } of MUST_COVER) {
   }
   for (const e of entries) {
     const tools = String(e.matcher || '').split('|').map((s) => s.trim());
-    const missing = REQUIRED_TOOLS.filter((t) => !tools.includes(t));
-    if (missing.length) errors.push(`${hook} (${event}): matcher "${e.matcher}" omits ${missing.join(', ')} — an edit tool would bypass this gate.`);
+    const missing = required.filter((t) => !tools.includes(t));
+    if (missing.length) errors.push(`${hook} (${event}): matcher "${e.matcher}" omits ${missing.join(', ')} — a tool lane would bypass this gate.`);
   }
 }
 
 if (errors.length) {
-  console.error(`✗ guardrail-hook-matchers: ${errors.length} gate(s) do not cover every edit tool:`);
+  console.error(`✗ guardrail-hook-matchers: ${errors.length} gate(s) missing or not covering their tool lane:`);
   for (const e of errors) console.error('  - ' + e);
-  console.error('\nEvery edit-governance hook must match Edit|Write|MultiEdit so no edit tool bypasses it.');
+  console.error('\nEdit-governance hooks must match Edit|Write|MultiEdit and guard-bash.sh must match Bash — no tool lane may bypass a gate.');
   process.exit(1);
 }
-console.log(`✓ guardrail-hook-matchers: all ${MUST_COVER.length} edit-governance gates cover Edit|Write|MultiEdit.`);
+console.log(`✓ guardrail-hook-matchers: all ${MUST_COVER.length} governance gates cover their required tool lanes.`);

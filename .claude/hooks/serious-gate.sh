@@ -4,6 +4,11 @@
 # Friction, not verdict: a human bypasses via .claude/state/serious-override. Fail-open on errors.
 # NOTE: installed as serious-gate.sh (NOT require-classification.sh) — that name is taken by the
 # existing Stop/CHANGE-MANIFEST hook; this is an independent PreToolUse gate.
+#
+# 2026-07-02 (P0 gate-rearm, ledger): clearance is now PER-LINE `slug|expiry-epoch`. The old
+# `[ -s serious-cleared ]` check meant ANY accumulated non-empty file cleared ALL serious surfaces
+# forever — the gate was de-facto open from 06-21 to 07-02 (7 stale slugs, 400+ blind ALLOWs).
+# Legacy bare-slug lines (no expiry) are treated as EXPIRED. Council GO appends `slug|now+72h`.
 set -uo pipefail
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "${CLAUDE_PROJECT_DIR:-$PWD}")"
@@ -41,18 +46,29 @@ if ! printf '%s' "$rel" | grep -Eiq "$SERIOUS"; then
 fi
 
 # --- serious: did the Council clear this change? ---
-if [ -s "$STATE/serious-cleared" ]; then
-  echo "$(date -Iseconds) ALLOW cleared $rel" >>"$LOG" 2>/dev/null || true
+# Per-line format `slug|expiry-epoch`; a line clears the gate only while expiry > now.
+# Lines without a numeric expiry (legacy bare slugs) NEVER clear — accumulation must not re-open the gate.
+now="$(date +%s)"
+cleared_slug=""
+if [ -f "$STATE/serious-cleared" ]; then
+  while IFS='|' read -r slug exp _rest; do
+    case "$exp" in ''|*[!0-9]*) continue ;; esac
+    if [ "$exp" -gt "$now" ]; then cleared_slug="${slug:-unnamed}"; break; fi
+  done <"$STATE/serious-cleared"
+fi
+if [ -n "$cleared_slug" ]; then
+  echo "$(date -Iseconds) ALLOW cleared($cleared_slug) $rel" >>"$LOG" 2>/dev/null || true
   exit 0
 fi
 
-# --- BLOCK: serious surface without an APPROVED plan ---
+# --- BLOCK: serious surface without an APPROVED (unexpired) plan ---
 echo "$(date -Iseconds) DENY serious-uncleared $rel" >>"$LOG" 2>/dev/null || true
 read -r -d '' REASON <<EOF
 🛑 serious-gate: «$rel» — серйозна поверхня (схема/контракт/гроші/RLS/auth/state-machine/WS/інтеграція).
 Це АВТОМАТИЧНИЙ gate, НЕ відмова користувача — дій, не зупиняйся.
 ПЕРЕД кодом проведи Тріадну Раду: запусти  /council <опис цієї зміни>  і доведи до APPROVED (STOP-DESIGN-B).
-Рада на GO запише .claude/state/serious-cleared — після цього повтори цей самий едит.
+Рада на GO запише рядок "<slug>|<expiry-epoch>" у .claude/state/serious-cleared (діє 72h, потім gate
+озброюється сам) — після цього повтори цей самий едит. Застарілі/без-expiry рядки НЕ відкривають gate.
 Людський обхід (тертя, не вирок):  echo "<причина>" > .claude/state/serious-override
 EOF
 

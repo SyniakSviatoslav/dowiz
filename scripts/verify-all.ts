@@ -35,6 +35,9 @@ const STEPS = [
   // Invoked directly (no package.json script needed — package.json is protect-paths): the SECURITY
   // DEFINER search_path gate was authored (ledger #33) but never wired here, so it never ran. Wired.
   { name: 'SECURITY DEFINER search_path pinned (pg-privilege-hardening, ledger #33)', cmd: 'node scripts/guardrail-definer-search-path.mjs', ci: true },
+  // Governance gates must be ARMED, not just registered: stale clearance files held serious-gate +
+  // red-line-gate open 06-21→07-02 and the Bash lane was ungoverned (P0 gate-rearm 2026-07-02).
+  { name: 'gate armament (serious/red-line/bash hooks deny stale, allow fresh)', cmd: 'node scripts/guardrail-gate-armament.mjs', ci: true },
 ].filter((s) => !CI_MODE || s.ci);
 
 function run(cmd: string): { ok: boolean; output: string } {

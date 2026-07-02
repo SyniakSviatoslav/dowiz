@@ -9,6 +9,10 @@
 # is ADVISORY over the broader red-line set — it uses exit 0 + additionalContext and NEVER weakens
 # or duplicates protect-paths' block. Only the truly-irreversible set gates (deny) here, and even
 # then a human override file releases it. Fail-open on any parse/IO error.
+#
+# 2026-07-02 (P0 gate-rearm): the redline-confirmed release now EXPIRES — the file must be younger
+# than 60 minutes. The previous `[ -f ... ]` check let a single 2026-06-23 confirmation hold the
+# irreversible-migration gate open for 9 days. One confirmation = one work window, not forever.
 set -uo pipefail
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "${CLAUDE_PROJECT_DIR:-$PWD}")"
@@ -50,15 +54,18 @@ printf '%s' "$REL" | grep -Eiq "$IRREVERSIBLE" && is_irrev=1
 
 # ============ IRREVERSIBLE: require explicit human confirmation (friction, not a wall) ============
 if [ "$is_irrev" -eq 1 ]; then
-  if [ -f "$STATE/redline-confirmed" ]; then
-    exit 0   # human cleared it
+  # Confirmation is a WINDOW, not a switch: file must exist AND be <60 min old.
+  if [ -n "$(find "$STATE/redline-confirmed" -mmin -60 2>/dev/null)" ]; then
+    exit 0   # human cleared it within the last hour
   fi
   REASON="🛑 RED-LINE / IRREVERSIBLE: «$REL» is a migration — forward-only, not rollbackable on prod.
 Doubt model requires a HUMAN doubt-pass before this edit. Provide, then confirm:
   • options considered (alternatives to this migration / can it be additive-only?)
   • why THIS one (evidence: invariant / ADR / failing test)
   • reversibility plan (expand→contract? backfill? is there ANY undo?)
-Human releases the gate (friction, not a verdict):  echo \"<reason>\" > .claude/state/redline-confirmed
+Human releases the gate for a 60-minute window (friction, not a verdict):
+  echo \"<reason>\" > .claude/state/redline-confirmed
+An older confirmation does NOT count — the gate re-arms itself after 60 minutes.
 NOTE: this is ADVISORY-gated and complementary to protect-paths.sh (which already hard-blocks migrations/). It does not replace that block."
   if command -v jq >/dev/null 2>&1; then
     jq -nc --arg r "$REASON" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'

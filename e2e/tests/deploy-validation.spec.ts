@@ -168,14 +168,19 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
 
   // ── 5. Public menu API: attributes shape contract ───────────────────
   test('5.1 — public menu returns attributes with taste+bom, NOT top-level kcal', async ({ request }) => {
-    const res = await request.get(`${BASE}/public/locations/${locationSlug}/menu`);
-    expect(res.status()).toBe(200);
-    const body = await res.json();
-    expect(body.categories).toBeTruthy();
-    expect(body.categories.length).toBeGreaterThan(0);
-    const allProducts = body.categories.flatMap((c: any) => c.products || []);
-    const pitaProduct = allProducts.find((p: any) => p.name && p.name.includes('Pita Test Sushi Updated'));
-    expect(pitaProduct).toBeTruthy();
+    // The public menu has a 30s in-process stale-while-revalidate cache (the
+    // storefront-blink fix) — a just-created product appears only after the TTL.
+    // Poll past it instead of racing it (proven: visible at exactly t=30s).
+    let pitaProduct: any;
+    await expect.poll(async () => {
+      const res = await request.get(`${BASE}/public/locations/${locationSlug}/menu`);
+      if (res.status() !== 200) return false;
+      const body = await res.json();
+      if (!body.categories?.length) return false;
+      const allProducts = body.categories.flatMap((c: any) => c.products || []);
+      pitaProduct = allProducts.find((p: any) => p.name && p.name.includes('Pita Test Sushi Updated'));
+      return !!pitaProduct;
+    }, { timeout: 75_000, intervals: [5_000] }).toBe(true);
 
     expect(pitaProduct.attributes).toBeTruthy();
     expect(pitaProduct.attributes.taste).toBeTruthy();
