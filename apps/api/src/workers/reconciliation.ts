@@ -4,10 +4,11 @@
  * Runs as pg-boss cron (nightly). Checks monetary invariants, orphan data,
  * notification delivery gaps, retention compliance, and trend anomalies.
  * Reports DRIFT via NotificationProvider (Telegram-ops). Zero mutations.
- * 
- * To register: add to server.ts startup:
- *   const reconWorker = new ReconciliationWorker(pool, queue.boss, messageBus);
- *   await reconWorker.start();
+ *
+ * Registered in bootstrap/workers.ts (ADR-dispatch-recovery B5 / Option R3′ — closes
+ * ADR-golive R9). A6.EXPECTED_WORKERS must stay in lockstep with the heartbeatConfigs
+ * there: all 8 ids genuinely beat (15s cadence-independent timer), so A6 yields no
+ * false DRIFT while covering backup-hourly + liveness-checker (watcher-of-the-watcher).
  */
 
 import type { Pool } from 'pg';

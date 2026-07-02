@@ -10,13 +10,16 @@ import { updateOrderStatus } from './orderStatusService.js';
 // UNCONDITIONALLY (abort/cancel always free the assignment), then (2) takes an order-side action GUARDED on
 // the LOCKED order status — updateOrderStatus is invoked ONLY from IN_DELIVERY (the one state with a legal
 // widened exit), so it can never throw an illegal/same-status transition; the flag-ON pre-pickup case takes
-// the no-transition branch (drop the mirror + re-offer, converging with the decline path). Returns whether
-// the order was re-offered.
+// the no-transition branch (drop the mirror + re-offer, converging with the decline path).
+//
+// Honest signal (ADR-dispatch-recovery Q4): returns `requeued` — the journal INSERT is a
+// RE-ENQUEUE, not a re-offer. The genuine re-offer claim (ORDER_ASSIGNMENT_CREATED) is emitted
+// only by the dispatch worker once the pumped journal row lands on a real new binding.
 export async function releaseBindingAndReoffer(
   client: any,
   args: { assignmentId: string; orderId: string; shiftId: string; asgStatus: string; ordStatus: string; locationId: string; reason: string },
   { messageBus }: { messageBus: MessageBus },
-): Promise<{ reoffered: boolean }> {
+): Promise<{ requeued: boolean }> {
   const { assignmentId, orderId, shiftId, asgStatus, ordStatus, locationId, reason } = args;
 
   await client.query(
@@ -37,17 +40,17 @@ export async function releaseBindingAndReoffer(
   if (ordStatus === 'IN_DELIVERY' && asgStatus === 'picked_up') {
     // Food is out with the failed courier → honest terminal (the no-cash-equivalent CANCELLED).
     await updateOrderStatus(client, orderId, locationId, 'CANCELLED', { messageBus, comment: reason });
-    return { reoffered: false };
+    return { requeued: false };
   }
   if (ordStatus === 'IN_DELIVERY') {
     // Legacy flag-OFF force-IN_DELIVERY, pre-pickup → revert to assignable (food still at venue), clear the
     // mirror (updateOrderStatus does not touch orders.courier_id), and re-offer.
     await updateOrderStatus(client, orderId, locationId, 'READY', { messageBus, comment: reason });
     await reEnqueue();
-    return { reoffered: true };
+    return { requeued: true };
   }
   // flag-ON accept — the order never advanced (CONFIRMED/PREPARING/READY) → NO status transition (forcing one
   // would throw). Drop the binding + re-offer, converging with the decline path.
   await reEnqueue();
-  return { reoffered: true };
+  return { requeued: true };
 }
