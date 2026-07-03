@@ -27,7 +27,46 @@ function isRlsViolation(err: unknown): boolean {
 }
 
 // High-value tables addressable by primary key without a location_id filter (IDOR surface).
-const IDOR_TABLES = ['orders', 'customers', 'courier_positions'] as const;
+// Extended per audit-fix-authz resolution.md §3.6 with the sink + injected tables from this
+// batch's point fixes (site #2 sink, site #1 LC5 entry, sites #5-#7/#11 fold-in fixes) so the
+// standing adversarial sweep covers them going forward, not just this batch's bespoke tests.
+const IDOR_TABLES = [
+  'orders', 'customers', 'courier_positions',
+  'courier_sessions', 'gdpr_erasure_requests', 'product_translations',
+  'product_modifier_groups', 'modifiers',
+] as const;
+
+// Column that scopes a table to its tenant, when it is not the default `location_id`.
+// courier_sessions denormalizes the tenant as `active_location_id` (the session's bound
+// location), not `location_id`.
+const LOCATION_COLUMN: Partial<Record<(typeof IDOR_TABLES)[number], string>> = {
+  courier_sessions: 'active_location_id',
+};
+
+// Tables with a composite PK (no scalar `id` column) can't be probed by the generic
+// `SELECT id FROM <table> WHERE <locCol> = $1` below — resolved via a bespoke lookup instead.
+// product_translations has NO location_id column at all (scope is the parent product's);
+// product_modifier_groups has a (product_id, group_id) composite PK, no `id`.
+const COMPOSITE_KEY_LOOKUP: Partial<
+  Record<(typeof IDOR_TABLES)[number], (sessionPool: ReturnType<typeof createSessionPool>, tenantBLocationId: string) => Promise<string | undefined>>
+> = {
+  product_translations: async (sessionPool, tenantBLocationId) => {
+    const r = await sessionPool.query(
+      `SELECT pt.product_id FROM product_translations pt
+       JOIN products p ON p.id = pt.product_id
+       WHERE p.location_id = $1 LIMIT 1`,
+      [tenantBLocationId],
+    );
+    return r.rows[0]?.product_id;
+  },
+  product_modifier_groups: async (sessionPool, tenantBLocationId) => {
+    const r = await sessionPool.query(
+      `SELECT product_id FROM product_modifier_groups WHERE location_id = $1 LIMIT 1`,
+      [tenantBLocationId],
+    );
+    return r.rows[0]?.product_id;
+  },
+};
 
 const tenantTables = [
   'locations', 'categories', 'products', 'modifier_groups', 'modifiers',
@@ -89,8 +128,15 @@ async function setup() {
 
     // Resolve a real tenant-B row id per IDOR table (bypass pool sees all tenants).
     for (const table of IDOR_TABLES) {
+      const composite = COMPOSITE_KEY_LOOKUP[table];
+      if (composite) {
+        const id = await composite(sessionPool, tenantBLocationId);
+        if (id) tenantBRowIds[table] = id;
+        continue;
+      }
+      const locCol = LOCATION_COLUMN[table] ?? 'location_id';
       const r = await sessionPool.query(
-        `SELECT id FROM ${table} WHERE location_id = $1 LIMIT 1`,
+        `SELECT id FROM ${table} WHERE ${locCol} = $1 LIMIT 1`,
         [tenantBLocationId],
       );
       if (r.rowCount && r.rowCount > 0) tenantBRowIds[table] = r.rows[0].id;

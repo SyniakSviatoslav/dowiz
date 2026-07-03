@@ -29,7 +29,7 @@ export const catalog: Record<string, CatalogEntry> = {
   'pwa.ios_hint': {
     en: "Tap Share, then 'Add to Home Screen'.",
     sq: "Trokit Share, pastaj 'Add to Home Screen'.",
-    uk: "Натисніть «Поділитися», потім «На початковий екран».",
+    uk: 'Натисніть «Поділитися», потім «На початковий екран».',
   },
   'pwa.close_label': {
     en: 'Dismiss install prompt',
@@ -3285,7 +3285,11 @@ export const catalog: Record<string, CatalogEntry> = {
   },
   'order.order_again': { en: 'Order again', sq: 'Porosit sërish', uk: 'Замовити знову' },
   'order.reorder': { en: 'Reorder', sq: 'Riporosit', uk: 'Повторити замовлення' },
-  'order.reordering': { en: 'Adding to cart…', sq: 'Po shtohet në shportë…', uk: 'Додаємо до кошика…' },
+  'order.reordering': {
+    en: 'Adding to cart…',
+    sq: 'Po shtohet në shportë…',
+    uk: 'Додаємо до кошика…',
+  },
   'order.reorder_added': {
     en: 'Your last order is back in the cart.',
     sq: 'Porosia juaj e fundit është sërish në shportë.',
@@ -4293,4 +4297,54 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: 'Список алергенів неповний — за серйозних алергій уточніть у закладі.',
   },
   'message.amount_placeholder': { en: 'Amount', sq: 'Shuma', uk: 'Сума' },
+  'checkout.tax_included': { en: 'Incl. VAT', sq: 'TVSH e përfshirë', uk: 'з ПДВ' },
+
+  // --- audit-fix (LC9/S3, S4, S5) — 2026-07-03, frontend data-integrity lane ---
+  'admin.customer_history_error_title': {
+    en: "Couldn't load history",
+    sq: 'Historiku nuk u ngarkua',
+    uk: 'Не вдалося завантажити історію',
+  },
+  'admin.customer_history_error_desc': {
+    en: 'Something went wrong loading this customer’s order history.',
+    sq: 'Diçka shkoi keq gjatë ngarkimit të historikut të porosive të këtij klienti.',
+    uk: 'Під час завантаження історії замовлень цього клієнта сталася помилка.',
+  },
+  'admin.consumption_unavailable_title': {
+    en: 'Not available yet',
+    sq: 'Ende e padisponueshme',
+    uk: 'Поки що недоступно',
+  },
+  'admin.consumption_unavailable_desc': {
+    en: "Ingredient consumption isn't connected to your recipes yet, so there's nothing real to show or export here.",
+    sq: 'Konsumi i përbërësve ende nuk është i lidhur me recetat tuaja, prandaj këtu nuk ka të dhëna reale për t’u shfaqur apo eksportuar.',
+    uk: 'Витрати інгредієнтів ще не пов’язані з вашими рецептами, тож тут немає реальних даних для показу чи експорту.',
+  },
+  'courier.destination_unavailable': {
+    en: 'Exact destination unknown — use the address and contact the customer.',
+    sq: 'Destinacioni i saktë nuk dihet — përdorni adresën dhe kontaktoni klientin.',
+    uk: 'Точне місце призначення невідоме — скористайтесь адресою і зв’яжіться з клієнтом.',
+  },
+  'courier.pickup_failed': {
+    en: 'Could not mark as picked up — check your connection and try again.',
+    sq: 'Nuk u shënua si e marrë — kontrollo lidhjen dhe provo përsëri.',
+    uk: 'Не вдалося позначити як забране — перевірте з’єднання і спробуйте ще раз.',
+  },
+  'courier.messenger_save_failed': {
+    en: 'Could not save your messenger contact. Please try again.',
+    sq: 'Kontakti i mesazherit nuk u ruajt. Ju lutemi provoni përsëri.',
+    uk: 'Не вдалося зберегти контакт месенджера. Спробуйте ще раз.',
+  },
+
+  // --- audit-fix (LC1/M7 receipt + LC9 no-location) — 2026-07-03, money lane ---
+  'checkout.tax_included_rate': {
+    en: 'Incl. VAT ({{rate}}%)',
+    sq: 'TVSH e përfshirë ({{rate}}%)',
+    uk: 'з ПДВ ({{rate}}%)',
+  },
+  'checkout.location_required': {
+    en: "We couldn't determine your delivery location — please place the pin on the map.",
+    sq: 'Nuk e përcaktuam dot vendndodhjen e dorëzimit — ju lutemi vendosni pikën në hartë.',
+    uk: 'Не вдалося визначити місце доставки — будь ласка, поставте позначку на мапі.',
+  },
 };

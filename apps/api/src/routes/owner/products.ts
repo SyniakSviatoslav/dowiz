@@ -201,27 +201,38 @@ export default async function productRoutes(fastify: FastifyInstance) {
       const { name, description } = request.body;
       const userId = (request.user as any).userId;
 
-      const res = await withTenant(server.db, userId, async (client) => {
+      const result = await withTenant(server.db, userId, async (client) => {
         // Validate locale exists in supported_locales
         const locRes = await client.query(`SELECT supported_locales FROM locations WHERE id = $1`, [locationId]);
         if (!locRes.rows[0]?.supported_locales?.includes(locale)) {
-          return null; // Signal 400
+          return { reason: 'unsupported_locale' as const };
         }
 
-        return client.query(
+        // product_translations has NO location_id column — the parent product's ownership
+        // fold-in (SELECT ... FROM products) IS the only possible tenant scope. 0 rows → 404.
+        const insertRes = await client.query(
           `INSERT INTO product_translations (product_id, locale, name, description)
-           VALUES ($1, $2, $3, $4)
+           SELECT p.id, $2, $3, $4
+           FROM products p
+           WHERE p.id = $1 AND p.location_id = $5
            ON CONFLICT (product_id, locale) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description
-           RETURNING *`,
-          [id, locale, name, description]
+           RETURNING product_id, locale, name, description`,
+          [id, locale, name, description, locationId]
         );
+        if (insertRes.rowCount === 0) {
+          return { reason: 'not_found' as const };
+        }
+        return { reason: 'ok' as const, row: insertRes.rows[0] };
       });
 
-      if (!res) {
+      if (result.reason === 'unsupported_locale') {
         return reply.sendError(400, 'UNSUPPORTED_LOCALE', 'unsupported locale');
       }
+      if (result.reason === 'not_found') {
+        return reply.sendError(404, 'NOT_FOUND', 'Not found');
+      }
 
-      return reply.send(res.rows[0]);
+      return reply.send(result.row);
     }
   );
 
@@ -232,11 +243,18 @@ export default async function productRoutes(fastify: FastifyInstance) {
       schema: { params: ProductParams }
     },
     async (request: any, reply: any) => {
-      const { id } = request.params;
+      const { locationId, id } = request.params;
       const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
-        return client.query(`SELECT * FROM product_translations WHERE product_id = $1`, [id]);
+        // product_translations has no location_id column — fold parent ownership into the JOIN.
+        return client.query(
+          `SELECT pt.*
+           FROM product_translations pt
+           JOIN products p ON p.id = pt.product_id AND p.location_id = $2
+           WHERE pt.product_id = $1`,
+          [id, locationId]
+        );
       });
       return reply.send({ data: res.rows });
     }
@@ -249,11 +267,18 @@ export default async function productRoutes(fastify: FastifyInstance) {
       schema: { params: TranslationParams }
     },
     async (request: any, reply: any) => {
-      const { id, locale } = request.params;
+      const { locationId, id, locale } = request.params;
       const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
-        return client.query(`DELETE FROM product_translations WHERE product_id = $1 AND locale = $2 RETURNING locale`, [id, locale]);
+        return client.query(
+          `DELETE FROM product_translations pt
+           USING products p
+           WHERE p.id = pt.product_id AND p.location_id = $3
+             AND pt.product_id = $1 AND pt.locale = $2
+           RETURNING pt.locale`,
+          [id, locale, locationId]
+        );
       });
       if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Not found');
       return reply.status(204).send();
@@ -278,17 +303,42 @@ export default async function productRoutes(fastify: FastifyInstance) {
       const payload = request.body;
       const userId = (request.user as any).userId;
 
-      await withTenant(server.db, userId, async (client) => {
-        await client.query(`DELETE FROM product_modifier_groups WHERE product_id = $1`, [id]);
-        
-        for (const item of payload) {
-          await client.query(
-            `INSERT INTO product_modifier_groups (product_id, group_id, sort_order, location_id)
-             VALUES ($1, $2, $3, $4)`,
-            [id, item.group_id, item.sort_order, locationId]
+      try {
+        await withTenant(server.db, userId, async (client) => {
+          // Same-tx product-ownership pre-check guards the WHOLE sync — including the
+          // destructive DELETE below — before any mutation happens. 0 rows → 404.
+          const ownRes = await client.query(
+            `SELECT 1 FROM products WHERE id = $1 AND location_id = $2`,
+            [id, locationId]
           );
-        }
-      });
+          if ((ownRes.rowCount ?? 0) === 0) {
+            throw Object.assign(new Error('Product not found'), { statusCode: 404 });
+          }
+
+          await client.query(
+            `DELETE FROM product_modifier_groups WHERE product_id = $1 AND location_id = $2`,
+            [id, locationId]
+          );
+
+          for (const item of payload) {
+            // Fold group ownership into the INSERT — a foreign/unknown group_id inserts 0 rows.
+            const insertRes = await client.query(
+              `INSERT INTO product_modifier_groups (product_id, group_id, sort_order, location_id)
+               SELECT $1, mg.id, $3, $4
+               FROM modifier_groups mg
+               WHERE mg.id = $2 AND mg.location_id = $4`,
+              [id, item.group_id, item.sort_order, locationId]
+            );
+            if (insertRes.rowCount === 0) {
+              throw Object.assign(new Error('Modifier group not found'), { statusCode: 400 });
+            }
+          }
+        });
+      } catch (err: any) {
+        if (err?.statusCode === 404) return reply.sendError(404, 'NOT_FOUND', err.message);
+        if (err?.statusCode === 400) return reply.sendError(400, 'INVALID_GROUP', err.message);
+        throw err;
+      }
       return reply.send({ success: true });
     }
   );
@@ -300,17 +350,17 @@ export default async function productRoutes(fastify: FastifyInstance) {
       schema: { params: ProductParams }
     },
     async (request: any, reply: any) => {
-      const { id } = request.params;
+      const { locationId, id } = request.params;
       const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
         return client.query(
           `SELECT pmg.sort_order, mg.*
            FROM product_modifier_groups pmg
-           JOIN modifier_groups mg ON pmg.group_id = mg.id
-           WHERE pmg.product_id = $1
+           JOIN modifier_groups mg ON pmg.group_id = mg.id AND mg.location_id = $2
+           WHERE pmg.product_id = $1 AND pmg.location_id = $2
            ORDER BY pmg.sort_order ASC`,
-          [id]
+          [id, locationId]
         );
       });
       return reply.send({ data: res.rows });

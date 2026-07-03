@@ -3,7 +3,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import argon2 from 'argon2';
-import { verifyAuth, requireLocationAccess } from '../../plugins/auth.js';
+import { verifyAuth, requireRole, requireLocationAccess } from '../../plugins/auth.js';
 import { decryptPII } from '../../lib/pii-cipher.js';
 import { maskStr } from '../../lib/pii-mask.js';
 import { SYNTHETIC_COURIER_EMAIL_HASH } from '../../lib/synthetic-courier.js';
@@ -11,7 +11,11 @@ import { SYNTHETIC_COURIER_EMAIL_HASH } from '../../lib/synthetic-courier.js';
 export default (async function ownerCourierRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
 
+  // F3: requireRole(['owner']) was missing — requireLocationAccess alone admits a customer
+  // whose JWT locationId==L (decrypted roster leak) and a courier whose activeLocationId==L
+  // (co-worker mutation). Mirrors gdpr.ts:28-30.
   fastify.addHook('preValidation', verifyAuth);
+  fastify.addHook('preValidation', requireRole(['owner']));
   fastify.addHook('preValidation', requireLocationAccess);
 
   // 1. List active members

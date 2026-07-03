@@ -4,7 +4,7 @@ import { z } from 'zod';
 import crypto from 'node:crypto';
 import argon2 from 'argon2';
 import { withTenant } from '@deliveryos/platform';
-import { verifyAuth, requireLocationAccess } from '../../plugins/auth.js';
+import { verifyAuth, requireRole, requireLocationAccess } from '../../plugins/auth.js';
 
 export default (async function ownerCourierInvitesRoutes(fastify: any, opts: any) {
   const { db } = opts as any;
@@ -17,7 +17,10 @@ export default (async function ownerCourierInvitesRoutes(fastify: any, opts: any
     parallelism: 4
   };
 
+  // F4: requireRole(['owner']) was missing — a non-owner (any authenticated member with
+  // location access) could mint/revoke courier invites. Mirrors gdpr.ts:28-30.
   fastify.addHook('preValidation', verifyAuth);
+  fastify.addHook('preValidation', requireRole(['owner']));
   fastify.addHook('preValidation', requireLocationAccess);
 
   // 1. Create Invite
@@ -26,6 +29,10 @@ export default (async function ownerCourierInvitesRoutes(fastify: any, opts: any
     const body = request.body as any;
     if (!body?.role || !body?.email) {
       return reply.sendError(400, 'VALIDATION_FAILED', 'role and email are required');
+    }
+    // F4: allow-list role to 'courier' — an invite must never be able to mint an owner.
+    if (body.role !== 'courier') {
+      return reply.sendError(400, 'INVALID_ROLE', "role must be 'courier'");
     }
     const role = body.role;
     const email = String(body.email).toLowerCase().trim();

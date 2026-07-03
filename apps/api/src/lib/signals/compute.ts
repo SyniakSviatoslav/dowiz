@@ -83,8 +83,8 @@ export async function computeSignals(
   // 1. No-show reputation
   if (params.customerId) {
     const custRes = await pool.query(
-      `SELECT no_show_count, completed_count, last_no_show_at FROM customers WHERE id = $1`,
-      [params.customerId],
+      `SELECT no_show_count, completed_count, last_no_show_at FROM customers WHERE id = $1 AND location_id = $2`,
+      [params.customerId, params.locationId],
     );
 
     if (custRes.rowCount > 0) {

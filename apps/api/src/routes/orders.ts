@@ -506,9 +506,13 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       } // end if (!isPickup) — pickup orders pay no delivery fee
 
       // 9. Taxes and Total
+      // taxTotal is the VAT figure for display/records. When price_includes_tax, the tax is
+      // ALREADY inside subtotal (applyTax EXTRACTS it), so adding it to total double-charges the
+      // customer — the inclusive branch contributes 0 to the charge (ADR-audit-fix-money D1 / LC1).
       const taxTotal = applyTax(subtotal, Number(location.tax_rate), location.price_includes_tax, location.currency_minor_unit);
+      const chargedTax = location.price_includes_tax ? 0 : taxTotal;
       const discountTotal = 0;
-      const total = subtotal + deliveryFee + taxTotal - discountTotal;
+      const total = subtotal + deliveryFee + chargedTax - discountTotal;
       assertNonNegative(total);
 
       if (cashPayWith !== undefined && cashPayWith < total) {
@@ -858,13 +862,27 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
      let outcome: { status: string; dispatched?: boolean; reason?: string } = { status: newStatus };
      try {
        await withTenant(db, user.userId, async (client) => {
-         // 1. Read current status
+         // 1. Read current status — authorized by a LIVE active owner membership folded INTO the
+         // query as a JOIN (LC2 / authz council; mirrors the GET sibling above and the dashboard
+         // transition site). A bare `WHERE id=$1` leaks cross-tenant under the BYPASSRLS pool
+         // (RLS inert) — an owner of location A could drive transitions on another tenant's order
+         // by UUID. 0 rows → 404 BEFORE any transition logic; locationId below is taken from the
+         // JOIN-verified row, never from client input or the baked token claim.
          const cur = await client.query(
-           `SELECT id, status, location_id, type FROM orders WHERE id = $1`,
-           [id]
+           `SELECT o.id, o.status, o.location_id, o.type
+              FROM orders o
+              JOIN memberships m ON m.location_id = o.location_id
+             WHERE o.id = $1 AND m.user_id = $2 AND m.role = 'owner' AND m.status = 'active'`,
+           [id, user.userId]
          );
 
          if (!cur.rowCount || cur.rowCount === 0) {
+           // Not found OR no live membership at the order's location — logged as a possible
+           // cross-tenant attempt (indistinguishable by design: the 404 must not leak existence).
+           request.log.warn(
+             { orderId: id, userId: user.userId, targetStatus: newStatus },
+             'PATCH /orders/:id/status membership-JOIN miss — order not found or cross-tenant attempt'
+           );
            throw { statusCode: 404, error: 'Order not found' };
          }
 
@@ -874,6 +892,47 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
           // edges are SYSTEM-only. An owner may not drive them via this request-supplied newStatus →
           // 403 CANCEL_NOT_PERMITTED. PENDING→CANCELLED and IN_DELIVERY→CANCELLED stay permitted.
           assertOwnerTargetAllowed(cur.rows[0].status, newStatus);
+
+          // M6 / CC-1 (ADR-audit-fix-money §3.5, money-audit H1): DELIVERED/PICKED_UP must never be
+          // reachable via PATCH when it would strand a courier binding or fabricate a delivery
+          // without completeDelivery's cash-as-proof attestation. Two arms (both 409, was a silent
+          // 200 + permanent strand):
+          //  (a) an ACTIVE binding exists → ASSIGNMENT_ACTIVE — the owner completes via /deliver
+          //      (owner-proxy exists: owner/dashboard.ts POST /deliver);
+          //  (b) order is IN_DELIVERY with NO delivered assignment (binding drained by an
+          //      offer-expiry/abort race or manual state) → USE_DELIVER_FLOW — otherwise the PATCH
+          //      passes with zero attestation and the silent strand survives via the back door.
+          // Never-dispatched orders (zero assignments, never IN_DELIVERY — phone/manual flow) stay
+          // PATCH-able: nothing to strand, no courier cash in play. The sanctioned completion paths
+          // (completeDelivery, owner-proxy /deliver) terminalize the assignment BEFORE calling
+          // updateOrderStatus and do not pass through this route — untouched.
+          if (newStatus === 'DELIVERED' || newStatus === 'PICKED_UP') {
+            const activeBinding = await client.query(
+              `SELECT 1 FROM courier_assignments
+                WHERE order_id = $1 AND status IN ('offered','assigned','accepted','picked_up') LIMIT 1`,
+              [id]
+            );
+            if (activeBinding.rowCount) {
+              throw {
+                statusCode: 409,
+                error: 'Order has an active courier assignment — complete it via the deliver flow',
+                code: 'ASSIGNMENT_ACTIVE',
+              };
+            }
+            if (cur.rows[0].status === 'IN_DELIVERY') {
+              const deliveredBinding = await client.query(
+                `SELECT 1 FROM courier_assignments WHERE order_id = $1 AND status = 'delivered' LIMIT 1`,
+                [id]
+              );
+              if (!deliveredBinding.rowCount) {
+                throw {
+                  statusCode: 409,
+                  error: 'Order is in delivery without a delivered assignment — complete it via the deliver flow',
+                  code: 'USE_DELIVER_FLOW',
+                };
+              }
+            }
+          }
 
           // §5 / R2-1 / R3-2 — HONEST DISPATCH. For an IN_DELIVERY target on a delivery order, find a courier
           // BEFORE advancing the status. The old code flipped to IN_DELIVERY first, then silently no-op'd when

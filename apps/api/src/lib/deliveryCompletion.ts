@@ -123,26 +123,11 @@ export async function completeDelivery(
     );
   }
 
-  // 5. C2 (ADR-0017): a PREPAID (crypto-paid) order that ends refused/cancelled was already paid. Crypto is
-  //    irreversible → no auto-refund; record an owner-review 'refund_due' obligation in the payments ledger.
-  //    The owner sends the crypto back out-of-band → records 'refund_sent' → payment_status='refunded'.
-  if (!isDelivered) {
-    const pay = await client.query(
-      `SELECT id, provider, provider_payment_id, amount_minor, currency_code
-         FROM payments WHERE order_id = $1 AND status = 'paid' LIMIT 1`,
-      [args.orderId],
-    );
-    if (pay.rowCount) {
-      const p = pay.rows[0];
-      await client.query(
-        `INSERT INTO payment_events
-           (payment_id, location_id, provider, provider_payment_id, type, amount_minor, currency_code, signature_verified)
-         VALUES ($1, $2, $3, $4, 'refund_due', $5, $6, true)
-         ON CONFLICT (provider, provider_payment_id, type) DO NOTHING`,
-        [p.id, args.locationId, p.provider, p.provider_payment_id, p.amount_minor, p.currency_code],
-      );
-    }
-  }
+  // 5. C2 (ADR-0017) — refused/cancelled prepaid refund obligation. The 'refund_due' insert that
+  //    lived here moved into the L-A fold in updateOrderStatus (ADR-audit-fix-money §3.2): step 2
+  //    above already recorded it in this same tx for the CANCELLED tail (single writer restored;
+  //    the per-payment unique makes the transition race-safe). The owner sends the crypto back
+  //    out-of-band → records 'refund_sent' → payment_status='refunded'.
 
   return { orderStatus };
 }

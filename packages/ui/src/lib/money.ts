@@ -65,7 +65,13 @@ export interface OrderTotalEstimate {
   /** True only when the delivery fee is computable client-side (flat/free/pickup). */
   feeKnown: boolean;
   deliveryFee: number | null;
+  /** The VAT figure, for display/records. On inclusive venues this is EXTRACTED from the
+   *  subtotal (already paid inside the price), not added on top. */
   taxTotal: number;
+  /** The tax actually ADDED to `total`: `taxTotal` on exclusive venues, 0 on inclusive. The FE
+   *  renders the tax line from this (never `taxTotal`) so it can't structurally show an inclusive
+   *  VAT as an addend (ADR-audit-fix-money M7). */
+  chargedTax: number;
   /** The authoritative-by-construction total, or null when the fee is unknown (tiered/unconfigured). */
   total: number | null;
   /** Mirrors the server's MIN_ORDER_NOT_MET gate (orders.ts:519 — applies to pickup AND delivery). */
@@ -74,13 +80,16 @@ export interface OrderTotalEstimate {
 
 /**
  * Mirror of the full server order-total computation (orders.ts:518-565). Tax is on the subtotal
- * (not subtotal+fee), matching the server. `discountTotal` is 0 server-side today (orders.ts:564).
+ * (not subtotal+fee), matching the server. On inclusive venues the tax is already inside the
+ * subtotal, so it contributes 0 to the charge — adding it would double-charge (LC1). `discountTotal`
+ * is 0 server-side today (orders.ts:564).
  */
 export function estimateOrderTotal(subtotal: number, cfg: OrderTotalConfig): OrderTotalEstimate {
   const deliveryFee = computeDeliveryFee(subtotal, cfg);
   const taxTotal = applyTax(subtotal, cfg.taxRate, cfg.priceIncludesTax);
+  const chargedTax = cfg.priceIncludesTax ? 0 : taxTotal;
   const minNotMet = cfg.minOrderValue !== null && subtotal < cfg.minOrderValue;
   const feeKnown = deliveryFee !== null;
-  const total = feeKnown ? subtotal + (deliveryFee as number) + taxTotal : null;
-  return { feeKnown, deliveryFee, taxTotal, total, minNotMet };
+  const total = feeKnown ? subtotal + (deliveryFee as number) + chargedTax : null;
+  return { feeKnown, deliveryFee, taxTotal, chargedTax, total, minNotMet };
 }

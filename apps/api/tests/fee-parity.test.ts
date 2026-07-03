@@ -64,7 +64,11 @@ test('parity: estimateOrderTotal.total === subtotal + serverFee + serverTax (com
           const fee = serverFeeOracle(sub, v);
           assert.equal(est.feeKnown, fee !== null, `${v.name}: feeKnown @ ${sub}`);
           if (fee !== null) {
-            const expected = sub + fee + serverApplyTax(sub, rate, inc, 0);
+            // Definitional composition (ADR-audit-fix-money D1): inclusive VAT is already inside
+            // subtotal, so it adds 0 to the charge — adding it here was the LC1 mirror-lock that
+            // certified the double-charge. Oracle-independent expectation, not implementation-derived.
+            const chargedTax = inc ? 0 : serverApplyTax(sub, rate, inc, 0);
+            const expected = sub + fee + chargedTax;
             assert.equal(est.total, expected, `${v.name}: total drift @ subtotal=${sub} rate=${rate} inc=${inc}`);
           } else {
             assert.equal(est.total, null, `${v.name}: must not pre-quote @ ${sub}`);

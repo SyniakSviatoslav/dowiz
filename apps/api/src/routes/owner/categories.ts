@@ -159,10 +159,11 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
       const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
-        // Check if products exist
+        // Check if products exist (location_id closes the 409-vs-404 existence oracle: a
+        // foreign category with products must 404 like a nonexistent one, never 409).
         const prodRes = await client.query(
-          `SELECT id FROM products WHERE category_id = $1 LIMIT 1`,
-          [id]
+          `SELECT id FROM products WHERE category_id = $1 AND location_id = $2 LIMIT 1`,
+          [id, locationId]
         );
         if (prodRes.rowCount && prodRes.rowCount > 0) {
           return null; // Signals 409
@@ -241,8 +242,9 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
       const userId = (request.user as any).userId;
       const { id } = request.params;
       const res = await withTenant(server.db, userId, async (client) => {
+        // location_id closes the 409-vs-404 existence oracle on this menu-alias path too.
         const prodRes = await client.query(
-          `SELECT id FROM products WHERE category_id = $1 LIMIT 1`, [id]
+          `SELECT id FROM products WHERE category_id = $1 AND location_id = $2 LIMIT 1`, [id, locId]
         );
         if (prodRes.rowCount && prodRes.rowCount > 0) return null;
         return client.query(

@@ -110,17 +110,31 @@ export default async function menuAvailabilityRoutes(fastify: FastifyInstance) {
         return reply.sendError(400, 'VALIDATION_FAILED', 'Provide exactly one of product_id or category_id');
       }
 
+      // R2-1 (15th IDOR): the FK-existence check bypasses RLS, so menu_schedules' tenant_isolation
+      // policy only validates OUR location_id — a body product_id/category_id from ANOTHER tenant
+      // would insert and (via the unscoped read_public_menu availability scan) hide/rewrite that
+      // tenant's live storefront. Fold the FK-ownership INTO the statement: only insert when the
+      // referenced product/category belongs to this location; 0 rows → 404 (mirrors products #5/#9/#11).
       const res = await withTenant(server.db, userId, async (client) =>
         client.query(
           `INSERT INTO menu_schedules
              (location_id, product_id, category_id, mode, start_minute, end_minute, days_of_week, starts_at, ends_at, available)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10
+           WHERE ($2::uuid IS NULL OR EXISTS (SELECT 1 FROM products p WHERE p.id = $2 AND p.location_id = $1))
+             AND ($3::uuid IS NULL OR EXISTS (SELECT 1 FROM categories c WHERE c.id = $3 AND c.location_id = $1))
            RETURNING *`,
           [locationId, b.product_id ?? null, b.category_id ?? null, b.mode,
             b.start_minute ?? null, b.end_minute ?? null, b.days_of_week ?? null,
             b.starts_at ?? null, b.ends_at ?? null, b.available],
         ),
       );
+      if (res.rowCount === 0) {
+        request.log.warn(
+          { locationId, productId: b.product_id ?? null, categoryId: b.category_id ?? null, userId },
+          'POST menu-schedules FK-ownership miss — product/category not in this tenant (cross-tenant attempt or nonexistent)',
+        );
+        return reply.sendError(404, 'NOT_FOUND', 'Product or category not found');
+      }
       return reply.status(201).send(rowToShape(res.rows[0]));
     },
   );

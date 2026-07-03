@@ -71,6 +71,14 @@ export class OrderTimeoutSweepWorker {
         // guard + RETURNING; folds the order_status_history audit row in atomically).
         const res = await client.query(`SELECT * FROM app_sweep_timeout_orders()`);
 
+        // (3) L-D (ADR-audit-fix-money §3.2): refund-obligation reconciler — the deterministic
+        // alarm of last resort for LC6. Runs EVERY tick right after the sweep (also on quiet
+        // ticks), so a terminal+paid order missing its refund_due is recorded within ≤1 tick or
+        // surfaced as an operator alert. Isolated try/catch: a reconciler failure must never
+        // block the sweep's recovery/notification work below (and vice versa — hence before the
+        // early return, not after it).
+        await this.reconcileRefundDue(client);
+
         if (!res.rowCount) return;
         console.log(`[OrderTimeoutSweep] recovered ${res.rowCount} overdue PENDING order(s)`);
         const ts = new Date().toISOString();
@@ -117,6 +125,52 @@ export class OrderTimeoutSweepWorker {
       console.error('[OrderTimeoutSweep] Error:', err);
     } finally {
       client.release();
+    }
+  }
+
+  // L-D (ADR-audit-fix-money §3.2, mig 1790000000087): app_reconcile_refund_due() returns one row
+  // per action — 'inserted' (an obligation another layer missed, recorded now — the miss itself is
+  // DRIFT-worthy), 'failed' (persistently un-recordable → alarm EVERY tick until resolved, P15),
+  // 'mismatch' (P16: over/under-paid crypto on a dead order — surfaced, never auto-obligated).
+  // failed/mismatch → DRIFT log + Sentry + ops-bus operator alert (same channel the recon worker
+  // uses). Never throws: a reconciler outage degrades to a logged error, never a crashed sweep.
+  private async reconcileRefundDue(client: any) {
+    try {
+      const recon = await client.query(`SELECT * FROM app_reconcile_refund_due()`);
+      if (!recon.rowCount) return;
+      const rows = recon.rows as Array<{ o_order_id: string; o_payment_id: string; o_action: string; o_detail: string | null }>;
+      const inserted = rows.filter((r) => r.o_action === 'inserted');
+      const failed = rows.filter((r) => r.o_action === 'failed');
+      const mismatch = rows.filter((r) => r.o_action === 'mismatch');
+      if (inserted.length) {
+        console.warn(`[OrderTimeoutSweep] DRIFT: refund_due recovered by L-D reconciler for ${inserted.length} payment(s) — an upstream layer (L-A/L-B/L-C) missed them`,
+          inserted.map((r) => r.o_order_id));
+      }
+      if (failed.length || mismatch.length) {
+        const summary = [
+          ...failed.map((r) => `failed order=${r.o_order_id} payment=${r.o_payment_id}: ${(r.o_detail || '').substring(0, 120)}`),
+          ...mismatch.map((r) => `mismatch order=${r.o_order_id} payment=${r.o_payment_id} ${r.o_detail || ''}`),
+        ].join('\n');
+        console.error(`[OrderTimeoutSweep] DRIFT refund_due (${failed.length} failed, ${mismatch.length} mismatch):\n${summary}`);
+        try {
+          const { getSentry } = await import('../lib/sentry.js');
+          getSentry()?.captureMessage(`refund_due reconciler: ${failed.length} failed, ${mismatch.length} mismatch terminal-order payment(s)`, 'error');
+        } catch { /* sentry unavailable — log + bus alert still fire */ }
+        try {
+          await this.messageBus.publish('ops.reconciliation_drift', {
+            timestamp: new Date().toISOString(),
+            source: 'refund_due_reconciler:L-D',
+            failedCount: failed.length,
+            mismatchCount: mismatch.length,
+            driftSummary: summary.substring(0, 1000),
+          });
+        } catch (e) {
+          console.error('[OrderTimeoutSweep] refund_due drift alert publish failed:', e);
+        }
+      }
+    } catch (e) {
+      // Fn missing (migration not yet applied) or transient failure — degrade loudly, never wedge.
+      console.error('[OrderTimeoutSweep] refund_due reconciler failed:', e);
     }
   }
 }

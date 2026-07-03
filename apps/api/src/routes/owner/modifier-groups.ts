@@ -59,7 +59,7 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
         return client.query(
           `SELECT mg.*, COUNT(m.id)::int AS modifier_count
            FROM modifier_groups mg
-           LEFT JOIN modifiers m ON m.group_id = mg.id
+           LEFT JOIN modifiers m ON m.group_id = mg.id AND m.location_id = mg.location_id
            WHERE mg.location_id = $1
            GROUP BY mg.id
            ORDER BY mg.created_at ASC`,
@@ -153,13 +153,17 @@ export default async function modifierGroupRoutes(fastify: FastifyInstance) {
       const userId = (request.user as any).userId;
 
       const res = await withTenant(server.db, userId, async (client) => {
+        // Fold group ownership into the INSERT — a foreign/unknown groupId inserts 0 rows.
         return client.query(
           `INSERT INTO modifiers (location_id, group_id, name, price_delta, available, sort_order)
-           VALUES ($1, $2, $3, $4, $5, $6)
+           SELECT $1, mg.id, $3, $4, $5, $6
+           FROM modifier_groups mg
+           WHERE mg.id = $2 AND mg.location_id = $1
            RETURNING *`,
           [locationId, groupId, name, price_delta, available, sort_order]
         );
       });
+      if (res.rowCount === 0) return reply.sendError(404, 'NOT_FOUND', 'Modifier group not found');
       const r = res.rows[0];
       return reply.status(201).send({ id: r.id, groupId: r.group_id, name: r.name, priceDelta: r.price_delta, available: r.available, sortOrder: r.sort_order });
     }

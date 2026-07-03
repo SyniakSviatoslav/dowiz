@@ -68,6 +68,22 @@ export default async function paymentsWebhookRoutes(fastify: FastifyInstance, op
                AND payment_status IN ('pending','authorized')`,
             [event.providerPaymentId],
           );
+          // L-B (ADR-audit-fix-money §3.4 / LC6 pay-after-cancel): the paid flips above STAY even on a
+          // terminal order (money truth: funds arrived) — but if the order is already CANCELLED/REJECTED
+          // the obligation is recorded in the SAME tx, so `paid + refund_due(unmatched)` lands atomically
+          // and the owner refunds queue (owner/refunds.ts) shows it. Idempotent: bare ON CONFLICT DO
+          // NOTHING rides payment_events_idem_unique AND the refund_due-per-payment partial unique
+          // (mig 086, N5); a race with the cancel-side writers (L-A/L-C) resolves to exactly one row.
+          await client.query(
+            `INSERT INTO payment_events
+               (payment_id, location_id, provider, provider_payment_id, type, amount_minor, currency_code, signature_verified)
+             SELECT p.id, p.location_id, p.provider, p.provider_payment_id, 'refund_due', p.amount_minor, p.currency_code, true
+               FROM payments p JOIN orders o ON o.id = p.order_id
+              WHERE p.provider = 'plisio' AND p.provider_payment_id = $1 AND p.status = 'paid'
+                AND o.status IN ('CANCELLED','REJECTED')
+             ON CONFLICT DO NOTHING`,
+            [event.providerPaymentId],
+          );
         } else if (event.type === 'failed') {
           await client.query(
             `UPDATE payments SET status='failed', updated_at=now()

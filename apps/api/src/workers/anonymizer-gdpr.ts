@@ -71,10 +71,35 @@ export class GdprErasureWorker {
             [JSON.stringify(result), row.id],
           );
 
+          // R2-5: stamp the SAME subject-true-tenant + provenance fields as the anonymizer's own
+          // audit insert (lib/anonymizer/index.ts insertAuditLog) so the two audit rows for one
+          // erasure never disagree on tenant. Read the customer's actual location_id back from the
+          // DB rather than trusting the request row's location_id for the audit stamp — the request
+          // row's tenant is the ACTOR's (gdpr.ts's entry gate already proved actor==subject before
+          // this row could exist, but the audit trail should assert it independently, not inherit it).
+          const subjectLocRes = await client.query(
+            `SELECT location_id FROM customers WHERE id = $1`,
+            [customerId],
+          );
+          const subjectLocationId = subjectLocRes.rows[0]?.location_id ?? row.location_id;
+
           await client.query(
             `INSERT INTO anonymization_audit_log (scope, subject_kind, subject_id, location_id, actor_kind, actor_id, metadata)
              VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            ['gdpr', 'customer', customerId, row.location_id, 'system', null, JSON.stringify({ requestId: row.id, ...result })],
+            [
+              'gdpr',
+              'customer',
+              customerId,
+              subjectLocationId,
+              'system',
+              null,
+              JSON.stringify({
+                actor_location_id: row.location_id,
+                subject_location_id: subjectLocationId,
+                request_id: row.id,
+                ...result,
+              }),
+            ],
           );
 
           await this.messageBus.publish(dashboardChannel(row.location_id), {

@@ -57,7 +57,10 @@ export async function updateOrderStatus(
   newStatus: OrderStatus,
   // ORDER-TRACKING: `comment` is additive (optional) — a human-readable reason
   // (rejection/cancellation) recorded on order_status_history. No `notify`.
-  opts: { messageBus: MessageBus; comment?: string | null }
+  // `forceTerminal` (ESC-2, ADR-audit-fix-money §3.2): operator-only escape hatch — a failed
+  // refund_due fold is SAVEPOINT-swallowed instead of aborting the cancel; writes an audit row
+  // and fires the same friction-alert. Never set it on automated paths.
+  opts: { messageBus: MessageBus; comment?: string | null; forceTerminal?: boolean }
 ): Promise<void> {
   // 1. Read current status
   const cur = await client.query(
@@ -131,7 +134,9 @@ export async function updateOrderStatus(
   // a no-op, and a PENDING→CANCELLED with no active binding matches 0 rows. Cash-safe: terminalizing writes
   // NO courier_cash_ledger 'hold' (the hold is written only by completeDelivery at DELIVERED).
   // 'delivered' ∉ {CANCELLED,READY} so a delivered row is never reverted.
-  if (newStatus === 'CANCELLED' || (currentStatus === 'IN_DELIVERY' && newStatus === 'READY')) {
+  // ADR-audit-fix-money §3.5: widened to REJECTED too — REJECTED is PENDING-only in the machine so an
+  // active binding is near-impossible; the fold is a no-op safety net there.
+  if (newStatus === 'CANCELLED' || newStatus === 'REJECTED' || (currentStatus === 'IN_DELIVERY' && newStatus === 'READY')) {
     await client.query(
       `WITH freed AS (
          UPDATE courier_assignments SET status = 'cancelled', cancelled_at = now(),
@@ -142,6 +147,75 @@ export async function updateOrderStatus(
         WHERE id IN (SELECT shift_id FROM freed WHERE shift_id IS NOT NULL)`,
       [orderId, opts.comment ?? null, newStatus],
     );
+  }
+
+  // L-A (ADR-audit-fix-money §3.2 / LC6): entering a terminal non-fulfilled state records a
+  // 'refund_due' obligation for EVERY paid payment of this order, in the SAME tx — the primary
+  // transactional recorder on all funnel paths (owner PATCH, mark-no-show, grace-cancel, courier
+  // abort, completeDelivery refused tail, customer cancel). Idempotent: bare ON CONFLICT DO NOTHING
+  // rides payment_events_idem_unique AND the refund_due-per-payment partial unique (mig 086, N5) —
+  // the L-C trigger usually wins the race inside the UPDATE statement above and this insert no-ops;
+  // that redundancy is deliberate (defense-in-depth). Cash orders match zero rows (no 'paid' row).
+  //
+  // Failure contract (ESC-2): fail-closed PER ORDER only — the insert failing aborts THIS order's
+  // cancel (single-order blast radius, never a batch) and MUST surface (Sentry + DRIFT log + ops
+  // bus alert), never silent. A conscious operator can pass opts.forceTerminal to swallow the fold
+  // (SAVEPOINT), which writes an audit row and fires the same alert; the L-D reconciler
+  // (app_reconcile_refund_due, mig 087) keeps retrying + alarming until the obligation lands.
+  if (newStatus === 'CANCELLED' || newStatus === 'REJECTED') {
+    try {
+      await client.query('SAVEPOINT refund_due_fold');
+      await client.query(
+        `INSERT INTO payment_events
+           (payment_id, location_id, provider, provider_payment_id, type, amount_minor, currency_code, signature_verified)
+         SELECT p.id, p.location_id, p.provider, p.provider_payment_id, 'refund_due', p.amount_minor, p.currency_code, true
+           FROM payments p WHERE p.order_id = $1 AND p.status = 'paid'
+         ON CONFLICT DO NOTHING`,
+        [orderId],
+      );
+      await client.query('RELEASE SAVEPOINT refund_due_fold');
+    } catch (foldErr) {
+      try { await client.query('ROLLBACK TO SAVEPOINT refund_due_fold'); } catch { /* no tx */ }
+      // Surfacing is part of the fold's CONTRACT, not optional (ESC-2).
+      const errMsg = foldErr instanceof Error ? foldErr.message : String(foldErr);
+      console.error(`[orderStatus] DRIFT refund_due fold failed (order ${orderId}, loc ${cur.rows[0].location_id}): ${errMsg}`);
+      try {
+        const { getSentry } = await import('./sentry.js');
+        getSentry()?.captureException(foldErr instanceof Error ? foldErr : new Error(`refund_due fold failed: ${errMsg}`));
+      } catch { /* sentry unavailable — the log + bus alert still fire */ }
+      try {
+        await opts.messageBus.publish('ops.reconciliation_drift', {
+          timestamp: new Date().toISOString(),
+          source: 'refund_due_fold:L-A',
+          orderId,
+          locationId: cur.rows[0].location_id,
+          forced: Boolean(opts.forceTerminal),
+          detail: errMsg.substring(0, 200),
+        });
+      } catch { /* bus down — log + sentry above already fired */ }
+      if (opts.forceTerminal) {
+        // ESC-2 escape hatch: conscious operator override — terminal proceeds, audit row recorded,
+        // obligation recording is now L-D's job (which alarms every tick until it lands).
+        try {
+          await client.query('SAVEPOINT force_terminal_audit');
+          await client.query(
+            `INSERT INTO order_status_history (order_id, location_id, from_status, to_status, actor, comment)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [orderId, cur.rows[0].location_id, currentStatus, newStatus, 'operator:force-terminal',
+             `refund_due fold failed and was consciously overridden (ESC-2): ${errMsg.substring(0, 200)}`],
+          );
+          await client.query('RELEASE SAVEPOINT force_terminal_audit');
+        } catch {
+          try { await client.query('ROLLBACK TO SAVEPOINT force_terminal_audit'); } catch { /* no tx */ }
+        }
+      } else {
+        throw {
+          statusCode: 500,
+          error: 'Refund obligation could not be recorded; cancel aborted. An operator can force-terminal (ESC-2).',
+          code: 'REFUND_DUE_RECORD_FAILED',
+        };
+      }
+    }
   }
 
   // ORDER-TRACKING: audit-trail row with optional reason. Best-effort — a

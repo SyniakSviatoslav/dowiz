@@ -56,6 +56,35 @@ export default (async function ownerGdprRoutes(fastify: any, opts: any) {
         }
       }
 
+      // Direct-customerId branch: a client-supplied id is unverified — prove same-tenant
+      // membership before it can drive an (irreversible) erasure. The gate-miss classification
+      // (nonexistent vs cross-tenant) is server-side only — the caller always sees a plain 404 —
+      // but a cross-tenant attempt is security-logged before that 404 so it stays detectable.
+      if (customerId) {
+        const ownRes = await client.query(
+          `SELECT 1 FROM customers WHERE id = $1 AND location_id = $2`,
+          [customerId, locationId],
+        );
+        if ((ownRes.rowCount ?? 0) === 0) {
+          const existsRes = await client.query(
+            `SELECT location_id FROM customers WHERE id = $1`,
+            [customerId],
+          );
+          if ((existsRes.rowCount ?? 0) > 0) {
+            request.log.warn({
+              event: 'cross_tenant_attempt',
+              resource: 'gdpr_erasure_requests',
+              actorUserId: user.userId,
+              actorLocationId: locationId,
+              targetCustomerId: customerId,
+              subjectLocationId: existsRes.rows[0].location_id,
+              requestId: request.id,
+            }, '[gdpr] cross-tenant erasure request blocked');
+          }
+          return { notOwned: true };
+        }
+      }
+
       if (resolvedCustomerId) {
         // Check for existing active (pending/in_progress) request — unique index covers these statuses
         const activeRes = await client.query(
@@ -86,6 +115,10 @@ export default (async function ownerGdprRoutes(fastify: any, opts: any) {
       );
       return { requestId: insertRes.rows[0].id };
     });
+
+    if (result.notOwned) {
+      return reply.sendError(404, 'NOT_FOUND', 'Not found');
+    }
 
     if (result.alreadyActive) {
       return reply.sendError(409, 'CONFLICT', 'An erasure request for this customer is already pending or in progress');

@@ -7,6 +7,7 @@ import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChann
 import { distanceKm } from '../../lib/geo.js';
 import { loadRoute } from '../../lib/routing.js';
 import { gatherOrderEtaRange } from '../../lib/etaGather.js';
+import { updateOrderStatus } from '../../lib/orderStatusService.js';
 
 const env = loadEnv();
 
@@ -304,36 +305,27 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
         return reply.sendError(410, 'CANCEL_WINDOW_EXPIRED', 'CANCEL_WINDOW_EXPIRED');
       }
 
-      // 2. Cancel order
-      await client.query(`
-        UPDATE orders 
-        SET status = 'CANCELLED', cancelled_at = now(), cancellation_reason = $1
-        WHERE id = $2
-      `, [reason, orderId]);
-
-      // 3. Cancel assignment safely
-      // Use app.settlement_reversal to bypass the cash immutable check since cash_collected becomes false
-      await client.query(`SET LOCAL app.settlement_reversal = 'true'`);
-      const assignmentRes = await client.query(`
-        UPDATE courier_assignments
-        SET status = 'cancelled', 
-            cancelled_at = now(), 
-            cancellation_reason = $1,
-            cash_collected = false,
-            cash_amount = NULL
-        WHERE order_id = $2 AND status IN ('assigned', 'accepted', 'picked_up')
-        RETURNING courier_id, shift_id, id
-      `, [reason, orderId]);
-
-      // 4. Reset shift if applicable
-      if (assignmentRes.rowCount > 0) {
-        const asgn = assignmentRes.rows[0];
-        if (asgn.shift_id) {
-          await client.query(`
-            UPDATE courier_shifts SET status = 'available' WHERE id = $1 AND status = 'on_delivery'
-          `, [asgn.shift_id]);
-        }
-      }
+      // 2. Cancel through the sanctioned mutator (LC3 fix, ADR-audit-fix-money §3.3.2 / DEP-1).
+      // The old raw UPDATE wrote orders.cancelled_at/cancellation_reason — columns that exist in
+      // NO migration (they live on courier_assignments only) → Postgres 42703 → this route
+      // 500-rolled-back on EVERY call. Routing through updateOrderStatus:
+      //   • sets only real columns (status/timeout_at), status-guarded against races;
+      //   • terminalizes the active assignment + frees the shift in the SAME tx (R2-3 fold);
+      //   • writes the order_status_history audit row + live WS deltas (owner dashboard/customer);
+      //   • records the 'refund_due' obligation for a crypto-PAID order via the L-A fold — the
+      //     customer cancel is exactly the case that most needs the refund (P4b).
+      //
+      // DEP-1(b) tenant context + N7 minimal-GUC-window: location_id comes from the ownership-
+      // verified read above (WHERE o.customer_id = $2 — the customer can only ever set the tenant
+      // of an order they own). The GUC is set IMMEDIATELY before the mutation and ONLY
+      // ownership-scoped statements run while it is set (tx-scoped: dies at COMMIT). Exact
+      // precedent: payments-webhook.ts:41 (DEFINER resolver → GUC → dual-policy GUC arm) — this is
+      // what makes the fold's payment_events insert pass FORCE RLS pre- and post-B3.
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [order.location_id]);
+      await updateOrderStatus(client, orderId, order.location_id, 'CANCELLED', {
+        messageBus,
+        comment: reason,
+      });
 
       await client.query('COMMIT');
 
@@ -345,9 +337,16 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
       });
 
       return reply.status(200).send({ success: true });
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
+    } catch (err: any) {
+      await client.query('ROLLBACK').catch(() => {});
+      // updateOrderStatus throws typed {statusCode, error, code} objects (409 CONFLICT on a lost
+      // race, 400 on an illegal transition, 500 REFUND_DUE_RECORD_FAILED on a fold failure) —
+      // surface them as the error envelope instead of a shapeless rethrown 500.
+      if (err && typeof err.statusCode === 'number') {
+        return reply.sendError(err.statusCode, err.code || 'ERROR', err.error || 'Request failed');
+      }
+      request.log.error(err);
+      return reply.sendError(500, 'INTERNAL', 'Internal server error');
     } finally {
       client.release();
     }

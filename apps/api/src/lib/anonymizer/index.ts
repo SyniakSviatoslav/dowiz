@@ -18,6 +18,10 @@ export interface AnonymizeOptions {
   batchSize?: number;
   dryRun?: boolean;
   actorId?: string;
+  /** Provenance (B6/STOP-1): the caller-verified tenant driving this call, when known. */
+  actorLocationId?: string;
+  /** Provenance: e.g. the gdpr_erasure_requests.id that triggered this call, when known. */
+  requestId?: string;
 }
 
 export interface AnonymizeResult {
@@ -53,17 +57,23 @@ export class AnonymizerService {
     let skipped = 0;
 
     if (options.dryRun) {
+      // Dead in production (zero callers pass dryRun:true — B7) but scoped for uniformity: the
+      // fail-closed contract (missing scope => throw) applies uniformly to every by-id path.
+      const dryRunLocationId = options.subject?.locationId;
+      if (!dryRunLocationId) {
+        throw new Error('[Anonymizer] dry-run requires an explicit subject.locationId scope (fail-closed)');
+      }
       if (options.subject?.customerId) {
         const res = await this.pool.query(
-          `SELECT anonymized_at IS NOT NULL AS done FROM customers WHERE id = $1`,
-          [options.subject.customerId],
+          `SELECT anonymized_at IS NOT NULL AS done FROM customers WHERE id = $1 AND location_id = $2`,
+          [options.subject.customerId, dryRunLocationId],
         );
         if (res.rows.length > 0 && !res.rows[0].done) customersAnonymized = 1;
       }
       if (options.subject?.orderId) {
         const res = await this.pool.query(
-          `SELECT anonymized_at IS NOT NULL AS done FROM orders WHERE id = $1`,
-          [options.subject.orderId],
+          `SELECT anonymized_at IS NOT NULL AS done FROM orders WHERE id = $1 AND location_id = $2`,
+          [options.subject.orderId, dryRunLocationId],
         );
         if (res.rows.length > 0 && !res.rows[0].done) ordersAnonymized = 1;
       }
@@ -112,12 +122,18 @@ export class AnonymizerService {
   }
 
   private async anonymizeCustomer(customerId: string, options: AnonymizeOptions): Promise<AnonymizeSubResult> {
+    // Fail-closed (B6): the tenant scope is REQUIRED, never self-derived from the row being
+    // mutated — a caller that omits it gets a throw, not a silent same-row "self-proof."
+    const locationId = options.subject?.locationId;
+    if (!locationId) {
+      throw new Error('[Anonymizer] anonymizeCustomer requires an explicit subject.locationId scope (fail-closed)');
+    }
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
       const lockRes = await client.query(
-        `SELECT anonymized_at, location_id FROM customers WHERE id = $1 FOR UPDATE`,
-        [customerId],
+        `SELECT anonymized_at, location_id FROM customers WHERE id = $1 AND location_id = $2 FOR UPDATE`,
+        [customerId, locationId],
       );
       if (lockRes.rows.length === 0) {
         await client.query('ROLLBACK');
@@ -128,7 +144,6 @@ export class AnonymizerService {
         await client.query('ROLLBACK');
         return { anon: false, skipped: true, storagePurged: 0 };
       }
-      const locationId = options.subject?.locationId || row.location_id;
 
       await client.query(
         `UPDATE customers
@@ -136,8 +151,8 @@ export class AnonymizerService {
              name = NULL,
              marketing_opt_in = false,
              anonymized_at = now()
-         WHERE id = $1`,
-        [customerId],
+         WHERE id = $1 AND location_id = $2`,
+        [customerId, locationId],
       );
 
       let storagePurged = 0;
@@ -145,8 +160,8 @@ export class AnonymizerService {
         const hasAvatarKey = await this.columnExists(client, 'customers', 'avatar_key');
         if (hasAvatarKey) {
           const avatarRes = await client.query(
-            `SELECT avatar_key FROM customers WHERE id = $1`,
-            [customerId],
+            `SELECT avatar_key FROM customers WHERE id = $1 AND location_id = $2`,
+            [customerId, locationId],
           );
           const avatarKey = avatarRes.rows[0]?.avatar_key;
           if (avatarKey) {
@@ -160,14 +175,22 @@ export class AnonymizerService {
         }
       }
 
+      // Audit location_id stamps the SUBJECT'S TRUE tenant — read back from the row itself
+      // (proven == locationId by the predicate above, never trusted blind). actor_location_id/
+      // subject_location_id/request_id give actor-vs-subject provenance (STOP-1 forensic trail).
       await this.insertAuditLog(client, {
         scope: options.scope,
         subjectKind: 'customer',
         subjectId: customerId,
-        locationId,
+        locationId: row.location_id,
         actorKind: options.actorId ? 'owner' : 'system',
         actorId: options.actorId || null,
-        metadata: { counts: { customersAnonymized: 1, ordersAnonymized: 0 } },
+        metadata: {
+          counts: { customersAnonymized: 1, ordersAnonymized: 0 },
+          actor_location_id: options.actorLocationId ?? null,
+          subject_location_id: row.location_id,
+          request_id: options.requestId ?? null,
+        },
       });
 
       await client.query('COMMIT');
@@ -189,12 +212,17 @@ export class AnonymizerService {
   }
 
   private async anonymizeOrder(orderId: string, options: AnonymizeOptions): Promise<AnonymizeSubResult> {
+    // Fail-closed (B6): required, never self-derived from the row (see anonymizeCustomer).
+    const locationId = options.subject?.locationId;
+    if (!locationId) {
+      throw new Error('[Anonymizer] anonymizeOrder requires an explicit subject.locationId scope (fail-closed)');
+    }
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
       const lockRes = await client.query(
-        `SELECT anonymized_at, location_id FROM orders WHERE id = $1 FOR UPDATE`,
-        [orderId],
+        `SELECT anonymized_at, location_id FROM orders WHERE id = $1 AND location_id = $2 FOR UPDATE`,
+        [orderId, locationId],
       );
       if (lockRes.rows.length === 0) {
         await client.query('ROLLBACK');
@@ -205,7 +233,6 @@ export class AnonymizerService {
         await client.query('ROLLBACK');
         return { anon: false, skipped: true, storagePurged: 0 };
       }
-      const locationId = options.subject?.locationId || row.location_id;
 
       await client.query(
         `UPDATE orders
@@ -217,18 +244,24 @@ export class AnonymizerService {
              receiver_handle = NULL,
              receiver_messenger_kind = NULL,
              anonymized_at = now()
-         WHERE id = $1`,
-        [orderId],
+         WHERE id = $1 AND location_id = $2`,
+        [orderId, locationId],
       );
 
+      // Audit location_id stamps the SUBJECT'S TRUE tenant (see anonymizeCustomer).
       await this.insertAuditLog(client, {
         scope: options.scope,
         subjectKind: 'order',
         subjectId: orderId,
-        locationId,
+        locationId: row.location_id,
         actorKind: options.actorId ? 'owner' : 'system',
         actorId: options.actorId || null,
-        metadata: { counts: { customersAnonymized: 0, ordersAnonymized: 1 } },
+        metadata: {
+          counts: { customersAnonymized: 0, ordersAnonymized: 1 },
+          actor_location_id: options.actorLocationId ?? null,
+          subject_location_id: row.location_id,
+          request_id: options.requestId ?? null,
+        },
       });
 
       await client.query('COMMIT');
