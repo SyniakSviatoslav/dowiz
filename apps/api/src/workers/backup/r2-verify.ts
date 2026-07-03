@@ -1,14 +1,13 @@
-// @ts-nocheck
-import { Pool } from 'pg';
-import { S3Client, GetObjectCommand, HeadBucketCommand, GetBucketLifecycleConfigurationCommand } from '@aws-sdk/client-s3';
+import type { Pool } from 'pg';
+import { type S3Client, GetObjectCommand, GetBucketLifecycleConfigurationCommand } from '@aws-sdk/client-s3';
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { getS3Client } from './upload.js';
 import type { R2Config } from './upload.js';
-import { createDecryptionStream } from './encrypt.js';
-import { spawn } from 'node:child_process';
+import { createDecryptionStream, resolveBackupKey } from './encrypt.js';
 
 const SAMPLE_DAYS_BACK = 7;
 const MIN_SAMPLE_COUNT = 3;
@@ -55,64 +54,56 @@ async function downloadManifest(s3: S3Client, config: R2Config, key: string): Pr
   return JSON.parse(body);
 }
 
-async function verifyManifestChecksum(
+// LC7 fix 1 — the writer stores sha256 of the PLAINTEXT dump, so the artifact must be DECRYPTED
+// before hashing. Download + decrypt ONCE; the checksum and the pg_restore --list schema check
+// both run on the resulting plaintext dump. (The old verifyManifestChecksum hashed the CIPHERTEXT
+// → always mismatched → `continue` skipped the schema check entirely.)
+async function downloadAndDecrypt(
   s3: S3Client,
   config: R2Config,
   manifest: R2Manifest,
-): Promise<boolean> {
-  const command = new GetObjectCommand({ Bucket: config.bucket, Key: manifest.r2Key });
-  const response = await s3.send(command);
-  const chunks: Buffer[] = [];
-  for await (const chunk of response.Body as any) {
-    chunks.push(Buffer.from(chunk));
-  }
-  const actualHash = createHash('sha256').update(Buffer.concat(chunks)).digest('hex');
-  return actualHash === manifest.checksumSha256;
+  encryptedPath: string,
+  decryptedPath: string,
+): Promise<void> {
+  const response = await s3.send(new GetObjectCommand({ Bucket: config.bucket, Key: manifest.r2Key }));
+  const writeStream = createWriteStream(encryptedPath);
+  await new Promise<void>((resolve, reject) => {
+    (response.Body as unknown as NodeJS.ReadableStream).pipe(writeStream);
+    writeStream.on('finish', resolve);
+    writeStream.on('error', reject);
+  });
+
+  // LC7 fix 7 — resolve the key via the keyring from the manifest's keyId (fail loud on unknown).
+  const key = resolveBackupKey(manifest.encryption.keyId);
+  const decipher = createDecryptionStream(key, manifest.encryption.iv, manifest.encryption.authTag);
+  const readStream = createReadStream(encryptedPath);
+  const decWriteStream = createWriteStream(decryptedPath);
+  await new Promise<void>((resolve, reject) => {
+    readStream.pipe(decipher).pipe(decWriteStream);
+    decWriteStream.on('finish', resolve);
+    decWriteStream.on('error', reject);
+    decipher.on('error', reject);
+  });
 }
 
-async function verifySchemaViaList(s3: S3Client, config: R2Config, manifest: R2Manifest): Promise<boolean> {
-  const tempDir = path.join(process.cwd(), '.tmp', 'r2-verify');
-  await fs.mkdir(tempDir, { recursive: true });
-  const encryptedPath = path.join(tempDir, `${manifest.backupId}.enc`);
-  const decryptedPath = path.join(tempDir, `${manifest.backupId}.dump`);
+async function sha256File(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash('sha256');
+    const stream = createReadStream(filePath);
+    stream.on('error', reject);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+  });
+}
 
-  try {
-    const getCmd = new GetObjectCommand({ Bucket: config.bucket, Key: manifest.r2Key });
-    const response = await s3.send(getCmd);
-    const writeStream = (await import('node:fs')).createWriteStream(encryptedPath);
-    await new Promise<void>((resolve, reject) => {
-      (response.Body as any).pipe(writeStream);
-      writeStream.on('finish', resolve);
-      writeStream.on('error', reject);
-    });
-
-    const decipher = createDecryptionStream(
-      process.env.BACKUP_ENCRYPTION_KEY || '',
-      manifest.encryption.iv,
-      manifest.encryption.authTag,
-    );
-    const readStream = createReadStream(encryptedPath);
-    const decWriteStream = (await import('node:fs')).createWriteStream(decryptedPath);
-    await new Promise<void>((resolve, reject) => {
-      readStream.pipe(decipher).pipe(decWriteStream);
-      decWriteStream.on('finish', resolve);
-      decWriteStream.on('error', reject);
-      decipher.on('error', reject);
-    });
-
-    return new Promise((resolve, reject) => {
-      const child = spawn('pg_restore', ['--list', decryptedPath], { stdio: ['ignore', 'pipe', 'pipe'] });
-      let output = '';
-      child.stdout.on('data', (d: Buffer) => { output += d.toString(); });
-      child.on('close', (code) => {
-        resolve(code === 0 && output.length > 0);
-      });
-      child.on('error', reject);
-    });
-  } finally {
-    await fs.unlink(encryptedPath).catch(() => {});
-    await fs.unlink(decryptedPath).catch(() => {});
-  }
+async function pgRestoreList(decryptedPath: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('pg_restore', ['--list', decryptedPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = '';
+    child.stdout?.on('data', (d: Buffer) => { output += d.toString(); });
+    child.on('close', (code) => resolve(code === 0 && output.length > 0));
+    child.on('error', reject);
+  });
 }
 
 async function checkLifecyclePolicy(s3: S3Client, config: R2Config): Promise<boolean> {
@@ -169,17 +160,27 @@ export async function runR2Verify(pool: Pool): Promise<R2VerifyResult> {
 
   for (const row of manifestRes.rows) {
     manifestsChecked++;
+    const tempDir = path.join(process.cwd(), '.tmp', 'r2-verify');
+    let encryptedPath = '';
+    let decryptedPath = '';
     try {
+      await fs.mkdir(tempDir, { recursive: true });
       const manifestKey = row.r2_key.replace('.enc.parts', '.manifest.json');
       const manifest = await downloadManifest(s3, config, manifestKey);
+      encryptedPath = path.join(tempDir, `${manifest.backupId}.enc`);
+      decryptedPath = path.join(tempDir, `${manifest.backupId}.dump`);
 
-      const checksumOk = await verifyManifestChecksum(s3, config, manifest);
-      if (!checksumOk) {
-        errors.push(`Manifest ${manifestKey}: checksum mismatch`);
+      await downloadAndDecrypt(s3, config, manifest, encryptedPath, decryptedPath);
+
+      // Checksum: manifest stores sha256 of the PLAINTEXT dump → hash the DECRYPTED file.
+      const actualHash = await sha256File(decryptedPath);
+      if (actualHash !== manifest.checksumSha256) {
+        errors.push(`Manifest ${manifestKey}: checksum mismatch (plaintext hash != manifest.checksumSha256)`);
         continue;
       }
 
-      const schemaOk = await verifySchemaViaList(s3, config, manifest);
+      // Schema: pg_restore --list must enumerate the archive TOC.
+      const schemaOk = await pgRestoreList(decryptedPath);
       if (!schemaOk) {
         errors.push(`Manifest ${manifestKey}: pg_restore --list failed or empty`);
         continue;
@@ -188,6 +189,9 @@ export async function runR2Verify(pool: Pool): Promise<R2VerifyResult> {
       manifestsValid++;
     } catch (err: any) {
       errors.push(`Manifest ${row.r2_key}: ${err.message}`);
+    } finally {
+      if (encryptedPath) await fs.unlink(encryptedPath).catch(() => {});
+      if (decryptedPath) await fs.unlink(decryptedPath).catch(() => {});
     }
   }
 

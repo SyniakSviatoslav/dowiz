@@ -1,7 +1,11 @@
 # ADR — GUC/tx discipline (`withTenantTx`), latent-RLS completion, GDPR-erasure liveness, pg-boss queue policy
 
-- **Status:** Proposed — RESOLVED-DRAFT v2 (breaker + counsel applied; see
-  `docs/design/audit-fix-rls-reliability/resolution.md`; awaiting conductor re-attack + operator)
+- **Status:** Proposed — RESOLVED-DRAFT v2 + **R2 re-attack applied** (breaker-r2 + counsel; see
+  `docs/design/audit-fix-rls-reliability/resolution-r2.md`). **Lane-A worker-local safety subset
+  IMPLEMENTED + PROVEN** (N1 fail-loud backstop + LC4 pending-reset in `workers/anonymizer-gdpr.ts`,
+  guardrail `apps/api/tests/anonymizer-gdpr-backstop.test.ts` red→green, ledger #61). The structural
+  post-flip *success* mechanism (DEFINER `gdpr_erase_customer`) + LC4-MIG + MIG-1..4 + the flip
+  remain **operator-gated** (see §R2-sync). Awaiting operator.
 - **Date:** 2026-07-03
 - **Deciders:** System Architect (proposer), Triadic Council, DB owner, Operator
 - **Related:** `docs/design/audit-fix-rls-reliability/proposal.md` (full design + verified fact
@@ -96,6 +100,55 @@ worker fleet including the detectors).
    liveness/reconciliation **watch-set fed by the boot registry of actually-started workers**
    ("detectors first" dropped — it fought reconciliation's dependency and made false DRIFT
    [breaker F12]).
+
+## R2-sync (2026-07-03 — conductor re-attack `resolution-r2.md` applied by lead)
+
+The R2 re-attack of the v2 design surfaced one CRITICAL and one HIGH that amend the decisions above.
+Binding amendments (each dispositioned in `resolution-r2.md §1`):
+
+- **Decision #3 — correction of record (N1, CRITICAL):** the v2 claim "the erasure path itself
+  survives the flip" is **false as designed** — the data erasure runs on the anonymizer's
+  context-free connection (`lib/anonymizer/index.ts:131,220`), which `customers` RLS does not honour
+  post-MIG-2 (`customers` has **no** `app.current_tenant` arm — the RC4 arm is orders-only,
+  `1790000000077:44-67`), while the worker wrote `completed` regardless of `result.skipped`. **Amended
+  to:** (i) terminal `completed`/audit/event are **conditional** — they fire only when a data-level
+  re-read confirms `customers.anonymized_at IS NOT NULL`; otherwise `failed` + `ANONYMIZER_GDPR_FAILED`
+  signal, **never** `completed` (reverses "regardless of `result.skipped`"; credits the idempotent
+  already-anonymized case). (ii) The erasure **data path** must run under an enforcement-valid
+  mechanism — a SECURITY DEFINER `gdpr_erase_customer(p_customer, p_location)` (search_path-pinned,
+  ledger #33) returning the resulting `anonymized_at` — **not** the worker's `app.current_tenant`
+  context. **IMPLEMENTED now (worker-local, no migration):** (i) — the fail-loud backstop + LC4
+  pending-reset, guardrail `anonymizer-gdpr-backstop.test.ts` (red→green, ledger #61). **OPERATOR-GATED
+  / GATE-FLIP-E2E:** (ii) — the DEFINER function is a `packages/db/migrations/**` red-line; drafted for
+  the operator. The backstop makes the pre-DEFINER interim SAFE (post-flip a non-erasure fails loud,
+  never silently completes) — it does not by itself make post-flip erasure *succeed*.
+- **Decision #3 / LC4-MIG scope (N2, HIGH):** route the worker's terminal writes + audit INSERT
+  through a DEFINER `gdpr_finalize(...)` so LC4-MIG adds **no** `app.current_tenant` arm to
+  `gdpr_erasure_requests` / `anonymization_audit_log` (both `FOR ALL`, member-only today; an arm would
+  grant the courier/webhook principal CRUD incl. DELETE on erasure requests + forge/erase of the
+  append-only audit log). Fallback if an arm is retained: command-split (`FOR SELECT`+`FOR UPDATE`
+  only; `FOR INSERT` only on the audit log — no DELETE). Operator-gated.
+- **Decision #2 / MIG-2 (N1-b):** adding a `customers` `app.current_tenant` arm is **REJECTED** —
+  it repeats N2 on the *primary* PII table (table-wide read/update for every courier-shift/webhook
+  principal). Use the DEFINER route instead.
+- **Decision #2 / MIG-1 (N3, MED):** extend MIG-1 with `courier_auth_write FOR INSERT TO dowiz_app`
+  on `courier_audit_log` — post-flip the failed-login audit INSERT (`courier/auth.ts:269-273`, pre-context
+  `db.connect()`, zero-UUID fallback) hits the RC5 policy WITH-CHECK → 42501 → a wrong-password 401
+  becomes a 500. P1b/P9 must exercise the *failed* login path (expect 401, not 500). Operator-gated (MIG-1).
+- **Decision #1 (`withTenantTx`) (N5, LOW):** the helper must issue transaction-local resets of both
+  GUC families (`set_config('app.user_id','',true)`, `set_config('app.current_tenant','',true)`)
+  before setting ctx keys, so `{anonymous:true}` cannot inherit a leaked session GUC. (Lane 0.)
+- **Decision #4 (pg-boss) (N4, MED):** the queue-policy reconciler must pass the FULL policy from
+  `QUEUE_POLICY` on every `updateQueue`; add a wrapper that requires `policy` (a partial `updateQueue`
+  resets a `'short'` queue to `'standard'`, silently disabling `singletonKey` dedup). (Lane A′.)
+- **Verification block:** P5 extended with the data-level erasure assertion + negative `failed`+DLQ
+  case (the new P-proof — IMPLEMENTED as `anonymizer-gdpr-backstop.test.ts` at the unit level; the
+  NOBYPASSRLS+MIG-2 rehearsal-DB variant remains a GATE-FLIP-E2E item); P1b/P9 failed-login (N3); P8
+  asserts no `FOR ALL`/DELETE `app.current_tenant` arm on the two GDPR tables (N2); P3 anon-reset (N5);
+  P6 short-stays-short after a partial reconcile (N4).
+- **needs-human (R2 additions, `resolution-r2.md §3`):** the N1 correction-of-record; the re-scoped
+  Lane-A DoD; the structural-fix mechanism choice (DEFINER vs anon-lane context — DEFINER recommended);
+  the N3 firebreak + N2 DEFINER-ization as migration red-lines — each operator-gated.
 
 ## Ordering (v2 — three lanes; gates, not prose)
 

@@ -53,10 +53,14 @@ test('Stage 32: Backup Verification (P5-2)', async (t) => {
   await t.test('R2.2: smoke-checks file has expected check functions', () => {
     const content = fs.readFileSync(path.resolve('apps/api/src/workers/backup/smoke-checks.ts'), 'utf8');
     const functions = ['checkSchema', 'checkRowCounts', 'checkFKIntegrity', 'checkMenuVersions',
-      'checkPayoutSums', 'checkOrderTotals', 'checkTimeOrder', 'checkPIIFree'];
+      'checkPayoutSums', 'checkOrderTotals', 'checkTimeOrder'];
     for (const fn of functions) {
       assert.ok(content.includes(`async function ${fn}`), `has ${fn} check function`);
     }
+    // LC7 fix 6 (BRK-5): checkPIIFree was REMOVED. Backup Option A keeps full-PII *encrypted*
+    // dumps (manifest piiEncrypted=true), so a pii_free assertion would fail every real restore.
+    // This gate now enforces its ABSENCE (ratcheted forward from asserting its presence).
+    assert.ok(!content.includes('function checkPIIFree'), 'checkPIIFree must be removed (LC7 fix 6)');
   });
 
   await t.test('R2.3: smoke-checks expected tables list defined', () => {
@@ -89,8 +93,13 @@ test('Stage 32: Backup Verification (P5-2)', async (t) => {
   await t.test('R4.2: r2-verify checks lifecycle, manifests, and schema', () => {
     const content = fs.readFileSync(path.resolve('apps/api/src/workers/backup/r2-verify.ts'), 'utf8');
     assert.ok(content.includes('checkLifecyclePolicy'), 'checks lifecycle policy');
-    assert.ok(content.includes('verifyManifestChecksum'), 'verifies manifest checksums');
-    assert.ok(content.includes('verifySchemaViaList'), 'verifies schema via pg_restore --list');
+    // LC7 fix 1: the manifest stores sha256 of the PLAINTEXT dump, so the artifact must be
+    // decrypted before hashing. The old verifyManifestChecksum hashed the CIPHERTEXT → always
+    // mismatched → `continue` skipped the schema check. Now: download+decrypt once, hash the
+    // DECRYPTED file, then pg_restore --list it. Gate ratcheted forward to the corrected invariant.
+    assert.ok(content.includes('downloadAndDecrypt'), 'download+decrypt the artifact before hashing');
+    assert.ok(content.includes('sha256File(decryptedPath)'), 'hashes the DECRYPTED (plaintext) dump');
+    assert.ok(content.includes('pgRestoreList'), 'verifies schema via pg_restore --list');
     assert.ok(content.includes('EXPECTED_LIFECYCLE_RULES'), 'has lifecycle rules constants');
   });
 

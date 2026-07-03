@@ -32,6 +32,12 @@ function makeHarness(customerTrueLocation: string) {
       if (/UPDATE\s+gdpr_erasure_requests[\s\S]*status\s*=\s*'completed'/i.test(sql)) {
         return { rowCount: 1, rows: [] };
       }
+      // N1 fail-loud backstop re-read (resolution-r2.md §1 N1.2): the worker confirms the erasure
+      // took effect before writing `completed`. Model the confirmed (erased) state so the provenance
+      // assertions below exercise the completion path.
+      if (/SELECT\s+anonymized_at\s+FROM\s+customers\s+WHERE\s+id\s*=\s*\$1/i.test(sql)) {
+        return { rowCount: 1, rows: [{ anonymized_at: '2026-07-03T00:00:00Z' }] };
+      }
       // The NEW true-tenant lookup (R2-5 fix).
       if (/SELECT\s+location_id\s+FROM\s+customers\s+WHERE\s+id\s*=\s*\$1/i.test(sql)) {
         return { rowCount: 1, rows: [{ location_id: customerTrueLocation }] };

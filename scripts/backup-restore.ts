@@ -3,19 +3,27 @@
  *
  * Usage:
  *   pnpm backup:restore --snapshot=<backupId>                    # Full restore
- *   pnpm backup:restore --dry-run --snapshot=<backupId>          # Dry-run (verify only)
- *   pnpm backup:restore --list                                   # List recent snapshots
+ *   pnpm backup:restore --dry-run --snapshot=<backupId>          # Dry-run (verify only, via DB)
+ *   pnpm backup:restore --list                                   # List recent snapshots (via DB)
+ *   pnpm backup:restore --r2-key=<r2Key>                         # DISASTER path: locate + verify
+ *                                                                 # the artifact straight from R2,
+ *                                                                 # with NO DB round-trip
+ *   pnpm backup:restore --list-r2                                # List snapshots straight from R2
+ *
+ * The --r2-key / --list-r2 paths exist because in a real disaster the DB (backup_metadata) is the
+ * thing you've lost — you cannot ask it where the artifact is. The R2 manifest JSON self-describes
+ * everything needed (iv/authTag/keyId/checksum/rowCounts), so these paths never touch the DB.
  *
  * Environment variables required:
  *   DATABASE_URL_MIGRATIONS       — target database (restore destination)
- *   BACKUP_ENCRYPTION_KEY         — 32-byte base64 key for decryption
+ *   BACKUP_ENCRYPTION_KEY / BACKUP_KEYRING — key(s) for decryption (resolved per manifest keyId)
  *   R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
  */
 
 import { loadEnv } from '@deliveryos/config';
 import { createSessionPool } from '@deliveryos/db';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { createDecryptionStream } from '../apps/api/src/workers/backup/encrypt.js';
+import { S3Client, GetObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { createDecryptionStream, resolveBackupKey } from '../apps/api/src/workers/backup/encrypt.js';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import { createWriteStream, createReadStream } from 'node:fs';
@@ -85,9 +93,46 @@ async function downloadManifest(backupId: string): Promise<Manifest> {
   }
 }
 
+async function downloadManifestByR2Key(r2Key: string): Promise<Manifest> {
+  // Disaster-recovery path: the DB may be GONE. Locate the manifest purely from R2. Accept either
+  // the artifact key (ending .enc.parts) or the manifest key (ending .manifest.json).
+  const manifestKey = r2Key.endsWith('.manifest.json')
+    ? r2Key
+    : r2Key.replace('.enc.parts', '.manifest.json');
+
+  const tempDir = path.join(process.cwd(), '.tmp', 'restore');
+  await fs.mkdir(tempDir, { recursive: true });
+  const manifestPath = path.join(tempDir, `${path.basename(manifestKey)}`);
+  await downloadFromR2(manifestKey, manifestPath);
+  const content = await fs.readFile(manifestPath, 'utf-8');
+  return JSON.parse(content);
+}
+
+async function listSnapshotsR2(): Promise<void> {
+  // Enumerate manifests straight from R2 — no DB. Single page is plenty for an operator triage.
+  const client = getS3Client();
+  const prefix = `dowiz-backups/${env.NODE_ENV}/`;
+  const res = await client.send(
+    new ListObjectsV2Command({ Bucket: env.R2_BUCKET, Prefix: prefix, MaxKeys: 1000 }),
+  );
+  const manifests = (res.Contents || [])
+    .map((o) => o.Key || '')
+    .filter((k) => k.endsWith('.manifest.json'))
+    .sort();
+
+  console.log(`\n=== R2 Backup Manifests (prefix ${prefix}) ===\n`);
+  if (manifests.length === 0) {
+    console.log('  (none found)');
+  } else {
+    for (const key of manifests) console.log(`  ${key}`);
+  }
+  if (res.IsTruncated) console.log('\n  … (list truncated at 1000 keys)');
+  console.log(`\n${manifests.length} manifest(s) found. Verify one with: pnpm backup:restore --r2-key=<r2Key>`);
+}
+
 async function decryptBackup(manifest: Manifest, encryptedPath: string, decryptedPath: string): Promise<void> {
-  const keyBase64 = env.BACKUP_ENCRYPTION_KEY;
-  if (!keyBase64) throw new Error('BACKUP_ENCRYPTION_KEY is required');
+  // LC7 fix 7 — resolve the key from the manifest's keyId via the keyring (fail loud on unknown).
+  const keyBase64 = resolveBackupKey(manifest.encryption.keyId);
 
   const decipherStream = createDecryptionStream(keyBase64, manifest.encryption.iv, manifest.encryption.authTag);
   const readStream = createReadStream(encryptedPath);
@@ -111,33 +156,32 @@ async function verifyChecksum(filePath: string, expectedSha256: string): Promise
   });
 }
 
-async function runDryRun(backupId: string) {
-  console.log(`\n=== Restore Dry-Run: ${backupId} ===\n`);
+async function runDryRun(manifest: Manifest, opts: { compareLiveDb: boolean }) {
+  console.log(`\n=== Restore Dry-Run: ${manifest.backupId} ===\n`);
   const tempDir = path.join(process.cwd(), '.tmp', 'restore');
   await fs.mkdir(tempDir, { recursive: true });
 
-  // 1. Download and verify manifest
-  console.log('[1/5] Downloading manifest...');
-  const manifest = await downloadManifest(backupId);
+  // 1. Manifest already resolved (via DB --snapshot, or straight from R2 --r2-key)
+  console.log('[1/5] Manifest loaded');
   console.log(`  Type: ${manifest.type}, Created: ${manifest.createdAt}`);
-  console.log(`  Tables: ${Object.keys(manifest.rowCounts).join(', ')}`);
-  console.log(`  Row counts: ${JSON.stringify(manifest.rowCounts)}`);
+  console.log(`  Key ID: ${manifest.encryption.keyId}`);
+  console.log(`  Tables in manifest: ${Object.keys(manifest.rowCounts).length}`);
 
   // 2. Download encrypted backup
   console.log('[2/5] Downloading encrypted backup from R2...');
-  const encryptedPath = path.join(tempDir, `${backupId}.enc`);
+  const encryptedPath = path.join(tempDir, `${manifest.backupId}.enc`);
   await downloadFromR2(manifest.r2Key, encryptedPath);
   const encryptedStat = await fs.stat(encryptedPath);
   console.log(`  Size: ${(encryptedStat.size / 1024 / 1024).toFixed(2)} MB`);
 
   // 3. Decrypt
   console.log('[3/5] Decrypting backup...');
-  const decryptedPath = path.join(tempDir, `${backupId}.dump`);
+  const decryptedPath = path.join(tempDir, `${manifest.backupId}.dump`);
   await decryptBackup(manifest, encryptedPath, decryptedPath);
   const decryptedStat = await fs.stat(decryptedPath);
   console.log(`  Decrypted size: ${(decryptedStat.size / 1024 / 1024).toFixed(2)} MB`);
 
-  // 4. Verify checksum
+  // 4. Verify checksum — hashes the DECRYPTED/plaintext dump (matches the writer's plaintext hash)
   console.log('[4/5] Verifying checksum...');
   const checksumOk = await verifyChecksum(decryptedPath, manifest.checksumSha256);
   if (!checksumOk) {
@@ -145,18 +189,22 @@ async function runDryRun(backupId: string) {
   }
   console.log('  ✓ Checksum matches');
 
-  // 5. Verify row counts (dry-run: restore to a temp schema or just validate manifest)
-  console.log('[5/5] Validating row counts...');
-  const db = createSessionPool();
-  try {
-    for (const [table, expectedCount] of Object.entries(manifest.rowCounts)) {
-      const res = await db.query(`SELECT COUNT(*) as c FROM "${table}"`);
-      const actualCount = parseInt(res.rows[0].c, 10);
-      const match = actualCount === expectedCount;
-      console.log(`  ${match ? '✓' : '⚠'} ${table}: expected ${expectedCount}, actual ${actualCount}`);
+  // 5. Row counts — only meaningful against a live DB; skipped on the R2 disaster path.
+  if (opts.compareLiveDb) {
+    console.log('[5/5] Comparing manifest row counts against the live DB...');
+    const db = createSessionPool();
+    try {
+      for (const [table, expectedCount] of Object.entries(manifest.rowCounts)) {
+        const res = await db.query(`SELECT COUNT(*) as c FROM "${table}"`);
+        const actualCount = parseInt(res.rows[0].c, 10);
+        const match = actualCount === expectedCount;
+        console.log(`  ${match ? '✓' : '⚠'} ${table}: manifest ${expectedCount}, live ${actualCount}`);
+      }
+    } finally {
+      await db.end();
     }
-  } finally {
-    await db.end();
+  } else {
+    console.log('[5/5] Skipping live-DB row-count comparison (--r2-key disaster path: no DB to compare against).');
   }
 
   // Cleanup
@@ -184,30 +232,52 @@ async function listSnapshots() {
   }
 }
 
+function getFlagValue(args: string[], flag: string): string | undefined {
+  const eq = args.find((a) => a.startsWith(`${flag}=`));
+  if (eq) return eq.slice(flag.length + 1);
+  const idx = args.indexOf(flag);
+  const next = idx !== -1 ? args[idx + 1] : undefined;
+  if (next && !next.startsWith('--')) return next;
+  return undefined;
+}
+
 async function main() {
   const args = process.argv.slice(2);
-  const listIdx = args.indexOf('--list');
   const dryRunIdx = args.indexOf('--dry-run');
-  const snapshotIdx = args.indexOf('--snapshot');
 
-  if (listIdx !== -1) {
+  // ── DISASTER paths: locate / verify straight from R2 with NO DB round-trip ──
+  if (args.includes('--list-r2')) {
+    await listSnapshotsR2();
+    return;
+  }
+  const r2KeyArg = getFlagValue(args, '--r2-key');
+  if (r2KeyArg) {
+    const manifest = await downloadManifestByR2Key(r2KeyArg);
+    await runDryRun(manifest, { compareLiveDb: false });
+    return;
+  }
+
+  // ── DB paths ──
+  if (args.includes('--list')) {
     await listSnapshots();
     return;
   }
 
-  if (snapshotIdx === -1 || !args[snapshotIdx + 1]) {
+  const backupId = getFlagValue(args, '--snapshot');
+  if (!backupId) {
     console.error('Usage:');
     console.error('  pnpm backup:restore --snapshot=<backupId>');
     console.error('  pnpm backup:restore --dry-run --snapshot=<backupId>');
     console.error('  pnpm backup:restore --list');
+    console.error('  pnpm backup:restore --r2-key=<r2Key>   (disaster path, no DB)');
+    console.error('  pnpm backup:restore --list-r2          (disaster path, no DB)');
     process.exit(1);
   }
 
-  const backupId = args[snapshotIdx + 1];
   const isDryRun = dryRunIdx !== -1;
-
+  const manifest = await downloadManifest(backupId);
   if (isDryRun) {
-    await runDryRun(backupId);
+    await runDryRun(manifest, { compareLiveDb: true });
   } else {
     console.log('Full restore not yet implemented — use --dry-run for verification.');
     console.log('For production restore, use pg_restore manually:');

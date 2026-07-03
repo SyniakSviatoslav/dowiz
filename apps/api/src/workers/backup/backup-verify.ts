@@ -1,7 +1,5 @@
-// @ts-nocheck
 import { Pool, type PoolClient } from 'pg';
-import { loadEnv } from '@deliveryos/config';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { createReadStream, createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -9,8 +7,8 @@ import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import { getS3Client } from './upload.js';
 import type { R2Config } from './upload.js';
-import { createDecryptionStream } from './encrypt.js';
-import { createSessionPool } from '@deliveryos/db';
+import { createDecryptionStream, resolveBackupKey } from './encrypt.js';
+import type { BackupManifest } from './manifest.js';
 import { runSmokeChecks } from './smoke-checks.js';
 import type { SmokeCheck } from './smoke-checks.js';
 import { createSandboxDatabase, dropSandboxDatabase } from '../../lib/restore-sandbox.js';
@@ -30,15 +28,14 @@ export interface VerifyResult {
   error?: string;
 }
 
-interface BackupRecord {
+// LC7 fix 5 — the DB (backup_metadata) only tells us WHICH backup and WHERE its artifact lives.
+// All integrity material (iv/authTag/keyId/checksum/rowCounts) is read from the R2 *manifest*
+// (loadManifest): backup_metadata has no `metadata` column (the old metadata->'encryption'->>'iv'
+// SELECT threw at runtime), and in a real disaster the DB is exactly the thing we've lost.
+interface BackupLocator {
   id: string;
   type: string;
-  r2_key: string;
-  checksum_sha256: string;
-  encryption_iv: string;
-  encryption_auth_tag: string;
-  encryption_algorithm: string;
-  row_counts: Record<string, number>;
+  r2Key: string;
 }
 
 function getR2Config(): R2Config {
@@ -86,34 +83,37 @@ async function releaseLock(client: PoolClient | null, lockId: number): Promise<v
   }
 }
 
-async function selectBackup(pool: Pool, backupId?: string): Promise<BackupRecord> {
+async function selectBackup(pool: Pool, backupId?: string): Promise<BackupLocator> {
   if (backupId) {
     const res = await pool.query(
-      `SELECT id, type, r2_key, checksum_sha256,
-              metadata->'encryption'->>'iv' AS encryption_iv,
-              metadata->'encryption'->>'auth_tag' AS encryption_auth_tag,
-              metadata->'encryption'->>'algorithm' AS encryption_algorithm,
-              COALESCE(row_counts, '{}'::jsonb) AS row_counts
-       FROM backup_metadata
-       WHERE id = $1 AND status = 'completed'`,
+      `SELECT id, type, r2_key FROM backup_metadata WHERE id = $1 AND status = 'completed'`,
       [backupId],
     );
     if (res.rows.length === 0) throw new Error(`Backup ${backupId} not found or not completed`);
-    return res.rows[0];
+    const row = res.rows[0];
+    return { id: row.id, type: row.type, r2Key: row.r2_key };
   }
 
   const res = await pool.query(
-    `SELECT id, type, r2_key, checksum_sha256,
-            metadata->'encryption'->>'iv' AS encryption_iv,
-            metadata->'encryption'->>'auth_tag' AS encryption_auth_tag,
-            metadata->'encryption'->>'algorithm' AS encryption_algorithm,
-            COALESCE(row_counts, '{}'::jsonb) AS row_counts
-     FROM backup_metadata
+    `SELECT id, type, r2_key FROM backup_metadata
      WHERE type = 'daily' AND status = 'completed'
      ORDER BY created_at DESC LIMIT 1`,
   );
   if (res.rows.length === 0) throw new Error('No completed daily backup found');
-  return res.rows[0];
+  const row = res.rows[0];
+  return { id: row.id, type: row.type, r2Key: row.r2_key };
+}
+
+// LC7 fix 5 — read the integrity material from the R2 manifest JSON (iv/authTag/keyId/checksum/
+// rowCounts), NOT the DB. The manifest key is derived from the artifact key.
+async function loadManifest(r2Key: string): Promise<BackupManifest> {
+  const config = getR2Config();
+  const s3 = getS3Client(config);
+  const manifestKey = r2Key.replace('.enc.parts', '.manifest.json');
+  const response = await s3.send(new GetObjectCommand({ Bucket: config.bucket, Key: manifestKey }));
+  const body = await response.Body?.transformToString();
+  if (!body) throw new Error(`Empty or missing manifest at ${manifestKey}`);
+  return JSON.parse(body) as BackupManifest;
 }
 
 async function downloadFromR2(r2Key: string, destPath: string): Promise<void> {
@@ -134,10 +134,8 @@ async function decryptBackup(
   decryptedPath: string,
   iv: string,
   authTag: string,
+  key: string,
 ): Promise<void> {
-  const key = process.env.BACKUP_ENCRYPTION_KEY;
-  if (!key) throw new Error('BACKUP_ENCRYPTION_KEY is required');
-
   const decipher = createDecryptionStream(key, iv, authTag);
   const readStream = createReadStream(encryptedPath);
   const writeStream = createWriteStream(decryptedPath);
@@ -150,7 +148,7 @@ async function decryptBackup(
   });
 }
 
-async function sha256File(filePath: string): Promise<string> {
+export async function sha256File(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256');
     const stream = createReadStream(filePath);
@@ -158,6 +156,37 @@ async function sha256File(filePath: string): Promise<string> {
     stream.on('data', (chunk) => hash.update(chunk));
     stream.on('end', () => resolve(hash.digest('hex')));
   });
+}
+
+// LC7 fix 2 — the smoke pool MUST target the freshly-restored SCRATCH database, never live prod.
+// The prior code called createSessionPool(sandboxUrl), but that factory takes NO argument and
+// hardwires env.DATABASE_URL_SESSION, so sandboxUrl was silently discarded and EVERY smoke check
+// ran against PROD. We build the scratch pool here from the passed connection string directly.
+// NOTE: the spec's preferred fix — an optional connectionString param on createSessionPool
+// (packages/db/src/index.ts) — is blocked by the protect-paths governance guardrail on that
+// package and needs the lead's manual approval. This app-code pool is the equivalent, safe now.
+export function createScratchPool(connectionString: string): Pool {
+  const pool = new Pool({
+    connectionString,
+    max: 3,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
+    ssl: /[?&]sslmode=disable/.test(connectionString) ? false : { rejectUnauthorized: false },
+  });
+  pool.on('connect', (client) => {
+    void client.query("SET statement_timeout = '30s'");
+  });
+  return pool;
+}
+
+// LC7 fix 1 — the writer stores sha256 of the PLAINTEXT dump (index.ts calculateFileChecksum(
+// dump.tempFile), pre-encryption). The drill MUST therefore hash the DECRYPTED (plaintext) file;
+// hashing the ciphertext (the old sha256File(encryptedPath)) can never match manifest.checksumSha256.
+export async function computeArtifactChecksum(paths: {
+  encryptedPath: string;
+  decryptedPath: string;
+}): Promise<string> {
+  return sha256File(paths.decryptedPath);
 }
 
 async function pgRestore(decryptedPath: string, sandboxUrl: string): Promise<void> {
@@ -272,11 +301,15 @@ export async function runRestoreVerify(
       return result;
     }
 
-    // ── 2. Select backup ──
+    // ── 2. Select backup + load the R2 manifest (source of truth for integrity material) ──
     result.stage = 'select';
     const backup = await selectBackup(pool, opts.backupId);
     result.backupId = backup.id;
     await writeAudit(pool, 'restore_drill_started', { backupId: backup.id, stage: 'select' });
+
+    const manifest = await loadManifest(backup.r2Key);
+    // Fail loud on an unknown keyId BEFORE downloading anything (LC7 fix 7).
+    const encKey = resolveBackupKey(manifest.encryption.keyId);
 
     const tempDir = path.join(process.cwd(), '.tmp', `restore-verify-${backup.id}`);
     await fs.mkdir(tempDir, { recursive: true, mode: 0o600 });
@@ -286,22 +319,26 @@ export async function runRestoreVerify(
     try {
       // ── 3. Download from R2 ──
       result.stage = 'download';
-      await downloadFromR2(backup.r2_key, encryptedPath);
+      await downloadFromR2(backup.r2Key, encryptedPath);
 
-      // ── 4. Decrypt ──
+      // ── 4. Decrypt (iv/authTag/keyId all from the R2 manifest, not the DB) ──
       result.stage = 'decrypt';
+      if (!manifest.encryption.authTag) {
+        throw new Error('Manifest is missing encryption.authTag — cannot decrypt (corrupt manifest)');
+      }
       await decryptBackup(
         encryptedPath,
         decryptedPath,
-        backup.encryption_iv,
-        backup.encryption_auth_tag,
+        manifest.encryption.iv,
+        manifest.encryption.authTag,
+        encKey,
       );
 
-      // ── 5. Checksum ──
+      // ── 5. Checksum — hash the DECRYPTED (plaintext) dump vs manifest.checksumSha256 (LC7 fix 1) ──
       result.stage = 'checksum';
-      const actualChecksum = await sha256File(encryptedPath);
-      if (actualChecksum !== backup.checksum_sha256) {
-        throw new Error(`Checksum mismatch: expected ${backup.checksum_sha256}, got ${actualChecksum}`);
+      const actualChecksum = await computeArtifactChecksum({ encryptedPath, decryptedPath });
+      if (actualChecksum !== manifest.checksumSha256) {
+        throw new Error(`Checksum mismatch: expected ${manifest.checksumSha256}, got ${actualChecksum}`);
       }
 
       // ── 6. Restore to sandbox ──
@@ -314,10 +351,10 @@ export async function runRestoreVerify(
 
         // ── 7. Smoke-checks ──
         result.stage = 'smoke_check';
-        sandboxPool = createSessionPool(sandboxUrl);
+        sandboxPool = createScratchPool(sandboxUrl);
         result.smokeChecks = await runSmokeChecks(sandboxPool, {
           fullHash: opts.fullHash,
-          baselineRowCounts: backup.row_counts,
+          manifestRowCounts: manifest.rowCounts,
         });
 
         const allPassed = result.smokeChecks.every(c => c.passed);

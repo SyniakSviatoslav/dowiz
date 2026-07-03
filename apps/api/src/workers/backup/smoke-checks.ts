@@ -1,7 +1,5 @@
-// @ts-nocheck
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
-import { PiiRedactor } from '../../lib/pii-redactor.js';
 
 export interface SmokeCheck {
   name: string;
@@ -22,26 +20,27 @@ const EXPECTED_TABLES = [
   'backup_metadata', 'backup_audit_log',
 ];
 
-const piiRedactor = new PiiRedactor();
-
 function now(): number {
   return Date.now();
 }
 
 export async function runSmokeChecks(
   sandboxPool: Pool,
-  opts: { fullHash?: boolean; baselineRowCounts?: Record<string, number> } = {},
+  opts: { fullHash?: boolean; manifestRowCounts?: Record<string, number> } = {},
 ): Promise<SmokeCheck[]> {
   const checks: SmokeCheck[] = [];
 
   checks.push(await checkSchema(sandboxPool));
-  checks.push(await checkRowCounts(sandboxPool, opts.baselineRowCounts));
+  checks.push(await checkRowCounts(sandboxPool, opts.manifestRowCounts));
   checks.push(await checkFKIntegrity(sandboxPool));
   checks.push(await checkMenuVersions(sandboxPool));
   checks.push(await checkPayoutSums(sandboxPool));
   checks.push(await checkOrderTotals(sandboxPool));
   checks.push(await checkTimeOrder(sandboxPool));
-  checks.push(await checkPIIFree(sandboxPool));
+  // LC7 fix 6 — checkPIIFree REMOVED. Backup Option A keeps FULL-PII *encrypted* dumps
+  // (manifest.ts: piiEncrypted=true, piiRedacted=false), so a faithful restore MUST contain PII;
+  // a pii_free assertion would fail every real restore (BRK-5). PII at rest is protected by
+  // AES-256-GCM encryption + R2 lifecycle expiry, not by scrubbing the dump the drill verifies.
 
   if (opts.fullHash) {
     checks.push(await checkSampleHashes(sandboxPool));
@@ -72,28 +71,59 @@ async function checkSchema(pool: Pool): Promise<SmokeCheck> {
   }
 }
 
-async function checkRowCounts(
+/**
+ * LC7 fix 3 — STRICT full-set row-count parity.
+ *
+ * The prior code used a `count === 0 || count > base*10` outlier heuristic against a 9-table
+ * baseline: a 99%-truncated table (5 of 100 rows) passed, and the ~17 EXPECTED_TABLES with no
+ * baseline got ZERO coverage. Replaced with strict parity: for EVERY table the manifest recorded,
+ * the restored scratch DB must contain EXACTLY that count, and the scratch DB's public base tables
+ * must be a SUPERSET of the manifest's tables (a manifest table missing from the restore is a
+ * failure). Any mismatch → passed=false with a per-table message.
+ */
+export async function checkRowCounts(
   pool: Pool,
-  baseline?: Record<string, number>,
+  manifestRowCounts?: Record<string, number>,
 ): Promise<SmokeCheck> {
   const start = now();
   try {
-    const results: Record<string, { count: number; outlier?: boolean }> = {};
-    let anyOutlier = false;
-
-    for (const table of EXPECTED_TABLES) {
-      const res = await pool.query(`SELECT COUNT(*)::int AS c FROM "${table}"`);
-      const count = res.rows[0].c;
-      const base = baseline?.[table];
-      const outlier = base !== undefined && (count === 0 || count > base * 10);
-      if (outlier) anyOutlier = true;
-      results[table] = { count, outlier: outlier || undefined };
+    if (!manifestRowCounts || Object.keys(manifestRowCounts).length === 0) {
+      return {
+        name: 'row_counts',
+        passed: false,
+        evidence: { error: 'manifest carried no rowCounts — cannot verify parity' },
+        durationMs: now() - start,
+      };
     }
 
+    const tblRes = await pool.query(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`,
+    );
+    const present = new Set<string>(tblRes.rows.map((r: { table_name: string }) => r.table_name));
+
+    const results: Record<string, { expected: number; actual: number | null; ok: boolean }> = {};
+    const messages: string[] = [];
+
+    for (const [table, expected] of Object.entries(manifestRowCounts)) {
+      if (!present.has(table)) {
+        results[table] = { expected, actual: null, ok: false };
+        messages.push(`${table}: MISSING from restore (manifest recorded ${expected} rows)`);
+        continue;
+      }
+      // Only tables confirmed present in information_schema are interpolated here.
+      const res = await pool.query(`SELECT COUNT(*)::int AS c FROM "${table}"`);
+      const actual: number = res.rows[0].c;
+      const ok = actual === expected;
+      results[table] = { expected, actual, ok };
+      if (!ok) messages.push(`${table}: expected ${expected} rows, restored ${actual}`);
+    }
+
+    const passed = messages.length === 0;
     return {
       name: 'row_counts',
-      passed: !anyOutlier,
-      evidence: results,
+      passed,
+      evidence: { tablesChecked: Object.keys(manifestRowCounts).length, mismatches: messages, results },
       durationMs: now() - start,
     };
   } catch (err: any) {
@@ -203,41 +233,6 @@ async function checkTimeOrder(pool: Pool): Promise<SmokeCheck> {
     };
   } catch (err: any) {
     return { name: 'time_order', passed: false, evidence: { error: err.message }, durationMs: now() - start };
-  }
-}
-
-async function checkPIIFree(pool: Pool): Promise<SmokeCheck> {
-  const start = now();
-  try {
-    const tables = ['customers', 'orders', 'couriers'];
-    let totalPii = 0;
-    const details: Record<string, number> = {};
-
-    for (const table of tables) {
-      try {
-        const res = await pool.query(`SELECT * FROM "${table}" ORDER BY random() LIMIT 100`);
-        let piiCount = 0;
-        for (const row of res.rows) {
-          const str = JSON.stringify(row);
-          const { redactions } = piiRedactor.redact(str);
-          if (redactions.length > 0) piiCount++;
-        }
-        details[table] = piiCount;
-        totalPii += piiCount;
-      } catch (err: any) {
-        console.debug('[smoke-checks] PII check failed for table', table, ':', err?.message);
-        details[table] = -1;
-      }
-    }
-
-    return {
-      name: 'pii_free',
-      passed: totalPii === 0,
-      evidence: { totalPiiMatches: totalPii, perTable: details },
-      durationMs: now() - start,
-    };
-  } catch (err: any) {
-    return { name: 'pii_free', passed: false, evidence: { error: err.message }, durationMs: now() - start };
   }
 }
 

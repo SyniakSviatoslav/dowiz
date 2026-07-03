@@ -1,6 +1,5 @@
-// @ts-nocheck
 import crypto from 'node:crypto';
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
 import { createReadStream } from 'node:fs';
 
 export interface BackupManifest {
@@ -31,16 +30,23 @@ export async function generateManifest(
 ): Promise<BackupManifest> {
   const client = await pool.connect();
   try {
-    // Get row counts for critical tables (approximate is fine for massive DBs, but exact is better for audits)
-    // We will do a fast estimation via pg_class to avoid locking or slow scans, or exact count for small DBs.
-    // For PII-free backup auditing, exact count is usually fine during a consistent snapshot.
-    // Let's use exact counts for the specific tables we care about in this phase.
-    
-    const tables = [
-      'orders', 'order_items', 'order_item_modifiers', 
-      'courier_assignments', 'settlement_items', 'courier_payouts', 
-      'backup_audit_log', 'locations', 'customers'
-    ];
+    // LC7 fix 4 — FULL-COVERAGE row counts. The manifest must describe EVERY public base table
+    // (not a hand-picked 9), because the restore drill (checkRowCounts) asserts strict per-table
+    // parity against it: any table the manifest omits is a table whose truncation/loss the drill
+    // can never catch. Enumerate all public BASE TABLEs (excludes views + materialized views) and
+    // count each.
+    //
+    // FOLLOW-ON (snapshot consistency): these are straight COUNT(*)s taken AFTER the pg_dump, so on
+    // a busy DB a high-churn table (orders, backup_audit_log) can drift by a few rows between dump
+    // and count and make strict parity false-FAIL. That is intentionally the safe direction (a
+    // false-FAIL alerts a human; a false-GREEN hides data loss). The real fix is to take the dump
+    // and these counts inside one `pg_export_snapshot()` transaction — tracked as a follow-on.
+    const tblRes = await client.query(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+       ORDER BY table_name`,
+    );
+    const tables: string[] = tblRes.rows.map((r: { table_name: string }) => r.table_name);
 
     const rowCounts: Record<string, number> = {};
     for (const t of tables) {

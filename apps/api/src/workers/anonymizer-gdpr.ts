@@ -64,6 +64,35 @@ export class GdprErasureWorker {
             subject: { customerId, locationId: row.location_id },
           });
 
+          // N1 fail-loud backstop (resolution-r2.md §1 N1.2 / §2): NEVER write `completed` without a
+          // data-level confirmation that the erasure actually took effect. Under NOBYPASSRLS+MIG-2 a
+          // context-free erasure silently sees ∅ and no-ops; keying the terminal write off a re-read
+          // of `customers.anonymized_at` converts that silent false Art.17 completion into a loud
+          // `failed` + FAILED signal. (Structural post-flip *success* — the DEFINER gdpr_erase_customer
+          // — rides LC4-MIG / GATE-FLIP-E2E; this backstop makes the interim safe.) The re-read also
+          // credits the idempotent already-anonymized case (skipped, but goal-state reached → success).
+          const confirm = await client.query(
+            `SELECT anonymized_at FROM customers WHERE id = $1 AND location_id = $2`,
+            [customerId, row.location_id],
+          );
+          const erasureConfirmed = confirm.rows.length > 0 && confirm.rows[0].anonymized_at != null;
+          if (!erasureConfirmed) {
+            await client.query(
+              `UPDATE gdpr_erasure_requests
+               SET status = 'failed', error_message = 'erasure produced no effect (customers.anonymized_at still null)'
+               WHERE id = $1`,
+              [row.id],
+            );
+            await this.messageBus.publish(BUS_CHANNELS.ANONYMIZER_GDPR_FAILED, {
+              requestId: row.id,
+              customerId,
+              locationId: row.location_id,
+              reason: 'no-effect',
+              time: new Date().toISOString(),
+            });
+            continue;
+          }
+
           await client.query(
             `UPDATE gdpr_erasure_requests
              SET status = 'completed', completed_at = now(), metadata = $1
@@ -114,9 +143,13 @@ export class GdprErasureWorker {
 
           if (retryCount < 3) {
             const backoff = Math.pow(2, retryCount) * 60;
+            // LC4 (reliability C4): reset to `pending`, NOT left `in_progress`. The retry scan
+            // (run(): SELECT ... WHERE status='pending') only re-selects pending rows; leaving the
+            // row `in_progress` strands the legally-mandated erasure forever — it never re-runs and
+            // never reaches `failed`. Resetting to pending guarantees the next scan re-selects it.
             await client.query(
               `UPDATE gdpr_erasure_requests
-               SET metadata = $1
+               SET status = 'pending', metadata = $1
                WHERE id = $2`,
               [JSON.stringify({ ...meta, retryCount, lastError: 'Processing error' }), row.id],
             );
