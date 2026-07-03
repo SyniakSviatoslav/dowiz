@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Button, Input, Select, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle, useToast, staggerChildren, cardEntry, SearchInput, ResponsiveDialog } from '@deliveryos/ui';
+import { Button, Input, Select, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle, useToast, staggerChildren, cardEntry, SearchInput, ResponsiveDialog, useHistoryStack, UndoRedoButtons } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { fetchVenueInfo } from '../../lib/publicApi.js';
 import { z } from 'zod';
@@ -28,6 +28,38 @@ import { MediaManager } from '../../components/admin/MediaManager.js';
 // manager renders only when the build flag is on; the server independently gates
 // on business tier, so this is a hint, not the authority.
 const MEDIA_RICH_ENABLED = import.meta.env?.VITE_MEDIA_RICH_ENABLED === 'true';
+
+// UNDO/REDO (additive) — bounded client-draft history for the add/edit product form.
+// Operates ONLY on the local editing buffer BEFORE save; the save contract, API calls
+// and server state are untouched. Default ON; set VITE_UNDO_REDO_ENABLED=false to hide
+// the controls and disable the shortcuts.
+const UNDO_REDO_ENABLED = import.meta.env?.VITE_UNDO_REDO_ENABLED !== 'false';
+
+type FormRecipeLine = { supplyId: string; supplyName: string; qty: number; unit: string; kind: string; kcal: number | null; proteinG: number | null; fatG: number | null; carbsG: number | null; allergens: string[] };
+
+// The undoable slice of the form. Image fields (formImage object-URL + pendingImageFile)
+// are deliberately EXCLUDED: they are a paired unit and restoring one without the other
+// would desync the preview from the upload payload.
+export interface ProductFormDraft {
+  name: string; price: string; desc: string; available: boolean;
+  stock: string; prepTime: string;
+  taste: Record<string, number>;
+  recipeLines: FormRecipeLine[];
+  allergenStatus: 'unset' | 'none' | 'listed';
+  declaredAllergens: string[];
+}
+
+// Factory (not a shared constant) so no live form state ever aliases the "empty" object.
+export function makeEmptyProductDraft(): ProductFormDraft {
+  return { name: '', price: '', desc: '', available: true, stock: '', prepTime: '15', taste: {}, recipeLines: [], allergenStatus: 'unset', declaredAllergens: [] };
+}
+
+// Structural comparison for history dedupe — the snapshot effect rebuilds the draft
+// object every render, so reference equality would record no-op entries. Drafts are
+// plain JSON-safe data with stable key order (always built from the same literal shape).
+export function productDraftsEqual(a: ProductFormDraft, b: ProductFormDraft): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
 function getProductAllergens(product: Product): string[] {
   const set = new Set<string>();
@@ -372,11 +404,60 @@ export function MenuManagerPage() {
   const TASTE_LABELS: Record<string, string> = { spicy: 'Spicy', sweet: 'Sweet', salty: 'Salty', sour: 'Sour', richness: 'Richness' };
   const TASTE_ICONS: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
   const [formTaste, setFormTaste] = useState<Record<string, number>>({});
-  const [formRecipeLines, setFormRecipeLines] = useState<Array<{supplyId: string; supplyName: string; qty: number; unit: string; kind: string; kcal: number | null; proteinG: number | null; fatG: number | null; carbsG: number | null; allergens: string[]}>>([]);
+  const [formRecipeLines, setFormRecipeLines] = useState<FormRecipeLine[]>([]);
   // Owner allergen attestation (L3 owner declaration — owner is the authority; persisted in attributes jsonb,
   // never derived). 'listed' carries declaredAllergens; 'none'/'unset' carry none. See menu-characteristics-model council.
   const [formAllergenStatus, setFormAllergenStatus] = useState<'unset' | 'none' | 'listed'>('unset');
   const [formDeclaredAllergens, setFormDeclaredAllergens] = useState<string[]>([]);
+
+  // UNDO/REDO — bounded history of the in-progress edit buffer (client draft ONLY;
+  // see ProductFormDraft above). The individual useState fields stay the render truth;
+  // history mirrors them via the snapshot effect below and writes back through applyDraft.
+  const {
+    set: pushDraft, undo: undoDraft, redo: redoDraft,
+    canUndo: canUndoDraft, canRedo: canRedoDraft, reset: resetDraftHistory,
+  } = useHistoryStack<ProductFormDraft>(makeEmptyProductDraft(), { limit: 100, isEqual: productDraftsEqual });
+
+  const applyDraft = useCallback((d: ProductFormDraft) => {
+    setFormName(d.name); setFormPrice(d.price); setFormDesc(d.desc); setFormAvailable(d.available);
+    setFormStock(d.stock); setFormPrepTime(d.prepTime); setFormTaste(d.taste);
+    setFormRecipeLines(d.recipeLines); setFormAllergenStatus(d.allergenStatus); setFormDeclaredAllergens(d.declaredAllergens);
+  }, []);
+
+  const handleUndoDraft = useCallback(() => { const d = undoDraft(); if (d) applyDraft(d); }, [undoDraft, applyDraft]);
+  const handleRedoDraft = useCallback(() => { const d = redoDraft(); if (d) applyDraft(d); }, [redoDraft, applyDraft]);
+
+  // Record every draft change as an undo step. Undo/redo writes the restored snapshot
+  // back through the same setters, which re-fires this effect with values equal to the
+  // history's present — historyPush drops equal snapshots (productDraftsEqual), so no loop.
+  useEffect(() => {
+    if (!UNDO_REDO_ENABLED || !showForm) return;
+    pushDraft({
+      name: formName, price: formPrice, desc: formDesc, available: formAvailable,
+      stock: formStock, prepTime: formPrepTime, taste: formTaste, recipeLines: formRecipeLines,
+      allergenStatus: formAllergenStatus, declaredAllergens: formDeclaredAllergens,
+    });
+  }, [showForm, formName, formPrice, formDesc, formAvailable, formStock, formPrepTime, formTaste, formRecipeLines, formAllergenStatus, formDeclaredAllergens, pushDraft]);
+
+  // Cmd/Ctrl+Z = undo · Cmd/Ctrl+Shift+Z or Ctrl+Y = redo — only while the edit form is
+  // open. preventDefault stops the browser's native per-input text undo from fighting
+  // the draft-level history.
+  useEffect(() => {
+    if (!UNDO_REDO_ENABLED || !showForm) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndoDraft();
+      } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+        e.preventDefault();
+        handleRedoDraft();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showForm, handleUndoDraft, handleRedoDraft]);
 
   // Filter/sort state
   const [searchQuery, setSearchQuery] = useState('');
@@ -394,37 +475,36 @@ export function MenuManagerPage() {
   const openAddForm = (categoryId: string) => {
     setEditingProduct(null);
     setShowForm(true);
-    setFormName('');
-    setFormPrice('');
-    setFormDesc('');
-    setFormAvailable(true);
+    // Single-source the form values through the draft so undo/redo history starts
+    // from EXACTLY the state the form shows (undo can never go past this baseline).
+    const draft = makeEmptyProductDraft();
+    applyDraft(draft);
+    resetDraftHistory(draft);
     setFormImage(null);
-    setFormStock('');
-    setFormPrepTime('15');
-
-    setFormTaste({});
-    setFormRecipeLines([]);
-    setFormAllergenStatus('unset');
-    setFormDeclaredAllergens([]);
     setExpandedCat(categoryId);
   };
 
   const openEditForm = (product: Product) => {
     setEditingProduct(product);
     setShowForm(true);
-    setFormName(product.name);
-    setFormPrice(String(product.price));
-    setFormDesc(product.description || '');
-    setFormAvailable(product.available);
-    setFormImage(product.imageUrl || null);
-    setFormStock(product.stockCount != null ? String(product.stockCount) : '');
-    setFormPrepTime((product as any).prepTimeMinutes != null ? String((product as any).prepTimeMinutes) : '15');
-
-    setFormTaste(product.taste || {});
-    setFormRecipeLines(product.recipeLines || []);
     const attrs = (product.attributes as any) || {};
-    setFormAllergenStatus(attrs.allergen_status === 'none' || attrs.allergen_status === 'listed' ? attrs.allergen_status : 'unset');
-    setFormDeclaredAllergens(Array.isArray(attrs.declared_allergens) ? attrs.declared_allergens : []);
+    // Single-source the form values through the draft (same values as before, built
+    // once) so the undo baseline is exactly the loaded product state.
+    const draft: ProductFormDraft = {
+      name: product.name,
+      price: String(product.price),
+      desc: product.description || '',
+      available: product.available,
+      stock: product.stockCount != null ? String(product.stockCount) : '',
+      prepTime: (product as any).prepTimeMinutes != null ? String((product as any).prepTimeMinutes) : '15',
+      taste: product.taste || {},
+      recipeLines: product.recipeLines || [],
+      allergenStatus: attrs.allergen_status === 'none' || attrs.allergen_status === 'listed' ? attrs.allergen_status : 'unset',
+      declaredAllergens: Array.isArray(attrs.declared_allergens) ? attrs.declared_allergens : [],
+    };
+    applyDraft(draft);
+    resetDraftHistory(draft);
+    setFormImage(product.imageUrl || null);
   };
 
   const closeForm = () => {
@@ -994,6 +1074,20 @@ export function MenuManagerPage() {
       <ResponsiveDialog open={showForm} onClose={closeForm} title={editingProduct ? t('admin.edit_item', 'Edit Item') : t('admin.add_item', 'Add Item')}>
         {showForm && (
           <div className="space-y-4">
+            {/* UNDO/REDO — client-draft history controls (flag-gated, additive).
+                Keyboard: Cmd/Ctrl+Z undo · Cmd/Ctrl+Shift+Z or Ctrl+Y redo. */}
+            {UNDO_REDO_ENABLED && (
+              <div className="flex justify-end" data-testid="undo-redo-toolbar">
+                <UndoRedoButtons
+                  canUndo={canUndoDraft}
+                  canRedo={canRedoDraft}
+                  onUndo={handleUndoDraft}
+                  onRedo={handleRedoDraft}
+                  undoLabel={t('common.undo', 'Undo')}
+                  redoLabel={t('common.redo', 'Redo')}
+                />
+              </div>
+            )}
             {/* Photo */}
             <div>
               <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.photo', 'Photo')}</label>

@@ -9,7 +9,7 @@ const MediaGallery = lazy(() => import('../../components/media/MediaGallery').th
 const MediaRenderer = lazy(() => import('../../components/media').then(m => ({ default: m.MediaRenderer })));
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput, computeAllergenSurface, partitionByMacroLens } from '@deliveryos/ui';
+import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput, computeAllergenSurface, partitionByMacroLens, usePullToRefresh, PullToRefreshIndicator } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 import { fetchVenueInfo } from '../../lib/publicApi.js';
 import { MenuComparePanel } from './MenuComparePanel.js';
@@ -39,6 +39,10 @@ const FILTER_LENSES_ENABLED = (import.meta as any).env?.VITE_MENU_CHARACTERISTIC
 // storefront for now. The computeAllergenSurface single-source library + STEP-0 contract + guardrails #12
 // stay intact underneath (dormant) — re-enabling is this one flag, not a rebuild. Default OFF = frozen.
 const ALLERGENS_ENABLED = false;
+
+// PULL-TO-REFRESH — touch-only "pull down at the top to refetch" on mobile lists.
+// Default ON; kill-switch is VITE_PULL_TO_REFRESH_ENABLED=false at build time.
+const PULL_TO_REFRESH_ENABLED = (import.meta as any).env?.VITE_PULL_TO_REFRESH_ENABLED !== 'false';
 
 interface ProductModifier {
   id: string;
@@ -403,6 +407,18 @@ export function MenuPage() {
     loadMenu(loadedOnceRef.current && !slugChanged);
   }, [loadMenu, retryCount]);
 
+  // PULL-TO-REFRESH: reuses the SOFT loadMenu path (no skeleton, current menu stays
+  // on screen until the fresh one arrives) — the indicator is the only loading UI.
+  const {
+    handlers: ptrHandlers,
+    pulling: ptrPulling,
+    progress: ptrProgress,
+    refreshing: ptrRefreshing,
+  } = usePullToRefresh({
+    onRefresh: () => loadMenu(true),
+    disabled: !PULL_TO_REFRESH_ENABLED,
+  });
+
   const stickyRef = useRef<HTMLDivElement>(null);
   const [stickyHeight, setStickyHeight] = useState(44);
 
@@ -735,7 +751,12 @@ export function MenuPage() {
   };
 
   return (
-    <div className="relative min-h-screen pb-28">
+    <div className="relative min-h-screen pb-28" {...ptrHandlers}>
+      {/* PULL-TO-REFRESH indicator — appears only during an active pull / in-flight refetch,
+          pointer-events-none so it can never intercept a tap. */}
+      {PULL_TO_REFRESH_ENABLED && (
+        <PullToRefreshIndicator pulling={ptrPulling} progress={ptrProgress} refreshing={ptrRefreshing} />
+      )}
 
       {/* Vendor info zone — between the header (which already shows the name+logo) and the categories.
           Google rating + reviews link + venue state + closing time, over a stylized-map backdrop (no API).

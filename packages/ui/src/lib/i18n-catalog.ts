@@ -4369,4 +4369,44 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Logoja nuk u ruajt. Ju lutemi provoni përsëri.',
     uk: 'Не вдалося зберегти логотип. Спробуйте ще раз.',
   },
+  'common.undo': { en: 'Undo', sq: 'Zhbëj', uk: 'Скасувати' },
+  'common.redo': { en: 'Redo', sq: 'Ribëj', uk: 'Повторити' },
+  'common.edit_history': {
+    en: 'Edit history',
+    sq: 'Historiku i redaktimeve',
+    uk: 'Історія редагувань',
+  },
+  'common.refreshing': { en: 'Refreshing', sq: 'Po rifreskohet', uk: 'Оновлення' },
+  'palette.title': { en: 'Command palette', sq: 'Paleta e komandave', uk: 'Палітра команд' },
+  'palette.placeholder': {
+    en: 'Type a command or search…',
+    sq: 'Shkruani një komandë ose kërkoni…',
+    uk: 'Введіть команду або пошук…',
+  },
+  'palette.empty': {
+    en: 'No matching commands',
+    sq: 'Asnjë komandë e përputhur',
+    uk: 'Немає відповідних команд',
+  },
+  'shortcuts.title': {
+    en: 'Keyboard shortcuts',
+    sq: 'Shkurtoret e tastierës',
+    uk: 'Клавіатурні скорочення',
+  },
+  'shortcuts.open_palette': {
+    en: 'Open command palette',
+    sq: 'Hap paletën e komandave',
+    uk: 'Відкрити палітру команд',
+  },
+  'shortcuts.show_help': {
+    en: 'Show keyboard shortcuts',
+    sq: 'Shfaq shkurtoret e tastierës',
+    uk: 'Показати клавіатурні скорочення',
+  },
+  'shortcuts.go_to': { en: 'Go to', sq: 'Shko te', uk: 'Перейти до' },
+  'shortcuts.close_dialogs': {
+    en: 'Close dialogs',
+    sq: 'Mbyll dialogët',
+    uk: 'Закрити діалогові вікна',
+  },
 };

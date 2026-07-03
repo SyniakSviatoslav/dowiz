@@ -14,6 +14,7 @@ import { OnboardingPage } from '../pages/admin/OnboardingPage.js';
 import { ActivationPage } from '../pages/admin/ActivationPage.js';
 import { SupplyLibraryPage } from '../pages/admin/SupplyLibraryPage.js';
 import { PromotionsPage } from '../pages/admin/PromotionsPage.js';
+import { AdminCommandCenter } from '../components/admin/AdminCommandCenter.js';
 
 const AnalyticsPage = React.lazy(() => import('../pages/admin/AnalyticsPage.js').then(m => ({ default: m.AnalyticsPage })));
 
@@ -217,6 +218,10 @@ function AdminLayout() {
           })}
         </div>
       </ResponsiveDialog>
+
+      {/* Power-user layer: ⌘K/Ctrl+K command palette + "g"-sequence nav + "?" shortcuts
+          help. Nav-only — no mutations — so it's safe to mount for every admin route. */}
+      <AdminCommandCenter navItems={ALL_NAV_ITEMS} navTo={navTo} />
     </div>
   );
 }

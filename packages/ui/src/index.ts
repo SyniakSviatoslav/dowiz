@@ -42,4 +42,14 @@ export { SearchInput } from './components/atoms/SearchInput.js';
 export { Textarea } from './components/atoms/Textarea.js';
 export { SegmentedControl } from './components/atoms/SegmentedControl.js';
 export type { SegmentOption } from './components/atoms/SegmentedControl.js';
+export { useHistoryStack, historyInit, historyPush, historyUndo, historyRedo, DEFAULT_HISTORY_LIMIT } from './hooks/use-history-stack.js';
+export type { HistoryState, HistoryOptions, UseHistoryStack } from './hooks/use-history-stack.js';
+export { usePullToRefresh, applyPullResistance, computePullProgress, shouldActivatePull, PULL_THRESHOLD_PX, PULL_RESISTANCE, MAX_PULL_PX } from './hooks/use-pull-to-refresh.js';
+export type { UsePullToRefreshOptions, UsePullToRefreshResult, PullToRefreshHandlers } from './hooks/use-pull-to-refresh.js';
+export { useKeyboardShortcuts, parseKeychord, parseSequence, chordMatches, advanceSequence, isEditableTarget, isMacPlatform, formatKeychord } from './hooks/use-keyboard-shortcuts.js';
+export type { KeyChord, ChordEventLike, EditableTargetLike, ShortcutDef, UseKeyboardShortcutsOptions } from './hooks/use-keyboard-shortcuts.js';
+export { CommandPalette, fuzzyScore } from './components/organisms/CommandPalette.js';
+export type { PaletteCommand } from './components/organisms/CommandPalette.js';
+export { ShortcutsHelp } from './components/organisms/ShortcutsHelp.js';
+export type { ShortcutHelpItem } from './components/organisms/ShortcutsHelp.js';
 

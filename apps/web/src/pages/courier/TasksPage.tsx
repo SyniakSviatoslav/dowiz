@@ -2,12 +2,16 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TaskCard, EmptyState, Button, useI18n, PaperIllustration, isPaperSkinEnabled, ease } from '@deliveryos/ui';
+import { TaskCard, EmptyState, Button, useI18n, PaperIllustration, isPaperSkinEnabled, ease, usePullToRefresh, PullToRefreshIndicator } from '@deliveryos/ui';
 import type { CourierTask } from '@deliveryos/ui';
 import { apiClient, useWebSocket, useSound } from '../../lib/index.js';
 
 const containerVariants = { hidden: {}, visible: { transition: { staggerChildren: 0.04, delayChildren: 0.05 } } };
 const itemVariants = { hidden: { opacity: 0, y: 10, scale: 0.98 }, visible: { opacity: 1, y: 0, scale: 1 } };
+
+// PULL-TO-REFRESH — touch-only "pull down at the top to refetch" on mobile lists.
+// Default ON; kill-switch is VITE_PULL_TO_REFRESH_ENABLED=false at build time.
+const PULL_TO_REFRESH_ENABLED = (import.meta as any).env?.VITE_PULL_TO_REFRESH_ENABLED !== 'false';
 
 export function TasksPage() {
   const [tasks, setTasks] = useState<CourierTask[]>([]);
@@ -65,6 +69,18 @@ export function TasksPage() {
     fetchShiftStatus();
   }, []);
 
+  // PULL-TO-REFRESH: reuses the page's existing refetchers (tasks + the shift badge,
+  // so the Online indicator can't go stale across a manual refresh).
+  const {
+    handlers: ptrHandlers,
+    pulling: ptrPulling,
+    progress: ptrProgress,
+    refreshing: ptrRefreshing,
+  } = usePullToRefresh({
+    onRefresh: () => Promise.all([fetchTasks(), fetchShiftStatus()]),
+    disabled: !PULL_TO_REFRESH_ENABLED,
+  });
+
   // WebSocket: Listen for new assignments
   useWebSocket({
     room: `courier:${courierId}`,
@@ -121,7 +137,12 @@ export function TasksPage() {
   };
 
   return (
-    <div className="p-5 space-y-5">
+    <div className="relative p-5 space-y-5" {...ptrHandlers}>
+      {/* PULL-TO-REFRESH indicator — appears only during an active pull / in-flight refetch,
+          pointer-events-none so it can never intercept a tap on a task card. */}
+      {PULL_TO_REFRESH_ENABLED && (
+        <PullToRefreshIndicator pulling={ptrPulling} progress={ptrProgress} refreshing={ptrRefreshing} />
+      )}
       <div className="flex justify-between items-center gap-3 pb-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
         <h1 className="text-2xl font-bold min-w-0 truncate" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>{t('courier.tasks_title', 'Tasks')}</h1>
         <div
