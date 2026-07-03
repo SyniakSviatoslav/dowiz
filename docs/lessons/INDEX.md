@@ -19,3 +19,8 @@ error signature. file is repo-relative.
 | docs/** | docs/lessons/2026-06-29-docs-only-no-staging-deploy.md |
 | .claude/state/** | docs/lessons/2026-07-02-gate-state-file-expiry.md |
 | .claude/hooks/** | docs/lessons/2026-07-02-gate-state-file-expiry.md |
+| packages/db/migrations/**role** | docs/lessons/2026-07-03-rotate-prod-role-staging-rehearsal.md |
+| packages/db/migrations/**grant** | docs/lessons/2026-07-03-rotate-prod-role-staging-rehearsal.md |
+| .github/workflows/** | docs/lessons/2026-07-03-secret-store-provenance-trace.md |
+| ESSLREQUIRED | docs/lessons/2026-07-03-secret-store-provenance-trace.md |
+| packages/db/migrations/** | docs/lessons/2026-07-03-prod-staging-schema-drift.md |
