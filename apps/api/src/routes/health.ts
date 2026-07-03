@@ -114,6 +114,15 @@ export default async function healthRoutes(
         ]),
       );
     }
+    // H7 (2026-07-03 audit): the aggregate below used to be hardcoded 'ok' regardless
+    // of what workerEntries actually said — a fully-dead worker fleet never degraded
+    // /health. Derive it for real: the heartbeat query itself failing/timing out, or
+    // zero live heartbeats, or any entry not 'ok' → degraded. Never silently 'ok'.
+    const workerStatuses = Object.values(workerEntries).map((w) => w.status);
+    const workersStatus: 'ok' | 'degraded' =
+      workerResult.status === 'ok' && workerStatuses.length > 0 && workerStatuses.every((s) => s === 'ok')
+        ? 'ok'
+        : 'degraded';
 
     // ── 3. MessageBus / Redis (Degraded) ───────────────────────────
     const redisResult = await withTimeout(opts.messageBus.checkHealth(), 'messageBus');
@@ -233,7 +242,10 @@ export default async function healthRoutes(
           last_verified_at: lastVerified,
           last_result: neverRun ? 'never_run' : (lastResult === true ? 'success' : 'failed'),
           stale: isStale,
-          status: neverRun ? 'ok' : (isStale ? 'degraded' : 'ok'),
+          // H7 (2026-07-03 audit): a system that has NEVER successfully restore-tested
+          // is not healthy — it previously reported 'ok'. Only a verified-recent
+          // success is 'ok'; never-run or stale both surface as 'degraded'.
+          status: neverRun ? 'degraded' : (isStale ? 'degraded' : 'ok'),
         };
       }
     }
@@ -289,7 +301,7 @@ export default async function healthRoutes(
     // ── Determine overall status ────────────────────────────────────
     const allChecks = {
       postgres: pgResult,
-      workers: { status: 'ok' as const, entries: workerEntries },
+      workers: { status: workersStatus, entries: workerEntries },
       messageBus: redisResult,
       telegram: telegramResult,
       r2: r2Result,

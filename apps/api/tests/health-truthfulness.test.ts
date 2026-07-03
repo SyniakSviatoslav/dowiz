@@ -17,9 +17,18 @@ async function buildApp(dbQuery: (sql: string) => Promise<any>) {
   return fastify;
 }
 
-// Everything healthy: SELECT 1 → alive, all other checks return empty rows (→ ok).
+// Everything healthy: SELECT 1 → alive, one fresh/healthy worker heartbeat (H7:
+// zero heartbeat rows now honestly means the worker fleet is degraded, not ok —
+// see health-worker-status.test.ts), all other checks return empty rows (→ ok).
 const healthyDb = async (sql: string) => {
   if (/SELECT 1 AS alive/i.test(sql)) return { rows: [{ alive: 1 }] };
+  if (/ops_worker_heartbeat/i.test(sql)) {
+    return {
+      rows: [
+        { worker_id: 'backup-cron', instance_id: 'a', job_name: null, status: 'healthy', stale_seconds: 5 },
+      ],
+    };
+  }
   return { rows: [] };
 };
 

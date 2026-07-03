@@ -2,6 +2,7 @@
 import { Pool } from 'pg';
 import { loadEnv } from '@deliveryos/config';
 import crypto from 'node:crypto';
+import { createQueueWithDefaults } from '@deliveryos/platform';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { createLogicalDump } from './dump.js';
 import { createEncryptionStream } from './encrypt.js';
@@ -36,13 +37,25 @@ export class BackupCronWorker {
     await this.boss.work(QUEUE_NAMES.BACKUP_WEEKLY, async () => this.handleBackup('weekly'));
     await this.boss.work(QUEUE_NAMES.BACKUP_MONTHLY, async () => this.handleBackup('monthly'));
 
-    await this.boss.createQueue(QUEUE_NAMES.BACKUP_HOURLY);
+    // H1/H2 (2026-07-03 reliability audit): bare createQueue() left every backup queue
+    // on pg-boss v10 defaults — retryLimit=2/retryDelay=0s/no deadLetter, and policy
+    // `standard` (the schedule() calls below dedupe on singletonKey alone, which is a
+    // no-op off policy `short`). `expireInSeconds` is sized above the worst-case
+    // in-handler retry loop (1+5+15min=1260s, see handleBackup) so pg-boss's own active
+    // job expiry can't fire and reschedule a second run while one is still legitimately
+    // retrying (M8's "expire_in shorter than the retry loop" compounding failure).
+    const queueOptions = {
+      policy: 'short' as const,
+      deadLetter: true as const,
+      expireInSeconds: 3600,
+    };
+    await createQueueWithDefaults(this.boss, QUEUE_NAMES.BACKUP_HOURLY, queueOptions);
     await this.boss.schedule(QUEUE_NAMES.BACKUP_HOURLY, env.BACKUP_HOURLY_CRON);
-    await this.boss.createQueue(QUEUE_NAMES.BACKUP_DAILY);
+    await createQueueWithDefaults(this.boss, QUEUE_NAMES.BACKUP_DAILY, queueOptions);
     await this.boss.schedule(QUEUE_NAMES.BACKUP_DAILY, env.BACKUP_DAILY_CRON);
-    await this.boss.createQueue(QUEUE_NAMES.BACKUP_WEEKLY);
+    await createQueueWithDefaults(this.boss, QUEUE_NAMES.BACKUP_WEEKLY, queueOptions);
     await this.boss.schedule(QUEUE_NAMES.BACKUP_WEEKLY, env.BACKUP_WEEKLY_CRON);
-    await this.boss.createQueue(QUEUE_NAMES.BACKUP_MONTHLY);
+    await createQueueWithDefaults(this.boss, QUEUE_NAMES.BACKUP_MONTHLY, queueOptions);
     await this.boss.schedule(QUEUE_NAMES.BACKUP_MONTHLY, env.BACKUP_MONTHLY_CRON);
   }
 
@@ -206,7 +219,12 @@ export class BackupCronWorker {
       });
     } finally {
       if (locked) {
-        await this.releaseLock(lockClient);
+        // H6 (2026-07-03 audit): releaseLock(client, type) was called with `type`
+        // omitted → getLockKey(undefined) unlocked "backup_lock_undefined", never the
+        // real per-type key. The session-level advisory lock on `type` stayed held
+        // forever, so every subsequent run of this backup type saw locked=false and
+        // silently skipped — backups stopped after the first successful run.
+        await this.releaseLock(lockClient, type);
       }
       lockClient.release();
     }
