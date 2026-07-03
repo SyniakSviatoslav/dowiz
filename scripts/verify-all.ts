@@ -46,6 +46,16 @@ const STEPS = [
   // flag defaults, no masked-exit-code pipes, migration-drift ordering, every authority guardrail wired,
   // the plane-maintainer autonomy envelope documented. Direct node invoke (package.json is protect-paths).
   { name: 'plane-guard (11 meta-patterns → deterministic gate)', cmd: 'node scripts/plane-guard.mjs', ci: true },
+  // L5 meta-controller (2026-07-03, docs/design/harness/META-CONTROLLER.md): the gated self-modification
+  // loop. Its IMMUTABLE-CORE proof must run in CI so the safety boundary (Ethics Charter / the gate /
+  // authority hooks / itself can never be a proposal target) can never silently rot. scripts/*.test.mjs
+  // are NOT in the test:unit glob, so they are wired here explicitly.
+  { name: 'meta-controller immutable-core (refuses to self-modify the Charter/gate)', cmd: 'node --test scripts/meta-controller.test.mjs', ci: true },
+  { name: 'sandbox-staleness predicate (red→green teeth)', cmd: 'node --test scripts/guardrail-sandbox-staleness.test.mjs', ci: true },
+  // The additive guard the meta-controller PROPOSED for the `stale-sandbox` gap: fails on a sandbox
+  // worktree that is STALE + carrying UNTRACKED work a `--force` prune would destroy (the 2026-07-03
+  // voice-FE near-miss). No-op in CI/clean clones (worktrees are local); catches the loss risk locally.
+  { name: 'sandbox staleness (no at-risk worktree work — meta-controller proposed)', cmd: 'node scripts/guardrail-sandbox-staleness.mjs --ci', ci: true },
 ].filter((s) => !CI_MODE || s.ci);
 
 function run(cmd: string): { ok: boolean; output: string } {
