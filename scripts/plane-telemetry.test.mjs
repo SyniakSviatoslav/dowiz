@@ -277,6 +277,26 @@ test('publish: bootstrap racing an existing branch falls through to the append p
   assert.equal(parents, '2', 'second commit must parent on the first (append, not orphan/rewrite)');
 });
 
+test('publish: a fresh checkout with no local predictions.jsonl must NOT delete the predictions.jsonl an earlier box already published (ledger #53 — append-only means never by omission either)', (t) => {
+  const { remote, works: [workA, workB] } = makeRepos(t, 2);
+  // Box A (yesterday's box) records + publishes a prediction.
+  assert.equal(cli(['predict', '--run-id', 'rA', '--target', 'cloud-first-publish', '--prediction', 'will hit', '--confidence', '0.6'], { root: workA }).status, 0);
+  assert.equal(cli(['publish', '--run-id', 'rA'], { root: workA, env: GIT_ENV }).status, 0);
+  assert.ok(g(['show', 'refs/remotes/origin/telemetry/plane:telemetry/predictions.jsonl'], workA).includes('cloud-first-publish'));
+
+  // Box B is a FRESH checkout (a new cloud container) — it has never written loops/runs/predictions.jsonl
+  // locally, only an unrelated event. Its publish must still preserve box A's predictions.jsonl untouched.
+  assert.ok(!existsSync(join(workB, 'loops/runs/predictions.jsonl')), 'fixture sanity: box B starts with no local predictions.jsonl');
+  assert.equal(cli(['emit', '--run-id', 'rB', '--kind', 'sense', '--outcome', 'pass', '--detail', 'box B sense'], { root: workB }).status, 0);
+  const r = cli(['publish', '--run-id', 'rB'], { root: workB, env: GIT_ENV });
+  assert.equal(r.status, 0, `box B publish failed: ${r.stderr}`);
+
+  const names = g(['ls-tree', '-r', '--name-only', 'refs/remotes/origin/telemetry/plane', '--', 'telemetry/'], workB).split('\n');
+  assert.ok(names.includes('telemetry/predictions.jsonl'), `predictions.jsonl was DELETED by box B's publish — tree now: ${names.join(', ')}`);
+  const predsAfter = g(['show', 'refs/remotes/origin/telemetry/plane:telemetry/predictions.jsonl'], workB);
+  assert.ok(predsAfter.includes('cloud-first-publish'), 'box A prediction content must survive a sibling-only publish from box B');
+});
+
 // ---------------------------------------------------------------------------
 // DoD row: Subprocess safety (R2-M3) — hostile args never reach a shell
 // ---------------------------------------------------------------------------

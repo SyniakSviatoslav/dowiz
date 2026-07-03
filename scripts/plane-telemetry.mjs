@@ -660,6 +660,17 @@ function collectPublishFiles() {
   return files;
 }
 
+/** Names already published under telemetry/ at a given branch tip (fresh checkouts lack these
+ * locally — e.g. predictions.jsonl from a prior box's run). Ledger #53: without this, cmdPublish
+ * rebuilt the tree from local files ONLY, silently DELETING any branch file absent from the local
+ * scratch on push (violates the branch's own append-only contract). */
+function remoteTelemetryNames(tip) {
+  if (!tip) return [];
+  const r = git(['ls-tree', '-r', '--name-only', tip, '--', 'telemetry/']);
+  if (r.status !== 0) return [];
+  return r.stdout.split('\n').filter(Boolean).map((p) => p.replace(/^telemetry\//, ''));
+}
+
 function lineKey(line) {
   try {
     const o = JSON.parse(line);
@@ -703,9 +714,13 @@ function cmdPublish(args) {
     else if (forceParentOnce && attempt === 0) tip = forceParentOnce === 'orphan' ? null : forceParentOnce;
 
     // Build the exact blob contents (branch content ∪ unseen local lines — append-only union).
+    // Names published at `tip` but absent from local scratch carry forward UNCHANGED (ledger #53)
+    // so a fresh/partial checkout can never delete a sibling file by omission.
+    const remoteOnlyNames = remoteTelemetryNames(tip).filter((n) => !files.some((f) => f.name === n));
+    const allFiles = [...files, ...remoteOnlyNames.map((name) => ({ name, local: '' }))];
     const blobs = [];
     let newLines = 0;
-    for (const f of files) {
+    for (const f of allFiles) {
       const existing = tip ? (showBranchFile(tip, f.name) ?? '') : '';
       const content = mergeContent(existing, f.local);
       if (content !== existing) newLines++;
