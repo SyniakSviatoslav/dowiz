@@ -17,6 +17,25 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Ky restorant ende nuk e ka publikuar menunë.',
     uk: 'Цей ресторан ще не опублікував меню.',
   },
+  // PWA install prompt (apps/web InstallPrompt) — Android/Chromium banner + iOS hint.
+  'pwa.install_title': { en: 'Install dowiz', sq: 'Instalo dowiz', uk: 'Встановити dowiz' },
+  'pwa.install_body': {
+    en: 'Add dowiz to your home screen for faster ordering.',
+    sq: 'Shto dowiz në ekranin bazë për porosi më të shpejta.',
+    uk: 'Додайте dowiz на головний екран для швидшого замовлення.',
+  },
+  'pwa.install_cta': { en: 'Install', sq: 'Instalo', uk: 'Встановити' },
+  'pwa.dismiss': { en: 'Not now', sq: 'Jo tani', uk: 'Не зараз' },
+  'pwa.ios_hint': {
+    en: "Tap Share, then 'Add to Home Screen'.",
+    sq: "Trokit Share, pastaj 'Add to Home Screen'.",
+    uk: "Натисніть «Поділитися», потім «На початковий екран».",
+  },
+  'pwa.close_label': {
+    en: 'Dismiss install prompt',
+    sq: 'Mbyll ftesën për instalim',
+    uk: 'Закрити пропозицію встановлення',
+  },
   'admin.dishes_available': { en: 'available', sq: 'të disponueshme', uk: 'доступні' },
   'admin.no_couriers_online': {
     en: 'No couriers online',
@@ -3265,6 +3284,28 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: 'Це замовлення скасовано — з вас не стягнуто кошти. Можете замовити знову або зателефонувати в ресторан.',
   },
   'order.order_again': { en: 'Order again', sq: 'Porosit sërish', uk: 'Замовити знову' },
+  'order.reorder': { en: 'Reorder', sq: 'Riporosit', uk: 'Повторити замовлення' },
+  'order.reordering': { en: 'Adding to cart…', sq: 'Po shtohet në shportë…', uk: 'Додаємо до кошика…' },
+  'order.reorder_added': {
+    en: 'Your last order is back in the cart.',
+    sq: 'Porosia juaj e fundit është sërish në shportë.',
+    uk: 'Ваше попереднє замовлення знову в кошику.',
+  },
+  'order.reorder_some_unavailable': {
+    en: 'Some items were unavailable and skipped — the rest are in your cart.',
+    sq: 'Disa artikuj nuk ishin të disponueshëm dhe u anashkaluan — pjesa tjetër është në shportë.',
+    uk: 'Деякі позиції були недоступні й пропущені — решта у вашому кошику.',
+  },
+  'order.reorder_empty': {
+    en: 'None of these items are available right now.',
+    sq: 'Asnjë nga këta artikuj nuk është i disponueshëm tani.',
+    uk: 'Жодна з цих позицій зараз недоступна.',
+  },
+  'order.reorder_failed': {
+    en: 'Could not load the menu to reorder. Please try again.',
+    sq: 'Nuk u ngarkua menyja për të riporositur. Ju lutemi provoni sërish.',
+    uk: 'Не вдалося завантажити меню для повторного замовлення. Спробуйте ще раз.',
+  },
   'order.rejected_help': {
     en: "The restaurant couldn't take this order — you haven't been charged. Try again or give them a call.",
     sq: 'Restoranti nuk mundi ta pranonte këtë porosi — nuk jeni faturuar. Provoni sërish ose telefonojini.',
