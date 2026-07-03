@@ -151,8 +151,16 @@ against prod — P6) with a single **read-only prod smoke** that can actually be
 only `request.*` / read-only page loads: `GET /health` → 200; a published `/s/:slug` menu renders a
 known product; `GET /api/owner/locations` (unauth) → 401. No mock-auth, no create/delete.
 
-> Note: `deploy-validation.spec.ts` already `requireStaging(BASE)`-guards and defaults BASE to staging,
-> so it correctly refused to run against prod anyway — moving it to `staging-verify` (b) is its home.
+> Note (updated 2026-07-03): `deploy-validation.spec.ts` is now **prod-safe and self-partitioning** — it
+> no longer throws against prod. Its home is still `staging-verify` (b) where it runs the FULL suite
+> (login → create category/product → PATCH → image upload → import preview → API round-trip); but the
+> SAME spec, pointed at `VITE_BASE_URL=https://dowiz.fly.dev`, now `test.skip(isProdTarget(BASE), …)`s
+> every mutating / owner-token-dependent test (0.1 login, 3.1, 4.x, 5.1, 6.2, 7.1, 11.1) and runs only
+> the read-only subset (1.x/2.x auth-401 + 400-not-500, 6.1 upload-401, 8.1 health, 9.1 SSR+menu-version,
+> 10.1 dashboard-SPA, 12.1 theme, 13.1 public-menu render). Proven: **11 passed / 9 skipped / exit 0**
+> against prod; **full mutating run green on staging** (`isProdTarget` false there). So the read-only
+> prod smoke below can either be a dedicated `prod-smoke.spec.ts` OR simply this spec pointed at prod —
+> it is now safe to run post-deploy against the live host without writing to the storefront.
 
 ## (d) `verify:all` as a required status check + pre-push hook (P1)
 
