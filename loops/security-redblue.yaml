@@ -1,0 +1,139 @@
+# security-redblue loop — a TWO-ARM blue-team + red-team security loop over dowiz's OWN app-layer
+# assets. BLUE arm = autonomous, safe, in-harness (static review + read-only scouts + dep audit +
+# security-E2E replay). RED arm = HUMAN-GATED, disposable-Kali-workstation-only (the offensive tools
+# from docs/security/redteam-runbook.md): the loop ORCHESTRATES (engagement plan + findings intake)
+# and NEVER autonomously fires attack traffic or installs offensive tooling. Findings are ADVISORY:
+# every confirmed finding → red→green guardrail + REGRESSION-LEDGER row; red-line (auth/RLS/money/PII)
+# → Triadic Council BEFORE any fix, never auto-fixed. The loop is advisory-forever, never a gate itself.
+id: security-redblue
+version: 0.1
+status: CERTIFIED          # M1–M11 green + anti-cheat dry-run 20/20 (loops/reports/security-redblue-0.1.md)
+intent: "Continuously harden dowiz's OWN application layer (authz/RLS, injection, JWT invariants, secret/PII egress, asset surface, dep advisories) by pairing an autonomous SAFE blue-team sweep with a HUMAN-GATED red-team engagement whose results feed the ordinary red→green guardrail + council discipline — advisory-forever, never a gate."
+problem_signature: "operator wants a repeatable self-security posture over their OWN staging assets (recurring cross-tenant/IDOR/JWT/injection/secret classes) WITHOUT the loop ever firing autonomous attack traffic, auto-fixing a red-line, or faking a green by declaring 'secure' without evidence."
+
+trigger: "/security-redblue   (or: node tools/security-redblue/dry-run.mjs for the anti-cheat cert; blue arm: node scripts/asset-surface-scan.mjs + node scripts/scout-feeds.mjs + pnpm run verify:rls|verify:secrets|verify:privacy + pnpm audit + security-E2E replay)"
+
+role_mindset: "Blue-team steward + red-team orchestrator: run every SAFE check yourself and TRUST THE ARTIFACT, not the absence of noise — absence of evidence is never evidence of absence. Never fire offensive traffic from the harness; the red arm runs on a disposable Kali workstation against STAGING by a human, and you only PLAN it and INGEST its findings. Treat every confirmed finding as an ordinary fix with an offensive origin (guardrail + ledger); STOP and route every auth/RLS/money/PII finding to the Triadic Council before any code. You inform; guardrails/tests/human decide."
+
+preconditions:
+  - "Scope authorization holds: ONLY dowiz's own code + data + own hostnames (dowiz.org|com|fly.dev, dowiz-staging.fly.dev). Third-party infra (Fly edge/VMs, Supabase host/VPC, Cloudflare R2) is OUT — STOP if a step's target is a network/host/edge layer (docs/security/redteam-runbook.md §1)."
+  - "STAGING only for any active probing (VITE_BASE_URL=https://dowiz-staging.fly.dev). Prod is NEVER a red-team target."
+  - "Ethics fence armed: NO person-profiling — Maigret + theHarvester person-modules + SpiderFoot social-modules stay OFF (charter). STOP if a step would profile a customer/courier/prospect."
+  - "For the RED arm: a human operator + a disposable Kali VM/container (kalilinux/kali-rolling, --rm) — the loop confirms readiness + emits the plan; it does NOT install or run offensive tooling itself."
+  - "For blue-arm E2E replay: pnpm exec playwright installed; staging reachable. For verify:rls/privacy: DB env present (else that step records skipped-no-env, never a faked pass)."
+
+scope_class: A             # BLUE arm is READ-ONLY (scouts + static review + advisory replay), mutates only local scratch (loops/runs/ baseline+cursor) + advisory ledger rows a human lands. RED arm is out-of-harness (human/Kali). The loop NEVER touches product code, never fires attack traffic, never auto-fixes.
+
+execution_skills:          # each is a real, shipped, invokable operation — zero phantom skills (verified: help/parse/registry)
+  - "node scripts/asset-surface-scan.mjs [--json] [--update-baseline]   (READ-ONLY crt.sh CT asset-surface scout — NEW subdomain = signal; has --test-fixture seam; emits plane-telemetry kind=scout)"
+  - "node scripts/scout-feeds.mjs [--json] [--update-cursor]            (READ-ONLY upstream release/advisory watch over shipped deps incl. argon2/jose/pg — advisory)"
+  - "pnpm run verify:rls        (packages/db/scripts/verify-rls.ts — RLS invariant DB backstop: FORCE/NOBYPASSRLS/WITH-CHECK)"
+  - "pnpm run verify:secrets    (scripts/verify-secrets.ts — secret/config hygiene)"
+  - "pnpm run verify:privacy    (apps/api/tests/pii-leak-detector.test.ts — PII egress detector)"
+  - "pnpm run verify:env        (packages/config/src/verify-env.ts — env/secret presence + shape)"
+  - "pnpm audit                 (dependency vulnerability audit — advisory, feeds scout-feeds triage)"
+  - "npx eslint . (tools/eslint-plugin-local)   (static security-class lint: test-integrity + local rules — red→green guardrail authoring surface)"
+  - "Security-E2E REPLAY vs staging: pnpm exec playwright test e2e/tests/admin-platform-authz.spec.ts e2e/tests/courier-room-authz-isolation.spec.ts e2e/tests/flow-security-contracts.spec.ts e2e/tests/flow-security-regression-2026-06.spec.ts --reporter=list   (proves the shipped authz/RLS/JWT guardrails still hold)"
+  - "node scripts/plane-telemetry.mjs emit --kind scout|probe … + finalize (§5)   (telemetry egress — advisory tags only, NEVER a gate)"
+  - "RED-arm ORCHESTRATION (human-gated, NOT fired by the harness): emit the engagement checklist from docs/security/redteam-runbook.md §3 (crt.sh · Autorize · JWT Editor · SQLmap · John-the-Ripper) + INGEST results via the finding-intake gate (tools/security-redblue/dry-run.mjs evaluateRun/classifyFinding)"
+
+goal: "Every RUN reaches a TERMINAL OUTCOME with proof: BLUE sweep = each declared safe step EXECUTED with a captured evidence artifact (skipped-no-env recorded honestly, never faked); RED engagement = a plan emitted + any human-supplied findings ingested; and every CONFIRMED finding lands in exactly one terminal disposition {guardrail-landed(+ledger) | council-queued(red-line) | open→carried} — verdict ∈ {ADVISORY-COMPLETE | INCOMPLETE | RED:violation}, gate ALWAYS 'advisory' (never PASS)."
+
+verification: >
+  Machine-graded, not vibe (tools/security-redblue/dry-run.mjs evaluateRun/classifyFinding):
+  (1) EVIDENCE-NOT-ASSUMED — a blue step marked executed with evidence===null ⇒ RED:violation (fake-green:no-evidence); an unrun step ⇒ INCOMPLETE. A run is never 'clean' without artifacts.
+  (2) NO-CLOSE-WITHOUT-GUARDRAIL — a confirmed finding is 'closed' ONLY with disposition==='guardrail-landed' && guardrail!=null && ledger_row===true; claiming closed without them ⇒ RED:violation (closed-without-guardrail).
+  (3) COUNCIL-BEFORE-REDLINE — a confirmed red-line finding (class ∈ authz|rls|money|pii|jwt|auth) with disposition==='auto-fixed' ⇒ RED:violation (council-bypass); terminal disposition is council-queued (or guardrail-landed AFTER council).
+  (4) ADVISORY-FOREVER — evaluateRun().gate === 'advisory' on EVERY branch; the loop never emits a gate PASS.
+  (5) SCOUT SURFACES SIGNAL — asset-surface-scan flags a planted NEW subdomain (total_new≥1) and 0-NEW on a baseline match (real diff, not always-red).
+  Proven by the anti-cheat dry-run (20/20): a run that never-ran / closed-without-guardrail / auto-fixed-a-red-line all go RED/INCOMPLETE — a status-only loop would falsely certify all three.
+
+iron_principles:
+  - no-fake-green                # certify on captured EVIDENCE ARTIFACTS + landed guardrails, never on 'no findings surfaced'
+  - evidence-not-assumed         # absence of evidence ≠ evidence of absence; an unrun/artifact-less step is INCOMPLETE/RED, never 'clean'
+  - advisory-forever             # findings + telemetry INFORM; guardrails/tests/human are authority; the loop is NEVER a gate (gate:'advisory' always)
+  - no-autonomous-offense        # the harness NEVER fires attack traffic or installs offensive tooling; the red arm is human + disposable-Kali, orchestrated + ingested only
+  - council-before-redline       # auth/RLS/money/PII finding → Triadic Council BEFORE any fix; NEVER auto-fixed (council-bypass = violation)
+  - close-only-with-guardrail    # a confirmed finding is closed ONLY via a red→green guardrail + REGRESSION-LEDGER row (same discipline as every fix)
+  - own-assets-staging-only      # only dowiz's own hostnames, staging only for active probing, prod never a target
+  - no-person-profiling          # charter: Maigret + person/social modules OFF; never profile a customer/courier/prospect
+  - never-weaken-a-gate          # a finding may harden an existing check, never relax one; no skip/.only/inflated-timeout/expect(true)
+
+loop_body: [SENSE, DIAGNOSE, ACT, VERIFY, REPEAT]   # SENSE=scouts+static+dep-audit+E2E-replay (blue) & red-plan · DIAGNOSE=triage findings by class/severity/red-line · ACT=author red→green guardrail OR queue council (red-line) OR carry-open · VERIFY=evaluateRun (evidence + disposition gate) · REPEAT=next surface/engagement, with hard exit
+
+exit_conditions: >
+  ALL must hold to finish a RUN: every declared BLUE step is EXECUTED with a captured evidence artifact
+  (or an honest skipped-no-env record); the RED engagement plan is emitted AND every human-supplied
+  finding is ingested; and every CONFIRMED finding has a terminal disposition — {guardrail-landed with a
+  real guardrail + REGRESSION-LEDGER row} OR {council-queued for a red-line} OR {explicitly carried open
+  to the next run with a reason}. The run then lands in exactly one verdict: ADVISORY-COMPLETE (all steps
+  evidenced + all confirmed findings terminally disposed), INCOMPLETE (an unrun step or an undisposed
+  confirmed finding — carried forward), or RED:violation (fake-green:no-evidence, closed-without-guardrail,
+  or council-bypass — STOP + escalate). gate is ALWAYS 'advisory'. No "until it looks secure". A §5 LOOP
+  REPORT is always printed + a per-run artifact written to loops/runs/ via the harness finalize.
+
+gates:
+  - "Scope gate (false turn = attacking a third party): every active-probe target MUST be a dowiz-owned hostname on STAGING; a network/host/edge target (Fly/Supabase/R2) STOPS the step (runbook §1)."
+  - "Autonomy gate (false turn = the harness becomes a weapon): the RED arm is human-gated on a disposable Kali workstation — the loop confirms human+VM readiness, emits the plan, and INGESTS results; it NEVER fires attack traffic or installs offensive tooling itself."
+  - "Red-line gate (false turn = a botched auth/RLS/money/PII fix ships): a confirmed red-line finding routes to the Triadic Council BEFORE any code — auto-fix is a VIOLATION."
+  - "Evidence gate (false turn = fake-green): a run is complete ONLY with captured artifacts per blue step + a landed guardrail per closed finding; 'no findings' without evidence is INCOMPLETE, never 'secure'."
+  - "Ethics gate (charter-binding): NO person-profiling — person/social modules OFF; STOP if a step would profile a real customer/courier/prospect."
+
+proof_artifacts:
+  - "loops/reports/security-redblue-0.1.md              (M1–M11 + the 20/20 anti-cheat dry-run)"
+  - "tools/security-redblue/dry-run.mjs                 (re-runnable hermetic anti-cheat harness: verdict engine + crt.sh smoke via fixture; NO attack traffic)"
+  - "loops/runs/security-redblue-<ts>.json              (per-run lossless: blue-step evidence map + finding dispositions + verdict + red-plan)  [loops/runs/* is gitignored scratch]"
+  - "loops/runs/asset-surface-baseline.json + scout-cursor.json   (the scout state the blue arm diffs against)"
+  - "plane-telemetry events (kind=scout|probe) + §5 finalize report  (advisory egress, never a gate)"
+  - "docs/regressions/REGRESSION-LEDGER.md rows          (one per confirmed finding — the red→green proof lives here, same as every fix)"
+
+out_of_scope:
+  - "Any third-party infra: Fly edge/Firecracker VMs/host/port/TLS, Supabase Postgres host + VPC, Cloudflare R2 edge — network/host/wireless scanning (Nmap/Metasploit/Aircrack) is SKIP (off-limits by AUP + law)."
+  - "Firing offensive/attack traffic from the harness, or installing offensive tooling on the build box — the red arm is a human on a disposable Kali VM against staging."
+  - "AUTO-FIXING any finding, especially a red-line (auth/RLS/money/PII) — the loop authors guardrails + queues council; a human lands the fix under ship discipline."
+  - "Person-profiling of any kind (Maigret / theHarvester person-harvest / SpiderFoot social) against any human — charter red-line."
+  - "Prod as a target; touching product code, migrations, or acting as a deterministic gate (advisory-forever)."
+  - "The DB-owner proactive-invariant track (SECURITY-DEFINER search_path, NOBYPASSRLS, RLS WITH CHECK) — owned separately (runbook §6); this loop RED-TEAMS the app layer + REPLAYS verify:rls as a backstop check, it does not own those migrations."
+
+escalation: >
+  A confirmed RED-LINE finding (auth/RLS/money/PII/JWT) → convene the Triadic Council (Architect + Breaker + Counsel)
+  BEFORE any fix (ADR + threat-model + counsel-opinion); NEVER auto-fix. A finding whose target turns out to be third-party
+  infra → STOP the step, record OUT-OF-SCOPE:THIRD-PARTY, do not probe. A step that cannot run for lack of env/staging →
+  record skipped-no-env (honest, blocks completion → INCOMPLETE, carried), NEVER a faked pass. A verdict of RED:violation
+  (fake-green / closed-without-guardrail / council-bypass) → STOP the run + raise to the operator; the loop must never
+  self-clear a violation. A MISSING capability (a blue skill absent / a scout offline) → degrade + record, never invent a
+  green. A recurrent finding class (N runs) → propose GRADUATING it to a standing guardrail/lint rule (human-gated).
+
+skills_required: [node>=18 (native fetch, no deps), pnpm + pnpm exec playwright (E2E replay + audit), DB env for verify:rls/privacy (else honest-skip), a human operator + disposable Kali VM for the RED arm, staging reachable, read scope+ethics fences from docs/security/redteam-runbook.md]
+
+harness:
+  always_emit_report: true   # standing RULE — every run prints its full §5 report (stdout) + writes loops/runs/security-redblue-<ts>.json
+  telemetry: "node scripts/plane-telemetry.mjs emit --kind scout|probe per blue step + red-plan; predict-before/resolve-after per docs/governance/model-calibration.md (DoD separate from METHOD, named fallback); finalize per living-loop-system-v3 §5 → loops/runs/metrics.jsonl"
+  artifacts: loops/runs/security-redblue-*.json
+  note: "Operator-runtime loop (blue = code/env-integrated read-only checks; red = out-of-harness human/Kali). The per-run report + the anti-cheat dry-run + REGRESSION-LEDGER rows ARE the §5 artifacts. Agent/token/eco telemetry applies when driven through an agent session; the scouts+verdict engine are deterministic scripts."
+
+memory_file: loops/memory/security-redblue.md
+verification_report: loops/reports/security-redblue-0.1.md
+
+# DoD vs METHOD (model-calibration.md — adaptation: keep the goal, swap the method):
+#   DoD (fixed): the app-layer security posture is swept + red-teamed, and every confirmed finding
+#     has a terminal disposition (guardrail+ledger | council | carried) with EVIDENCE — advisory.
+#   METHOD (primary, disposable): blue scouts + verify:* + E2E replay in-harness; red via Kali+Burp/Autorize/
+#     JWT-Editor/SQLmap/JtR on a disposable workstation, ingested through the finding gate.
+#   FALLBACK (named): if a blue script is unavailable → its manual runbook §3 step + honest skipped-no-env;
+#     if the Kali/Burp path is unavailable → scripted E2E rate-limit/authz assertions in-harness (stays
+#     safe, no offensive traffic) + crt.sh via the one-liner; the DoD (evidenced posture + disposed
+#     findings) is unchanged, only the method swaps.
+
+test_seam: >
+  Full LIVE certification needs a human + a disposable Kali VM (the RED arm) + a reachable staging DB
+  (verify:rls/privacy) — environment-blocked for an autonomous cert. The loop's CERTIFIABLE core — the
+  finding-gate verdict logic (evidence-not-assumed · no-close-without-guardrail · council-before-redline ·
+  advisory-forever) + the blue-arm scout smoke — is certified hermetically by tools/security-redblue/dry-run.mjs
+  (20/20): it feeds KNOWN-cheating fixtures (unrun step, artifact-less step, closed-without-guardrail,
+  auto-fixed red-line) and asserts each goes RED/INCOMPLETE, and drives the real asset-surface-scan through
+  its --test-fixture seam to prove a planted NEW subdomain is surfaced. To exercise LIVE: (1) run the blue
+  scouts + verify:* + E2E replay against staging, (2) spin the disposable Kali VM + run runbook §3 (a)-(e),
+  (3) ingest each finding through evaluateRun, (4) land guardrail+ledger or queue council per disposition.
+
+build_status: BUILT+CERTIFIED (anti-cheat dry-run 20/20 green, 2026-07-02); blue arm scripts live + invokable; RED arm is human-gated (not yet run against a live staging engagement).
