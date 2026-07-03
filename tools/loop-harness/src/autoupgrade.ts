@@ -301,15 +301,27 @@ export function recordKeptUpgrades(baseDir: string, classA: Candidate[], outcome
 
 // ─── Runner — MAP → CLASSIFY → (oracle-gated apply) → §5 report ───
 
-import type { RunRecord } from './types.js';
+import type { RunRecord, MetricsLine } from './types.js';
 import { buildRecord } from './cli.js';
 import { renderReport } from './report.js';
 import { writeRunRecord, appendMetricsLine } from './storage.js';
 
-export async function runAutoupgrade(opts: { repoDir: string; baseDir: string; tStart: string; tEnd: string; apply: boolean }): Promise<RunRecord> {
+export async function runAutoupgrade(opts: {
+  repoDir: string; baseDir: string; tStart: string; apply: boolean;
+  /** End timestamp override (tests/determinism). Omitted → resolved AFTER the
+   *  slow work (MAP codeburn + oracle benchmarks) so wall_s measures the real run —
+   *  resolving it eagerly at process start froze every row's wall_s at 0. */
+  tEnd?: string;
+  /** Claude Code session JSONL + workflow transcript dir — the usage sources the
+   *  collector aggregates. Omitted → tokens are honestly 0 (pure-script run). */
+  session?: string; workflow?: string;
+}): Promise<RunRecord> {
   const candidates = mapCandidates(opts.repoDir).map((c) => ({ c, k: classify(c) }));
   const classA = candidates.filter((x) => x.k.class === 'A');
   const classB = candidates.filter((x) => x.k.class === 'B');
+  const outcomes = await evaluateClassA(classA.map((x) => x.c), opts.apply, opts.baseDir);
+  // t_end resolved only now — all the slow work is behind us (see opts.tEnd doc).
+  const tEnd = opts.tEnd ?? new Date().toISOString();
   // §8c — Class B is PROPOSED to the human-gated queue, never auto-applied.
   // §2 feedback: skip re-proposing anything a human already REJECTED (negative learning).
   for (const x of classB) {
@@ -317,12 +329,11 @@ export async function runAutoupgrade(opts: { repoDir: string; baseDir: string; t
     queueProposal(opts.baseDir, {
       id: x.c.id, source: 'autoupgrade:class-B', kind: x.c.area.split(' ')[0] ?? 'review',
       description: x.c.pattern, evidence: x.c.evidence, action: x.c.action,
-    }, opts.tEnd);
+    }, tEnd);
   }
-  const outcomes = await evaluateClassA(classA.map((x) => x.c), opts.apply, opts.baseDir);
   // EvoMap-insight A — persist every KEPT Class-A change as a proven, replayable
   // gene (lens-gated). Report-only runs keep 0, so this is dormant-but-ready.
-  const genes = recordKeptUpgrades(opts.baseDir, classA.map((x) => x.c), outcomes, opts.tEnd);
+  const genes = recordKeptUpgrades(opts.baseDir, classA.map((x) => x.c), outcomes, tEnd);
   const kept = outcomes.filter((o) => o.decision === 'kept');
   const rolledBack = outcomes.filter((o) => o.decision === 'rolled_back');
   const skipped = outcomes.filter((o) => o.decision === 'skipped');
@@ -333,7 +344,7 @@ export async function runAutoupgrade(opts: { repoDir: string; baseDir: string; t
     goal: 'Find changes that PROVABLY haste iteration with fewer resources. Oracle-gated (green + no-security-regression + ≥5% benchmark speedup + reversible); Class B never auto-applied.',
     outcome: 'natural_stop' as const,
     t_start: opts.tStart,
-    t_end: opts.tEnd,
+    t_end: tEnd,
     iter_from: 1,
     iter_to: Math.max(1, candidates.length),
     what_done: `MAP (codeburn + fs scan) → ${candidates.length} candidate(s); CLASSIFY fail-safe (firm boundary → B). Mode: ${mode}. Oracle verdicts: ${kept.length} kept · ${rolledBack.length} rolled back · ${skipped.length} skipped.`,
@@ -360,29 +371,52 @@ export async function runAutoupgrade(opts: { repoDir: string; baseDir: string; t
     },
   };
 
-  // session telemetry intentionally omitted — this MAP/CLASSIFY pass is a
-  // deterministic script (≈0 agent tokens); its value is the candidates, not its cost.
-  return buildRecord(input, opts.baseDir, { repo: opts.repoDir });
+  // Session/workflow usage sources (when the run is driven by an agent session)
+  // flow into the SAME collector cli.ts finalize uses — no source → honest zeros.
+  return buildRecord(input, opts.baseDir, { repo: opts.repoDir, session: opts.session, workflow: opts.workflow });
+}
+
+/**
+ * Persist the run exactly like `cli.ts finalize` does: run-record gzipped + one
+ * metrics.jsonl line derived from the MEASURED record.telemetry. This replaces
+ * main()'s old hand-rolled metrics line that hardcoded tokens/cost/eco to 0 —
+ * the zero-cost-row regression (reflection 2026-07-02-advisory-arm-revival).
+ */
+export function persistAutoupgradeRun(baseDir: string, record: RunRecord): MetricsLine {
+  writeRunRecord(baseDir, record.loop, record.run_index, record);
+  const line: MetricsLine = {
+    loop: record.loop, run_index: record.run_index, ts: record.t_end, outcome: record.outcome,
+    iters: record.telemetry.iterations, wall_s: record.wall_s,
+    tokens_in: record.telemetry.tokens_in, tokens_out: record.telemetry.tokens_out, cost_usd: record.telemetry.cost_usd,
+    kwh: record.telemetry.eco.kwh ?? 0, gco2: record.telemetry.eco.gco2 ?? 0, water_ml: record.telemetry.eco.water_ml ?? 0,
+    fail_start: record.telemetry.tests_fail_start, fail_end: record.telemetry.tests_fail_end,
+    per_resolved: record.telemetry.per_resolved, slop_min: record.telemetry.slop_min,
+    conflicts: 0, recurring_flags: record.patterns.filter((p) => /recurring/i.test(p)),
+  };
+  appendMetricsLine(baseDir, line);
+  return line;
 }
 
 async function main(): Promise<void> {
   const apply = process.argv.includes('--apply');
-  const positional = process.argv.slice(3).filter((a) => !a.startsWith('--'));
+  const flag = (name: string): string | undefined => {
+    const i = process.argv.indexOf(name);
+    return i >= 0 ? process.argv[i + 1] : undefined;
+  };
+  // Usage sources (same flags as cli.ts finalize) — pass them so the run's real
+  // tokens/cost land in metrics.jsonl instead of zero-cost rows.
+  const session = flag('--session');
+  const workflow = flag('--workflow');
+  const flagValues = new Set([session, workflow].filter((v): v is string => v !== undefined));
+  const positional = process.argv.slice(3).filter((a) => !a.startsWith('--') && !flagValues.has(a));
   const repoDir = positional[0] ?? process.cwd();
   const baseDir = positional[1] ?? path.join(repoDir, 'loops', 'runs');
-  const t0 = Date.now();
-  const tStart = new Date(t0).toISOString();
-  const record = await runAutoupgrade({ repoDir, baseDir, tStart, tEnd: new Date(Date.now()).toISOString(), apply });
+  const tStart = new Date().toISOString();
+  // NOTE: no tEnd here — runAutoupgrade resolves it AFTER the work (wall_s truth).
+  const record = await runAutoupgrade({ repoDir, baseDir, tStart, apply, session, workflow });
   console.log(renderReport(record));
-  writeRunRecord(baseDir, 'autoupgrade', record.run_index, record);
-  appendMetricsLine(baseDir, {
-    loop: 'autoupgrade', run_index: record.run_index, ts: record.t_end, outcome: record.outcome,
-    iters: record.telemetry.iterations, wall_s: record.wall_s,
-    tokens_in: 0, tokens_out: 0, cost_usd: 0, kwh: 0, gco2: 0, water_ml: 0,
-    fail_start: record.telemetry.tests_fail_start, fail_end: 0, per_resolved: null, slop_min: null,
-    conflicts: 0, recurring_flags: [],
-  });
-  console.error(`\n[persisted] ${baseDir}/autoupgrade/${record.run_index}.json.gz`);
+  persistAutoupgradeRun(baseDir, record);
+  console.error(`\n[persisted] ${baseDir}/autoupgrade/${record.run_index}.json.gz (+ metrics.jsonl)`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => { console.error(e); process.exit(1); });

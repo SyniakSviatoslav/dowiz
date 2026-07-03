@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { m, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../../lib/I18nProvider.js';
 import { ease } from '../../lib/motion.js';
 
@@ -139,7 +139,7 @@ export function OrderProgress(props: OrderProgressProps) {
       {/* Track (upcoming) — inset to align with the first/last dot centers. */}
       <div className="absolute top-1/2 h-1 rounded-full bg-[var(--brand-surface-raised)] -translate-y-1/2 z-0" style={{ left: `${inset}%`, right: `${inset}%` }} />
       {/* Filled connector — animates its width on advance, ease-out only. */}
-      <motion.div
+      <m.div
         className="absolute top-1/2 h-1 rounded-full -translate-y-1/2 z-0"
         style={{ left: `${inset}%`, background: isTerminal ? 'var(--status-rejected)' : 'var(--brand-primary)' }}
         initial={false}
@@ -165,7 +165,7 @@ export function OrderProgress(props: OrderProgressProps) {
               <span className="relative inline-flex items-center justify-center">
                 {/* Gentle "you are here" halo on the active step (terminal excluded). */}
                 {isCurrent && !prefersReducedMotion && (
-                  <motion.span
+                  <m.span
                     aria-hidden
                     className="absolute w-4 h-4 rounded-full"
                     style={{ background: accent }}
@@ -173,7 +173,7 @@ export function OrderProgress(props: OrderProgressProps) {
                     transition={{ duration: 1.8, repeat: Infinity, ease: ease.soft, repeatDelay: 0.2 }}
                   />
                 )}
-                <motion.span
+                <m.span
                   className="relative w-4 h-4 rounded-full border-2 flex items-center justify-center"
                   initial={false}
                   animate={{
@@ -186,7 +186,7 @@ export function OrderProgress(props: OrderProgressProps) {
                 >
                   {/* Check fills in with an ease-out micro-pop once a step completes. */}
                   {isDone && (
-                    <motion.svg
+                    <m.svg
                       viewBox="0 0 12 12"
                       className="w-2.5 h-2.5"
                       fill="none"
@@ -199,9 +199,9 @@ export function OrderProgress(props: OrderProgressProps) {
                       transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.24, ease: ease.out }}
                     >
                       <path d="M2.5 6.5 L5 9 L9.5 3.5" />
-                    </motion.svg>
+                    </m.svg>
                   )}
-                </motion.span>
+                </m.span>
               </span>
               <span className={`text-step-2xs mt-1 text-center leading-tight break-words ${isFilled ? 'text-[var(--brand-text)] font-semibold' : 'text-[var(--brand-text-muted)]'}`}>
                 {step.label}

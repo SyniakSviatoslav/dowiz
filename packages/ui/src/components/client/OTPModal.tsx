@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { m, useReducedMotion } from 'framer-motion';
 import { Button, ResponsiveDialog, useI18n } from '../../index.js';
 import { ease, duration } from '../../lib/motion.js';
 
@@ -103,7 +103,7 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
         <label htmlFor="otp-code" className="text-step-sm font-bold block" style={{ color: 'var(--brand-text)' }}>
           {t('otp.code_label', 'Verification code')}
         </label>
-        <motion.input
+        <m.input
           id="otp-code"
           ref={inputRef}
           type="text"
@@ -132,7 +132,7 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
         />
 
         {error && (
-          <motion.p
+          <m.p
             role="alert"
             className="text-sm font-medium"
             style={{ color: 'var(--color-danger)' }}
@@ -141,7 +141,7 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
             transition={{ duration: duration.fast, ease: ease.out }}
           >
             {error}
-          </motion.p>
+          </m.p>
         )}
 
         <Button

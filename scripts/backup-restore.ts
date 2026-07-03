@@ -184,35 +184,104 @@ async function listSnapshots() {
   }
 }
 
+/** Redact credentials from a Postgres URL for safe logging (host/db only). */
+function safeTarget(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.host}${u.pathname}`;
+  } catch {
+    return '<unparseable DATABASE_URL_MIGRATIONS>';
+  }
+}
+
+/**
+ * Full restore: download → decrypt → checksum → pg_restore into DATABASE_URL_MIGRATIONS.
+ * DESTRUCTIVE (`--clean --if-exists` drops+recreates objects). Gated behind an explicit --confirm so a
+ * mistyped command can never wipe a database; refuses to run without it. Mirrors the pg_restore invocation
+ * the daily restore-verify drill (backup-verify.ts) already exercises against a sandbox.
+ */
+async function runFullRestore(backupId: string, opts: { confirm: boolean }) {
+  const target = env.DATABASE_URL_MIGRATIONS;
+  if (!target) throw new Error('DATABASE_URL_MIGRATIONS is required (restore destination)');
+
+  console.log(`\n=== FULL RESTORE: ${backupId} → ${safeTarget(target)} ===\n`);
+  if (!opts.confirm) {
+    console.error('REFUSED: full restore is destructive (--clean --if-exists drops and recreates objects).');
+    console.error(`Re-run with --confirm to overwrite ${safeTarget(target)}:`);
+    console.error(`  pnpm backup:restore --snapshot=${backupId} --confirm`);
+    console.error('First rehearse with --dry-run (non-destructive: verifies download + decrypt + checksum).');
+    process.exit(1);
+  }
+
+  const tempDir = path.join(process.cwd(), '.tmp', 'restore');
+  await fs.mkdir(tempDir, { recursive: true });
+
+  console.log('[1/4] Downloading manifest...');
+  const manifest = await downloadManifest(backupId);
+
+  console.log('[2/4] Downloading + decrypting backup from R2...');
+  const encryptedPath = path.join(tempDir, `${backupId}.enc`);
+  const decryptedPath = path.join(tempDir, `${backupId}.dump`);
+  await downloadFromR2(manifest.r2Key, encryptedPath);
+  await decryptBackup(manifest, encryptedPath, decryptedPath);
+
+  console.log('[3/4] Verifying checksum...');
+  if (!(await verifyChecksum(decryptedPath, manifest.checksumSha256))) {
+    throw new Error('CHECKSUM_MISMATCH: backup data corrupted or wrong encryption key — restore aborted before touching the target DB');
+  }
+  console.log('  ✓ Checksum matches');
+
+  console.log(`[4/4] Restoring into ${safeTarget(target)} via pg_restore...`);
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(
+      'pg_restore',
+      ['-d', target, '--clean', '--if-exists', '--no-owner', '--no-acl', decryptedPath],
+      { stdio: ['ignore', 'inherit', 'inherit'] },
+    );
+    child.on('error', reject);
+    child.on('close', (code) => {
+      // pg_restore exits non-zero on benign warnings (e.g. "does not exist, skipping" from --clean on a
+      // fresh DB); treat only a hard failure as fatal. Operators must still verify (verify:db) after.
+      if (code === 0 || code === 1) resolve();
+      else reject(new Error(`pg_restore exited with code ${code}`));
+    });
+  });
+
+  await fs.unlink(encryptedPath).catch(() => {});
+  await fs.unlink(decryptedPath).catch(() => {});
+  console.log(`\n✓ Restore of ${backupId} into ${safeTarget(target)} completed.`);
+  console.log('  NEXT: run `pnpm verify:db` and spot-check recent orders/settlements before serving traffic.');
+}
+
+/** Parse `--flag=value` and `--flag value`; returns undefined if the flag is absent. */
+function argValue(args: string[], flag: string): string | undefined {
+  const eq = args.find((a) => a.startsWith(`${flag}=`));
+  if (eq) return eq.slice(flag.length + 1);
+  const i = args.indexOf(flag);
+  return i !== -1 ? args[i + 1] : undefined;
+}
+
 async function main() {
   const args = process.argv.slice(2);
-  const listIdx = args.indexOf('--list');
-  const dryRunIdx = args.indexOf('--dry-run');
-  const snapshotIdx = args.indexOf('--snapshot');
 
-  if (listIdx !== -1) {
+  if (args.includes('--list')) {
     await listSnapshots();
     return;
   }
 
-  if (snapshotIdx === -1 || !args[snapshotIdx + 1]) {
+  const backupId = argValue(args, '--snapshot');
+  if (!backupId) {
     console.error('Usage:');
-    console.error('  pnpm backup:restore --snapshot=<backupId>');
-    console.error('  pnpm backup:restore --dry-run --snapshot=<backupId>');
     console.error('  pnpm backup:restore --list');
+    console.error('  pnpm backup:restore --dry-run --snapshot=<backupId>   # non-destructive verify');
+    console.error('  pnpm backup:restore --snapshot=<backupId> --confirm   # DESTRUCTIVE full restore');
     process.exit(1);
   }
 
-  const backupId = args[snapshotIdx + 1];
-  const isDryRun = dryRunIdx !== -1;
-
-  if (isDryRun) {
+  if (args.includes('--dry-run')) {
     await runDryRun(backupId);
   } else {
-    console.log('Full restore not yet implemented — use --dry-run for verification.');
-    console.log('For production restore, use pg_restore manually:');
-    console.log(`  pg_restore -d <DATABASE_URL> --clean --if-exists <decrypted_dump>`);
-    process.exit(1);
+    await runFullRestore(backupId, { confirm: args.includes('--confirm') });
   }
 }
 

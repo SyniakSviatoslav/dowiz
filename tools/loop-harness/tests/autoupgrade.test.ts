@@ -7,7 +7,9 @@ import {
   classify, applyCandidate, evaluateLenses, recordKeptUpgrades,
   type Candidate, type ApplyOutcome,
 } from '../src/autoupgrade.js';
+import * as au from '../src/autoupgrade.js';
 import { readProvenUpgrades } from '../src/proven-upgrades.js';
+import { readMetrics } from '../src/storage.js';
 
 const cand = (over: Partial<Candidate>): Candidate => ({
   id: 'c', pattern: '', source: 't', area: '', evidence: '', expected_speedup: '',
@@ -129,6 +131,68 @@ test('recordKeptUpgrades — a lens-failing (firm-boundary) candidate is NOT rec
   const genes = recordKeptUpgrades(dir, [c], outcomes, 'T0');
   assert.equal(genes.length, 0, 'lens-failing change not recorded');
   assert.deepEqual(readProvenUpgrades(dir), [], 'registry stays empty');
+});
+
+// ─── Telemetry truthfulness — the zero-cost-row regression ───
+// (reflection: 2026-07-02-advisory-arm-revival — "autoupgrade session-telemetry
+// collector still emits zero-cost rows"). Root: autoupgrade's private finalize
+// path (a) never handed buildRecord a session usage source, (b) resolved t_end
+// eagerly at process start so wall_s was frozen at 0, and (c) hardcoded literal
+// zeros into its metrics.jsonl line instead of reading record.telemetry the way
+// cli.ts finalize does. A NON-EMPTY usage source MUST yield non-zero tokens,
+// cost and wall_s in both the run record and the persisted metrics row —
+// a zero row on a non-empty source is the regression and must FAIL here.
+
+test('runAutoupgrade + persist — non-empty session source → non-zero tokens/cost/wall_s (zero row = FAIL)', async (t) => {
+  // Hermetic: break PATH so child spawns (codeburn npx / git) fail fast — both
+  // collectors tolerate that; the run then measures ONLY the session fixture.
+  const oldPath = process.env.PATH;
+  process.env.PATH = '/nonexistent-au-telemetry-test';
+  t.after(() => { process.env.PATH = oldPath; });
+
+  const repo = tmp();
+  const base = tmp();
+  const tStart = new Date(Date.now() - 5000).toISOString(); // run "began" 5s ago
+  const mid = new Date(Date.now() - 2000).toISOString();    // usage inside the window
+  const session = path.join(tmp(), 'session.jsonl');
+  fs.writeFileSync(session, [
+    JSON.stringify({ type: 'assistant', timestamp: mid, message: { model: 'claude-sonnet-4-6', usage: { input_tokens: 1200, output_tokens: 3400 }, content: [] } }),
+    JSON.stringify({ type: 'assistant', timestamp: mid, message: { model: 'claude-sonnet-4-6', usage: { input_tokens: 800, output_tokens: 600 }, content: [] } }),
+  ].join('\n') + '\n');
+
+  const record = await au.runAutoupgrade({ repoDir: repo, baseDir: base, tStart, apply: false, session });
+  assert.equal(record.telemetry.tokens_in, 2000, 'collector must see the session usage (tokens_in)');
+  assert.equal(record.telemetry.tokens_out, 4000, 'collector must see the session usage (tokens_out)');
+  assert.ok(record.telemetry.cost_usd > 0, 'cost must be derived from measured usage');
+  assert.ok(
+    Number.isFinite(record.wall_s) && record.wall_s >= 5,
+    `wall_s must reflect the run duration (t_end resolved AFTER the work, not at process start); got ${record.wall_s}`,
+  );
+
+  // The metrics row must carry the MEASURED telemetry — never hardcoded zeros.
+  const line = au.persistAutoupgradeRun(base, record);
+  const rows = readMetrics(base, 'autoupgrade');
+  assert.equal(rows.length, 1);
+  const row = rows[0]!;
+  assert.deepEqual(
+    { tokens_in: row.tokens_in, tokens_out: row.tokens_out },
+    { tokens_in: 2000, tokens_out: 4000 },
+    'zero-cost metrics row from a non-empty session source — the regression this test pins',
+  );
+  assert.ok(row.cost_usd > 0 && row.wall_s >= 5, `metrics row must carry real cost/wall_s; got cost=${row.cost_usd} wall_s=${row.wall_s}`);
+  assert.equal(row.cost_usd, record.telemetry.cost_usd, 'metrics row is derived from record.telemetry');
+  assert.equal(line.tokens_in, row.tokens_in, 'returned line matches the persisted row');
+});
+
+test('runAutoupgrade — no usage source → tokens honestly 0 but wall_s still real', async (t) => {
+  const oldPath = process.env.PATH;
+  process.env.PATH = '/nonexistent-au-telemetry-test';
+  t.after(() => { process.env.PATH = oldPath; });
+  const record = await au.runAutoupgrade({
+    repoDir: tmp(), baseDir: tmp(), tStart: new Date(Date.now() - 3000).toISOString(), apply: false,
+  });
+  assert.equal(record.telemetry.tokens_in, 0, 'pure-script run with no source: zero tokens is truthful');
+  assert.ok(Number.isFinite(record.wall_s) && record.wall_s >= 3, `wall_s must never freeze at 0; got ${record.wall_s}`);
 });
 
 // ─── Run-#5 firm boundary — staged security migration MUST stay Class B ───

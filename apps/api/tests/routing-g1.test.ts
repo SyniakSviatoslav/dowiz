@@ -10,7 +10,15 @@ import {
   type RouteResult,
   type RoutingProvider,
 } from '@deliveryos/platform';
-import { RoutingService, deviationMeters, shouldReroute } from '../src/lib/routing.js';
+import {
+  RoutingService,
+  deviationMeters,
+  shouldReroute,
+  saveRoute,
+  loadRoute,
+  claimOnce,
+  __setRouteRedisForTest,
+} from '../src/lib/routing.js';
 
 const FROM: LatLng = { lat: 41.3275, lng: 19.8187 };
 const TO: LatLng = { lat: 41.3375, lng: 19.8287 };
@@ -172,6 +180,64 @@ test('G1 RoutingProvider + service', async (t) => {
       { warn: silent, fetchImpl: (async () => fakeResponse({ ok: true, status: 200, json: okGeo })) as any },
     );
     assert.equal((await self.route(FROM, TO)).provider, 'self');
+  });
+});
+
+// ── G1c: route state via injected Redis double (__setRouteRedisForTest seam) ────
+// Deterministic twin of route-store-g1.test.ts (which needs a live Redis): same
+// contract, but through the test-only injection seam — no connection, no env.
+
+/** Minimal ioredis double: SET (with EX/NX semantics) + GET over an in-memory map. */
+function redisDouble(faults: { getThrows?: boolean; setThrows?: boolean } = {}) {
+  const store = new Map<string, string>();
+  return {
+    store,
+    async set(key: string, value: string, ...args: unknown[]): Promise<'OK' | null> {
+      if (faults.setThrows) throw new Error('redis down');
+      if (args.includes('NX') && store.has(key)) return null;
+      store.set(key, value);
+      return 'OK';
+    },
+    async get(key: string): Promise<string | null> {
+      if (faults.getThrows) throw new Error('redis down');
+      return store.get(key) ?? null;
+    },
+    async quit(): Promise<void> {},
+  };
+}
+
+test('G1c — route state via __setRouteRedisForTest double (no live Redis)', async (t) => {
+  t.after(() => { __setRouteRedisForTest(null); }); // reset seam: back to lazy real client
+
+  await t.test('save → load round-trips the RouteResult through the double', async () => {
+    const double = redisDouble();
+    __setRouteRedisForTest(double as any);
+    const r = haversineRoute(FROM, TO);
+    await saveRoute('g1c-order', r);
+    assert.equal(double.store.size, 1, 'write went to the injected double, not a real Redis');
+    const back = await loadRoute('g1c-order');
+    assert.ok(back, 'route reloads through the double');
+    assert.equal(back!.provider, 'haversine');
+    assert.deepEqual(back!.polyline, [FROM, TO]);
+    assert.equal(back!.distance_m, r.distance_m);
+    assert.equal(back!.duration_s, r.duration_s);
+  });
+
+  await t.test('unknown order → null (no throw)', async () => {
+    __setRouteRedisForTest(redisDouble() as any);
+    assert.equal(await loadRoute('g1c-absent'), null);
+  });
+
+  await t.test('claimOnce NX: first instance wins, second loses within the window', async () => {
+    __setRouteRedisForTest(redisDouble() as any);
+    assert.equal(await claimOnce('g1c-claim', 60), true, 'first claim wins');
+    assert.equal(await claimOnce('g1c-claim', 60), false, 'second claim (other instance) loses');
+  });
+
+  await t.test('advisory contract under Redis failure: load → null, claim → false (never throws)', async () => {
+    __setRouteRedisForTest(redisDouble({ getThrows: true, setThrows: true }) as any);
+    assert.equal(await loadRoute('g1c-order'), null, 'Redis hiccup never breaks the read');
+    assert.equal(await claimOnce('g1c-claim2', 60), false, 'on Redis error, do not compute');
   });
 });
 

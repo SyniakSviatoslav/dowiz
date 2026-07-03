@@ -188,6 +188,15 @@
       "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
     },
     {
+      "id": "security-redblue",
+      "goal": "blue-team (autonomous, safe) + red-team (human-gated, Kali-only) над ВЛАСНИМ app-layer; findings advisory→guardrail+ledger; red-line→council; advisory-forever, no-autonomous-offense",
+      "version": "0.1",
+      "status": "CERTIFIED (anti-cheat 20/20)",
+      "trigger": "/security-redblue",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
       "id": "test-hardening",
       "goal": "harden a test spec by attacking blind-spots with 3 agents then strengthening assertions (no weakening)",
       "trigger_tags": [

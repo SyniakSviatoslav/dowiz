@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, Input, EmptyState, MapWithRadius, Toggle, useI18n, LanguageSwitcher, useToast, ease, duration } from '@deliveryos/ui';
+import { Button, Input, EmptyState, Toggle, useI18n, LanguageSwitcher, useToast, ease, duration } from '@deliveryos/ui';
+import { MapWithRadius } from '../../components/maps.js';
 import type { LngLatLike, Locale } from '@deliveryos/ui';
 import { PHONE_E164_REGEX, PHONE_E164_PATTERN } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';

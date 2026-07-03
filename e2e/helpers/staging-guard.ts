@@ -14,3 +14,14 @@ export function requireStaging(base: string | undefined): void {
     throw new Error(`requireStaging: refusing to run a mutating test against PROD (${base}) — set VITE_BASE_URL to staging`);
   }
 }
+
+/**
+ * True when `base` is the live PROD host (dowiz.fly.dev / .app / .org, but NOT the
+ * `dowiz-staging.*` host). Use this to CONDITIONALLY SKIP mutating/auth-dependent tests
+ * against prod — `test.skip(isProdTarget(BASE), '…')` — so a post-deploy smoke run reports
+ * them as *skipped* (green) rather than throwing (red). The read-only subset still runs.
+ * The mirror of `requireStaging`'s prod check, exposed as a predicate for per-test gating.
+ */
+export function isProdTarget(base: string | undefined): boolean {
+  return !!base && PROD.test(base) && !base.includes('staging');
+}

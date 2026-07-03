@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { useI18n, ease, MapWithPin, Textarea } from '@deliveryos/ui';
+import { useI18n, ease, Textarea } from '@deliveryos/ui';
+import { MapWithPin } from '../../../components/maps.js';
 import type { LngLatLike } from '@deliveryos/ui';
 import type { DeliveryType } from './types.js';
 

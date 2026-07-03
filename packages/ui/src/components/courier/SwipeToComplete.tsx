@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { m, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../../lib/I18nProvider.js';
 import { ease, duration } from '../../lib/motion.js';
 
@@ -98,7 +98,7 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
 
   if (isCompleted) {
     return (
-      <motion.div
+      <m.div
         initial={reduceMotion ? false : { scale: 0.97, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: duration.base, ease: ease.out }}
@@ -108,7 +108,7 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
         <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <path d="M5 13l4 4L19 7" />
         </svg>
-      </motion.div>
+      </m.div>
     );
   }
 
@@ -138,7 +138,7 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
         {loading ? t('common.processing', 'Processing...') : resolvedLabel}
       </span>
 
-      <motion.div
+      <m.div
         className="absolute left-1 top-1 bottom-1 w-12 bg-[var(--brand-primary)] rounded-full shadow-[var(--elevation-2)] flex items-center justify-center cursor-grab active:cursor-grabbing z-20"
         animate={hint
           ? { transform: ['translateX(0px)', 'translateX(6px)', 'translateX(0px)'] }
@@ -154,7 +154,7 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
         <svg className="h-5 w-5 text-[var(--brand-bg)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M9 6l6 6-6 6" />
         </svg>
-      </motion.div>
+      </m.div>
 
       {/* Keyboard-accessible fallback — explicit, visible action for non-pointer users. */}
       <button

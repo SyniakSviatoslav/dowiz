@@ -49,15 +49,17 @@ If primary DB is lost:
    ```bash
    # List snapshots to find the latest completed one
    pnpm backup:restore --list
-   
-   # Full restore (non-dry-run)
-   pnpm backup:restore --snapshot=<backupId>
+
+   # ALWAYS rehearse first — non-destructive: verifies download + decrypt + checksum, touches no data
+   pnpm backup:restore --dry-run --snapshot=<backupId>
+
+   # Full restore — DESTRUCTIVE (--clean --if-exists). Requires --confirm; targets DATABASE_URL_MIGRATIONS.
+   pnpm backup:restore --snapshot=<backupId> --confirm
    ```
-   
-   For manual restore via `pg_restore`:
+
+   Fallback — manual `pg_restore` (if the script is unavailable):
    ```bash
-   # Download and decrypt manually
-   # Then run:
+   # Download + decrypt the dump (see --dry-run for the steps), then:
    pg_restore -d "$DATABASE_URL_MIGRATIONS" --clean --if-exists --no-owner --no-acl <decrypted_dump>
    ```
 5. **Verify application connectivity** (≤ 30 min).

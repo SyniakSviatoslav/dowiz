@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { m, useReducedMotion } from 'framer-motion';
 import { ease } from '../../lib/motion.js';
 
 interface LiveDotProps {
@@ -54,7 +54,7 @@ export function LiveDot({ color, size = 8, pulse = true }: LiveDotProps) {
   return (
     <div ref={ref} className="relative inline-flex items-center justify-center">
       {/* Expanding halo — the gentle "breathing" ring behind the solid core. */}
-      <motion.span
+      <m.span
         aria-hidden
         className="absolute rounded-full"
         style={{ width: size, height: size, backgroundColor: dotColor }}
@@ -62,7 +62,7 @@ export function LiveDot({ color, size = 8, pulse = true }: LiveDotProps) {
         transition={{ duration: 1.8, repeat: Infinity, ease: ease.soft, repeatDelay: 0.2 }}
       />
       {/* Solid core — a soft scale/opacity breath, no harsh blink. */}
-      <motion.span
+      <m.span
         className="relative rounded-full"
         style={{ width: size, height: size, backgroundColor: dotColor }}
         animate={{ scale: [1, 1.12, 1], opacity: [1, 0.82, 1] }}

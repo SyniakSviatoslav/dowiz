@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { m, useReducedMotion } from 'framer-motion';
 import { useI18n, PriceDisplay } from '../../index.js';
 import { ease, duration } from '../../lib/motion.js';
+import { cinematicRevealsEnabled, revealLayoutId } from '../../lib/cinematic.js';
 
 interface ProductCardProps {
   product: {
@@ -26,6 +27,11 @@ interface ProductCardProps {
   // P6-3 preview: suppress the "+" add affordance entirely for a never-orderable shadow preview.
   // The card stays fully browsable (tap → detail modal) but advertises no ordering action.
   hideAdd?: boolean;
+  // Cinematic reveals (flag: VITE_CINEMATIC_REVEALS): when true, the image/title/price get a
+  // shared `layoutId` so they morph into the detail sheet on tap. Defaults to the flag so the
+  // card is dark by default and reusable elsewhere without an accidental morph. Reduced-motion
+  // is a second gate applied inside — accessibility wins even when this is on.
+  sharedLayout?: boolean;
 }
 
 const TASTE_ICONS: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
@@ -50,9 +56,15 @@ const addBtnVariants = {
 // tap, which reads as a stuck/janky card. Gate the lift behind a hover-capable pointer.
 const canHover = typeof window !== 'undefined' && window.matchMedia?.('(hover: hover)').matches;
 
-export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd }: ProductCardProps) {
+export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd, sharedLayout }: ProductCardProps) {
   const { t } = useI18n();
   const [imgError, setImgError] = useState(false);
+  const prefersReduced = useReducedMotion();
+  // Attach the shared-element ids only when the flag is on AND motion is allowed. Under
+  // reduced motion we drop the layoutId entirely → no FLIP morph, the detail sheet opens
+  // with its opacity-only fallback (same as flag-off). `sharedLayout ?? flag` keeps the
+  // card dark by default while letting a call site force it on/off.
+  const morph = (sharedLayout ?? cinematicRevealsEnabled()) && !prefersReduced;
   const isChefPick = !!product.chefPick;
   // HIGH-1: photoless items render text-first (no fake placeholder slot), so the card
   // only reserves a photo area when there is a real photo to show.
@@ -71,7 +83,7 @@ export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd }:
     : undefined;
 
   return (
-    <motion.article
+    <m.article
       data-testid="menu-item"
       className={`flex flex-col cursor-pointer overflow-hidden border rounded-xl h-full ${
         product.isAvailable ? '' : 'opacity-55'
@@ -92,19 +104,20 @@ export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd }:
           className="w-full aspect-[4/3] flex items-center justify-center relative overflow-hidden"
           style={{ background: 'var(--brand-surface-raised)' }}
         >
-          <motion.img
+          <m.img
             src={product.image}
             alt={product.name}
             className="w-full h-full object-cover"
             loading="lazy"
             onError={() => setImgError(true)}
             variants={product.isAvailable ? imgVariants : undefined}
+            layoutId={morph ? revealLayoutId('media', product.id) : undefined}
           />
           {/* Chef-pick is the one curation cue that stays ON the photo. Allergens,
               nutrition and ingredient chips moved into the detail modal (HIGH-2). */}
           {isChefPick && (
             <div className="absolute top-1.5 right-1.5 z-10">
-              <motion.span
+              <m.span
                 className="text-step-2xs font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
                 style={{ background: 'var(--brand-primary)', color: 'color-mix(in srgb, var(--brand-bg) 88%, #000)', boxShadow: '0 2px 8px color-mix(in srgb, var(--brand-primary) 45%, transparent)' }}
                 initial={{ scale: 0.85, opacity: 0 }}
@@ -112,7 +125,7 @@ export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd }:
                 transition={{ type: 'spring', stiffness: 300, damping: 20 }}
               >
                 ✦ {t('client.chefs_pick_badge', "Chef's Pick")}
-              </motion.span>
+              </m.span>
             </div>
           )}
           {/* No sold-out overlay/chip: read_public_menu only returns is_available=true products,
@@ -127,9 +140,9 @@ export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd }:
           </span>
         )}
         <div className={`flex items-start justify-between gap-1.5 ${reserveGutter && !isChefPick ? 'pl-7' : ''}`}>
-          <h3 className={`font-semibold leading-tight line-clamp-2 flex-1 ${hasPhoto ? 'text-step-sm min-h-[2.5em]' : 'text-step-base'}`} style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{product.name}</h3>
+          <m.h3 layoutId={morph ? revealLayoutId('title', product.id) : undefined} className={`font-semibold leading-tight line-clamp-2 flex-1 ${hasPhoto ? 'text-step-sm min-h-[2.5em]' : 'text-step-base'}`} style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{product.name}</m.h3>
           {!hideAdd && (
-          <motion.button
+          <m.button
             data-testid="menu-item-add"
             className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--brand-bg)] rounded-full mt-0.5 ${
               product.isAvailable ? 'cursor-pointer' : 'opacity-30 cursor-not-allowed'
@@ -147,7 +160,7 @@ export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd }:
             whileTap={product.isAvailable ? 'tap' : undefined}
           >
             <i className="ti ti-plus text-lg leading-none" />
-          </motion.button>
+          </m.button>
           )}
         </div>
         {product.description && (
@@ -163,7 +176,9 @@ export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd }:
         {/* Footer: price + meta. flex-wrap so on a narrow 2-col card the meta drops to its own
             line instead of colliding with a wide price (the "1500 ALL~15 min" overlap bug). */}
         <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 mt-auto pt-1.5">
-          <PriceDisplay amount={product.price} size="md" style={{ color: 'var(--brand-primary-readable, var(--brand-text))', fontWeight: 800 }} />
+          <m.div layoutId={morph ? revealLayoutId('price', product.id) : undefined} className="flex items-baseline">
+            <PriceDisplay amount={product.price} size="md" style={{ color: 'var(--brand-primary-readable, var(--brand-text))', fontWeight: 800 }} />
+          </m.div>
           {/* Meta rail: dominant taste cue + COOKING-time (not delivery). shrink-0 + nowrap keeps
               it intact; when it can't fit beside the price, flex-wrap moves the whole rail below. */}
           <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
@@ -192,6 +207,6 @@ export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd }:
           </div>
         </div>
       </div>
-    </motion.article>
+    </m.article>
   );
 }

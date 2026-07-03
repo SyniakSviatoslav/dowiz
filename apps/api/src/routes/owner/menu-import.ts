@@ -97,13 +97,36 @@ export default (async function menuImportRoutes(fastify: any, opts: any) {
       return reply.sendError(400, 'UNSUPPORTED_SOURCE', `Unsupported source: ${source}`);
     }
 
-    // Parse data
-    const parseResult = await parser.parse({
-      kind: kind as any,
-      mime: mime as any,
-      bytes: buffer,
-      config: { ...config, expectedCurrency: locationCurrency, currencyMinorUnit: locationMinorUnit }
-    });
+    // Parse data — under a hard deadline. The AI-OCR image path (OCR engine + LLM chain,
+    // each with its own long budget) can otherwise hold this connection for minutes
+    // (measured >150s on staging for a 1px png): an interactive preview must degrade,
+    // not hang — one slow import must never pin connections toward pool exhaustion.
+    const PARSE_DEADLINE_MS = Number(process.env.IMPORT_PARSE_DEADLINE_MS || 55_000);
+    const deadline = new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error('IMPORT_PARSE_DEADLINE')), PARSE_DEADLINE_MS).unref?.());
+    let parseResult;
+    try {
+      parseResult = await Promise.race([
+        parser.parse({
+          kind: kind as any,
+          mime: mime as any,
+          bytes: buffer,
+          config: { ...config, expectedCurrency: locationCurrency, currencyMinorUnit: locationMinorUnit }
+        }),
+        deadline,
+      ]);
+    } catch (e: any) {
+      if (e?.message === 'IMPORT_PARSE_DEADLINE') {
+        // Graceful contract (same shape as a parse failure): 200 with an error issue,
+        // never a 500/hang. The abandoned parse finishes in background and is discarded.
+        return reply.send({
+          draft: { categories: [], products: [], modifierGroups: [], modifiers: [], links: [], translations: [] },
+          issues: [{ rowNumber: 1, code: 'PARSE_ERROR', message: `Import processing exceeded ${Math.round(PARSE_DEADLINE_MS / 1000)}s — try a smaller/clearer file, or CSV`, severity: 'error' }],
+          summary: { valid: 0, errors: 1, warnings: 0, mode: validatedMode.data },
+        });
+      }
+      throw e;
+    }
 
     parseResult.summary.mode = validatedMode.data;
 

@@ -6,6 +6,7 @@ import type { QueueProvider, MessageBus } from '@deliveryos/platform';
 import { loadEnv } from '@deliveryos/config';
 import { BUS_CHANNELS, orderChannel, dashboardChannel, courierChannel } from '../lib/registry.js';
 import { updateOrderStatus } from '../lib/orderStatusService';
+import { assertOwnerTargetAllowed } from '../lib/orderAuthz.js';
 import { attemptHonestDispatch } from '../lib/dispatch.js';
 import { getPaymentProvider, isPrepaidEnabled, isCryptoEnabled } from '../lib/payments/registry.js';
 import { evaluatePreflight } from '../lib/preflight.js';
@@ -868,6 +869,11 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
          }
 
           const locationId = cur.rows[0].location_id;
+
+          // deliver v2 offer-sweep-cancel addendum: the widened CONFIRMED/PREPARING/READY→CANCELLED
+          // edges are SYSTEM-only. An owner may not drive them via this request-supplied newStatus →
+          // 403 CANCEL_NOT_PERMITTED. PENDING→CANCELLED and IN_DELIVERY→CANCELLED stay permitted.
+          assertOwnerTargetAllowed(cur.rows[0].status, newStatus);
 
           // §5 / R2-1 / R3-2 — HONEST DISPATCH. For an IN_DELIVERY target on a delivery order, find a courier
           // BEFORE advancing the status. The old code flipped to IN_DELIVERY first, then silently no-op'd when

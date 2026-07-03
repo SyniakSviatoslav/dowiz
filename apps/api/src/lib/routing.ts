@@ -131,6 +131,16 @@ export async function closeRouteRedis(): Promise<void> {
   if (_redis) { await _redis.quit().catch(() => {}); _redis = null; }
 }
 
+/**
+ * Test-only seam: inject a Redis double so saveRoute/loadRoute/claimOnce are
+ * deterministically unit-testable without a live Redis. Inert in production —
+ * nothing in src/ calls this; routeRedis() lazily creates the real client
+ * unless a test has injected a double. Pass null to reset to lazy creation.
+ */
+export function __setRouteRedisForTest(r: Redis | null): void {
+  _redis = r;
+}
+
 const routeKey = (orderId: string) => `route:${orderId}`;
 const ROUTE_TTL_S = 2 * 60 * 60; // outlives a delivery; cleaned up by TTL
 

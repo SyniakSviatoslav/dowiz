@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { m, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../../lib/I18nProvider.js';
 import { ease, duration } from '../../lib/motion.js';
 import type { MessageSender, OrderStatusForMsg } from '@deliveryos/shared-types';
@@ -142,7 +142,7 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
         {messages.map((msg) => {
           const isMine = msg.sender === myRole;
           return (
-            <motion.div
+            <m.div
               key={msg.id}
               className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
               initial={reduceMotion ? false : { opacity: 0, y: 6 }}
@@ -165,7 +165,7 @@ export function MessageThread({ orderId, role, currentStatus, messages, onSend, 
                   {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
-            </motion.div>
+            </m.div>
           );
         })}
         <div ref={threadEndRef} />

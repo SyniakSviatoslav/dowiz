@@ -121,12 +121,17 @@ export async function updateOrderStatus(
     throw { statusCode: 409, error: 'Order status already changed', code: 'CONFLICT' };
   }
 
-  // deliver v2 (R2-3 shared invariant — ADR-deliver-v2-cash-as-proof): NO order leaves IN_DELIVERY without
-  // its active courier assignment terminalized in the SAME tx. Folded centrally here so EVERY caller (owner
-  // no-show signals.ts, owner PATCH orders.ts, courier cancel/abort, reassign revert) is covered, present
-  // and future. Idempotent: an already-terminal row (incl. a just-set 'delivered' or a completeDelivery
-  // 'cancelled') is a no-op; 'delivered' ∉ {CANCELLED,READY} so a delivered row is never reverted.
-  if (currentStatus === 'IN_DELIVERY' && (newStatus === 'CANCELLED' || newStatus === 'READY')) {
+  // deliver v2 (R2-3 shared invariant — ADR-deliver-v2-cash-as-proof + offer-sweep-cancel addendum):
+  // NO order leaves to a terminal/assignable downgrade without its active courier assignment terminalized
+  // in the SAME tx. Folded centrally here so EVERY caller (owner no-show signals.ts, owner PATCH orders.ts,
+  // courier cancel/abort, reassign revert, dispatch-grace worker) is covered, present and future.
+  // Addendum widening: runs on ANY newStatus==='CANCELLED' (not only from IN_DELIVERY) so a widened
+  // CONFIRMED/PREPARING/READY→CANCELLED edge can never strand a binding; plus the IN_DELIVERY→READY revert.
+  // Idempotent: an already-terminal row (incl. a just-set 'delivered' or a completeDelivery 'cancelled') is
+  // a no-op, and a PENDING→CANCELLED with no active binding matches 0 rows. Cash-safe: terminalizing writes
+  // NO courier_cash_ledger 'hold' (the hold is written only by completeDelivery at DELIVERED).
+  // 'delivered' ∉ {CANCELLED,READY} so a delivered row is never reverted.
+  if (newStatus === 'CANCELLED' || (currentStatus === 'IN_DELIVERY' && newStatus === 'READY')) {
     await client.query(
       `WITH freed AS (
          UPDATE courier_assignments SET status = 'cancelled', cancelled_at = now(),

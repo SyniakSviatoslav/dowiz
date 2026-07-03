@@ -2,7 +2,8 @@
 import type { Pool } from 'pg';
 import type Boss from 'pg-boss';
 import type { MessageBus } from '@deliveryos/platform';
-import { QUEUE_NAMES, dashboardChannel, orderChannel } from '../lib/registry.js';
+import { BUS_CHANNELS, QUEUE_NAMES, dashboardChannel } from '../lib/registry.js';
+import { updateOrderStatus } from '../lib/orderStatusService.js';
 import { loadEnv } from '@deliveryos/config';
 
 // deliver v2 §A + ADR-dispatch-recovery (B2): the durable courier-recovery sweep. Four passes
@@ -186,10 +187,15 @@ export class CourierOfferSweepWorker {
   // After exhaustion set orders.dispatch_exhausted_at + alerted the owner, owner inaction must not
   // equal permanent customer silence: past DISPATCH_OWNER_GRACE_MS the order auto-transitions to
   // the customer-honest terminal CANCELLED (+ honest terminal push). Ships DISPATCH_OWNER_GRACE_ENABLED
-  // =false until the operator ratifies at STOP-ETHICS. NOTE for that ratification: the order state
-  // machine has no CONFIRMED/PREPARING/READY → CANCELLED edge today, so this pass uses a
-  // status-guarded direct UPDATE (a deliberate widened terminal edge, mirroring the
-  // updateOrderStatus guard + history shape) — the human gate covers this edge too.
+  // =false until the operator ratifies at STOP-ETHICS.
+  //
+  // offer-sweep-cancel addendum (ADR-deliver-v2-cash-as-proof §Addendum, 2026-07-02): the machine now
+  // OWNS CONFIRMED/PREPARING/READY→CANCELLED (SYSTEM-only), so this pass routes through the sanctioned
+  // mutator updateOrderStatus instead of a raw UPDATE (R3-3 satisfied by a real funnel, not laundering).
+  // updateOrderStatus does the status-guarded write + timeout_at=NULL + history + the R2-3 assignment-
+  // terminalize fold (cash-safe: no 'hold') + the pre-commit live WS deltas. The consequential fan-out
+  // (ORDER_CANCELLED → dwell-alert resolve + escalation-job cancel, and the customer terminal push) is
+  // published POST-commit here (mirrors owner/signals.ts) so it can never fire on a rolled-back cancel.
   private async graceCancelExhausted(client: any) {
     const env = loadEnv();
     if (env.DISPATCH_OWNER_GRACE_ENABLED !== 'true') return;
@@ -207,6 +213,7 @@ export class CourierOfferSweepWorker {
     );
     if (!res.rowCount) return;
     for (const row of res.rows) {
+      let committed = false;
       try {
         await client.query('BEGIN');
         await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [row.location_id]);
@@ -216,44 +223,50 @@ export class CourierOfferSweepWorker {
           await client.query('ROLLBACK');
           continue;
         }
-        // Status-guarded terminal write (anti-race, same shape as updateOrderStatus).
-        const upd = await client.query(
-          `UPDATE orders SET status = 'CANCELLED', timeout_at = NULL WHERE id = $1 AND status = $2`,
-          [row.id, st],
+        // F7 anti-race: re-check "no active assignment" UNDER the row lock, immediately before the
+        // mutator. A binding drained in earlier in this same tick would otherwise be stranded / a
+        // courier who just took the order would be cancelled out from under. Bound → ROLLBACK + skip.
+        const bound = await client.query(
+          `SELECT 1 FROM courier_assignments WHERE order_id = $1
+             AND status IN ('offered','assigned','accepted','picked_up') LIMIT 1`,
+          [row.id],
         );
-        if (!upd.rowCount) {
+        if (bound.rowCount) {
           await client.query('ROLLBACK');
           continue;
         }
-        // Audit trail (best-effort, savepoint-guarded like updateOrderStatus).
+        // Sanctioned funnel: the machine now permits the CANCELLED terminal from CONFIRMED/PREPARING/READY.
+        // A lost race (status changed under us) → updateOrderStatus throws 409 → ROLLBACK + skip.
         try {
-          await client.query('SAVEPOINT grace_history_ins');
-          await client.query(
-            `INSERT INTO order_status_history (order_id, location_id, from_status, to_status, actor, comment)
-             VALUES ($1, $2, $3, 'CANCELLED', 'system:dispatch_grace', $4)`,
-            [row.id, row.location_id, st, 'dispatch_exhausted'],
-          );
-          await client.query('RELEASE SAVEPOINT grace_history_ins');
-        } catch {
-          try { await client.query('ROLLBACK TO SAVEPOINT grace_history_ins'); } catch { /* no tx */ }
+          await updateOrderStatus(client, row.id, row.location_id, 'CANCELLED', {
+            messageBus: this.messageBus,
+            comment: 'dispatch_exhausted',
+          });
+        } catch (mutErr: any) {
+          await client.query('ROLLBACK');
+          if (mutErr?.statusCode === 409) continue;
+          console.error(`[CourierOfferSweep] grace-cancel mutator rejected order ${row.id}:`, mutErr);
+          continue;
         }
         await client.query('COMMIT');
-        // Post-commit: live deltas + the honest customer TERMINAL push (never a false "on its way").
-        const nowIso = new Date().toISOString();
-        await this.messageBus.publish(orderChannel(row.id), {
-          type: 'order.status', orderId: row.id, status: 'CANCELLED', locationId: row.location_id,
-          timestamp: nowIso, statusAtField: null, statusAt: null,
-        });
-        await this.messageBus.publish(dashboardChannel(row.location_id), {
-          type: 'order.status', data: { orderId: row.id, status: 'CANCELLED', statusUpdatedAt: nowIso },
+        committed = true;
+      } catch (e) {
+        await client.query('ROLLBACK').catch(() => {});
+        console.error(`[CourierOfferSweep] grace-cancel failed for order ${row.id}:`, e);
+      }
+      if (!committed) continue;
+      // Post-commit consequential fan-out (never before the row is durably CANCELLED). ORDER_CANCELLED
+      // drives lifecycle-handlers → resolve dwell alerts + boss.cancel pending notify.dispatch.* jobs (F1).
+      try {
+        await this.messageBus.publish(BUS_CHANNELS.ORDER_CANCELLED, {
+          orderId: row.id, locationId: row.location_id, reason: 'dispatch_exhausted',
         });
         await this.boss.send(QUEUE_NAMES.NOTIFY_CUSTOMER_STATUS, {
           orderId: row.id, locationId: row.location_id, event: 'CANCELLED',
         });
         console.log(`[CourierOfferSweep] grace-window expired for ${row.id} → CANCELLED (dispatch_exhausted)`);
       } catch (e) {
-        await client.query('ROLLBACK').catch(() => {});
-        console.error(`[CourierOfferSweep] grace-cancel failed for order ${row.id}:`, e);
+        console.error(`[CourierOfferSweep] grace-cancel post-commit fan-out failed for order ${row.id}:`, e);
       }
     }
   }

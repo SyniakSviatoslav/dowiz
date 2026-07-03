@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { ease } from '../../lib/motion.js';
 
 interface AnimatedCheckProps {
@@ -11,7 +11,7 @@ interface AnimatedCheckProps {
 export function AnimatedCheck({ size = 48, strokeWidth = 3, className = '', color }: AnimatedCheckProps) {
   const strokeColor = color || 'var(--color-success)';
   return (
-    <motion.svg
+    <m.svg
       className={className}
       width={size}
       height={size}
@@ -21,7 +21,7 @@ export function AnimatedCheck({ size = 48, strokeWidth = 3, className = '', colo
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.2, ease: ease.out }}
     >
-      <motion.circle
+      <m.circle
         cx="12" cy="12" r="11"
         stroke={strokeColor}
         strokeWidth={strokeWidth}
@@ -30,7 +30,7 @@ export function AnimatedCheck({ size = 48, strokeWidth = 3, className = '', colo
         animate={{ pathLength: 1 }}
         transition={{ duration: 0.3, ease: ease.out }}
       />
-      <motion.path
+      <m.path
         d="M7 12.5l3 3 7-7"
         stroke={strokeColor}
         strokeWidth={strokeWidth}
@@ -41,6 +41,6 @@ export function AnimatedCheck({ size = 48, strokeWidth = 3, className = '', colo
         animate={{ pathLength: 1 }}
         transition={{ duration: 0.25, delay: 0.15, ease: ease.out }}
       />
-    </motion.svg>
+    </m.svg>
   );
 }

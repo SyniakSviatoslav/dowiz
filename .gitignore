@@ -81,6 +81,10 @@ loops/runs/*
 !loops/runs/metrics.jsonl
 !loops/runs/routing.jsonl
 !loops/runs/registry.json
+# NOTE (ADR-plane-telemetry-and-calibration, R2-C1/R2-M5): plane-telemetry durability does NOT
+# live here. loops/runs/ stays disposable scratch (per-box working copy). The authoritative,
+# append-only record is committed to a DEDICATED orphan branch `telemetry/plane` under a clean
+# telemetry/ path via git plumbing — never onto main, never into this scratch dir.
 loops/prospects/
 # Committed-by-accident classes: log dumps at root, python bytecode
 /*.txt

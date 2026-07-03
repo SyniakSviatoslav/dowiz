@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect } from 'react';
+import { LazyMotion, domAnimation } from 'framer-motion';
 
 export interface ThemeConfig {
   primary: string;
@@ -105,7 +106,16 @@ export function ThemeProvider({
 
   return (
     <ThemeContext.Provider value={{ theme: theme || null }}>
-      {children}
+      {/* Phase 2.1 (LazyMotion + `m`): ONE shared feature provider for every `m.*` component
+          in packages/ui (~46KB motion → ~4.6KB `m` + lazy domAnimation). ThemeProvider is the
+          root seam both apps already mount (apps/web main.tsx wraps the whole router), so no
+          app-side integration is needed. NO `strict` flag: apps/web still renders full
+          `motion.*` components (their own migration is a separate lane) and strict would
+          throw on those. Nested ThemeProviders (ClientLayout) nest LazyMotion with the same
+          static `domAnimation` feature object — supported and idempotent. */}
+      <LazyMotion features={domAnimation}>
+        {children}
+      </LazyMotion>
     </ThemeContext.Provider>
   );
 }
