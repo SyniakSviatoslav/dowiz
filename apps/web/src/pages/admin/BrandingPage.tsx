@@ -75,13 +75,18 @@ export function BrandingPage() {
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { alert(t('admin.error_file_too_large', 'File too large. Max 2MB.')); return; }
+    if (file.size > 2 * 1024 * 1024) { showToast(t('admin.error_file_too_large', 'File too large. Max 2MB.'), 'error'); return; }
+    if (!locationId) {
+      // The upload control is disabled until locationId resolves (see the file input's
+      // `disabled` below) — this is a defensive fallback so a race never reads as a silent no-op.
+      showToast(t('admin.logo_not_ready', 'Still loading your store — try again in a moment.'), 'warning');
+      return;
+    }
     // Show preview immediately via data URL
     const reader = new FileReader();
     reader.onload = () => setLogoDataUrl(reader.result as string);
     reader.readAsDataURL(file);
     // Upload via multipart to persist the logo
-    if (!locationId) return;
     setLogoUploading(true);
     try {
       const form = new FormData();
@@ -90,8 +95,13 @@ export function BrandingPage() {
       // fetch with a hand-rolled Bearer header that silently failed on token expiry).
       const data = await apiClient<any>(`/owner/locations/${locationId}/theme/logo`, { method: 'POST', body: form });
       if (data?.logo_url) { setLogoUrl(data.logo_url); setLogoDataUrl(''); }
-    } catch {
-      // Preview still shows; logo not persisted until next save
+    } catch (err) {
+      // BUGFIX (S4 audit finding #40): a bare catch left the optimistic preview showing the
+      // picked file forever while the server never actually persisted it — the owner believed
+      // it saved. Revert to the last-saved logo and tell them it failed.
+      console.error('[BrandingPage] Failed to upload logo:', err);
+      setLogoDataUrl('');
+      showToast(t('admin.logo_upload_failed', 'Failed to save your logo. Please try again.'), 'error');
     } finally {
       setLogoUploading(false);
     }
@@ -368,7 +378,7 @@ export function BrandingPage() {
             <div className="flex items-start gap-4">
               <div className="flex-1 min-w-0 space-y-3">
                 <FormField label={t(logoUploading ? 'admin.uploading' : 'admin.upload_logo', logoUploading ? 'Uploading…' : 'Upload Logo File')}>
-                  <input type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={handleLogoUpload} disabled={logoUploading}
+                  <input type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={handleLogoUpload} disabled={logoUploading || !locationId}
                     aria-label={t('admin.upload_logo', 'Upload Logo File')}
                     className="w-full text-sm rounded-[var(--brand-radius-sm)] transition-shadow duration-150 ease-[var(--ease-soft)]
                       file:mr-3 file:py-2 file:px-4 file:rounded-[var(--brand-radius-sm)] file:border-0 file:text-sm file:font-medium file:bg-[var(--brand-primary)] file:text-white file:transition-opacity file:duration-150 hover:file:opacity-90 disabled:opacity-50

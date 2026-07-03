@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, type ReactNode } from 'react';
+import { useEffect, useCallback, useState, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useIsMobile } from '../../hooks/use-breakpoint.js';
 
@@ -10,36 +10,89 @@ interface ResponsiveDialogProps {
   className?: string;
 }
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// S5 fix (repo-wide: zero focus traps existed despite aria-modal="true" on every
+// dialog). This is the ONE modal-shell primitive — every composer (OTPModal,
+// ConfirmDialog, and page modals migrated onto ResponsiveDialog) gets a real trap,
+// initial focus and focus restoration for free instead of re-solving it per-site.
 export function ResponsiveDialog({ open, onClose, title, children, className = '' }: ResponsiveDialogProps) {
   const isMobile = useIsMobile();
   // Ease-out enter without global keyframes; reduced-motion collapses the
   // --motion-* tokens to 0ms so this becomes instant.
   const [entered, setEntered] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  const getFocusable = useCallback((): HTMLElement[] => {
+    const root = containerRef.current;
+    if (!root) return [];
+    return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+      (el) => !el.hasAttribute('disabled') && el.getAttribute('aria-hidden') !== 'true',
+    );
+  }, []);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusable = getFocusable();
+      if (focusable.length === 0) {
+        // Nothing to tab to inside the dialog — keep focus from escaping to the page.
+        e.preventDefault();
+        containerRef.current?.focus();
+        return;
+      }
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      const active = document.activeElement as HTMLElement | null;
+      const activeInside = !!active && containerRef.current?.contains(active);
+      if (e.shiftKey) {
+        if (!activeInside || active === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (!activeInside || active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     },
-    [onClose],
+    [onClose, getFocusable],
   );
 
   useEffect(() => {
     if (open) {
+      previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
       document.addEventListener('keydown', handleKeyDown);
       document.body.style.overflow = 'hidden';
-      const raf = requestAnimationFrame(() => setEntered(true));
+      const raf = requestAnimationFrame(() => {
+        setEntered(true);
+        // Initial focus inside the dialog. A composer that needs a specific field
+        // focused (e.g. OTPModal's code input) simply focuses it itself afterward —
+        // this is only the default so a dialog with no such logic isn't left with
+        // focus stranded on the page underneath.
+        const focusable = getFocusable();
+        (focusable[0] ?? containerRef.current)?.focus();
+      });
       return () => {
         cancelAnimationFrame(raf);
         document.removeEventListener('keydown', handleKeyDown);
         document.body.style.overflow = '';
         setEntered(false);
+        // Restore focus to whatever triggered the dialog — without this, closing
+        // (Escape, backdrop, or an in-dialog action) drops focus to <body>.
+        previouslyFocusedRef.current?.focus?.();
       };
     }
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = '';
     };
-  }, [open, handleKeyDown]);
+  }, [open, handleKeyDown, getFocusable]);
 
   if (!open) return null;
 
@@ -70,7 +123,9 @@ export function ResponsiveDialog({ open, onClose, title, children, className = '
       <div className="fixed inset-0 z-modal-backdrop flex items-end justify-center">
         {backdrop}
         <div
-          className={`relative z-modal w-full max-h-[85vh] bg-[var(--brand-bg)] flex flex-col transition-transform ease-[var(--ease-out)] ${className}`}
+          ref={containerRef}
+          tabIndex={-1}
+          className={`relative z-modal w-full max-h-[85vh] bg-[var(--brand-bg)] flex flex-col transition-transform ease-[var(--ease-out)] outline-none ${className}`}
           style={{
             borderTopLeftRadius: 'var(--brand-radius)',
             borderTopRightRadius: 'var(--brand-radius)',
@@ -104,10 +159,15 @@ export function ResponsiveDialog({ open, onClose, title, children, className = '
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-modal-backdrop flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="fixed inset-0 z-modal-backdrop flex items-center justify-center p-4">
       {backdrop}
       <div
-        className={`relative z-modal bg-[var(--brand-bg)] max-w-md w-full max-h-[85vh] overflow-y-auto transition-[opacity,transform] ease-[var(--ease-out)] ${className}`}
+        ref={containerRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={`relative z-modal bg-[var(--brand-bg)] max-w-md w-full max-h-[85vh] overflow-y-auto transition-[opacity,transform] ease-[var(--ease-out)] outline-none ${className}`}
         style={{
           borderRadius: 'var(--brand-radius)',
           boxShadow: 'var(--elev-4)',

@@ -77,16 +77,6 @@ export function AnalyticsPage() {
   const [copied, setCopied] = useState(false);
 
   const [error, setError] = useState(false);
-  const CONSUMPTION_DATA = [
-    { name: 'Salmon fillet', consumed: 12.5, unit: 'kg', ordered: 8, pct: 85 },
-    { name: 'Sushi rice', consumed: 28, unit: 'kg', ordered: 4, pct: 65 },
-    { name: 'Nori sheets', consumed: 240, unit: 'pcs', ordered: 60, pct: 50 },
-    { name: 'Avocado', consumed: 35, unit: 'pcs', ordered: 10, pct: 40 },
-    { name: 'Cream cheese', consumed: 6.2, unit: 'kg', ordered: 3, pct: 70 },
-    { name: 'Spicy mayo', consumed: 4.5, unit: 'L', ordered: 2, pct: 30 },
-    { name: 'Takeout boxes', consumed: 126, unit: 'pcs', ordered: 126, pct: 100 },
-    { name: 'Chopsticks', consumed: 252, unit: 'pcs', ordered: 126, pct: 100 },
-  ];
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [productOrders, setProductOrders] = useState<ProductOrder[]>([]);
   const [productOrdersLoading, setProductOrdersLoading] = useState(false);
@@ -397,65 +387,39 @@ export function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Consumption report */}
+        {/* Consumption report — NOT wired to a real BOM/recipe source yet. Was a
+            static fake sushi dataset (Salmon/Nori/Wasabi) shown to every tenant
+            with a working CSV/JSON export ("Based on today's orders") — the
+            export made fabricated ingredient/stock numbers indistinguishable
+            from real data. Until this is wired to real recipe consumption,
+            show an honest "not available" state with no export action. */}
         <div className="p-5 rounded-xl border border-glow" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>
-              {t('admin.ingredient_consumption', 'Ingredient Consumption')} <span className="text-step-2xs font-normal opacity-50">({t('admin.derived', 'derived')})</span>
+              {t('admin.ingredient_consumption', 'Ingredient Consumption')}
             </h3>
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" size="sm" onClick={() => exportCSV(CONSUMPTION_DATA, 'consumption.csv')}>
-                <i className="ti ti-download" /> {t('admin.export_csv', 'Export CSV')}
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => exportJSON(CONSUMPTION_DATA, 'consumption.json')} title={t('tooltip.export_json', 'Export as JSON')}>
-                <i className="ti ti-braces" /> {t('admin.export_json', 'Export JSON')}
-              </Button>
-            </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {CONSUMPTION_DATA.map((item, i) => (
-              <div
-                key={item.name}
-                className="flex items-center justify-between p-3 rounded-lg border slide-in-up"
-                style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface-raised)', animationDelay: `${i * 60}ms` }}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium truncate">{item.name}</div>
-                  <div className="text-step-2xs" style={{ color: 'var(--brand-text-muted)' }}>{item.consumed} {item.unit}</div>
-                  <div className="w-full h-1 rounded-full mt-1.5" style={{ background: 'var(--brand-border)' }}>
-                    <div
-                      className="h-full rounded-full progress-animate"
-                      style={{
-                        width: `${item.pct}%`,
-                        background: item.pct > 80 ? 'var(--color-warning)' : 'var(--color-success)',
-                        transitionDelay: `${i * 80}ms`,
-                      }}
-                    />
-                  </div>
-                </div>
-                {item.pct > 80 && (
-                  <span className="text-step-2xs ml-2 px-1.5 py-0.5 rounded font-medium shrink-0 animate-pulse" style={{ background: 'var(--color-warning-light, color-mix(in srgb, var(--color-warning) 15%, transparent))', color: 'var(--color-warning)' }}>
-                    {t('admin.reorder', 'Reorder')}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-          <p className="text-step-2xs mt-3" style={{ color: 'var(--brand-text-muted)' }}>
-            {t('admin.consumption_hint', 'Based on today\'s orders x recipe quantities. Estimates only.')}
-          </p>
-          <button
-            onClick={handleCopyReorder}
-            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 text-step-2xs font-medium rounded-lg border transition-[background-color,transform,box-shadow] duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
-            style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-primary-readable)' }}
-          >
-            {copied ? (
-              <><i className="ti ti-check" /> {t('common.copied', 'Copied!')}</>
-            ) : (
-              <><i className="ti ti-clipboard" /> {t('admin.copy_reorder', 'Copy Reorder List')}</>
-            )}
-          </button>
+          <EmptyState
+            icon={<i className="ti ti-chart-bar text-4xl opacity-30" />}
+            title={t('admin.consumption_unavailable_title', 'Not available yet')}
+            description={t('admin.consumption_unavailable_desc', "Ingredient consumption isn't connected to your recipes yet, so there's nothing real to show or export here.")}
+          />
         </div>
+      </div>
+
+      {/* Reorder list — real top-products names, no fabricated ingredient data. */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleCopyReorder}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-step-2xs font-medium rounded-lg border transition-[background-color,transform,box-shadow] duration-200 hover:bg-[var(--brand-surface-raised)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+          style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-primary-readable)', background: 'var(--brand-surface)' }}
+        >
+          {copied ? (
+            <><i className="ti ti-check" /> {t('common.copied', 'Copied!')}</>
+          ) : (
+            <><i className="ti ti-clipboard" /> {t('admin.copy_reorder', 'Copy Reorder List')}</>
+          )}
+        </button>
       </div>
 
       {/* Order Heatmap */}

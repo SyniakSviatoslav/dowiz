@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, EmptyState, SkeletonBase, useI18n, PriceDisplay, ease, duration, Select } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, useI18n, useToast, PriceDisplay, ease, duration, Select } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 
@@ -40,6 +40,7 @@ export function ShiftPage() {
   const [msgSaving, setMsgSaving] = useState(false);
   const [msgSaved, setMsgSaved] = useState(false);
   const { t } = useI18n();
+  const { showToast } = useToast();
   const reduce = useReducedMotion();
   // ease-out tween (contract: no spring/bounce); reduced-motion → instant crossfade.
   const rise = reduce
@@ -55,7 +56,11 @@ export function ShiftPage() {
         body: { messenger_kind: msgKind || null, messenger_handle: msgHandle.trim() || null },
       });
       setMsgSaved(true);
-    } catch { /* surfaced via the unchanged Save label */ } finally { setMsgSaving(false); }
+    } catch {
+      // S4 fix: was a bare catch with no feedback at all — the Save button just
+      // stopped loading and looked identical to a successful save.
+      showToast(t('courier.messenger_save_failed', 'Could not save your messenger contact. Please try again.'), 'error');
+    } finally { setMsgSaving(false); }
   };
 
   const fetchShift = async () => {

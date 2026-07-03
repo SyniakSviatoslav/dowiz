@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { Button, EmptyState, SkeletonBase, useI18n, useConfirm, Toggle, Select, Textarea, ease, duration } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, useI18n, useConfirm, Toggle, Select, Textarea, ease, duration, useToast, ResponsiveDialog } from '@deliveryos/ui';
 import { PromotionSchema, PromotionListResponse, CreatePromotionSchema } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
 import type { z } from 'zod';
@@ -32,10 +32,16 @@ function PromotionForm({
   initial,
   onSave,
   onCancel,
+  bare = false,
 }: {
   initial?: Promotion | null;
   onSave: (data: CreatePromotion) => Promise<boolean> | void;
   onCancel: () => void;
+  // S5 fix: when rendered inside ResponsiveDialog (which already supplies its own
+  // card chrome + scroll region + padding), skip this component's own outer
+  // bg/rounded/shadow wrapper and sticky footer so we don't nest a card in a card.
+  // The standalone (non-modal) "create" usage keeps the original full wrapper.
+  bare?: boolean;
 }) {
   const { t } = useI18n();
   const prefersReducedMotion = useReducedMotion();
@@ -97,21 +103,22 @@ function PromotionForm({
   const inputClass = 'w-full h-11 px-3 rounded-[var(--brand-radius-sm)] border text-sm outline-none transition-[border-color,box-shadow] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-surface)] focus:border-[var(--brand-primary)]';
   const labelClass = 'text-xs font-medium block mb-1';
 
-  return (
-    <div className="bg-[var(--brand-surface)] rounded-[var(--brand-radius)] flex flex-col max-h-[85vh] shadow-[var(--elev-4)]">
-      <div className="overflow-y-auto p-5 space-y-4">
-        <h3 className="text-base font-semibold" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
-          {initial ? `${t('common.edit')}: ${form.code}` : t('promotions.create', 'Create Promotion')}
-        </h3>
+  const titleBlock = (
+    <h3 className="text-base font-semibold" style={{ fontFamily: 'var(--brand-font-heading)', color: 'var(--brand-text)' }}>
+      {initial ? `${t('common.edit')}: ${form.code}` : t('promotions.create', 'Create Promotion')}
+    </h3>
+  );
 
-        {saveError && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-[var(--brand-radius-sm)] text-xs" role="alert"
-            style={{ background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>
-            <i className="ti ti-alert-circle shrink-0" style={{ fontSize: '0.9rem', marginTop: '1px' }} />
-            <span className="min-w-0">{saveError}</span>
-          </div>
-        )}
+  const errorBlock = saveError && (
+    <div className="flex items-start gap-2 px-3 py-2 rounded-[var(--brand-radius-sm)] text-xs" role="alert"
+      style={{ background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>
+      <i className="ti ti-alert-circle shrink-0" style={{ fontSize: '0.9rem', marginTop: '1px' }} />
+      <span className="min-w-0">{saveError}</span>
+    </div>
+  );
 
+  const fields = (
+    <>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="min-w-0">
             <label className={labelClass} style={{ color: 'var(--brand-text)' }}>{t('promotions.code', 'Code')} *</label>
@@ -181,10 +188,41 @@ function PromotionForm({
           <Textarea value={form.description ?? ''} onChange={e => set('description', e.target.value)} rows={3} maxLength={500}
             placeholder={t('promotions.description_placeholder', 'e.g. Summer special - 20% off all sushi rolls')} />
         </div>
+    </>
+  );
+
+  const footer = (
+    <>
+      <Button variant="ghost" size="sm" onClick={onCancel}>{t('common.cancel')}</Button>
+      <Button size="sm" loading={saving} onClick={handleSave}>{t('common.save')}</Button>
+    </>
+  );
+
+  // S5 fix: `bare` (used when this form is the child of ResponsiveDialog, which
+  // already renders its own card chrome + scroll region) skips this component's own
+  // outer bg/rounded/shadow wrapper and sticky border-t footer — everything else
+  // (title text, field markup, button handlers/order) is identical to the
+  // standalone "create" rendering below.
+  if (bare) {
+    return (
+      <div className="space-y-4">
+        {titleBlock}
+        {errorBlock}
+        {fields}
+        <div className="flex justify-end gap-2 pt-2">{footer}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-[var(--brand-surface)] rounded-[var(--brand-radius)] flex flex-col max-h-[85vh] shadow-[var(--elev-4)]">
+      <div className="overflow-y-auto p-5 space-y-4">
+        {titleBlock}
+        {errorBlock}
+        {fields}
       </div>
       <div className="flex justify-end gap-2 p-5 pt-3 border-t shrink-0" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
-        <Button variant="ghost" size="sm" onClick={onCancel}>{t('common.cancel')}</Button>
-        <Button size="sm" loading={saving} onClick={handleSave}>{t('common.save')}</Button>
+        {footer}
       </div>
     </div>
   );
@@ -198,6 +236,7 @@ export function PromotionsPage() {
   const { t } = useI18n();
   const prefersReducedMotion = useReducedMotion();
   const { confirm: rmConfirm, dialog: rmDialog } = useConfirm();
+  const { showToast } = useToast();
 
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -223,14 +262,9 @@ export function PromotionsPage() {
 
   useEffect(() => { load(); }, []);
 
-  useEffect(() => {
-    if (editing) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => { document.body.style.overflow = ''; };
-  }, [editing]);
+  // S5 fix: body-scroll-lock while the edit modal is open now lives inside
+  // ResponsiveDialog (keyed off its own `open` prop) — this page no longer needs
+  // its own copy of that effect.
 
   const handleCreate = async (data: CreatePromotion): Promise<boolean> => {
     try {
@@ -260,9 +294,15 @@ export function PromotionsPage() {
   const handleToggleActive = async (p: Promotion) => {
     try {
       await apiClient(`/owner/promotions/${p.id}`, { method: 'PATCH', body: { is_active: !p.is_active } });
+      // Not optimistic — state only flips after the PATCH resolves, so there is
+      // nothing to roll back on failure below.
       setPromotions(prev => prev.map(x => x.id === p.id ? { ...x, is_active: !x.is_active } : x));
     } catch (err: any) {
+      // S4 fix: this used to fail silently (console-only) while the Toggle still
+      // visually showed the pre-toggle state with no error — the owner had no way
+      // to tell the request had failed.
       console.error('[Promotions] toggle failed:', err);
+      showToast(t('promotions.toggle_error', 'Could not update promotion status. Please try again.'), 'error');
     }
   };
 
@@ -276,9 +316,15 @@ export function PromotionsPage() {
     if (!ok) return;
     try {
       await apiClient(`/owner/promotions/${p.id}`, { method: 'DELETE' });
+      // Not optimistic — the row is only removed from the list after the DELETE
+      // resolves, so there is nothing to restore on failure below.
       setPromotions(prev => prev.filter(x => x.id !== p.id));
     } catch (err: any) {
+      // S4 fix: this used to fail silently (console-only) — the confirm dialog
+      // had already closed, so the owner saw nothing and could believe the
+      // promotion was deleted when the row was still there on next reload.
       console.error('[Promotions] delete failed:', err);
+      showToast(t('common.error_delete', 'Failed to delete.'), 'error');
     }
   };
 
@@ -406,25 +452,17 @@ export function PromotionsPage() {
         )}
       </div>
 
-      <AnimatePresence>
-        {editing && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true">
-            <motion.button type="button"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: prefersReducedMotion ? 0 : duration.fast }}
-              className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-default"
-              aria-label={t('common.close', 'Close')} onClick={() => setEditing(null)} />
-            <motion.div
-              initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 24, scale: prefersReducedMotion ? 1 : 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: prefersReducedMotion ? 0 : 24, scale: prefersReducedMotion ? 1 : 0.98 }}
-              transition={{ duration: prefersReducedMotion ? 0 : duration.base, ease: ease.out }}
-              className="relative w-full max-w-lg sm:mx-4 mb-0 sm:mb-auto">
-              <PromotionForm initial={editing} onSave={handleEdit} onCancel={() => setEditing(null)} />
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* S5 fix: migrated off the hand-rolled fixed/inset-0-overlay backdrop+dialog
+          (no focus trap, no Escape handling) onto the shared ResponsiveDialog
+          primitive, which now provides a real focus trap (initial focus lands on
+          the Code input — the first focusable element — and Tab/Shift+Tab cycle
+          confined to the dialog), Escape-to-close, backdrop click-to-close, and
+          body-scroll-lock. `bare` keeps PromotionForm's own title/fields/footer
+          content and handlers unchanged, only dropping its now-redundant outer
+          card chrome since ResponsiveDialog supplies that. */}
+      <ResponsiveDialog open={!!editing} onClose={() => setEditing(null)} className="max-w-lg">
+        {editing && <PromotionForm initial={editing} onSave={handleEdit} onCancel={() => setEditing(null)} bare />}
+      </ResponsiveDialog>
       {rmDialog}
     </>
   );

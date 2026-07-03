@@ -1,6 +1,6 @@
 import { safeStorage } from '../../lib/safeStorage.js';
 import { useState, useEffect, useMemo } from 'react';
-import { Button, EmptyState, SkeletonBase, HintCard, useI18n, useConfirm, MobilePicker, useIsMobile, Select, SegmentedControl, SearchInput } from '@deliveryos/ui';
+import { Button, EmptyState, SkeletonBase, HintCard, useI18n, useConfirm, MobilePicker, useIsMobile, Select, SegmentedControl, SearchInput, ResponsiveDialog } from '@deliveryos/ui';
 import { EU_ALLERGENS } from '@deliveryos/shared-types';
 
 type SupplyKind = 'food_ingredient' | 'condiment' | 'packaging' | 'utensil';
@@ -219,16 +219,6 @@ export function SupplyLibraryPage() {
     setLoading(false);
   }, []);
 
-  // Lock body scroll when editing modal is open
-  useEffect(() => {
-    if (editing) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => { document.body.style.overflow = ''; };
-  }, [editing]);
-
   const persistAndSet = (newSupplies: SupplyItem[]) => {
     saveSupplies(newSupplies);
     setSupplies(newSupplies);
@@ -374,14 +364,15 @@ export function SupplyLibraryPage() {
         )
       ) : (
         <div className="space-y-1">
-          {editing && (
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center fade-in" role="dialog" aria-modal="true">
-              <button type="button" className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-default" aria-label={t('common.close', 'Close')} onClick={() => setEditing(null)} />
-              <div className="relative w-full max-w-lg mx-4 mb-0 sm:mb-auto rounded-t-2xl sm:rounded-2xl">
-                <SupplyForm initial={editing} onSave={handleSave} onCancel={() => setEditing(null)} />
-              </div>
-            </div>
-          )}
+          {/* Edit Supply Modal — S5 fix (audit #59): migrated off the hand-rolled
+              fixed/inset-0 overlay onto the shared ResponsiveDialog primitive, which
+              adds a real focus trap + Escape-to-close + focus restoration (all were
+              missing before). No `title` passed: SupplyForm renders its own heading
+              (shared with the inline "add" flow below), so ResponsiveDialog's header
+              row stays collapsed to avoid a duplicate title. */}
+          <ResponsiveDialog open={!!editing} onClose={() => setEditing(null)}>
+            {editing && <SupplyForm initial={editing} onSave={handleSave} onCancel={() => setEditing(null)} />}
+          </ResponsiveDialog>
           {filtered.map((supply, i) => {
             const ico = kindIcons[supply.kind] || 'ti ti-circle';
             const icoColor = supply.kind === 'food_ingredient' ? 'var(--color-success)' : supply.kind === 'condiment' ? 'var(--color-warning)' : supply.kind === 'packaging' ? 'var(--color-info)' : 'var(--brand-text-muted)';

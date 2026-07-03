@@ -12,6 +12,10 @@ interface OrderSummarySectionProps {
   feeKnown: boolean;
   deliveryFee: number;
   taxTotal: number;
+  /** True when the venue's prices already include VAT — the tax is informational, not an addend. */
+  taxInclusive: boolean;
+  /** VAT rate as a percent (e.g. 20, 7.45) — shown on the inclusive line per CC-3 "includes VAT (r%)". */
+  taxRatePct?: number;
   tipAmount: number;
   total: number;
   hasNutrition: boolean;
@@ -19,7 +23,7 @@ interface OrderSummarySectionProps {
 }
 
 export function OrderSummarySection({
-  deliveryType, subtotal, feeKnown, deliveryFee, taxTotal, tipAmount, total,
+  deliveryType, subtotal, feeKnown, deliveryFee, taxTotal, taxInclusive, taxRatePct, tipAmount, total,
   hasNutrition, nutritionKcal,
 }: OrderSummarySectionProps) {
   const { t } = useI18n();
@@ -51,9 +55,20 @@ export function OrderSummarySection({
           </div>
         )}
         {taxTotal > 0 && (
+          // Inclusive venues: VAT is already inside the subtotal, so it is shown as an informational
+          // "Incl. VAT" note — never a breakdown addend, or the visible lines would sum past the total
+          // (ADR-audit-fix-money M7 / LC1). Exclusive venues: VAT is a real addend.
           <div className="flex justify-between items-baseline gap-3 text-step-sm">
-            <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.tax', 'Tax')}</span>
-            <span className="shrink-0 tabular-nums"><PriceDisplay amount={taxTotal} /></span>
+            <span className="min-w-0 truncate" style={{ color: 'var(--brand-text-muted)' }}>
+              {taxInclusive
+                ? (taxRatePct && taxRatePct > 0
+                    ? t('checkout.tax_included_rate', 'Incl. VAT ({{rate}}%)', { rate: taxRatePct })
+                    : t('checkout.tax_included', 'Incl. VAT'))
+                : t('cart.tax', 'Tax')}
+            </span>
+            <span className="shrink-0 tabular-nums" style={taxInclusive ? { color: 'var(--brand-text-muted)' } : undefined}>
+              {taxInclusive ? '(' : ''}<PriceDisplay amount={taxTotal} />{taxInclusive ? ')' : ''}
+            </span>
           </div>
         )}
         {tipAmount > 0 && (

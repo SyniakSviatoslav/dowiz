@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, Input, Select, EmptyState, CourierLiveMap, useI18n, PriceDisplay, useToast, SkeletonBase, scalePress } from '@deliveryos/ui';
+import { Button, Input, Select, EmptyState, CourierLiveMap, useI18n, PriceDisplay, useToast, SkeletonBase, scalePress, ResponsiveDialog } from '@deliveryos/ui';
 import type { CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
@@ -526,66 +526,61 @@ export function CouriersPage() {
         />
       </div>
 
-      {/* Order Detail Modal */}
-      {selectedOrderDetail && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center fade-in" role="dialog" aria-modal="true">
-          <button type="button" className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-default" aria-label={t('common.close', 'Close')} onClick={() => setSelectedOrderDetail(null)} />
-          <div className="relative w-full max-w-md bg-[var(--brand-surface)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 z-10 slide-in-up">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>
-                {t('admin.order_details', 'Order Details')} #{selectedOrderDetail.order_id.slice(0, 8)}
-              </h3>
-              <motion.button onClick={() => setSelectedOrderDetail(null)} whileTap={{ scale: 0.97 }} aria-label={t('common.close', 'Close')} className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-md hover:bg-[var(--brand-surface-raised)]">
-                <i className="ti ti-x" style={{ color: 'var(--brand-text-muted)' }} />
-              </motion.button>
+      {/* Order Detail Modal — S5 fix (audit #59): migrated off the hand-rolled
+          fixed/inset-0 overlay onto the shared ResponsiveDialog primitive (real focus
+          trap + Escape-to-close + focus restoration, all missing before). The title
+          bar + close button are now the shared primitive's own header (was hand-rolled). */}
+      <ResponsiveDialog
+        open={!!selectedOrderDetail}
+        onClose={() => setSelectedOrderDetail(null)}
+        title={selectedOrderDetail ? `${t('admin.order_details', 'Order Details')} #${selectedOrderDetail.order_id.slice(0, 8)}` : ''}
+      >
+        {selectedOrderDetail && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg border text-center" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+                <div className="text-lg font-bold" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={selectedOrderDetail.total || 0} /></div>
+                <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.total', 'Total')}</div>
+              </div>
+              <div className="p-3 rounded-lg border text-center" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+                <div className="text-lg font-bold" style={{ color: 'var(--color-success)' }}><PriceDisplay amount={selectedOrderDetail.cash_amount || 0} /></div>
+                <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.delivery_fee', 'Delivery Fee')}</div>
+              </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-lg border text-center" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
-                  <div className="text-lg font-bold" style={{ color: 'var(--brand-primary)' }}><PriceDisplay amount={selectedOrderDetail.total || 0} /></div>
-                  <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.total', 'Total')}</div>
-                </div>
-                <div className="p-3 rounded-lg border text-center" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
-                  <div className="text-lg font-bold" style={{ color: 'var(--color-success)' }}><PriceDisplay amount={selectedOrderDetail.cash_amount || 0} /></div>
-                  <div className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{t('cart.delivery_fee', 'Delivery Fee')}</div>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-lg border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
-                <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.status_timeline', 'Status Timeline')}</h4>
-                <div className="space-y-2">
-                  {[
-                    { label: t('admin.assigned', 'Assigned'), time: selectedOrderDetail.assigned_at, icon: 'ti ti-user-plus' },
-                    { label: t('admin.accepted', 'Accepted'), time: selectedOrderDetail.accepted_at, icon: 'ti ti-circle-check' },
-                    { label: t('admin.picked_up', 'Picked up'), time: selectedOrderDetail.picked_up_at, icon: 'ti ti-package' },
-                    { label: t('admin.delivered', 'Delivered'), time: selectedOrderDetail.delivered_at, icon: 'ti ti-map-pin-check' },
-                  ].filter(s => s.time).map((s, i, arr) => (
-                    <div key={s.label} className="flex items-center gap-3">
-                      <div className="flex flex-col items-center">
-                        <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: 'var(--brand-primary-light)' }}>
-                          <i className={s.icon} style={{ fontSize: '0.7rem', color: 'var(--brand-primary)' }} />
-                        </div>
-                        {i < arr.length - 1 && <div className="w-px h-4" style={{ background: 'var(--brand-border)' }} />}
+            <div className="p-3 rounded-lg border" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)' }}>
+              <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.status_timeline', 'Status Timeline')}</h4>
+              <div className="space-y-2">
+                {[
+                  { label: t('admin.assigned', 'Assigned'), time: selectedOrderDetail.assigned_at, icon: 'ti ti-user-plus' },
+                  { label: t('admin.accepted', 'Accepted'), time: selectedOrderDetail.accepted_at, icon: 'ti ti-circle-check' },
+                  { label: t('admin.picked_up', 'Picked up'), time: selectedOrderDetail.picked_up_at, icon: 'ti ti-package' },
+                  { label: t('admin.delivered', 'Delivered'), time: selectedOrderDetail.delivered_at, icon: 'ti ti-map-pin-check' },
+                ].filter(s => s.time).map((s, i, arr) => (
+                  <div key={s.label} className="flex items-center gap-3">
+                    <div className="flex flex-col items-center">
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: 'var(--brand-primary-light)' }}>
+                        <i className={s.icon} style={{ fontSize: '0.7rem', color: 'var(--brand-primary)' }} />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>{s.label}</div>
-                        <div data-dynamic className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{new Date(s.time!).toLocaleString()}</div>
-                      </div>
+                      {i < arr.length - 1 && <div className="w-px h-4" style={{ background: 'var(--brand-border)' }} />}
                     </div>
-                  ))}
-                </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>{s.label}</div>
+                      <div data-dynamic className="text-xs" style={{ color: 'var(--brand-text-muted)' }}>{new Date(s.time!).toLocaleString()}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
+            </div>
 
-              <div className="text-xs space-y-1" style={{ color: 'var(--brand-text-muted)' }}>
-                <div className="flex items-center gap-1"><i className="ti ti-user" /> {selectedOrderDetail.customer_name}</div>
-                {selectedOrderDetail.customer_phone && <div className="flex items-center gap-1"><i className="ti ti-phone" /> {selectedOrderDetail.customer_phone}</div>}
-                {selectedOrderDetail.delivery_address && <div className="flex items-center gap-1"><i className="ti ti-map-pin" /> {selectedOrderDetail.delivery_address}</div>}
-              </div>
+            <div className="text-xs space-y-1" style={{ color: 'var(--brand-text-muted)' }}>
+              <div className="flex items-center gap-1"><i className="ti ti-user" /> {selectedOrderDetail.customer_name}</div>
+              {selectedOrderDetail.customer_phone && <div className="flex items-center gap-1"><i className="ti ti-phone" /> {selectedOrderDetail.customer_phone}</div>}
+              {selectedOrderDetail.delivery_address && <div className="flex items-center gap-1"><i className="ti ti-map-pin" /> {selectedOrderDetail.delivery_address}</div>}
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </ResponsiveDialog>
     </div>
   );
 }

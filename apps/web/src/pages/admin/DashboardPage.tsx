@@ -240,7 +240,12 @@ export function DashboardPage() {
     try {
       const msg = await apiClient(`/orders/${orderId}/messages`, { method: 'POST', body: { presetKey, params } });
       setMessagesByOrder(prev => ({ ...prev, [orderId]: [...(prev[orderId] || []), msg] }));
-    } catch (err) { console.warn('[DashboardPage] send message failed:', err); }
+    } catch (err) {
+      // BUGFIX (S4 audit): surface send failures — the old console.warn-only swallow left the
+      // owner tapping a dead preset with zero feedback (mirrors the same fix in courier/DeliveryPage.tsx).
+      console.warn('[DashboardPage] send message failed:', err);
+      showToast(t('courier.message_send_failed', 'Message could not be sent. Please try again.'), 'error');
+    }
   };
 
   const { showToast } = useToast();

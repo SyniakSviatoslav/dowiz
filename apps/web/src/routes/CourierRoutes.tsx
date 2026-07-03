@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { LanguageSwitcher, BottomTabBar, CurrencySwitcher, SunlightToggle, useI18n, paperSkinAttr } from '@deliveryos/ui';
+import { LanguageSwitcher, BottomTabBar, CurrencySwitcher, SunlightToggle, useI18n, paperSkinAttr, ToastProvider } from '@deliveryos/ui';
 import type { TabItem } from '@deliveryos/ui';
 import { TasksPage } from '../pages/courier/TasksPage.js';
 import { DeliveryPage } from '../pages/courier/DeliveryPage.js';
@@ -82,17 +82,22 @@ function CourierLayout() {
 
 export function CourierRoutes() {
   return (
-    <Routes>
-      <Route path="/" element={<CourierLayout />}>
-        <Route index element={<TasksPage />} />
-        <Route path="delivery/:id" element={<DeliveryPage />} />
-        <Route path="login" element={<LoginPage />} />
-        <Route path="earnings" element={<EarningsPage />} />
-        <Route path="history" element={<HistoryPage />} />
-        <Route path="shift" element={<ShiftPage />} />
-        {/* BUGFIX: unknown /courier/* paths rendered a blank Outlet — redirect to tasks instead. */}
-        <Route path="*" element={<Navigate to="/courier" replace />} />
-      </Route>
-    </Routes>
+    // S4 fix: courier pages had no toast/notification mechanism mounted at all —
+    // silent mutation failures (console.* only) had no user-facing alternative.
+    // Mirrors AdminRoutes/ClientLayout, which already wrap their routes the same way.
+    <ToastProvider>
+      <Routes>
+        <Route path="/" element={<CourierLayout />}>
+          <Route index element={<TasksPage />} />
+          <Route path="delivery/:id" element={<DeliveryPage />} />
+          <Route path="login" element={<LoginPage />} />
+          <Route path="earnings" element={<EarningsPage />} />
+          <Route path="history" element={<HistoryPage />} />
+          <Route path="shift" element={<ShiftPage />} />
+          {/* BUGFIX: unknown /courier/* paths rendered a blank Outlet — redirect to tasks instead. */}
+          <Route path="*" element={<Navigate to="/courier" replace />} />
+        </Route>
+      </Routes>
+    </ToastProvider>
   );
 }

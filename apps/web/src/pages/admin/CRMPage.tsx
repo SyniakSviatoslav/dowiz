@@ -41,6 +41,7 @@ export function CRMPage() {
   const [sortKey, setSortKey] = useState<'orders' | 'ltv' | 'name'>('orders');
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
   const [analyticsCache, setAnalyticsCache] = useState<Record<string, any>>({});
+  const [analyticsError, setAnalyticsError] = useState<Record<string, boolean>>({});
   const [loadingAnalytics, setLoadingAnalytics] = useState<string | null>(null);
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
 
@@ -65,29 +66,33 @@ export function CRMPage() {
   // /customers/:id/reveal-contact call 404'd and the catch rendered a hardcoded
   // fake phone for every customer.)
 
-  const toggleExpand = async (id: string) => {
+  // Fetch (or re-fetch, on explicit retry) one customer's analytics. On failure
+  // this must NEVER fabricate data — a failed fetch renders an error state with
+  // a Retry action, never a synthetic order/preferences/heatmap payload. (Was:
+  // hardcoded fake "Pizza x2" order + fake LTV + fake heatmap written into
+  // analyticsCache and rendered indistinguishably from real customer history.)
+  const loadAnalytics = React.useCallback(async (id: string) => {
+    setLoadingAnalytics(id);
+    setAnalyticsError(prev => ({ ...prev, [id]: false }));
+    try {
+      const data = await apiClient<typeof CustomerAnalyticsResponse>(`/owner/customers/${id}/analytics`, { schema: CustomerAnalyticsResponse });
+      setAnalyticsCache(prev => ({ ...prev, [id]: data }));
+    } catch (err) {
+      console.warn('[CRMPage] customer analytics failed:', err);
+      setAnalyticsError(prev => ({ ...prev, [id]: true }));
+    } finally {
+      setLoadingAnalytics(null);
+    }
+  }, []);
+
+  const toggleExpand = (id: string) => {
     if (expandedCustomer === id) {
       setExpandedCustomer(null);
       return;
     }
     setExpandedCustomer(id);
-    if (!analyticsCache[id]) {
-      setLoadingAnalytics(id);
-      try {
-        const data = await apiClient<typeof CustomerAnalyticsResponse>(`/owner/customers/${id}/analytics`, { schema: CustomerAnalyticsResponse });
-        setAnalyticsCache(prev => ({ ...prev, [id]: data }));
-      } catch (err) {
-        console.warn('[CRMPage] customer analytics failed:', err);
-        setAnalyticsCache(prev => ({ ...prev, [id]: {
-          orders: [
-            { id: 'o1', status: 'DELIVERED', total: 150000, created_at: new Date().toISOString(), delivery_address: 'Rruga e Durresit', items: [{name: 'Pizza', qty: 2}] }
-          ],
-          preferences: [{ name: 'Pizza', total_qty: 10, total_spent: 750000 }],
-          heatmap: [{ dow: 5, hour: 19, cnt: 4 }]
-        }}));
-      } finally {
-        setLoadingAnalytics(null);
-      }
+    if (!analyticsCache[id] && !analyticsError[id] && loadingAnalytics !== id) {
+      void loadAnalytics(id);
     }
   };
 
@@ -251,7 +256,7 @@ export function CRMPage() {
                   {expandedCustomer === c.id && (
                     <tr className="bg-[var(--brand-bg)]">
                       <td colSpan={5} className="p-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
-                        <CustomerDetail t={t} loading={loadingAnalytics === c.id} data={analyticsCache[c.id]} reduceMotion={reduceMotion} />
+                        <CustomerDetail t={t} loading={loadingAnalytics === c.id} data={analyticsCache[c.id]} error={!!analyticsError[c.id]} onRetry={() => loadAnalytics(c.id)} reduceMotion={reduceMotion} />
                       </td>
                     </tr>
                   )}
@@ -301,7 +306,7 @@ export function CRMPage() {
                 </motion.div>
                 {expanded && (
                   <div className="px-4 pb-4 border-t pt-4" style={{ borderColor: 'var(--brand-border)' }}>
-                    <CustomerDetail t={t} loading={loadingAnalytics === c.id} data={analyticsCache[c.id]} reduceMotion={reduceMotion} />
+                    <CustomerDetail t={t} loading={loadingAnalytics === c.id} data={analyticsCache[c.id]} error={!!analyticsError[c.id]} onRetry={() => loadAnalytics(c.id)} reduceMotion={reduceMotion} />
                   </div>
                 )}
               </motion.div>
@@ -316,7 +321,7 @@ export function CRMPage() {
 
 // Shared expanded-detail panel (preferences / recent orders / heatmap) for the
 // desktop table row and the mobile card. Kept local to the page per scope.
-function CustomerDetail({ t, loading, data, reduceMotion }: { t: (k: string, f: string) => string; loading: boolean; data: any; reduceMotion: boolean | null }) {
+function CustomerDetail({ t, loading, data, error, onRetry, reduceMotion }: { t: (k: string, f: string) => string; loading: boolean; data: any; error: boolean; onRetry: () => void; reduceMotion: boolean | null }) {
   if (loading) {
     return (
       <div className="space-y-3" aria-busy="true" aria-label={t('common.loading', 'Loading')}>
@@ -324,6 +329,20 @@ function CustomerDetail({ t, loading, data, reduceMotion }: { t: (k: string, f: 
         <SkeletonBase className="h-16 w-full" />
         <SkeletonBase className="h-16 w-full" />
       </div>
+    );
+  }
+  if (error) {
+    return (
+      <EmptyState
+        icon={<i className="ti ti-cloud-off" />}
+        title={t('admin.customer_history_error_title', "Couldn't load history")}
+        description={t('admin.customer_history_error_desc', 'Something went wrong loading this customer’s order history.')}
+        action={
+          <Button onClick={onRetry} size="sm">
+            <i className="ti ti-refresh" /> {t('common.retry', 'Retry')}
+          </Button>
+        }
+      />
     );
   }
   if (!data) return null;

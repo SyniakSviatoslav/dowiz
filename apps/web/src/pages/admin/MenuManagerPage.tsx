@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Button, Input, Select, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle, useToast, staggerChildren, cardEntry, SearchInput } from '@deliveryos/ui';
+import { Button, Input, Select, EmptyState, useI18n, useConfirm, MobilePicker, useIsMobile, PriceDisplay, getAllergenStyle, useToast, staggerChildren, cardEntry, SearchInput, ResponsiveDialog } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { fetchVenueInfo } from '../../lib/publicApi.js';
 import { z } from 'zod';
@@ -47,6 +47,17 @@ function getProductAllergens(product: Product): string[] {
   return Array.from(set).sort();
 }
 
+// S4 fix (silent-mutation-failure class) — shared pure state-merge used by
+// handleToggleAvailable for BOTH the optimistic apply and the on-failure rollback,
+// so the two are guaranteed symmetric (whatever shape is written can be un-written
+// with the same function) and the merge logic is unit-testable with plain objects
+// (see menu-manager.source-integrity.test.ts).
+export function replaceProductInCategories(categories: Category[], catId: string, productId: string, nextProduct: Product): Category[] {
+  return categories.map(c => {
+    if (c.id !== catId) return c;
+    return { ...c, products: (c.products || []).map(p => p.id === productId ? nextProduct : p) };
+  });
+}
 
 // MENU-AVAILABILITY (additive) · owner schedule + busy editor. Self-contained,
 // collapsed by default, zero impact on existing flows. Reads the location id from
@@ -61,6 +72,7 @@ interface ScheduleRow {
 // state read from the public /info; PATCH sets a 30-min window or clears it.
 function KitchenBusyToggle() {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const [locationId, setLocationId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -81,7 +93,10 @@ function KitchenBusyToggle() {
       const busy_until = next ? new Date(Date.now() + 30 * 60 * 1000).toISOString() : null;
       const r = await apiClient<any>(`/owner/locations/${locationId}/kitchen-busy`, { method: 'PATCH', body: { busy_until } });
       setBusy(!!r?.kitchenBusyUntil && new Date(r.kitchenBusyUntil) > new Date());
-    } catch { /* keep prior state */ } finally { setLoading(false); }
+    } catch (err) {
+      console.debug('[MenuManager] failed to toggle kitchen-busy status:', err);
+      showToast(t('admin.kitchen_busy_save_failed', 'Could not update kitchen status. Please try again.'), 'error');
+    } finally { setLoading(false); }
   };
   return (
     <button
@@ -147,7 +162,10 @@ function MenuScheduleEditor({ categories }: { categories: Category[] }) {
     try {
       await apiClient(`/owner/locations/${locationId}/menu-schedules/${id}`, { method: 'DELETE' });
       setSchedules(prev => prev.filter(s => s.id !== id));
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.debug('[MenuManager] failed to delete schedule:', err);
+      showToast(t('common.error_delete', 'Failed to delete.'), 'error');
+    }
   };
 
   const fmt = (min: number | null) => min == null ? '—' : `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
@@ -312,6 +330,20 @@ export function MenuManagerPage() {
 
   const [saving, setSaving] = useState(false);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+
+  // S5 fix: ResponsiveDialog's own default-initial-focus grabs the FIRST focusable
+  // element in DOM order, which here is the (visually hidden) file input in the photo
+  // picker above the Name field — focusing a display:none element is a no-op, so the
+  // dialog would open with focus effectively stranded. Mirrors OTPModal's own-input
+  // self-focus pattern (packages/ui/src/components/client/OTPModal.tsx).
+  const formNameInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (showForm) {
+      const id = setTimeout(() => formNameInputRef.current?.focus(), 80);
+      return () => clearTimeout(id);
+    }
+    return undefined;
+  }, [showForm]);
 
   // Owner location slug — needed by MediaManager's public lazy-media list. Only
   // fetched when the rich-media flag is on (otherwise the manager never renders).
@@ -495,12 +527,16 @@ export function MenuManagerPage() {
 
   const handleToggleAvailable = async (catId: string, product: Product) => {
     const updated = { ...product, available: !product.available };
-    setCategories(prev => prev.map(c => {
-      if (c.id !== catId) return c;
-      return { ...c, products: (c.products || []).map(p => p.id === product.id ? updated : p) };
-    }));
-    try { await apiClient(`/owner/menu/products/${product.id}`, { method: 'PATCH', body: { available: updated.available } }); } catch (err) {
+    setCategories(prev => replaceProductInCategories(prev, catId, product.id, updated));
+    try {
+      await apiClient(`/owner/menu/products/${product.id}`, { method: 'PATCH', body: { available: updated.available } });
+    } catch (err) {
       console.debug('[MenuManager] failed to toggle product availability:', err);
+      // S4 fix: revert the optimistic flip back to the pre-toggle snapshot (`product`,
+      // closed over before the flip) instead of leaving the UI showing a state the
+      // server never persisted, and tell the owner it didn't save.
+      setCategories(prev => replaceProductInCategories(prev, catId, product.id, product));
+      showToast(t('common.error_save', 'Failed to save.'), 'error');
     }
   };
 
@@ -886,14 +922,16 @@ export function MenuManagerPage() {
         </div>
       )}
 
-      {/* Product Preview Card */}
-      {previewProduct && (
-        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-        <div className="fixed inset-0 z-50 flex items-center justify-center fade-in" onClick={() => setPreviewProduct(null)}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-          <div className="relative w-[min(20rem,calc(100vw-2rem))] bg-[var(--brand-surface)] rounded-2xl overflow-hidden shadow-elevation-4 z-10 scale-in" onClick={e => e.stopPropagation()}>
-            <div className="aspect-[4/3] relative" style={{ background: 'var(--brand-surface-raised)' }}>
+      {/* Product Preview Card — S5 fix: migrated onto the shared ResponsiveDialog
+          (real focus trap, Escape, backdrop click-to-close, scroll-lock) instead of
+          a hand-rolled fixed-inset overlay. No `title` — the header would fight the
+          full-bleed image; the existing overlay close button + bottom "Close" stay. */}
+      <ResponsiveDialog open={!!previewProduct} onClose={() => setPreviewProduct(null)}>
+        {previewProduct && (
+          <>
+            {/* -mx-5 bleeds the image past ResponsiveDialog's own content padding to
+                the dialog's edges, matching the original edge-to-edge preview photo. */}
+            <div className="-mx-5 aspect-[4/3] relative overflow-hidden" style={{ background: 'var(--brand-surface-raised)', borderTopLeftRadius: 'var(--brand-radius)', borderTopRightRadius: 'var(--brand-radius)' }}>
               {previewProduct.imageUrl
                 ? <img src={previewProduct.imageUrl} alt="" className="w-full h-full object-cover" loading="lazy"
                     onError={(e) => { const t = e.target as HTMLImageElement; t.style.display = 'none'; const p = t.parentElement; if (p) { const i = document.createElement('i'); i.className = 'ti ti-photo text-4xl'; i.style.cssText = 'color: var(--brand-border)'; p.appendChild(i); } }} />
@@ -908,7 +946,7 @@ export function MenuManagerPage() {
                 </div>
               )}
             </div>
-            <div className="p-4 space-y-3">
+            <div className="pt-4 space-y-3">
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="text-lg font-bold">{previewProduct.name}</h3>
@@ -947,24 +985,15 @@ export function MenuManagerPage() {
                 <Button onClick={() => setPreviewProduct(null)} variant="ghost" size="sm">{t('common.close', 'Close')}</Button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </ResponsiveDialog>
 
-      {/* Add/Edit Form Modal */}
-      {showForm && (
-        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center fade-in" onClick={closeForm}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-          <div className="relative w-full max-w-md bg-[var(--brand-surface)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 z-10 slide-in-up max-h-[85vh] overflow-auto pb-20 sm:pb-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--brand-font-heading)' }}>{editingProduct ? t('admin.edit_item', 'Edit Item') : t('admin.add_item', 'Add Item')}</h3>
-              <motion.button onClick={closeForm} whileTap={{ scale: 0.97 }} aria-label={t('common.close', 'Close')} className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-md outline-none transition-colors hover:bg-[var(--brand-surface-raised)] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1">
-                <i className="ti ti-x" style={{ color: 'var(--brand-text-muted)' }} />
-              </motion.button>
-            </div>
-
+      {/* Add/Edit Form Modal — S5 fix: migrated onto ResponsiveDialog. The title bar
+          + close button are now the shared primitive's own header (was hand-rolled). */}
+      <ResponsiveDialog open={showForm} onClose={closeForm} title={editingProduct ? t('admin.edit_item', 'Edit Item') : t('admin.add_item', 'Add Item')}>
+        {showForm && (
+          <div className="space-y-4">
             {/* Photo */}
             <div>
               <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.photo', 'Photo')}</label>
@@ -996,8 +1025,7 @@ export function MenuManagerPage() {
 
             <div>
               <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--brand-text-muted)' }}>{t('admin.name', 'Name')} *</label>
-              {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
-              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="e.g. Margherita Pizza" autoFocus />
+              <Input ref={formNameInputRef} value={formName} onChange={e => setFormName(e.target.value)} placeholder="e.g. Margherita Pizza" />
             </div>
 
             <div>
@@ -1092,26 +1120,18 @@ export function MenuManagerPage() {
               </Button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </ResponsiveDialog>
 
-      {/* PDF Import Modal */}
-      {showImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/50 backdrop-blur-sm pointer-events-none" />
-          <div className="w-full max-w-lg rounded-2xl border shadow-elevation-4 overflow-hidden relative scale-in" style={{ background: 'var(--brand-bg)', borderColor: 'var(--brand-border)', zIndex: 1 }}>
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
-              <div className="flex items-center gap-2">
-                <i className="ti ti-file-import text-lg" style={{ color: 'var(--brand-primary)' }} />
-                <h3 className="font-bold">{t('admin.import_menu', 'Import Menu from PDF')}</h3>
-              </div>
-              <motion.button onClick={resetImport} whileTap={{ scale: 0.97 }} aria-label={t('common.close', 'Close')} className="w-8 h-8 flex items-center justify-center rounded-lg outline-none hover:bg-[var(--brand-surface)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1">
-                <i className="ti ti-x" style={{ color: 'var(--brand-text-muted)' }} />
-              </motion.button>
-            </div>
-
-            <div className="p-4 space-y-4">
-              {/* Step: Upload */}
+      {/* PDF Import Modal — S5 fix: migrated onto ResponsiveDialog. This also fixes the
+          audit's specific note that the backdrop couldn't close it (pointer-events-none
+          on the hand-rolled backdrop, so only the header X worked) — ResponsiveDialog's
+          backdrop click-to-close works for free. The leading header icon is dropped since
+          the shared title bar takes a plain string, not a custom icon+text node. */}
+      <ResponsiveDialog open={showImport} onClose={resetImport} title={t('admin.import_menu', 'Import Menu from PDF')}>
+        {showImport && (
+          <div className="space-y-4">
+            {/* Step: Upload */}
               {importStep === 'upload' && (
                 <>
                   {/* Mode selector */}
@@ -1282,10 +1302,9 @@ export function MenuManagerPage() {
                   <Button onClick={resetImport} className="px-8">{t('common.done', 'Done')}</Button>
                 </div>
               )}
-            </div>
           </div>
-        </div>
-      )}
+        )}
+      </ResponsiveDialog>
       {confirmDialog}
     </div>
   );

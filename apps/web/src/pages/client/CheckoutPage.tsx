@@ -196,9 +196,17 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
   const feeKnown = estimate.feeKnown;
   const deliveryFee = estimate.deliveryFee ?? 0;
   const taxTotal = estimate.taxTotal;
+  // On inclusive venues the tax is already inside subtotal → it adds 0 to the charge (LC1). The
+  // summary needs both figures: `taxTotal` for the informational VAT line, `chargedTax` for what
+  // actually enters the total.
+  const chargedTax = estimate.chargedTax;
+  const taxInclusive = estimateCfg.priceIncludesTax;
+  // CC-3 (§2.7): the inclusive line reads "includes VAT (r%) — X"; integer-safe percent (0.0745 → 7.45).
+  const taxRatePct = Math.round(estimateCfg.taxRate * 10000) / 100;
   // When the fee is known, `total` is authoritative-by-construction. When unknown, fall back to a
-  // lower-bound (subtotal+tax) used only for display; the cash-422 backstop catches any under-quote.
-  const total = estimate.total ?? subtotal + taxTotal;
+  // lower-bound used only for display — add only the CHARGED tax (0 on inclusive), never the
+  // extracted figure, or the fallback double-counts. The cash-422 backstop catches any under-quote.
+  const total = estimate.total ?? subtotal + chargedTax;
 
   // Per-unit nutrition comes from the fetched menu map (cart items don't carry it); fall back to any
   // fields a cart item happens to have. Combined = Σ per-unit × quantity.
@@ -288,8 +296,18 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
     setShowPhoneFallback(false);
     try {
       const idempotencyKey = crypto.randomUUID();
-      const pinLat = (pinLocation as [number, number])?.[1] || (locationCenter as [number, number])?.[1] || 41.324;
-      const pinLng = (pinLocation as [number, number])?.[0] || (locationCenter as [number, number])?.[0] || 19.456;
+      // LC9 (audit): NEVER fabricate coordinates. The pin resolves from the customer's placed pin,
+      // else the venue's own map center (a real point the courier can work from together with the
+      // required door details/notes). The old third fallback — a hardcoded point between Tirana and
+      // Durrës — silently sent couriers to a fake location whenever both sources were missing; now
+      // that case stops with an explicit "set your location" state instead of fake coordinates.
+      const pinLat = (pinLocation as [number, number])?.[1] ?? (locationCenter as [number, number])?.[1] ?? null;
+      const pinLng = (pinLocation as [number, number])?.[0] ?? (locationCenter as [number, number])?.[0] ?? null;
+      if (deliveryType !== 'pickup' && (pinLat == null || pinLng == null)) {
+        setOrderError(t('checkout.location_required', "We couldn't determine your delivery location — please place the pin on the map."));
+        setPlacing(false);
+        return false;
+      }
       const raw = await apiClient<typeof PreflightResponse>('/orders', {
         method: 'POST',
         headers: verifiedToken ? { 'x-otp-verified': verifiedToken } : undefined,
@@ -310,10 +328,11 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
           }),
           ...(entryPhotoKey ? { delivery_photo_key: entryPhotoKey } : {}),
           ...(tipAmount > 0 ? { tip_amount: tipAmount } : {}),
-          // Pickup orders carry no delivery pin/address (no delivery fee).
+          // Pickup orders carry no delivery pin/address (no delivery fee). For delivery, the
+          // no-location guard above guarantees real coordinates here (LC9: never fabricated).
           ...(deliveryType === 'pickup' ? {} : {
             delivery: {
-              pin: { lat: pinLat, lng: pinLng },
+              pin: { lat: pinLat as number, lng: pinLng as number },
               address_text: address || undefined,
             },
           }),
@@ -366,8 +385,10 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
       const orderRes = OrderCreateResponse.parse(raw);
       try {
         safeStorage.set(`dos_last_delivery_${slug}`, JSON.stringify({
-          lat: pinLat,
-          lng: pinLng,
+          // LC9: coords may be absent on pickup — JSON drops undefined keys; the reader already
+          // guards `if (parsed.lat && parsed.lng)`.
+          lat: pinLat ?? undefined,
+          lng: pinLng ?? undefined,
           address,
           entrance,
           apartment,
@@ -606,6 +627,8 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
           feeKnown={feeKnown}
           deliveryFee={deliveryFee}
           taxTotal={taxTotal}
+          taxInclusive={taxInclusive}
+          taxRatePct={taxRatePct}
           tipAmount={tipAmount}
           total={total}
           hasNutrition={hasNutrition}

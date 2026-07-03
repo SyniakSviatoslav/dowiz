@@ -2,10 +2,11 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useReducedMotion } from 'framer-motion';
-import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot, PriceDisplay, Button, ease } from '@deliveryos/ui';
+import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot, PriceDisplay, Button, useToast, ease } from '@deliveryos/ui';
 import type { CourierTask, CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { messengerLink } from '../../lib/messenger.js';
+import { computeDestinationRoute } from './delivery-utils.js';
 import { z } from 'zod';
 
 // P0-1: courier GPS heartbeat interval. Mirrors the server ping rate-limit (1/10s);
@@ -22,9 +23,10 @@ const MessageSendResponse = z.object({
 
 const CourierTaskDetail = z.custom<CourierTask>();
 
+// Map-viewport default only (used until the courier's own GPS resolves) — never
+// used as a stand-in for the customer/restaurant destination (see destPin/routeLine
+// below, which render nothing rather than a fake Tirana/Durrës pin+route).
 const TIRANA_CENTER: LngLatLike = [19.817, 41.331];
-const MOCK_RESTAURANT: LngLatLike = [19.812, 41.328];
-const MOCK_CUSTOMER: LngLatLike = [19.825, 41.337];
 
 export function DeliveryPage() {
   const { id } = useParams<{ id: string }>();
@@ -38,6 +40,7 @@ export function DeliveryPage() {
   const [orderClosed, setOrderClosed] = useState<string | null>(null); // CANCELLED/REJECTED while en route
   const [clientLocation, setClientLocation] = useState<LngLatLike | null>(null);
   const { t } = useI18n();
+  const { showToast } = useToast();
   const reduceMotion = useReducedMotion();
   const [messages, setMessages] = useState<any[]>([]);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -211,7 +214,10 @@ export function DeliveryPage() {
       await apiClient(`/courier/assignments/${id}/picked-up`, { method: 'POST' });
       setPickedUp(true);
     } catch (err) {
+      // S4 fix: was console.warn-only — an offline courier tapping "Mark as Picked
+      // Up" saw the spinner end with no feedback at all, no sign the tap did nothing.
       console.warn('[DeliveryPage] pickup failed:', err);
+      showToast(t('courier.pickup_failed', 'Could not mark as picked up — check your connection and try again.'), 'error');
     } finally {
       setPickupLoading(false);
     }
@@ -260,15 +266,9 @@ export function DeliveryPage() {
     status: 'busy',
   }], [courierPos]);
 
-  const destPin: LngLatLike = task
-    ? [task.customer.lng || MOCK_CUSTOMER[0], task.customer.lat || MOCK_CUSTOMER[1]]
-    : MOCK_CUSTOMER;
-
-  const routeLine: LngLatLike[] = [
-    courierPos,
-    [task?.restaurant?.lng || MOCK_RESTAURANT[0], task?.restaurant?.lat || MOCK_RESTAURANT[1]],
-    destPin,
-  ];
+  // LC9/S3 fix: real coords only, no hardcoded Tirana/Durrës stand-in. See
+  // delivery-utils.ts for the (unit-tested) derivation.
+  const { hasCustomerCoords, destPin, routeLine } = computeDestinationRoute(task, courierPos);
 
   if (loading) return (
     <div className="flex flex-col h-screen bg-[var(--brand-surface)]">
@@ -401,6 +401,15 @@ export function DeliveryPage() {
             <div className="text-sm text-[var(--brand-text-muted)]">{t('courier.to_destination', 'to destination')}</div>
           </div>
         </div>
+
+        {/* Explicit no-location state: no fake pin/route was rendered on the map above
+            (destPin/routeLine are undefined), so tell the courier plainly instead of
+            leaving them to notice a suspiciously empty map. */}
+        {!hasCustomerCoords && (
+          <div role="status" data-testid="courier-no-location" className="bg-[var(--status-pending-light)] border border-[var(--status-pending-border)] text-[var(--status-pending)] p-3 rounded-[var(--brand-radius-sm)] text-sm font-medium break-words">
+            <i className="ti ti-map-pin-off" aria-hidden="true" /> {t('courier.destination_unavailable', "Exact destination unknown — use the address and contact the customer.")}
+          </div>
+        )}
 
         {task.customer.instructions && (
           <div className="bg-[var(--status-pending-light)] border border-[var(--status-pending-border)] text-[var(--status-pending)] p-3 rounded-[var(--brand-radius-sm)] text-sm font-medium break-words">

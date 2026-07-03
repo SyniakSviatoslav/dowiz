@@ -65,18 +65,6 @@ interface LocationSettings {
   hoursJson: WeeklySchedule;
 }
 
-const MOCK_SETTINGS: LocationSettings = {
-  locationName: 'Downtown Tirana',
-  phone: '+35542345678',
-  address: 'Rruga Ismail Qemali 45, Tirana',
-  deliveryFee: 120,
-  minOrder: 500,
-  radiusKm: 8,
-  lat: 41.331,
-  lng: 19.817,
-  hoursJson: DEFAULT_SCHEDULE,
-};
-
 export function SettingsPage() {
   const { t, locale, setLocale } = useI18n();
   const { showToast } = useToast();
@@ -147,12 +135,14 @@ export function SettingsPage() {
         });
         if (data.id) setLocationId(data.id);
         setDeliveryPaused((data as any).deliveryPaused ?? false);
-      } else {
-        setSettings(MOCK_SETTINGS);
       }
+      // else: no settings saved yet — keep the blank setup-form defaults from
+      // initial state. Was: silently loaded a hardcoded mock store identity
+      // (fake name/phone/address) which the owner could then submit as their
+      // real live store settings without noticing (LC9/S3 — see audit #10).
     } catch (err: any) {
       if (err.status === 404) {
-        setSettings(MOCK_SETTINGS);
+        // Nothing saved yet — same blank setup-form defaults, no error banner.
       } else {
         // Keep the raw server detail in the console; show a localized message.
         console.error('[SettingsPage] fetch settings failed:', err);
@@ -333,14 +323,11 @@ export function SettingsPage() {
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 2400);
     } catch (err: any) {
-      if (err.status === 404) {
-        showToast(t('common.saved', 'Settings saved'), 'success');
-        setJustSaved(true);
-        setTimeout(() => setJustSaved(false), 2400);
-      } else {
-        showToast(t('common.error', 'Failed to save settings'), 'error');
-        setError(t('admin.settings_save_error', 'Failed to save settings'));
-      }
+      // A 404 here means the save did NOT happen (was: shown as fake success —
+      // the "Settings saved" toast + green check rendered even though nothing
+      // was persisted). Every non-2xx response is a real save failure.
+      showToast(t('common.error', 'Failed to save settings'), 'error');
+      setError(t('admin.settings_save_error', 'Failed to save settings'));
     } finally {
       setSaving(false);
     }

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useI18n, PriceDisplay, ease } from '@deliveryos/ui';
 import { DishStats } from '../../components/client/DishStats.js';
@@ -28,6 +29,29 @@ const TASTE_ICONS: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti 
 
 export function MenuComparePanel({ a, b, onClose }: MenuComparePanelProps) {
   const { t } = useI18n();
+
+  // S5 fix (audit #64): Escape-to-close + a keyboard-operable backdrop + scroll-lock —
+  // previously only the "Done" button could dismiss this via keyboard. Mirrors
+  // packages/ui/src/components/molecules/ResponsiveDialog.tsx's own handleKeyDown /
+  // backdrop / body-scroll-lock patterns for consistency. NOT migrated onto
+  // ResponsiveDialog itself: this panel is mounted/unmounted by the parent inside
+  // <AnimatePresence> (see MenuPage.tsx) and relies on framer-motion's `exit` prop for
+  // its slide-down-and-fade close animation — ResponsiveDialog returns `null` the
+  // instant `open` flips false (no exit-animation support), so migrating would silently
+  // kill that animation. This also means it does NOT get a full Tab-focus trap (flagged
+  // in the remediation report — approach (a)/full ResponsiveDialog migration would be
+  // needed to close that gap, at the cost of the exit animation).
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = '';
+    };
+  }, [onClose]);
 
   const lower = (x?: number | null, y?: number | null): 'a' | 'b' | null => {
     if (typeof x !== 'number' || typeof y !== 'number') return null;
@@ -87,7 +111,9 @@ export function MenuComparePanel({ a, b, onClose }: MenuComparePanelProps) {
       style={{ background: 'rgba(0,0,0,0.45)' }}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       onClick={onClose}
-      role="dialog" aria-modal="true" aria-label={t('compare.title', 'Compare dishes')}
+      role="button" tabIndex={0}
+      aria-label={t('common.close', 'Close')}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}
       data-testid="compare-panel"
     >
       <motion.div
@@ -96,6 +122,7 @@ export function MenuComparePanel({ a, b, onClose }: MenuComparePanelProps) {
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ duration: 0.24, ease: ease.out }}
         onClick={e => e.stopPropagation()}
+        role="dialog" aria-modal="true" aria-label={t('compare.title', 'Compare dishes')}
       >
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>{t('compare.title', 'Compare dishes')}</h2>
