@@ -45,6 +45,7 @@ export function HistoryPage() {
       setLoading(true);
       const data = await apiClient<typeof HistoryListResponse>('/courier/me/history', { schema: HistoryListResponse });
       setDeliveries(Array.isArray(data) ? data : []);
+      setError('');
     } catch (err: any) {
       setError(t('courier.error_fetch_history', 'Failed to fetch delivery history'));
     } finally {

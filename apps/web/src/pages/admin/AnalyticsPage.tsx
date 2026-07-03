@@ -91,16 +91,23 @@ export function AnalyticsPage() {
   const [productOrders, setProductOrders] = useState<ProductOrder[]>([]);
   const [productOrdersLoading, setProductOrdersLoading] = useState(false);
 
-  useEffect(() => {
+  // Extracted so Retry can force a refetch even when `period` hasn't changed — a
+  // `setPeriod(p => p)` retry is a same-value state update that React bails out of,
+  // so the [period] effect below would never re-fire and the button would be dead.
+  const fetchAnalytics = useCallback((p: '7d' | '30d') => {
     setLoading(true);
     setError(false);
-    apiClient<typeof AnalyticsOverviewResponse>(`/owner/analytics?period=${period}`, { schema: AnalyticsOverviewResponse })
+    apiClient<typeof AnalyticsOverviewResponse>(`/owner/analytics?period=${p}`, { schema: AnalyticsOverviewResponse })
       .then(d => { setData(d); setLoading(false); })
       .catch(() => {
         setError(true);
         setLoading(false);
       });
-  }, [period]);
+  }, []);
+
+  useEffect(() => {
+    fetchAnalytics(period);
+  }, [period, fetchAnalytics]);
 
   const toggleProduct = async (name: string) => {
     if (expandedProduct === name) {
@@ -160,7 +167,7 @@ export function AnalyticsPage() {
         icon={<i className="ti ti-alert-triangle text-4xl opacity-30" />}
         action={
           <button
-            onClick={() => setPeriod(p => p)}
+            onClick={() => fetchAnalytics(period)}
             className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--brand-primary)] text-[var(--brand-bg)] transition-[background-color,transform,box-shadow] duration-200 active:scale-[0.97] hover:bg-[var(--brand-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
           >
             {t('common.retry', 'Retry')}

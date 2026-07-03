@@ -505,7 +505,7 @@ export function DeliveryPage() {
             onClick={handlePickup}
             disabled={pickupLoading}
             whileTap={reduceMotion ? undefined : { scale: 0.97 }}
-            className="w-full h-14 bg-[var(--brand-primary)] text-[var(--brand-on-primary)] font-bold text-base rounded-full shadow-[var(--elev-3)] transition-[transform,box-shadow,opacity] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 hover:hover:shadow-[var(--elev-4)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
+            className="w-full h-14 bg-[var(--brand-primary)] text-[var(--color-on-primary)] font-bold text-base rounded-full shadow-[var(--elev-3)] transition-[transform,box-shadow,opacity] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 hover:hover:shadow-[var(--elev-4)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
           >
             {pickupLoading ? (
               <span className="inline-flex items-center gap-2">

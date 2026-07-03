@@ -41,6 +41,7 @@ export function TasksPage() {
       const data = await apiClient<any>('/courier/me/assignments');
       const raw = data?.success && Array.isArray(data.assignments) ? data.assignments : [];
       setTasks(raw);
+      setError('');
     } catch (err: any) {
       setError(t('courier.error_fetch_tasks', 'Failed to fetch tasks'));
     } finally {

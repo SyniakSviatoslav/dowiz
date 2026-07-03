@@ -153,6 +153,7 @@ export function OrderStatusPage() {
     try {
       const data = await apiClient<any>(`/customer/orders/${id}/status`);
       setOrder(data);
+      setError('');
       if (data.courierPosition) {
         setCourierPos([data.courierPosition.lng, data.courierPosition.lat]);
         setHasCourierFix(true);

@@ -387,7 +387,7 @@ function CustomerDetail({ t, loading, data, reduceMotion }: { t: (k: string, f: 
         <h4 className="text-xs font-bold uppercase tracking-wider mb-3 text-[var(--brand-text-muted)]">{t('admin.ordering_heatmap', 'Ordering Heatmap')}</h4>
         <div className="flex flex-wrap gap-2">
           {data.heatmap?.length > 0 ? data.heatmap.map((h: any, i: number) => (
-            <div key={i} className="px-2 py-1 rounded-[var(--brand-radius-sm)] text-xs font-medium tabular-nums" style={{ background: `rgba(var(--brand-primary-rgb, 59, 130, 246), ${Math.min(1, h.cnt / 5)})`, color: h.cnt > 2 ? 'white' : 'inherit' }}>
+            <div key={i} className="px-2 py-1 rounded-[var(--brand-radius-sm)] text-xs font-medium tabular-nums" style={{ background: `color-mix(in srgb, var(--brand-primary) ${Math.round(Math.min(1, h.cnt / 5) * 100)}%, transparent)`, color: h.cnt > 2 ? 'white' : 'inherit' }}>
               {[t('client.day_sun', 'Sun'), t('client.day_mon', 'Mon'), t('client.day_tue', 'Tue'), t('client.day_wed', 'Wed'), t('client.day_thu', 'Thu'), t('client.day_fri', 'Fri'), t('client.day_sat', 'Sat')][h.dow]} {h.hour}:00 - {h.cnt} {t('admin.orders_lower', 'orders')}
             </div>
           )) : <div className="text-sm text-[var(--brand-text-muted)]">{t('admin.not_enough_data', 'Not enough data for heatmap.')}</div>}

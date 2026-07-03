@@ -263,7 +263,7 @@ export function ActivationPage() {
             )}
           </>
         ) : (
-          <a href={`/s/${slug}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 w-full min-h-[44px] py-3 rounded-[var(--brand-radius)] font-bold text-center transition-[box-shadow,transform] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] shadow-[var(--elev-1)] [@media(hover:hover)]:hover:shadow-[var(--elev-2)] [@media(hover:hover)]:hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]" style={{ background: 'var(--brand-primary-strong)', color: 'var(--color-on-primary, var(--brand-on-primary, #fff))' }}>
+          <a href={`/s/${slug}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 w-full min-h-[44px] py-3 rounded-[var(--brand-radius)] font-bold text-center transition-[box-shadow,transform] duration-[var(--motion-fast,150ms)] ease-[var(--ease-soft,ease)] shadow-[var(--elev-1)] [@media(hover:hover)]:hover:shadow-[var(--elev-2)] [@media(hover:hover)]:hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]" style={{ background: 'var(--brand-primary-strong)', color: 'var(--color-on-primary, #fff)' }}>
             {t('activation.view_live', 'View live storefront')} <i className="ti ti-external-link" aria-hidden />
           </a>
         )}

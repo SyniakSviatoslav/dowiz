@@ -711,7 +711,7 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
           data-testid="order-confirm-button"
           disabled={placing || !locationId}
           whileTap={{ scale: (placing || !locationId) ? 1 : 0.97 }}
-          className="w-full h-14 rounded-full bg-[var(--brand-primary-strong)] text-[var(--brand-bg)] font-bold text-base flex items-center justify-center gap-2 transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.97] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0"
+          className="w-full h-14 rounded-full bg-[var(--brand-primary-strong)] text-[var(--color-on-primary)] font-bold text-base flex items-center justify-center gap-2 transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.97] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0"
           style={{ minHeight: 'var(--tap-critical)', boxShadow: 'var(--elev-3)' }}
         >
           {placing ? (

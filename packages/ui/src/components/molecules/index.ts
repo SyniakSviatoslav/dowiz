@@ -6,7 +6,7 @@ export { MapWithPin } from './MapWithPin.js';
 export { CourierLiveMap } from './CourierLiveMap.js';
 export type { CourierOnMap } from './CourierLiveMap.js';
 export { MapWithRadius } from './MapWithRadius.js';
-export { TourProvider, useTour, HintCard } from './TourHint.js';
+export { HintCard } from './TourHint.js';
 export { MessageThread } from './MessageThread.js';
 export { ResponsiveDialog } from './ResponsiveDialog.js';
 export { StickyActionBar } from './StickyActionBar.js';
