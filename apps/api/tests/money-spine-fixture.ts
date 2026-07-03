@@ -231,6 +231,32 @@ const SCHEMA_SQL = `
   END $fn$;
 `;
 
+/**
+ * Per-process isolated database: `node --test` runs test FILES in parallel child processes, so two
+ * suites sharing one database race each other's resetSchema (DROP SCHEMA mid-run). Each suite gets
+ * its own `money_spine_<pid>` database, dropped on teardown.
+ */
+export async function createIsolatedPool(baseUrl: string): Promise<{ pool: Pool; dbUrl: string; teardown: () => Promise<void> }> {
+  const { Pool: PgPool } = await import('pg');
+  const admin = new PgPool({ connectionString: baseUrl, max: 1 });
+  const dbName = `money_spine_${process.pid}`;
+  await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
+  await admin.query(`CREATE DATABASE ${dbName}`);
+  const u = new URL(baseUrl);
+  u.pathname = '/' + dbName;
+  const dbUrl = u.toString();
+  const pool = new PgPool({ connectionString: dbUrl, max: 4 });
+  return {
+    pool,
+    dbUrl,
+    teardown: async () => {
+      await pool.end().catch(() => {});
+      await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`).catch(() => {});
+      await admin.end().catch(() => {});
+    },
+  };
+}
+
 /** Resolve a money migration by number — prefers the operator-placed location, falls back to the draft. */
 function resolveMigration(basename: string): string {
   const placed = path.join(REPO_ROOT, 'packages/db/migrations', basename);
