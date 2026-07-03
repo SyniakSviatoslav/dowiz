@@ -744,5 +744,54 @@ export default {
         };
       },
     },
+    'no-voice-app-import': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'disallow packages/voice importing apps/web, an API/fetch client, or a Cart* mutator — the voice engine must stay a pure, mutation-free source; the ConfirmationGate (owned by apps/web) is the sole write sink (council voice-control ADR-0015 §6, proposal §6 guardrail #1 G1b)' },
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, '/');
+        // Scope: the voice engine package + this rule's OWN fixtures (…voice-app-import…) for the
+        // red→green proof. Unlike no-voice-engine-callback, THIS rule also covers __tests__ — a test
+        // importing a real mutator would still be a live crack in the "engine imports nothing that can
+        // write" invariant, not just a signature-shape smell.
+        const inVoiceSrc = /\/packages\/voice\/src\//.test(filename);
+        const inOwnFixture = /\/__fixtures__\/[^/]*voice-app-import[^/]*\.(ts|tsx)$/.test(filename);
+        if (!inVoiceSrc && !inOwnFixture) return {};
+
+        // Known HTTP/fetch-client packages — if the engine ever depended on one directly it could grow
+        // a network side-channel outside the ConfirmationGate/VoiceHandlers port.
+        const FORBIDDEN_PACKAGES = /^(axios|node-fetch|cross-fetch|isomorphic-fetch|ky|got|undici|graphql-request|superagent)$/;
+
+        const isForbidden = (src) => {
+          if (typeof src !== 'string') return false;
+          // apps/web — the entire consuming app (any depth: relative or workspace-style path).
+          if (/(^|\/)apps\/web(\/|$)/.test(src)) return true;
+          // An API/fetch-client module by conventional name, anywhere in the specifier.
+          if (/api-client/i.test(src)) return true;
+          if (FORBIDDEN_PACKAGES.test(src)) return true;
+          // A `Cart*` mutator module/component (CartProvider, CartContext, useCart, …) by path segment.
+          if (/(^|\/)(use)?Cart[A-Za-z]*(\.[jt]sx?)?$/.test(src)) return true;
+          return false;
+        };
+
+        const check = (node) => {
+          const src = node.source && node.source.value;
+          if (isForbidden(src)) {
+            context.report({
+              node,
+              message: `forbidden import "${src}" in packages/voice — the engine must stay pure: no apps/web, no fetch/API client, no Cart* mutator may cross into the engine (ADR-0015 §6 / proposal §6 G1b). The ConfirmationGate + VoiceHandlers port (owned by apps/web) is the sole write sink.`,
+            });
+          }
+        };
+
+        return {
+          ImportDeclaration: check,
+          ImportExpression: check,
+          ExportNamedDeclaration(node) { if (node.source) check(node); },
+          ExportAllDeclaration: check,
+        };
+      },
+    },
   },
 };

@@ -134,3 +134,37 @@ test('no-voice-engine-callback — red on a callback/handler param in packages/v
     ],
   });
 });
+
+test('no-voice-app-import — red on packages/voice importing apps/web / a fetch-client / a Cart* mutator, green on relative + data-only imports', () => {
+  // TS parser: the valid cases use `import type` (TS-only syntax espree can't parse).
+  tsrt.run('no-voice-app-import', plugin.rules['no-voice-app-import'], {
+    valid: [
+      // in-package relative imports — the normal shape of the engine's own modules
+      { code: "import { classify } from './capability-table.js';", filename: '/r/packages/voice/src/confirmation-gate.ts' },
+      { code: "import type { IntentKind } from './types.js';", filename: '/r/packages/voice/src/capability-table.ts' },
+      { code: "import { normalize } from '../normalize.js';", filename: '/r/packages/voice/src/__tests__/matcher.test.ts' },
+      // node builtins / test runner — inert
+      { code: "import { describe, it } from 'node:test';", filename: '/r/packages/voice/src/__tests__/capability-table.test.ts' },
+      // a package NAME that merely CONTAINS "cart" as a substring, not a Cart* module path — not flagged
+      { code: "import { scaffold } from 'cartography-utils';", filename: '/r/packages/voice/src/matcher.ts' },
+      // outside packages/voice entirely — rule is scoped, inert even on a real forbidden import
+      { code: "import { addItem } from '../../apps/web/src/lib/CartProvider';", filename: '/r/apps/web/src/other.ts' },
+    ],
+    invalid: [
+      // apps/web — the whole consuming app, at any relative depth
+      { code: "import { addItem } from '../../../apps/web/src/lib/CartProvider';", filename: '/r/packages/voice/src/matcher.ts', errors: 1 },
+      { code: "import { setSortBy } from 'apps/web/src/pages/client/MenuPage';", filename: '/r/packages/voice/src/matcher.ts', errors: 1 },
+      // a Cart* mutator module, even from inside packages/voice's own tree
+      { code: "import { useSharedCart } from '../../CartProvider.js';", filename: '/r/packages/voice/src/mock-provider.ts', errors: 1 },
+      // known fetch/API-client packages
+      { code: "import axios from 'axios';", filename: '/r/packages/voice/src/transcriber.ts', errors: 1 },
+      { code: "import { request } from './lib/api-client.js';", filename: '/r/packages/voice/src/whisper-provider.ts', errors: 1 },
+      // dynamic import + re-export forms must be caught too, not just static ImportDeclaration
+      { code: "export * from '../../apps/web/src/lib/CartProvider.js';", filename: '/r/packages/voice/src/index.ts', errors: 1 },
+      // a forbidden import inside a __tests__ file — this rule covers tests too (unlike no-voice-engine-callback)
+      { code: "import { addItem } from '../../../apps/web/src/lib/CartProvider';", filename: '/r/packages/voice/src/__tests__/matcher.test.ts', errors: 1 },
+      // the rule's own fixture-scope proof
+      { code: "import { addItem } from '../../apps/web/src/lib/CartProvider';", filename: '/r/__fixtures__/bad-voice-app-import.ts', errors: 1 },
+    ],
+  });
+});

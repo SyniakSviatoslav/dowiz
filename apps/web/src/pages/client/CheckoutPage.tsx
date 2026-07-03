@@ -677,7 +677,7 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
               onClick={() => window.location.reload()}
               data-testid="checkout-location-retry"
               className="inline-flex items-center gap-2 mt-3 px-4 py-2 rounded-full font-semibold text-sm transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
-              style={{ background: 'var(--brand-primary-strong)', color: 'var(--brand-bg)', minHeight: 'var(--tap-min)' }}
+              style={{ background: 'var(--brand-primary-strong)', color: 'var(--color-on-primary)', minHeight: 'var(--tap-min)' }}
             >
               <i className="ti ti-refresh" aria-hidden="true" />
               {t('common.refresh', 'Refresh')}
@@ -706,7 +706,7 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
                 href={`tel:${fallbackPhone}`}
                 data-testid="checkout-call-restaurant"
                 className="inline-flex items-center gap-2 mt-3 px-4 py-2 rounded-full font-semibold text-sm transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-[0.98] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
-                style={{ background: 'var(--brand-primary-strong)', color: 'var(--brand-bg)', minHeight: 'var(--tap-min)' }}
+                style={{ background: 'var(--brand-primary-strong)', color: 'var(--color-on-primary)', minHeight: 'var(--tap-min)' }}
               >
                 <i className="ti ti-phone" aria-hidden="true" />
                 {t('checkout.call_restaurant', 'Call the restaurant')}: {fallbackPhone}

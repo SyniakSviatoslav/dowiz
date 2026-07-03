@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Button, EmptyState, SkeletonBase, useI18n, useConfirm, Toggle, Select, Textarea, ease, duration, useToast, ResponsiveDialog } from '@deliveryos/ui';
-import { PromotionSchema, PromotionListResponse, CreatePromotionSchema } from '@deliveryos/shared-types';
+import { PromotionSchema, PromotionListResponse, CreatePromotionSchema, formatALL } from '@deliveryos/shared-types';
 import { apiClient } from '../../lib/index.js';
 import type { z } from 'zod';
 
@@ -403,7 +403,7 @@ export function PromotionsPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-mono font-bold tracking-wider truncate max-w-[12rem]" style={{ color: 'var(--brand-text)' }}>{p.code}</span>
                       <span className={`text-xs px-1.5 py-0.5 rounded-[var(--brand-radius-sm)] font-medium whitespace-nowrap ${p.type === 'free_delivery' ? 'bg-[var(--color-info-light)] text-[var(--color-info)]' : p.type === 'percentage' ? 'bg-[var(--color-success-light)] text-[var(--color-success)]' : 'bg-[var(--color-warning-light)] text-[var(--color-warning)]'}`}>
-                        {p.type === 'percentage' ? `${p.discount_value}%` : p.type === 'fixed' ? `${(p.discount_value / 100).toFixed(0)} ALL` : t('promotions.free_delivery_short', 'Free delivery')}
+                        {p.type === 'percentage' ? `${p.discount_value}%` : p.type === 'fixed' ? formatALL(p.discount_value) : t('promotions.free_delivery_short', 'Free delivery')}
                       </span>
                       {isExpired && (
                         <span className="text-xs px-1.5 py-0.5 rounded-[var(--brand-radius-sm)] font-medium whitespace-nowrap" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
@@ -423,7 +423,7 @@ export function PromotionsPage() {
                     {p.min_order_amount > 0 && (
                       <div className="flex items-center gap-1 text-xs mt-0.5 min-w-0" style={{ color: 'var(--brand-text-muted)' }}>
                         <i className="ti ti-shopping-cart shrink-0" style={{ fontSize: '0.75rem' }} />
-                        <span className="truncate">{t('promotions.min_order', 'Min. order')}: {(p.min_order_amount / 100).toFixed(0)} ALL</span>
+                        <span className="truncate">{t('promotions.min_order', 'Min. order')}: {formatALL(p.min_order_amount)}</span>
                       </div>
                     )}
                     {p.description && (

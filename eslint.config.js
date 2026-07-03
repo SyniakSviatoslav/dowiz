@@ -45,6 +45,7 @@ export default tseslint.config(
       'local/no-admin-prefix-register': 'error', // ADR-admin-platform-authz (B4): /api/admin mounts only via server.ts
       'local/no-recipe-only-allergen-read': 'error', // menu-characteristics-model STEP-0 (#12): storefront allergen surface = computeAllergenSurface only
       'local/no-voice-engine-callback': 'error', // ADR-0015 §6 / R2-F: the voice engine accepts no callback/handler param (no write-capable closure crosses the source→sink boundary)
+      'local/no-voice-app-import': 'error', // ADR-0015 §6 / proposal §6 G1b: packages/voice imports no apps/web, fetch/API client, or Cart* mutator
       'local/no-arbitrary-tailwind': 'warn',
       // Phase-B type-scale: error-level (zero violations after migration → locks the win).
       'local/no-arbitrary-font-size': 'error',
@@ -112,6 +113,7 @@ export default tseslint.config(
       '@typescript-eslint/prefer-nullish-coalescing': 'off',
       'local/no-permissive-status-assertion': 'warn',
       'local/no-voice-engine-callback': 'warn', // the bad-* fixture intentionally trips it; error-level is proven in the RuleTester
+      'local/no-voice-app-import': 'warn', // the bad-* fixture intentionally trips it; error-level is proven in the RuleTester
     },
   }
 );

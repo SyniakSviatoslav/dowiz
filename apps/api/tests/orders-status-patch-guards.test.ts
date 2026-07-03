@@ -38,8 +38,15 @@ const OWNER_ID = crypto.randomUUID();
 const LOCATION_ID = crypto.randomUUID();
 
 interface Scenario {
-  /** row returned by the membership-JOIN current-status read (null → 0 rows) */
+  /** the order row PHYSICALLY present in `orders` (null → the order does not exist at all) */
   orderRow: { id: string; status: string; location_id: string; type: string } | null;
+  /**
+   * whether the authenticated owner holds a LIVE `active` owner membership at the order's location.
+   * Defaults to true (present) when omitted so the existing M6 scenarios are unaffected. When false,
+   * a correctly-authorized JOIN read hides the physically-present row (→ 404), whereas a regressed
+   * bare `WHERE id=$1` read would still return it (the cross-tenant IDOR the LC2 JOIN closes).
+   */
+  ownerHasActiveMembership?: boolean;
   activeAssignmentExists: boolean;
   deliveredAssignmentExists: boolean;
 }
@@ -49,9 +56,18 @@ function scriptedQuery(sc: Scenario, issued: Array<{ sql: string; params: unknow
     const s = String(sql);
     issued.push({ sql: s, params });
     if (/^(BEGIN|COMMIT|ROLLBACK)$/i.test(s.trim()) || /set_config/i.test(s) || /SAVEPOINT/i.test(s)) return { rows: [], rowCount: 0 };
-    // LC2 membership-JOIN read (also matches a regressed bare read — the JOIN pin is asserted separately)
+    // LC2 current-status read. Modelled to the DB's TRUTH, not to a string shape, so that dropping
+    // the JOIN behaviourally leaks (returns the row → the handler transitions) instead of merely
+    // failing a grep. The row comes back only when BOTH the order physically exists AND the SQL
+    // actually authorizes it via an active owner-membership JOIN keyed by the caller. A regressed bare
+    // `WHERE id=$1` read (no JOIN) ignores membership → returns the row for a non-member owner (the IDOR).
     if (/SELECT o\.id, o\.status, o\.location_id, o\.type|SELECT id, status, location_id, type FROM orders/i.test(s)) {
-      return sc.orderRow ? { rowCount: 1, rows: [sc.orderRow] } : { rowCount: 0, rows: [] };
+      if (!sc.orderRow) return { rowCount: 0, rows: [] }; // order does not exist at all
+      const authorizedRead = /JOIN memberships/i.test(s) && /m\.status = 'active'/i.test(s);
+      const ownerIsMember = sc.ownerHasActiveMembership !== false; // default: member (M6 scenarios)
+      // A properly-authorized read hides the row from a non-member owner; a bare read leaks it.
+      if (authorizedRead && !ownerIsMember) return { rowCount: 0, rows: [] };
+      return { rowCount: 1, rows: [sc.orderRow] };
     }
     if (/status IN \('offered','assigned','accepted','picked_up'\)/i.test(s) && /SELECT 1 FROM courier_assignments/i.test(s)) {
       return sc.activeAssignmentExists ? { rowCount: 1, rows: [{ '?column?': 1 }] } : { rowCount: 0, rows: [] };
@@ -115,6 +131,38 @@ test('LC2: membership-JOIN miss → 404 before any transition logic, and the rea
   assert.match(read!.sql, /m\.status = 'active'/, 'LC2: only a LIVE membership authorizes');
   // no transition attempt happened after the miss
   assert.ok(!issued.some((x) => /^UPDATE orders SET status/i.test(x.sql.trim())), '404 must precede any transition write');
+  await app.close();
+});
+
+test('LC2 behavioral: order EXISTS but owner has NO active membership at its location → JOIN read hides it (404, zero transition); a bare WHERE id=$1 read would have leaked it (200)', async () => {
+  const issued: Array<{ sql: string; params: unknown[] }> = [];
+  // The order is PHYSICALLY present and PATCH-eligible (CONFIRMED→PREPARING is a legal, non-money edge),
+  // but the authenticated owner is a member of a DIFFERENT tenant — no active membership at LOCATION_ID.
+  const sc: Scenario = {
+    orderRow: { id: orderId, status: 'CONFIRMED', location_id: LOCATION_ID, type: 'delivery' },
+    ownerHasActiveMembership: false,
+    activeAssignmentExists: false,
+    deliveredAssignmentExists: false,
+  };
+  const app = await buildApp(sc, issued);
+  const res = await app.inject({ method: 'PATCH', url: `/api/orders/${orderId}/status`, payload: { status: 'PREPARING' } });
+
+  // Real (JOIN-authorized) behaviour: the membership predicate hides the row the owner may not see →
+  // 404, and NOT ONE transition write is attempted. This is the LEAK the LC2 JOIN prevents.
+  assert.equal(res.statusCode, 404, `membership-miss on an existing order must 404, not leak; body=${res.body}`);
+  assert.ok(!issued.some((x) => /^UPDATE orders SET status/i.test(x.sql.trim())), 'a non-member owner must drive ZERO transitions');
+
+  // Behavioural discrimination (no product-code edit needed): feed the SAME scripted DB the pre-fix BARE
+  // read (JOIN stripped). It returns the row → the handler WOULD have transitioned and leaked. So the 404
+  // above is EARNED by the JOIN authorizing the read, not by an incidental string match. Removing
+  // `JOIN memberships … m.status='active'` from the route flips this scenario 404 → 200.
+  const readCall = issued.find((x) => /FROM orders o/i.test(x.sql) && /o\.status/.test(x.sql));
+  assert.ok(readCall, 'the membership-JOIN current-status read was issued');
+  const probe = scriptedQuery(sc, []);
+  const bareRead = await probe(`SELECT o.id, o.status, o.location_id, o.type FROM orders o WHERE o.id = $1`, [orderId, OWNER_ID]);
+  const joinRead = await probe(readCall!.sql, readCall!.params);
+  assert.equal(bareRead.rowCount, 1, 'pre-fix bare WHERE id=$1 read LEAKS the row to a non-member owner (the IDOR)');
+  assert.equal(joinRead.rowCount, 0, 'the membership-JOIN read correctly returns 0 rows for a non-member owner');
   await app.close();
 });
 

@@ -24,6 +24,7 @@ import { applyTax, assertNonNegative } from '../lib/money.js';
 import { computeOrderPricing, resolveDeliveryFee } from '../lib/order-pricing.js';
 import { buildRequestHash, buildSignalState } from '../lib/order-canonical.js';
 import { insertOrderWithItems } from '../lib/order-persistence.js';
+import { isVenueOpen } from '../lib/venue-open.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isValidUUID(id: string): boolean {
@@ -122,7 +123,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
          `SELECT lat, lng, confirm_timeout_min, busy_mode, phone, slug, published_at,
                  currency_code, currency_minor_unit, tax_rate, price_includes_tax,
                  min_order_value, free_delivery_threshold, delivery_fee_flat,
-                 require_phone_otp
+                 require_phone_otp, hours_json, delivery_paused
           FROM locations WHERE id = $1`,
         [locationId]
       );
@@ -139,6 +140,19 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       if (location.published_at == null) {
         await client.query('ROLLBACK');
         return reply.sendError(409, 'NOT_PUBLISHED', 'Storefront is not published yet');
+      }
+
+      // Closed-venue gate (audit): the storefront computes open/closed from hours_json +
+      // delivery_paused, but POST /orders accepted orders after hours. When ENFORCE_VENUE_HOURS
+      // is on we mirror that EXACT computation server-side (lib/venue-open.ts ← public/menu.ts)
+      // and refuse a closed venue BEFORE any write. Reversible/dark by default: flag OFF ⇒
+      // unchanged (always accept), so a misfiring gate can be killed instantly without a deploy.
+      if (
+        process.env.ENFORCE_VENUE_HOURS === 'true' &&
+        !isVenueOpen(location.hours_json, location.delivery_paused ?? false, new Date())
+      ) {
+        await client.query('ROLLBACK');
+        return reply.sendError(409, 'VENUE_CLOSED', 'VENUE_CLOSED');
       }
 
       // OTP verification (if column exists)

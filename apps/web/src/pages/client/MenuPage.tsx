@@ -9,7 +9,7 @@ const MediaGallery = lazy(() => import('../../components/media/MediaGallery').th
 const MediaRenderer = lazy(() => import('../../components/media').then(m => ({ default: m.MediaRenderer })));
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput, computeAllergenSurface, partitionByMacroLens, usePullToRefresh, PullToRefreshIndicator } from '@deliveryos/ui';
+import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput, computeAllergenSurface, partitionByMacroLens, usePullToRefresh, PullToRefreshIndicator, resolveInitialLocale, getStoredLocale, isLocale, setLocale as setModuleLocale } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 import { fetchVenueInfo } from '../../lib/publicApi.js';
 import { MenuComparePanel } from './MenuComparePanel.js';
@@ -406,6 +406,23 @@ export function MenuPage() {
     prevSlugRef.current = slug;
     loadMenu(loadedOnceRef.current && !slugChanged);
   }, [loadMenu, retryCount]);
+
+  // Fix: honor the tenant's configured default_locale on first load. The storefront used to
+  // always start in the module-default language (ignoring default_locale); now, when the visitor
+  // has made NO explicit language choice, we adopt the tenant default (non-persisted, so it never
+  // shadows a different tenant's default), which triggers a soft menu refetch in that locale. An
+  // explicit user pick (a stored preference) still wins — see resolveInitialLocale.
+  const defaultLocaleAppliedRef = useRef(false);
+  useEffect(() => {
+    if (defaultLocaleAppliedRef.current || !menu?.default_locale) return;
+    defaultLocaleAppliedRef.current = true;
+    const resolved = resolveInitialLocale({
+      stored: getStoredLocale(),
+      tenantDefault: menu.default_locale,
+      supported: menu.supported_locales,
+    });
+    if (isLocale(resolved) && resolved !== locale) setModuleLocale(resolved, false);
+  }, [menu, locale]);
 
   // PULL-TO-REFRESH: reuses the SOFT loadMenu path (no skeleton, current menu stays
   // on screen until the fresh one arrives) — the indicator is the only loading UI.
@@ -1103,11 +1120,11 @@ export function MenuPage() {
                 : t('client.empty_menu_unavailable_hint', "This restaurant hasn't published its menu yet.")}
             </p>
             {notFound ? (
-              <a href="/" className="mt-4 inline-flex items-center px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ background: 'var(--brand-primary-strong)' }}>
+              <a href="/" className="mt-4 inline-flex items-center px-5 py-2 rounded-xl text-sm font-semibold text-[var(--color-on-primary)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ background: 'var(--brand-primary-strong)' }}>
                 <i className="ti ti-home mr-1.5" />{t('client.go_home', 'Back to home')}
               </a>
             ) : fetchError && (
-              <motion.button onClick={() => { setRetryCount(c => c + 1); }} whileTap={prefersReduced ? undefined : { scale: 0.97 }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ background: 'var(--brand-primary-strong)' }}>
+              <motion.button onClick={() => { setRetryCount(c => c + 1); }} whileTap={prefersReduced ? undefined : { scale: 0.97 }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-[var(--color-on-primary)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ background: 'var(--brand-primary-strong)' }}>
                 <i className="ti ti-refresh mr-1.5" />{t('client.retry', 'Retry')}
               </motion.button>
             )}
@@ -1126,7 +1143,7 @@ export function MenuPage() {
             <motion.button
               onClick={() => { setSortBy('default'); setFilterAllergen(null); setSearchQuery(''); setSelectedCategory(null); }}
               whileTap={prefersReduced ? undefined : { scale: 0.97 }}
-              className="px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
+              className="px-5 py-2 rounded-xl text-sm font-semibold text-[var(--color-on-primary)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
               style={{ background: 'var(--brand-primary-strong)' }}
             >
               {t('client.browse_menu', 'Browse full menu')}
@@ -1675,7 +1692,7 @@ export function MenuPage() {
                   onClick={handleAddDetail}
                   disabled={!canAdd()}
                   whileTap={prefersReduced || !canAdd() ? undefined : { scale: 0.97 }}
-                  className="flex-1 min-w-0 h-[46px] text-[var(--brand-bg)] font-bold text-step-sm outline-none transition-[transform,opacity] duration-150 ease-out disabled:opacity-40 flex items-center justify-between gap-2 px-4 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
+                  className="flex-1 min-w-0 h-[46px] text-[var(--color-on-primary)] font-bold text-step-sm outline-none transition-[transform,opacity] duration-150 ease-out disabled:opacity-40 flex items-center justify-between gap-2 px-4 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
                   style={{ background: detailProduct.available && !orderingDisabled ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
                   {!detailProduct.available ? (

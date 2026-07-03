@@ -87,6 +87,7 @@ function buildJsonLd(menu: MenuData, slug: string, baseUrl: string): string {
     openingHoursSpecification: loc.hours ? buildHours(loc.hours) : undefined,
   });
 
+  const minorUnit = menu.currency?.minor_unit ?? 0;
   const menuItems: any[] = [];
   for (const cat of menu.categories || []) {
     for (const prod of cat.products || []) {
@@ -96,7 +97,9 @@ function buildJsonLd(menu: MenuData, slug: string, baseUrl: string): string {
         description: getDesc(prod, menu.default_locale) || undefined,
         offers: {
           '@type': 'Offer',
-          price: (prod.price / 100).toFixed(2),
+          // Same minor→major conversion as the visible price (toMajorUnits) — NOT a
+          // hard-coded /100, which double-scaled a minor_unit=0 currency (Lekë).
+          price: toMajorUnits(prod.price, minorUnit).toFixed(minorUnit),
           priceCurrency: menu.currency.code === 'EUR' ? 'EUR' : 'ALL',
         },
       });
@@ -175,8 +178,18 @@ function buildHours(hours: Record<string, { open: string; close: string }[]>): a
   return result;
 }
 
+/** Minor units (integer, as stored) → major units for display. A `minorUnit === 0`
+ *  currency (ALL / Lekë) is stored in whole units already and MUST NOT be divided.
+ *  Exported so the JSON-LD offer emitter and the on-page price share ONE conversion:
+ *  a prior hard-coded `/100` in the JSON-LD made structured-data prices 100× off for
+ *  Lekë (e.g. 1200 → "12.00") while the visible price was correct — SEO/rich-result
+ *  inconsistency, display-only (no charged/stored value flows through here). */
+export function toMajorUnits(minor: number, minorUnit: number): number {
+  return minorUnit === 0 ? minor : minor / Math.pow(10, minorUnit);
+}
+
 function formatPrice(price: number, currencyCode: string, minorUnit: number): string {
-  const actualPrice = minorUnit === 0 ? price : price / Math.pow(10, minorUnit);
+  const actualPrice = toMajorUnits(price, minorUnit);
   const cur = ensureCurr(currencyCode, 'ALL');
   return formatMoney(actualPrice, cur);
 }

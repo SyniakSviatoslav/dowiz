@@ -114,3 +114,31 @@ describe('i18n', () => {
     }
   });
 });
+
+// Fix (Albania go-to-market gap): the storefront ignored the tenant's default_locale and
+// always started in the module-default language. resolveInitialLocale is the pure resolution
+// the storefront now applies on first menu load (MenuPage) — an explicit user preference wins,
+// otherwise the tenant default is honored. Independent, hand-derived expectations below.
+describe('resolveInitialLocale — tenant default_locale honored (Fix 3)', () => {
+  it('honors the tenant default_locale when the user has NO stored preference', () => {
+    assert.equal(mod.resolveInitialLocale({ stored: null, tenantDefault: 'en', supported: ['sq', 'en'] }), 'en');
+  });
+
+  it('a stored user preference OVERRIDES the tenant default', () => {
+    assert.equal(mod.resolveInitialLocale({ stored: 'sq', tenantDefault: 'en', supported: ['sq', 'en'] }), 'sq');
+  });
+
+  it("task case: default_locale='al', no override → 'al'; a user override still wins", () => {
+    assert.equal(mod.resolveInitialLocale({ stored: null, tenantDefault: 'al', supported: ['al', 'en'] }), 'al');
+    assert.equal(mod.resolveInitialLocale({ stored: 'en', tenantDefault: 'al', supported: ['al', 'en'] }), 'en');
+  });
+
+  it('never selects a language the tenant does not support (falls through to the default)', () => {
+    assert.equal(mod.resolveInitialLocale({ stored: 'uk', tenantDefault: 'sq', supported: ['sq', 'en'] }), 'sq');
+  });
+
+  it('falls back to the first supported locale, then to sq', () => {
+    assert.equal(mod.resolveInitialLocale({ stored: null, tenantDefault: null, supported: ['en', 'sq'] }), 'en');
+    assert.equal(mod.resolveInitialLocale({ stored: null, tenantDefault: null, supported: [] }), 'sq');
+  });
+});

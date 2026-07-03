@@ -54,4 +54,29 @@ describe('derivePalette — branding never ships an illegible storefront', () =>
       assert.ok(priceText >= 4.5, `primary-readable ${priceText.toFixed(2)}:1 < 4.5 for ${b.primary}`);
     }
   });
+
+  // LC8 (audit-frontend S2, AA CTAs): a batch of filled CTAs paired `var(--brand-bg)` TEXT with a
+  // `--brand-primary-strong` FILL (CheckoutPage retry / call-restaurant; MenuPage empty-state CTAs +
+  // the product-detail "add to order" button). primaryStrong is derived to clear AA against onPrimary
+  // — NOT against bg — so bg-on-strong is un-guaranteed and illegible on real brands. The fix swaps the
+  // text to `--color-on-primary` (== onPrimary), the AA-proven partner of primaryStrong.
+  it('LC8: brand-bg text on a primaryStrong fill is sub-AA (the residual bug); onPrimary on the same fill clears AA (the fix)', () => {
+    const subAAonBg: string[] = [];
+    for (const b of [...PALE_BRANDS, ...NORMAL_BRANDS]) {
+      const p = derivePalette({ primary: b.primary, bg: b.bg });
+      const bgOnStrong = contrastRatio(rgb(p.bg), rgb(p.primaryStrong!));
+      const onPrimaryOnStrong = contrastRatio(rgb(p.onPrimary!), rgb(p.primaryStrong!));
+      if (bgOnStrong < 4.5) {
+        subAAonBg.push(`${b.primary} on ${b.bg} (${bgOnStrong.toFixed(2)}:1)`);
+        // wherever the residual bg pairing was illegible, the token the fix now uses must rescue it
+        assert.ok(
+          onPrimaryOnStrong >= 4.5,
+          `onPrimary must clear AA on the fill the residual site failed: ${b.primary} on ${b.bg} (bg was ${bgOnStrong.toFixed(2)}:1, onPrimary ${onPrimaryOnStrong.toFixed(2)}:1)`,
+        );
+      }
+    }
+    // RED arm: the residual `var(--brand-bg)` text WAS illegible for at least one real brand — this is
+    // why the swap was necessary. If this ever holds zero, the pairing is no longer the bug it fixed.
+    assert.ok(subAAonBg.length > 0, `expected brand-bg-on-primaryStrong to fail AA on ≥1 brand (the residual LC8 bug); got: ${JSON.stringify(subAAonBg)}`);
+  });
 });

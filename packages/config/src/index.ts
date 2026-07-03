@@ -55,6 +55,13 @@ const EnvSchema = z.object({
   // non-blocking, per-IP rate-limited and best-effort, so capture is safe by default; this flag
   // lets ops silence a misbehaving/abused funnel sensor WITHOUT a deploy (set 'false' as a secret).
   FUNNEL_INGEST_ENABLED: z.enum(['true', 'false']).default('true'),
+  // Closed-venue order gate. The audit found POST /orders accepts orders even when the storefront
+  // shows "closed". When 'true', the create handler mirrors the storefront's EXACT open/closed
+  // computation (apps/api/src/lib/venue-open.ts ← public/menu.ts) and refuses a closed venue with
+  // 409 VENUE_CLOSED. Default OFF / reversible (ship-discipline): deploy dark, flip on after
+  // staging validation; flip back instantly if it misfires — a false-"closed" would drop real
+  // orders, so the safe default is to accept.
+  ENFORCE_VENUE_HOURS: z.enum(['true', 'false']).default('false'),
   // Menu-import LLM (ai-ocr-parser). OpenRouter is OpenAI-wire compatible; when its key is
   // set it serves PDF/image menu extraction. Without any provider the parser falls back to a
   // zero-dependency heuristic structurer. All optional — read via process.env in the parser.
