@@ -3,6 +3,8 @@
   "short_name": "DeliveryOS",
   "description": "Delivery management platform for restaurants",
   "start_url": "/",
+  "scope": "/",
+  "id": "/",
   "display": "standalone",
   "background_color": "#121212",
   "theme_color": "#ea4f16",

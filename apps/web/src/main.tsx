@@ -7,13 +7,20 @@ import { ThemeProvider, TourProvider, I18nProvider, CurrencyProvider, ErrorBound
 // + hashes/emits the woff2, so icons render offline / on blocked networks — no third-party CDN.
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import './index.css';
+// App-wide PWA install nudge (Android/Chromium banner + iOS "Add to Home Screen"
+// hint). Self-hides when already installed or after dismissal — see component.
+import { InstallPrompt } from './components/pwa/InstallPrompt.js';
 
-import { LoginPage } from './pages/admin/LoginPage.js';
-import { StartPage } from './pages/MenuFirstOnboarding.js';
-import { AuthCallback } from './pages/admin/AuthCallback.js';
-import { PrivacyPage } from './pages/PrivacyPage.js';
-
-// Lazy-loaded surfaces
+// Lazy-loaded surfaces (UI-PERF roadmap 2.2 — route-based code splitting).
+// EVERY page is lazy so the entry chunk carries only the shell (router, theme,
+// i18n, ErrorBoundary): a storefront customer landing on /s/:slug must never
+// download admin/courier code, and owner/courier surfaces must not pay for the
+// storefront. All lazy mounts sit inside the AnimatedRoutes <Suspense> and the
+// app-level <ErrorBoundary> (chunk-load failures surface there, not as a blank page).
+const LoginPage = lazy(() => import('./pages/admin/LoginPage.js').then(m => ({ default: m.LoginPage })));
+const StartPage = lazy(() => import('./pages/MenuFirstOnboarding.js').then(m => ({ default: m.StartPage })));
+const AuthCallback = lazy(() => import('./pages/admin/AuthCallback.js').then(m => ({ default: m.AuthCallback })));
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage.js').then(m => ({ default: m.PrivacyPage })));
 const ClientRoutes = lazy(() => import('./routes/ClientRoutes.js').then(m => ({ default: m.ClientRoutes })));
 const AdminRoutes = lazy(() => import('./routes/AdminRoutes.js').then(m => ({ default: m.AdminRoutes })));
 const CourierRoutes = lazy(() => import('./routes/CourierRoutes.js').then(m => ({ default: m.CourierRoutes })));
@@ -71,6 +78,7 @@ function App() {
           <ErrorBoundary>
             <AnimatedRoutes />
           </ErrorBoundary>
+          <InstallPrompt />
           </TourProvider>
         </ThemeProvider>
         </CurrencyProvider>
