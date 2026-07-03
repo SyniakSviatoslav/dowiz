@@ -103,6 +103,16 @@ test('/auth/refresh atomic rotation (#5)', async (t) => {
     assert.ok(body.access_token && body.refresh_token, 'new access+refresh tokens issued');
     assert.equal(db.state.used, true, 'token marked used');
     assert.equal(db.state.deletedFamilies.length, 0, 'no family revoked on a clean rotation');
+    // B3 P0-5 · W3 LOCK: the access token minted on refresh must stay within the ADR-0004
+    // 24h blast-radius bound. A future edit that widens the refresh TTL (e.g. '24h'→'7d') goes
+    // RED here. Decode the (already-verified-by-issuance) claims to read iat/exp.
+    const claims = JSON.parse(Buffer.from(body.access_token.split('.')[1], 'base64url').toString());
+    const ttlSeconds = claims.exp - claims.iat;
+    assert.ok(ttlSeconds > 0, 'access token must have a positive TTL');
+    assert.ok(
+      ttlSeconds <= 24 * 3600,
+      `refresh-minted access token TTL ${ttlSeconds}s must not exceed the 24h bound (ADR-0004)`,
+    );
     await app.close();
   });
 
