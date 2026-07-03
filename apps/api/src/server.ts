@@ -336,7 +336,12 @@ async function main() {
   // workers). Workers keep starting in the background. The race + budget + catch
   // stay HERE; the construction sequence lives in bootstrap/workers.ts.
   let heartbeats: any[] = [];
-  const WORKER_BOOT_BUDGET_MS = 25_000;
+  // DEPLOY-SAFETY (incident 2026-07-03): Fly's /livez check (interval 15s, no grace_period) fails the
+  // whole deploy if the server hasn't listened by the time Fly gives up. With active workers this race
+  // used to burn the full budget (25s) BEFORE fastify.listen → every deploy health-failed. Keep the
+  // budget short so we listen fast; workers keep starting in the background (heartbeats is read at
+  // shutdown time, so late population is fine). The menu must serve well before workers finish.
+  const WORKER_BOOT_BUDGET_MS = 3_000;
   await Promise.race([
     startBackgroundWorkers({ pool, backupPool, queue, messageBus, notifyWorker })
       .then((r) => { heartbeats = r.heartbeats; })
