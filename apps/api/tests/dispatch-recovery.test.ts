@@ -334,29 +334,115 @@ test('sweep grace-window — DISPATCH_OWNER_GRACE_ENABLED default OFF: no exhaus
   assert.ok(!client.calls.some((c) => /UPDATE orders SET status\s*=\s*'CANCELLED'/.test(c.sql)), 'no auto-cancel while unratified');
 });
 
-test('sweep grace-window — flag ON: exhausted order past grace → CANCELLED + honest customer terminal push', async () => {
+// offer-sweep-cancel addendum: grace-cancel now routes through the SANCTIONED mutator updateOrderStatus
+// (no raw UPDATE — R3-3 guardrail green), publishes ORDER_CANCELLED post-commit (F1), and writes NO cash.
+// Handler models updateOrderStatus's real queries (it runs for real against the fake client).
+function graceFunnelHandler(status: string, extra: Array<[RegExp, { rows: any[]; rowCount: number }]> = []): Handler {
+  return sweepHandler([
+    [/dispatch_exhausted_at IS NOT NULL/, { rows: [{ id: 'o9', location_id: 'l1' }], rowCount: 1 }],
+    [/SELECT status FROM orders WHERE id = \$1 FOR UPDATE/, { rows: [{ status }], rowCount: 1 }], // worker lock read
+    ...extra,
+    // F7 under-lock re-check: no active binding by default.
+    [/SELECT 1 FROM courier_assignments WHERE order_id = \$1/, { rows: [], rowCount: 0 }],
+    // updateOrderStatus internals:
+    [/SELECT id, status, location_id FROM orders WHERE id/, { rows: [{ id: 'o9', status, location_id: 'l1' }], rowCount: 1 }],
+    [/UPDATE orders SET status = \$1/, { rows: [{ id: 'o9' }], rowCount: 1 }], // status-guarded, parameterized
+  ]);
+}
+
+test('sweep grace-window — flag ON: PREPARING order past grace → CANCELLED via updateOrderStatus funnel (no raw UPDATE), ORDER_CANCELLED post-commit, honest customer push, ZERO cash', async () => {
   const CourierOfferSweepWorker = await loadSweepWorker();
   process.env.DISPATCH_OWNER_GRACE_ENABLED = 'true';
   try {
     const sends: Array<{ name: string; payload: any }> = [];
     const boss = { send: async (name: string, payload: any) => { sends.push({ name, payload }); }, work: async () => {}, createQueue: async () => {}, schedule: async () => {} };
-    const client = makeClient(sweepHandler([
-      [/dispatch_exhausted_at IS NOT NULL/, { rows: [{ id: 'o9', location_id: 'l1' }], rowCount: 1 }],
-      [/SELECT status FROM orders WHERE id/, { rows: [{ status: 'READY' }], rowCount: 1 }],
-      [/UPDATE orders SET status\s*=\s*'CANCELLED'/, { rows: [], rowCount: 1 }],
+    const client = makeClient(graceFunnelHandler('PREPARING'));
+    const events: Array<{ channel: string; payload: any }> = [];
+    const sweep = new CourierOfferSweepWorker(makePool(client), boss as any, makeBus(events));
+
+    await (sweep as any).run();
+
+    const sqls = client.calls.map((c) => c.sql);
+    // Sanctioned funnel, NOT a raw cancel (R3-3): the write is updateOrderStatus's parameterized guard.
+    assert.ok(!sqls.some((s) => /UPDATE orders SET status\s*=\s*'CANCELLED'/.test(s)), 'no raw inline CANCELLED UPDATE (funnel, not laundering)');
+    assert.ok(sqls.some((s) => /UPDATE orders SET status = \$1, timeout_at = NULL/.test(s)), 'routed through updateOrderStatus (parameterized guard + timeout_at cleared)');
+    assert.ok(sqls.some((s) => /SAVEPOINT order_status_history_ins/.test(s)), 'updateOrderStatus history savepoint present (real funnel ran)');
+    // F7: the "no active assignment" re-check ran UNDER the FOR UPDATE lock before the mutator.
+    const lockIdx = sqls.findIndex((s) => /FOR UPDATE/.test(s));
+    const recheckIdx = sqls.findIndex((s) => /SELECT 1 FROM courier_assignments WHERE order_id/.test(s));
+    const mutIdx = sqls.findIndex((s) => /UPDATE orders SET status = \$1/.test(s));
+    assert.ok(lockIdx >= 0 && recheckIdx > lockIdx && mutIdx > recheckIdx, 'F7: re-check under lock, before the mutator');
+    // Audit trail carries the dispatch_exhausted reason (as updateOrderStatus comment).
+    assert.ok(client.calls.some((c) => /INSERT INTO order_status_history/.test(c.sql) && c.params.includes('dispatch_exhausted')), 'history comment = dispatch_exhausted');
+    // COMMIT durable before consequential effects.
+    assert.ok(sqls.some((s) => /^COMMIT$/.test(s.trim())), 'tx committed');
+    // F1: ORDER_CANCELLED published POST-commit → drives lifecycle-handlers (dwell resolve + boss.cancel).
+    const cancelledEvt = events.find((e) => e.channel === 'order.cancelled');
+    assert.ok(cancelledEvt, 'ORDER_CANCELLED published (F1 fan-out)');
+    assert.equal(cancelledEvt!.payload.orderId, 'o9');
+    assert.equal(cancelledEvt!.payload.reason, 'dispatch_exhausted');
+    const commitPos = client.calls.findIndex((c) => c.sql.trim() === 'COMMIT');
+    const cancelledPublishAfterCommit = client.calls.length >= commitPos; // publishes happen after the loop's COMMIT
+    assert.ok(commitPos >= 0 && cancelledPublishAfterCommit, 'fan-out is post-commit');
+    // Honest customer terminal push.
+    const push = sends.find((s) => s.name === 'notify.customer_status');
+    assert.ok(push, 'honest customer terminal push enqueued');
+    assert.equal(push!.payload.event, 'CANCELLED');
+    assert.equal(push!.payload.orderId, 'o9');
+    // 🔴 CASH-SAFETY (load-bearing): the grace path writes NO cash ledger hold and NO delivery_trace crumb.
+    assert.ok(!sqls.some((s) => /INSERT INTO courier_cash_ledger/i.test(s)), 'ZERO courier_cash_ledger writes');
+    assert.ok(!sqls.some((s) => /INSERT INTO delivery_trace/i.test(s)), 'ZERO delivery_trace writes');
+  } finally {
+    delete process.env.DISPATCH_OWNER_GRACE_ENABLED;
+  }
+});
+
+test('sweep grace-window — F7 anti-race: a freshly-bound (accepted) order is NOT cancelled (skip, no history, no ORDER_CANCELLED)', async () => {
+  const CourierOfferSweepWorker = await loadSweepWorker();
+  process.env.DISPATCH_OWNER_GRACE_ENABLED = 'true';
+  try {
+    const sends: Array<{ name: string; payload: any }> = [];
+    const boss = { send: async (name: string, payload: any) => { sends.push({ name, payload }); }, work: async () => {}, createQueue: async () => {}, schedule: async () => {} };
+    // Candidate prefilter picked it up, but under the lock a fresh 'accepted' binding exists → skip.
+    const client = makeClient(graceFunnelHandler('PREPARING', [
+      [/SELECT 1 FROM courier_assignments WHERE order_id = \$1/, { rows: [{ '?column?': 1 }], rowCount: 1 }],
     ]));
     const events: Array<{ channel: string; payload: any }> = [];
     const sweep = new CourierOfferSweepWorker(makePool(client), boss as any, makeBus(events));
 
     await (sweep as any).run();
 
-    const cancel = client.calls.find((c) => /UPDATE orders SET status\s*=\s*'CANCELLED'/.test(c.sql));
-    assert.ok(cancel, 'auto-cancel issued when flag ON');
-    assert.ok(client.calls.some((c) => /INSERT INTO order_status_history/.test(c.sql) && (c.params.includes('dispatch_exhausted') || c.sql.includes('dispatch_exhausted'))), 'audit trail carries dispatch_exhausted');
-    const push = sends.find((s) => s.name === 'notify.customer_status');
-    assert.ok(push, 'honest customer terminal push enqueued');
-    assert.equal(push!.payload.event, 'CANCELLED');
-    assert.equal(push!.payload.orderId, 'o9');
+    const sqls = client.calls.map((c) => c.sql);
+    assert.ok(!sqls.some((s) => /UPDATE orders SET status = \$1/.test(s)), 'no status write — order left alone');
+    assert.ok(!sqls.some((s) => /INSERT INTO order_status_history/.test(s)), 'no history row');
+    assert.ok(!events.some((e) => e.channel === 'order.cancelled'), 'no ORDER_CANCELLED publish');
+    assert.ok(!sends.some((s) => s.name === 'notify.customer_status'), 'no customer push');
+    assert.ok(sqls.some((s) => s.trim() === 'ROLLBACK'), 'rolled back cleanly');
+  } finally {
+    delete process.env.DISPATCH_OWNER_GRACE_ENABLED;
+  }
+});
+
+test('sweep grace-window — idempotency: lost race (409 from the mutator) → ROLLBACK, no duplicate history/publish', async () => {
+  const CourierOfferSweepWorker = await loadSweepWorker();
+  process.env.DISPATCH_OWNER_GRACE_ENABLED = 'true';
+  try {
+    const sends: Array<{ name: string; payload: any }> = [];
+    const boss = { send: async (name: string, payload: any) => { sends.push({ name, payload }); }, work: async () => {}, createQueue: async () => {}, schedule: async () => {} };
+    // The guarded UPDATE inside updateOrderStatus matches 0 rows (status changed under us) → throws 409.
+    const client = makeClient(graceFunnelHandler('PREPARING', [
+      [/UPDATE orders SET status = \$1/, { rows: [], rowCount: 0 }],
+    ]));
+    const events: Array<{ channel: string; payload: any }> = [];
+    const sweep = new CourierOfferSweepWorker(makePool(client), boss as any, makeBus(events));
+
+    await (sweep as any).run();
+
+    const sqls = client.calls.map((c) => c.sql);
+    assert.ok(sqls.some((s) => s.trim() === 'ROLLBACK'), '409 → ROLLBACK');
+    assert.ok(!sqls.some((s) => s.trim() === 'COMMIT'), 'no COMMIT on a lost race');
+    assert.ok(!events.some((e) => e.channel === 'order.cancelled'), 'no ORDER_CANCELLED on a lost race');
+    assert.ok(!sends.some((s) => s.name === 'notify.customer_status'), 'no customer push on a lost race');
   } finally {
     delete process.env.DISPATCH_OWNER_GRACE_ENABLED;
   }

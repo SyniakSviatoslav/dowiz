@@ -6,6 +6,7 @@ import { decryptPII } from '../../lib/pii-cipher.js';
 import crypto from 'node:crypto';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel, shiftChannel } from '../../lib/registry.js';
 import { updateOrderStatus } from '../../lib/orderStatusService.js';
+import { assertOwnerTargetAllowed } from '../../lib/orderAuthz.js';
 import { completeDelivery, CompletionError } from '../../lib/deliveryCompletion.js';
 import { withTenant } from '@deliveryos/platform';
 
@@ -633,6 +634,11 @@ async function transitionOrder(db: any, messageBus: any, orderId: string, locati
       [orderId, locationId],
     );
     if (!cur.rowCount) throw { statusCode: 404, error: 'Order not found' };
+
+    // offer-sweep-cancel addendum coupling-fix: the widened CONFIRMED/PREPARING/READY→CANCELLED edges
+    // are SYSTEM-only. Reject an owner-driven cancel of those states (403). Defensive: today's callers
+    // pass only CONFIRMED/REJECTED, but this keeps the guard co-located with every owner transition site.
+    assertOwnerTargetAllowed(cur.rows[0].status, newStatus);
 
     // Canonical path: updateOrderStatus handles state machine, anti-race, and events.
     // ORDER-TRACKING: pass the reason as the order_status_history.comment (additive).
