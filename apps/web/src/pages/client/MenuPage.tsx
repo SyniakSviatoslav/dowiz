@@ -1,4 +1,5 @@
 import { safeStorage } from '../../lib/safeStorage.js';
+import { hasDishData } from '../../lib/dishNutrition.js';
 import React, { useEffect, useState, useRef, useCallback, useMemo, useLayoutEffect, lazy, Suspense } from 'react';
 import type { ProductMedia } from '../../components/media/types';
 
@@ -9,7 +10,7 @@ const MediaGallery = lazy(() => import('../../components/media/MediaGallery').th
 const MediaRenderer = lazy(() => import('../../components/media').then(m => ({ default: m.MediaRenderer })));
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput, computeAllergenSurface, partitionByMacroLens, usePullToRefresh, PullToRefreshIndicator, resolveInitialLocale, getStoredLocale, isLocale, setLocale as setModuleLocale } from '@deliveryos/ui';
+import { ProductCard, StateChip, useI18n, useToast, PriceDisplay, getAllergenStyle, ease, SearchInput, computeAllergenSurface, partitionByMacroLens } from '@deliveryos/ui';
 import { useSharedCart } from '../../lib/CartProvider.js';
 import { fetchVenueInfo } from '../../lib/publicApi.js';
 import { MenuComparePanel } from './MenuComparePanel.js';
@@ -39,10 +40,6 @@ const FILTER_LENSES_ENABLED = (import.meta as any).env?.VITE_MENU_CHARACTERISTIC
 // storefront for now. The computeAllergenSurface single-source library + STEP-0 contract + guardrails #12
 // stay intact underneath (dormant) — re-enabling is this one flag, not a rebuild. Default OFF = frozen.
 const ALLERGENS_ENABLED = false;
-
-// PULL-TO-REFRESH — touch-only "pull down at the top to refetch" on mobile lists.
-// Default ON; kill-switch is VITE_PULL_TO_REFRESH_ENABLED=false at build time.
-const PULL_TO_REFRESH_ENABLED = (import.meta as any).env?.VITE_PULL_TO_REFRESH_ENABLED !== 'false';
 
 interface ProductModifier {
   id: string;
@@ -407,35 +404,6 @@ export function MenuPage() {
     loadMenu(loadedOnceRef.current && !slugChanged);
   }, [loadMenu, retryCount]);
 
-  // Fix: honor the tenant's configured default_locale on first load. The storefront used to
-  // always start in the module-default language (ignoring default_locale); now, when the visitor
-  // has made NO explicit language choice, we adopt the tenant default (non-persisted, so it never
-  // shadows a different tenant's default), which triggers a soft menu refetch in that locale. An
-  // explicit user pick (a stored preference) still wins — see resolveInitialLocale.
-  const defaultLocaleAppliedRef = useRef(false);
-  useEffect(() => {
-    if (defaultLocaleAppliedRef.current || !menu?.default_locale) return;
-    defaultLocaleAppliedRef.current = true;
-    const resolved = resolveInitialLocale({
-      stored: getStoredLocale(),
-      tenantDefault: menu.default_locale,
-      supported: menu.supported_locales,
-    });
-    if (isLocale(resolved) && resolved !== locale) setModuleLocale(resolved, false);
-  }, [menu, locale]);
-
-  // PULL-TO-REFRESH: reuses the SOFT loadMenu path (no skeleton, current menu stays
-  // on screen until the fresh one arrives) — the indicator is the only loading UI.
-  const {
-    handlers: ptrHandlers,
-    pulling: ptrPulling,
-    progress: ptrProgress,
-    refreshing: ptrRefreshing,
-  } = usePullToRefresh({
-    onRefresh: () => loadMenu(true),
-    disabled: !PULL_TO_REFRESH_ENABLED,
-  });
-
   const stickyRef = useRef<HTMLDivElement>(null);
   const [stickyHeight, setStickyHeight] = useState(44);
 
@@ -768,12 +736,7 @@ export function MenuPage() {
   };
 
   return (
-    <div className="relative min-h-screen pb-28" {...ptrHandlers}>
-      {/* PULL-TO-REFRESH indicator — appears only during an active pull / in-flight refetch,
-          pointer-events-none so it can never intercept a tap. */}
-      {PULL_TO_REFRESH_ENABLED && (
-        <PullToRefreshIndicator pulling={ptrPulling} progress={ptrProgress} refreshing={ptrRefreshing} />
-      )}
+    <div className="relative min-h-screen pb-28">
 
       {/* Vendor info zone — between the header (which already shows the name+logo) and the categories.
           Google rating + reviews link + venue state + closing time, over a stylized-map backdrop (no API).
@@ -1120,11 +1083,11 @@ export function MenuPage() {
                 : t('client.empty_menu_unavailable_hint', "This restaurant hasn't published its menu yet.")}
             </p>
             {notFound ? (
-              <a href="/" className="mt-4 inline-flex items-center px-5 py-2 rounded-xl text-sm font-semibold text-[var(--color-on-primary)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ background: 'var(--brand-primary-strong)' }}>
+              <a href="/" className="mt-4 inline-flex items-center px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ background: 'var(--brand-primary-strong)' }}>
                 <i className="ti ti-home mr-1.5" />{t('client.go_home', 'Back to home')}
               </a>
             ) : fetchError && (
-              <motion.button onClick={() => { setRetryCount(c => c + 1); }} whileTap={prefersReduced ? undefined : { scale: 0.97 }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-[var(--color-on-primary)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ background: 'var(--brand-primary-strong)' }}>
+              <motion.button onClick={() => { setRetryCount(c => c + 1); }} whileTap={prefersReduced ? undefined : { scale: 0.97 }} className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]" style={{ background: 'var(--brand-primary-strong)' }}>
                 <i className="ti ti-refresh mr-1.5" />{t('client.retry', 'Retry')}
               </motion.button>
             )}
@@ -1143,7 +1106,7 @@ export function MenuPage() {
             <motion.button
               onClick={() => { setSortBy('default'); setFilterAllergen(null); setSearchQuery(''); setSelectedCategory(null); }}
               whileTap={prefersReduced ? undefined : { scale: 0.97 }}
-              className="px-5 py-2 rounded-xl text-sm font-semibold text-[var(--color-on-primary)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
+              className="px-5 py-2 rounded-xl text-sm font-semibold text-[var(--brand-bg)] outline-none transition-[transform,box-shadow] duration-150 ease-out active:scale-95 min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
               style={{ background: 'var(--brand-primary-strong)' }}
             >
               {t('client.browse_menu', 'Browse full menu')}
@@ -1441,8 +1404,12 @@ export function MenuPage() {
                         </span>
                       )}
                     </div>
-                    {/* Body font (not the heading serif) to match the menu card title — opened/closed consistency. */}
-                    <h2 className="text-xl font-bold leading-tight" style={{ color: 'var(--brand-text)' }}>{detailProduct.name}</h2>
+                    {/* Heading font comes from the global .client-shell rule (index.css), same as the
+                        card title — opened/closed now render the SAME font (was a mismatch: the card
+                        set it inline, this <h2> didn't, so it silently fell back to the body font).
+                        text-step-xl (22px) instead of stock text-xl (20px) — a detail title shouldn't
+                        be smaller than a checkout section header (CONSISTENCY-AUDIT T2/T3). */}
+                    <h2 className="text-step-xl font-bold leading-tight" style={{ color: 'var(--brand-text)' }}>{detailProduct.name}</h2>
                     {!detailProduct.available && (
                       <span className="inline-block mt-1.5 text-step-2xs font-semibold px-2 py-0.5 rounded" style={{ background: 'rgba(220,38,38,0.1)', color: 'var(--color-danger)' }}>
                         {t('client.unavailable', 'Unavailable')}
@@ -1495,7 +1462,7 @@ export function MenuPage() {
                 if (!entries.length) return null;
                 return (
                   <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)' }}>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
+                    <h3 className="text-step-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
                       <i className="ti ti-flask" /> {t('common.taste', 'Taste')}
                     </h3>
                     <div className="flex flex-wrap gap-x-4 gap-y-2">
@@ -1517,34 +1484,72 @@ export function MenuPage() {
                 );
               })()}
 
-              {/* Ingredients — simple badge chips (operator directive: no nutrition infographics; the calorie
-                  ring / macro bars / per-ingredient bar chart read as clutter and the amounts are unreliable).
-                  Sourced from the BOM food lines (packaging/utensils already excluded by bomToNutrition).
-                  Hidden when the dish carries no structured ingredients (e.g. the description already lists them). */}
+              {/* "What's inside" — Huel-style big-number macro tiles + ingredient chips
+                  (docs/design/storefront-polish/AWWWARDS-RESEARCH.md §4.2/§5). Rendered ONLY when
+                  the dish actually carries nutrition/ingredient data (hasDishData) — reuses the
+                  SAME compute (bomToNutrition/BOM) and "has data" predicate as DishStats (Compare
+                  panel / checkout order summary), so this never shows an empty section.
+                  Deliberately NOT DishStats' calorie-ring/proportional-bar visual here — an earlier
+                  operator directive rejected pie-chart/bar-chart clutter in this exact spot because
+                  the amounts read as unreliable; monochrome big-numeral tiles (no gauges, no rings)
+                  are the research's answer to that same complaint, so both directives are honored. */}
               {(() => {
+                const nutrition = bomToNutrition(detailProduct);
                 // Prefer the display-only ingredients list (brand-ingest; survives the shadow bom-strip),
                 // else derive from the BOM (post-claim / owner-authored dishes).
                 const attrIng = (detailProduct as any).attributes?.ingredients;
-                const names = Array.isArray(attrIng) && attrIng.length
+                const names: string[] = Array.isArray(attrIng) && attrIng.length
                   ? attrIng.filter((s: unknown): s is string => typeof s === 'string' && s.trim().length > 0)
-                  : bomToNutrition(detailProduct).ingredients;
-                if (names.length === 0) return null;
+                  : nutrition.ingredients;
+                if (!hasDishData(nutrition, names)) return null;
+
+                // Only tiles with a real value — never a zero/placeholder tile.
+                const tiles = [
+                  { key: 'kcal', value: nutrition.kcal, unit: '', label: t('nutrition.calories', 'kcal') },
+                  { key: 'protein', value: nutrition.protein, unit: 'g', label: t('nutrition.protein', 'Protein'), accent: true },
+                  { key: 'carbs', value: nutrition.carbs, unit: 'g', label: t('nutrition.carbs', 'Carbs') },
+                  { key: 'fat', value: nutrition.fat, unit: 'g', label: t('nutrition.fat', 'Fat') },
+                ].filter((tile) => tile.value > 0);
+
                 return (
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
-                      <i className="ti ti-salad" /> {t('client.ingredients', 'Ingredients')}
+                  <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)' }}>
+                    <h3 className="text-step-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--brand-text-muted)' }}>
+                      <i className="ti ti-leaf" /> {t('client.whats_inside', "What's inside")}
                     </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {names.map((name, i) => (
-                        <span
-                          key={`${name}-${i}`}
-                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium"
-                          style={{ background: 'var(--brand-surface)', color: 'var(--brand-text)', border: '1px solid color-mix(in srgb, var(--brand-primary) 16%, transparent)' }}
-                        >
-                          {name}
-                        </span>
-                      ))}
-                    </div>
+                    {tiles.length > 0 && (
+                      <div className="flex flex-wrap gap-x-6 gap-y-3">
+                        {tiles.map((tile) => (
+                          <div key={tile.key} className="flex flex-col items-start">
+                            <span
+                              className="text-step-2xl font-bold leading-none tabular-nums"
+                              style={{ color: tile.accent ? 'var(--brand-primary-readable)' : 'var(--brand-text)' }}
+                            >
+                              {tile.value}
+                              {tile.unit && <span className="text-step-sm font-medium">{tile.unit}</span>}
+                            </span>
+                            <span className="text-step-2xs font-medium uppercase tracking-wide mt-1" style={{ color: 'var(--brand-text-muted)' }}>
+                              {tile.label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {tiles.length > 0 && names.length > 0 && (
+                      <div className="h-px w-full my-3" style={{ background: 'var(--brand-border)' }} aria-hidden="true" />
+                    )}
+                    {names.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {names.map((name, i) => (
+                          <span
+                            key={`${name}-${i}`}
+                            className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium"
+                            style={{ background: 'var(--brand-bg)', color: 'var(--brand-text)', border: '1px solid color-mix(in srgb, var(--brand-primary) 16%, transparent)' }}
+                          >
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -1692,7 +1697,7 @@ export function MenuPage() {
                   onClick={handleAddDetail}
                   disabled={!canAdd()}
                   whileTap={prefersReduced || !canAdd() ? undefined : { scale: 0.97 }}
-                  className="flex-1 min-w-0 h-[46px] text-[var(--color-on-primary)] font-bold text-step-sm outline-none transition-[transform,opacity] duration-150 ease-out disabled:opacity-40 flex items-center justify-between gap-2 px-4 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
+                  className="flex-1 min-w-0 h-[46px] text-[var(--brand-bg)] font-bold text-step-sm outline-none transition-[transform,opacity] duration-150 ease-out disabled:opacity-40 flex items-center justify-between gap-2 px-4 focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]"
                   style={{ background: detailProduct.available && !orderingDisabled ? 'var(--brand-primary-strong)' : 'var(--brand-text-muted)', borderRadius: 'var(--brand-radius-btn)' }}
                 >
                   {!detailProduct.available ? (

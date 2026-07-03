@@ -1,9 +1,16 @@
 import type { ReactNode } from 'react';
 import { useI18n } from '@deliveryos/ui';
+import { hasDishData } from '../../lib/dishNutrition.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DishStats — a reusable, "data-art"-quality nutrition + ingredients visual.
-// Used in the dish detail modal ('full') and the 2-dish compare panel ('compact').
+// DishStats — a reusable, "data-art"-quality nutrition + ingredients visual, currently used in
+// 'compact' form: the 2-dish compare panel (MenuComparePanel.tsx) and the checkout order-summary
+// totals (checkout/OrderSummaryAccordion.tsx). The 'full' variant (calorie ring + macro bars) is
+// NOT used in the product-detail modal — an operator directive rejected that ring/bar treatment
+// there as clutter, and the storefront-polish research independently landed on the same call (no
+// pie charts/gauges); the detail modal instead renders its own minimal Huel-style macro-tile
+// section (MenuPage.tsx, "What's inside") that reuses this file's hasDishData predicate for
+// visibility, not its ring/bar JSX. 'full' remains available for a future surface that wants it.
 // Pure SVG + divs + brand CSS variables; no new dependencies, no hardcoded colors.
 // The calorie ring's arc segments ENCODE the macro energy split (protein/carbs
 // 4 kcal/g, fat 9 kcal/g), so the ring itself reads as the macro breakdown.
@@ -275,8 +282,10 @@ export function DishStats({ macros, ingredients, variant = 'full', className }: 
 
   const ingr = (ingredients ?? []).filter((i): i is DishIngredient => !!i && typeof i.name === 'string' && i.name.length > 0);
 
-  // Guard: nothing meaningful to draw.
-  if (kcal <= 0 && ingr.length === 0) return null;
+  // Guard: nothing meaningful to draw. Shared predicate (../../lib/dishNutrition.ts) — the
+  // product-detail "What's inside" section uses the SAME check, so every storefront surface agrees
+  // on when there's data to show.
+  if (!hasDishData(macros, ingr.map((i) => i.name))) return null;
 
   const compact = variant === 'compact';
 

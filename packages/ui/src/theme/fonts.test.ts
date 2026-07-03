@@ -60,6 +60,27 @@ describe('font allowlist invariants', () => {
     assert.ok(!junk.includes('<script>'));
   });
 
+  it('Latin-only display faces carry an Inter fallback so Cyrillic headers never break mid-page', () => {
+    // storefront-polish research finding: Fraunces/DM Serif Display/Yeseva One/Bebas Neue ship no
+    // Cyrillic glyphs. A Ukrainian heading rendered in one of them must fall back to Inter (already
+    // loaded, multi-script) via the CSS stack itself — never to an uncontrolled generic serif/sans.
+    const LATIN_ONLY_HEADING_IDS = ['fraunces', 'dmserif', 'yeseva', 'bebas'] as const;
+    for (const id of LATIN_ONLY_HEADING_IDS) {
+      assert.ok(IDS.includes(id), `${id} ∈ allowlist`);
+      assert.match(FONT_ALLOWLIST[id].stack, /'Inter'/, `${id}'s stack includes an Inter fallback`);
+      // The Inter fallback must come BEFORE the generic serif/sans-serif fallback, so it's what
+      // actually renders for a Cyrillic glyph (CSS font matching walks the stack in order).
+      const stack = FONT_ALLOWLIST[id].stack;
+      assert.ok(stack.indexOf("'Inter'") < stack.indexOf('serif'), `${id}: Inter precedes the generic fallback`);
+    }
+  });
+
+  it('multi-script faces (already Cyrillic-capable or Inter itself) need no extra fallback', () => {
+    // Sanity check the fix is scoped — it should not blanket-rewrite every stack.
+    assert.doesNotMatch(FONT_ALLOWLIST.playfair.stack, /'Inter'/);
+    assert.doesNotMatch(FONT_ALLOWLIST.cormorant.stack, /'Inter'/);
+  });
+
   it('googleFontsHref is egress-safe: base ids → null, non-base → allowlisted google URL, junk dropped', () => {
     // Base families are already in index.html — nothing to inject.
     assert.equal(googleFontsHref(['playfair', 'inter', 'dmsans']), null);

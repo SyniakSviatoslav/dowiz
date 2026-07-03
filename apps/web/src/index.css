@@ -21,6 +21,19 @@ body {
   min-height: 100dvh;
 }
 
+/* Storefront heading font — without this, h1-h4 silently inherit the BODY font (only `body` was
+   set above), so the same dish name renders in the heading font on the product card (which sets
+   it inline) but the body font in the detail modal / compare panel (which didn't). :where() keeps
+   this at zero specificity so any more specific rule (e.g. the internal admin/courier paper skin's
+   `[data-skin="paper"] h1`) still wins without a specificity fight. Scoped to .client-shell
+   (ClientLayout's root, apps/web/src/routes/ClientLayout.tsx) — the customer storefront only
+   (/s/:slug menu, product detail, checkout, order status) — so /admin and /courier are unaffected.
+   fonts.ts guarantees every heading-role stack degrades to Inter (multi-script) for any glyph the
+   chosen display face doesn't cover, so a Ukrainian header never falls back mid-page. */
+.client-shell :where(h1, h2, h3, h4) {
+  font-family: var(--brand-font-heading);
+}
+
 /* ── Mobile touch rules ── */
 button, a, [role="button"], input, select, textarea, label {
   touch-action: manipulation;

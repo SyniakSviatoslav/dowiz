@@ -25,16 +25,26 @@ export interface FontSpec {
 
 const SERIF = 'Georgia, "Times New Roman", serif';
 const SANS = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+// Inter is multi-script (Latin + Latin-Ext + full Cyrillic) and always statically loaded
+// (apps/web/index.html), so it's a zero-cost, always-available fallback. Several display faces
+// below (Fraunces, DM Serif Display, Yeseva One, Bebas Neue) ship Latin-only glyph sets — without
+// this, a Ukrainian (Cyrillic) heading rendered in one of them silently falls back to the
+// browser's generic serif/sans-serif default, which reads as a jarring mid-page font swap. Putting
+// 'Inter' in the stack itself means the browser's per-GLYPH fallback (not per-element) kicks in:
+// Latin characters still render in the display face, and any Cyrillic characters fall back to the
+// same Inter used for chrome/body — so the page always looks intentional, never broken.
+const CYRILLIC_SAFE_FALLBACK = "'Inter'";
 
 // The ONLY selectable/loadable families. Keys are the stored/transmitted ids.
 export const FONT_ALLOWLIST = {
   playfair:     { label: 'Playfair Display',   family: 'Playfair Display',   stack: `'Playfair Display', ${SERIF}`,   googleSpec: 'Playfair+Display:wght@400;500;600;700',  role: 'heading', base: true },
   cormorant:    { label: 'Cormorant Garamond', family: 'Cormorant Garamond', stack: `'Cormorant Garamond', ${SERIF}`, googleSpec: 'Cormorant+Garamond:wght@400;500;600;700', role: 'heading', base: true },
-  dmserif:      { label: 'DM Serif Display',   family: 'DM Serif Display',   stack: `'DM Serif Display', ${SERIF}`,   googleSpec: 'DM+Serif+Display',                       role: 'heading', base: true },
-  fraunces:     { label: 'Fraunces',           family: 'Fraunces',           stack: `'Fraunces', ${SERIF}`,           googleSpec: 'Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700', role: 'heading', base: true },
-  yeseva:       { label: 'Yeseva One',         family: 'Yeseva One',         stack: `'Yeseva One', ${SERIF}`,         googleSpec: 'Yeseva+One',                             role: 'heading', base: true },
+  // Latin-only faces (no Cyrillic) — CYRILLIC_SAFE_FALLBACK inserted before the generic fallback.
+  dmserif:      { label: 'DM Serif Display',   family: 'DM Serif Display',   stack: `'DM Serif Display', ${CYRILLIC_SAFE_FALLBACK}, ${SERIF}`, googleSpec: 'DM+Serif+Display',                       role: 'heading', base: true },
+  fraunces:     { label: 'Fraunces',           family: 'Fraunces',           stack: `'Fraunces', ${CYRILLIC_SAFE_FALLBACK}, ${SERIF}`,         googleSpec: 'Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700', role: 'heading', base: true },
+  yeseva:       { label: 'Yeseva One',         family: 'Yeseva One',         stack: `'Yeseva One', ${CYRILLIC_SAFE_FALLBACK}, ${SERIF}`,       googleSpec: 'Yeseva+One',                             role: 'heading', base: true },
   spacegrotesk: { label: 'Space Grotesk',      family: 'Space Grotesk',      stack: `'Space Grotesk', ${SANS}`,       googleSpec: 'Space+Grotesk:wght@400;500;600;700',     role: 'heading', base: false },
-  bebas:        { label: 'Bebas Neue',         family: 'Bebas Neue',         stack: `'Bebas Neue', ${SANS}`,          googleSpec: 'Bebas+Neue',                             role: 'heading', base: false },
+  bebas:        { label: 'Bebas Neue',         family: 'Bebas Neue',         stack: `'Bebas Neue', ${CYRILLIC_SAFE_FALLBACK}, ${SANS}`,        googleSpec: 'Bebas+Neue',                             role: 'heading', base: false },
   poppins:      { label: 'Poppins',            family: 'Poppins',            stack: `'Poppins', ${SANS}`,             googleSpec: 'Poppins:wght@400;500;600;700',           role: 'both',    base: false },
   montserrat:   { label: 'Montserrat',         family: 'Montserrat',         stack: `'Montserrat', ${SANS}`,          googleSpec: 'Montserrat:wght@400;500;600;700',        role: 'both',    base: false },
   quicksand:    { label: 'Quicksand',          family: 'Quicksand',          stack: `'Quicksand', ${SANS}`,           googleSpec: 'Quicksand:wght@400;500;600;700',         role: 'both',    base: false },

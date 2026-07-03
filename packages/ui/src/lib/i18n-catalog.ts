@@ -29,7 +29,7 @@ export const catalog: Record<string, CatalogEntry> = {
   'pwa.ios_hint': {
     en: "Tap Share, then 'Add to Home Screen'.",
     sq: "Trokit Share, pastaj 'Add to Home Screen'.",
-    uk: 'Натисніть «Поділитися», потім «На початковий екран».',
+    uk: "Натисніть «Поділитися», потім «На початковий екран».",
   },
   'pwa.close_label': {
     en: 'Dismiss install prompt',
@@ -2617,6 +2617,7 @@ export const catalog: Record<string, CatalogEntry> = {
   'client.allergens': { en: 'Allergens', sq: 'Alergjenët', uk: 'Алергени' },
   'client.ingredients': { en: 'Ingredients', sq: 'Përbërësit', uk: 'Інгредієнти' },
   'client.nutrition': { en: 'Nutrition', sq: 'Vlerat Ushqimore', uk: 'Харчова цінність' },
+  'client.whats_inside': { en: "What's inside", sq: 'Çfarë përmban', uk: 'Що всередині' },
   'client.unavailable': { en: 'Unavailable', sq: 'I padisponueshëm', uk: 'Недоступно' },
   'admin.not_yet': { en: 'Not yet', sq: 'Ende jo', uk: 'Ще не встановлено' },
   'admin.none': { en: 'None', sq: 'Asnjë', uk: 'Немає' },
@@ -3285,11 +3286,7 @@ export const catalog: Record<string, CatalogEntry> = {
   },
   'order.order_again': { en: 'Order again', sq: 'Porosit sërish', uk: 'Замовити знову' },
   'order.reorder': { en: 'Reorder', sq: 'Riporosit', uk: 'Повторити замовлення' },
-  'order.reordering': {
-    en: 'Adding to cart…',
-    sq: 'Po shtohet në shportë…',
-    uk: 'Додаємо до кошика…',
-  },
+  'order.reordering': { en: 'Adding to cart…', sq: 'Po shtohet në shportë…', uk: 'Додаємо до кошика…' },
   'order.reorder_added': {
     en: 'Your last order is back in the cart.',
     sq: 'Porosia juaj e fundit është sërish në shportë.',
@@ -4297,178 +4294,4 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: 'Список алергенів неповний — за серйозних алергій уточніть у закладі.',
   },
   'message.amount_placeholder': { en: 'Amount', sq: 'Shuma', uk: 'Сума' },
-  'checkout.tax_included': { en: 'Incl. VAT', sq: 'TVSH e përfshirë', uk: 'з ПДВ' },
-
-  // --- audit-fix (LC9/S3, S4, S5) — 2026-07-03, frontend data-integrity lane ---
-  'admin.customer_history_error_title': {
-    en: "Couldn't load history",
-    sq: 'Historiku nuk u ngarkua',
-    uk: 'Не вдалося завантажити історію',
-  },
-  'admin.customer_history_error_desc': {
-    en: 'Something went wrong loading this customer’s order history.',
-    sq: 'Diçka shkoi keq gjatë ngarkimit të historikut të porosive të këtij klienti.',
-    uk: 'Під час завантаження історії замовлень цього клієнта сталася помилка.',
-  },
-  'admin.consumption_unavailable_title': {
-    en: 'Not available yet',
-    sq: 'Ende e padisponueshme',
-    uk: 'Поки що недоступно',
-  },
-  'admin.consumption_unavailable_desc': {
-    en: "Ingredient consumption isn't connected to your recipes yet, so there's nothing real to show or export here.",
-    sq: 'Konsumi i përbërësve ende nuk është i lidhur me recetat tuaja, prandaj këtu nuk ka të dhëna reale për t’u shfaqur apo eksportuar.',
-    uk: 'Витрати інгредієнтів ще не пов’язані з вашими рецептами, тож тут немає реальних даних для показу чи експорту.',
-  },
-  'courier.destination_unavailable': {
-    en: 'Exact destination unknown — use the address and contact the customer.',
-    sq: 'Destinacioni i saktë nuk dihet — përdorni adresën dhe kontaktoni klientin.',
-    uk: 'Точне місце призначення невідоме — скористайтесь адресою і зв’яжіться з клієнтом.',
-  },
-  'courier.pickup_failed': {
-    en: 'Could not mark as picked up — check your connection and try again.',
-    sq: 'Nuk u shënua si e marrë — kontrollo lidhjen dhe provo përsëri.',
-    uk: 'Не вдалося позначити як забране — перевірте з’єднання і спробуйте ще раз.',
-  },
-  'courier.messenger_save_failed': {
-    en: 'Could not save your messenger contact. Please try again.',
-    sq: 'Kontakti i mesazherit nuk u ruajt. Ju lutemi provoni përsëri.',
-    uk: 'Не вдалося зберегти контакт месенджера. Спробуйте ще раз.',
-  },
-
-  // --- audit-fix (LC1/M7 receipt + LC9 no-location) — 2026-07-03, money lane ---
-  'checkout.tax_included_rate': {
-    en: 'Incl. VAT ({{rate}}%)',
-    sq: 'TVSH e përfshirë ({{rate}}%)',
-    uk: 'з ПДВ ({{rate}}%)',
-  },
-  'checkout.location_required': {
-    en: "We couldn't determine your delivery location — please place the pin on the map.",
-    sq: 'Nuk e përcaktuam dot vendndodhjen e dorëzimit — ju lutemi vendosni pikën në hartë.',
-    uk: 'Не вдалося визначити місце доставки — будь ласка, поставте позначку на мапі.',
-  },
-
-  // --- audit-fix (S4 silent-mutation-failure, sub-lane sites) — 2026-07-03, frontend data-integrity lane ---
-  'admin.kitchen_busy_save_failed': {
-    en: 'Could not update kitchen status. Please try again.',
-    sq: 'Statusi i kuzhinës nuk u përditësua. Provo përsëri.',
-    uk: 'Не вдалося оновити статус кухні. Спробуйте ще раз.',
-  },
-  'promotions.toggle_error': {
-    en: 'Could not update promotion status. Please try again.',
-    sq: 'Statusi i promovimit nuk u përditësua. Provo përsëri.',
-    uk: 'Не вдалося оновити статус акції. Спробуйте ще раз.',
-  },
-  'admin.logo_not_ready': {
-    en: 'Still loading your store — try again in a moment.',
-    sq: 'Ende po ngarkojmë dyqanin tuaj — provoni sërish pas pak.',
-    uk: 'Ще завантажуємо ваш магазин — спробуйте за мить.',
-  },
-  'admin.logo_upload_failed': {
-    en: 'Failed to save your logo. Please try again.',
-    sq: 'Logoja nuk u ruajt. Ju lutemi provoni përsëri.',
-    uk: 'Не вдалося зберегти логотип. Спробуйте ще раз.',
-  },
-  'common.undo': { en: 'Undo', sq: 'Zhbëj', uk: 'Скасувати' },
-  'common.redo': { en: 'Redo', sq: 'Ribëj', uk: 'Повторити' },
-  'common.edit_history': {
-    en: 'Edit history',
-    sq: 'Historiku i redaktimeve',
-    uk: 'Історія редагувань',
-  },
-  'common.refreshing': { en: 'Refreshing', sq: 'Po rifreskohet', uk: 'Оновлення' },
-  'palette.title': { en: 'Command palette', sq: 'Paleta e komandave', uk: 'Палітра команд' },
-  'palette.placeholder': {
-    en: 'Type a command or search…',
-    sq: 'Shkruani një komandë ose kërkoni…',
-    uk: 'Введіть команду або пошук…',
-  },
-  'palette.empty': {
-    en: 'No matching commands',
-    sq: 'Asnjë komandë e përputhur',
-    uk: 'Немає відповідних команд',
-  },
-  'shortcuts.title': {
-    en: 'Keyboard shortcuts',
-    sq: 'Shkurtoret e tastierës',
-    uk: 'Клавіатурні скорочення',
-  },
-  'shortcuts.open_palette': {
-    en: 'Open command palette',
-    sq: 'Hap paletën e komandave',
-    uk: 'Відкрити палітру команд',
-  },
-  'shortcuts.show_help': {
-    en: 'Show keyboard shortcuts',
-    sq: 'Shfaq shkurtoret e tastierës',
-    uk: 'Показати клавіатурні скорочення',
-  },
-  'shortcuts.go_to': { en: 'Go to', sq: 'Shko te', uk: 'Перейти до' },
-  'shortcuts.close_dialogs': {
-    en: 'Close dialogs',
-    sq: 'Mbyll dialogët',
-    uk: 'Закрити діалогові вікна',
-  },
-  'voice.fab_label': { en: 'Order by voice', sq: 'Porosit me zë', uk: 'Замовити голосом' },
-  'voice.listening': { en: 'Listening…', sq: 'Duke dëgjuar…', uk: 'Слухаю…' },
-  'voice.transcribing': { en: 'Getting that…', sq: 'Duke përpunuar…', uk: 'Обробляю…' },
-  'voice.confirm_add': {
-    en: 'Add {{qty}}× {{item}}?',
-    sq: 'Shto {{qty}}× {{item}}?',
-    uk: 'Додати {{qty}}× {{item}}?',
-  },
-  'voice.confirm': { en: 'Confirm', sq: 'Konfirmo', uk: 'Підтвердити' },
-  'voice.cancel': { en: 'Cancel', sq: 'Anulo', uk: 'Скасувати' },
-  'voice.applied': { en: 'Done', sq: 'Gati', uk: 'Готово' },
-  'voice.undo': { en: 'Undo', sq: 'Zhbëj', uk: 'Скасувати' },
-  'voice.did_you_mean': {
-    en: 'Did you mean?',
-    sq: 'Ndoshta kërkuat këtë?',
-    uk: 'Ви мали на увазі?',
-  },
-  'voice.read_order_title': { en: 'Your order', sq: 'Porosia juaj', uk: 'Ваше замовлення' },
-  'voice.read_order_total': { en: 'Total', sq: 'Totali', uk: 'Разом' },
-  'voice.go_checkout': {
-    en: 'Go to checkout',
-    sq: 'Shko te përfundimi',
-    uk: 'Перейти до оформлення',
-  },
-  'voice.disclosure_body': {
-    en: 'Processed on your device. Audio never leaves your phone. No recording is kept.',
-    sq: 'Përpunohet në pajisjen tuaj. Zëri nuk del kurrë nga telefoni juaj. Nuk ruhet asnjë incizim.',
-    uk: 'Обробляється на вашому пристрої. Аудіо ніколи не залишає ваш телефон. Запис не зберігається.',
-  },
-  'voice.disclosure_use': { en: 'Use voice', sq: 'Përdor zërin', uk: 'Використати голос' },
-  'voice.disclosure_decline': {
-    en: 'Not now / use touch',
-    sq: 'Jo tani / përdor prekjen',
-    uk: 'Не зараз / використати дотик',
-  },
-  'voice.setting_label': { en: 'Voice', sq: 'Zëri', uk: 'Голос' },
-  'voice.err.mic_denied': {
-    en: 'Voice needs mic access — use touch instead',
-    sq: 'Zërit i duhet qasje në mikrofon — përdorni prekjen në vend të tij',
-    uk: 'Голосу потрібен доступ до мікрофона — використайте дотик замість цього',
-  },
-  'voice.err.model_offline': {
-    en: 'Voice unavailable offline',
-    sq: 'Zëri nuk disponohet pa internet',
-    uk: 'Голос недоступний офлайн',
-  },
-  'voice.err.no_match': {
-    en: "Didn't catch that",
-    sq: 'Nuk u kuptua',
-    uk: 'Не вдалося розпізнати',
-  },
-  'voice.err.try_again': {
-    en: "Didn't catch that — try again or use touch",
-    sq: 'Nuk u kuptua — provoni përsëri ose përdorni prekjen',
-    uk: 'Не вдалося розпізнати — спробуйте знову або використайте дотик',
-  },
-  'voice.err.unavailable': {
-    en: 'Voice is unavailable right now',
-    sq: 'Zëri nuk është i disponueshëm tani',
-    uk: 'Голос зараз недоступний',
-  },
-  'voice.retry': { en: 'Retry', sq: 'Provo përsëri', uk: 'Спробувати знову' },
 };

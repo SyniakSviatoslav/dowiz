@@ -167,7 +167,11 @@ function ClientLayoutInner() {
         {/* Heading/body fonts now come from the per-tenant theme (ThemeProvider sets --brand-font-heading /
             --brand-font-body on :root from the cuisine default or the owner's pick). No inline override here —
             an inline style on this div would shadow the :root value for the whole subtree. */}
-        <div {...paperSkinAttr()} className="app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] font-sans">
+        {/* client-shell scopes the global storefront heading-font rule (apps/web/src/index.css) to
+            exactly this subtree — /s/:slug menu, detail modal, checkout, order status — so /admin
+            and /courier (which intentionally keep headings on the neutral body font unless a
+            component opts in) are never affected. */}
+        <div {...paperSkinAttr()} className="client-shell app-shell bg-[var(--brand-bg)] text-[var(--brand-text)] font-sans">
           <header className="sticky top-0 z-sticky h-14 bg-[var(--brand-bg)]/95 backdrop-blur-sm border-b border-[var(--brand-border)] flex items-center px-4 gap-3 shrink-0">
             {logoUrl ? (
               // Hide on load failure instead of showing a broken-image icon (e.g. a stale
@@ -192,8 +196,8 @@ function ClientLayoutInner() {
                 <button
                   data-testid="cart-open"
                   onClick={() => setCartOpen(true)}
-                  className={`w-full h-12 flex items-center justify-center gap-2 text-[var(--color-on-primary)] font-bold text-sm rounded-full shadow-lg ${isBouncing ? 'cart-bounce' : ''}`}
-                  style={{ background: 'var(--brand-primary-strong)', boxShadow: '0 4px 12px color-mix(in srgb, var(--brand-primary) 40%, transparent)' }}
+                  className={`w-full h-12 flex items-center justify-center gap-2 text-[var(--brand-bg)] font-bold text-sm rounded-full shadow-lg ${isBouncing ? 'cart-bounce' : ''}`}
+                  style={{ background: 'var(--brand-primary)', boxShadow: '0 4px 12px color-mix(in srgb, var(--brand-primary) 40%, transparent)' }}
                 >
                   <span className="relative inline-flex">
                     <i className="ti ti-shopping-cart text-lg leading-none" />
@@ -282,7 +286,7 @@ function ClientLayoutInner() {
                   <button
                     data-testid="cart-checkout"
                     onClick={() => { setCartOpen(false); setCheckoutOpen(true); }}
-                    className="w-full h-12 rounded-full bg-[var(--brand-primary-strong)] text-[var(--color-on-primary)] font-bold text-base shadow-xl transition-all active:scale-[0.97]"
+                    className="w-full h-12 rounded-full bg-[var(--brand-primary)] text-[var(--brand-bg)] font-bold text-base shadow-xl transition-all active:scale-[0.97]"
                   >
                     {t('cart.checkout', 'Checkout')}
                   </button>

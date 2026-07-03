@@ -119,7 +119,10 @@ export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd }:
               so the storefront hides unavailable items rather than greying them. */}
         </div>
       )}
-      <div className={`flex flex-col flex-1 gap-1 min-h-0 ${hasPhoto ? 'p-2.5' : 'p-3.5'}`}>
+      {/* Padding snapped onto the --space-* grid (was p-2.5/p-3.5 — off-grid Tailwind fractional
+          defaults): p-3 (12px, --space-3) for photo cards, p-4 (16px, --space-4) for photoless —
+          matches every other card interior in the modal (CONSISTENCY-AUDIT S1). */}
+      <div className={`flex flex-col flex-1 gap-1 min-h-0 ${hasPhoto ? 'p-3' : 'p-4'}`}>
         {/* Photoless cards have no image corner to host the chef-pick cue, so it surfaces inline. */}
         {!hasPhoto && isChefPick && (
           <span className={`self-start text-step-2xs font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 mb-0.5 ${reserveGutter ? 'ml-7' : ''}`} style={{ background: 'color-mix(in srgb, var(--brand-primary) 14%, transparent)', color: 'var(--brand-primary-readable)' }}>
@@ -127,7 +130,10 @@ export function ProductCard({ product, onAdd, onClick, compareGutter, hideAdd }:
           </span>
         )}
         <div className={`flex items-start justify-between gap-1.5 ${reserveGutter && !isChefPick ? 'pl-7' : ''}`}>
-          <h3 className={`font-semibold leading-tight line-clamp-2 flex-1 ${hasPhoto ? 'text-step-sm min-h-[2.5em]' : 'text-step-base'}`} style={{ color: 'var(--brand-text)', fontFamily: 'var(--brand-font-heading)' }}>{product.name}</h3>
+          {/* fontFamily comes from the global .client-shell heading rule (apps/web/src/index.css)
+              now — the inline override here used to be the ONLY place setting it, which is why the
+              detail modal's <h2> (no override) rendered in the body font instead. */}
+          <h3 className={`font-semibold leading-tight line-clamp-2 flex-1 ${hasPhoto ? 'text-step-sm min-h-[2.5em]' : 'text-step-base'}`} style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
           {!hideAdd && (
           <motion.button
             data-testid="menu-item-add"
