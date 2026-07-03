@@ -1,8 +1,10 @@
 # ADR — Audit-fix: cross-tenant authz + the missing data-access seam
 
-- Status: **DRAFT (design-only)** — Council STEP 1 (FRAME + PROPOSE). Not approved; Breaker + Counsel run
-  next. No production code until per-finding sign-off (authz/PII red-line).
-- Date: 2026-07-03
+- Status: **DRAFT (design-only) — rev 3, post RE-ATTACK round 2.** Council STEP 3 (RESOLVE) applied twice;
+  breaker re-attack R2-1..R2-6 dispositioned (`resolution-r2.md`). Not approved; conductor may re-attack
+  (round 3). No production code until per-finding sign-off (authz/PII red-line). The frozen 14-site code
+  batch is in-flight in a parallel implementation lane; rev-3 deltas are additive.
+- Date: 2026-07-03 (rev 3)
 - Deciders: System Architect (proposer), Council (authz/PII/RLS red-line), Operator + DB owner.
 - Relates / does NOT supersede: `ADR-security-hardening-2026-07` (this is the **PATCH sibling** left
   behind by that batch's GET/#1, spa-proxy/#6, invite/#7 fixes, plus the class-killer seam),
@@ -24,6 +26,11 @@ The 2026-07-03 audit found four live cross-tenant findings (verified against sou
 - **LC5/F2 (HIGH, CRIT-impact):** `owner/gdpr.ts:48` trusts body `customerId`; `lib/anonymizer/index.ts:
   119/133` UPDATE has no `location_id` → irreversible cross-tenant PII erasure.
 - **F5 (MED):** `lib/signals/compute.ts:86` reads `customers WHERE id=$1`, no `location_id`.
+- **#15 / R2-1 (CRIT, found in re-attack):** `owner/menu-availability.ts:113` INSERT `menu_schedules`
+  trusts body `product_id`/`category_id` (plain FKs, mig `062:28-29`); `read_public_menu` (mig
+  `064:139-160`) + `product_available_now` (mig `062:120-123`) scan `menu_schedules` with **no
+  `location_id` predicate** under `public_select USING(true)` → any owner hides/rewrites ANY tenant's
+  product/category on the victim's live public storefront. Falsified rev-2's "complete enumerated surface."
 
 **Root (arch F2 / synthesis R-A):** no enforced data-access seam. `withTenant` in 22/65 route files; the
 membership resolver cloned with divergent failure (`null`→401 vs `throw`→500); the tenant predicate is a
@@ -42,19 +49,37 @@ repositories **incrementally** as debt-paydown.
    - F3/F4 — add `requireRole(['owner'])` preValidation hook to both files; F4 allow-lists `role`; scope
      courier mutations to `courier_locations`, not the global row.
    - LC5 — validate `customerId` same-tenant at the entry (404 else) **and** add `AND location_id=$2` to
-     the anonymizer SELECT/UPDATE (and symmetric `anonymizeOrder`).
+     the anonymizer SELECT/UPDATE (and symmetric `anonymizeOrder`). Provenance stamps the **subject's true
+     tenant** on **BOTH** audit inserts — anonymizer `index.ts:291` AND the worker
+     `anonymizer-gdpr.ts:74-78` (R2-5; worker fix covered-by-implementation).
    - F5 — thread `locationId` + `AND location_id=$2` into `compute.ts`.
+   - **#15 / R2-1 (added rev 3)** — writer fold-in (code-only): `menu-availability.ts:115` INSERT →
+     `INSERT…SELECT … WHERE EXISTS(products/categories WHERE id=body-fk AND location_id=$verified)`,
+     0 rows → 404. Siblings (kitchen-busy PATCH, schedule DELETE) verified SAFE; no schedule UPDATE exists.
+   - The complete live surface = the frozen 14 §2 sites + **#15** + the anonymizer sink, now resting on the
+     **mechanical FK-sweep** (proposal §3.9), not manual convergence.
 2. **Tier-1 guardrails (same batch — the reason the class stays closed):**
    - Tighten `local/require-auth-hook` to require `verifyAuth` **AND** `requireRole` on
      `routes/{owner,courier}/**` (explicit allow-list for pre-account routes); ratchet warn→error.
-   - New `local/no-unscoped-tenant-query` ESLint rule: FAIL on a raw `.query` touching a tenant table
-     without a tenant predicate / `withTenant` context, with a grep-auditable `-- tenant-scoped-ok`
-     escape hatch. Land at warn with the current count as the ratchet floor; burn to error.
+   - New `local/no-unscoped-tenant-query` ESLint rule (prove-or-allowlist, fail-closed). **Honestly
+     re-cost rev 3 (R2-2):** ~87 forced-UNKNOWN, not ~15-25 → **two tiers**: **Tier-A `error` day-1**
+     (SELECT/UPDATE/DELETE predicate proof + dynamic-`${}` fail-closed) and **Tier-B `warn`→count-floor-
+     ratchet→`error`** (`INSERT…VALUES`, ~60 sites). Evasions closed (R2-3): `$n`-anchor required,
+     DML-CTE/multi-statement → UNKNOWN, view-manifest extension. **The child-FK-injection class is OUT of
+     the lint's model** — the **mechanical FK-sweep (proposal §3.9) is the named companion gate** (the two
+     together are the class-killer, not the lint alone).
    - Wire `test:unit` (incl. the never-run `phase5/rls-adversarial.test.ts`) into CI against the
-     fresh-provision service DB; skip-of-a-should-succeed-setup = FAIL.
-3. **Tier-2 (subsequent tracks):** collapse resolver clones → one `getOwnerLocationId` (single
-   `null→401`); per-aggregate repositories behind the lint gate.
-4. **Hand-off:** Section-E RLS-policy migrations + NOBYPASSRLS flip → B3/flip council (sequencing
+     fresh-provision service DB; skip-of-a-should-succeed-setup = FAIL. `IDOR_TABLES` gains
+     `menu_schedules` (+ the resolution.md §3.6 additions).
+3. **Tier-2 (subsequent tracks):** collapse resolver clones → one core
+   **`resolveOwnerMembership(db, userId, activeLocationId?)`** (signature widened rev 3 / R2-4 to carry
+   the ADR-0004 P-d verify branch present in 5/6 clones) + thin per-caller adapters preserving each
+   caller's contract; per-aggregate repositories behind the lint gate.
+4. **Migration tracks (operator-gated, red-line):** (i) **M-F3** (`courier_locations.status` per-location
+   deactivation); (ii) **M-menu-sched-read (rev 3 / R2-1):** forward-only `CREATE OR REPLACE` adding the
+   `location_id` predicate to `read_public_menu` + `product_available_now` (L2-mechanics checklist +
+   equivalence fixture, proposal §3.8) — defense-in-depth over the §3.7 writer fix, not co-blocking.
+5. **Hand-off:** Section-E RLS-policy migrations + NOBYPASSRLS flip → B3/flip council (sequencing
    contract; this batch is a prerequisite, not a conflict).
 
 ## Consequences
@@ -63,8 +88,14 @@ repositories **incrementally** as debt-paydown.
   query = CI failure); the genuinely-good adversarial IDOR test finally runs; failure semantics unified.
 - **Cost / risk:** status-code-only behavior change on previously-exploitable calls (200→404/403) — a
   leak correction, not a break for same-tenant callers; `promotions.ts` authz 500→401 (flag for Breaker —
-  confirm no caller depends on the 500); the new lint is heuristic (escape-hatch mitigates, kept
-  grep-auditable). Repository migration is L-effort and deferred/staged.
+  confirm no caller depends on the 500); the new lint is heuristic (Tier-A `error`, Tier-B `warn`/ratchet —
+  honest re-cost R2-2; FK class covered by the sweep, not the lint). The #15 batch is no longer purely
+  code-only: the read-path fix (§3.8) is a red-line migration (operator-gated). Repository migration is
+  L-effort and deferred/staged. **ACCEPT-RISK (R2-6):** the allowlist certifies the SQL string, not the
+  call site — an adjacent-guard removal that keeps the SQL byte-identical passes the lint; backstopped by
+  the rls-adversarial behavioral sweep + `reason`-cites-guard + fold-guard-into-statement. **DEFER-FLAG
+  (LOW):** `products.ts:432` body `category_id` unverified (self-scoped, no cross-tenant harm) — hygiene
+  predicate recommended, not a ship-blocker.
 - **Proof:** every fix ships red→green (proposal §6) + a `REGRESSION-LEDGER.md` row; no cheat-green.
 
 ## Alternatives considered
@@ -86,3 +117,12 @@ repositories **incrementally** as debt-paydown.
   semantics (should deactivating in A ever affect B? design says no).
 - OR-4 (operator): confirm the CI `test:unit` job can reach the fresh-provision service DB with seeded
   owner-A/owner-B fixtures (the test `process.exit(1)`s without them — must not be silently skipped).
+- OR-5 (operator, rev 3 / R2-1): schedule the M-menu-sched-read migration (§3.8) — red-line, staged-DB
+  first + equivalence proof. The §3.7 writer fix closes NEW injections independently, so this is
+  defense-in-depth for historically-injected rows, not co-blocking.
+- OR-6 (operator, rev 3 / R2-1): **"was #15 exploited?"** — before the read-path migration, scan
+  `menu_schedules s JOIN products p ON p.id=s.product_id WHERE p.location_id <> s.location_id` (+ category
+  variant) for cross-tenant rows; fold the outcome into the STOP-1 record. Near-vacuous now (operator-seeded
+  demos); binds at real tenant #2.
+- OR-7 (rev 3 / R2-2): lint Tier-B floor is the exact `INSERT…VALUES` count (~60 measured) — lock it at
+  implementation time; confirm Tier-B `warn`-not-`error` day-1 is acceptable to the operator.

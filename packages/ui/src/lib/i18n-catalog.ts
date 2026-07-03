@@ -4347,4 +4347,26 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Nuk e përcaktuam dot vendndodhjen e dorëzimit — ju lutemi vendosni pikën në hartë.',
     uk: 'Не вдалося визначити місце доставки — будь ласка, поставте позначку на мапі.',
   },
+
+  // --- audit-fix (S4 silent-mutation-failure, sub-lane sites) — 2026-07-03, frontend data-integrity lane ---
+  'admin.kitchen_busy_save_failed': {
+    en: 'Could not update kitchen status. Please try again.',
+    sq: 'Statusi i kuzhinës nuk u përditësua. Provo përsëri.',
+    uk: 'Не вдалося оновити статус кухні. Спробуйте ще раз.',
+  },
+  'promotions.toggle_error': {
+    en: 'Could not update promotion status. Please try again.',
+    sq: 'Statusi i promovimit nuk u përditësua. Provo përsëri.',
+    uk: 'Не вдалося оновити статус акції. Спробуйте ще раз.',
+  },
+  'admin.logo_not_ready': {
+    en: 'Still loading your store — try again in a moment.',
+    sq: 'Ende po ngarkojmë dyqanin tuaj — provoni sërish pas pak.',
+    uk: 'Ще завантажуємо ваш магазин — спробуйте за мить.',
+  },
+  'admin.logo_upload_failed': {
+    en: 'Failed to save your logo. Please try again.',
+    sq: 'Logoja nuk u ruajt. Ju lutemi provoni përsëri.',
+    uk: 'Не вдалося зберегти логотип. Спробуйте ще раз.',
+  },
 };
