@@ -34,3 +34,16 @@ NEXT-TIME: When designing any recurring obligation, specify in the same breath (
 LINK:      docs/regressions/REGRESSION-LEDGER.md #48 ; scripts/agent-health-pass.mjs ;
            [[meta-loop-audit-2026-07-02]]
 ---
+
+**Curation note (librarian, 2026-07-04 drain pass):** CHALLENGE — this WHY ("the system only
+sustains hook-enforced or gate-checked behaviors") is a real, high-confidence root, but it is not
+NEW here: it is the generalization of the SAME mechanism already distilled from the sibling P0
+reflection (`2026-07-02-governance-gates-rot-open.reflection.md`) into
+`docs/lessons/2026-07-02-gate-state-file-expiry.md` (active, ledger #47), and it is already fully
+enacted as deterministic artifacts in ledger #48 (`scripts/guardrail-ledger-integrity.mjs`,
+`scripts/loops-registry-sync.mjs --check`, `scripts/agent-health-pass.mjs`, hooks v2 armament). A
+second lesson restating the same causal claim at a broader scope would be a duplicate trigger
+("collapse to the single load-bearing lesson," CLAUDE.md) with no new file-glob or error-signature
+it could attach to beyond what already exists — PRUNED, not distilled. No new artifact needed;
+the guardrails already ARE the promotion. Archiving (this reflection's content is fully subsumed
+by shipped ledger #47/#48 work, not a fresh regression).

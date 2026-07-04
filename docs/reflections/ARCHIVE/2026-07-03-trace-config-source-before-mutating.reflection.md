@@ -56,6 +56,18 @@ This is already being ratcheted into a gate: `scripts/ci-connection-preflight.mj
 deterministic pre-deploy check.
 
 ## LINK
-[[merge-to-main-plan-2026-07-02]] · docs/reflections/INBOX/ci-pre-prod-verification-2026-07-03.md
+[[merge-to-main-plan-2026-07-02]] · docs/reflections/ARCHIVE/ci-pre-prod-verification-2026-07-03.md
 (the gate-side reflection; this is the method-side) · docs/design/ci-pre-prod-verification/ ·
 prod-outage-schema-drift-2026-06-20 (P3 recurrence).
+
+---
+
+**Curation note (librarian, 2026-07-04 drain pass):** Already fully promoted in a prior pass —
+`docs/lessons/2026-07-03-secret-store-provenance-trace.md` (STATUS active, cites this reflection
+as source, TRIGGER `.github/workflows/**` / `ESSLREQUIRED`, both already in INDEX) and
+`docs/regressions/REGRESSION-LEDGER.md` #52 (`scripts/ci-connection-preflight.mjs`, red→green
+proven this session per the ledger row) already cover this causal claim in full. CHALLENGE
+re-confirms: not a coincidence — the Fly-vs-GitHub-secret confusion and the deploy-and-observe
+sslmode loop are directly attested in this session's own command history, with a local repro as
+counterfactual proof. This file was simply never moved out of INBOX after promotion — archiving
+now to close the orphan (no new lesson/guardrail work needed).

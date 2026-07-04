@@ -31,3 +31,14 @@ NEXT-TIME: Any gate released by a state file needs (a) an expiry in the state it
 LINK:      docs/regressions/REGRESSION-LEDGER.md #47 ; scripts/guardrail-gate-armament.mjs ;
            memory meta-loop-audit-2026-07-02
 ---
+
+**Curation note (librarian, 2026-07-04 drain pass):** Already fully promoted in a prior pass —
+`docs/lessons/2026-07-02-gate-state-file-expiry.md` (STATUS active, cites this reflection as
+source) and `docs/regressions/REGRESSION-LEDGER.md` #47 (`scripts/guardrail-gate-armament.mjs`,
+19 hermetic DENY/ALLOW simulations, red→green proven) already exist and cover this causal claim in
+full; the `.claude/state/**` / `.claude/hooks/**` INDEX rows are already present. CHALLENGE
+re-confirms the causality holds (not a coincidence: the 400+ blind-ALLOW streak + guard-bash's
+wholesale unregistration are directly observable in `.claude/logs/classification.log` and commit
+`43a018c1`, and guard-bash is now re-registered per `.claude/settings.json:72`). This file was
+simply never moved out of INBOX after promotion — archiving now to close the orphan (no new
+lesson/guardrail work needed).
