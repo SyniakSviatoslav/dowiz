@@ -1,0 +1,30 @@
+[workspace]
+resolver = "2"
+members = ["crates/domain", "crates/api"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+license = "AGPL-3.0-or-later"
+publish = false
+
+# ── Ratchet culture, ported into the compiler (REBUILD-MAP §Guardrails) ──
+# CI runs `cargo clippy --all-targets -- -D warnings` on top of this: clippy::all promoted to
+# deny turns every clippy warning into a build failure; the specific restriction lints below are
+# the direct Rust analogs of the retired eslint-plugin-local intent catalog (13-scripts-ops-
+# guardrails.md §2b: no-process-exit → clippy::exit, no-tautological-assertion →
+# clippy::assertions_on_constants, no-swallowed-catch/no-empty-catch → clippy::map_err_ignore +
+# clippy::let_underscore_must_use, no-raw-any → clippy::as_conversions).
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+exit = "deny"
+assertions_on_constants = "deny"
+map_err_ignore = "warn"
+let_underscore_must_use = "warn"
+as_conversions = "warn"
+unwrap_used = "warn"
+expect_used = "warn"

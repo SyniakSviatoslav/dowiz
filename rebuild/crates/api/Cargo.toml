@@ -1,0 +1,44 @@
+[package]
+name = "api"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "api"
+path = "src/main.rs"
+
+[dependencies]
+domain = { path = "../domain" }
+
+axum = { version = "0.8", features = ["json"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time"] }
+tower = { version = "0.5", features = ["timeout", "util"] }
+tower-http = { version = "0.6", features = ["trace", "request-id", "util"] }
+
+# runtime-tokio + rustls (not native-tls) so the eventual musl/scratch static build (rebuild/Dockerfile)
+# never needs to link OpenSSL — see REBUILD-MAP inventory/13 §Dockerfile.
+sqlx = { version = "0.8", default-features = false, features = [
+  "runtime-tokio-rustls",
+  "postgres",
+  "uuid",
+  "chrono",
+] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+thiserror = "2"
+
+utoipa = { version = "5", features = ["axum_extras"] }
+
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }

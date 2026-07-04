@@ -1,0 +1,23 @@
+[package]
+name = "domain"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+# Deliberately dependency-light: this crate is the invariant core (money, order-status
+# transitions, tenant identity, error taxonomy) and must stay pure — no IO, no sqlx, no tokio.
+# `#[derive(sqlx::Type)]` on OrderStatus (per REBUILD-MAP inventory/12 §9) is NOT wired yet —
+# see rebuild/README.md "Open questions" for why that's deferred to the contract lane.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[dev-dependencies]
+serde_json = "1"

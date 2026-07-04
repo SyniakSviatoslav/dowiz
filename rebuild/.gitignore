@@ -1,0 +1,4 @@
+# rebuild/ is a Cargo workspace; only the build output is ignored — Cargo.lock is committed
+# (this workspace ships binaries, so a reproducible lockfile is the desired default).
+target/
+**/*.rs.bk
