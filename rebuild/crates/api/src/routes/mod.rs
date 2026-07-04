@@ -10,6 +10,14 @@ pub mod theme;
 pub mod vapid;
 pub mod voice_config;
 
+// ── S2 auth surface (openapi-s2-auth.yaml) ──
+pub mod auth_claim;
+pub mod auth_courier;
+pub mod auth_customer;
+#[cfg(feature = "dev-routes")]
+pub mod auth_dev;
+pub mod auth_owner;
+
 use tower_http::request_id::RequestId;
 
 /// Shared by every S1 handler that builds an `ApiError`: the server-authoritative correlation id

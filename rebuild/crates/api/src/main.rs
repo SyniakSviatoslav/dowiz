@@ -6,15 +6,22 @@
 // See domain/src/lib.rs for why `unwrap`/`expect` are relaxed in `#[cfg(test)]` only.
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
+mod auth;
+mod cache;
 mod config;
 mod db;
 mod dto;
 mod error;
+mod middleware;
 mod openapi;
 mod repo;
 mod routes;
 mod service;
 mod storage;
+// Test-only: throwaway RSA keypairs generated at runtime (crates/api/src/test_support.rs) —
+// replaces committed test_keys/*.pem so no key material ever enters the tree (secrets hygiene).
+#[cfg(test)]
+pub(crate) mod test_support;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -30,8 +37,9 @@ use tower_http::trace::TraceLayer;
 
 use config::Config;
 use db::Pools;
-use repo::{PgRepo, PublicRepo};
-use storage::{LocalFsStorage, Storage};
+use middleware::ratelimit::RateLimitLayer;
+use repo::{CachedRepo, PgRepo, PublicRepo};
+use storage::{LocalFsStorage, R2Storage, Storage};
 
 /// How long in-flight requests get to finish once a shutdown signal arrives before the process
 /// force-exits. Chosen well under Fly's default stop-signal-to-SIGKILL grace period.
@@ -41,6 +49,11 @@ const SHUTDOWN_DEADLINE: Duration = Duration::from_secs(10);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 const CORRELATION_ID_HEADER: &str = "x-correlation-id";
+
+/// S1 follow-up #3 (rebuild/README.md "New follow-ups": rate-limiting middleware) — matches
+/// Node's global limiter (`apps/api/src/server.ts:360-376`: `max: 100, timeWindow: '1 minute'`).
+const RATE_LIMIT_MAX_REQUESTS: u32 = 100;
+const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 
 /// Shared app state for every S1 handler. `media_rich_enabled`/`app_base_url`/`r2_public_url`
 /// are raw env reads at boot (see `routes/voice_config.rs`'s module doc for why these stay raw
@@ -73,7 +86,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     let state = Arc::new(build_app_state(&pools));
-    let app = build_router(state);
+    let mut app = build_router(state);
+
+    // ── S2 auth surface (dark) ──
+    // Mount the auth router ONLY when the JWT/auth env is present (AuthConfig fail-fasts on a
+    // prod box carrying dev-auth vars — boot-guard D). When the auth env is absent (e.g. an
+    // S1-only boot), the auth routes stay DARK (unmounted) — the openapi document still lists
+    // them (openapi.rs) so `openapi-diff` is satisfied, but they are not served. Launching S2 is
+    // the separate, explicit act of providing the JWT keys.
+    match build_auth_state(&pools) {
+        Ok(auth_state) => {
+            app = app.merge(auth::auth_router(auth_state));
+            tracing::info!("S2 auth surface mounted");
+        }
+        Err(err) => {
+            tracing::warn!(%err, "S2 auth surface DARK — JWT/auth env not configured; not mounting auth routes");
+        }
+    }
 
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", config.port)).await?;
     tracing::info!(port = config.port, "listening");
@@ -90,10 +119,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// live Postgres.
 fn build_app_state(pools: &Pools) -> AppState {
     AppState {
-        repo: Arc::new(PgRepo::new(pools.operational.clone())),
-        storage: Arc::new(LocalFsStorage::new(
-            std::env::var("LOCAL_STORAGE_DIR").unwrap_or_else(|_| "tmp/imports".to_string()),
-        )),
+        // S1 follow-up #1: `CachedRepo` (repo.rs) wraps the real `PgRepo` with the TTL+SWR cache
+        // — `AppState.repo` stays `Arc<dyn PublicRepo>` either way, so every route handler and
+        // every route module's test fixtures are untouched by this.
+        repo: Arc::new(CachedRepo::new(Arc::new(PgRepo::new(
+            pools.operational.clone(),
+        )))),
+        storage: build_storage(),
         media_rich_enabled: std::env::var("MEDIA_RICH_ENABLED").as_deref() == Ok("true"),
         app_base_url: std::env::var("APP_BASE_URL")
             .unwrap_or_else(|_| "https://dowiz.fly.dev".to_string()),
@@ -101,6 +133,56 @@ fn build_app_state(pools: &Pools) -> AppState {
             .ok()
             .filter(|s| !s.is_empty()),
     }
+}
+
+/// S1 follow-up #2: `STORAGE_BACKEND=r2` selects the real R2 client (`storage::R2Storage`);
+/// anything else (including unset, the safe default for local/dev) keeps `LocalFsStorage`. This
+/// is a NEW, explicit selector env var — Node instead infers R2 implicitly from
+/// `R2_BUCKET && R2_ENDPOINT` both being set (`server.ts:306`) with no separate flag. Flagged
+/// deviation: this follow-up's brief asked for `STORAGE_BACKEND=local|r2` specifically, so an
+/// explicit flag was built rather than Node's implicit-presence gate; whoever wires a live deploy
+/// should pick ONE of the two conventions, not carry both.
+///
+/// Fails fast (panics before ever listening) if `STORAGE_BACKEND=r2` is set but any of the 4
+/// `R2_*` vars is missing — same boot philosophy as `Config::from_env`, and matches Node's own
+/// `R2StorageProvider` constructor throwing on a missing `R2_BUCKET`/`R2_ENDPOINT`
+/// (`r2-storage.ts:18-20`).
+fn build_storage() -> Arc<dyn Storage> {
+    match std::env::var("STORAGE_BACKEND").as_deref() {
+        Ok("r2") => match R2Storage::from_env() {
+            Ok(r2) => Arc::new(r2),
+            Err(err) => {
+                tracing::error!(%err, "boot failed: STORAGE_BACKEND=r2 misconfigured");
+                panic!("boot failed: STORAGE_BACKEND=r2 misconfigured: {err}");
+            }
+        },
+        _ => Arc::new(LocalFsStorage::new(
+            std::env::var("LOCAL_STORAGE_DIR").unwrap_or_else(|_| "tmp/imports".to_string()),
+        )),
+    }
+}
+
+/// Build the S2 `AuthState` from env + pools. `Err` when the JWT/auth env is missing or invalid
+/// (the auth surface then stays dark — see the call site). Store/Google default to in-memory /
+/// null (Redis + a real Google client are prod wirings behind those seams, A19). The PII cipher
+/// loads from `COURIER_PII_ENCRYPTION_KEY` when present; without it courier redeem returns a typed
+/// 500 rather than writing plaintext PII.
+fn build_auth_state(pools: &Pools) -> Result<auth::AuthState, Box<dyn std::error::Error>> {
+    let cfg = auth::config::AuthConfig::from_env()?;
+    let verifier = Arc::new(auth::jwt::JwtVerifier::from_config(&cfg)?);
+    let pii_cipher = std::env::var("COURIER_PII_ENCRYPTION_KEY")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .and_then(|k| auth::pii::PiiCipher::from_base64(&k).ok())
+        .map(Arc::new);
+    Ok(auth::AuthState::new(
+        verifier,
+        Arc::new(auth::repo::PgAuthRepo::new(pools.operational.clone())),
+        Arc::new(cfg),
+        Arc::new(auth::store::InMemoryStore::default()),
+        Arc::new(auth::store::NullGoogleClient),
+        pii_cipher,
+    ))
 }
 
 fn build_router(state: Arc<AppState>) -> Router {
@@ -186,6 +268,14 @@ fn build_router(state: Arc<AppState>) -> Router {
         .layer(PropagateRequestIdLayer::new(correlation_header.clone()))
         .layer(TraceLayer::new_for_http())
         .layer(SetRequestIdLayer::new(correlation_header, MakeRequestUuid))
+        // S1 follow-up #3: outermost layer (added last) — gates every route the same way Node's
+        // globally-registered `fastifyRateLimit` does (`server.ts:360-376`), before request-id
+        // assignment even runs (the layer mints its own correlation id per rejected request; see
+        // `middleware/ratelimit.rs`).
+        .layer(RateLimitLayer::new(
+            RATE_LIMIT_MAX_REQUESTS,
+            RATE_LIMIT_WINDOW,
+        ))
         .with_state(state)
 }
 

@@ -68,6 +68,35 @@ pub enum ErrorCode {
     /// code for a `..`/NUL/backslash-shaped object key
     /// (`apps/api/src/routes/spa-proxy.ts:165,190` `INVALID_KEY`).
     InvalidKey,
+
+    // ── S2 auth code set (openapi-s2-auth.yaml ErrorEnvelope `code` enumeration) ──
+    // Each maps to a fixed HTTP status in `http_status` below; the SCREAMING_SNAKE serialization
+    // is the FE-branchable contract (append-only, never renamed — ADR-0010 §4b).
+    /// 401 — bad email/password OR unknown identity (indistinguishable by design; local.ts:91,
+    /// courier/auth.ts:256).
+    InvalidCredentials,
+    /// 401 — the account has no `password_hash` (Google/Telegram-only account; local.ts:96).
+    WrongAuthMethod,
+    /// 401 — the ADR-0004 P-c live role re-derive found no active owner membership (auth.ts:300).
+    OwnerRevoked,
+    /// 410 — courier invite invalid/expired/used/revoked (courier/auth.ts:62).
+    InviteInvalid,
+    /// 401 — wrong courier invite code (courier/auth.ts:71).
+    InvalidCode,
+    /// 401 — malformed/mismatched courier refresh token (courier/auth.ts:394,415).
+    InvalidRefreshToken,
+    /// 401 — courier session id not found on refresh (courier/auth.ts:407).
+    SessionNotFound,
+    /// 401 — courier refresh token reuse detected, family revoked (courier/auth.ts:427).
+    RefreshReused,
+    /// 401 — courier refresh token past its expiry (courier/auth.ts:432).
+    RefreshExpired,
+    /// 403 — courier account deactivated (courier/auth.ts:278,439).
+    CourierDeactivated,
+    /// 403 — explicit `location_id` is not one of the courier's memberships (courier/auth.ts:291).
+    NotAuthorizedForLocation,
+    /// 403 — courier has no assigned location at all (courier/auth.ts:300).
+    NoLocationAssigned,
 }
 
 impl ErrorCode {
@@ -91,6 +120,19 @@ impl ErrorCode {
             ErrorCode::Internal => 500,
             ErrorCode::ServiceUnavailable => 503,
             ErrorCode::InvalidKey => 400,
+            // ── S2 auth codes (openapi-s2-auth.yaml per-operation response statuses) ──
+            ErrorCode::InvalidCredentials
+            | ErrorCode::WrongAuthMethod
+            | ErrorCode::OwnerRevoked
+            | ErrorCode::InvalidCode
+            | ErrorCode::InvalidRefreshToken
+            | ErrorCode::SessionNotFound
+            | ErrorCode::RefreshReused
+            | ErrorCode::RefreshExpired => 401,
+            ErrorCode::CourierDeactivated
+            | ErrorCode::NotAuthorizedForLocation
+            | ErrorCode::NoLocationAssigned => 403,
+            ErrorCode::InviteInvalid => 410,
         }
     }
 }
@@ -222,5 +264,30 @@ mod tests {
     fn error_alias_always_equals_message() {
         let envelope = ErrorEnvelope::new(ErrorCode::NotFound, "Location not found", "corr-1");
         assert_eq!(envelope.error, envelope.message);
+    }
+
+    /// S2 auth codes serialize SCREAMING_SNAKE and map to the openapi-s2-auth.yaml statuses.
+    #[test]
+    fn s2_auth_codes_serialize_and_map_status() {
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::OwnerRevoked).unwrap(),
+            "\"OWNER_REVOKED\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::InvalidRefreshToken).unwrap(),
+            "\"INVALID_REFRESH_TOKEN\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::CourierDeactivated).unwrap(),
+            "\"COURIER_DEACTIVATED\""
+        );
+        // Status parity with the contract.
+        assert_eq!(ErrorCode::InvalidCredentials.http_status(), 401);
+        assert_eq!(ErrorCode::WrongAuthMethod.http_status(), 401);
+        assert_eq!(ErrorCode::OwnerRevoked.http_status(), 401);
+        assert_eq!(ErrorCode::InviteInvalid.http_status(), 410);
+        assert_eq!(ErrorCode::CourierDeactivated.http_status(), 403);
+        assert_eq!(ErrorCode::NotAuthorizedForLocation.http_status(), 403);
+        assert_eq!(ErrorCode::NoLocationAssigned.http_status(), 403);
     }
 }

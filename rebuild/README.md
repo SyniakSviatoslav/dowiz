@@ -74,14 +74,20 @@ every S1 route is unauthenticated and verified (against live Node) to never call
 `with_tenant` correctly remains uncalled after this build (see `db.rs`/`repo.rs` module docs).
 
 **New follow-ups this build surfaced (not in the original Phase-A open-questions list):**
-1. No menu/info in-process TTL cache (Node's connection-burst guard, `menu.ts:76-111`) — an
-   axum/tokio caching-layer concern orthogonal to the data-shape port; flagged per-handler.
-2. No R2 storage backend (`r2-storage.ts`) — only `LocalFsStorage` is wired; S1's `/images/*`
-   and `/media/*` need a real object-store client before a staging deploy.
-3. No rate-limiting middleware — the contract's `RateLimited` response component exists in the
-   OpenAPI schema but no tower layer enforces it yet (cross-cutting, not per-operation).
+1. ~~No menu/info in-process TTL cache~~ — **BUILT** (S1-FOLLOWUPS lane): `cache.rs`'s generic
+   `TtlSwrCache` (fresh TTL / stale-while-revalidate / stale-on-error, Node's real 30s/300s/1h
+   constants) wraps `read_public_menu`/`location_info` via `repo.rs`'s `CachedRepo` decorator —
+   see that module's doc for the deliberate cache-BOUNDARY and SWR-window parity notes.
+2. ~~No R2 storage backend~~ — **BUILT**: `storage.rs`'s `R2Storage` (SigV4-signed GetObject via
+   `aws-sign-v4`+`reqwest`/rustls, NOT `aws-sdk-s3`/`object_store` — both need `cmake`, unavailable
+   in-sandbox; see that struct's doc). Selected via `STORAGE_BACKEND=r2` in `main.rs`.
+3. ~~No rate-limiting middleware~~ — **BUILT**: `middleware/ratelimit.rs`'s `RateLimitLayer`, a
+   per-`Fly-Client-IP` fixed-window counter (100/60s, matches Node's global `@fastify/rate-limit`
+   registration) returning the ADR-0010 429 envelope + `Retry-After`. Wired as the outermost layer
+   in `main.rs::build_router`.
 4. `getStorefrontOrderPageLegacy`'s x-quirk (port-as-alias-vs-second-handler decision) was left
-   as its own handler, matching the contract's explicit "port decision row" framing.
+   as its own handler, matching the contract's explicit "port decision row" framing — still open,
+   out of scope for the S1-FOLLOWUPS lane (doesn't touch storage/cache/rate-limiting).
 
 ## Build / test / run
 

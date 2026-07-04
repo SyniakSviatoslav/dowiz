@@ -58,5 +58,50 @@ utoipa = { version = "5", features = ["axum_extras", "uuid"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# ── S2 auth port additions ──
+# RS256 sign/verify + kid-header handling (jwt.ts port) — "use_pem" so RSA keys load from the
+# same `\n`-escaped PEM strings the Node env carries (JWT_PRIVATE_KEY etc.).
+jsonwebtoken = { version = "9", default-features = false, features = ["use_pem"] }
+# Owner/courier password verify (argon2id) — the Rust `argon2` crate reads/writes the same PHC
+# string format (`$argon2id$...`) Node's `argon2` lib produces, so existing hashes verify as-is.
+argon2 = "0.5"
+# sha256 hashing for refresh-token/opaque-code lookups (auth_refresh_tokens.token_hash,
+# customer_track_grants.token_hash, courier invite code_hash) — hex-string digests, never raw
+# bytes, matching Node's `crypto.createHash('sha256').update(x).digest('hex')`.
+sha2 = "0.10"
+hex = "0.4"
+# Opaque token/code generation (64-hex refresh tokens, OAuth handoff codes) — CSPRNG bytes,
+# matching Node's `crypto.randomBytes(32).toString('hex')`.
+rand = "0.8"
+# Courier PII-at-rest encryption (threat-model asset A7) — AES-256-GCM, layout [IV(12)][ct][tag(16)],
+# byte-compatible with the Node `pii-cipher.ts` format so encrypted columns are cross-stack-readable.
+aes-gcm = "0.10"
+base64 = "0.22"
+
+# ── S1 follow-up #2: R2 object-storage backend (crates/api/src/storage.rs::R2Storage) ──
+# "rustls-tls" (not the default "default-tls", which pulls native-tls/OpenSSL) keeps this on the SAME
+# ring-backed rustls stack sqlx already uses — no native build tool needed. Deliberately NOT
+# aws-sdk-s3/object_store (both pull aws-lc-rs, which needs `cmake`, unavailable in this sandbox) —
+# see R2Storage's module doc for the full rationale.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+# SigV4 request signing ONLY (no HTTP client, no AWS SDK) — pairs with reqwest above for R2Storage's
+# GetObject call. Built on ring/hmac/sha2, all already resolved transitively via sqlx-postgres's
+# SCRAM auth, so this + reqwest add 24 new crates total vs. ~70+ for aws-sdk-s3.
+aws-sign-v4 = "0.3"
+
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
+# Test-only throwaway RSA-2048 keypair generation (test_support.rs) — replaces committed
+# test_keys/*.pem so no key material enters the tree. Zero new crates: sqlx-mysql already
+# depends on rsa 0.9.10 (fully resolved in Cargo.lock).
+rsa = { version = "0.9", default-features = false, features = ["std", "pem"] }
+
+[features]
+default = []
+# Compiles the dev-auth mint surface (/dev/mock-auth + /api/dev/mock-auth, dev-kid signing/
+# verification) INTO the binary. Deliberately NOT a default feature — ADR-0003 layer 3
+# (dev-kid segregation): a release binary built without this feature is structurally
+# incapable of accepting or minting a dev-kid token, independent of any env var (the runtime
+# ALLOW_DEV_LOGIN/DEV_AUTH_SECRET gate is belt-and-suspenders on TOP of this, not instead of
+# it). Staging/CI builds pass `--features dev-routes` explicitly.
+dev-routes = []
