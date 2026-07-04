@@ -104,6 +104,12 @@ invariant worth stating so the port does not regress it:
 | T-9 | **Claim/transfer replay or cross-identity** — token replayed, or authenticated ≠ invited identity | Dropping single-use / contact-binding on `claim_transfer()` | Keep `claim_transfer()` SECURITY DEFINER atomicity, CONTACT_REQUIRED/CONTACT_MISMATCH; token single-use 72h; `reauth:true` forces re-derive |
 | T-10 | **Enumeration** — attacker probes `/api/claim/request` to discover claimable shadows | Port returning a distinguishable response for real-vs-fake slug | Keep the byte-identical uniform 202; never reveal shadow existence |
 | T-11 | **Timing oracle** — courier/owner login reveals identity existence by timing | Dropping the dummy-argon2-on-unknown-identity path (`courier/auth.ts:254-256`) | Port the constant-work path; INVALID_CREDENTIALS indistinguishable for unknown-identity vs bad-password |
+| T-12 | **Customer-token order-scope drift** (breaker H3 / architect · = WS-authz council A1) — a per-order 14d tracking token (`?t=` query, referer-leakable) is authorized customer-wide, so a token minted for order A can read/cancel/rate any of the customer's other orders | `orders.ts:752` binds the token's `orderId` claim (per-order) but `customer/orders.ts:50` binds `customer_id = sub` (customer-wide, ignoring the claim). A lenient `Claims<Customer>` port silently unifies to the broader arm | **COUNCIL REV-3 — FIX-IN-PORT (not carry).** Unify customer authorization to the minted `(orderId, locationId, sub)` tuple; E2E delta: token for order A → `POST /customer/orders/B/cancel` must 403 (today it 200s). Resolve jointly with the WS-authz council (same A1 finding). Added to the quirk register as a FIX row. |
+
+> **Governance note (breaker H3):** T-12 was ABSENT from both the quirk register and this threat-model
+> in the drafted packet — a real cross-order authz gap with no "carry-vs-FIX" disposition. The council
+> RESOLUTION (`resolution.md` REV-3) adds it here and dispositions it FIX-IN-PORT; it must also land as
+> a quirk-register row in `proposal.md §10` before `COUNCIL-APPROVED`.
 
 ---
 

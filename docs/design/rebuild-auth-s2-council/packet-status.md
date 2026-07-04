@@ -1,11 +1,18 @@
 # S2-AUTH Port — Council Packet · STATUS
 
-## ⛔ DRAFT — NOT APPROVED
+## 🟡 COUNCIL-REVIEWED — CONDITIONALLY RATIFIED (PROCEED-WITH-REVISIONS) — NOT YET `COUNCIL-APPROVED`
 
-This packet is the **description input** to the S2-auth Triadic Council. It documents current Node
-behavior verbatim and proposes a Rust/axum port design. **It is not an approval to port.** No 🔴 AUTH
-row moves to `BUILT` in `traceability.csv` until this packet is council-APPROVED and every
-open-question is resolved on the record.
+**Triadic council ran 2026-07-04** (architect + breaker + counsel + decorrelated security-sentinel).
+Verdict: **PROCEED-WITH-REVISIONS, no ETHICAL-STOP** — the design is sound and ports cleanly at the
+crypto core, but a frozen 5-item revision set (`resolution.md`) must fold in and the operator must sign
+the 🔴 items before `COUNCIL-APPROVED`. Seat verdicts: architect RATIFIED-WITH-REVISIONS · breaker
+"the port breaks" (1 CRIT / 6 HIGH — strict-claim parse + Q10 body-`kid`) · counsel PROCEED-WITH-REVISIONS
+· security-sentinel PASS-with-one-HIGH (RETIRE courier-activate). See `resolution.md` for the full record.
+
+**Blockers to `COUNCIL-APPROVED`:** (1) fold REV-1…REV-5 into `proposal.md`/`threat-model.md`;
+(2) **operator sign-off** on Q1/Q2/Q5/Q6/Q10 + AR-6 rotation runbook + cutover canary plan. Until both,
+this packet is the **description input** only. No 🔴 AUTH row moves to `BUILT` in `traceability.csv`
+until council-APPROVED and every open-question is resolved on the record.
 
 - **Lane:** R3 (complete-rebuild) · **Surface:** S2 auth 🔴 (REBUILD-MAP §3 Phase B, 4th strangler)
 - **Date:** 2026-07-04 · **Source:** `fix/audit-remediation@ae9f5360`
