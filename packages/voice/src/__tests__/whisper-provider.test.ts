@@ -48,7 +48,11 @@ function makeSpies(): { calls: Record<string, number>; handlers: VoiceHandlers }
     calls[k] = (calls[k] ?? 0) + 1;
   };
   const handlers: VoiceHandlers = {
-    addToCart: bump('addToCart'),
+    // addToCart reports apply-outcome (council R-a); the spy counts AND reports a real mutation.
+    addToCart: () => {
+      calls['addToCart'] = (calls['addToCart'] ?? 0) + 1;
+      return true;
+    },
     setSort: bump('setSort'),
     setMacroLens: bump('setMacroLens'),
     selectCategory: bump('selectCategory'),

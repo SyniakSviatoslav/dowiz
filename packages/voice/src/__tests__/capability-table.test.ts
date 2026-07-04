@@ -133,7 +133,7 @@ describe('voice capability-table — exhaustiveness (G3) + table test (G4)', () 
     // literal fails `tsc` (missing property) until updated — a live drift signal independent of the
     // Exclude-based check below.
     const handlers: VoiceHandlers = {
-      addToCart: () => {},
+      addToCart: () => true,
       setSort: () => {},
       setMacroLens: () => {},
       selectCategory: () => {},

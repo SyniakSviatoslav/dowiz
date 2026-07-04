@@ -504,3 +504,55 @@ html[data-theme="dark"] [data-skin="paper"] .maplibregl-canvas,
 @media (prefers-reduced-motion: reduce) {
   .paper-rise { animation: none; }
 }
+
+/* ── MicFab halo/bloom (voice control PR-3) ── docs/design/voice-control/VOICE-UI-REFERENCE.md §3.
+   A persistent mic glyph wrapped in a bloom of concentric rings. Idle is fully static (no idle
+   pulse — a pulsing idle mic reads as "always listening", the one forbidden animation). Motion
+   begins only in the 'listening' data-state (after an explicit tap) via two pseudo-elements sized
+   OUTSIDE the 56px disc (pointer-events:none, never affects layout/tap-target):
+     ::before — the amp-reactive ring, driven by the single --amp custom property a rAF loop in
+                MicFab.tsx writes directly on this element (see smoothAmplitude in state-machine.ts).
+     ::after  — the looping "breath" bloom (a calm ambient ring, independent of --amp).
+   Colour is token-only (color-mix of --brand-primary) so paper-skin inherits it for free. */
+.mic-fab { --amp: 0; }
+.mic-fab:active { transform: scale(.97); transition: transform var(--motion-instant) var(--ease-out); }
+
+.mic-fab[data-state="listening"]::before {
+  content: ""; position: absolute; inset: -8px; border-radius: inherit; pointer-events: none;
+  border: 2px solid color-mix(in srgb, var(--brand-primary) 35%, transparent);
+  transform: scale(calc(1 + var(--amp) * 0.22));
+  opacity: calc(0.25 + var(--amp) * 0.5);
+}
+.mic-fab[data-state="listening"]::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand-primary) 35%, transparent);
+  animation: mic-bloom 1800ms var(--ease-out) infinite;
+}
+@keyframes mic-bloom {
+  0%   { transform: scale(1);   opacity: 0.35; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+/* Indeterminate spinner for the 'transcribing' data-state — a rotating conic-gradient ring, no
+   canvas/SVG. Reduced motion swaps the spin for a slow opacity breathe (motion is never the ONLY
+   cue anyway — the partial-transcript pill's text/aria carries the state regardless). */
+.mic-fab__spinner {
+  width: 1.35rem; height: 1.35rem; border-radius: 9999px;
+  background: conic-gradient(from 0deg, transparent, var(--color-on-primary));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);
+  animation: mic-spin 900ms linear infinite;
+}
+@keyframes mic-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mic-fab[data-state="listening"]::after { animation: none; }
+  .mic-fab[data-state="listening"]::before { transform: none; opacity: 0.35; }
+  .mic-fab__spinner { animation: mic-spinner-breathe 1800ms var(--ease-soft, ease-in-out) infinite; }
+}
+@keyframes mic-spinner-breathe {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}

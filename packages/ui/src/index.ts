@@ -53,3 +53,7 @@ export type { PaletteCommand } from './components/organisms/CommandPalette.js';
 export { ShortcutsHelp } from './components/organisms/ShortcutsHelp.js';
 export type { ShortcutHelpItem } from './components/organisms/ShortcutsHelp.js';
 
+// Voice control PR-3 (MicFab + UI state machine) — docs/design/voice-control/ui-spec.md +
+// PHASE1-IMPLEMENTATION-PLAN.md §3. Injected-contract only; imports no @deliveryos/voice/apps/web.
+export * from './voice/index.js';
+

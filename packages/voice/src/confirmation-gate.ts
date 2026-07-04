@@ -10,7 +10,10 @@ import { isDietaryCategory } from './dietary-denylist.js';
  * even a mis-classified such intent has nothing to call.
  */
 export interface VoiceHandlers {
-  readonly addToCart: (args: Readonly<Record<string, unknown>>) => void;
+  /** Returns whether a cart line was ACTUALLY added — false on every drop path (unresolved /
+   * unavailable / requires-modifiers). The gate reads this so `confirm()` reports `applied` ONLY on
+   * a real mutation → no "Done ✓" over an unchanged cart (council R-a apply-outcome honesty). */
+  readonly addToCart: (args: Readonly<Record<string, unknown>>) => boolean;
   readonly setSort: (args: Readonly<Record<string, unknown>>) => void;
   readonly setMacroLens: (args: Readonly<Record<string, unknown>>) => void;
   readonly selectCategory: (args: Readonly<Record<string, unknown>>) => void;
