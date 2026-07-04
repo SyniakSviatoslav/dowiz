@@ -1,7 +1,9 @@
 # S4-MEDIA Port — Council RESOLVE
 
 > **Verdict: PROCEED-WITH-REVISIONS + one liftable ETHICAL-STOP (counsel).** Packet-status:
-> **🟡 — NOT COUNCIL-APPROVED until the operator signs §4 (incl. the STOP lift choice).**
+> **🟢 COUNCIL-APPROVED — operator signed §4 in-session 2026-07-04 ("3. 1, approve others"):
+> ETHICAL-STOP lifts via option (1) — the old-stack anonymizer `delivery_photo_key` purge fix,
+> shipping with its own red→green guardrail + ledger row; Q1/Q2/Q4 approved as resolved.**
 > Seats: architect (packet, amended by spike-evidence) · breaker (1 CRIT / 3 HIGH / 4 MED / 4 LOW) ·
 > counsel (PROCEED-WITH-REVISIONS + scoped ETHICAL-STOP) · lead (this RESOLVE).
 > Q3 (image stack) is **decided by machine evidence** (spike-evidence.md): pure-Rust `image` 0.25 +

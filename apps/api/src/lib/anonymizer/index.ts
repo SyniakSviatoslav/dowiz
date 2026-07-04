@@ -91,6 +91,7 @@ export class AnonymizerService {
       const result = await this.anonymizeOrder(options.subject.orderId, options);
       ordersAnonymized += result.anon ? 1 : 0;
       skipped += result.skipped ? 1 : 0;
+      storagePurged += result.storagePurged;
     }
 
     if (!options.subject && options.scope === 'retention') {
@@ -107,6 +108,7 @@ export class AnonymizerService {
         const result = await this.anonymizeOrder(o.id, { ...options, subject: { orderId: o.id, locationId: o.location_id } });
         if (result.anon) ordersAnonymized++;
         else skipped++;
+        storagePurged += result.storagePurged;
       }
     }
 
@@ -221,7 +223,7 @@ export class AnonymizerService {
     try {
       await client.query('BEGIN');
       const lockRes = await client.query(
-        `SELECT anonymized_at, location_id FROM orders WHERE id = $1 AND location_id = $2 FOR UPDATE`,
+        `SELECT anonymized_at, location_id, delivery_photo_key FROM orders WHERE id = $1 AND location_id = $2 FOR UPDATE`,
         [orderId, locationId],
       );
       if (lockRes.rows.length === 0) {
@@ -233,6 +235,7 @@ export class AnonymizerService {
         await client.query('ROLLBACK');
         return { anon: false, skipped: true, storagePurged: 0 };
       }
+      const deliveryPhotoKey = row.delivery_photo_key;
 
       await client.query(
         `UPDATE orders
@@ -243,10 +246,25 @@ export class AnonymizerService {
              receiver_name = NULL,
              receiver_handle = NULL,
              receiver_messenger_kind = NULL,
+             delivery_photo_key = NULL,
              anonymized_at = now()
          WHERE id = $1 AND location_id = $2`,
         [orderId, locationId],
       );
+
+      // Doorway/entry-photo purge (S4 council REV-S4-7): the delivery photo is customer PII —
+      // leaving the R2 object behind after erasure would survive its own order's GDPR erasure,
+      // public-by-key, indefinitely. Mirrors the avatar_key purge in anonymizeCustomer EXACTLY:
+      // tolerated-and-reported (catch + log), never rethrown, never rolls back the anonymization.
+      let storagePurged = 0;
+      if (this.storage && deliveryPhotoKey) {
+        try {
+          await this.storage.delete(deliveryPhotoKey);
+          storagePurged = 1;
+        } catch (err) {
+          console.error('[Anonymizer] Failed to purge storage:', err);
+        }
+      }
 
       // Audit location_id stamps the SUBJECT'S TRUE tenant (see anonymizeCustomer).
       await this.insertAuditLog(client, {
@@ -273,7 +291,7 @@ export class AnonymizerService {
         timestamp: new Date().toISOString(),
       });
 
-      return { anon: true, skipped: false, storagePurged: 0 };
+      return { anon: true, skipped: false, storagePurged };
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
