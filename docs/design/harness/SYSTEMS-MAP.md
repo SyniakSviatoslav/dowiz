@@ -44,7 +44,7 @@ flowchart TB
     subgraph LEARN["Self-improvement ratchet"]
         REFLECT["Reflections\ndocs/reflections/{INBOX,ARCHIVE,RETRO}"]
         COUNCIL["Council retro\ncause-critic + pattern-critic + ratchet-critic"]
-        METRICREFLECT["Metric-Reflection loop — PLANNED\nbacklog item 4, not yet built"]
+        METRICREFLECT["Metric-Reflection loop — DESIGNED\nscripts/metric-reflection.mjs, DRAFT loop card, cert pending"]
         LIBRARIAN["Librarian (executor)\n.claude/agents/librarian.md"]
         LEDGER["Regression Ledger\ndocs/regressions/REGRESSION-LEDGER.md"]
         LESSONS["Lessons store\ndocs/lessons/ + INDEX.md"]
@@ -117,7 +117,7 @@ partially built) · 🔴 PLANNED (backlog item only, not started).
 | **Reflections + Council retro** | self-improvement ratchet | Worker writes atomic causal-WHY reflections on qualified fixes/failures; Council (cause-critic/pattern-critic/ratchet-critic) challenges + synthesizes; librarian enacts | `docs/reflections/INBOX/*.reflection.md` | Ledger row / lesson / prune-revision / CLAUDE.md pointer, or explicit no-op; processed reflections moved to `ARCHIVE/` | worker (writes) → council agents (deliberate) → `librarian` (enacts) | 🟢 BUILT+GREEN | `docs/reflections/{INBOX,ARCHIVE,RETRO}`, `docs/reflections/README.md` |
 | **Regression Ledger (ratchet)** | self-improvement ratchet | Tier-1 authority: one row per bug class with a deterministic red→green guardrail; monotonic, never weakened | Confirmed council root / qualified fix | New ledger row + guardrail (eslint rule / boot-guard / migration check / E2E / CI-gate / unit test) | `librarian` (enacts), operator (reviews) | 🟢 BUILT+GREEN (71 rows, `node scripts/guardrail-ledger-integrity.mjs` green, max #68) | `docs/regressions/REGRESSION-LEDGER.md`, integrity check `scripts/guardrail-ledger-integrity.mjs` |
 | **Lessons store** | self-improvement ratchet | Tier-2 advisory: point-in-place pre-edit warnings injected by trigger, distilled from reflections that don't rise to a guardrail | Council retro output below the guardrail bar | `docs/lessons/{date}-{slug}.md` + `INDEX.md` entry; injected pre-edit via `pre-edit-lessons` hook (advisory only) | `librarian` | 🟢 BUILT+GREEN | `docs/lessons/*.md`, `docs/lessons/INDEX.md` |
-| **Metric-Reflection loop** | self-improvement ratchet | Folds telemetry (plane + exec, once exec-telemetry exists) and git history into cross-run insights (patterns, cross-patterns, historical comparison), written as a governance report that feeds the ratchet | Plane-telemetry digests, exec-telemetry log (once built), `git log` | `docs/governance/*` insight report → ratchet candidates | *unassigned — backlog item 4* | 🔴 PLANNED (not started; depends on Exec-Telemetry) | target: a `loops/` DRAFT card + a `scripts/` helper (backlog item 4) |
+| **Metric-Reflection loop** | self-improvement ratchet | Folds `exec-telemetry`'s log and `git log` history into cross-run insights (patterns via `telemetry-analyze`, cross-patterns — cross-layer + churn-correlated recurring failures, historical comparison vs the last stored snapshot), written as a governance report that feeds the ratchet | `scripts/exec-telemetry.mjs` log, `git log --name-only` in the analysis window | `docs/governance/metric-reflection-report.md` (advisory insight report) + `loops/runs/metric-reflection-history.jsonl` (snapshot trail) → ratchet candidates (never self-promoted) | *unassigned — autonomous-continuation run* | 🟡 DESIGNED (`scripts/metric-reflection.mjs` built + 13/13 red→green tested; `loops/metric-reflection.yaml` is a DRAFT card awaiting `/build-verify-loop verify metric-reflection`) | `scripts/metric-reflection.mjs` (+ `.test.mjs`), `loops/metric-reflection.yaml`, `docs/governance/metric-reflection-report.md`, `loops/runs/metric-reflection-history.jsonl` (gitignored) |
 | **Triadic Council** | design-time council | Pre-code hardening of a serious change (schema/contract/money/RLS/auth/state-machine/WS/integration/irreversible): system-architect proposes, system-breaker attacks, counsel judges ethics/aesthetics/strategy | A design proposal | ADR + threat-model + counsel-opinion + decision log; APPROVED/REJECTED/DEFERRED | `system-architect`, `system-breaker`, `counsel` agents | 🟢 BUILT+GREEN (loop `design-convergence`, CERTIFIED — report lost, re-cert via `/build-verify-loop verify`) | `.claude/agents/{system-architect,system-breaker,counsel}.md`, `docs/adr/`, `loops/design-convergence.yaml`, trigger `/council` |
 | **SSG reviewers (Gate)** | design-time council | Per-sandbox-lane merge gate: quality (typecheck/build/Mandatory-Proof/no-false-green) + safety (`invariant-guardian`, `security-sentinel`, red-line human-approval) + ethics (Charter, non-negotiable) | A sandbox lane's diff | PASS→merge or REJECT→back to sandbox | `invariant-guardian`, `security-sentinel` agents + human (red-lines) | 🟡 DESIGNED (same cert-pending status as SSG itself) | `docs/design/harness/SANDBOX-SWARM-GATE.md` §4 |
 | **Plane-Maintainer charter** | governance | Autonomous cloud agent's authority boundary + daily Sense→Diagnose→Heal→Scout→Report→Self-improve loop over the dev/ops plane (staging only) | Cron firing, `plane-guard.mjs`/`agent-health-pass.mjs` sense output | Staging fixes (gated, proof-carrying), telemetry emissions, reflections | plane-maintainer agent (operator-scheduled) | 🟢 BUILT+GREEN | `docs/governance/plane-maintainer-agent.md`, enforcement `scripts/plane-guard.mjs` |
@@ -164,12 +164,14 @@ to-human event, full stop, same as any other Ethics-Charter conflict in `.claude
 ## 5. Known gaps in this map (honesty, not aspiration)
 
 - **Exec-Telemetry** is now 🟢 BUILT+GREEN (backlog item 3 — `scripts/exec-telemetry.mjs` +
-  `scripts/telemetry-analyze.mjs`, red→green tested). **Metric-Reflection** is still 🔴 PLANNED —
-  this map documents its intended shape (per the backlog that motivated this document) so the
-  graph is complete, but no code exists yet; building it is backlog item 4 of the same
-  autonomous-continuation run that wrote this map (`docs/governance/AUTONOMOUS-STATUS.md`). It
-  depends on Exec-Telemetry's log, which now exists — do not treat its table row above as a claim
-  that it runs today.
+  `scripts/telemetry-analyze.mjs`, red→green tested). **Metric-Reflection** (backlog item 4) is now
+  🟡 DESIGNED: `scripts/metric-reflection.mjs` folds the exec-telemetry log + `git log` into
+  patterns/cross-patterns/historical-comparison and writes `docs/governance/metric-reflection-report.md`
+  (13/13 red→green tested, incl. a confirmed RED on the cross-layer threshold). It is not 🟢
+  BUILT+GREEN because it has not yet gone through `loop-architect` M1–M11 certification as a loop
+  (`loops/metric-reflection.yaml` is DRAFT) — the script itself runs today, but do not treat the
+  DRAFT card as CERTIFIED. The report is advisory-only: it never writes a reflection or ledger row
+  itself, per the self-improvement loop's authority split (signals inform, guardrails decide).
 - **SSG** and **Skill-Evolution** are 🟡 DESIGNED, not certified — their loop cards are DRAFT and
   will not be dispatched by the router until `/build-verify-loop verify <id>` returns CERTIFIED.
 - Several CERTIFIED loops (`error-fix-convergence`, `design-convergence`, `autoupgrade`) show
