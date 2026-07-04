@@ -65,12 +65,14 @@ Telemetry: telegram=none · push=none · run_id=plane-2026-07-04T06-03-00Z
   monotonic).
 - **No hard fails found → nothing to Heal.** No staging deploy attempted this run (there was nothing to
   fix). `FLY_API_TOKEN` is present in this checkout, for the record, in case a future firing needs it.
-- **Telegram channel: blocked, not unset.** `TELEGRAM_BOT_TOKEN`/`PLANE_REPORT_CHAT_ID` are both set,
-  but `api.telegram.org` is denied by this cloud session's own egress policy (proxy status endpoint:
-  `connect_rejected … gateway answered 403 … host: api.telegram.org:443`). Per this environment's own
-  guidance this is a "report the blocked host, do not retry/route around" case, not a bug to fix.
-  Wrote up as a reflection (`docs/reflections/INBOX/2026-07-04-telegram-egress-blocked-not-unset.md`)
-  since the charter's "skips cleanly if unset" language only covers the secret-absent case, not this one.
+- **Telegram channel: correction.** At 06:03Z the `plane-report.mjs` send got `HTTP 403` from the
+  egress proxy (`connect_rejected … host: api.telegram.org:443`) — read at the time as a standing org
+  policy block and written up as such in a reflection. At 06:12Z the REPORT step's
+  `plane-telemetry.mjs send` call to the **same host** succeeded (`sent:chunked`), and the proxy's
+  `recentRelayFailures` shows no new entry since 06:03. So this was a **transient** blip, not a
+  persistent policy denial — the reflection has been corrected in place rather than left wrong on
+  record (see `docs/reflections/INBOX/2026-07-04-telegram-egress-blocked-not-unset.reflection.md` for
+  the full correction note). Net effect: telegram digest for this run did go out.
 - **Dispatched the `librarian` agent** to drain the reflections INBOX (7 files, over the healthy-backlog
   threshold of 3 per `inbox-drain-liveness`). See its own commit/report for what got promoted vs
   archived vs discarded.

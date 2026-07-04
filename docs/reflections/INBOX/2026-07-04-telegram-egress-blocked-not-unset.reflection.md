@@ -31,3 +31,20 @@ NEXT-TIME: When a reporting channel fails, distinguish "secret unset" (skip clea
            right now both look identical to the caller.
 LINK:      docs/governance/plane-status-2026-07-04.md ; docs/governance/plane-maintainer-agent.md
            (reporting channels §2) ; [[plane-telemetry-closed-loop]]
+
+CORRECTION (same firing, ~9 min later): at REPORT step, `node scripts/plane-telemetry.mjs send
+           --run-id run-20260704T0602` reached the SAME host (`api.telegram.org`) and succeeded
+           (`sent:chunked`) — no new entry appeared in the proxy's `recentRelayFailures` after the
+           06:03 one. So the 06:03 403 was a **transient** relay blip, not a standing org-policy
+           denial as WHY above concluded. The proxy README's own framing ("403/407 = policy denial")
+           primed a too-confident read of a single failed request as a fixed environment property;
+           the correct move on a proxy 403 is still "don't retry/route around in the moment," but the
+           CONCLUSION should have been held at lower confidence pending a second data point in the
+           same run, not written up as high-confidence root cause after one sample. Downgraded:
+           CONFIDENCE above → medium (was high) for the "standing policy" claim specifically; the
+           distinct-failure-mode point (secret-present-but-blocked ≠ secret-unset) still holds at
+           high confidence independent of whether the block is transient or standing. NEXT-TIME
+           amended: before concluding a proxy 403 is a standing policy block, retry the SAME
+           destination once more later in the same run (a different script/call is fine) before
+           writing the reflection — one 403 sample is not enough to distinguish "policy" from
+           "blip," even though the response action (don't hammer it) is identical either way.
