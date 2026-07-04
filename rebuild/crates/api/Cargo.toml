@@ -19,7 +19,11 @@ domain = { path = "../domain" }
 # "multipart" added for the S4 media port: product-image/theme-logo/entry-photo all accept
 # `multipart/form-data` uploads (Node's `@fastify/multipart` equivalent) — pulls in `multer`,
 # axum's own official multipart extractor, not a third-party pick.
-axum = { version = "0.8", features = ["json", "multipart"] }
+# "ws" added for the S6 realtime port (docs/design/rebuild-realtime-s6-council/): the
+# `WebSocketUpgrade` extractor + frame types — pulls in `tokio-tungstenite`/`sha1` (already
+# resolved transitively via sqlx-postgres's SCRAM auth) + `base64` (already a direct dependency
+# below). `query` (the `?token=` dual-accept transport, Q1) is already a default axum feature.
+axum = { version = "0.8", features = ["json", "multipart", "ws"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "fs"] }
 tower = { version = "0.5", features = ["timeout", "util"] }
 tower-http = { version = "0.6", features = ["trace", "request-id", "util"] }
@@ -42,8 +46,12 @@ sqlx = { version = "0.8", default-features = false, features = [
   "macros",
 ] }
 
+# "raw_value" — the S6 realtime-WS opaque passthrough (REV-S6-3): re-serializing a NOTIFY payload
+# through `serde_json::Value` reorders object keys (its map is a sorted BTreeMap by default), which
+# IS the exact "reorders keys" drift REV-S6-3 forbids — a byte-for-byte golden-frame test caught
+# this live during the build. `RawValue` carries the original bytes through untouched instead.
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["raw_value"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }

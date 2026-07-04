@@ -19,6 +19,7 @@ mod repo;
 mod routes;
 mod service;
 mod storage;
+mod ws;
 // Test-only: throwaway RSA keypairs generated at runtime (crates/api/src/test_support.rs) —
 // replaces committed test_keys/*.pem so no key material ever enters the tree (secrets hygiene).
 #[cfg(test)]
@@ -129,12 +130,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // so "auth env present" is the S5 precondition too. Dark (mounted, not launched) — the
             // openapi document lists the ops (openapi.rs) so openapi-diff is satisfied.
             app = app.merge(routes::orders::orders_router(build_orders_state(
-                auth_state, &pools,
+                auth_state.clone(),
+                &pools,
             )));
             tracing::info!("S5 orders/money surface mounted");
+            // ── S6 realtime-WS surface (docs/design/rebuild-realtime-s6-council/) — the 🔴
+            // realtime-authz + cross-tenant fan-out red-line. Rides the SAME auth-env gate: WS
+            // admission reuses the S2 verifier (`AuthState.verifier.verify`), so "auth env
+            // present" is the S6 precondition too. Mounting the `/ws` route and SPAWNING the
+            // `PgListener` fan-out task are two halves of one dark launch — neither is reachable
+            // by a real client until the cutover proxy steers traffic here (REV-S6-5); running the
+            // listener dark now is exactly "deploying dark code to verify," not "launching" it.
+            let (ws_state, ws_lifecycle_rx) = ws::WsState::build(
+                auth_state,
+                Arc::new(ws::repo::PgWsAuthzRepo::new(pools.operational.clone())),
+                std::env::var("WS_URL_TOKEN_ACCEPT")
+                    .map(|v| v != "false")
+                    .unwrap_or(true),
+            );
+            app = app.merge(ws::ws_router(ws_state.clone()));
+            tokio::spawn(ws::run_fanout(ws_state, config.clone(), ws_lifecycle_rx));
+            tracing::info!("S6 realtime-WS surface mounted (PgListener fan-out task spawned)");
         }
         Err(err) => {
-            tracing::warn!(%err, "S2 auth + S3 catalog + S4 media + S5 orders surfaces DARK — JWT/auth env not configured; not mounting them");
+            tracing::warn!(%err, "S2 auth + S3 catalog + S4 media + S5 orders + S6 WS surfaces DARK — JWT/auth env not configured; not mounting them");
         }
     }
 
