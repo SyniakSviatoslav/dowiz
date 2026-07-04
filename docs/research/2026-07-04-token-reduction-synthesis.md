@@ -22,7 +22,7 @@
 | **agentmemory** (rohitg00) | Apache-2.0 ✅ | clean | Value = 5 patterns; vendoring means running a daemon | **LEARN** — apply patterns natively |
 | **agentfiles** (Railly) + skillkit | MIT ✅ | clean | Measurement layer (metrics/health/token-spend) from logs we already have | **APPLY** — 3 zero-dep scripts (in flight) |
 | **pxpipe** (teamchong) | MIT ✅ | SAFE (local proxy; no exfil) | Exact Fable-5 fit (`PXPIPE_MODELS`), renders bulk context as images — but **LOSSY on exact strings** (hashes/IDs); one documented silent failure | **PILOT dark, gated** to non-red-line lanes only |
-| **codegraph-rust** (Jakedismo) | ❌ no LICENSE (conflicting) | safe to run local | Flagship tools SPEND tokens (2nd LLM); cheap structural layer not exposed; redundant w/ repowise except Rust-tree indexing | **BAKE-OFF pending** (prove-or-reject, task #18) |
+| **codegraph-rust** (Jakedismo) | ❌ no LICENSE (conflicting) | safe to run local | **BAKE-OFF PROVEN: loses 0/7 vs repowise 3/7-exact.** No query interface without `ai-enhanced` (2nd LLM/query); license blocks vendoring; its one edge (Rust indexing) absorbed by repowise which already ships the Rust stack | **NO-GO — do not integrate.** Cheaper win: point repowise at `rebuild/crates/` (13.8s, 0 LLM tokens) |
 | **halo/HALO** (context-labs) | ❌ unresolved (issue #34) | clean | Harness QA/observability — **wrong domain**, doesn't address tokens | **SKIP** (learn the trace-diagnostic governance pattern only) |
 | **future-agi** | pending | pending | pending | **PENDING** (task #17) |
 
@@ -60,10 +60,15 @@ lossiness collides with our Mandatory-Proof / red-line invariants — hence gate
    `ANTHROPIC_BASE_URL` for non-red-line reasoning sessions ONLY. Never for money/auth/RLS/migrations/
    bulk-edit or any session needing verbatim hash/ID recall. Measure real savings before trusting.
 
-## 5. Pending fold-ins
-- **codegraph bake-off** (task #18) → settles the Rust-indexing item; the cheaper alternative is
-  "get repowise to index `rebuild/crates/`" (repowise confirmed blind to the Rust tree).
-- **future-agi** (task #17) → additive-vs-redundant vs the agentfiles measurement layer.
+## 5. Settled + pending fold-ins
+- **codegraph bake-off** (task #18) → **SETTLED: NO-GO** (0/7 vs repowise 3/7; no query path without a
+  2nd LLM; license blocks vendoring). Actionable replacement: **point repowise at `rebuild/crates/`** —
+  it already ships `tree_sitter_rust` + resolver; test indexed the 56-file tree in 13.8s / 0 LLM
+  tokens. ⚠️ do NOT use `repowise init <path>` — it silently rewrote global `~/.claude/settings.json`
+  in the bake-off (caught + reverted); find the non-destructive scope-add path or propose to operator.
+  Two real repowise gaps logged as separate follow-ups (symbol-qualified `get_context` targets;
+  cross-package caller undercounting).
+- **future-agi** (task #17) → additive-vs-redundant vs the agentfiles measurement layer. PENDING.
 
 ## 6. Note on this pass's own cost
 The map phase (7 teardowns) itself spent tokens — the honest ledger: the reduce's applied wins
