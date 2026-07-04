@@ -169,3 +169,97 @@ layer of the harness, not just the governance plane).
 `scripts/` helper folding `telemetry-analyze.mjs`'s output and `git log` history into
 cross-run insights (patterns, cross-patterns, historical comparison), written to a
 `docs/governance/*` report that feeds the ratchet.
+
+## 2026-07-04 — item 4: metric-reflection loop
+
+**What:** Between the previous entry and this run, other (non-autonomous-continuation)
+sessions landed a large amount of unrelated work on this same branch — a
+"complete-rebuild program" (Rust/axum/sqlx backend + Astro/Svelte frontend planning,
+S1/S2 rebuild surfaces), ledger rows #70/#71, and a session reflection. None of it
+touched backlog items 1–6, so per STEP 0 I re-verified the backlog state directly
+(grepped for `metric-reflection`/`HARNESS-IMPROVEMENTS` and checked for existing
+reflections on commits `69ad3074`/`aaa0b182`/`b536ca07`) rather than trusting this
+file's own "Next" line, which was stale. Confirmed items 1–3 done, items 4–6 not
+started, and picked item 4 next as instructed.
+
+Built the metric-reflection loop named in `docs/design/harness/SYSTEMS-MAP.md`'s
+Metric-Reflection row (backlog item 4, paired with item 3's exec-telemetry/
+telemetry-analyze scripts):
+- `scripts/metric-reflection.mjs` — pure functions (`foldGitHistory`,
+  `findCrossPatterns`, `buildSnapshot`, `compareHistory`, `buildReport`,
+  `formatMarkdown`) plus a thin git-log/filesystem I/O shell. Cross-patterns are
+  genuinely two-point signals, not vibes: **cross-layer** (the same recurring-failure
+  `name` recurs under ≥2 distinct layers) and **churn-correlated** (a recurring
+  failure's layer/name substring-matches a file churned ≥N times in the git-log
+  window). Historical comparison comes from an append-only
+  `loops/runs/metric-reflection-history.jsonl` snapshot trail (gitignored, matching
+  the existing `loops/runs/*` pattern) — new/resolved recurring failures + fail-rate
+  deltas versus the immediately prior snapshot. The CLI writes
+  `docs/governance/metric-reflection-report.md` and stays explicitly advisory: it
+  surfaces candidates, it never writes a `docs/reflections/INBOX/` entry or a
+  `docs/regressions/REGRESSION-LEDGER.md` row itself — that promotion is always a
+  human/council/librarian decision, per CLAUDE.md's self-improvement loop authority
+  split.
+- `scripts/metric-reflection.test.mjs` — 13/13 pure-function + one real-filesystem
+  round-trip test.
+- `loops/metric-reflection.yaml` — a DRAFT loop scaffold (same shape as the existing
+  `sandbox-swarm-gate.yaml`/`skill-evolution.yaml` scaffolds), status DRAFT pending
+  `/build-verify-loop verify metric-reflection`.
+- `loops/registry.md` — new `metric-reflection` DRAFT row; updated the
+  `telemetry-council-review` row's note (no longer says metric-reflection is
+  unbuilt).
+- `docs/design/harness/SYSTEMS-MAP.md` — flipped the Metric-Reflection mermaid node
+  and table row from 🔴 PLANNED to 🟡 DESIGNED (built + tested, not yet
+  loop-architect-certified as a loop) and updated §5's known-gaps note accordingly.
+- Ran the CLI for real against this repo's own `git log` (`--since 90d`, no
+  exec-telemetry events recorded yet so the Patterns/Cross-Patterns sections are
+  correctly empty) to produce the first real `docs/governance/metric-reflection-report.md`
+  and the first `loops/runs/metric-reflection-history.jsonl` snapshot — not just a
+  fixture-only proof.
+
+**Proof:**
+- `node --test scripts/metric-reflection.test.mjs` → 13/13 pass.
+- **RED→GREEN confirmed by hand**: temporarily tightened the cross-layer detection
+  threshold from `layers.size >= 2` to `layers.size >= 3` → re-ran the suite → the
+  cross-layer test failed exactly as expected (12/13, `not ok 3`) → reverted → 13/13
+  green again. This is the assertion that would catch a broken cross-layer
+  threshold, not just a happy-path smoke test.
+- Manual end-to-end CLI run (`node scripts/metric-reflection.mjs --since 90d`, both
+  with and without `--no-write`) produced the expected markdown, including a correct
+  git-churn ranking (`apps/web/src/pages/client/MenuPage.tsx` top at 26 commits) and
+  a correctly-empty Patterns section (0 exec-telemetry events recorded so far).
+- **Gate per STEP 2**: `git worktree add /tmp/wt-metric-reflection HEAD`, copied the
+  staged files in, symlinked `node_modules`/`dist`. The worktree's
+  `pnpm -r typecheck` initially failed on `packages/platform` — traced to my own
+  incomplete symlink list (I hadn't linked that package's `dist`/`node_modules` into
+  the worktree), not to this change, which touches zero platform code. Confirmed by
+  re-running `pnpm -r typecheck` in the fully-provisioned main tree: all 12 projects
+  green. Worktree removed after.
+- Full pre-commit hook passed (`lint:gates` — 19 warnings on the pre-existing
+  intentional fixture files, 0 errors; corpus-reachability; license/forbidden-dep;
+  hook-matcher; `pnpm -r typecheck`; `pnpm -r build`; Docker/Fly checks skipped — no
+  local Docker daemon in this container, expected and non-blocking).
+- Per this task's explicit hard boundary ("never deploy"), the staging-deploy step
+  of Ship Discipline was intentionally skipped even though this change includes code
+  — same precedent as item 3. This harness dev-tooling has no UI/API runtime surface
+  (never imported by `apps/api` or `apps/web`), so a staging Playwright run would
+  exercise nothing related to it even if it were in scope.
+- Environment note (fourth run in a row to hit this): fresh container again had no
+  `node_modules`/`dist` anywhere — ran `pnpm install --frozen-lockfile` (no
+  lockfile/`package.json` touched) then `pnpm -r build` once before `lint:gates`/
+  `pnpm -r typecheck` would pass. Same fix as the prior three runs; still worth a
+  `docs/governance/HARNESS-IMPROVEMENTS.md` proposal (backlog item 5) to warm this
+  once per container instead of once per run.
+- Commit `245a364` pushed to `origin/fix/audit-remediation`.
+
+**Next:** backlog item 5 — `docs/governance/HARNESS-IMPROVEMENTS.md`: exact PROPOSED
+diffs (P1–P5) for the operator to apply by hand.
+
+**Note (unrelated concurrent work, not this task's scope):** commits `5ae7dc0`
+through `b28b176` on this branch (the "complete-rebuild program", channel
+integrations, an S2 auth surface in Rust) were made by the human operator and other
+sessions between this run and the previous one. They are large, legitimate,
+operator-directed work — not scope creep by this autonomous run — but they mean
+`git log --oneline -20` on a future run will not show a contiguous
+autonomous-continuation history; this file remains the authoritative source for
+backlog progress, not the raw commit log.
