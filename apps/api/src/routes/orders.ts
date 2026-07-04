@@ -25,6 +25,7 @@ import { computeOrderPricing, resolveDeliveryFee } from '../lib/order-pricing.js
 import { buildRequestHash, buildSignalState } from '../lib/order-canonical.js';
 import { insertOrderWithItems } from '../lib/order-persistence.js';
 import { isVenueOpen } from '../lib/venue-open.js';
+import { channelFromHeader } from '../lib/channel.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isValidUUID(id: string): boolean {
@@ -95,6 +96,10 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
       return reply.sendError(400, 'VALIDATION_FAILED', issues || 'Validation error');
     }
     const { locationId, items, customer: cust, delivery, idempotency_key, cash_pay_with: cashPayWith, delivery_instructions: rawInstructions } = input;
+    // Acquisition-channel attribution (QR/ATTRIBUTION) — travels as a header, not a
+    // CreateOrderInput field (see lib/channel.ts for why). Write-only; never used below
+    // for pricing/routing/authz — folded into orders.metadata via insertOrderWithItems.
+    const channel = channelFromHeader(request.headers?.['x-channel']);
     // Pickup orders carry no delivery pin/address and incur no delivery fee.
     const isPickup = input.type === 'pickup';
     const pin = isPickup ? null : delivery!.pin;
@@ -577,6 +582,7 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
         rawInstructions,
         otpServerVerified,
         clientIpHash,
+        channel,
         preflightMeta,
         type: input.type,
         messengerKind: (cust as any)?.messenger_kind ?? null,

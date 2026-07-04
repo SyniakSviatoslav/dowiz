@@ -2,6 +2,7 @@ import type { QueueProvider } from '@deliveryos/platform';
 import { QUEUE_NAMES } from './registry.js';
 import { generateOpaqueToken } from './otp.js';
 import type { PricedOrderItemRow } from './order-pricing.js';
+import type { Channel } from './channel.js';
 
 // Side-effectful persistence block extracted from POST /orders (sections 11-14).
 // Owns the order INSERT, velocity event, order_items/modifiers, idempotency key,
@@ -34,6 +35,10 @@ export interface InsertOrderInput {
   rawInstructions: string | null | undefined;
   otpServerVerified: boolean;
   clientIpHash: string | undefined;
+  // Acquisition-channel attribution (QR/ATTRIBUTION) — write-only, folded into the same
+  // metadata jsonb write below. Optional so existing callers/fixtures need no change;
+  // the live route always passes a normalized value (see routes/orders.ts + lib/channel.ts).
+  channel?: Channel;
   preflightMeta: string;
   type: string;
   messengerKind: string | null;
@@ -92,7 +97,10 @@ export async function insertOrderWithItems(
       input.cashPayWith ?? null, input.currencyCode,
       input.menuVersion, input.clientMenuVersion || null, input.requestHash, input.timeoutAt,
       input.rawInstructions || null,
-      JSON.stringify({ otp_verified: input.otpServerVerified, client_ip_hash: input.clientIpHash }),
+      // `channel` omitted entirely (not even `null`) when unset — JSON.stringify drops an
+      // `undefined` value, so callers that don't pass it (e.g. existing test fixtures) get
+      // byte-identical output to before this field existed.
+      JSON.stringify({ otp_verified: input.otpServerVerified, client_ip_hash: input.clientIpHash, channel: input.channel }),
       input.preflightMeta,
       input.type,
       input.messengerKind || null, input.messengerHandle || null,

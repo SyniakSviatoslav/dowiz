@@ -5,6 +5,7 @@ import { ThemeProvider, LanguageSwitcher, ToastProvider, useI18n, StickyActionBa
 import { formatMoney } from '@deliveryos/shared-types';
 import type { ThemeConfig } from '@deliveryos/ui';
 import { apiClient } from '../lib/index.js';
+import { captureChannel } from '../lib/channel.js';
 import { z } from 'zod';
 
 const PublicThemeResponse = z.object({
@@ -24,6 +25,7 @@ const PublicThemeResponse = z.object({
 import { CartProvider, useSharedCart } from '../lib/CartProvider.js';
 import { fetchVenueInfo } from '../lib/publicApi.js';
 import { CheckoutPage } from '../pages/client/CheckoutPage.js';
+import { initTelegramMiniApp, setupTmaBackButton } from '../lib/tma.js';
 
 // Inject the Google-Fonts <link> for any non-base tenant font, once. Idempotent (dedup by href) and
 // egress-safe: googleFontsHref builds the URL from allowlist ids only, dropping anything unknown, so a
@@ -52,6 +54,25 @@ function ClientLayoutInner() {
   const { t } = useI18n();
 
   const isEmbed = new URLSearchParams(location.search).get('embed') === 'true';
+
+  // Telegram Mini App (TMA, VITE_TMA_ENABLED default off) — no-op outside Telegram or when
+  // the flag is off. Runs once: ready()+expand() + data-tma-* theme attrs on <html> (never
+  // restyles — CSS can opt in later). See docs/design/channel-hub/TMA-VALIDATION.md.
+  useEffect(() => {
+    initTelegramMiniApp({ root: document.documentElement });
+  }, []);
+
+  // TMA back-button: while the cart or checkout sheet is open, Telegram's hardware/native
+  // back gesture closes the sheet instead of leaving the Mini App (trivial in-app nav).
+  // No-op outside Telegram.
+  useEffect(() => {
+    if (!isCartOpen && !isCheckoutOpen) return;
+    const onBack = () => {
+      if (isCheckoutOpen) setCheckoutOpen(false);
+      else setCartOpen(false);
+    };
+    return setupTmaBackButton(onBack);
+  }, [isCartOpen, isCheckoutOpen]);
 
   useEffect(() => {
     const handleBounce = () => {
@@ -84,6 +105,14 @@ function ClientLayoutInner() {
     }
     if (location.pathname.includes('/order/')) setCheckoutOpen(false);
   }, [location.pathname, location.search, navigate]);
+
+  // QR/ATTRIBUTION: capture ?ch=<value> (QR sticker, NFC tag, GBP link, social share, ...)
+  // once per session, scoped to this slug — CheckoutPage reads it back at order time via
+  // getOrderChannel(slug). Best-effort (see lib/channel.ts); never blocks the page.
+  useEffect(() => {
+    if (!slug) return;
+    captureChannel(slug, location.search);
+  }, [slug, location.search]);
 
   const [locationName, setLocationName] = useState('');
   const [logoUrl, setLogoUrl] = useState('');

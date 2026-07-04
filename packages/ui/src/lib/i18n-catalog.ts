@@ -1041,6 +1041,46 @@ export const catalog: Record<string, CatalogEntry> = {
   'admin.signals': { en: 'Signals', sq: 'Sinjalet', uk: 'Сигнали' },
   'admin.alerts': { en: 'Alerts', sq: 'Njoftimet', uk: 'Сповіщення' },
   'admin.onboarding': { en: 'Onboarding', sq: 'Regjistrimi', uk: 'Реєстрація' },
+  // QR/ATTRIBUTION kit (dark behind VITE_CHANNEL_KIT_ENABLED) — QRKitPage.tsx + AdminRoutes nav.
+  'admin.qr_kit': { en: 'QR kit', sq: 'Kompleti QR', uk: 'QR-набір' },
+  'admin.qr_kit_subtitle': {
+    en: 'Print the QR code for tables/packaging, or copy the NFC-tag link — both point customers straight to your menu and let you see which one drove the order.',
+    sq: 'Printoni kodin QR për tavolina/paketime, ose kopjoni lidhjen e etiketës NFC — të dyja i çojnë klientët direkt te menyja juaj dhe ju tregojnë cila e solli porosinë.',
+    uk: 'Роздрукуйте QR-код для столиків чи упаковки або скопіюйте посилання NFC-мітки — обидва ведуть клієнтів прямо до вашого меню й показують, звідки прийшло замовлення.',
+  },
+  'admin.qr_kit_qr_caption': { en: 'Scan to order', sq: 'Skanoni për të porositur', uk: 'Скануйте, щоб замовити' },
+  'admin.qr_kit_qr_alt': {
+    en: 'QR code linking to your storefront',
+    sq: 'Kodi QR që lidh me vitrinën tuaj',
+    uk: 'QR-код із посиланням на вашу вітрину',
+  },
+  'admin.qr_kit_nfc_caption': { en: 'NFC tag link', sq: 'Lidhja e etiketës NFC', uk: 'Посилання NFC-мітки' },
+  'admin.qr_kit_nfc_hint': {
+    en: 'Write this URL to an NFC sticker so a tap opens your menu.',
+    sq: 'Shkruajeni këtë URL në një etiketë NFC që një prekje të hapë menynë tuaj.',
+    uk: 'Запишіть цю URL-адресу на NFC-наліпку, щоб дотик відкривав ваше меню.',
+  },
+  'admin.qr_kit_print': { en: 'Print', sq: 'Printo', uk: 'Друк' },
+  'admin.qr_kit_empty_title': {
+    en: 'Publish your storefront first',
+    sq: 'Publikoni fillimisht vitrinën tuaj',
+    uk: 'Спершу опублікуйте вітрину',
+  },
+  'admin.qr_kit_empty_desc': {
+    en: 'Your QR kit needs a live storefront link — finish onboarding to get one.',
+    sq: 'Kompleti juaj QR kërkon një lidhje aktive të vitrinës — përfundoni regjistrimin për ta marrë.',
+    uk: 'Для QR-набору потрібне активне посилання на вітрину — завершіть налаштування, щоб отримати його.',
+  },
+  'admin.qr_kit_load_error_title': {
+    en: 'Could not load your QR kit',
+    sq: 'Nuk u ngarkua kompleti juaj QR',
+    uk: 'Не вдалося завантажити QR-набір',
+  },
+  'admin.qr_kit_load_error_desc': {
+    en: 'Check your connection and try reloading the page.',
+    sq: 'Kontrolloni lidhjen dhe provoni të ringarkoni faqen.',
+    uk: 'Перевірте з’єднання та спробуйте перезавантажити сторінку.',
+  },
   'admin.supplies': { en: 'Supplies', sq: 'Furnizimet', uk: 'Матеріали' },
   'admin.promotions': { en: 'Promotions', sq: 'Promocionet', uk: 'Акції' },
   'admin.live_orders': { en: 'Live Orders', sq: 'Porositë Live', uk: 'Замовлення Live' },
@@ -4294,4 +4334,50 @@ export const catalog: Record<string, CatalogEntry> = {
     uk: 'Список алергенів неповний — за серйозних алергій уточніть у закладі.',
   },
   'message.amount_placeholder': { en: 'Amount', sq: 'Shuma', uk: 'Сума' },
+  // Voice control (ADR-0015) — client-only READ-ONLY voice UI (packages/ui/src/voice/*.tsx).
+  // Add-to-cart is the one STATEFUL proposal and always requires ConfirmChip confirmation.
+  'voice.fab_label': { en: 'Voice control', sq: 'Kontrolli me zë', uk: 'Голосове керування' },
+  'voice.listening': { en: 'Listening…', sq: 'Po dëgjon…', uk: 'Слухаю…' },
+  'voice.transcribing': { en: 'Transcribing…', sq: 'Po transkriptohet…', uk: 'Розшифровую…' },
+  'voice.applied': { en: 'Done', sq: 'U krye', uk: 'Готово' },
+  'voice.setting_label': { en: 'Voice', sq: 'Zëri', uk: 'Голос' },
+  'voice.disclosure_body': {
+    en: 'Voice control listens only while you hold the mic button and runs on your device. It can browse, filter, sort, or read back your order — adding items always asks you to confirm first.',
+    sq: 'Kontrolli me zë dëgjon vetëm kur mbani të shtypur butonin e mikrofonit dhe funksionon në pajisjen tuaj. Mund të shfletojë, filtrojë, renditë ose lexojë porosinë tuaj — shtimi i artikujve kërkon gjithmonë konfirmimin tuaj.',
+    uk: 'Голосове керування слухає лише поки ви утримуєте кнопку мікрофона і працює на вашому пристрої. Воно може переглядати, фільтрувати, сортувати чи зачитувати ваше замовлення — додавання товарів завжди запитує підтвердження.',
+  },
+  'voice.disclosure_decline': { en: 'Not now', sq: 'Jo tani', uk: 'Не зараз' },
+  'voice.disclosure_use': { en: 'Use voice', sq: 'Përdor zërin', uk: 'Використати голос' },
+  'voice.confirm_add': {
+    en: 'Add {{qty}}× {{item}}?',
+    sq: 'Shto {{qty}}× {{item}}?',
+    uk: 'Додати {{qty}}× {{item}}?',
+  },
+  'voice.cancel': { en: 'Cancel', sq: 'Anulo', uk: 'Скасувати' },
+  'voice.confirm': { en: 'Confirm', sq: 'Konfirmo', uk: 'Підтвердити' },
+  'voice.read_order_title': { en: 'Your order', sq: 'Porosia juaj', uk: 'Ваше замовлення' },
+  'voice.read_order_total': { en: 'Total', sq: 'Totali', uk: 'Разом' },
+  'voice.retry': { en: 'Try again', sq: 'Provo përsëri', uk: 'Спробувати знову' },
+  'voice.did_you_mean': { en: 'Did you mean?', sq: 'Ndoshta doje të thoje?', uk: 'Можливо, ви мали на увазі?' },
+  'voice.err.mic_denied': {
+    en: 'Microphone access denied',
+    sq: 'Qasja në mikrofon u refuzua',
+    uk: 'Доступ до мікрофона заборонено',
+  },
+  'voice.err.model_offline': {
+    en: 'Voice model is offline',
+    sq: 'Modeli i zërit është jashtë linje',
+    uk: 'Голосова модель офлайн',
+  },
+  'voice.err.no_match': { en: "Didn't catch that", sq: 'Nuk e kuptuam', uk: 'Не вдалося розпізнати' },
+  'voice.err.try_again': {
+    en: 'Something went wrong — try again',
+    sq: 'Diçka shkoi keq. Provoni sërish.',
+    uk: 'Щось пішло не так. Спробуйте ще раз.',
+  },
+  'voice.err.unavailable': {
+    en: "Voice control isn't available right now",
+    sq: 'Kontrolli me zë nuk është i disponueshëm tani',
+    uk: 'Голосове керування зараз недоступне',
+  },
 };

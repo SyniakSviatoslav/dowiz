@@ -18,6 +18,13 @@ import { AdminCommandCenter } from '../components/admin/AdminCommandCenter.js';
 
 const AnalyticsPage = React.lazy(() => import('../pages/admin/AnalyticsPage.js').then(m => ({ default: m.AnalyticsPage })));
 
+// QR/ATTRIBUTION build lane — dark by default. Lazy so the QR-generation code (qrcode
+// package) never ships in the initial admin bundle while the kit is off.
+const CHANNEL_KIT_ENABLED = import.meta.env.VITE_CHANNEL_KIT_ENABLED === 'true';
+const QRKitPage = CHANNEL_KIT_ENABLED
+  ? React.lazy(() => import('../pages/admin/QRKitPage.js').then(m => ({ default: m.QRKitPage })))
+  : null;
+
 // Dev-only diagnostic surface. Lazily + conditionally imported so the page and
 // its mock-courier/demo helpers are tree-shaken out of production builds
 // (import.meta.env.DEV is statically false in prod → the dynamic import is dropped).
@@ -39,6 +46,7 @@ const ALL_NAV_ITEMS = [
   { key: 'admin.crm', href: '/admin/crm', icon: 'ti ti-users' },
   { key: 'admin.branding', href: '/admin/branding', icon: 'ti ti-palette' },
   { key: 'admin.settings', href: '/admin/settings', icon: 'ti ti-settings' },
+  ...(CHANNEL_KIT_ENABLED ? [{ key: 'admin.qr_kit', href: '/admin/qr-kit', icon: 'ti ti-qrcode' }] : []),
 ];
 
 const PRIMARY_TABS: TabItem[] = ALL_NAV_ITEMS.slice(0, 4).map(item => ({
@@ -272,6 +280,9 @@ export function AdminRoutes() {
           <Route path="settings" element={<SettingsPage />} />
           <Route path="onboarding" element={<OnboardingPage />} />
           <Route path="activation" element={<ActivationPage />} />
+          {CHANNEL_KIT_ENABLED && QRKitPage && (
+            <Route path="qr-kit" element={<Suspense fallback={null}><QRKitPage /></Suspense>} />
+          )}
           {import.meta.env.DEV && FlowTestPage && (
             <Route path="_flow-test" element={<Suspense fallback={null}><FlowTestPage /></Suspense>} />
           )}

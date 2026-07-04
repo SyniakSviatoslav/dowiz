@@ -7,6 +7,7 @@ import { CURRENCIES } from '@deliveryos/shared-types';
 import type { LngLatLike } from '@deliveryos/ui';
 import { PHONE_E164_REGEX } from '@deliveryos/shared-types';
 import { messengerIsPhone } from '../../lib/messenger.js';
+import { getOrderChannel } from '../../lib/channel.js';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';
 import { normalizeAlbanianPhone } from './checkout/phone.js';
@@ -310,7 +311,12 @@ export function CheckoutPage({ onClose }: { onClose?: () => void } = {}) {
       }
       const raw = await apiClient<typeof PreflightResponse>('/orders', {
         method: 'POST',
-        headers: verifiedToken ? { 'x-otp-verified': verifiedToken } : undefined,
+        // QR/ATTRIBUTION: acquisition channel rides as a header (write-only metadata, never
+        // read for pricing/status/dispatch) — see lib/channel.ts for why it isn't a body field.
+        headers: {
+          'x-channel': getOrderChannel(slug),
+          ...(verifiedToken ? { 'x-otp-verified': verifiedToken } : {}),
+        },
         body: {
           locationId: locationId,
           type: deliveryType === 'pickup' ? 'pickup' : 'delivery',

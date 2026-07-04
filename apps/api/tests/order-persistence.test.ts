@@ -99,6 +99,29 @@ test('insertOrderWithItems — orders INSERT receives the exact positional param
   ]);
 });
 
+test('insertOrderWithItems — channel omitted (undefined) leaves metadata byte-identical to pre-channel behavior', async () => {
+  const calls: Call[] = [];
+  const enqueues: any[] = [];
+  await insertOrderWithItems(stubClient(calls), stubQueue(enqueues), baseInput());
+
+  const orderInsert = calls.find((c) => /INSERT INTO orders\b/.test(c.sql))!;
+  // metadata is the $18 positional param (see the golden-params test above).
+  assert.equal(orderInsert.params[17], JSON.stringify({ otp_verified: false, client_ip_hash: 'iphash' }));
+});
+
+test('insertOrderWithItems — QR/ATTRIBUTION: channel folds into the existing metadata jsonb (write-only)', async () => {
+  const calls: Call[] = [];
+  const enqueues: any[] = [];
+  await insertOrderWithItems(stubClient(calls), stubQueue(enqueues), { ...baseInput(), channel: 'qr' });
+
+  const orderInsert = calls.find((c) => /INSERT INTO orders\b/.test(c.sql))!;
+  const metadata = JSON.parse(orderInsert.params[17] as string);
+  assert.equal(metadata.channel, 'qr');
+  // otp_verified/client_ip_hash still present — channel is additive, not a replacement.
+  assert.equal(metadata.otp_verified, false);
+  assert.equal(metadata.client_ip_hash, 'iphash');
+});
+
 test('insertOrderWithItems — writes dependent rows + returns order/trackCode', async () => {
   const calls: Call[] = [];
   const enqueues: any[] = [];

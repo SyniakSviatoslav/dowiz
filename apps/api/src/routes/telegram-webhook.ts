@@ -13,6 +13,7 @@ import { setStorefrontPaused, createCloseNonce, getLocationStorefront } from '..
 import { setCategoryPref, isToggleableCategory } from '../lib/notificationPrefsService';
 import { botT } from '../notifications/bot-strings.js';
 import type { Locale } from '../notifications/locales.js';
+import { buildSetChatMenuButtonRequest } from '../notifications/telegram-mini-app.js';
 
 // TG_CATEGORY_GATING (default off): owner can toggle notification categories
 // (operational/quality) from Telegram via /settings → pref.toggle:<loc>:<category>.
@@ -23,6 +24,44 @@ const TG_CATEGORY_GATING = process.env.TG_CATEGORY_GATING === 'true';
 // callbacks is store.open:<locationId>, store.close:<locationId> (-> confirm button),
 // store.confirm:<locationId>:<nonce>. Authority is (chatId<->target@location)<->membership.
 const TG_STOREFRONT_ACTION = process.env.TG_STOREFRONT_ACTION === 'true';
+
+// TMA_ENABLED (default off; packages/config EnvSchema) — Telegram Mini App wrap of the
+// existing /s/:slug storefront (docs/design/tma-menu-button-wiring/, council-approved
+// 2026-07-04; see docs/design/channel-hub/TMA-VALIDATION.md for the manual test script).
+// On a successful /start <token> connect, best-effort sets a per-chat "web_app" menu
+// button that opens the vendor's OWN /s/:slug in Telegram's WebView. Zero schema/auth
+// change — reuses the location_id already authenticated by the connect-token flow just
+// above. Never blocks the connect success path: a failure here is swallowed (inner
+// try/catch), the owner still sees start.connected. Recovery note: the connect token is
+// single-use, so a transient failure is NOT retried by re-sending the same /start <token>
+// link — only a fresh reconnect (new token from /admin) reaches this code again.
+const TMA_ENABLED = process.env.TMA_ENABLED === 'true';
+
+// Best-effort, timeout-bounded (the shared callTelegramApi has no request timeout —
+// B-SCALE finding: don't let this rare side-effect pin the held operational DB connection
+// past a few seconds). Never throws — the caller doesn't need to catch.
+async function setTmaMenuButtonBestEffort(
+  callTelegramApi: (method: string, body: Record<string, any>) => Promise<any>,
+  chatId: string,
+  locationId: string,
+  client: { query: (...args: any[]) => Promise<any> },
+): Promise<void> {
+  if (!TMA_ENABLED) return;
+  try {
+    const appBaseUrl = process.env.APP_BASE_URL;
+    if (!appBaseUrl) return; // required env elsewhere; guard defensively, never throw here
+    const locRes = await client.query(`SELECT slug FROM locations WHERE id = $1`, [locationId]);
+    const slug = locRes.rows[0]?.slug;
+    if (!slug) return; // slug=NULL guard — never link to /s/null
+    const body = buildSetChatMenuButtonRequest(chatId, { appBaseUrl, slug });
+    await Promise.race([
+      callTelegramApi('setChatMenuButton', body),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TMA_MENU_BUTTON_TIMEOUT')), 5000)),
+    ]);
+  } catch (err) {
+    console.warn('[TelegramWebhook] Failed to set Mini App menu button (non-fatal):', err);
+  }
+}
 
 export default (async function telegramWebhookRoutes(fastify, opts) {
   const { db, queue, telegramBotSecret, messageBus } = opts as {
@@ -594,6 +633,10 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
         );
 
         await sendMessage(chatId, botT(locale, 'start.connected'));
+
+        // TMA_ENABLED (dark by default) — best-effort, never blocks the connect success
+        // path above. See docs/design/channel-hub/TMA-VALIDATION.md.
+        await setTmaMenuButtonBestEffort(callTelegramApi, chatId, location_id, client);
       }
       // Handle /stop command to disconnect
       else if (text === '/stop') {
