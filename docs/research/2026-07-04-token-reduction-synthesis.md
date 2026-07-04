@@ -24,7 +24,7 @@
 | **pxpipe** (teamchong) | MIT ✅ | SAFE (local proxy; no exfil) | Exact Fable-5 fit (`PXPIPE_MODELS`), renders bulk context as images — but **LOSSY on exact strings** (hashes/IDs); one documented silent failure | **PILOT dark, gated** to non-red-line lanes only |
 | **codegraph-rust** (Jakedismo) | ❌ no LICENSE (conflicting) | safe to run local | **BAKE-OFF PROVEN: loses 0/7 vs repowise 3/7-exact.** No query interface without `ai-enhanced` (2nd LLM/query); license blocks vendoring; its one edge (Rust indexing) absorbed by repowise which already ships the Rust stack | **NO-GO — do not integrate.** Cheaper win: point repowise at `rebuild/crates/` (13.8s, 0 LLM tokens) |
 | **halo/HALO** (context-labs) | ❌ unresolved (issue #34) | clean | Harness QA/observability — **wrong domain**, doesn't address tokens | **SKIP** (learn the trace-diagnostic governance pattern only) |
-| **future-agi** | pending | pending | pending | **PENDING** (task #17) |
+| **future-agi** (future-agi) | Apache-2.0 ✅ | benign (SDK phones usage home if pip-installed; we read source only) | LLM observability/eval platform; 2 borrowable metric patterns for our own scripts | **BORROW-PATTERNS** — not a dependency |
 
 Cross-cutting: agentmemory (active context-shrinking) + agentfiles (cheap continuous measurement) are
 **complementary, not redundant** — measure first, then shrink. codegraph & halo both blocked by absent
@@ -77,7 +77,11 @@ lossiness collides with our Mandatory-Proof / red-line invariants — hence gate
   in the bake-off (caught + reverted); find the non-destructive scope-add path or propose to operator.
   Two real repowise gaps logged as separate follow-ups (symbol-qualified `get_context` targets;
   cross-package caller undercounting).
-- **future-agi** (task #17) → additive-vs-redundant vs the agentfiles measurement layer. PENDING.
+- **future-agi** (task #17) → SETTLED: borrow-patterns. Two additive, non-protected `scripts/` follow-ups
+  (logged, not yet applied): (1) a `token_source` provenance tag (MEASURED/estimated/fallback) on
+  `scripts/exec-telemetry.mjs`'s schema — codifies the audit's prose distinction; (2) auto-emit per-lane
+  `subagent_tokens` into the telemetry emitter (replaces one-off diagnostic probes like the ~42K-floor
+  finding). Idea 3 (SSG registry-of-checks) deferred — SSG's own no-new-dep philosophy.
 
 ## 6. Note on this pass's own cost
 The map phase (7 teardowns) itself spent tokens — the honest ledger: the reduce's applied wins
