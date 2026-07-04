@@ -36,10 +36,13 @@ governance hooks hard-block it:
 2. `mv package.json.pending package.json`
 3. `cd rebuild/web && npm install` (generates `package-lock.json` — not in either hook's protected
    list, only the root `pnpm-lock.yaml` is guarded)
-4. `npm run gen:messages` — compiles `messages/{sq,en,uk}.json` via the real
-   `@inlang/paraglide-js` compiler into `src/paraglide/` (see "i18n" below — replaces
-   `src/lib/paraglide-stub.ts` + `src/lib/locale-data/*`, which are hand-written stand-ins with the
-   **same call shape** Paraglide 2 generates, so swapping is an import-path change only)
+4. `npm run gen:messages` — compiles `messages/{sq,en,uk}.json` via the real `@inlang/paraglide-js`
+   compiler into `src/paraglide/` (gitignored codegen; see "i18n" below). **Done** — the swap from
+   the hand-written `src/lib/paraglide-stub.ts` stand-in (now deleted, along with
+   `src/lib/locale-data/*`) to the real compiled `src/paraglide/messages.js` + `runtime.js` was a
+   pure import-path change, exactly as the stub's own header comment predicted. `gen:messages` now
+   also runs as a `prebuild` hook so `npm run build`/`pnpm run build` always compiles fresh
+   messages first.
 5. `npx openapi-typescript ../../docs/design/rebuild-plan/openapi-contracts/openapi-s1-storefront-read.yaml -o src/lib/api-types.d.ts`
    — regenerates the real typed client from the S1 YAML; diff against the current hand-transcribed
    file (should be near-identical; any drift is a real contract nuance to double check)
@@ -70,9 +73,8 @@ rebuild/web/
     │   │                          by MenuBrowser + CartButton islands (parity: CartProvider.tsx) —
     │   │                          note the `.svelte.ts` extension: runes only compile in `.svelte`
     │   │                          or `.svelte.js/.ts` files, a plain `.ts` module fails silently
-    │   ├── paraglide-stub.ts    ← hand-written stand-in for `src/paraglide/messages.js`
-    │   │                          (identical call shape: `cart_title(locale?)`) — see "i18n" below
-    │   └── locale-data/{en,sq,uk}.ts  ← message tables backing the stub
+    │   │                          (paraglide-stub.ts + locale-data/*.ts deleted post-swap — see
+    │   │                          "i18n" below; real messages compile to gitignored src/paraglide/)
     ├── styles/tokens.css        ← placeholder --brand-* vars only (no design-system port — that's
     │                              Phase-B scope per REBUILD-MAP inventory 11 §3.3)
     ├── components/
@@ -86,7 +88,7 @@ rebuild/web/
     │       │                            MenuPage.tsx:516-533), search filter, add-to-cart delegation
     │       ├── CartButton.svelte      ← client:idle — sticky cart bar (parity: ClientLayout.tsx
     │       │                            StickyActionBar)
-    │       └── LanguageSwitcher.svelte ← client:idle — wired to the Paraglide stand-in
+    │       └── LanguageSwitcher.svelte ← client:idle — wired to the real compiled Paraglide runtime
     ├── layouts/StorefrontLayout.astro ← header chrome + SERVER-SIDE theme CSS-var injection
     │                                     (kills the theme-flash the current React app has)
     └── pages/s/[slug].astro    ← the S1 SSR page: parallel fetch menu+info+theme per request,
@@ -117,27 +119,16 @@ Phase-B follow-up — Astro doesn't have a first-class "upgrade hydration at run
 message keys — a compiler constraint, not a stylistic choice; REBUILD-MAP inventory 11 §5.2 already
 flags this for the 13 dynamic-key families).
 
-**Overhead measurement — could not run the real compiler (blocker above).** As a substitute, I
-hand-built a proxy bundle matching Paraglide-JS 2's **publicly documented** compiled-message shape
-(one small function per message + the runtime's `getLocale`/`setLocale`/`isLocale` surface — see
-paraglidejs.com "Compiled Bundle" docs) for these exact 10 messages × 3 locales, and gzip'd it for
-real:
-
-```
-$ wc -c paraglide-proxy-bundle.js && gzip -9 -c paraglide-proxy-bundle.js | wc -c
-4731  (raw)
-1567  (gzip -9)
-```
-
-**≈1.53 kB gz for 10 messages + runtime — well inside the ≤8 kB gz budget** (REBUILD-MAP §3 Phase A
-gate / inventory 11 §5.2 fallback trigger "storefront island i18n overhead measured > ~8 kB gz").
-Caveat: this is a **hand-modeled proxy**, not `astro build` output — real per-message output may
-carry a few hundred more bytes of compiler boilerplate (import wiring, tree-shaking artifacts), but
-even 3-4x this number stays under budget. At 1,445 real catalog keys the picture doesn't change:
-Paraglide's whole value proposition is **per-message** tree-shaking (REBUILD-MAP inventory 11 §5.2
-point 2) — MenuBrowser only pulls in the ~10-20 keys it actually calls, not the 61.4 kB gz whole
-catalog (C7). Re-run the measurement for real once the compiler is installed (recipe step 4 above)
-before treating this as final.
+**Overhead measurement — real compiler output, post-swap.** `gen:messages` now compiles via the
+real `@inlang/paraglide-js@2.20.2` (`--strategy globalVariable baseLocale`, matching the stub's
+in-memory-only locale resolution — no cookie/URL/localStorage code ships). The compiled Paraglide
+**runtime chunk** (`getLocale`/`setLocale`/`locales`/`baseLocale`) alone is **972 B gz**; individual
+messages tree-shake to nothing extra (`cart_title`'s 3-locale function inlines directly into
+whichever island calls it, at well under 100 B). That part of the original spike's finding holds:
+i18n overhead is a small slice of the total. It is **not**, however, the reason the page is over
+budget — the Svelte-islands runtime itself is. See `ISLAND-BUDGET-OPTIONS.md` for the full
+per-chunk breakdown, category attribution, and slimming options against the real 21.6 kB gz
+client-JS total for `/s/[slug]`.
 
 ## Parity notes vs. `apps/web/src/pages/client/MenuPage.tsx` + `ClientLayout.tsx`
 

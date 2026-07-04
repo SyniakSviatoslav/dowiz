@@ -5,7 +5,7 @@
   // yet expose a first-class "upgrade hydration at runtime" primitive, so today this ships as a
   // plain client:idle island that re-renders reactively once cart.count > 0).
   import { cart } from '../../lib/cart-store.svelte';
-  import { cart_title } from '../../lib/paraglide-stub';
+  import { cart_title } from '../../paraglide/messages.js';
 </script>
 
 {#if cart.count > 0}

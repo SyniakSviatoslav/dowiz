@@ -6,7 +6,7 @@
 import '../styles/tokens.css';
 import LanguageSwitcher from '../components/islands/LanguageSwitcher.svelte';
 import type { PublicTheme } from '../lib/api-types';
-import { client_menu } from '../lib/paraglide-stub';
+import { client_menu } from '../paraglide/messages.js';
 
 interface Props {
   theme: PublicTheme | null;
@@ -14,7 +14,7 @@ interface Props {
 }
 const { theme, locationName } = Astro.props;
 // Parity: ClientLayout.tsx:192 `{locationName || t('client.menu', 'Menu')}` — same fallback,
-// via the Paraglide stand-in rather than the old I18nProvider.
+// via the real compiled Paraglide runtime rather than the old I18nProvider.
 const displayName = locationName || client_menu();
 
 // Only emit vars the tenant actually set — unset ones fall back to tokens.css defaults, same

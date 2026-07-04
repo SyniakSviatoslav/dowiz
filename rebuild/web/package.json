@@ -9,7 +9,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",
-    "gen:messages": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide"
+    "gen:messages": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy globalVariable baseLocale",
+    "prebuild": "pnpm run gen:messages"
   },
   "dependencies": {
     "@astrojs/node": "9.5.5",

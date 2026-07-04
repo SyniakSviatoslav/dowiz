@@ -1,16 +1,21 @@
 <script lang="ts">
   // LanguageSwitcher island — parity: packages/ui LanguageSwitcher (compact/full variants),
   // consumed inside StorefrontShellControls per REBUILD-MAP inventory 11 §7.1 row 4
-  // ("client:idle — tiny"). Wired to the Paraglide stand-in (src/lib/paraglide-stub.ts); once
-  // the real @inlang/paraglide-js runtime is installed, only the import path changes — the
-  // `setLocale`/`getLocale`/`locales` call shape is Paraglide 2's own public API, kept identical
-  // here on purpose.
-  import { locales, getLocale, setLocale, type Locale } from '../../lib/paraglide-stub';
+  // ("client:idle — tiny"). Wired to the real compiled `src/paraglide/runtime.js` (recompiled
+  // with `--strategy globalVariable baseLocale` — see gen:messages in package.json — so locale
+  // resolution stays an in-memory module variable defaulting to baseLocale, same behavior as the
+  // stub this replaced; no cookie/URL/localStorage strategies are included, so none of that code
+  // ships). `reload: false` matches the stub's non-reloading behavior — Paraglide's default is to
+  // full-page-reload on setLocale so SSR-rendered strings re-render in the new locale too; that's
+  // a deliberate follow-up for whoever wires real locale-aware routing, not in scope here.
+  import { locales, getLocale, setLocale } from '../../paraglide/runtime.js';
+
+  type Locale = (typeof locales)[number];
 
   let current = $state<Locale>(getLocale());
 
   function choose(l: Locale) {
-    setLocale(l);
+    setLocale(l, { reload: false });
     current = l;
     document.documentElement.lang = l;
   }
