@@ -134,3 +134,8 @@ applies this. A green test is worthless if it can't go red. **Banned (these are 
 🔴 **Red-line (money/RLS/PII):** never "prove" a block with `assert.ok(true)`, a COUNT of an empty
 tenant, a pg_class metadata check, or a PII check by JSON key-name — assert the actual DML/value.
 A test that fails because the PRODUCT is wrong is a **finding to escalate**, never a thing to weaken.
+
+# Execution shape — Map-Reduce (universal)
+
+Decomposable work runs Map→Reduce: classify (≥2 independent/collision-free/order-free units?) → map (concurrent, narrow-tool subagents returning DISTILLED results, not dumps) → reduce (synthesize, dedup, integrate the shared point, trust the distillate — don't re-read). Non-decomposable work runs solo. Never fan out what doesn't split; never serialize what does. Narrow tool grants (read-only search → Explore, not general-purpose) cut the ~42K/lane dispatch floor; recursion depth ≤2. Spec: docs/operating-model/agentic-map-reduce.md.
+

@@ -16,7 +16,6 @@ error signature. file is repo-relative.
 | packages/ui/src/theme/**.css | docs/lessons/2026-06-23-css-comment-star-slash.md |
 | e2e/tests/behavioural-invariants.spec.ts | docs/lessons/2026-06-23-contrast-gate-skip-images.md |
 | File has not been read yet | docs/lessons/2026-06-29-read-tool-before-edit.md |
-| docs/** | docs/lessons/2026-06-29-docs-only-no-staging-deploy.md |
 | .claude/state/** | docs/lessons/2026-07-02-gate-state-file-expiry.md |
 | .claude/hooks/** | docs/lessons/2026-07-02-gate-state-file-expiry.md |
 | packages/db/migrations/**role** | docs/lessons/2026-07-03-rotate-prod-role-staging-rehearsal.md |
