@@ -3,12 +3,18 @@
 // globs apps/*, packages/*, tools/*, spikes/* only — rebuild/web matches none of them).
 import { defineConfig, envField } from 'astro/config';
 import svelte from '@astrojs/svelte';
+import node from '@astrojs/node';
 
 export default defineConfig({
   // SSR (server output) so /s/[slug] fetches the menu per-request from the S1 read API —
   // no live fetches happen at BUILD time (see src/pages/s/[slug].astro: fetch only in
   // the per-request `get`/frontmatter path, never at module scope).
   output: 'server',
+  // Adapter required for output:'server' (astro build fails with NoAdapterInstalled
+  // otherwise). 'standalone' mode = a self-contained Node HTTP server (dist/server/entry.mjs)
+  // for this Phase-A spike; final deployment target (Fly/Rust proxy) picks its own adapter
+  // later — swapping this is a config-only change, no page code depends on it.
+  adapter: node({ mode: 'standalone' }),
   integrations: [svelte()],
   security: {
     // storefront embeds itself in iframes for the branding-preview flow (parity with

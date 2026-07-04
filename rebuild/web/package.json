@@ -12,12 +12,14 @@
     "gen:messages": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide"
   },
   "dependencies": {
-    "astro": "5.18.2",
+    "@astrojs/node": "9.5.5",
     "@astrojs/svelte": "7.2.5",
-    "svelte": "5.56.4",
-    "@inlang/paraglide-js": "2.20.2"
+    "@inlang/paraglide-js": "2.20.2",
+    "astro": "5.18.2",
+    "svelte": "5.56.4"
   },
   "devDependencies": {
+    "@astrojs/check": "0.9.9",
     "openapi-typescript": "7.13.0",
     "typescript": "5.9.3"
   }
