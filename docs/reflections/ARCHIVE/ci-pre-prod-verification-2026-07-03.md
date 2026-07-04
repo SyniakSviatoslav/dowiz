@@ -109,3 +109,19 @@ green, red arms proven). Medium on FULL mode until it runs once in CI against a 
 - [[plane-telemetry-closed-loop-2026-07-02]] (durable-local illusion = same "property-of-the-target"
   category error as prod≠staging)
 - docs/design/ci-pre-prod-verification/proposal.md · docs/proposals/ci-pre-prod-verification-wiring.md
+
+---
+
+**Curation note (librarian, 2026-07-04 drain pass):** Already fully promoted in a prior pass —
+`docs/lessons/2026-07-03-prod-staging-schema-drift.md` and
+`docs/lessons/2026-07-03-rotate-prod-role-staging-rehearsal.md` (both STATUS active, both cite
+this reflection as source, INDEX rows already present for
+`packages/db/migrations/**`/`**role**`/`**grant**`) plus
+`docs/regressions/REGRESSION-LEDGER.md` #51 and #52 (`apps/api/tests/worker-boot-budget-lock.test.ts`,
+`scripts/ci-connection-preflight.mjs`, `scripts/ci-migration-preflight.mjs`,
+`scripts/ci-schema-drift.mjs` — all red→green proven per the ledger rows) already cover all six
+causal patterns (P1-P6) in full. CHALLENGE re-confirms: P3 (prod≠staging drift) is a genuine
+recurrence, not coincidence — it is the SECOND occurrence of the identical shape as the
+2026-06-20 outage (ledger #3), and the `dowiz_app`/`owner_id` drift is directly reproducible from
+migration 077 + the deploy log. This file was simply never moved out of INBOX after promotion —
+archiving now to close the orphan (no new lesson/guardrail work needed).

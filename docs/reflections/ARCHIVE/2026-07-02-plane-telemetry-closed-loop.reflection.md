@@ -61,3 +61,19 @@ resolution of that prediction is itself the first calibration data point.
   (verify-artifact-not-proxy, advisory-vs-authority, council-before-code)
 - docs/design/plane-telemetry-principles/ (proposal, breaker ROUND 1-3, counsel, resolution)
 - docs/adr/ADR-plane-telemetry-and-calibration.md · REGRESSION-LEDGER #49
+
+---
+
+**Curation note (librarian, 2026-07-04 drain pass):** Two causal roots, two different
+dispositions. Root 1 (durable-local illusion) is fully covered already: ledger #49's git-plumbing
+publish to the append-only `telemetry/plane` branch is the deterministic fix, no separate lesson
+needed (would duplicate the ledger row). Root 2 (uncommitted-toolchain blind spot — a remote
+trigger referenced a repo path before it was pushed) is a genuinely distinct, atomic, CHALLENGE-
+surviving root (verified reproducible: the trigger-prompt-before-commit sequencing is directly in
+this session's own decision log, and it is a second occurrence of the shared-checkout
+deferred-commit hazard also seen in `design-system-prune-collision-2026-07-02.md` — not a
+coincidence, a recurring class) → distilled into
+`docs/lessons/2026-07-02-remote-consumer-artifact-existence.md` (TRIGGER `scripts/plane-*.mjs`,
+STATUS active) + INDEX row added. Not promoted to a Tier-1 guardrail: no static in-repo check can
+see "is this path pushed to the remote-read ref" without querying the remote on every relevant
+edit — Tier-2 advisory is the right level for now. Archiving this reflection.

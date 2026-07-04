@@ -49,3 +49,19 @@ cse_01Psnn1SgcmYwwqpZoyE1xtv's transcript; explicitly flagged as the open verifi
 - [[plane-maintainer-agent-2026-07-02]]
 - [[claude-cloud-github-authz-2026-07-02]]
 - [[memory-corpus-meta-patterns-2026-07-02]] (verify-artifact-not-proxy)
+
+---
+
+**Curation note (librarian, 2026-07-04 drain pass):** CHALLENGE — is this a genuine recurring
+root, or a benign one-off? The WHY (act on cached remote-state-in-memory instead of re-`get`ing
+it) is real and correctly reasoned, but two things weigh against promotion: (1) the outcome was
+idempotent (one wasted `get` call, zero side effect — the operator's 13:39 repoint was never
+clobbered); (2) the underlying pattern is already a NAMED, established meta-pattern
+(`verify-artifact-not-proxy`, `memory-corpus-meta-patterns-2026-07-02`) with its own deterministic
+instance already gated in `scripts/plane-guard.mjs` (`P1/P2 verify-artifact-not-proxy` — no
+commit/deploy piped to tail/head/grep). This reflection is a second, milder manifestation
+(memory-of-remote-API-state, not a masked exit code), not a new bug class. NOT distilled into
+`docs/lessons/`: the trigger surface is a remote `claude.ai` trigger/env API call, not a repo file
+`pre-edit-lessons` could ever match on Edit/Write/MultiEdit — a lesson here would be permanently
+dead weight (never inject), violating "store must not grow." PRUNED — folded into the
+already-established `verify-artifact-not-proxy` pattern rather than a new artifact. Archiving.

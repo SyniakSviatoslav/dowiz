@@ -26,3 +26,18 @@ decisions (worktrees-by-default, re-verify a `--no-verify` commit) that need a h
 call, not a librarian promotion. Left in INBOX for the Council retro (CLAUDE.md self-improvement
 loop step 5, "On a big change / hard fix, the Council retro ... synthesises reflections") rather
 than archived — item 3's re-verify action is still open.
+
+**Curation note 2 (librarian, 2026-07-04 drain pass):** Re-confirming the 2026-07-02 decision on a
+fresh read: it holds — item 1's guardrail is still self-flagged infeasible (no session-attribution
+primitive exists), item 2 (worktrees-by-default) is a process decision above librarian scope, and
+neither is edit-time file-triggerable, so no `docs/lessons/` entry is warranted per the same
+reasoning as `2026-07-02-plane-maintainer-env-probe.reflection.md` (this pass, same category). One
+fact HAS changed since the last pass: item 3's precondition — "once guard-bash.sh registration
+lands" — is now satisfied (`guard-bash.sh` is registered under Bash in `.claude/settings.json:72`,
+per ledger #47/#48, commit `58f223f`). The re-verify action itself (confirm commit `06471162`
+against the full gate set) is a one-off diagnostic on a specific past commit, not a systemic
+ratchet artifact — flagging it as an explicit OPEN FOLLOW-UP for the operator/calling agent rather
+than executing it here (out of librarian scope: no git-history replay/checkout actions). Archiving
+now per the 2026-07-04 backlog-drain directive (plane-guard `inbox-drain-liveness` soft-warn) —
+this closes the loop's advisory half; the open follow-up is carried in this run's report, not
+lost.
