@@ -34,6 +34,13 @@ use crate::auth::error::{
     SyntheticCourierMissing, TrackLinkExpiredBody,
 };
 
+// ── S4 media council schemas ──
+use crate::routes::media_public::EntryPhotoResponse;
+use crate::routes::owner::product_media::{
+    AvailableToggleRequest, BudgetExceededBody, ConfirmRequest, ConfirmResponse, PresignItem,
+    PresignRequest, PresignResponse, PresignUpload, ReorderRequest,
+};
+
 #[derive(OpenApi)]
 #[openapi(
     paths(
@@ -82,9 +89,9 @@ use crate::auth::error::{
         crate::routes::auth_customer::customer_track_exchange,
         // ── S3 catalog/admin CRUD (owner-route census rows 1-89; 35 built ops) ──
         // Out-of-scope rows deliberately ABSENT: settlements/dashboard/gdpr/signals/couriers/etc
-        // (other surfaces), product-media + theme logo upload (S4 media), locations PATCH /
-        // menu-confirm / menu-import / menu-translate (🔴 council-gated or deferred — see
-        // routes/owner/mod.rs module doc).
+        // (other surfaces), locations PATCH / menu-confirm / menu-import / menu-translate
+        // (🔴 council-gated or deferred — see routes/owner/mod.rs module doc). Theme logo upload
+        // (row #86) and product-media are NO LONGER absent — see the S4 media council block below.
         crate::routes::owner::products::create_product,
         crate::routes::owner::products::list_products,
         crate::routes::owner::products::get_product,
@@ -120,6 +127,19 @@ use crate::auth::error::{
         crate::routes::owner::menu_availability::delete_schedule,
         crate::routes::owner::themes::get_owner_theme,
         crate::routes::owner::themes::put_owner_theme,
+        // ── S4 media council (docs/design/rebuild-media-s4-council/) ──
+        // Owner-authenticated (mounted inside owner_catalog_router, same bearer gate as S3):
+        crate::routes::owner::themes::upload_theme_logo,
+        crate::routes::owner::product_media::presign_product_media,
+        crate::routes::owner::product_media::confirm_product_media,
+        crate::routes::owner::product_media::set_primary_product_media,
+        crate::routes::owner::product_media::reorder_product_media,
+        crate::routes::owner::product_media::set_product_media_available,
+        crate::routes::owner::product_image::upload_product_image,
+        // Unauthenticated (routes::media_public — REV-S4-2 token-proxy-PUT + REV-S4-6
+        // entry-photo; mounted OUTSIDE the bearer gate, see that module's doc):
+        crate::routes::media_public::proxy_put_upload,
+        crate::routes::media_public::upload_entry_photo,
     ),
     components(schemas(
         HealthStatus,
@@ -213,6 +233,17 @@ use crate::auth::error::{
         crate::routes::owner::themes::UpdateThemeRequest,
         crate::routes::owner::themes::GetThemeResponse,
         crate::routes::owner::themes::UpdateThemeResponse,
+        // ── S4 media council schemas ──
+        PresignItem,
+        PresignRequest,
+        PresignUpload,
+        PresignResponse,
+        BudgetExceededBody,
+        ConfirmRequest,
+        ConfirmResponse,
+        ReorderRequest,
+        AvailableToggleRequest,
+        EntryPhotoResponse,
     )),
     tags(
         (name = "health", description = "Liveness/health probes"),
@@ -229,6 +260,8 @@ use crate::auth::error::{
         (name = "auth", description = "S2 owner/courier/claim/customer auth flows"),
         (name = "dev", description = "S2 dev-auth mint (dev-routes builds only)"),
         (name = "owner-catalog", description = "S3 owner catalog/admin CRUD (products, categories, modifier groups, availability, themes)"),
+        (name = "owner-media", description = "S4 owner-authenticated media (product-media ADR-0002 seam, product-image, theme logo)"),
+        (name = "media-upload", description = "S4 unauthenticated media (token-proxy-PUT, entry-photo)"),
     )
 )]
 pub struct ApiDoc;
@@ -363,8 +396,9 @@ mod tests {
     /// The 15 distinct S3 catalog paths this build annotated (35 ops — several paths carry
     /// multiple methods). A future edit that silently drops a `#[utoipa::path]` from `paths(...)`
     /// fails loudly here (same posture as the S1/S2 pinning tests above). Out-of-scope rows must
-    /// stay ABSENT: theme logo upload (S4), locations PATCH / menu-confirm / menu-import /
-    /// menu-translate (🔴 council-gated or deferred).
+    /// stay ABSENT: locations PATCH / menu-confirm / menu-import / menu-translate (🔴
+    /// council-gated or deferred). Theme logo upload is NO LONGER in the absent list — S4 built
+    /// it (`openapi_document_lists_the_s4_media_operations` below covers its own presence).
     #[test]
     fn openapi_document_lists_the_s3_catalog_operations_and_omits_deferred_rows() {
         let doc = ApiDoc::openapi();
@@ -396,7 +430,6 @@ mod tests {
         }
         // Deferred/out-of-scope proof-of-absence.
         for absent in [
-            "/api/owner/locations/{locationId}/theme/logo",
             "/api/owner/locations/{locationId}",
             "/api/owner/locations/{locationId}/products/{productId}/confirm-allergens",
             "/api/owner/menu/import/commit",
@@ -405,6 +438,50 @@ mod tests {
                 !paths.contains(absent),
                 "deferred/out-of-scope S3 row must be absent: {absent}"
             );
+        }
+    }
+
+    /// S4 media council paths — owner-authenticated (theme logo, product-media, product-image)
+    /// and unauthenticated (token-proxy-PUT, entry-photo).
+    #[test]
+    fn openapi_document_lists_the_s4_media_operations() {
+        let doc = ApiDoc::openapi();
+        let paths: std::collections::HashSet<&str> =
+            doc.paths.paths.keys().map(String::as_str).collect();
+        let expected = [
+            "/api/owner/locations/{locationId}/theme/logo",
+            "/api/owner/menu/products/{productId}/media/presign",
+            "/api/owner/menu/products/{productId}/media/confirm",
+            "/api/owner/menu/products/{productId}/media/{mediaId}/set-primary",
+            "/api/owner/menu/products/{productId}/media/reorder",
+            "/api/owner/menu/products/{productId}/media/{mediaId}",
+            "/api/owner/menu/products/{productId}/image",
+            "/api/media/upload/{token}",
+            "/api/public/entry-photo",
+        ];
+        for path in expected {
+            assert!(paths.contains(path), "missing S4 media path: {path}");
+        }
+    }
+
+    /// The S4 request/response DTO schemas are registered.
+    #[test]
+    fn openapi_document_includes_s4_media_schemas() {
+        let doc = ApiDoc::openapi();
+        let schemas = &doc.components.as_ref().unwrap().schemas;
+        for name in [
+            "PresignItem",
+            "PresignRequest",
+            "PresignUpload",
+            "PresignResponse",
+            "BudgetExceededBody",
+            "ConfirmRequest",
+            "ConfirmResponse",
+            "ReorderRequest",
+            "AvailableToggleRequest",
+            "EntryPhotoResponse",
+        ] {
+            assert!(schemas.contains_key(name), "missing S4 schema: {name}");
         }
     }
 

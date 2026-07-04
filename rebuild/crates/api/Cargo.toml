@@ -16,7 +16,10 @@ path = "src/main.rs"
 [dependencies]
 domain = { path = "../domain" }
 
-axum = { version = "0.8", features = ["json"] }
+# "multipart" added for the S4 media port: product-image/theme-logo/entry-photo all accept
+# `multipart/form-data` uploads (Node's `@fastify/multipart` equivalent) — pulls in `multer`,
+# axum's own official multipart extractor, not a third-party pick.
+axum = { version = "0.8", features = ["json", "multipart"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "fs"] }
 tower = { version = "0.5", features = ["timeout", "util"] }
 tower-http = { version = "0.6", features = ["trace", "request-id", "util"] }
@@ -88,6 +91,23 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 # GetObject call. Built on ring/hmac/sha2, all already resolved transitively via sqlx-postgres's
 # SCRAM auth, so this + reqwest add 24 new crates total vs. ~70+ for aws-sdk-s3.
 aws-sign-v4 = "0.3"
+
+# ── S4 media port additions ──
+# Council-sanctioned image stack (docs/design/rebuild-media-s4-council/resolution.md Q3, decided
+# by spike evidence `rebuild/spikes/image-stack/`): pure-Rust decode/resize, `cc`-only build (no
+# `cmake` anywhere in the graph — `libvips` was rejected for exactly that link-time system-dep
+# trap). "jpeg"/"png" cover the real input classes (spike's `load_from_memory_with_format` path
+# was PNG-only, a breaker H2 gap this port closes). "webp" feature is the container/basic decode
+# path used by `ImageReader` for the rare webp-in re-upload case; the actual q78-82 LOSSY ENCODE
+# goes through the `webp` crate below (`image`'s own WebP encoder is lossless-only, spike-confirmed).
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+# Lossy WebP encode (libwebp-sys, `cc`-only — no cmake/system lib). REQUIRED because `image`'s
+# native WebP encoder has no quality knob (see above).
+webp = "0.3"
+# Upload-token HMAC-SHA256 (REV-S4-2 token-proxy-PUT design) — already resolved transitively
+# (`sha2`'s own dependency graph / `aws-sign-v4`), promoted to a direct dependency here since the
+# media upload-token module calls it directly rather than through another crate's re-export.
+hmac = "0.12"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }

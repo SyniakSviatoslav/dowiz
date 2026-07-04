@@ -12,6 +12,7 @@ mod config;
 mod db;
 mod dto;
 mod error;
+mod media;
 mod middleware;
 mod openapi;
 mod repo;
@@ -85,10 +86,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         err
     })?;
 
-    let state = Arc::new(build_app_state(&pools));
+    // Built ONCE and shared across S1 (`AppState`) and every S4 owner/public media state — a
+    // single object-storage handle for the whole process, matching Node's single `storage`
+    // instance threaded through every plugin registration (`server.ts`).
+    let storage = build_storage();
+    let state = Arc::new(build_app_state(&pools, storage.clone()));
     let mut app = build_router(state);
 
-    // ── S2 auth surface + S3 catalog/admin CRUD surface (both dark) ──
+    // ── S2 auth surface + S3 catalog/admin CRUD surface + S4 media surface (all dark) ──
     // Mount the auth router ONLY when the JWT/auth env is present (AuthConfig fail-fasts on a
     // prod box carrying dev-auth vars — boot-guard D). When the auth env is absent (e.g. an
     // S1-only boot), the auth routes stay DARK (unmounted) — the openapi document still lists
@@ -98,17 +103,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // S3 rides the same gate: every S3 op binds the S2 `OwnerClaimsExt` extractor (nothing can
     // authenticate without the JWT verifier), so "auth env present" is exactly the S3
     // precondition too — the catalog surface is dark precisely when the auth surface is.
+    //
+    // S4 (media) rides the SAME gate too, by build-brief instruction — even though its
+    // UNAUTHENTICATED half (`routes::media_public`, entry-photo + the token-proxy-PUT endpoint)
+    // needs no JWT at all, it mounts "dark exactly when S2 is dark" rather than unconditionally,
+    // so the whole media surface (owner-authenticated + public) launches as one unit.
     match build_auth_state(&pools) {
         Ok(auth_state) => {
             app = app.merge(auth::auth_router(auth_state.clone()));
             tracing::info!("S2 auth surface mounted");
             app = app.merge(routes::owner::owner_catalog_router(build_owner_states(
-                auth_state, &pools,
+                auth_state,
+                &pools,
+                storage.clone(),
+                &config,
             )));
             tracing::info!("S3 catalog/admin CRUD surface mounted");
+            app = app.merge(routes::media_public::media_public_router(
+                build_media_public_state(storage, &config),
+                config.media.entry_photo_global_cap_per_minute,
+            ));
+            tracing::info!("S4 media surface mounted");
         }
         Err(err) => {
-            tracing::warn!(%err, "S2 auth + S3 catalog surfaces DARK — JWT/auth env not configured; not mounting them");
+            tracing::warn!(%err, "S2 auth + S3 catalog + S4 media surfaces DARK — JWT/auth env not configured; not mounting them");
         }
     }
 
@@ -122,10 +140,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Builds `AppState` from connected `Pools` + raw env reads. Split out from `main()` so it's
-/// exercised (minus the live-DB pool) by `build_router`'s wiring test below without needing a
-/// live Postgres.
-fn build_app_state(pools: &Pools) -> AppState {
+/// Builds `AppState` from connected `Pools` + a shared `storage` handle + raw env reads. Split
+/// out from `main()` so it's exercised (minus the live-DB pool) by `build_router`'s wiring test
+/// below without needing a live Postgres.
+fn build_app_state(pools: &Pools, storage: Arc<dyn Storage>) -> AppState {
     AppState {
         // S1 follow-up #1: `CachedRepo` (repo.rs) wraps the real `PgRepo` with the TTL+SWR cache
         // — `AppState.repo` stays `Arc<dyn PublicRepo>` either way, so every route handler and
@@ -133,7 +151,7 @@ fn build_app_state(pools: &Pools) -> AppState {
         repo: Arc::new(CachedRepo::new(Arc::new(PgRepo::new(
             pools.operational.clone(),
         )))),
-        storage: build_storage(),
+        storage,
         media_rich_enabled: std::env::var("MEDIA_RICH_ENABLED").as_deref() == Ok("true"),
         app_base_url: std::env::var("APP_BASE_URL")
             .unwrap_or_else(|_| "https://dowiz.fly.dev".to_string()),
@@ -193,12 +211,30 @@ fn build_auth_state(pools: &Pools) -> Result<auth::AuthState, Box<dyn std::error
     ))
 }
 
-/// Build the five S3 per-module states (each a `Pg*Repo` over the operational pool — every
-/// query inside goes through `db::with_user`, never a raw pool read; see `routes/owner/mod.rs`).
-/// `app_base_url`/`r2_public_url` mirror `build_app_state`'s S1 raw env reads — the
-/// `/api/owner/menu/products*` alias ops thread them into the same `get_image_url` mapping the
-/// S1 menu read uses (`product-mapper.ts` parity).
-fn build_owner_states(auth: auth::AuthState, pools: &Pools) -> routes::owner::OwnerCatalogStates {
+/// Build the S3 per-module states PLUS the S4 owner-authenticated media states (each a
+/// `Pg*Repo` over the operational pool — every query inside goes through `db::with_user`, never
+/// a raw pool read; see `routes/owner/mod.rs`). `app_base_url`/`r2_public_url` mirror
+/// `build_app_state`'s S1 raw env reads — the `/api/owner/menu/products*` alias ops (and the S4
+/// media ops) thread them into the same `get_image_url` mapping the S1 menu read uses
+/// (`product-mapper.ts` parity).
+fn build_owner_states(
+    auth: auth::AuthState,
+    pools: &Pools,
+    storage: Arc<dyn Storage>,
+    config: &config::Config,
+) -> routes::owner::OwnerCatalogStates {
+    let app_base_url =
+        std::env::var("APP_BASE_URL").unwrap_or_else(|_| "https://dowiz.fly.dev".to_string());
+    let r2_public_url = std::env::var("R2_PUBLIC_URL")
+        .ok()
+        .filter(|s| !s.is_empty());
+    let token_signer = config
+        .media
+        .upload_token_secret_hex
+        .as_deref()
+        .and_then(|hex| media::upload_token::UploadTokenSigner::from_hex(hex).ok())
+        .map(Arc::new);
+
     routes::owner::OwnerCatalogStates {
         auth: auth.clone(),
         products: routes::owner::products::ProductsState {
@@ -206,11 +242,8 @@ fn build_owner_states(auth: auth::AuthState, pools: &Pools) -> routes::owner::Ow
             repo: Arc::new(routes::owner::products::PgProductsRepo::new(
                 pools.operational.clone(),
             )),
-            app_base_url: std::env::var("APP_BASE_URL")
-                .unwrap_or_else(|_| "https://dowiz.fly.dev".to_string()),
-            r2_public_url: std::env::var("R2_PUBLIC_URL")
-                .ok()
-                .filter(|s| !s.is_empty()),
+            app_base_url: app_base_url.clone(),
+            r2_public_url: r2_public_url.clone(),
         },
         categories: routes::owner::categories::CategoriesState {
             auth: auth.clone(),
@@ -233,11 +266,54 @@ fn build_owner_states(auth: auth::AuthState, pools: &Pools) -> routes::owner::Ow
             ),
         },
         themes: routes::owner::themes::ThemesState {
-            auth,
+            auth: auth.clone(),
             repo: Arc::new(routes::owner::themes::PgThemesRepo::new(
                 pools.operational.clone(),
             )),
+            storage: storage.clone(),
+            processor: Arc::new(media::processor::RustImageProcessor),
+            app_base_url: app_base_url.clone(),
         },
+        product_media: routes::owner::product_media::ProductMediaState {
+            auth: auth.clone(),
+            repo: Arc::new(routes::owner::product_media::PgProductMediaRepo::new(
+                pools.operational.clone(),
+            )),
+            storage: storage.clone(),
+            token_signer,
+            app_base_url: app_base_url.clone(),
+        },
+        product_image: routes::owner::product_image::ProductImageState {
+            auth,
+            repo: Arc::new(routes::owner::product_image::PgProductImageRepo::new(
+                pools.operational.clone(),
+            )),
+            storage,
+            processor: Arc::new(media::processor::RustImageProcessor),
+            app_base_url,
+        },
+    }
+}
+
+/// Build the S4 UNAUTHENTICATED media state (entry-photo + the token-proxy-PUT endpoint) — no
+/// DB pool at all, matching `spa-proxy.ts:268-293`'s design (entry-photo writes no row).
+fn build_media_public_state(
+    storage: Arc<dyn Storage>,
+    config: &config::Config,
+) -> routes::media_public::MediaPublicState {
+    let token_signer = config
+        .media
+        .upload_token_secret_hex
+        .as_deref()
+        .and_then(|hex| media::upload_token::UploadTokenSigner::from_hex(hex).ok())
+        .map(Arc::new);
+    routes::media_public::MediaPublicState {
+        storage,
+        processor: Arc::new(media::processor::RustImageProcessor),
+        token_signer,
+        app_base_url: std::env::var("APP_BASE_URL")
+            .unwrap_or_else(|_| "https://dowiz.fly.dev".to_string()),
+        entry_photo_enabled: config.media.entry_photo_enabled,
     }
 }
 

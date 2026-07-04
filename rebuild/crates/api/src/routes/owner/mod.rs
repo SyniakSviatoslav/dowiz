@@ -77,6 +77,8 @@ use crate::error::ApiError;
 pub mod categories;
 pub mod menu_availability;
 pub mod modifier_groups;
+pub mod product_image;
+pub mod product_media;
 pub mod products;
 pub mod themes;
 
@@ -161,12 +163,23 @@ pub struct OwnerCatalogStates {
     pub modifier_groups: modifier_groups::ModifierGroupsState,
     pub menu_availability: menu_availability::MenuAvailabilityState,
     pub themes: themes::ThemesState,
+    /// S4 media surface (`docs/design/rebuild-media-s4-council/`) — the product-media ADR-0002
+    /// seam plus product-image upload. Bundled into the SAME `OwnerCatalogStates`/
+    /// `owner_catalog_router` as S3 (rather than a separate merge site in `main.rs`) because
+    /// every S4 owner-authenticated op reuses the identical `OwnerClaimsExt`/
+    /// `bearer_and_dev_gate` layer stack — there is no reason for a second, parallel router just
+    /// to hold five more routes.
+    pub product_media: product_media::ProductMediaState,
+    pub product_image: product_image::ProductImageState,
 }
 
-/// Assemble the S3 catalog/admin CRUD surface — all 35 built operations at the SAME paths the
-/// Node API serves (each submodule's `#[utoipa::path]` annotations are the per-op SSOT; this
-/// function's `.route()` calls mirror them 1:1, grouped per path because axum panics on a
-/// duplicate `.route()` registration for the same path).
+/// Assemble the S3 catalog/admin CRUD surface (35 ops) PLUS the S4 media council's
+/// owner-authenticated ops (theme logo, product-media presign/confirm/set-primary/reorder/
+/// toggle, product-image upload — 7 more) at the SAME paths the Node API serves (each
+/// submodule's `#[utoipa::path]` annotations are the per-op SSOT; this function's `.route()`
+/// calls mirror them 1:1, grouped per path because axum panics on a duplicate `.route()`
+/// registration for the same path). S4's UNAUTHENTICATED ops (entry-photo, the token-proxy-PUT
+/// endpoint) are NOT here — see `routes/media_public.rs` and its own mount site in `main.rs`.
 ///
 /// ## Layer stack (mirrors `auth::mount::auth_router`, S2)
 /// tower applies layers OUTSIDE-IN (the LAST `.layer` runs FIRST). Order (outer -> inner):
@@ -179,6 +192,7 @@ pub struct OwnerCatalogStates {
 /// covers these routes; this dark mount (like the S2 auth mount today) carries none — an explicit
 /// launch-wiring item, flagged in the lane report, not silently skipped.
 pub fn owner_catalog_router(states: OwnerCatalogStates) -> axum::Router {
+    use axum::extract::DefaultBodyLimit;
     use axum::routing::{delete, get, patch, post, put};
     use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 
@@ -266,10 +280,41 @@ pub fn owner_catalog_router(states: OwnerCatalogStates) -> axum::Router {
             "/api/owner/locations/{locationId}/menu-schedules/{id}",
             delete(menu_availability::delete_schedule),
         )
-        // ── themes.rs (census rows 84-85; row 86 logo upload deferred to S4) ──
+        // ── themes.rs (census rows 84-86; row 86 logo upload is the S4 media council op) ──
         .route(
             "/api/owner/locations/{locationId}/theme",
             get(themes::get_owner_theme).put(themes::put_owner_theme),
+        )
+        .route(
+            "/api/owner/locations/{locationId}/theme/logo",
+            post(themes::upload_theme_logo)
+                .layer(DefaultBodyLimit::max(themes::LOGO_MAX_UPLOAD_BYTES)),
+        )
+        // ── S4 media council: product_media.rs (ADR-0002 seam) + product_image.rs ──
+        .route(
+            "/api/owner/menu/products/{productId}/media/presign",
+            post(product_media::presign_product_media),
+        )
+        .route(
+            "/api/owner/menu/products/{productId}/media/confirm",
+            post(product_media::confirm_product_media),
+        )
+        .route(
+            "/api/owner/menu/products/{productId}/media/{mediaId}/set-primary",
+            post(product_media::set_primary_product_media),
+        )
+        .route(
+            "/api/owner/menu/products/{productId}/media/reorder",
+            post(product_media::reorder_product_media),
+        )
+        .route(
+            "/api/owner/menu/products/{productId}/media/{mediaId}",
+            patch(product_media::set_product_media_available),
+        )
+        .route(
+            "/api/owner/menu/products/{productId}/image",
+            post(product_image::upload_product_image)
+                .layer(DefaultBodyLimit::max(product_image::MAX_UPLOAD_BYTES)),
         )
         // REV-4 pre-route gate — innermost of the cross-cutting layers, same position as S2.
         .layer(axum::middleware::from_fn(
@@ -282,6 +327,8 @@ pub fn owner_catalog_router(states: OwnerCatalogStates) -> axum::Router {
         .layer(axum::Extension(states.modifier_groups))
         .layer(axum::Extension(states.menu_availability))
         .layer(axum::Extension(states.themes))
+        .layer(axum::Extension(states.product_media))
+        .layer(axum::Extension(states.product_image))
         // Outermost: mint + propagate the correlation id (see fn doc for why this is here).
         .layer(PropagateRequestIdLayer::new(correlation_header.clone()))
         .layer(SetRequestIdLayer::new(correlation_header, MakeRequestUuid))
@@ -446,15 +493,35 @@ mod tests {
                 repo: Arc::new(menu_availability::fake::FakeMenuAvailabilityRepo::default()),
             },
             themes: themes::ThemesState {
-                auth,
+                auth: auth.clone(),
                 repo: Arc::new(themes::fake::FakeThemesRepo::default()),
+                storage: Arc::new(crate::storage::LocalFsStorage::new(std::env::temp_dir())),
+                processor: Arc::new(crate::media::processor::RustImageProcessor),
+                app_base_url: "https://dowiz.fly.dev".to_string(),
+            },
+            product_media: product_media::ProductMediaState {
+                auth: auth.clone(),
+                repo: Arc::new(product_media::fake::FakeProductMediaRepo::default()),
+                storage: Arc::new(crate::storage::LocalFsStorage::new(std::env::temp_dir())),
+                token_signer: Some(Arc::new(
+                    crate::media::upload_token::UploadTokenSigner::new(vec![3u8; 32]),
+                )),
+                app_base_url: "https://dowiz.fly.dev".to_string(),
+            },
+            product_image: product_image::ProductImageState {
+                auth,
+                repo: Arc::new(product_image::fake::FakeProductImageRepo::default()),
+                storage: Arc::new(crate::storage::LocalFsStorage::new(std::env::temp_dir())),
+                processor: Arc::new(crate::media::processor::RustImageProcessor),
+                app_base_url: "https://dowiz.fly.dev".to_string(),
             },
         }
     }
 
     /// `Router::route` panics at construction on an invalid path pattern or a duplicate
-    /// method-per-path registration — this proves all 35 S3 operations register cleanly
-    /// (parity with S1's `build_router` / S2's `auth_router` panic-freedom tests).
+    /// method-per-path registration — this proves all 35 S3 + 7 S4 owner-authenticated
+    /// operations register cleanly (parity with S1's `build_router` / S2's `auth_router`
+    /// panic-freedom tests).
     #[test]
     fn owner_catalog_router_builds_without_panicking() {
         let _router = owner_catalog_router(test_states());

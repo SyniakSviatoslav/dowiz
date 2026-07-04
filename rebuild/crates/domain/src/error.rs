@@ -115,6 +115,15 @@ pub enum ErrorCode {
     /// 409 — `DELETE .../categories/:id` on a category that still has products
     /// (`categories.ts:168-180,249-255`).
     CategoryNotEmpty,
+
+    // ── S4 media surface code set (`docs/design/rebuild-media-s4-council/`) ──
+    /// 400 — invalid media `kind`, disallowed mime, invalid sha256 shape, bad bytes, missing
+    /// `storageKey`, or a `storageKey` outside the tenant prefix (`product-media.ts` multiple
+    /// sites, e.g. `:98,116,209`). One code covers every "the request shape/content is invalid
+    /// for a media op" case, matching the TS route's own `INVALID_MEDIA` string reuse.
+    InvalidMedia,
+    /// 413 — a declared file size exceeds the per-mime ceiling (`product-media.ts:119`).
+    FileTooLarge,
 }
 
 impl ErrorCode {
@@ -154,6 +163,9 @@ impl ErrorCode {
             // ── S3 catalog/admin CRUD code set ──
             ErrorCode::NoUpdates | ErrorCode::UnsupportedLocale | ErrorCode::InvalidGroup => 400,
             ErrorCode::CategoryNotEmpty => 409,
+            // ── S4 media code set ──
+            ErrorCode::InvalidMedia => 400,
+            ErrorCode::FileTooLarge => 413,
         }
     }
 }
@@ -336,5 +348,21 @@ mod tests {
         assert_eq!(ErrorCode::UnsupportedLocale.http_status(), 400);
         assert_eq!(ErrorCode::InvalidGroup.http_status(), 400);
         assert_eq!(ErrorCode::CategoryNotEmpty.http_status(), 409);
+    }
+
+    /// S4 media codes serialize SCREAMING_SNAKE and map to the `product-media.ts` `sendError`
+    /// statuses (`INVALID_MEDIA` 400, `FILE_TOO_LARGE` 413).
+    #[test]
+    fn s4_media_codes_serialize_and_map_status() {
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::InvalidMedia).unwrap(),
+            "\"INVALID_MEDIA\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::FileTooLarge).unwrap(),
+            "\"FILE_TOO_LARGE\""
+        );
+        assert_eq!(ErrorCode::InvalidMedia.http_status(), 400);
+        assert_eq!(ErrorCode::FileTooLarge.http_status(), 413);
     }
 }

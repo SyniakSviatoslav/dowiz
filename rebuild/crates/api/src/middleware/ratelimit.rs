@@ -140,6 +140,79 @@ where
     }
 }
 
+/// S4 media council (REV-S4-6, breaker M3): a GLOBAL (cross-tenant, cross-IP) fixed-window cap,
+/// for the unauthenticated entry-photo route. `RateLimitLayer` above is keyed per-IP by design
+/// (the abuse class it defends against is one attacker fragmenting requests); a botnet defeats a
+/// PER-IP-only cap by fanning out across many IPs, so this is a SECOND, independent layer with
+/// exactly ONE shared bucket regardless of caller — same fixed-window algorithm, reusing
+/// `RateLimitState`'s bucket/window math with a single constant key instead of deriving one from
+/// headers.
+const GLOBAL_BUCKET_KEY: &str = "global";
+
+#[derive(Clone)]
+pub struct GlobalRateLimitLayer {
+    state: Arc<RateLimitState>,
+}
+
+impl GlobalRateLimitLayer {
+    pub fn new(max_requests: u32, window: Duration) -> Self {
+        GlobalRateLimitLayer {
+            state: Arc::new(RateLimitState {
+                max_requests,
+                window,
+                buckets: Mutex::new(HashMap::new()),
+            }),
+        }
+    }
+}
+
+impl<S> Layer<S> for GlobalRateLimitLayer {
+    type Service = GlobalRateLimitService<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        GlobalRateLimitService {
+            inner,
+            state: self.state.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct GlobalRateLimitService<S> {
+    inner: S,
+    state: Arc<RateLimitState>,
+}
+
+impl<S> Service<Request<Body>> for GlobalRateLimitService<S>
+where
+    S: Service<Request<Body>, Response = Response, Error = std::convert::Infallible>
+        + Clone
+        + Send
+        + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = Response;
+    type Error = std::convert::Infallible;
+    type Future = Pin<Box<dyn Future<Output = Result<Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        let decision = self.state.check(GLOBAL_BUCKET_KEY);
+        let clone = self.inner.clone();
+        let mut inner = std::mem::replace(&mut self.inner, clone);
+
+        Box::pin(async move {
+            match decision {
+                Ok(()) => inner.call(req).await,
+                Err(retry_after) => Ok(too_many_requests(retry_after)),
+            }
+        })
+    }
+}
+
 /// `client-ip.ts::clientIp` + `normalizeIp`, minus the dev-mode `request.ip` fallback (see module
 /// doc). `HeaderMap::get` is already case-insensitive, so the lowercase constant is enough.
 fn client_ip_key(headers: &HeaderMap) -> String {
@@ -341,5 +414,29 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("Fly-Client-IP", HeaderValue::from_static("5.5.5.5"));
         assert_eq!(client_ip_key(&headers), "5.5.5.5");
+    }
+
+    // ── GlobalRateLimitLayer (REV-S4-6, breaker M3) ─────────────────────────────────────────
+
+    #[tokio::test]
+    async fn global_rate_limit_shares_one_bucket_across_different_ips() {
+        let layer = GlobalRateLimitLayer::new(2, Duration::from_secs(60));
+        let svc = ServiceBuilder::new().layer(layer).service(ok_service());
+
+        let a = svc.clone().oneshot(request_from("1.1.1.1")).await.unwrap();
+        assert_eq!(a.status(), StatusCode::OK);
+        let b = svc.clone().oneshot(request_from("2.2.2.2")).await.unwrap();
+        assert_eq!(
+            b.status(),
+            StatusCode::OK,
+            "a DIFFERENT IP still counts against the SAME global bucket"
+        );
+        let c = svc.clone().oneshot(request_from("3.3.3.3")).await.unwrap();
+        assert_eq!(
+            c.status(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "the 3rd request, from a THIRD distinct IP, still hits the shared cap — proves this \
+             is NOT per-IP like RateLimitLayer"
+        );
     }
 }

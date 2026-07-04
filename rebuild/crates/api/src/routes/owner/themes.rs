@@ -1,11 +1,26 @@
-//! S3 catalog/admin CRUD — theme GET/PUT. Ports `apps/api/src/routes/owner/themes.ts`'s two
-//! non-media ops:
+//! S3/S4 catalog/admin CRUD — theme GET/PUT/logo. Ports `apps/api/src/routes/owner/themes.ts`'s
+//! three ops:
 //!   - `GET  /api/owner/locations/:locationId/theme` (themes.ts:17-43)
 //!   - `PUT  /api/owner/locations/:locationId/theme` (themes.ts:46-116)
+//!   - `POST /api/owner/locations/:locationId/theme/logo` (themes.ts:119-149) — S4 media council,
+//!     landed here with the media stack per that packet's own deferral note (census row #86).
 //!
-//! **Deferred, NOT built here:** `POST .../theme/logo` (themes.ts:119-149) — S4 media-upload work
-//! (sharp resize/webp + R2 `storage.put`), a different surface (census row #86). See
-//! `docs/design/rebuild-plan/inventory/10-api-realtime-jobs.md` rows #84-86.
+//! ## S4 logo upload — REV-S4-5 (FIX-IN-PORT, Q-GUC-LOGO) + REV-S4-8 (M1 register)
+//! `themes.ts:139-143`'s `UPDATE location_themes` ran on a raw `db.connect()`, no GUC — REV-2
+//! named `themes` as EXACTLY this fix-in-port divergence. This port routes it through
+//! `db::with_user` + `assert_active_owner_membership`, the same pattern every other op in this
+//! file already uses.
+//!
+//! **CARRY (breaker M1, register, not silently fixed):** the logo key is FIXED —
+//! `locations/{locationId}/logo.webp` (`themes.ts:132`), NOT content-addressed — and is served
+//! through `/images/*` with `Cache-Control: public, max-age=31536000, immutable`. A logo
+//! re-upload therefore reuses the SAME key, so browsers/Cloudflare can keep serving the stale
+//! copy for up to a year (`immutable` tells the CDN not even to revalidate). The council
+//! resolution registers this as a KNOWN follow-up (FE/asset pass), not a build-lane fix — ported
+//! bug-for-bug, flagged here per the register.
+//!
+//! Image processing: `crate::media::processor::transcode` (logo profile, 512×512/q80) —
+//! bomb-capped decode + explicit EXIF orientation (REV-S4-1/REV-S4-4).
 //!
 //! Also ports `apps/api/src/lib/theme-renderer.ts` (`renderTheme`/`ALLOWED_FONTS`/the color-math
 //! helpers) as pure, DB-free Rust functions below — op 2's response is entirely a function of
@@ -554,12 +569,31 @@ pub trait ThemesRepo: Send + Sync {
         location_id: Uuid,
         updates: ThemeUpdates,
     ) -> Result<Option<RenderedThemeResult>, RepoError>;
+
+    /// S4 logo upload's DB write (REV-S4-5, Q-GUC-LOGO fix-in-port): membership assert +
+    /// `UPDATE location_themes SET logo_url = $2 WHERE location_id = $1`, in ONE
+    /// `with_user`-seated transaction. `Ok(false)` (membership failure) maps to 404 at the
+    /// handler; CARRY (`themes.ts:139-143`): no rowcount check on the UPDATE itself — a location
+    /// with no `location_themes` row still reports success (the UPDATE just affects 0 rows), the
+    /// same "no rowcount check" quirk `update_and_render` already carries.
+    async fn update_logo_url(
+        &self,
+        owner_user_id: Uuid,
+        location_id: Uuid,
+        logo_url: &str,
+    ) -> Result<bool, RepoError>;
 }
 
 #[derive(Clone)]
 pub struct ThemesState {
     pub auth: crate::auth::AuthState,
     pub repo: std::sync::Arc<dyn ThemesRepo>,
+    /// S4 logo upload fields — `None`/absent-equivalent state is not modeled (unlike
+    /// `ProductMediaState.token_signer`) because the logo route needs no secret, only storage +
+    /// a processor, both of which this build always constructs.
+    pub storage: std::sync::Arc<dyn crate::storage::Storage>,
+    pub processor: std::sync::Arc<dyn crate::media::processor::ImageProcessor>,
+    pub app_base_url: String,
 }
 
 /// Collapses `db::with_user`'s transaction-lifecycle error into the plain `RepoError` every
@@ -790,6 +824,43 @@ impl ThemesRepo for PgThemesRepo {
         .await
         .map_err(map_txn_err)
     }
+
+    /// S4 logo upload (REV-S4-5, Q-GUC-LOGO fix-in-port) — `themes.ts:139-143`'s raw
+    /// `db.connect()` write, now through `with_user` + `assert_active_owner_membership`.
+    async fn update_logo_url(
+        &self,
+        owner_user_id: Uuid,
+        location_id: Uuid,
+        logo_url: &str,
+    ) -> Result<bool, RepoError> {
+        // Owned, not borrowed — see `product_image::PgProductImageRepo::update_image`'s identical
+        // comment: `with_user`'s HRTB effectively requires a `'static` capture for anything held
+        // by reference across it.
+        let logo_url = logo_url.to_string();
+        crate::db::with_user(&self.pool, owner_user_id, |txn| {
+            Box::pin(async move {
+                if !crate::routes::owner::assert_active_owner_membership(
+                    txn,
+                    owner_user_id,
+                    location_id,
+                )
+                .await?
+                {
+                    return Ok(false);
+                }
+                // CARRY (`themes.ts:143`): no rowcount check — a location with no
+                // `location_themes` row still reports success.
+                sqlx::query("UPDATE location_themes SET logo_url = $2 WHERE location_id = $1")
+                    .bind(location_id)
+                    .bind(logo_url)
+                    .execute(&mut **txn)
+                    .await?;
+                Ok(true)
+            })
+        })
+        .await
+        .map_err(map_txn_err)
+    }
 }
 
 // ── Handlers ───────────────────────────────────────────────────────────────────────────────────
@@ -918,6 +989,113 @@ pub async fn put_owner_theme(
         version: rendered.version,
         warnings: rendered.warnings,
     }))
+}
+
+/// Node's global multipart `fileSize` limit (`server.ts:355-356`) — this route has no per-route
+/// override in the old TS, so it inherits the global (same reasoning as
+/// `product_image::MAX_UPLOAD_BYTES`).
+pub const LOGO_MAX_UPLOAD_BYTES: usize = 10 * 1024 * 1024;
+
+/// `POST /api/owner/locations/{locationId}/theme/logo` — source: `themes.ts:119-149`. S4 media
+/// council; see module doc for the REV-S4-5/REV-S4-8 disposition.
+#[utoipa::path(
+    post,
+    path = "/api/owner/locations/{locationId}/theme/logo",
+    params(("locationId" = Uuid, Path)),
+    responses(
+        (status = 200, description = "Uploaded + transcoded logo"),
+        (status = 400, description = "No file uploaded / invalid image", body = domain::ErrorEnvelope),
+        (status = 401, description = "Unauthorized", body = domain::ErrorEnvelope),
+        (status = 404, description = "Not found", body = domain::ErrorEnvelope),
+        (status = 413, description = "File exceeds size limit", body = domain::ErrorEnvelope),
+    ),
+    tag = "owner-media"
+)]
+pub async fn upload_theme_logo(
+    Extension(state): Extension<ThemesState>,
+    OwnerClaimsExt(owner): OwnerClaimsExt,
+    Path(location_id): Path<Uuid>,
+    Extension(request_id): Extension<RequestId>,
+    mut multipart: axum::extract::Multipart,
+) -> Result<impl IntoResponse, ApiError> {
+    let correlation_id = crate::routes::correlation_id_string(&request_id);
+    crate::routes::owner::require_location_access(
+        &state.auth,
+        &owner,
+        location_id,
+        &correlation_id,
+    )
+    .await?;
+
+    // A single `request.file()`-equivalent read (`themes.ts:121`) — the FIRST multipart part,
+    // whatever its field name (same posture as `product_image::upload_product_image`).
+    let Ok(Some(field)) = multipart.next_field().await else {
+        return Err(ApiError::new(
+            domain::ErrorCode::ValidationFailed,
+            "No file uploaded",
+            correlation_id,
+        ));
+    };
+    let bytes = field.bytes().await.map_err(|_multipart_err| {
+        ApiError::new(
+            domain::ErrorCode::ValidationFailed,
+            "Invalid multipart body",
+            correlation_id.clone(),
+        )
+    })?;
+    if bytes.len() > LOGO_MAX_UPLOAD_BYTES {
+        return Err(ApiError::new(
+            domain::ErrorCode::FileTooLarge,
+            "File exceeds size limit",
+            correlation_id,
+        ));
+    }
+    let buffer = bytes.to_vec();
+
+    let processed = state
+        .processor
+        .process(&buffer, crate::media::processor::LOGO_PROFILE)
+        .map_err(|err| {
+            ApiError::new(
+                domain::ErrorCode::ValidationFailed,
+                format!("Invalid image file: {err}"),
+                correlation_id.clone(),
+            )
+        })?;
+
+    // CARRY (breaker M1, register): fixed key, NOT content-addressed — see module doc.
+    let key = format!("locations/{location_id}/logo.webp");
+    let logo_url =
+        crate::service::get_image_url(Some(&key), None, &state.app_base_url).unwrap_or_default();
+
+    let found = state
+        .repo
+        .update_logo_url(owner.user_id, location_id, &logo_url)
+        .await
+        .map_err(|_err| {
+            ApiError::new(
+                domain::ErrorCode::Internal,
+                "internal_error",
+                correlation_id.clone(),
+            )
+        })?;
+    if !found {
+        return Err(ApiError::new(
+            domain::ErrorCode::NotFound,
+            "Not found",
+            correlation_id,
+        ));
+    }
+
+    state.storage.put(&key, processed).await.map_err(|err| {
+        ApiError::new(
+            domain::ErrorCode::Internal,
+            format!("Failed to store image: {err}"),
+            correlation_id.clone(),
+        )
+    })?;
+
+    Ok(Json(serde_json::json!({ "logo_url": logo_url })))
 }
 
 // ── Fake repo (cfg(test)) ────────────────────────────────────────────────────────────────────
@@ -1064,6 +1242,22 @@ pub mod fake {
                 version: rendered.version,
                 warnings: rendered.warnings,
             }))
+        }
+
+        /// Mirrors this fake's established posture (module doc): does NOT model the membership
+        /// check (that invariant is proven at the extractor layer using `FakeAuthRepo` in the
+        /// handler tests below) — always reports success, and CARRIES the no-rowcount-check
+        /// quirk (updating an absent row is a silent no-op, not an error).
+        async fn update_logo_url(
+            &self,
+            _owner_user_id: Uuid,
+            location_id: Uuid,
+            logo_url: &str,
+        ) -> Result<bool, RepoError> {
+            if let Some(row) = self.themes.lock().unwrap().get_mut(&location_id) {
+                row.logo_url = Some(logo_url.to_string());
+            }
+            Ok(true)
         }
     }
 }
@@ -1285,6 +1479,9 @@ mod tests {
         ThemesState {
             auth: AuthState::test_state(auth_repo),
             repo: Arc::new(repo),
+            storage: Arc::new(crate::storage::LocalFsStorage::new(std::env::temp_dir())),
+            processor: Arc::new(crate::media::processor::RustImageProcessor),
+            app_base_url: "https://dowiz.fly.dev".to_string(),
         }
     }
 
@@ -1574,5 +1771,137 @@ mod tests {
             vec![(first.css_hash.clone(), 1)],
             "dedup: only ONE row actually stored, even though the response reported version 2"
         );
+    }
+
+    // ── S4 logo upload ───────────────────────────────────────────────────────────────────────
+
+    fn tiny_png() -> Vec<u8> {
+        use image::codecs::png::PngEncoder;
+        use image::{ExtendedColorType, ImageEncoder, Rgb, RgbImage};
+        let img = RgbImage::from_pixel(4, 4, Rgb([200, 100, 50]));
+        let mut out = Vec::new();
+        PngEncoder::new(&mut out)
+            .write_image(&img, 4, 4, ExtendedColorType::Rgb8)
+            .unwrap();
+        out
+    }
+
+    fn multipart_body(field_name: &str, filename: &str, bytes: &[u8]) -> (String, Vec<u8>) {
+        let boundary = "themeslogoboundary";
+        let mut body = Vec::new();
+        body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+        body.extend_from_slice(
+            format!(
+                "Content-Disposition: form-data; name=\"{field_name}\"; filename=\"{filename}\"\r\n"
+            )
+            .as_bytes(),
+        );
+        body.extend_from_slice(b"Content-Type: image/png\r\n\r\n");
+        body.extend_from_slice(bytes);
+        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        (boundary.to_string(), body)
+    }
+
+    async fn multipart_from(bytes: Vec<u8>) -> axum::extract::Multipart {
+        use axum::extract::{FromRequest, Request};
+        let (boundary, body) = multipart_body("file", "logo.png", &bytes);
+        let request = Request::builder()
+            .method("POST")
+            .header(
+                "content-type",
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .body(axum::body::Body::from(body))
+            .unwrap();
+        axum::extract::Multipart::from_request(request, &())
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn upload_theme_logo_200s_and_stores_a_transcoded_webp() {
+        let user_id = Uuid::new_v4();
+        let loc = Uuid::new_v4();
+        let repo = FakeThemesRepo::default();
+        repo.themes
+            .lock()
+            .unwrap()
+            .insert(loc, StoredTheme::default());
+        let state = test_state(user_id, Some(loc), repo);
+        let multipart = multipart_from(tiny_png()).await;
+
+        let response = upload_theme_logo(
+            Extension(state.clone()),
+            owner_ext(user_id),
+            Path(loc),
+            request_id(),
+            multipart,
+        )
+        .await
+        .unwrap()
+        .into_response();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+
+        let theme = state.repo.get_theme(user_id, loc).await.unwrap().unwrap();
+        assert!(
+            theme
+                .logo_url
+                .unwrap()
+                .contains(&format!("locations/{loc}/logo.webp")),
+            "the fixed (non-content-addressed) logo key, CARRY (breaker M1)"
+        );
+    }
+
+    #[tokio::test]
+    async fn upload_theme_logo_404s_for_a_foreign_location() {
+        let user_id = Uuid::new_v4();
+        let mine = Uuid::new_v4();
+        let theirs = Uuid::new_v4();
+        let repo = FakeThemesRepo::default();
+        repo.themes
+            .lock()
+            .unwrap()
+            .insert(theirs, StoredTheme::default());
+        let state = test_state(user_id, Some(mine), repo);
+        let multipart = multipart_from(tiny_png()).await;
+
+        let err = crate::error::expect_err(
+            upload_theme_logo(
+                Extension(state),
+                owner_ext(user_id),
+                Path(theirs),
+                request_id(),
+                multipart,
+            )
+            .await
+            .map(|r| r.into_response()),
+        );
+        assert_eq!(err.envelope.code, domain::ErrorCode::NotFound);
+    }
+
+    #[tokio::test]
+    async fn upload_theme_logo_400s_on_garbage_bytes() {
+        let user_id = Uuid::new_v4();
+        let loc = Uuid::new_v4();
+        let repo = FakeThemesRepo::default();
+        repo.themes
+            .lock()
+            .unwrap()
+            .insert(loc, StoredTheme::default());
+        let state = test_state(user_id, Some(loc), repo);
+        let multipart = multipart_from(b"not-an-image".to_vec()).await;
+
+        let err = crate::error::expect_err(
+            upload_theme_logo(
+                Extension(state),
+                owner_ext(user_id),
+                Path(loc),
+                request_id(),
+                multipart,
+            )
+            .await
+            .map(|r| r.into_response()),
+        );
+        assert_eq!(err.envelope.code, domain::ErrorCode::ValidationFailed);
     }
 }

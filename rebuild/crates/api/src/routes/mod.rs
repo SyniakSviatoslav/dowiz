@@ -21,6 +21,11 @@ pub mod auth_owner;
 // ── S3 catalog/admin CRUD surface (owner-route census rows 1-89) ──
 pub mod owner;
 
+// ── S4 media surface (docs/design/rebuild-media-s4-council/) — the UNAUTHENTICATED half.
+// The owner-authenticated half (product-media, product-image, theme logo) lives inside
+// `routes::owner` (product_media.rs, product_image.rs, themes.rs) — see that module's doc.
+pub mod media_public;
+
 use tower_http::request_id::RequestId;
 
 /// Shared by every S1 handler that builds an `ApiError`: the server-authoritative correlation id

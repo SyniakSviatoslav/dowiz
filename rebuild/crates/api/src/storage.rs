@@ -1,13 +1,11 @@
-//! Object storage abstraction for `/images/*` and `/media/*` (S1 `getImage`/`getMediaObject`).
-//! Ports `apps/api/src/ports.ts` `StorageProvider` (read side only — S1 is read-only) and
-//! `apps/api/src/lib/local-storage.ts` `LocalFsStorageProvider` verbatim.
+//! Object storage abstraction for `/images/*` and `/media/*` (S1 `getImage`/`getMediaObject`) AND
+//! (S4) the media write path. Ports `apps/api/src/ports.ts` `StorageProvider` and
+//! `apps/api/src/lib/local-storage.ts` `LocalFsStorageProvider` verbatim; R2 `put`/`delete` port
+//! `apps/api/src/lib/r2-storage.ts:48-79` (S4 media council, REV-S4 §5).
 //!
-//! No R2 (`apps/api/src/lib/r2-storage.ts`) implementation yet: wiring an S3-compatible client
-//! is a real dependency addition (aws-sdk-s3 or an s3-compatible crate) that has no justified
-//! call site in THIS build (no deployed bucket to point it at in this sandbox) — flagged as a
-//! follow-up in the lane report rather than speculatively added (YAGNI). `LocalFsStorage` is
-//! enough to prove the traversal-guard + 404-on-missing/404-on-error `x-quirk` behavior, which is
-//! the part of this surface that is actual *logic*, not infra wiring.
+//! S1 shipped `get` only (read-only surface, R2 client absent — see `R2Storage`'s own doc for why
+//! `aws-sign-v4`+`reqwest` was picked over `aws-sdk-s3`). S4 is the first Rust surface that
+//! MUTATES object storage, so `Storage::put`/`Storage::delete` land here now.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -16,10 +14,27 @@ use domain::ErrorCode;
 
 use crate::error::ApiError;
 
-/// Read-only slice of `StorageProvider` (`ports.ts:18-22`) — S1 never `put`/`delete`s.
+/// `StorageProvider` (`ports.ts:18-22`) — S1 shipped `get` only (read-only surface). S4 is the
+/// first Rust surface that MUTATES object storage (product-media confirm-flow proxy-PUT,
+/// product-image/theme-logo/entry-photo transcode-then-store, old-key best-effort cleanup on
+/// replace) — `put`/`delete` port `r2-storage.ts:48-79` verbatim. Every key passed to these
+/// methods is server-derived (membership-resolved `locId` prefix, a content hash, or a random
+/// UUID) — the client-key-never-trusted boundary is enforced at the ROUTE layer (REV-S4 quirk
+/// register Q-KEY-DERIVE), not here; this trait has no opinion on key shape.
 #[async_trait::async_trait]
 pub trait Storage: Send + Sync {
     async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, StorageError>;
+
+    /// Writes `data` to `key`, overwriting any existing object at that key (R2 `PutObjectCommand`,
+    /// no conditional-write semantics — matches `r2-storage.ts:48-59`/`local-storage.ts` parity).
+    async fn put(&self, key: &str, data: Vec<u8>) -> Result<(), StorageError>;
+
+    /// Deletes `key`. CARRY (`spa-proxy.ts:257-259`): idempotent — deleting an already-absent key
+    /// is `Ok(())`, not an error (mirrors S3's own `DeleteObject` semantics and `LocalFsStorage`'s
+    /// `ENOENT`-is-fine read path) — the "cleanup must never fail the user-visible upload"
+    /// invariant is enforced by the CALLER wrapping this in a swallow, this method just makes
+    /// "already gone" a success on its own so the caller doesn't have to special-case it.
+    async fn delete(&self, key: &str) -> Result<(), StorageError>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -49,6 +64,26 @@ impl Storage for LocalFsStorage {
         match tokio::fs::read(&path).await {
             Ok(bytes) => Ok(Some(bytes)),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(StorageError(err.to_string())),
+        }
+    }
+
+    async fn put(&self, key: &str, data: Vec<u8>) -> Result<(), StorageError> {
+        let path = self.base_dir.join(key);
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| StorageError(e.to_string()))?;
+        }
+        tokio::fs::write(&path, data)
+            .await
+            .map_err(|e| StorageError(e.to_string()))
+    }
+
+    async fn delete(&self, key: &str) -> Result<(), StorageError> {
+        match tokio::fs::remove_file(self.base_dir.join(key)).await {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(err) => Err(StorageError(err.to_string())),
         }
     }
@@ -294,6 +329,149 @@ impl Storage for R2Storage {
             status => Err(StorageError(format!("R2 GET returned {status}"))),
         }
     }
+
+    /// `PutObjectCommand` (`r2-storage.ts:48-59`) via the SAME header-form SigV4 signer `get`
+    /// uses (no query-string presign anywhere in this file — that crypto class was rejected
+    /// outright for the client-facing flow, REV-S4-2, and this server-to-R2 leg never needed it:
+    /// the shipped `aws-sign-v4` Authorization-header signer is the RIGHT algorithm for a request
+    /// *this server itself sends*, unlike a presigned URL handed to a client). Unlike the GET's
+    /// constant `EMPTY_PAYLOAD_SHA256`, a PUT signs the REAL body hash — it must be computed
+    /// once and reused identically for both the `x-amz-content-sha256` header AND the value the
+    /// canonical request signs internally (`AwsSign::canonical_request` hashes `self.body` — the
+    /// same `data` slice passed to `AwsSign::new` below), or R2 rejects the signature.
+    async fn put(&self, key: &str, data: Vec<u8>) -> Result<(), StorageError> {
+        let url = self.object_url(key);
+        let host = self.host().to_string();
+        let datetime = chrono::Utc::now();
+        let amz_date = datetime.format("%Y%m%dT%H%M%SZ").to_string();
+        let content_type = media_content_type(key);
+        let payload_sha256 = payload_sha256_hex(&data);
+
+        let mut sign_headers = axum::http::HeaderMap::new();
+        sign_headers.insert(
+            "host",
+            host.parse()
+                .map_err(|e| StorageError(format!("invalid R2 host {host:?}: {e}")))?,
+        );
+        sign_headers.insert(
+            "x-amz-content-sha256",
+            payload_sha256
+                .parse()
+                .map_err(|e| StorageError(format!("invalid payload sha256 header: {e}")))?,
+        );
+        sign_headers.insert(
+            "x-amz-date",
+            amz_date
+                .parse()
+                .map_err(|e| StorageError(format!("invalid x-amz-date {amz_date:?}: {e}")))?,
+        );
+        sign_headers.insert(
+            "content-type",
+            content_type
+                .parse()
+                .map_err(|e| StorageError(format!("invalid content-type {content_type:?}: {e}")))?,
+        );
+
+        let signer = aws_sign_v4::AwsSign::new(
+            "PUT",
+            &url,
+            &datetime,
+            &sign_headers,
+            &self.region,
+            &self.access_key,
+            &self.secret_key,
+            "s3",
+            data.as_slice(),
+        );
+        let authorization = signer.sign();
+
+        let response = self
+            .client
+            .put(&url)
+            .header("host", &host)
+            .header("x-amz-content-sha256", &payload_sha256)
+            .header("x-amz-date", &amz_date)
+            .header("content-type", content_type)
+            .header("authorization", authorization)
+            .body(data)
+            .send()
+            .await
+            .map_err(|e| StorageError(format!("R2 PUT request failed: {e}")))?;
+
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            Err(StorageError(format!(
+                "R2 PUT returned {}",
+                response.status()
+            )))
+        }
+    }
+
+    /// `DeleteObjectCommand` (`r2-storage.ts:75-79`), same header-form signer as `get`/`put`.
+    /// CARRY: a 404 from R2 (key already gone) is treated as success (trait doc — idempotent
+    /// delete), not surfaced as an error.
+    async fn delete(&self, key: &str) -> Result<(), StorageError> {
+        let url = self.object_url(key);
+        let host = self.host().to_string();
+        let datetime = chrono::Utc::now();
+        let amz_date = datetime.format("%Y%m%dT%H%M%SZ").to_string();
+
+        let mut sign_headers = axum::http::HeaderMap::new();
+        sign_headers.insert(
+            "host",
+            host.parse()
+                .map_err(|e| StorageError(format!("invalid R2 host {host:?}: {e}")))?,
+        );
+        sign_headers.insert(
+            "x-amz-content-sha256",
+            axum::http::HeaderValue::from_static(EMPTY_PAYLOAD_SHA256),
+        );
+        sign_headers.insert(
+            "x-amz-date",
+            amz_date
+                .parse()
+                .map_err(|e| StorageError(format!("invalid x-amz-date {amz_date:?}: {e}")))?,
+        );
+
+        let signer = aws_sign_v4::AwsSign::new(
+            "DELETE",
+            &url,
+            &datetime,
+            &sign_headers,
+            &self.region,
+            &self.access_key,
+            &self.secret_key,
+            "s3",
+            "",
+        );
+        let authorization = signer.sign();
+
+        let response = self
+            .client
+            .delete(&url)
+            .header("host", &host)
+            .header("x-amz-content-sha256", EMPTY_PAYLOAD_SHA256)
+            .header("x-amz-date", &amz_date)
+            .header("authorization", authorization)
+            .send()
+            .await
+            .map_err(|e| StorageError(format!("R2 DELETE request failed: {e}")))?;
+
+        match response.status() {
+            reqwest::StatusCode::NOT_FOUND => Ok(()),
+            status if status.is_success() => Ok(()),
+            status => Err(StorageError(format!("R2 DELETE returned {status}"))),
+        }
+    }
+}
+
+/// Hex-encoded SHA-256 of `body` — the real payload hash a PUT must sign (unlike GET/DELETE's
+/// constant `EMPTY_PAYLOAD_SHA256`), reused identically for the `x-amz-content-sha256` header and
+/// the value `AwsSign::canonical_request` hashes internally from the same body bytes.
+fn payload_sha256_hex(body: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    hex::encode(Sha256::digest(body))
 }
 
 #[cfg(test)]
@@ -499,5 +677,64 @@ mod tests {
             result.is_ok(),
             "expected a real R2 GET to succeed: {result:?}"
         );
+    }
+
+    // ── S4: LocalFsStorage put/delete ───────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn local_fs_storage_put_then_get_round_trips() {
+        let dir = std::env::temp_dir().join(format!("dowiz-rebuild-test-{}", uuid::Uuid::new_v4()));
+        let storage = LocalFsStorage::new(&dir);
+        storage
+            .put("nested/key.webp", b"hello-webp".to_vec())
+            .await
+            .unwrap();
+        let got = storage.get("nested/key.webp").await.unwrap();
+        assert_eq!(got, Some(b"hello-webp".to_vec()));
+        tokio::fs::remove_dir_all(&dir).await.ok();
+    }
+
+    #[tokio::test]
+    async fn local_fs_storage_delete_is_idempotent_on_a_missing_key() {
+        let dir = std::env::temp_dir().join(format!("dowiz-rebuild-test-{}", uuid::Uuid::new_v4()));
+        let storage = LocalFsStorage::new(&dir);
+        // Deleting a key that was never written must succeed, not error (trait doc: idempotent).
+        assert!(storage.delete("never-existed.webp").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn local_fs_storage_put_then_delete_then_get_returns_none() {
+        let dir = std::env::temp_dir().join(format!("dowiz-rebuild-test-{}", uuid::Uuid::new_v4()));
+        let storage = LocalFsStorage::new(&dir);
+        storage.put("k.webp", b"bytes".to_vec()).await.unwrap();
+        storage.delete("k.webp").await.unwrap();
+        assert_eq!(storage.get("k.webp").await.unwrap(), None);
+        tokio::fs::remove_dir_all(&dir).await.ok();
+    }
+
+    // ── S4: R2 put/delete signing (offline — real network call is #[ignore]'d below) ────────
+
+    #[test]
+    fn payload_sha256_hex_matches_a_known_vector() {
+        // SHA-256 of the empty string, the same well-known constant `EMPTY_PAYLOAD_SHA256` above
+        // pins for GET/DELETE — proves the PUT path's payload hasher agrees with it on the same
+        // input, rather than defining its own incompatible hash.
+        assert_eq!(payload_sha256_hex(b""), EMPTY_PAYLOAD_SHA256);
+    }
+
+    /// The real network call — never runs in CI/`cargo test`, only via `cargo test -- --ignored`
+    /// with live `R2_*` env vars set.
+    #[tokio::test]
+    #[ignore = "needs R2 creds"]
+    async fn r2_storage_put_then_delete_against_a_live_bucket() {
+        let storage = R2Storage::from_env().expect("R2_* env vars must be set to run this test");
+        storage
+            .put("some-test-key.webp", b"test-bytes".to_vec())
+            .await
+            .expect("PUT should succeed");
+        storage
+            .delete("some-test-key.webp")
+            .await
+            .expect("DELETE should succeed");
     }
 }
