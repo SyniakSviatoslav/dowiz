@@ -1,0 +1,73 @@
+---
+// Static SSR venue header — parity: apps/web/src/pages/client/MenuPage.tsx:744-823 (hero/venue
+// header section). Backdrop precedence (hero image -> video -> StylizedMap) and OSRM
+// client-geolocation ETA are explicitly OUT of scope for this skeleton (they are client-only
+// enhancements slated for the MenuBrowser island in a later Phase-B pass); this component
+// renders the always-present, zero-JS parts: name, status chip, rating, address.
+import type { PublicLocationInfo } from '../lib/api-types';
+import { client_closed_title } from '../lib/paraglide-stub';
+
+interface Props {
+  info: PublicLocationInfo;
+}
+const { info } = Astro.props;
+
+// Only 'closed' has a sample key in this spike's 10-message set (client_closed_title, verbatim
+// from i18n-catalog.ts) — open/busy stay plain-English literals here on purpose; the point of
+// the Phase-A i18n spike is measuring compiled-message overhead, not translating every string.
+const statusLabel: Record<PublicLocationInfo['status'], string> = {
+  open: 'Open',
+  closed: client_closed_title(),
+  busy: 'Busy — orders may take longer',
+};
+---
+
+<header class="venue-header">
+  <h1 class="venue-name">{info.name}</h1>
+  <span class:list={['venue-status', `venue-status--${info.status}`]} data-testid="venue-state">
+    {statusLabel[info.status]}
+  </span>
+  {info.googleRating != null && (
+    <span class="venue-rating">
+      ★ {info.googleRating.toFixed(1)}
+      {info.googleReviewCount != null && <span class="venue-rating-count">({info.googleReviewCount})</span>}
+    </span>
+  )}
+  {info.address && <p class="venue-address">{info.address}</p>}
+</header>
+
+<style>
+  .venue-header {
+    padding: 1.5rem 1rem 1rem;
+    border-bottom: 1px solid var(--brand-border);
+  }
+  .venue-name {
+    font-family: var(--brand-font-heading);
+    font-size: 1.5rem;
+    margin: 0 0 0.5rem;
+  }
+  .venue-status {
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.15rem 0.6rem;
+    border-radius: var(--radius-full);
+    background: var(--brand-surface-raised);
+  }
+  .venue-status--closed {
+    color: var(--color-danger-strong);
+  }
+  .venue-status--busy {
+    color: var(--brand-primary-readable);
+  }
+  .venue-rating {
+    margin-left: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--brand-text-muted);
+  }
+  .venue-address {
+    margin: 0.5rem 0 0;
+    color: var(--brand-text-muted);
+    font-size: 0.9rem;
+  }
+</style>

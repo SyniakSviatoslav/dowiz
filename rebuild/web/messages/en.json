@@ -1,0 +1,13 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "client_menu": "Menu",
+  "cart_title": "Cart",
+  "cart_empty": "Cart is empty",
+  "cart_total": "Total",
+  "cart_checkout": "Checkout",
+  "cart_clear": "Clear",
+  "cart_increase": "Increase quantity",
+  "cart_decrease": "Decrease quantity",
+  "checkout_title": "Checkout",
+  "client_closed_title": "Closed right now"
+}

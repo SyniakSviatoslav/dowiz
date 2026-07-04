@@ -1,0 +1,80 @@
+---
+// StorefrontLayout — parity: apps/web/src/routes/ClientLayout.tsx (header chrome + per-tenant
+// theme CSS-var injection). The rebuild renders the tenant palette server-side (kills the
+// theme-flash the current React app has on first paint — REBUILD-MAP inventory 11 §3.3
+// "ThemeProvider: in rebuild the *initial* vars render server-side in Astro").
+import '../styles/tokens.css';
+import LanguageSwitcher from '../components/islands/LanguageSwitcher.svelte';
+import type { PublicTheme } from '../lib/api-types';
+import { client_menu } from '../lib/paraglide-stub';
+
+interface Props {
+  theme: PublicTheme | null;
+  locationName: string;
+}
+const { theme, locationName } = Astro.props;
+// Parity: ClientLayout.tsx:192 `{locationName || t('client.menu', 'Menu')}` — same fallback,
+// via the Paraglide stand-in rather than the old I18nProvider.
+const displayName = locationName || client_menu();
+
+// Only emit vars the tenant actually set — unset ones fall back to tokens.css defaults, same
+// "don't inherit dark surfaces from a half-set theme" rule as derivePalette (packages/ui) enforces
+// today (client-theme-palette-rootcause fix, memory 2026-06-21). Full derivePalette port (AA
+// contrast enforcement, surface stepping) is Phase-B scope, not this skeleton.
+const themeVars = [
+  theme?.primaryColor && `--brand-primary:${theme.primaryColor};`,
+  theme?.bgColor && `--brand-bg:${theme.bgColor};`,
+  theme?.textColor && `--brand-text:${theme.textColor};`,
+]
+  .filter(Boolean)
+  .join(' ');
+---
+
+<html lang="sq" style={themeVars || undefined}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{displayName} — Order Online | Dowiz</title>
+    <slot name="head" />
+  </head>
+  <body>
+    <header class="shell-header">
+      {theme?.logoUrl && <img src={theme.logoUrl} alt="" class="shell-logo" />}
+      <div class="shell-name">{displayName}</div>
+      <LanguageSwitcher client:idle />
+    </header>
+    <main>
+      <slot />
+    </main>
+  </body>
+</html>
+
+<style>
+  .shell-header {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-sticky);
+    height: 3.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0 1rem;
+    background: color-mix(in srgb, var(--brand-bg) 95%, transparent);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--brand-border);
+  }
+  .shell-logo {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.375rem;
+    object-fit: contain;
+  }
+  .shell-name {
+    flex: 1;
+    font-weight: 700;
+    font-family: var(--brand-font-heading);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+</style>

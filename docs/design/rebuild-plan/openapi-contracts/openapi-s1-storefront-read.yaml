@@ -1,0 +1,913 @@
+# S1 — STOREFRONT-READ surface (strangler surface 1, REBUILD-MAP §3 Phase A/B).
+# SSOT authored from LIVE Node source 2026-07-04 (branch fix/audit-remediation).
+# Documents CURRENT behavior verbatim — quirks annotated x-quirk (file:line), never silently fixed.
+# Conventions, additive-only rule, utoipa mirroring: see CONVENTIONS.md in this directory.
+openapi: 3.1.0
+info:
+  title: DeliveryOS S1 — Storefront Read (public /s/:slug surface)
+  version: 1.0.0
+  description: |
+    Every public READ route serving the /s/:slug storefront: menu, venue info (hours/closed/busy
+    state, fee-mirror inputs), lazy product media, theme (JSON + CSS), SSR/SPA-shell HTML, PWA
+    manifest, media/image proxies, fallback config, voice kill-switch, VAPID key, FX rates, SEO.
+    All routes are unauthenticated (no security schemes). Global rate limit 100/min per IP unless
+    a per-route override is noted (x-rate-limit).
+    Error responses use the ADR-0010 envelope (components.schemas.ErrorEnvelope) with the ACTUAL
+    codes each route emits; routes that deliberately never error (fallback-to-default behavior)
+    say so per response.
+  x-source-commit: fix/audit-remediation@ae9f5360 (working tree 2026-07-04)
+  x-inventory: docs/design/rebuild-plan/inventory/10-api-realtime-jobs.md §1.3 rows 19-43 + spa-proxy rows 1,2,9
+
+servers:
+  - url: https://dowiz.fly.dev
+    description: production
+  - url: https://dowiz-staging.fly.dev
+    description: staging (E2E target)
+
+# Root security: every S1 route is public/unauthenticated by design (no schemes exist here).
+security: []
+
+paths:
+  /public/locations/{locationIdOrSlug}/menu:
+    get:
+      operationId: getPublicMenu
+      summary: Full public menu (the hottest storefront read)
+      description: |
+        Source: apps/api/src/routes/public/menu.ts:231-270 (handler), payload produced by
+        SECURITY DEFINER fn read_public_menu (packages/db/migrations/1790000000072_c2-read-gate.ts:29-183)
+        + route-side enrichment (imageUrl resolution menu.ts:148-194, locationId alias menu.ts:146).
+        Server-side in-process cache: 30s fresh / 300s stale-while-revalidate / 1h stale-on-error,
+        max 500 (slug,locale) keys FIFO (menu.ts:89-102). Shadow tenants fall back to
+        read_preview_menu adapted with is_preview:true (menu.ts:118-133,40-68).
+      x-cache: "response: public, max-age=60, stale-while-revalidate=300; server: 30s/300s/1h in-proc"
+      x-surface: S1
+      parameters:
+        - name: locationIdOrSlug
+          in: path
+          required: true
+          description: Location UUID or slug — fn matches id::text OR slug (migration 072:49).
+          schema: { type: string }
+        - name: locale
+          in: query
+          required: false
+          description: |
+            Normalized server-side to lowercase [a-z0-9_-], max 12 chars, BEFORE becoming a cache
+            key (menu.ts:238-241 — cache-poisoning/OOM guard). Unsupported locale → coerced to the
+            location's default_locale inside read_public_menu (migration 072:56-58).
+          schema: { type: string, maxLength: 12, pattern: "^[a-z0-9_-]*$" }
+      responses:
+        "200":
+          description: Menu payload (live tenant) OR adapted shadow preview (is_preview true).
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              description: "public, max-age=60, stale-while-revalidate=300 (menu.ts:253,265)"
+            X-Menu-Version:
+              schema: { type: string }
+              description: Stringified menu_version — FE polls it for fine-grained invalidation.
+            X-Menu-Cache:
+              schema: { type: string, enum: [stale-on-error] }
+              description: Present ONLY when a DB/pool failure was absorbed by serving a ≤1h-old cached copy (menu.ts:255).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicMenu" }
+        "404":
+          description: Unknown location (and shadow-preview fn absent/empty — menu.ts:261-263).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              example: { code: NOT_FOUND, message: Location not found, correlationId: 6f0f…, status: 404, error: Location not found }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500":
+          description: Unhandled (DB failure past the 1h stale-on-error window) → central handler INTERNAL.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /public/locations/{slug}/info:
+    get:
+      operationId: getPublicLocationInfo
+      summary: Venue status (open/closed/busy), hours, fee-mirror inputs, socials
+      description: |
+        Source: apps/api/src/routes/public/menu.ts:312-411. DB ROW is cached 30s (menu.ts:104-111);
+        the open/closed/busy computation always runs fresh against `now` (hours_json day windows,
+        menu.ts:333-367). Response mirrors the server order-total fee ladder (ADR-0005 Approach M)
+        so the storefront can compute totals to the cent.
+      x-cache: "response: none (uncached JSON); server: 30s row cache + 1h stale-on-error"
+      x-surface: S1
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+          description: Slug ONLY (no uuid fallback here — WHERE l.slug = $1, menu.ts:287).
+      responses:
+        "200":
+          description: Venue info. x-quirk — MIXED naming in one payload (snake_case currency_code
+            next to camelCase deliveryFeeFlat), preserved verbatim (menu.ts:383-409).
+          headers:
+            X-Info-Cache:
+              schema: { type: string, enum: [stale-on-error] }
+              description: Present only when a DB failure was absorbed from cache (menu.ts:324).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicLocationInfo" }
+        "404":
+          description: Unknown slug (menu.ts:331).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "503":
+          description: DB unavailable AND no usable cached row ≤1h old (menu.ts:328) — typed so the FE shows "couldn't load" instead of a raw 500.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              example: { code: SERVICE_UNAVAILABLE, message: Temporarily unavailable, correlationId: 6f0f…, status: 503, error: Temporarily unavailable }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /public/locations/{slug}/products/{productId}/media:
+    get:
+      operationId: getProductMedia
+      summary: Lazy rich-media payload for a product modal (dark behind MEDIA_RICH_ENABLED)
+      description: |
+        Source: apps/api/src/routes/public/menu.ts:418-471. Defence-in-depth gate — returns
+        {media: []} with 200 when MEDIA_RICH_ENABLED != 'true' OR location plan != 'business'
+        (mediaServingAllowed, menu.ts:424-435). NEVER errors on gate-fail: empty array is the
+        designed dark state. spin meta.frameKeys are resolved server-side to meta.frameUrls
+        (menu.ts:448-452) — frameKeys never reach the wire.
+      x-cache: "response: public, max-age=60, stale-while-revalidate=300"
+      x-flags: [MEDIA_RICH_ENABLED, "location.plan == business"]
+      x-surface: S1
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+          description: Location UUID or slug (id::text OR slug, menu.ts:429).
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Media list; empty when feature dark, plan mismatch, unknown location, or no media.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [media]
+                properties:
+                  media:
+                    type: array
+                    items: { $ref: "#/components/schemas/ProductMedia" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/public/theme/{slug}:
+    get:
+      operationId: getPublicTheme
+      summary: Tenant branding for the SPA storefront (colors, logo, fonts, locales)
+      description: |
+        Source: apps/api/src/routes/spa-proxy.ts:506-528. The ONE slug-resolved route in
+        spa-proxy.ts. Font ids are allowlist ids (SoT packages/ui/src/theme/fonts.ts); null →
+        SPA default pairing; client re-validates so a stale id degrades safely.
+      x-cache: "none (default no-cache JSON)"
+      x-surface: S1
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Theme fields (all nullable except locationName).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicTheme" }
+        "404":
+          description: Unknown slug.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /public/locations/{locationId}/theme.css:
+    get:
+      operationId: getThemeCss
+      summary: Versioned tenant CSS custom-properties sheet
+      description: |
+        Source: apps/api/src/routes/public/theme.ts:10-50. locationId accepts UUID or slug
+        (slug resolved to uuid, theme.ts:20-24). With ?hash= serves that exact immutable version;
+        without, the latest version.
+        x-quirk (theme.ts:44-49): NEVER errors — any DB failure OR unknown location OR no
+        theme_versions row falls back to DEFAULT_CSS with 200. An unknown slug is indistinguishable
+        from an unthemed tenant. Port verbatim (storefront must never render unstyled).
+      x-cache: "?hash= → public, max-age=31536000, immutable; else public, max-age=60 (theme.ts:38,48)"
+      x-surface: S1
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          schema: { type: string }
+          description: Location UUID or slug.
+        - name: hash
+          in: query
+          required: false
+          schema: { type: string }
+          description: css_hash pin for immutable caching.
+      responses:
+        "200":
+          description: text/css body (tenant CSS or DEFAULT_CSS fallback). Always 200.
+          content:
+            text/css:
+              schema: { type: string }
+
+  /s/{slug}:
+    get:
+      operationId: getStorefrontPage
+      summary: Storefront entry — SSR menu HTML for bots, SPA shell for humans
+      description: |
+        Source: apps/api/src/routes/public/ssr.ts:18-52. Branching:
+        (1) shadow tenant (read_preview_menu non-null): X-Robots-Tag noindex,nofollow always;
+            bot UA → renderShadowPreview static HTML with GENERIC OG (never the real venue name —
+            🔴 P6-2/P6-3 privacy invariant); human → SPA shell (noindex, generic OG).
+        (2) live tenant: bot UA (isBot, lib/spa-shell.ts) → renderMenuPage SSR HTML with JSON-LD +
+            OG (the only SEO-relevant surface); human → serveSpaShell (per-tenant CSP incl.
+            frame-ancestors, lib/spa-shell.ts:161).
+        Migration-070-absent (PG 42883) falls through to the live-tenant path (ssr.ts:42-44).
+        This is the Astro handoff seam: the bot branch becomes an Astro SSR route in the rebuild.
+      x-cache: "no-cache, no-store, must-revalidate on the shell (spa-shell.ts:162)"
+      x-surface: S1
+      x-redline: "🔴 privacy — shadow tenants forced noindex + generic OG regardless of branch"
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: HTML (SSR menu / shadow preview / SPA shell — by UA and tenant kind).
+          headers:
+            X-Robots-Tag:
+              schema: { type: string }
+              description: "noindex, nofollow — shadow tenants only (ssr.ts:36, spa-shell.ts:169)"
+            Content-Security-Policy:
+              schema: { type: string }
+              description: Per-tenant CSP with tenant frame-ancestors (spa-shell.ts:161).
+          content:
+            text/html:
+              schema: { type: string }
+
+  /s/{slug}/cart:
+    get:
+      operationId: getStorefrontCartPage
+      summary: SPA shell (cart deep-link / refresh)
+      description: "Source: apps/api/src/routes/public/client-flow.ts:15 → serveSpaShell. noindex + robots-disallowed (seo.ts); no bot branch by design."
+      x-cache: "no-cache, no-store, must-revalidate"
+      x-surface: S1
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: SPA shell HTML.
+          content: { text/html: { schema: { type: string } } }
+
+  /s/{slug}/checkout:
+    get:
+      operationId: getStorefrontCheckoutPage
+      summary: SPA shell (checkout deep-link / refresh)
+      description: "Source: apps/api/src/routes/public/client-flow.ts:16 → serveSpaShell."
+      x-cache: "no-cache, no-store, must-revalidate"
+      x-surface: S1
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: SPA shell HTML.
+          content: { text/html: { schema: { type: string } } }
+
+  /s/{slug}/order/{id}:
+    get:
+      operationId: getStorefrontOrderPage
+      summary: SPA shell (order-status deep-link — the tracking-link landing)
+      description: "Source: apps/api/src/routes/public/client-flow.ts:17 → serveSpaShell. The ?t= opaque code in the deep link is exchanged by the SPA via POST /api/customer/track/exchange (S2)."
+      x-cache: "no-cache, no-store, must-revalidate"
+      x-surface: S1
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: SPA shell HTML.
+          content: { text/html: { schema: { type: string } } }
+
+  /s/{slug}/orders/{orderId}:
+    get:
+      operationId: getStorefrontOrderPageLegacy
+      summary: SPA shell (LEGACY order deep-link alias)
+      description: |
+        Source: apps/api/src/routes/public/client-flow.ts:18.
+        x-quirk (client-flow.ts:18): duplicate handler for old deep links — inventory 10 row 22
+        recommends porting as a redirect/alias, not a second handler. Untested directly
+        (needs-new-E2E per census).
+      x-quirk: "legacy alias route, zero direct E2E coverage — port as alias/redirect decision row"
+      x-cache: "no-cache, no-store, must-revalidate"
+      x-surface: S1
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+        - { name: orderId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: SPA shell HTML.
+          content: { text/html: { schema: { type: string } } }
+
+  /s/{slug}/manifest.webmanifest:
+    get:
+      operationId: getWebManifest
+      summary: Per-tenant PWA manifest
+      description: |
+        Source: apps/api/src/routes/public/pwa.ts:7-51.
+        x-quirk (pwa.ts:31-33): DB failure → generic manifest with slug as name, still 200 —
+        never 500s. background_color is hardcoded #121212 (theme bg not read — pwa.ts:12).
+      x-cache: "public, max-age=3600 (pwa.ts:36)"
+      x-surface: S1
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Web-app manifest.
+          content:
+            application/manifest+json:
+              schema:
+                type: object
+                required: [name, short_name, description, start_url, display, background_color, theme_color, icons]
+                properties:
+                  name: { type: string }
+                  short_name: { type: string, description: "name truncated to 12 chars + '...' (pwa.ts:40)" }
+                  description: { type: string }
+                  start_url: { type: string, description: "/s/{slug}?source=pwa" }
+                  display: { type: string, const: standalone }
+                  background_color: { type: string }
+                  theme_color: { type: string, description: "tenant primary_color or #ea4f16 default" }
+                  icons:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        src: { type: string }
+                        sizes: { type: string }
+                        type: { type: string }
+                        purpose: { type: string }
+
+  /api/public/locations/{slug}/fallback-config:
+    get:
+      operationId: getFallbackConfig
+      summary: Offline/error phone-fallback config for the storefront
+      description: "Source: apps/api/src/routes/public/fallback-config.ts:9-32. Zod params {slug: string}. show* flags default TRUE unless explicitly false in fallback_config JSONB."
+      x-cache: "none"
+      x-surface: S1
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Fallback contact config.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [phone, showPhoneOnError, showPhoneOnOffline]
+                properties:
+                  phone: { type: [string, "null"], description: "fallback_config.phone || locations.phone || null" }
+                  showPhoneOnError: { type: boolean }
+                  showPhoneOnOffline: { type: boolean }
+        "404":
+          description: Unknown slug.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /images/{key}:
+    get:
+      operationId: getImage
+      summary: Product image proxy (R2/local-fs) — content-hashed keys
+      description: |
+        Source: apps/api/src/routes/spa-proxy.ts:158-178 (registered as wildcard /images/*; {key}
+        here stands for the full remaining path). Traversal guard rejects '..', NUL, backslash
+        BEFORE storage (Fastify decodes %2f in wildcards — spa-proxy.ts comment).
+        x-quirk (spa-proxy.ts:172-176): a storage-layer ERROR is returned as 404 NOT_FOUND, not
+        5xx — outage indistinguishable from missing object. Port verbatim or council-row it.
+        Content-Type is always image/webp (upload pipeline transcodes to webp).
+      x-cache: "public, max-age=31536000, immutable"
+      x-surface: S1
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+          description: Flat object key (uuid/sha-hash + extension). Wildcard — may contain slashes.
+          x-wildcard: true
+      responses:
+        "200":
+          description: Binary webp.
+          content:
+            image/webp:
+              schema: { type: string, format: binary }
+        "400":
+          description: Traversal-shaped key.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              example: { code: INVALID_KEY, message: Invalid image key, correlationId: 6f0f…, status: 400, error: Invalid image key }
+        "404":
+          description: Missing object OR storage error (x-quirk above).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /media/{key}:
+    get:
+      operationId: getMediaObject
+      summary: Rich-media object proxy (image/video/spin frames) by content-addressed key
+      description: |
+        Source: apps/api/src/routes/spa-proxy.ts:184-211. Same traversal guard and 404-on-error
+        quirk as /images/*. Content-Type derived from key extension: webp/jpg/jpeg/png/mp4 →
+        matching type, anything else application/octet-stream (spa-proxy.ts:193-199).
+      x-cache: "public, max-age=31536000, immutable"
+      x-surface: S1
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+          x-wildcard: true
+      responses:
+        "200":
+          description: Binary media (type by extension).
+          content:
+            image/webp: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+            video/mp4: { schema: { type: string, format: binary } }
+            application/octet-stream: { schema: { type: string, format: binary } }
+        "400":
+          description: Traversal-shaped key (INVALID_KEY).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "404":
+          description: Missing object OR storage error (x-quirk — same as /images/*).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/public/voice-config:
+    get:
+      operationId: getVoiceConfig
+      summary: Voice runtime kill-switch (ADR-0015)
+      description: |
+        Source: apps/api/src/routes/public/voice-config.ts:11-15. Deliberately under /api/ so the
+        cache-first service worker never pins it (breaker R2-A). enabled =
+        VOICE_CONTROL_ENABLED==='true' && VOICE_KILL!=='true' (lib/voice-flag.ts:11-12 — both env
+        vars are schema-drift, see inventory 14 §1b FLAG-S15/S16). Client treats reject/!ok/absent
+        as OFF (fail-closed). Currently double-dark: flag off AND MicFab unmounted.
+      x-cache: "no-store"
+      x-flags: [VOICE_CONTROL_ENABLED, VOICE_KILL]
+      x-surface: S1
+      responses:
+        "200":
+          description: Global boolean; no DB, no auth, no PII.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled]
+                properties:
+                  enabled: { type: boolean }
+
+  /api/push/vapid-public-key:
+    get:
+      operationId: getVapidPublicKey
+      summary: VAPID public key for web-push subscribe (storefront order-status page)
+      description: "Source: apps/api/src/routes/public/vapid.ts:5-9. Raw process.env.VAPID_PUBLIC_KEY read; empty/absent → 404 NOT_FOUND."
+      x-cache: "none"
+      x-surface: S1
+      responses:
+        "200":
+          description: Public key present.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [publicKey]
+                properties:
+                  publicKey: { type: string }
+        "404":
+          description: VAPID not configured.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/rates:
+    get:
+      operationId: getExchangeRate
+      summary: ALL→EUR display rate (storefront secondary-currency)
+      description: |
+        Source: apps/api/src/routes/public/rates.ts:14-48. Latest exchange_rates row (hourly
+        worker). x-quirk (rates.ts:22-35): empty table → STATIC fallback rate 0.0099 with
+        fetchedAt=epoch(0) and Cache-Control public,max-age=300 — the ONLY branch that sets a
+        cache header. rate is a float (display-only FX, NOT money — no x-money-minor-unit).
+      x-cache: "fallback branch only: public, max-age=300"
+      x-surface: S1
+      responses:
+        "200":
+          description: Rate (live or static fallback — distinguishable by fetchedAt 1970-01-01).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [base, target, rate, fetchedAt]
+                properties:
+                  base: { type: string, const: ALL }
+                  target: { type: string, const: EUR }
+                  rate: { type: number, description: "FX float — deliberately NOT integer money" }
+                  fetchedAt: { type: string, format: date-time }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500":
+          description: Query threw (rates.ts:44-47).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              example: { code: INTERNAL, message: internal_error, correlationId: 6f0f…, status: 500, error: internal_error }
+
+  /robots.txt:
+    get:
+      operationId: getRobotsTxt
+      summary: Robots directives incl. AI-bot allowlist + sitemap link
+      description: "Source: apps/api/src/routes/public/seo.ts:45-86. Host-dependent content (sitemap URL) — a handler, not a static asset."
+      x-cache: "public, max-age=86400 (seo.ts:85)"
+      x-surface: S1
+      responses:
+        "200":
+          description: Always 200.
+          content:
+            text/plain:
+              schema: { type: string }
+
+  /sitemap.xml:
+    get:
+      operationId: getSitemapIndex
+      summary: Sitemap index → sharded children (50k-URL shard cap)
+      description: "Source: apps/api/src/routes/public/seo.ts:90-118."
+      x-cache: "public, max-age=3600 (seo.ts:109)"
+      x-surface: S1
+      responses:
+        "200":
+          description: Sitemap index XML.
+          content:
+            application/xml:
+              schema: { type: string }
+        "500":
+          description: DB failure (central handler → INTERNAL envelope; Content-Type json).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /sitemap-locations-{shard}.xml:
+    get:
+      operationId: getSitemapShard
+      summary: Per-shard urlset with hreflang alternates
+      description: |
+        Source: apps/api/src/routes/public/seo.ts:121-160. 🔴 privacy invariant: EXCLUDES shadow
+        tenants (org.owner_id IS NOT NULL filter) — unconsented scraped listings are never listed
+        (P6-2 B2). Empty shard → 404.
+      x-cache: "public, max-age=3600 (seo.ts:154)"
+      x-surface: S1
+      x-redline: "🔴 privacy — never list unconsented shadow tenants"
+      parameters:
+        - name: shard
+          in: path
+          required: true
+          schema: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: urlset XML.
+          content:
+            application/xml:
+              schema: { type: string }
+        "404":
+          description: Empty/unknown shard.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "500":
+          description: DB failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+components:
+  responses:
+    RateLimited:
+      description: |
+        Global @fastify/rate-limit (100/min per IP default; per-route overrides noted in x-rate-limit).
+        Emitted via rateLimitError() → central handler (apps/api/src/lib/api-error.ts:83-91,
+        server.ts:375): envelope with retryAfterMs + Retry-After / x-ratelimit-* headers.
+      headers:
+        Retry-After: { schema: { type: integer }, description: seconds }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+          example: { code: RATE_LIMIT, message: "Too many requests. Try again in 30s.", correlationId: 6f0f…, retryAfterMs: 30000, status: 429, error: "Too many requests. Try again in 30s." }
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      description: |
+        ADR-0010 envelope — buildErrorEnvelope, apps/api/src/lib/api-error.ts:56-72; central
+        handler server.ts:443-520. correlationId is server-authoritative (inbound header never
+        trusted, server.ts:92-100) and echoed in the x-correlation-id response header.
+        `status` and `error` are RETAINED legacy fields (un-migrated FE reads
+        `message || error`, apiClient.ts:211) — drop only after full FE re-audit (post-Astro).
+        `code` values are append-only; the S1 set: NOT_FOUND, SERVICE_UNAVAILABLE, INVALID_KEY,
+        VALIDATION_FAILED, RATE_LIMIT, INTERNAL.
+      required: [code, message, correlationId, status, error]
+      properties:
+        code:
+          type: string
+          pattern: "^[A-Z][A-Z0-9_]*$"
+          description: Machine code, FE-branchable. SCREAMING_SNAKE contract (isContractCode, api-error.ts:41-43).
+        message: { type: string, description: Human text; generic on 5xx (no PG/stack leak). }
+        fields:
+          type: array
+          description: Validation failures only — field PATHS + keyword, never submitted values (PII-safe, B4).
+          items:
+            type: object
+            required: [path, code]
+            properties:
+              path: { type: string }
+              code: { type: string }
+        correlationId: { type: string, description: Server-generated request id (shown as on-screen support code). }
+        retryAfterMs: { type: integer, description: 429 only; mirrored in Retry-After header (seconds). }
+        status: { type: integer, description: Numeric HTTP status (legacy field — keep). }
+        error: { type: string, description: "Legacy alias, always equal to message." }
+
+    PublicMenu:
+      type: object
+      description: |
+        read_public_menu jsonb (migration 1790000000072:170-179) + route enrichment (menu.ts:138-194).
+        Products are pre-filtered server-side to is_available=true AND schedule-open windows
+        (migration 072:130-151) — x-quirk: `available` is therefore ALWAYS true on live-tenant
+        payloads (sold-out items are absent, not flagged; the FE sold-out chip was removed for
+        exactly this reason). Preview (shadow) payloads adapt is_available!==false (menu.ts:59).
+        x-quirk (menu.ts:146): `locationId` is a legacy camelCase ALIAS of location_id — both
+        present, keep both.
+        x-quirk: packages/shared-types/src/contracts/public/menu.ts (PublicMenuResponse) does NOT
+        match this live wire shape — it is aspirational drift; THIS schema (from the DB fn) is the
+        authority.
+      required: [menu_version, default_locale, supported_locales, currency, categories, location_id, location_name, locationId]
+      properties:
+        menu_version:
+          type: integer
+          description: Monotonic publish version (0 for shadow previews). Also in X-Menu-Version header.
+        location_id:
+          type: [string, "null"]
+          description: uuid; null ONLY on shadow previews (adaptPreviewMenu menu.ts:45).
+        locationId:
+          type: [string, "null"]
+          description: "x-quirk: camelCase alias of location_id (menu.ts:146). Always mirrors it."
+        location_name: { type: string }
+        default_locale: { type: string }
+        supported_locales:
+          type: array
+          items: { type: string }
+        currency:
+          type: object
+          required: [code, minor_unit]
+          properties:
+            code: { type: string, description: "ISO 4217 (ALL default)" }
+            minor_unit: { type: integer, description: "Runtime authority for minor-unit interpretation (0 for ALL)" }
+        is_preview:
+          type: boolean
+          description: |
+            Present+true ONLY for shadow-tenant previews (menu.ts:43) — the SOLE signal flipping
+            the storefront into NON-ORDERABLE preview mode (no cart/checkout, claim CTA).
+            Never-orderability is ALSO server-enforced (shadow = closed + unpublished).
+        categories:
+          type: array
+          items: { $ref: "#/components/schemas/PublicMenuCategory" }
+
+    PublicMenuCategory:
+      type: object
+      required: [id, name, sort_order, products]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, description: Locale-resolved (translation → default-locale translation → base). }
+        sort_order: { type: integer }
+        products:
+          type: array
+          items: { $ref: "#/components/schemas/PublicMenuProduct" }
+
+    PublicMenuProduct:
+      type: object
+      required: [id, name, description, price, available, image_key, primary_media_id, attributes, prep_time_minutes, modifier_groups]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, "null"] }
+        price:
+          type: integer
+          x-money-minor-unit: ALL
+          description: Integer minor units (ADR-0005). Interpret with menu.currency.minor_unit.
+        available:
+          type: boolean
+          description: "x-quirk: always true on live payloads (unavailable products filtered out server-side, migration 072:130)."
+        image_key: { type: [string, "null"] }
+        primary_media_id: { type: [string, "null"], description: uuid of the primary product_media row (media seam). }
+        imageUrl:
+          type: [string, "null"]
+          description: |
+            Route-added (menu.ts:152, lib/image-url.ts:1-23): http(s)/data: keys pass through;
+            else R2_PUBLIC_URL join or APP_BASE_URL + /images/<key>. When absent and
+            primary_media_id set + MEDIA_RICH_ENABLED, filled from the primary media's still
+            (menu.ts:165-194).
+        attributes:
+          type: [object, "null"]
+          description: |
+            Free-form JSONB characteristics layer (ADR-0014). Known keys consumed by the FE:
+            kcal, protein, fat, carbs (numbers), allergens (array — EU 14-allergen ids, SoT
+            packages/shared-types/src/allergens.ts), tags, taste, bom (recipe/BOM), stock_count,
+            chef_pick (bool), ingredients, image_url (brand-ingest display URL), description_sq.
+            🔴 SAFETY quirk (migration 072:121): for source='place' rows with
+            allergens_confirmed=false the server strips 'bom' — unconfirmed scraped recipes must
+            never surface allergen-bearing BOM. Port verbatim.
+          additionalProperties: true
+        prep_time_minutes: { type: [integer, "null"] }
+        modifier_groups:
+          type: array
+          items: { $ref: "#/components/schemas/PublicModifierGroup" }
+
+    PublicModifierGroup:
+      type: object
+      description: "migration 072:86-107. Only groups attached via product_modifier_groups appear; empty → []."
+      required: [id, name, min_select, max_select, required, display_type, sort_order, modifiers]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        min_select: { type: integer }
+        max_select: { type: integer }
+        required: { type: boolean }
+        display_type:
+          type: [string, "null"]
+          enum: [radio, checkbox, select, quantity, null]
+          description: Null → client infers radio (max_select==1) vs checkbox (shared-types contracts/public/menu.ts:23).
+        sort_order: { type: integer }
+        modifiers:
+          type: array
+          items:
+            type: object
+            required: [id, name, price_delta, available, sort_order]
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+              price_delta:
+                type: integer
+                x-money-minor-unit: ALL
+                description: Signed integer minor units.
+              available: { type: boolean, description: "Always true on the wire (WHERE m.available=true, migration 072:83)." }
+              sort_order: { type: integer }
+
+    PublicLocationInfo:
+      type: object
+      description: |
+        menu.ts:383-409 verbatim. x-quirk: mixed snake_case (id/name/slug/currency_*/default_locale)
+        and camelCase (everything else) in ONE payload — preserved.
+      required: [id, name, slug, currency_code, currency_minor_unit, default_locale,
+                 deliveryFeeFlat, freeDeliveryThreshold, minOrderValue, taxRate, priceIncludesTax,
+                 hasDistanceTiers, lat, lng, address, phone, isOpen, status, closesAt, weeklyHours,
+                 googleRating, googleReviewCount, googleMapsUrl, googlePlaceId, socialInstagram, socialFacebook]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        currency_code: { type: string }
+        currency_minor_unit: { type: integer }
+        default_locale: { type: string }
+        deliveryFeeFlat:
+          type: [integer, "null"]
+          x-money-minor-unit: ALL
+          description: Flat delivery fee, integer minor units (fee-mirror input, ADR-0005 M).
+        freeDeliveryThreshold:
+          type: [integer, "null"]
+          x-money-minor-unit: ALL
+        minOrderValue:
+          type: [integer, "null"]
+          x-money-minor-unit: ALL
+        taxRate: { type: number, description: "Config fraction (e.g. 0.2) — NOT money. Defaults 0 when null (menu.ts:392)." }
+        priceIncludesTax: { type: boolean }
+        hasDistanceTiers:
+          type: boolean
+          description: True iff delivery_tiers exist AND lat/lng set — mirrors the server fee-ladder branch (menu.ts:281-282).
+        lat: { type: [number, "null"] }
+        lng: { type: [number, "null"] }
+        address: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        isOpen: { type: boolean, description: Legacy boolean (hours_json day-window ∧ !delivery_paused). }
+        status:
+          type: string
+          enum: [open, closed, busy]
+          description: "busy = open ∧ kitchen_busy_until in the future (menu.ts:365-367)."
+        closesAt:
+          type: [string, "null"]
+          pattern: "^\\d{1,2}:\\d{2}$"
+          description: Today's close HH:MM (venue-local wall time) or null.
+        weeklyHours:
+          type: [array, "null"]
+          description: Mon..Sun normalized; null when no hours_json OR all-closed (menu.ts:372-381).
+          items:
+            type: object
+            required: [day, isOpen, open, close]
+            properties:
+              day: { type: string, enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday] }
+              isOpen: { type: boolean }
+              open: { type: [string, "null"], pattern: "^\\d{1,2}:\\d{2}$" }
+              close: { type: [string, "null"], pattern: "^\\d{1,2}:\\d{2}$" }
+        googleRating: { type: [number, "null"], description: Owner-entered/scraped — no live Places API. }
+        googleReviewCount: { type: [integer, "null"] }
+        googleMapsUrl: { type: [string, "null"] }
+        googlePlaceId: { type: [string, "null"] }
+        socialInstagram: { type: [string, "null"] }
+        socialFacebook: { type: [string, "null"] }
+
+    PublicTheme:
+      type: object
+      description: "spa-proxy.ts:513-527 verbatim."
+      required: [primaryColor, bgColor, textColor, logoUrl, locationName, headingFont, bodyFont, supportedLocales]
+      properties:
+        primaryColor: { type: [string, "null"] }
+        bgColor: { type: [string, "null"] }
+        textColor: { type: [string, "null"] }
+        logoUrl: { type: [string, "null"] }
+        locationName: { type: string }
+        headingFont: { type: [string, "null"], description: Font id from the packages/ui/src/theme/fonts.ts allowlist; null → default pairing. }
+        bodyFont: { type: [string, "null"] }
+        supportedLocales:
+          type: [array, "null"]
+          items: { type: string }
+          description: "x-quirk (spa-proxy.ts:524): null (not []) when the DB column is not an array."
+
+    ProductMedia:
+      type: object
+      description: |
+        Resolved media view (menu.ts:446-467; shared-types contracts/public/menu.ts:32-45).
+        url/posterUrl are already absolute or /media/-prefixed (server resolves storage_key;
+        http(s) passthrough). spin: meta.frameUrls resolved, frameKeys stripped.
+      required: [id, kind, url, mimeType, sortOrder]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [image, video, spin, model] }
+        url: { type: string, description: "'' when storage_key unresolvable (menu.ts:457 fallback)" }
+        posterUrl: { type: [string, "null"] }
+        mimeType: { type: string }
+        width: { type: [integer, "null"] }
+        height: { type: [integer, "null"] }
+        durationMs: { type: [integer, "null"] }
+        alt: { type: [string, "null"] }
+        sortOrder: { type: integer }
+        meta:
+          type: [object, "null"]
+          properties:
+            frameCount: { type: integer }
+            frameUrls:
+              type: array
+              items: { type: string }
+          additionalProperties: true
+
+    PreflightReason:
+      type: object
+      description: |
+        RESERVED SHARED COMPONENT — referenced by NO S1 route. The lowercase business-outcome
+        namespace (ADR-0010 §4b) carried in S5 order-create success/422 payloads
+        ({outcome, reasons[]}). Defined here so S5 imports it instead of re-inventing.
+        Source: apps/api/src/lib/preflight.ts:71-138. NEVER merge with ErrorEnvelope.code.
+      required: [code]
+      properties:
+        code:
+          type: string
+          enum: [item_unavailable, velocity, no_show_history, otp_required]
+          x-open-enum: true
+        message: { type: string }
+      x-reserved-for: S5
+
+    Channel:
+      type: string
+      description: |
+        RESERVED FOR S5 — order-attribution channel (hub taxonomy, REBUILD-MAP §6). Referenced by
+        no S1/S2 operation; S5 adds it as an OPTIONAL order-create field (absent = web-direct).
+      enum: [web-direct, qr, nfc, gbp, apple-maps, instagram, facebook, whatsapp, telegram-tma, kiosk, widget, agent, other]
+      x-open-enum: true
+      x-reserved-for: S5

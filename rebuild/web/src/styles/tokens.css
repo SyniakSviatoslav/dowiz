@@ -1,0 +1,35 @@
+/*
+ * Placeholder design tokens — rebuild/web/src/styles/tokens.css
+ *
+ * NOT a design-system port (out of scope for this spike — REBUILD-MAP inventory 11 §3.3 records
+ * the real SoT: packages/ui/src/theme/tokens.css, 506 lines / 251 custom properties, to be ported
+ * verbatim in a later Phase-B lane). This file carries only the handful of --brand-* vars the
+ * storefront layout/page skeleton reference, named identically to the real tokens so the later
+ * port is a superset, not a rename.
+ */
+:root {
+  --brand-bg: #fdfbf7;
+  --brand-text: #1c1a17;
+  --brand-text-muted: #6b6459;
+  --brand-primary: #ea4f16;
+  --brand-primary-readable: #b83c10;
+  --brand-border: #e7e0d4;
+  --brand-surface-raised: #f5f0e6;
+  --brand-font-heading: system-ui, sans-serif;
+  --brand-font-body: system-ui, sans-serif;
+  --color-danger: #c0392b;
+  --color-danger-strong: #e74c3c;
+  --radius-full: 999px;
+  --z-sticky: 40;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--brand-bg);
+  color: var(--brand-text);
+  font-family: var(--brand-font-body);
+}

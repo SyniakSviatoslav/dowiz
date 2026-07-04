@@ -1,0 +1,1169 @@
+# S2 — AUTH surface (strangler surface 2, REBUILD-MAP §3 Phase B). 🔴 EVERY flow council-gated.
+# ┌─────────────────────────────────────────────────────────────────────────────────────────┐
+# │ 🔴 IMPLEMENTATION IS COUNCIL-GATED (inventory 14 §4 — every AUTH-xx row is red-line).    │
+# │ This contract documents CURRENT Node behavior VERBATIM, including quirks (x-quirk with   │
+# │ file:line) — quirks are never silently "fixed" here. Porting any operation requires the  │
+# │ per-surface council APPROVED (REBUILD-MAP §3) and the divergent-shape decision rows in   │
+# │ CONVENTIONS.md §error-envelope resolved one by one.                                      │
+# └─────────────────────────────────────────────────────────────────────────────────────────┘
+# SSOT authored from LIVE source 2026-07-04. Conventions/versioning: CONVENTIONS.md (same dir).
+openapi: 3.1.0
+info:
+  title: DeliveryOS S2 — Auth (owner / courier / claim / track / dev flows)
+  version: 1.0.0
+  description: |
+    The auth flows S2 ports: owner email+password login (AUTH-01), Google OAuth + exchange
+    (AUTH-02), Telegram owner login (AUTH-03), owner refresh rotation + logout (AUTH-09),
+    courier invite details/redeem + login/refresh/logout (AUTH-05/06), dead courier-activate
+    (AUTH-GAP-2), public claim flow (AUTH-07 web side), customer track-exchange (AUTH-10),
+    dev-auth mint (AUTH-08). AUTH-04 (customer OTP) is order-adjacent → S5. AUTH-11
+    (platform-admin) is a structural gate, not a route. AUTH-12 (WS auth) → S6.
+
+    ARCHITECTURE FACT (port-shaping): Bearer RS256 JWT only — ZERO cookies anywhere
+    (inventory 14 §4). Tokens live in client localStorage (dos_access_token/dos_refresh_token).
+    httpOnly-cookie redesign = AUTH-GAP-5, an explicit council decision, never a port default.
+
+    JWT contract (must stay byte-compatible during Phase-B overlap — both stacks verify the
+    same tokens/keys): RS256 only, key selected by header kid before verify
+    (packages/platform/src/auth/jwt.ts:87-111); claims union packages/shared-types/src/legacy.ts:161-175
+    (see components.schemas.AuthTokenClaims). Dev tokens signed under a SEPARATE dev kid/key —
+    cryptographically unverifiable on prod (ADR-0003).
+  x-source-commit: fix/audit-remediation@ae9f5360 (working tree 2026-07-04)
+  x-inventory: docs/design/rebuild-plan/inventory/14-crosscutting-proofnet.md §4 (AUTH-01..12, gaps 1-5); inventory/10 CORE rows 36-43,51 + COURIER rows 21-25 + PUBLIC rows 29-31 + CUSTOMER row 35 + DEV row 44
+  x-redline: "🔴 council-gated port — all operations"
+
+servers:
+  - url: https://dowiz.fly.dev
+    description: production
+  - url: https://dowiz-staging.fly.dev
+    description: staging (E2E target; dev-auth enabled with DEV_AUTH_SECRET)
+
+security: []   # per-operation; most flows are pre-auth by nature
+
+paths:
+  # ═══════════════════════════ OWNER — local login (AUTH-01) ═══════════════════════════
+  /api/auth/local/login:
+    post:
+      operationId: ownerLocalLogin
+      summary: Owner email+password login (argon2id) — most-used login path (18 spec files)
+      description: |
+        Source: apps/api/src/routes/auth/local.ts:36-172. Two ordered paths:
+        (1) flag-gated DEV bypass (ADR-0003, local.ts:51-71): only when ALLOW_DEV_LOGIN='true' AND
+            DEV_AUTH_SECRET set (devLoginAllowed) AND credentials timing-safe-match
+            DEV_LOGIN_EMAIL/PASSWORD → dev-kid token '7d', response WITHOUT refresh_token.
+            Inert on prod (boot-guard D, packages/config/src/index.ts:230-244).
+        (2) real argon2 verify (local.ts:86-107) → RS256 access '24h' + opaque refresh (sha256-
+            hashed, auth_refresh_tokens, 7d family).
+        Role + activeLocationId resolution: memberships (owner-first) → organizations-owned
+        fallback (local.ts:110-139); on resolver error role silently degrades to 'customer'
+        (local.ts:136-139 — x-quirk).
+      x-auth-flow: AUTH-01
+      x-rate-limit: 5/1min
+      x-redline: "🔴 AUTH"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  maxLength: 200
+                  description: Rejects reserved TLDs .test/.example/.invalid/.localhost (rejectReservedTld, lib/synthetic-courier.ts:60-63).
+                password: { type: string, minLength: 1, maxLength: 200 }
+      responses:
+        "200":
+          description: Logged in. Role travels INSIDE the JWT, not the body.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, userId]
+                properties:
+                  access_token: { type: string, description: "RS256 JWT, 24h TTL (dev path 7d dev-kid)." }
+                  refresh_token:
+                    type: string
+                    description: |
+                      x-quirk (local.ts:149-165): CONDITIONALLY OMITTED — absent when the
+                      auth_refresh_tokens INSERT failed (client then simply has no refresh path)
+                      and ALWAYS absent on the dev-bypass path (local.ts:70). 64-hex opaque.
+                  userId: { type: string, format: uuid }
+                  activeLocationId:
+                    type: [string, "null"]
+                    description: May be absent/null for a fresh owner with no membership/org yet.
+              x-quirk: "doc-comment says 1h access (local.ts:25) but code signs '24h' (local.ts:146) — code is authority (ADR-0004)"
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401":
+          description: INVALID_CREDENTIALS (no user / bad password) or WRONG_AUTH_METHOD (no password_hash — Google/TG-only account, local.ts:95-97).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              examples:
+                invalid: { value: { code: INVALID_CREDENTIALS, message: Invalid email or password, correlationId: 6f0f…, status: 401, error: Invalid email or password } }
+                wrongMethod: { value: { code: WRONG_AUTH_METHOD, message: Account uses another sign-in method, correlationId: 6f0f…, status: 401, error: Account uses another sign-in method } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500":
+          description: argon2 failure (local.ts:102-105) or DB not configured.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "503":
+          description: Pool-checkout guard — connection contention returns typed 503 not 500 (local.ts:79-84).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  # ═══════════════════════════ OWNER — Google OAuth (AUTH-02) ═══════════════════════════
+  /api/auth/google:
+    get:
+      operationId: googleOauthStart
+      summary: Start Google OAuth (PKCE S256) — 302 to Google
+      description: |
+        Source: apps/api/src/routes/auth.ts:34-60. Server-gated by GOOGLE_OAUTH_ENABLED
+        (404 NOT_FOUND when off — the gate itself is contract, auth.ts:38). State+nonce+PKCE
+        verifier in Redis, TTL 600s (auth.ts:46). Port note (inventory 14 AUTH-02): Redis state
+        cache → Pg/in-proc per decision A19.
+      x-auth-flow: AUTH-02
+      x-rate-limit: 10/1min
+      x-flags: [GOOGLE_OAUTH_ENABLED]
+      x-redline: "🔴 AUTH"
+      responses:
+        "302":
+          description: Redirect to accounts.google.com with client_id, S256 code_challenge, state, nonce, scope "openid email profile".
+          headers:
+            Location: { schema: { type: string } }
+        "404":
+          description: Flag off — closed at the server, not just hidden in the FE.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/auth/google/callback:
+    get:
+      operationId: googleOauthCallback
+      summary: OAuth callback — upserts owner, mints token pair, hands off via one-time code
+      description: |
+        Source: apps/api/src/routes/auth.ts:62-167. Validates state (Redis, single-use), exchanges
+        code (PKCE verifier), decodes Google id_token (nonce-checked; signature NOT verified —
+        fetched directly from Google over TLS, auth.ts:105-106 — x-quirk, documented rationale).
+        User linking: upsert by google_sub, fallback UPDATE by email (auth.ts:122-144). Mints
+        24h access + 7d refresh family, stashes the PAIR in Redis under a one-time opaque code
+        (60s TTL) and 302s to the SPA with the code in the URL FRAGMENT (#code= — never query,
+        anti-Referer-leak, auth.ts:166).
+      x-auth-flow: AUTH-02
+      x-rate-limit: 10/1min
+      x-flags: [GOOGLE_OAUTH_ENABLED]
+      x-redline: "🔴 AUTH (mints owner tokens, upserts users)"
+      parameters:
+        - { name: code, in: query, required: true, schema: { type: string } }
+        - { name: state, in: query, required: true, schema: { type: string } }
+      responses:
+        "302":
+          description: "Redirect: {APP_BASE_URL}/auth/callback#code=<uuid> (fragment carriage)."
+          headers:
+            Location: { schema: { type: string } }
+        "400":
+          description: Missing/invalid query, expired state, token-exchange failure, nonce mismatch, missing profile — ALL as VALIDATION_FAILED with differing messages (auth.ts:72,77,99,110,118).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "404":
+          description: Flag off.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/auth/exchange:
+    post:
+      operationId: exchangeOauthCode
+      summary: Trade the one-time opaque code (from the OAuth fragment) for the token pair
+      description: "Source: apps/api/src/routes/auth.ts:173-185. Redis one-shot (GET+DEL); 60s TTL set by the callback."
+      x-auth-flow: AUTH-02
+      x-rate-limit: 10/1min
+      x-redline: "🔴 AUTH"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false   # Zod .strict() (auth.ts:176)
+              required: [code]
+              properties:
+                code: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The stashed pair, verbatim.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, refresh_token]
+                properties:
+                  access_token: { type: string }
+                  refresh_token: { type: string }
+        "400":
+          description: Unknown/expired/replayed code → VALIDATION_FAILED "Invalid or expired code" (auth.ts:181); also Zod strict violations via central handler.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # ═══════════════════════════ OWNER — Telegram login (AUTH-03) ═══════════════════════════
+  /api/auth/telegram/start:
+    post:
+      operationId: telegramLoginStart
+      summary: Mint a 5-min Telegram deep-link login token
+      description: "Source: apps/api/src/routes/auth.ts:191-200. No body. FE then polls /poll every 2s for ≤5min (LoginPage.tsx:38-68)."
+      x-auth-flow: AUTH-03
+      x-rate-limit: 10/5min
+      x-redline: "🔴 AUTH (pre-login token mint)"
+      responses:
+        "200":
+          description: Deep-link material.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, botUsername, deepLink]
+                properties:
+                  token: { type: string, format: uuid }
+                  botUsername: { type: string, description: "TELEGRAM_BOT_USERNAME env, default 'dowiz_bot' (raw process.env read — x-quirk: schema-drift var)" }
+                  deepLink: { type: string, description: "https://t.me/<bot>?start=login_<token>" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/auth/telegram/poll:
+    get:
+      operationId: telegramLoginPoll
+      summary: Poll the login token; single-use atomic consume on success
+      description: |
+        Source: apps/api/src/routes/auth.ts:202-233. On status='authenticated' atomically flips
+        authenticated→consumed (race loser gets 410) and mints 24h access + 7d refresh.
+        x-quirk (auth.ts:211,213,221): NON-ENVELOPE bodies on 404/410 — plain {status:'unknown'} /
+        {status:'expired'} / {status:'consumed'}; the FE poll loop branches on `status`, NOT on
+        envelope `code`. Port these shapes verbatim or FE-lockstep.
+      x-auth-flow: AUTH-03
+      x-rate-limit: 120/5min
+      x-redline: "🔴 AUTH (mints owner tokens)"
+      parameters:
+        - { name: token, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: pending/consumed status OR terminal authenticated payload.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [status]
+                    properties:
+                      status: { type: string, enum: [pending, consumed] }
+                  - type: object
+                    required: [status, access_token, refresh_token]
+                    properties:
+                      status: { type: string, const: authenticated }
+                      access_token: { type: string }
+                      refresh_token: { type: string }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "404":
+          description: "Unknown token. x-quirk: body is {status:'unknown'} — NOT the envelope (auth.ts:211)."
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties: { status: { type: string, const: unknown } }
+              x-quirk: divergent-shape (no code/correlationId)
+        "410":
+          description: "Expired or already consumed. x-quirk: {status:'expired'|'consumed'} — NOT the envelope (auth.ts:213,221)."
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties: { status: { type: string, enum: [expired, consumed] } }
+              x-quirk: divergent-shape
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # ═══════════════════════════ OWNER — refresh + logout (AUTH-09, ADR-0004) ═══════════════════════════
+  /api/auth/refresh:
+    post:
+      operationId: ownerRefresh
+      summary: Rotate the owner refresh token (single-use, family-revoke on reuse, live role re-derive)
+      description: |
+        Source: apps/api/src/routes/auth.ts:235-318. Semantics (need a dedicated Rust test-vector
+        set — inventory 14 AUTH-09):
+        1. Atomic claim: UPDATE … SET used=true WHERE used=false — exactly one winner (auth.ts:265-268).
+        2. Lost claim + any family token created <5s ago = benign concurrent refresh → soft
+           409 {error:'concurrent_refresh'} (x-quirk divergent shape, auth.ts:276-282); client
+           retries with the freshly-stored token; family NOT revoked.
+        3. Lost claim + no recent rotation = genuine replay → DELETE whole family, 401 (auth.ts:283-286).
+        4. ADR-0004 P-c: role re-derived from LIVE memberships EVERY refresh; no active owner
+           membership → 401 OWNER_REVOKED, token already consumed (auth.ts:293-301).
+        5. active_location_id kept iff still an active owner membership, else stable first pick
+           (auth.ts:304-306). New access '24h' owner-role always (refreshedOwnerClaims, auth.ts:17-26);
+           new refresh inserted in the SAME family (7d).
+        Owner family ONLY — couriers refresh via /api/courier/auth/refresh.
+      x-auth-flow: AUTH-09
+      x-rate-limit: 5/1min
+      x-redline: "🔴 AUTH (rotation + revocation semantics)"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false   # Zod .strict() (auth.ts:240)
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+                active_location_id: { type: string, format: uuid, description: Caller's working tenant — preserved across refresh (ADR-0004 P-c R2-2). }
+      responses:
+        "200":
+          description: Rotated pair.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, refresh_token]
+                properties:
+                  access_token: { type: string }
+                  refresh_token: { type: string }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401":
+          description: Invalid token / expired / genuine reuse (family revoked) — all UNAUTHORIZED; revoked owner → OWNER_REVOKED.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              examples:
+                reuse: { value: { code: UNAUTHORIZED, message: Token reuse detected. Family revoked., correlationId: 6f0f…, status: 401, error: Token reuse detected. Family revoked. } }
+                revoked: { value: { code: OWNER_REVOKED, message: No active owner membership, correlationId: 6f0f…, status: 401, error: No active owner membership } }
+        "409":
+          description: "Benign concurrent refresh. x-quirk (auth.ts:281): body is {error:'concurrent_refresh'} — lowercase, non-envelope; the FE Web-Locks single-flight (apiClient.ts:52-66) makes this rare but two-device races still hit it."
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties: { error: { type: string, const: concurrent_refresh } }
+              x-quirk: divergent-shape (lowercase code in `error`, no correlationId)
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/auth/logout:
+    post:
+      operationId: ownerLogout
+      summary: Server-side logout — revokes ALL refresh families for the user (all devices)
+      description: |
+        Source: apps/api/src/routes/auth.ts:325-333 (ADR-0004 P-b). DELETE every
+        auth_refresh_tokens row for claims.userId. Access token stays valid ≤24h (accepted risk).
+        x-quirk: reads claims.userId — present only on OWNER tokens (courier tokens carry sub/jti,
+        customer tokens orderId/locationId), so non-owner bearers get 401 UNAUTHORIZED here.
+        KNOWN GAP (AUTH-GAP-1, do NOT fix silently): the FE "Exit" button never calls this route
+        and never clears dos_refresh_token — the refresh family survives UI logout.
+      x-auth-flow: AUTH-09
+      x-rate-limit: 10/1min
+      x-redline: "🔴 AUTH"
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: All families revoked. No body. }
+        "401":
+          description: Missing/invalid Bearer (global gate or verifyAuth), or token without userId claim.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # ═══════════════════════════ COURIER activation — DEAD flow (AUTH-GAP-2) ═══════════════════════════
+  /api/auth/courier/activate:
+    post:
+      operationId: courierActivateDead
+      summary: "DEAD parallel courier activation (zero FE callers) — RETIRE-or-port decision row"
+      description: |
+        Source: apps/api/src/routes/auth.ts:339-393. SECURITY DEFINER activate_courier() validates
+        a sha256-hashed invite code + upserts user + first courier membership atomically.
+        x-quirk (AUTH-GAP-2, inventory 14 §4): ZERO FE callers and zero E2E — dead code. Also
+        inconsistent with the live courier family: signs a '7d' courier access token (auth.ts:374 —
+        vs 24h/14d elsewhere, AUTH-GAP-3) and writes the refresh into the OWNER table
+        auth_refresh_tokens (auth.ts:378-382) which /api/auth/refresh would then rotate as
+        role:'owner' — a latent role-confusion path. Decide delete-vs-port EXPLICITLY at council;
+        do not port by inertia.
+      x-auth-flow: AUTH-GAP-2 (dead)
+      x-rate-limit: 5/1min
+      x-redline: "🔴 AUTH (dead but live-reachable)"
+      x-quirk: "dead flow; 7d TTL; courier refresh in owner table"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code, phone, name]
+              properties:
+                code: { type: string, minLength: 4 }
+                phone: { type: string, minLength: 6 }
+                name: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Courier token pair.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, refresh_token]
+                properties:
+                  access_token: { type: string, description: "courier-role JWT, 7d (x-quirk)" }
+                  refresh_token: { type: string }
+        "400":
+          description: Invalid/used/expired code (DB-fn error strings mapped, auth.ts:364-369) → VALIDATION_FAILED with the mapped message.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # ═══════════════════════════ COURIER — invite + sessions (AUTH-05/06) ═══════════════════════════
+  # Prefix /api/courier/auth is in NO_AUTH_PATHS (server.ts:402-404) — pre-auth by design.
+  /api/courier/auth/invites/{inviteId}:
+    get:
+      operationId: getCourierInvite
+      summary: Public invite validity details (the redeem page's first fetch)
+      description: "Source: apps/api/src/routes/courier/auth.ts:159-216. Two-pass RLS tenant discovery (location_id first, then set_config + JOIN) — note for Rust RLS parity."
+      x-auth-flow: AUTH-05
+      parameters:
+        - { name: inviteId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Invite state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, role, locationName, isValid, isExpired, isUsed, isRevoked]
+                properties:
+                  id: { type: string, format: uuid }
+                  role: { type: string, description: "'courier' (mint side hard-allowlists it — an invite must never mint an owner, owner/courier-invites.ts:34-36)" }
+                  locationName: { type: string }
+                  isValid: { type: boolean }
+                  isExpired: { type: boolean }
+                  isUsed: { type: boolean }
+                  isRevoked: { type: boolean }
+        "404":
+          description: Unknown invite.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/courier/auth/invites/{inviteId}/redeem:
+    post:
+      operationId: courierRedeemInvite
+      summary: Redeem invite — create courier (PII encrypted), mint 14d JWT + 30d session
+      description: |
+        Source: apps/api/src/routes/courier/auth.ts:23-156. argon2id code verify; PII (email/name/
+        phone) AES-256-GCM encrypted at rest + sha256 lookup hashes; ON CONFLICT(email_hash)
+        UPDATE password_hash (re-redeem overwrites password — x-quirk worth a council eye);
+        courier_sessions row 30d; JWT '14d' (auth.ts:136).
+        x-quirk (AUTH-GAP-3): TTL matrix inconsistent — redeem 14d JWT vs login/refresh 24h JWT vs
+        30d session row. Council unifies target values at port; contract records reality.
+      x-auth-flow: AUTH-05
+      x-rate-limit: 5/15min
+      x-redline: "🔴 AUTH (mints courier credentials)"
+      parameters:
+        - { name: inviteId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false   # Zod .strict() (courier/auth.ts:40)
+              required: [email, code, password, full_name]
+              properties:
+                email: { type: string, format: email, description: Lowercased+trimmed server-side; reserved-TLD reject. }
+                code: { type: string, minLength: 1, description: 16-hex invite code (argon2id-verified). }
+                password: { type: string, minLength: 12 }
+                full_name: { type: string, minLength: 1 }
+                phone: { type: string }
+      responses:
+        "200":
+          description: Courier session minted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jwt, refreshToken, courier]
+                properties:
+                  jwt: { type: string, description: "courier-role RS256, 14d (x-quirk AUTH-GAP-3), claims {role, sub, activeLocationId, jti:sessionId}" }
+                  refreshToken: { type: string, description: "Format 'sessionId.tokenPlain' — sessionId uuid + 64-hex secret (courier/auth.ts:142)" }
+                  courier:
+                    type: object
+                    required: [id, masked_email, full_name, locations]
+                    properties:
+                      id: { type: string, format: uuid }
+                      masked_email: { type: string, description: PII-masked (maskStr). }
+                      full_name: { type: string, description: Plaintext in response by design (courier/auth.ts:146). }
+                      locations:
+                        type: array
+                        items:
+                          type: object
+                          required: [id, role]
+                          properties:
+                            id: { type: string, format: uuid }
+                            role: { type: string }
+        "400": { $ref: "#/components/responses/CourierManualZod400" }
+        "401":
+          description: Wrong invite code (INVALID_CODE).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "410":
+          description: Invite invalid/expired/used/revoked (INVITE_INVALID).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/courier/auth/login:
+    post:
+      operationId: courierLogin
+      summary: Courier login (email OR phone + password) — 24h JWT + 30d session
+      description: |
+        Source: apps/api/src/routes/courier/auth.ts:219-351. Timing-safe: dummy argon2 verify on
+        unknown identity (auth.ts:254-256). Failed attempts audit-logged.
+        x-quirk (courier/auth.ts:229-244): `email` field is NOT format-validated (min 1 only) —
+        it doubles as phone; the SAME sha256 hash is matched against email_hash OR phone_hash.
+        Location resolution: explicit location_id must be a membership (403
+        NOT_AUTHORIZED_FOR_LOCATION) else first assigned (403 NO_LOCATION_ASSIGNED when none).
+      x-auth-flow: AUTH-06
+      x-rate-limit: 5/15min
+      x-redline: "🔴 AUTH"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, minLength: 1, description: Email OR phone (not format-checked — x-quirk). Lowercased+trimmed. }
+                password: { type: string, minLength: 1 }
+                location_id: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Courier session.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jwt, refreshToken, activeLocationId, role]
+                properties:
+                  jwt: { type: string, description: "courier RS256 24h, jti = session id (live-bind check per request, plugins/auth.ts:63-83)." }
+                  refreshToken: { type: string, description: "'sessionId.tokenPlain'" }
+                  activeLocationId: { type: string, format: uuid }
+                  role: { type: string, description: courier_locations.role for the resolved location. }
+        "400": { $ref: "#/components/responses/CourierManualZod400" }
+        "401":
+          description: INVALID_CREDENTIALS (unknown identity or bad password — indistinguishable by design).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "403":
+          description: COURIER_DEACTIVATED | NOT_AUTHORIZED_FOR_LOCATION | NO_LOCATION_ASSIGNED.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/courier/auth/refresh:
+    post:
+      operationId: courierRefresh
+      summary: Rotate courier session (reuse-detection family-revoke; live status re-check)
+      description: |
+        Source: apps/api/src/routes/courier/auth.ts:354-476. Lookup by sessionId prefix (format
+        'sessionId.tokenPlain'), argon2 verify of the secret half, FOR UPDATE NOWAIT row lock.
+        Reuse of a revoked session → revoke FAMILY + audit row + 401 REFRESH_REUSED (COMMITTED,
+        auth.ts:418-428). Rotation: old session revoked_at=now, new 30d session in same family,
+        replaced_by linked; new '24h' JWT with new jti.
+        KNOWN GAP (inventory 10 courier note, do NOT fix silently): no ADR-0004-style per-location
+        membership re-check — only couriers.status!=='active' is re-checked (401 COURIER_DEACTIVATED).
+      x-auth-flow: AUTH-06
+      x-rate-limit: 10/1min
+      x-redline: "🔴 AUTH"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string, minLength: 1, description: "'sessionId.tokenPlain'" }
+      responses:
+        "200":
+          description: Rotated courier pair.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jwt, refreshToken]
+                properties:
+                  jwt: { type: string }
+                  refreshToken: { type: string }
+        "400": { $ref: "#/components/responses/CourierManualZod400" }
+        "401":
+          description: INVALID_REFRESH_TOKEN (format/secret) | SESSION_NOT_FOUND | REFRESH_REUSED (family revoked) | REFRESH_EXPIRED | COURIER_DEACTIVATED.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/courier/auth/logout:
+    post:
+      operationId: courierLogout
+      summary: Revoke one courier session (best-effort, never fails)
+      description: |
+        Source: apps/api/src/routes/courier/auth.ts:479-507.
+        x-quirk (auth.ts:487,493): ALWAYS returns 200 {success:true} — invalid body and malformed
+        token are silently ignored (soft-fail by design; logout must never error the client).
+        No rate-limit override (global 100/min).
+      x-auth-flow: AUTH-06
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Always (even invalid input — x-quirk).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties: { success: { type: boolean, const: true } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # ═══════════════════════════ CLAIM flow — web side (AUTH-07) ═══════════════════════════
+  # ⚠ ALL claim responses use the BARE {error: CODE} divergent shape (claim.ts) — never the envelope.
+  /api/claim/accept:
+    post:
+      operationId: claimAccept
+      summary: Accept a shadow-tenant claim token → atomic ownership transfer
+      description: |
+        Source: apps/api/src/routes/public/claim.ts:17-43 (mounted prefix /api). verifyAuth ONLY —
+        the claimer has no membership yet; the TOKEN is the sole transfer authority; role
+        re-derives from the new membership next request (ADR-0004) — hence reauth:true hint.
+        Transfer = claim_transfer() SECURITY DEFINER (atomic). Token arrives via URL FRAGMENT
+        (#token=, anti-Referer-leak) and is stashed pre-signin as dos_claim_token (ClaimPage.tsx:144).
+        Contact-bound invites: CONTACT_REQUIRED when a token-only invite is not web-claimable
+        (G-F2g); CONTACT_MISMATCH when authenticated ≠ invited identity.
+      x-auth-flow: AUTH-07
+      x-rate-limit: 10/1min
+      x-redline: "🔴 AUTH + tenant transfer (ownership mint)"
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string, minLength: 16, maxLength: 256 }
+      responses:
+        "200":
+          description: Transferred.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [org_id, location_id, reauth]
+                properties:
+                  org_id: { type: string, format: uuid }
+                  location_id: { type: string, format: uuid }
+                  reauth: { type: boolean, const: true, description: Client must refresh so the new membership enters the token. }
+        "400":
+          description: "x-quirk: bare {error:'VALIDATION_FAILED'} (claim.ts:22) — no envelope."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClaimBareError" }
+        "401":
+          description: "bare {error:'UNAUTHENTICATED'} (no sub claim) or {error:'INVALID_OR_EXPIRED_TOKEN'} (claim.ts:24,34)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClaimBareError" }
+        "403":
+          description: "bare {error:'CONTACT_MISMATCH'|'CONTACT_REQUIRED'} (claim.ts:35-36)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClaimBareError" }
+        "409":
+          description: "bare {error:'ALREADY_CLAIMED'} (claim.ts:33)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClaimBareError" }
+        "422":
+          description: "Any other ClaimError code, bare shape (claim.ts:37-38)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClaimBareError" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/claim/request:
+    post:
+      operationId: claimRequest
+      summary: Owner-initiated "this is my restaurant" — uniform 202, anti-enumeration
+      description: |
+        Source: apps/api/src/routes/public/claim.ts:49-67. Never auto-mints (spam/IDOR vector);
+        records an ops signal ONLY for real shadows; response is byte-identical either way —
+        never reveals whether a slug is a claimable shadow.
+      x-auth-flow: AUTH-07
+      x-rate-limit: 5/1min
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false   # .strict() (claim.ts:12)
+              required: [slug]
+              properties:
+                slug: { type: string, minLength: 2, maxLength: 100, pattern: "^[a-z0-9-]+$" }
+      responses:
+        "202":
+          description: Uniform ack, always.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requested, message]
+                properties:
+                  requested: { type: boolean, const: true }
+                  message: { type: string }
+        "400":
+          description: "x-quirk: bare {error:'VALIDATION_FAILED'} (claim.ts:54)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClaimBareError" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/claim/decline:
+    post:
+      operationId: claimDecline
+      summary: Decline + hard-erase the unconsented preview — token-only, NO account needed
+      description: |
+        Source: apps/api/src/routes/public/claim.ts:69-83. Deliberately unauthenticated (counsel
+        CC2 — the restaurant erases without creating an account). declineAndErase() hard-deletes
+        the shadow preview. 🔴 destructive.
+      x-auth-flow: AUTH-07
+      x-rate-limit: 10/1min
+      x-redline: "🔴 destructive erase"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string, minLength: 16, maxLength: 256 }
+      responses:
+        "200":
+          description: Erased.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [erased]
+                properties: { erased: { type: boolean, const: true } }
+        "400":
+          description: "bare {error:'VALIDATION_FAILED'} (claim.ts:74)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClaimBareError" }
+        "401":
+          description: "Any ClaimError → bare {error:<code>} at 401 regardless of kind (claim.ts:79 — x-quirk: no per-code status mapping on decline)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClaimBareError" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # ═══════════════════════════ CUSTOMER — track exchange (AUTH-10) ═══════════════════════════
+  /api/customer/track/exchange:
+    post:
+      operationId: customerTrackExchange
+      summary: Trade the opaque ?t= tracking-link code for a customer JWT
+      description: |
+        Source: apps/api/src/routes/customer/track.ts:28-86. Pre-auth (NO_AUTH_PATHS,
+        server.ts:403). Grant minted at order-create (customer_track_grants, 14d TTL,
+        lib/order-persistence.ts:145-148). REUSABLE until expiry (use_count = observability, not
+        a single-use gate). Mints issueCustomerToken 7d JWT {role:'customer', orderId, locationId}
+        — NO phone claim (P0-PII, jwt.ts:122-125). Raw code never logged (sha256 lookup).
+      x-auth-flow: AUTH-10
+      x-rate-limit: 10/1min per IP
+      x-redline: "🔴 AUTH (mints customer JWT; runs on BYPASSRLS operational pool with explicit WHERE)"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false   # .strict() (track.ts:18-23)
+              required: [code]
+              properties:
+                code: { type: string, minLength: 20, maxLength: 64, description: base64url(32 bytes) opaque grant. }
+      responses:
+        "200":
+          description: Customer JWT.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token]
+                properties:
+                  token: { type: string, description: 7d customer-role RS256 JWT. }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "410":
+          description: |
+            Unknown/expired/order-gone — SINGLE uniform 410 (no case leak).
+            x-quirk (track.ts:58-61): divergent shape {error:'TRACK_LINK_EXPIRED', message} —
+            `error` carries the CODE (inverse of the envelope, where `error` mirrors message);
+            no code/correlationId fields. FE branches on this today.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, message]
+                properties:
+                  error: { type: string, const: TRACK_LINK_EXPIRED }
+                  message: { type: string }
+              x-quirk: divergent-shape
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500":
+          description: Token-issue failure (track.ts:80-83) → INTERNAL envelope.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  # ═══════════════════════════ DEV-AUTH (AUTH-08, ADR-0003) — staging E2E backbone ═══════════════════════════
+  /dev/mock-auth:
+    post:
+      operationId: devMockAuth
+      summary: "Mint a dev-kid JWT (owner default / courier / synthetic courier) — 404s unless dev-gate open"
+      description: |
+        Source: apps/api/src/routes/dev/mock-auth.ts:14-119. FOUR-layer gate, port ALL of them
+        (ADR-0003): (1) ALLOW_DEV_LOGIN==='true' AND (2) x-dev-auth-secret header timing-safe ==
+        DEV_AUTH_SECRET (plugins/dev-guard.ts:29-31) — else global onRequest hook 404s
+        (server.ts:405-416, existence-hiding); (3) tokens signed under the SEPARATE dev kid/key —
+        prod verifier rejects them cryptographically (jwt.ts:73-115); (4) prod boot fail-fast if
+        any dev var set (config/index.ts:230-244).
+        Courier synthetic:true → id RE-DERIVED server-side from the sentinel email_hash (never a
+        caller-supplied courierId — impersonation reduced to the one fixture BY CONSTRUCTION).
+        ~80 E2E specs depend on this on staging.
+        Rust: #[cfg(feature="dev-routes")] compile-out of release + keep the runtime gate.
+      x-auth-flow: AUTH-08
+      x-flags: [ALLOW_DEV_LOGIN, DEV_AUTH_SECRET]
+      x-redline: "🔴 auth-bypass minter (dev-gated)"
+      parameters:
+        - name: x-dev-auth-secret
+          in: header
+          required: true
+          schema: { type: string }
+          description: Constant-time compared against DEV_AUTH_SECRET; wrong/missing → 404 (never 401 — no existence leak).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { type: string, enum: [owner, courier], description: Anything ≠ 'courier' → owner (mock-auth.ts:16). }
+                locationSlug: { type: string, description: Owner path — resolve activeLocationId by slug. }
+                locationId: { type: string, description: "Courier random-uuid path — baked activeLocationId (hardcoded default when absent, mock-auth.ts:58)." }
+                synthetic: { type: boolean, description: Courier-only — mint for the seeded synthetic fixture. }
+      responses:
+        "200":
+          description: Dev-kid token.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, userId]
+                properties:
+                  access_token: { type: string, description: "signDevToken '1d' — dev kid, prod-unverifiable." }
+                  userId: { type: string, description: uuid (random for non-synthetic courier — no DB row behind it, x-quirk). }
+                  activeLocationId: { type: [string, "null"] }
+                  synthetic: { type: boolean, description: Present (true) only on the synthetic path. }
+        "404":
+          description: "Gate closed (flag off or secret mismatch). x-quirk: bare {error:'Not found'} (server.ts:414) — not the envelope; deliberate existence-hiding."
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties: { error: { type: string, const: Not found } }
+              x-quirk: divergent-shape (fail-closed 404)
+        "409":
+          description: "synthetic:true but fixture not seeded. x-quirk (mock-auth.ts:38-41): {error:<human text>, code:'SYNTHETIC_COURIER_MISSING'} — error carries prose, code the machine token (fields swapped vs envelope)."
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, code]
+                properties:
+                  error: { type: string }
+                  code: { type: string, const: SYNTHETIC_COURIER_MISSING }
+              x-quirk: divergent-shape
+
+  /api/dev/mock-auth:
+    post:
+      operationId: devMockAuthAlias
+      summary: "DUPLICATE implementation of /dev/mock-auth inline in server.ts — collapse in Rust"
+      description: |
+        Source: apps/api/src/server.ts:549+ (inline). Same dev-guard gate, same synthetic
+        re-derive, same response shapes as /dev/mock-auth.
+        x-quirk (inventory 10 §1.3 duplicate-implementation flag): TWO independently maintained
+        near-identical bodies (mock-auth.ts:14 vs server.ts:549) — a security fix to one can
+        silently miss the other. The Rust port MUST collapse to ONE handler registered at both
+        paths; this alias entry exists so openapi-diff proves both paths still answer.
+      x-auth-flow: AUTH-08
+      x-flags: [ALLOW_DEV_LOGIN, DEV_AUTH_SECRET]
+      x-redline: "🔴 auth-bypass minter (dev-gated)"
+      x-quirk: "duplicate handler body — port as one handler, two routes"
+      parameters:
+        - name: x-dev-auth-secret
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { type: string, enum: [owner, courier] }
+                locationSlug: { type: string }
+                locationId: { type: string }
+                synthetic: { type: boolean }
+      responses:
+        "200":
+          description: Same shape as /dev/mock-auth.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, userId]
+                properties:
+                  access_token: { type: string }
+                  userId: { type: string }
+                  activeLocationId: { type: [string, "null"] }
+                  synthetic: { type: boolean }
+        "404":
+          description: Gate closed (bare {error:'Not found'}).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties: { error: { type: string, const: Not found } }
+        "409":
+          description: SYNTHETIC_COURIER_MISSING (same swapped shape as /dev/mock-auth).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, code]
+                properties:
+                  error: { type: string }
+                  code: { type: string, const: SYNTHETIC_COURIER_MISSING }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        RS256 ONLY — sign packages/platform/src/auth/jwt.ts:55-56; verify rejects any other alg
+        twice (jwt.ts:105-111). Key by header kid (prod kid vs dev kid — pair-passed so
+        dev-kid-with-prod-key is unrepresentable, jwt.ts:48-60, ADR-0003 C.1). Claims:
+        components.schemas.AuthTokenClaims. ZERO cookies — session state is client-side
+        localStorage (AUTH-GAP-5 documents the accepted XSS-exfiltration risk; changing this is
+        a council decision at the S2 port, not a default).
+        Global Bearer-presence pre-gate (server.ts:399-427): under /api/owner|courier|customer/
+        (minus NO_AUTH_PATHS + OTP regex) a missing "Bearer " prefix short-circuits to
+        401 {error:'Unauthorized'} — see responses.GlobalBearerGate401.
+
+  responses:
+    RateLimited:
+      description: |
+        @fastify/rate-limit → rateLimitError() → central handler (api-error.ts:83-91): envelope
+        {code:'RATE_LIMIT', retryAfterMs, ...} + Retry-After / x-ratelimit-* headers. Per-route
+        windows in x-rate-limit; global default 100/min per IP.
+      headers:
+        Retry-After: { schema: { type: integer }, description: seconds }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+    ValidationFailed:
+      description: |
+        Schema-attached Zod (via fastify-type-provider-zod) → central handler →
+        400 VALIDATION_FAILED envelope; fields[] = paths + UPPERCASED issue code, never values
+        (server.ts:459-483). Status deliberately 400, not 422 (ADR-0010 code-preserving).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+          example: { code: VALIDATION_FAILED, message: Invalid request, fields: [{ path: refresh_token, code: INVALID_TYPE }], correlationId: 6f0f…, status: 400, error: Invalid request }
+
+    CourierManualZod400:
+      description: |
+        x-quirk (courier/auth.ts:44,237,369): the courier-auth file bypasses the envelope with a
+        MANUAL safeParse → 400 {error:'Validation failed', details:<ZodError.format()>}.
+        `details` leaks the raw Zod tree structure (paths + messages, no submitted values).
+        Divergent from ErrorEnvelope AND from claim's bare shape — third shape family. Council
+        decision row: keep-verbatim vs envelope-migrate with FE lockstep.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error, details]
+            properties:
+              error: { type: string, const: Validation failed }
+              details: { type: object, additionalProperties: true, description: ZodError.format() tree. }
+          x-quirk: divergent-shape (manual Zod, prose error, details tree)
+
+    GlobalBearerGate401:
+      description: |
+        Pre-route Bearer-presence gate (server.ts:417-426) for AUTH_PREFIXES paths:
+        x-quirk — bare {error:'Unauthorized'} (no envelope, no correlationId). Fires BEFORE any
+        handler, so every /api/courier/* and /api/customer/* route (except NO_AUTH_PATHS) can
+        surface this shape in addition to its own 401s.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties: { error: { type: string, const: Unauthorized } }
+          x-quirk: divergent-shape
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      description: |
+        ADR-0010 envelope — buildErrorEnvelope, apps/api/src/lib/api-error.ts:56-72; central
+        handler server.ts:443-520. correlationId is server-authoritative (inbound header never
+        trusted, server.ts:92-100) and echoed in the x-correlation-id response header.
+        `status` and `error` are RETAINED legacy fields (un-migrated FE reads
+        `message || error`, apiClient.ts:211) — drop only after full FE re-audit (post-Astro).
+        `code` values are append-only; the S2 set: VALIDATION_FAILED, INVALID_CREDENTIALS,
+        WRONG_AUTH_METHOD, UNAUTHORIZED, OWNER_REVOKED, NOT_FOUND, INVITE_INVALID, INVALID_CODE,
+        INVALID_REFRESH_TOKEN, SESSION_NOT_FOUND, REFRESH_REUSED, REFRESH_EXPIRED,
+        COURIER_DEACTIVATED, NOT_AUTHORIZED_FOR_LOCATION, NO_LOCATION_ASSIGNED, RATE_LIMIT,
+        INTERNAL, SERVICE_UNAVAILABLE.
+      required: [code, message, correlationId, status, error]
+      properties:
+        code:
+          type: string
+          pattern: "^[A-Z][A-Z0-9_]*$"
+          description: Machine code, FE-branchable. SCREAMING_SNAKE contract (isContractCode, api-error.ts:41-43).
+        message: { type: string, description: Human text; generic on 5xx (no PG/stack leak). }
+        fields:
+          type: array
+          description: Validation failures only — field PATHS + keyword, never submitted values (PII-safe, B4).
+          items:
+            type: object
+            required: [path, code]
+            properties:
+              path: { type: string }
+              code: { type: string }
+        correlationId: { type: string, description: Server-generated request id (shown as on-screen support code). }
+        retryAfterMs: { type: integer, description: 429 only; mirrored in Retry-After header (seconds). }
+        status: { type: integer, description: Numeric HTTP status (legacy field — keep). }
+        error: { type: string, description: "Legacy alias, always equal to message." }
+
+    ClaimBareError:
+      type: object
+      description: |
+        x-quirk — the claim surface's OWN error shape (public/claim.ts:22,24,38,54,74,79):
+        bare {error: <CODE>} where `error` carries the MACHINE CODE (VALIDATION_FAILED,
+        UNAUTHENTICATED, INVALID_OR_EXPIRED_TOKEN, ALREADY_CLAIMED, CONTACT_MISMATCH,
+        CONTACT_REQUIRED, …). No message, no correlationId, no status. The ClaimPage FE branches
+        on this field. Council decision row before any reshape.
+      required: [error]
+      properties:
+        error:
+          type: string
+          pattern: "^[A-Z][A-Z0-9_]*$"
+          description: ClaimError code (machine token in the `error` slot — inverse of the envelope).
+      x-quirk: divergent-shape family (claim surface)
+
+    AuthTokenClaims:
+      description: |
+        JWT claims union (Zod discriminatedUnion, packages/shared-types/src/legacy.ts:161-175).
+        Strict per-variant (.strict() — no extra claims). Base: sub(uuid), iat, exp, kid.
+        Byte-compatibility across stacks during Phase B is the strangler's load-bearing seam.
+      oneOf:
+        - $ref: "#/components/schemas/OwnerClaims"
+        - $ref: "#/components/schemas/CourierClaims"
+        - $ref: "#/components/schemas/CustomerClaims"
+
+    OwnerClaims:
+      type: object
+      required: [role, userId, sub, iat, exp, kid]
+      additionalProperties: false
+      properties:
+        role: { type: string, const: owner }
+        userId: { type: string, format: uuid }
+        activeLocationId: { type: string, format: uuid, description: Optional — absent for a location-less fresh owner. }
+        sub: { type: string, format: uuid }
+        iat: { type: integer }
+        exp: { type: integer, description: 24h from mint (dev path 7d/1d dev-kid). }
+        kid: { type: string }
+
+    CourierClaims:
+      type: object
+      required: [role, activeLocationId, sub, iat, exp, kid]
+      additionalProperties: false
+      properties:
+        role: { type: string, const: courier }
+        activeLocationId: { type: string, format: uuid, description: REQUIRED for couriers. }
+        jti: { type: string, format: uuid, description: courier_sessions id — live session-bind check per request (plugins/auth.ts:63-83). }
+        sub: { type: string, format: uuid, description: courier id }
+        iat: { type: integer }
+        exp: { type: integer, description: 24h (login/refresh) / 14d (redeem — AUTH-GAP-3) / 7d (dead activate). }
+        kid: { type: string }
+
+    CustomerClaims:
+      type: object
+      required: [role, orderId, locationId, sub, iat, exp, kid]
+      additionalProperties: false
+      properties:
+        role: { type: string, const: customer }
+        orderId: { type: string, format: uuid }
+        locationId: { type: string, format: uuid }
+        sub: { type: string, format: uuid }
+        iat: { type: integer }
+        exp: { type: integer, description: "7d (issueCustomerToken). NO phone claim ever (P0-PII, jwt.ts:122-125)." }
+        kid: { type: string }
+
+    Channel:
+      type: string
+      description: |
+        RESERVED FOR S5 — mirror of the S1 definition (order-attribution hub taxonomy,
+        REBUILD-MAP §6). Referenced by no S2 operation.
+      enum: [web-direct, qr, nfc, gbp, apple-maps, instagram, facebook, whatsapp, telegram-tma, kiosk, widget, agent, other]
+      x-open-enum: true
+      x-reserved-for: S5
