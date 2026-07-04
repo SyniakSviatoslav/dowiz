@@ -17,25 +17,43 @@ path = "src/main.rs"
 domain = { path = "../domain" }
 
 axum = { version = "0.8", features = ["json"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "fs"] }
 tower = { version = "0.5", features = ["timeout", "util"] }
 tower-http = { version = "0.6", features = ["trace", "request-id", "util"] }
 
 # runtime-tokio + rustls (not native-tls) so the eventual musl/scratch static build (rebuild/Dockerfile)
 # never needs to link OpenSSL — see REBUILD-MAP inventory/13 §Dockerfile.
+# "json" added for the S1 port: read_public_menu/read_preview_menu return jsonb, decoded via
+# serde_json::Value (sqlx's json feature wires that decode) — see crates/api/src/repo.rs.
+# "macros" added ONLY for `#[derive(sqlx::FromRow)]` (crates/api/src/repo.rs::LocationInfoRow —
+# the `/info` query has 24 columns, past the tuple-FromRow impl's arity ceiling). This is
+# DISTINCT from the `query!`/`query_as!` compile-time-checked macros the build brief says not to
+# use (those need a reachable DATABASE_URL + `.sqlx/` cache at compile time; `#[derive(FromRow)]`
+# does not touch a database at all, it only generates a row-decoding impl).
 sqlx = { version = "0.8", default-features = false, features = [
   "runtime-tokio-rustls",
   "postgres",
   "uuid",
   "chrono",
+  "json",
+  "macros",
 ] }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
 
-utoipa = { version = "5", features = ["axum_extras"] }
+# Object-safe async trait methods for the S1 port's DB-repo and storage abstractions
+# (`Arc<dyn PublicRepo>`/`Arc<dyn Storage>` in AppState) — native async-fn-in-trait is not yet
+# dyn-compatible on stable, so this well-established crate is the standard workaround (not a
+# speculative addition: every S1 handler needs it for the cfg(test)-stub swap the build brief
+# requires).
+async-trait = "0.1"
+
+# "uuid" feature: utoipa::ToSchema for uuid::Uuid (params/schemas referencing product/order ids).
+utoipa = { version = "5", features = ["axum_extras", "uuid"] }
 
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

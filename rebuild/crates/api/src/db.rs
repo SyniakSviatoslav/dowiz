@@ -18,22 +18,33 @@
 //!
 //! ## Why the raw pool is not `pub`
 //! `Pools` intentionally does not expose its fields as a way to reach for `pool.acquire()`
-//! directly from route code — `with_tenant` (and, later, a session-pool equivalent for
-//! LISTEN/NOTIFY) is meant to be the ONLY way a tenant-scoped table gets touched. Phase A doesn't
-//! yet enforce this by visibility (both fields are `pub(crate)` so `main.rs` can wire them), but
-//! no route handler in this crate calls a pool method directly — see `routes/menu.rs`.
+//! directly from ARBITRARY route code — `with_tenant` (and, later, a session-pool equivalent for
+//! LISTEN/NOTIFY) is meant to be the ONLY way an AUTHENTICATED-TENANT-scoped table gets touched.
+//! Fields stay `pub(crate)` so `main.rs`/`crates/api/src/repo.rs` can wire them.
 //!
-//! ## Why this whole module is `#[allow(dead_code)]`
-//! `Pools`/`with_tenant`/`TenantTxnError` are wired at boot (`main.rs` connects `Pools`) but have
-//! no reachable caller yet: the one route this crate ships (`GET /api/v1/public/menu/{slug}`) is
-//! an explicit 501 stub that never touches the database (see `routes/menu.rs`). That is the
-//! correct Phase A shape, not a bug — but it means `cargo clippy -- -D warnings` would otherwise
-//! fail on "never used" for this entire module. The allow is scoped to this module only (not
-//! workspace-wide) and is expected to be deleted the moment the first real DB-backed route calls
-//! `with_tenant` (REBUILD-MAP Phase A/B S1).
+//! ## S1 storefront-read resolves this module's "open question" — verified, not assumed
+//! The S1 port (`crates/api/src/repo.rs::PgRepo`) reads `pools.operational` DIRECTLY, bypassing
+//! `with_tenant` entirely. This is not a violation of the design above: every S1 route is
+//! PUBLIC/unauthenticated and, verified against the live Node source
+//! (`apps/api/src/routes/public/*.ts`, `spa-proxy.ts` lines before 300), NONE of them ever call
+//! `withTenant` either — they filter by an explicit `slug`/`id` predicate against a BYPASSRLS-role
+//! pool (`menu.ts:280-282`'s comment confirms the pool role bypasses RLS), not by an
+//! authenticated tenant's session GUC. There is no "authenticated tenant" in these requests to
+//! scope by. `withTenant` in `spa-proxy.ts` is used ONLY by the owner routes below line 300 (S3+,
+//! out of S1 scope). So `with_tenant` correctly remains uncalled after this build too — this
+//! resolves (rather than defers) `rebuild/README.md`'s "dual tenant GUC" open question for the
+//! S1 surface specifically; S2 (auth) and later authenticated surfaces still need it.
+//!
+//! ## Why this whole module is STILL `#[allow(dead_code)]`
+//! `with_tenant`/`TenantTxnError`/`SET_TENANT_STATEMENT` and `Pools.session` remain genuinely
+//! unused after the S1 port (see above — no S1 route needs a tenant-scoped transaction or a
+//! session-scoped LISTEN/NOTIFY connection). `Pools.operational` itself is NOT dead anymore
+//! (`PgRepo` reads it), but a per-field allow isn't expressible at the struct-field granularity
+//! sqlx/serde-free code like this needs, so the module-level allow stays until S2+ gives
+//! `with_tenant` its first real caller.
 #![allow(
     dead_code,
-    reason = "wired at boot; no caller until the first real DB-backed route lands, see module doc"
+    reason = "with_tenant/TenantTxnError/Pools.session remain uncalled after the S1 port — see module doc for why S1 correctly never needs them"
 )]
 
 use sqlx::postgres::{PgPool, PgPoolOptions};

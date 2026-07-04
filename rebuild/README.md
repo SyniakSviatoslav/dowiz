@@ -1,10 +1,16 @@
-# DeliveryOS Rust rebuild — Phase A workspace
+# DeliveryOS Rust rebuild — Phase A workspace + S1 storefront-read surface
 
 Scaffold for the from-scratch Rust rebuild (`docs/design/rebuild-plan/06-complete-rebuild-stack.md`
 + `REBUILD-MAP.md`, main-tree paths — not yet merged into every branch). This directory is a
 **standalone Cargo workspace** at the repo top level; it is not part of the pnpm workspace
 (`pnpm-workspace.yaml` only globs `apps/*`, `packages/*`, `tools/*`, `spikes/*` — `rebuild/`
 matches none of them) and touches no existing Node/TS code.
+
+**Update (S1 lane, contract-first):** the `crates/api` menu stub below has been replaced by the
+full **S1 storefront-read surface** — all 20 operations in
+`docs/design/rebuild-plan/openapi-contracts/openapi-s1-storefront-read.yaml`, ported verbatim
+from the live Node source with `utoipa` annotations regenerating the contract at `/openapi.json`.
+See "S1 storefront-read (this build)" below for what's real vs. flagged.
 
 ## What's here
 
@@ -13,23 +19,69 @@ rebuild/
 ├── Cargo.toml              workspace manifest + lint posture (deny(warnings) via clippy::all)
 ├── rust-toolchain.toml     stable + rustfmt + clippy components
 ├── crates/
-│   ├── domain/             pure invariant core — NO IO, NO sqlx/tokio/axum
+│   ├── domain/             pure invariant core — NO IO, NO sqlx/tokio/axum (+ utoipa, see error.rs)
 │   │   └── src/
-│   │       ├── money.rs       Lek(i64) — checked-only arithmetic, no float construction
-│   │       ├── order_status.rs OrderStatus (10 values) + can_transition/assert_transition/is_terminal
-│   │       ├── tenant.rs       TenantId newtype (uuid)
-│   │       └── error.rs       DomainError + ErrorCode + ErrorEnvelope (ADR-0010 shape)
-│   └── api/                axum skeleton — the only crate that does IO
+│   │       ├── money.rs       Lek(i64) — checked-only arithmetic, no float construction (COUNCIL-LOCKED, unmodified)
+│   │       ├── order_status.rs OrderStatus (10 values) + can_transition/assert_transition/is_terminal (COUNCIL-LOCKED, unmodified)
+│   │       ├── tenant.rs       TenantId newtype (uuid) (unmodified)
+│   │       └── error.rs       DomainError + ErrorCode + ErrorEnvelope (ADR-0010 shape) — EXTENDED for
+│   │                          S1 (ServiceUnavailable/InvalidKey codes, http_status() table, always-
+│   │                          present status/error fields, utoipa::ToSchema derives)
+│   └── api/                axum crate — the only crate that does IO
 │       └── src/
-│           ├── config.rs      fail-fast env validation (PORT, DATABASE_URL_OPERATIONAL/SESSION)
-│           ├── db.rs           Pools + with_tenant (the load-bearing GUC-scoping combinator)
-│           ├── error.rs        ErrorCode -> HTTP status -> axum Response
-│           ├── openapi.rs      utoipa OpenAPI 3.1 document + /openapi.json
+│           ├── config.rs      fail-fast env validation (PORT, DATABASE_URL_OPERATIONAL/SESSION) — unmodified
+│           ├── db.rs           Pools + with_tenant — unmodified code; doc updated (S1 resolves the
+│           │                   "dual tenant GUC" question: no S1 route needs with_tenant, verified)
+│           ├── error.rs        ErrorCode -> HTTP status -> axum Response (now delegates to domain::ErrorCode::http_status)
+│           ├── openapi.rs      utoipa OpenAPI 3.1 document + /openapi.json — all 20 S1 operations + schemas
+│           ├── repo.rs         PublicRepo trait (S1 data access) + PgRepo (sqlx) + FakeRepo (#[cfg(test)])
+│           ├── service.rs      pure mapping functions shared by handlers (image URLs, open/closed/busy, etc.)
+│           ├── storage.rs      Storage trait (read-only) + LocalFsStorage + traversal-guard/content-type
+│           ├── dto.rs          S1 wire DTOs (PublicMenu, PublicLocationInfo, PublicTheme, ProductMedia, ...)
 │           ├── routes/
-│           │   ├── health.rs   /healthz, /livez
-│           │   └── menu.rs     GET /api/v1/public/menu/{slug} — 501 stub, typed TODO
-│           └── main.rs         tower layers, graceful shutdown w/ deadline, router wiring
+│           │   ├── health.rs          /healthz, /livez
+│           │   ├── menu.rs            getPublicMenu, getPublicLocationInfo, getProductMedia
+│           │   ├── theme.rs           getPublicTheme, getThemeCss
+│           │   ├── storefront.rs      getStorefrontPage + 4 SPA-shell ops (SCOPE CUT, see module doc)
+│           │   ├── manifest.rs        getWebManifest
+│           │   ├── fallback_config.rs getFallbackConfig
+│           │   ├── media_proxy.rs     getImage, getMediaObject
+│           │   ├── voice_config.rs    getVoiceConfig
+│           │   ├── vapid.rs           getVapidPublicKey
+│           │   ├── rates.rs           getExchangeRate
+│           │   └── seo.rs             getRobotsTxt, getSitemapIndex, getSitemapShard
+│           └── main.rs         tower layers, graceful shutdown w/ deadline, router wiring (all 20 routes)
 ```
+
+## S1 storefront-read (this build)
+
+**Built, tested, real logic:** all 15 pure-JSON/text/binary operations (menu, location info,
+lazy product media, theme JSON+CSS, manifest, fallback-config, image/media proxies, voice-config,
+VAPID key, exchange rate, robots.txt, sitemap index+shards) — DB access behind `PublicRepo`
+(`#[cfg(test)]`-stubbed via `FakeRepo`), pure mapping functions (venue open/closed/busy,
+image-URL resolution, shadow-preview adaptation, CSP building, etc.) unit-tested independent of
+axum/sqlx.
+
+**Built, but a documented scope cut:** `getStorefrontPage` + the 4 SPA-shell operations
+(cart/checkout/order/order-legacy) port the REAL branching logic (bot/human, shadow-tenant
+detection + the 🔴 P6-2/P6-3 noindex+generic-OG privacy invariant, per-tenant CSP) but render a
+minimal HTML placeholder instead of the pixel-identical preact-hydrated page — see
+`crates/api/src/routes/storefront.rs`'s module doc for why (no Vite build artifact exists in a
+pure-Rust workspace, and the contract's own description calls this "the Astro handoff seam").
+
+**Resolved, not deferred:** `db.rs`'s "dual tenant GUC" open question, for S1 specifically —
+every S1 route is unauthenticated and verified (against live Node) to never call `withTenant`;
+`with_tenant` correctly remains uncalled after this build (see `db.rs`/`repo.rs` module docs).
+
+**New follow-ups this build surfaced (not in the original Phase-A open-questions list):**
+1. No menu/info in-process TTL cache (Node's connection-burst guard, `menu.ts:76-111`) — an
+   axum/tokio caching-layer concern orthogonal to the data-shape port; flagged per-handler.
+2. No R2 storage backend (`r2-storage.ts`) — only `LocalFsStorage` is wired; S1's `/images/*`
+   and `/media/*` need a real object-store client before a staging deploy.
+3. No rate-limiting middleware — the contract's `RateLimited` response component exists in the
+   OpenAPI schema but no tower layer enforces it yet (cross-cutting, not per-operation).
+4. `getStorefrontOrderPageLegacy`'s x-quirk (port-as-alias-vs-second-handler decision) was left
+   as its own handler, matching the contract's explicit "port decision row" framing.
 
 ## Build / test / run
 
@@ -45,9 +97,6 @@ cargo run -p api                 # needs PORT (default 8080) + both DATABASE_URL
 
 ## What is deliberately NOT here yet
 
-- **No real menu query.** `GET /api/v1/public/menu/{slug}` returns `501 NOT_IMPLEMENTED` with the
-  ADR-0010 envelope shape. The actual `read_public_menu` DEFINER-fn call via `with_tenant` lands
-  after the OpenAPI contract is extracted from the 236-route census (REBUILD-MAP §4/Phase A).
 - **No media-worker crate.** Imaging/OCR/PDF (libvips/tesseract/pdfium) is a separate image per
   the Lane A verdict (REBUILD-MAP §2) — lands with Phase B S4.
 - **No job queue.** The hand-rolled SKIP LOCKED + PgListener queue (REBUILD-MAP §2 decision

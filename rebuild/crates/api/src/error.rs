@@ -6,6 +6,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use domain::{ErrorCode, ErrorEnvelope};
 
+#[derive(Debug)]
 pub struct ApiError {
     pub envelope: ErrorEnvelope,
 }
@@ -27,26 +28,28 @@ impl ApiError {
 }
 
 /// Pure function (no `Response`/IO) so the code -> status mapping is unit-testable directly.
+/// Delegates to `domain::ErrorCode::http_status` — the ONE code -> status table (see that
+/// function's doc); this wrapper only exists to produce the `axum` type instead of a bare `u16`.
 fn status_for_code(code: ErrorCode) -> StatusCode {
-    match code {
-        ErrorCode::NotFound => StatusCode::NOT_FOUND,
-        ErrorCode::Unauthorized => StatusCode::UNAUTHORIZED,
-        ErrorCode::Forbidden => StatusCode::FORBIDDEN,
-        ErrorCode::ValidationFailed => StatusCode::UNPROCESSABLE_ENTITY,
-        ErrorCode::RateLimit => StatusCode::TOO_MANY_REQUESTS,
-        ErrorCode::Conflict
-        | ErrorCode::IllegalTransition
-        | ErrorCode::ScaffoldDisabled
-        | ErrorCode::SameStatus => StatusCode::CONFLICT,
-        ErrorCode::NotImplemented => StatusCode::NOT_IMPLEMENTED,
-        ErrorCode::Internal => StatusCode::INTERNAL_SERVER_ERROR,
-    }
+    StatusCode::from_u16(code.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = self.status();
         (status, Json(self.envelope)).into_response()
+    }
+}
+
+/// Test-only helper: extracts the `Err` side of a handler's `Result<impl IntoResponse, ApiError>`.
+/// Plain `.unwrap_err()` doesn't work here — it requires the `Ok` type to implement `Debug`, and
+/// handlers deliberately return an opaque `impl IntoResponse` (unnameable, so it can't be given a
+/// `Debug` impl) rather than a concrete response type.
+#[cfg(test)]
+pub(crate) fn expect_err<T>(result: Result<T, ApiError>) -> ApiError {
+    match result {
+        Err(e) => e,
+        Ok(_) => panic!("expected an ApiError, got Ok"),
     }
 }
 
@@ -83,6 +86,18 @@ mod tests {
         assert_eq!(
             status_for_code(ErrorCode::RateLimit),
             StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+
+    #[test]
+    fn s1_additions_map_to_503_and_400() {
+        assert_eq!(
+            status_for_code(ErrorCode::ServiceUnavailable),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        assert_eq!(
+            status_for_code(ErrorCode::InvalidKey),
+            StatusCode::BAD_REQUEST
         );
     }
 }
