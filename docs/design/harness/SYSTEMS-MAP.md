@@ -38,7 +38,7 @@ flowchart TB
 
     subgraph OBSERVE["Observability"]
         PLANETEL["Plane-Telemetry\nscripts/plane-telemetry.mjs (governance plane only)"]
-        EXECTEL["Exec-Telemetry — PLANNED\nbacklog item 3, not yet built"]
+        EXECTEL["Exec-Telemetry — BUILT+GREEN\nscripts/exec-telemetry.mjs + telemetry-analyze.mjs"]
     end
 
     subgraph LEARN["Self-improvement ratchet"]
@@ -113,7 +113,7 @@ partially built) · 🔴 PLANNED (backlog item only, not started).
 | **Skill-Evolution** | execution substrate | Third ratchet output (alongside guardrail/lesson): turn a recurring stable procedure into a reusable SKILL via find→use→expand→create; reuses SSG's sandbox+gate substrate | Recurring task procedures (≥2× recurrence + stable steps + checkable DoD) | Drafted skill under `docs/design/harness/proposed-skills/` (never self-installs into protected `.claude/skills/`) | operator + `loop-architect` (cert pending) | 🟡 DESIGNED (doc + one draft skill scaffold; loop card DRAFT) | `docs/design/harness/SKILL-EVOLUTION.md`, `docs/design/harness/proposed-skills/`, `loops/skill-evolution.yaml` |
 | **Model-Routing convention** | execution substrate | Assigns model tier by agent role (doers=sonnet, reasoning=fable, review=opus) across `Agent`/`Workflow` calls and `.claude/agents/*.md` frontmatter | Task role (doer/reasoner/reviewer) | Model parameter on the spawned agent | whoever authors the agent/workflow call | 🟢 BUILT+GREEN (convention enforced by author discipline, not a standalone gate) | `.claude/agents/*.md` frontmatter; convention documented in `docs/design/harness/SANDBOX-SWARM-GATE.md` §"Swarm" |
 | **Plane-Telemetry** | observability | Structured per-step telemetry (`emit`/`digest`/`predict`/`resolve`/`inbox`) for the plane-maintainer's own runs, plus the prediction-ledger calibration mechanism; **governance-plane-only by design** | `emit --kind <sense\|diagnose\|heal\|scout\|report> --outcome … --target … --detail …` calls from the plane-maintainer's charter steps | Append-only JSONL on the `telemetry/plane` orphan branch; Telegram digest; `inbox` uncertainty-first queue | plane-maintainer agent | 🟢 BUILT+GREEN (22/22 `node --test scripts/plane-telemetry.test.mjs`; ADR APPROVED) | `scripts/plane-telemetry.mjs` (+ `.test.mjs`), orphan branch `telemetry/plane`, working copy `loops/runs/`, ADR `docs/adr/ADR-plane-telemetry-and-calibration.md` |
-| **Exec-Telemetry** | observability | General harness-wide append-only exec-history emitter (`{ts,layer,action_kind,name,duration_ms,tokens?,outcome,meta}`) + a bottleneck/pattern analyzer, distinct from plane-telemetry (that one is plane-maintainer-only; this one covers every layer's execution) | Every layer's action completion (loop run, agent call, gate pass/fail) | Append-only exec-history log; bottleneck/pattern report | *unassigned — backlog item 3* | 🔴 PLANNED (not started) | target: `scripts/exec-telemetry.mjs` + `scripts/telemetry-analyze.mjs` (backlog item 3) |
+| **Exec-Telemetry** | observability | General harness-wide append-only exec-history emitter (`{ts,layer,action_kind,name,duration_ms,tokens?,outcome,meta}`) + a bottleneck/pattern analyzer, distinct from plane-telemetry (that one is plane-maintainer-only; this one covers every layer's execution) | Every layer's action completion (loop run, agent call, gate pass/fail) — `node scripts/exec-telemetry.mjs emit --layer L --action-kind K --name N --outcome O --duration-ms N` | Append-only exec-history log (`loops/runs/exec-events-YYYY-MM.jsonl`, local scratch — no orphan-branch publish, unlike plane-telemetry); `node scripts/telemetry-analyze.mjs` bottleneck + recurring-failure report | *unassigned — autonomous-continuation run* | 🟢 BUILT+GREEN (13/13 `node --test scripts/exec-telemetry.test.mjs`, incl. a confirmed red→green canary on the recurring-failure threshold) | `scripts/exec-telemetry.mjs` (+ `.test.mjs`), `scripts/telemetry-analyze.mjs`, working copy `loops/runs/` (gitignored) |
 | **Reflections + Council retro** | self-improvement ratchet | Worker writes atomic causal-WHY reflections on qualified fixes/failures; Council (cause-critic/pattern-critic/ratchet-critic) challenges + synthesizes; librarian enacts | `docs/reflections/INBOX/*.reflection.md` | Ledger row / lesson / prune-revision / CLAUDE.md pointer, or explicit no-op; processed reflections moved to `ARCHIVE/` | worker (writes) → council agents (deliberate) → `librarian` (enacts) | 🟢 BUILT+GREEN | `docs/reflections/{INBOX,ARCHIVE,RETRO}`, `docs/reflections/README.md` |
 | **Regression Ledger (ratchet)** | self-improvement ratchet | Tier-1 authority: one row per bug class with a deterministic red→green guardrail; monotonic, never weakened | Confirmed council root / qualified fix | New ledger row + guardrail (eslint rule / boot-guard / migration check / E2E / CI-gate / unit test) | `librarian` (enacts), operator (reviews) | 🟢 BUILT+GREEN (71 rows, `node scripts/guardrail-ledger-integrity.mjs` green, max #68) | `docs/regressions/REGRESSION-LEDGER.md`, integrity check `scripts/guardrail-ledger-integrity.mjs` |
 | **Lessons store** | self-improvement ratchet | Tier-2 advisory: point-in-place pre-edit warnings injected by trigger, distilled from reflections that don't rise to a guardrail | Council retro output below the guardrail bar | `docs/lessons/{date}-{slug}.md` + `INDEX.md` entry; injected pre-edit via `pre-edit-lessons` hook (advisory only) | `librarian` | 🟢 BUILT+GREEN | `docs/lessons/*.md`, `docs/lessons/INDEX.md` |
@@ -163,11 +163,13 @@ to-human event, full stop, same as any other Ethics-Charter conflict in `.claude
 
 ## 5. Known gaps in this map (honesty, not aspiration)
 
-- **Exec-Telemetry** and **Metric-Reflection** are 🔴 PLANNED — this map documents their intended
-  shape (per the backlog that motivated this document) so the graph is complete, but no code
-  exists yet. Building them is backlog items 3 and 4 of the same autonomous-continuation run that
-  wrote this map (`docs/governance/AUTONOMOUS-STATUS.md`); do not treat the table rows above as a
-  claim that they run today.
+- **Exec-Telemetry** is now 🟢 BUILT+GREEN (backlog item 3 — `scripts/exec-telemetry.mjs` +
+  `scripts/telemetry-analyze.mjs`, red→green tested). **Metric-Reflection** is still 🔴 PLANNED —
+  this map documents its intended shape (per the backlog that motivated this document) so the
+  graph is complete, but no code exists yet; building it is backlog item 4 of the same
+  autonomous-continuation run that wrote this map (`docs/governance/AUTONOMOUS-STATUS.md`). It
+  depends on Exec-Telemetry's log, which now exists — do not treat its table row above as a claim
+  that it runs today.
 - **SSG** and **Skill-Evolution** are 🟡 DESIGNED, not certified — their loop cards are DRAFT and
   will not be dispatched by the router until `/build-verify-loop verify <id>` returns CERTIFIED.
 - Several CERTIFIED loops (`error-fix-convergence`, `design-convergence`, `autoupgrade`) show
