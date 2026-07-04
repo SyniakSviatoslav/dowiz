@@ -35,16 +35,35 @@
 //! resolves (rather than defers) `rebuild/README.md`'s "dual tenant GUC" open question for the
 //! S1 surface specifically; S2 (auth) and later authenticated surfaces still need it.
 //!
+//! ## S3 catalog/admin CRUD resolves this module's "open question" — do NOT reuse `with_tenant`
+//! The S3 council packet (`docs/design/rebuild-catalog-s3-council/proposal.md` §3, Q-GUC-FAMILY)
+//! traced the live owner-write path to `packages/platform/src/auth/tenant.ts`'s `withTenant(pool,
+//! userId, fn)`, which seats **`app.user_id`** (the owner's user id) — a DIFFERENT GUC, keyed by a
+//! DIFFERENT value, than this module's `with_tenant` (`app.current_tenant`, a location id — the
+//! courier/service root, ~102 RLS-policy sites). Owner-path RLS policies resolve the tenant from
+//! `app.user_id` -> `memberships` via `app_member_location_ids()` (~34 sites). Reusing
+//! `with_tenant` for an owner catalog write would seat the wrong GUC family with the wrong value:
+//! masked today by BYPASSRLS, a total silent owner-write outage the moment NOBYPASSRLS goes live
+//! (the exact anonymizer-N1/GDPR-worker wrong-GUC-family class this repo already hit once). So
+//! `with_tenant`/`TenantId` stay reserved for the S6/S7 courier/service surfaces (still correctly
+//! uncalled after S3), and `with_user` below is the owner-write combinator — same `BEGIN ->
+//! set_config(..., true) -> f -> COMMIT/ROLLBACK` discipline, different GUC name and value.
+//! PROVISIONAL: council Q1 (`docs/design/rebuild-catalog-s3-council/proposal.md`) is still
+//! pending human RESOLVE on the broader write-pattern packet; this combinator itself is the
+//! narrow, already-directed fix (course correction 2026-07-04) and does not wait on the rest of
+//! that packet (locations.ts PATCH / menu-confirm.ts / menu-import.ts stay OUT of S3 scope).
+//!
 //! ## Why this whole module is STILL `#[allow(dead_code)]`
 //! `with_tenant`/`TenantTxnError`/`SET_TENANT_STATEMENT` and `Pools.session` remain genuinely
-//! unused after the S1 port (see above — no S1 route needs a tenant-scoped transaction or a
-//! session-scoped LISTEN/NOTIFY connection). `Pools.operational` itself is NOT dead anymore
-//! (`PgRepo` reads it), but a per-field allow isn't expressible at the struct-field granularity
-//! sqlx/serde-free code like this needs, so the module-level allow stays until S2+ gives
-//! `with_tenant` its first real caller.
+//! unused after the S1+S3 ports (see above — no route built so far needs a `current_tenant`-scoped
+//! transaction or a session-scoped LISTEN/NOTIFY connection; S3 uses `with_user` instead).
+//! `Pools.operational` itself is NOT dead anymore (`PgRepo` and `with_user` both read it), but a
+//! per-field allow isn't expressible at the struct-field granularity sqlx/serde-free code like
+//! this needs, so the module-level allow stays until a courier/service surface gives `with_tenant`
+//! its first real caller.
 #![allow(
     dead_code,
-    reason = "with_tenant/TenantTxnError/Pools.session remain uncalled after the S1 port — see module doc for why S1 correctly never needs them"
+    reason = "with_tenant/TenantId/Pools.session remain uncalled after S1+S3 — reserved for the courier/service GUC family, see module doc"
 )]
 
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -174,6 +193,60 @@ where
     }
 }
 
+/// The exact statement text `with_user` executes — the S3 owner-write GUC (`app.user_id`), distinct
+/// from `SET_TENANT_STATEMENT`'s `app.current_tenant`. Ports `packages/platform/src/auth/tenant.ts`'s
+/// `withTenant(pool, userId, fn)` verbatim (that TS name is misleading — it seats `app.user_id`, not
+/// a tenant/location id; the Rust name `with_user` is deliberately distinct from `with_tenant` so the
+/// two GUC families can never be confused at a call site again — see module doc, Q-GUC-FAMILY).
+pub const SET_USER_STATEMENT: &str = "SELECT set_config('app.user_id', $1, true)";
+
+/// `BEGIN` -> `SET LOCAL app.user_id` (via `set_config(..., true)`) -> `f(&mut txn)` -> `COMMIT` on
+/// `Ok` / `ROLLBACK` on `Err`. This is the ONLY sanctioned way an owner-authenticated route touches
+/// a catalog table (`products`, `categories`, `modifier_groups`, `modifiers`, `menu_schedules`,
+/// `locations.kitchen_busy_until`, `location_themes`, `theme_versions`, ...) — S3 routes must never
+/// `pool.acquire()`/query the raw pool directly (`Pools` fields stay `pub(crate)`, see module doc).
+///
+/// `user_id` is the OWNER's user id (`OwnerClaims.user_id`/`.sub` — the two are always equal on an
+/// owner token, S2 §5), never a location id: RLS resolves the visible location set from
+/// `app.user_id` -> `memberships` via `app_member_location_ids()`, it is not itself a location
+/// scope. Every call site must ALSO carry an explicit `WHERE location_id = $n` (or an
+/// ownership-fold-in `INSERT ... SELECT ... WHERE ... location_id = $n`) — belt-and-suspenders that
+/// holds independent of whether RLS is bypassed or enforced (council packet §3 clause 4).
+///
+/// Same shape as `with_tenant` (boxed-future callback — see that function's doc for why); kept as a
+/// sibling function rather than a generic "which GUC name" parameter so the GUC family is a
+/// call-site TYPE choice (`with_user` vs `with_tenant`), not a stringly-typed argument a caller
+/// could pass wrong.
+pub async fn with_user<T, F>(pool: &PgPool, user_id: uuid::Uuid, f: F) -> Result<T, TenantTxnError>
+where
+    for<'t> F: FnOnce(
+        &'t mut Transaction<'_, Postgres>,
+    ) -> Pin<Box<dyn Future<Output = Result<T, sqlx::Error>> + Send + 't>>,
+{
+    let mut txn = pool.begin().await.map_err(TenantTxnError::Begin)?;
+
+    sqlx::query(SET_USER_STATEMENT)
+        .bind(user_id.to_string())
+        .execute(&mut *txn)
+        .await
+        .map_err(TenantTxnError::SetTenant)?;
+
+    match f(&mut txn).await {
+        Ok(value) => txn
+            .commit()
+            .await
+            .map(|()| value)
+            .map_err(TenantTxnError::Commit),
+        Err(work_err) => match txn.rollback().await {
+            Ok(()) => Err(TenantTxnError::Work(work_err)),
+            Err(rollback_err) => Err(TenantTxnError::WorkThenRollbackFailed {
+                work: work_err,
+                rollback: rollback_err,
+            }),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -243,6 +316,75 @@ mod tests {
         assert_eq!(
             reset, None,
             "app.current_tenant must not leak past the transaction"
+        );
+    }
+
+    // ── S3 `with_user` (Q-GUC-FAMILY) — the owner-write GUC is `app.user_id`, NOT
+    // `app.current_tenant`, and is keyed by the owner's user id, not a location id. ──
+
+    #[test]
+    fn set_user_statement_is_pinned_and_distinct_from_set_tenant_statement() {
+        assert_eq!(
+            SET_USER_STATEMENT,
+            "SELECT set_config('app.user_id', $1, true)"
+        );
+        assert_ne!(
+            SET_USER_STATEMENT, SET_TENANT_STATEMENT,
+            "owner writes must seat a DIFFERENT GUC than the courier/service `with_tenant` path \
+             (council packet Q-GUC-FAMILY) — a shared statement string here would be the exact \
+             wrong-GUC-family bug this combinator exists to prevent"
+        );
+        assert_eq!(
+            SET_USER_STATEMENT.matches('$').count(),
+            1,
+            "exactly one bind parameter"
+        );
+        assert!(
+            SET_USER_STATEMENT.contains(", true)"),
+            "is_local must be true — a session-scoped (false) GUC on a transaction-pooled \
+             connection leaks across reuse (latent-GUC-bug class 1, same rule as with_tenant)"
+        );
+    }
+
+    #[test]
+    fn set_user_statement_binds_user_id_as_text() {
+        let user_id = uuid::Uuid::new_v4();
+        let bound: String = user_id.to_string();
+        assert_eq!(
+            bound.len(),
+            36,
+            "a hyphenated UUID string, not a bytes/uuid bind"
+        );
+    }
+
+    /// Requires a live Postgres — same posture as `with_tenant_scopes_and_resets_the_guc` above.
+    #[tokio::test]
+    #[ignore = "requires a live Postgres — set DATABASE_URL_OPERATIONAL/DATABASE_URL_SESSION and run with --ignored"]
+    async fn with_user_scopes_and_resets_the_guc() {
+        let config = Config::from_env().expect("env must be valid to run this ignored test");
+        let pools = Pools::connect(&config).await.expect("pools must connect");
+        let user_id = uuid::Uuid::new_v4();
+
+        let seen: String = with_user(&pools.operational, user_id, |txn| {
+            Box::pin(async move {
+                sqlx::query_scalar("SELECT current_setting('app.user_id', true)")
+                    .fetch_one(&mut **txn)
+                    .await
+            })
+        })
+        .await
+        .expect("with_user should succeed");
+
+        assert_eq!(seen, user_id.to_string());
+
+        let reset: Option<String> =
+            sqlx::query_scalar("SELECT NULLIF(current_setting('app.user_id', true), '')")
+                .fetch_one(&pools.operational)
+                .await
+                .expect("query must succeed");
+        assert_eq!(
+            reset, None,
+            "app.user_id must not leak past the transaction"
         );
     }
 }

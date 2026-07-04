@@ -80,6 +80,46 @@ use crate::auth::error::{
         crate::routes::auth_claim::claim_request,
         crate::routes::auth_claim::claim_decline,
         crate::routes::auth_customer::customer_track_exchange,
+        // ── S3 catalog/admin CRUD (owner-route census rows 1-89; 35 built ops) ──
+        // Out-of-scope rows deliberately ABSENT: settlements/dashboard/gdpr/signals/couriers/etc
+        // (other surfaces), product-media + theme logo upload (S4 media), locations PATCH /
+        // menu-confirm / menu-import / menu-translate (🔴 council-gated or deferred — see
+        // routes/owner/mod.rs module doc).
+        crate::routes::owner::products::create_product,
+        crate::routes::owner::products::list_products,
+        crate::routes::owner::products::get_product,
+        crate::routes::owner::products::update_product,
+        crate::routes::owner::products::delete_product,
+        crate::routes::owner::products::put_product_translation,
+        crate::routes::owner::products::list_product_translations,
+        crate::routes::owner::products::delete_product_translation,
+        crate::routes::owner::products::sync_product_modifier_groups,
+        crate::routes::owner::products::list_product_modifier_groups,
+        crate::routes::owner::products::list_menu_products,
+        crate::routes::owner::products::create_menu_product,
+        crate::routes::owner::products::update_menu_product,
+        crate::routes::owner::products::delete_menu_product,
+        crate::routes::owner::categories::create_category,
+        crate::routes::owner::categories::list_categories,
+        crate::routes::owner::categories::get_category,
+        crate::routes::owner::categories::update_category,
+        crate::routes::owner::categories::delete_category,
+        crate::routes::owner::categories::list_categories_alias,
+        crate::routes::owner::categories::create_category_alias,
+        crate::routes::owner::categories::delete_category_alias,
+        crate::routes::owner::modifier_groups::create_modifier_group,
+        crate::routes::owner::modifier_groups::list_modifier_groups,
+        crate::routes::owner::modifier_groups::update_modifier_group,
+        crate::routes::owner::modifier_groups::delete_modifier_group,
+        crate::routes::owner::modifier_groups::create_modifier,
+        crate::routes::owner::modifier_groups::update_modifier,
+        crate::routes::owner::modifier_groups::delete_modifier,
+        crate::routes::owner::menu_availability::set_kitchen_busy,
+        crate::routes::owner::menu_availability::list_schedules,
+        crate::routes::owner::menu_availability::create_schedule,
+        crate::routes::owner::menu_availability::delete_schedule,
+        crate::routes::owner::themes::get_owner_theme,
+        crate::routes::owner::themes::put_owner_theme,
     ),
     components(schemas(
         HealthStatus,
@@ -143,6 +183,36 @@ use crate::auth::error::{
         GlobalBearerGate401,
         DevGate404,
         SyntheticCourierMissing,
+        // ── S3 catalog/admin CRUD schemas (per-submodule request/response DTOs) ──
+        crate::routes::owner::products::CreateProductRequest,
+        crate::routes::owner::products::UpdateProductRequest,
+        crate::routes::owner::products::PutTranslationRequest,
+        crate::routes::owner::products::ModifierGroupSyncItem,
+        crate::routes::owner::products::MenuCreateProductRequest,
+        crate::routes::owner::products::MenuUpdateProductRequest,
+        crate::routes::owner::categories::CreateCategoryRequest,
+        crate::routes::owner::categories::UpdateCategoryRequest,
+        crate::routes::owner::categories::CreateCategoryAliasRequest,
+        crate::routes::owner::categories::CategoryResponse,
+        crate::routes::owner::categories::ListCategoriesResponse,
+        crate::routes::owner::modifier_groups::DisplayType,
+        crate::routes::owner::modifier_groups::CreateModifierGroupRequest,
+        crate::routes::owner::modifier_groups::UpdateModifierGroupRequest,
+        crate::routes::owner::modifier_groups::ModifierGroupResponse,
+        crate::routes::owner::modifier_groups::ModifierGroupListResponse,
+        crate::routes::owner::modifier_groups::CreateModifierRequest,
+        crate::routes::owner::modifier_groups::UpdateModifierRequest,
+        crate::routes::owner::modifier_groups::ModifierResponse,
+        crate::routes::owner::menu_availability::SetKitchenBusyRequest,
+        crate::routes::owner::menu_availability::KitchenBusyResponse,
+        crate::routes::owner::menu_availability::ScheduleMode,
+        crate::routes::owner::menu_availability::CreateScheduleRequest,
+        crate::routes::owner::menu_availability::ScheduleShape,
+        crate::routes::owner::menu_availability::ScheduleListResponse,
+        crate::routes::owner::themes::OwnerThemeRow,
+        crate::routes::owner::themes::UpdateThemeRequest,
+        crate::routes::owner::themes::GetThemeResponse,
+        crate::routes::owner::themes::UpdateThemeResponse,
     )),
     tags(
         (name = "health", description = "Liveness/health probes"),
@@ -158,6 +228,7 @@ use crate::auth::error::{
         (name = "seo", description = "robots.txt / sitemap"),
         (name = "auth", description = "S2 owner/courier/claim/customer auth flows"),
         (name = "dev", description = "S2 dev-auth mint (dev-routes builds only)"),
+        (name = "owner-catalog", description = "S3 owner catalog/admin CRUD (products, categories, modifier groups, availability, themes)"),
     )
 )]
 pub struct ApiDoc;
@@ -286,6 +357,94 @@ mod tests {
             "TrackLinkExpiredBody",
         ] {
             assert!(schemas.contains_key(name), "missing S2 schema: {name}");
+        }
+    }
+
+    /// The 15 distinct S3 catalog paths this build annotated (35 ops — several paths carry
+    /// multiple methods). A future edit that silently drops a `#[utoipa::path]` from `paths(...)`
+    /// fails loudly here (same posture as the S1/S2 pinning tests above). Out-of-scope rows must
+    /// stay ABSENT: theme logo upload (S4), locations PATCH / menu-confirm / menu-import /
+    /// menu-translate (🔴 council-gated or deferred).
+    #[test]
+    fn openapi_document_lists_the_s3_catalog_operations_and_omits_deferred_rows() {
+        let doc = ApiDoc::openapi();
+        let paths: std::collections::HashSet<&str> =
+            doc.paths.paths.keys().map(String::as_str).collect();
+        let expected = [
+            "/api/owner/locations/{locationId}/products",
+            "/api/owner/locations/{locationId}/products/{id}",
+            "/api/owner/locations/{locationId}/products/{id}/translations/{locale}",
+            "/api/owner/locations/{locationId}/products/{id}/translations",
+            "/api/owner/locations/{locationId}/products/{id}/modifier-groups",
+            "/api/owner/menu/products",
+            "/api/owner/menu/products/{productId}",
+            "/api/owner/locations/{locationId}/categories",
+            "/api/owner/locations/{locationId}/categories/{id}",
+            "/api/owner/menu/categories",
+            "/api/owner/menu/categories/{id}",
+            "/api/owner/locations/{locationId}/modifier-groups",
+            "/api/owner/locations/{locationId}/modifier-groups/{id}",
+            "/api/owner/locations/{locationId}/modifier-groups/{groupId}/modifiers",
+            "/api/owner/locations/{locationId}/modifiers/{id}",
+            "/api/owner/locations/{locationId}/kitchen-busy",
+            "/api/owner/locations/{locationId}/menu-schedules",
+            "/api/owner/locations/{locationId}/menu-schedules/{id}",
+            "/api/owner/locations/{locationId}/theme",
+        ];
+        for path in expected {
+            assert!(paths.contains(path), "missing S3 catalog path: {path}");
+        }
+        // Deferred/out-of-scope proof-of-absence.
+        for absent in [
+            "/api/owner/locations/{locationId}/theme/logo",
+            "/api/owner/locations/{locationId}",
+            "/api/owner/locations/{locationId}/products/{productId}/confirm-allergens",
+            "/api/owner/menu/import/commit",
+        ] {
+            assert!(
+                !paths.contains(absent),
+                "deferred/out-of-scope S3 row must be absent: {absent}"
+            );
+        }
+    }
+
+    /// The S3 request/response DTO schemas are registered.
+    #[test]
+    fn openapi_document_includes_s3_catalog_schemas() {
+        let doc = ApiDoc::openapi();
+        let schemas = &doc.components.as_ref().unwrap().schemas;
+        for name in [
+            "CreateProductRequest",
+            "UpdateProductRequest",
+            "PutTranslationRequest",
+            "ModifierGroupSyncItem",
+            "MenuCreateProductRequest",
+            "MenuUpdateProductRequest",
+            "CreateCategoryRequest",
+            "UpdateCategoryRequest",
+            "CreateCategoryAliasRequest",
+            "CategoryResponse",
+            "ListCategoriesResponse",
+            "DisplayType",
+            "CreateModifierGroupRequest",
+            "UpdateModifierGroupRequest",
+            "ModifierGroupResponse",
+            "ModifierGroupListResponse",
+            "CreateModifierRequest",
+            "UpdateModifierRequest",
+            "ModifierResponse",
+            "SetKitchenBusyRequest",
+            "KitchenBusyResponse",
+            "ScheduleMode",
+            "CreateScheduleRequest",
+            "ScheduleShape",
+            "ScheduleListResponse",
+            "OwnerThemeRow",
+            "UpdateThemeRequest",
+            "GetThemeResponse",
+            "UpdateThemeResponse",
+        ] {
+            assert!(schemas.contains_key(name), "missing S3 schema: {name}");
         }
     }
 }

@@ -97,6 +97,24 @@ pub enum ErrorCode {
     NotAuthorizedForLocation,
     /// 403 — courier has no assigned location at all (courier/auth.ts:300).
     NoLocationAssigned,
+
+    // ── S3 catalog/admin CRUD code set (owner-route census rows 1-89) ──
+    // Each is a genuinely NEW machine-code string the owner-route TS source sends (never an
+    // existing code with a different status — those go through the `ApiError`
+    // status-override pattern S2 already established for VALIDATION_FAILED, see
+    // `crates/api/src/error.rs`/`crates/api/src/auth/error.rs::validation_failed`).
+    /// 400 — PATCH body was `{}` (`products.ts:141`, `categories.ts:129-131`): "No updates
+    /// provided". Distinct from `ValidationFailed` (a different literal code string on the wire).
+    NoUpdates,
+    /// 400 — `PUT .../translations/:locale` targets a locale outside the location's
+    /// `supported_locales` (`products.ts:228-230`).
+    UnsupportedLocale,
+    /// 400 — `PUT .../products/:id/modifier-groups` referenced a `group_id` that does not belong
+    /// to this location (fold-in INSERT matched 0 rows, `products.ts:332-334`).
+    InvalidGroup,
+    /// 409 — `DELETE .../categories/:id` on a category that still has products
+    /// (`categories.ts:168-180,249-255`).
+    CategoryNotEmpty,
 }
 
 impl ErrorCode {
@@ -133,6 +151,9 @@ impl ErrorCode {
             | ErrorCode::NotAuthorizedForLocation
             | ErrorCode::NoLocationAssigned => 403,
             ErrorCode::InviteInvalid => 410,
+            // ── S3 catalog/admin CRUD code set ──
+            ErrorCode::NoUpdates | ErrorCode::UnsupportedLocale | ErrorCode::InvalidGroup => 400,
+            ErrorCode::CategoryNotEmpty => 409,
         }
     }
 }
@@ -289,5 +310,31 @@ mod tests {
         assert_eq!(ErrorCode::CourierDeactivated.http_status(), 403);
         assert_eq!(ErrorCode::NotAuthorizedForLocation.http_status(), 403);
         assert_eq!(ErrorCode::NoLocationAssigned.http_status(), 403);
+    }
+
+    /// S3 catalog/admin CRUD codes serialize SCREAMING_SNAKE and map to the census-observed
+    /// (`owner-route census rows 1-89`) `sendError` statuses.
+    #[test]
+    fn s3_catalog_codes_serialize_and_map_status() {
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::NoUpdates).unwrap(),
+            "\"NO_UPDATES\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::UnsupportedLocale).unwrap(),
+            "\"UNSUPPORTED_LOCALE\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::InvalidGroup).unwrap(),
+            "\"INVALID_GROUP\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::CategoryNotEmpty).unwrap(),
+            "\"CATEGORY_NOT_EMPTY\""
+        );
+        assert_eq!(ErrorCode::NoUpdates.http_status(), 400);
+        assert_eq!(ErrorCode::UnsupportedLocale.http_status(), 400);
+        assert_eq!(ErrorCode::InvalidGroup.http_status(), 400);
+        assert_eq!(ErrorCode::CategoryNotEmpty.http_status(), 409);
     }
 }

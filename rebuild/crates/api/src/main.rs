@@ -88,19 +88,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = Arc::new(build_app_state(&pools));
     let mut app = build_router(state);
 
-    // ── S2 auth surface (dark) ──
+    // ── S2 auth surface + S3 catalog/admin CRUD surface (both dark) ──
     // Mount the auth router ONLY when the JWT/auth env is present (AuthConfig fail-fasts on a
     // prod box carrying dev-auth vars — boot-guard D). When the auth env is absent (e.g. an
     // S1-only boot), the auth routes stay DARK (unmounted) — the openapi document still lists
     // them (openapi.rs) so `openapi-diff` is satisfied, but they are not served. Launching S2 is
     // the separate, explicit act of providing the JWT keys.
+    //
+    // S3 rides the same gate: every S3 op binds the S2 `OwnerClaimsExt` extractor (nothing can
+    // authenticate without the JWT verifier), so "auth env present" is exactly the S3
+    // precondition too — the catalog surface is dark precisely when the auth surface is.
     match build_auth_state(&pools) {
         Ok(auth_state) => {
-            app = app.merge(auth::auth_router(auth_state));
+            app = app.merge(auth::auth_router(auth_state.clone()));
             tracing::info!("S2 auth surface mounted");
+            app = app.merge(routes::owner::owner_catalog_router(build_owner_states(
+                auth_state, &pools,
+            )));
+            tracing::info!("S3 catalog/admin CRUD surface mounted");
         }
         Err(err) => {
-            tracing::warn!(%err, "S2 auth surface DARK — JWT/auth env not configured; not mounting auth routes");
+            tracing::warn!(%err, "S2 auth + S3 catalog surfaces DARK — JWT/auth env not configured; not mounting them");
         }
     }
 
@@ -183,6 +191,54 @@ fn build_auth_state(pools: &Pools) -> Result<auth::AuthState, Box<dyn std::error
         Arc::new(auth::store::NullGoogleClient),
         pii_cipher,
     ))
+}
+
+/// Build the five S3 per-module states (each a `Pg*Repo` over the operational pool — every
+/// query inside goes through `db::with_user`, never a raw pool read; see `routes/owner/mod.rs`).
+/// `app_base_url`/`r2_public_url` mirror `build_app_state`'s S1 raw env reads — the
+/// `/api/owner/menu/products*` alias ops thread them into the same `get_image_url` mapping the
+/// S1 menu read uses (`product-mapper.ts` parity).
+fn build_owner_states(auth: auth::AuthState, pools: &Pools) -> routes::owner::OwnerCatalogStates {
+    routes::owner::OwnerCatalogStates {
+        auth: auth.clone(),
+        products: routes::owner::products::ProductsState {
+            auth: auth.clone(),
+            repo: Arc::new(routes::owner::products::PgProductsRepo::new(
+                pools.operational.clone(),
+            )),
+            app_base_url: std::env::var("APP_BASE_URL")
+                .unwrap_or_else(|_| "https://dowiz.fly.dev".to_string()),
+            r2_public_url: std::env::var("R2_PUBLIC_URL")
+                .ok()
+                .filter(|s| !s.is_empty()),
+        },
+        categories: routes::owner::categories::CategoriesState {
+            auth: auth.clone(),
+            repo: Arc::new(routes::owner::categories::PgCategoriesRepo::new(
+                pools.operational.clone(),
+            )),
+        },
+        modifier_groups: routes::owner::modifier_groups::ModifierGroupsState {
+            auth: auth.clone(),
+            repo: Arc::new(routes::owner::modifier_groups::PgModifierGroupsRepo::new(
+                pools.operational.clone(),
+            )),
+        },
+        menu_availability: routes::owner::menu_availability::MenuAvailabilityState {
+            auth: auth.clone(),
+            repo: Arc::new(
+                routes::owner::menu_availability::PgMenuAvailabilityRepo::new(
+                    pools.operational.clone(),
+                ),
+            ),
+        },
+        themes: routes::owner::themes::ThemesState {
+            auth,
+            repo: Arc::new(routes::owner::themes::PgThemesRepo::new(
+                pools.operational.clone(),
+            )),
+        },
+    }
 }
 
 fn build_router(state: Arc<AppState>) -> Router {

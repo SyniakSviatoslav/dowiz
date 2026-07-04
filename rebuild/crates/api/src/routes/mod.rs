@@ -18,6 +18,9 @@ pub mod auth_customer;
 pub mod auth_dev;
 pub mod auth_owner;
 
+// ── S3 catalog/admin CRUD surface (owner-route census rows 1-89) ──
+pub mod owner;
+
 use tower_http::request_id::RequestId;
 
 /// Shared by every S1 handler that builds an `ApiError`: the server-authoritative correlation id

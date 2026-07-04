@@ -1,10 +1,12 @@
 # S3-CATALOG Port — Council RESOLVE
 
-> **Verdict: PROCEED-WITH-REVISIONS.** No ETHICAL-STOP (counsel). Packet-status: **🟡 — NOT
-> COUNCIL-APPROVED until the operator signs the 🔴 items (§4).** Seats: architect (packet author),
-> breaker (2 CRIT / 4 HIGH / 3 MED / 2 LOW), counsel (PROCEED-WITH-REVISIONS), lead (this RESOLVE).
+> **Verdict: PROCEED-WITH-REVISIONS.** No ETHICAL-STOP (counsel). Packet-status: **🟢
+> COUNCIL-APPROVED — operator signed all §4 🔴 items in-session 2026-07-04 ("do this by yourself",
+> direct reply to the enumerated §4 list).** Seats: architect (packet author), breaker
+> (2 CRIT / 4 HIGH / 3 MED / 2 LOW), counsel (PROCEED-WITH-REVISIONS), lead (this RESOLVE).
 > Build lane note: the parallel S3 build lane was course-corrected in-flight to REV-1/REV-2/REV-4
-> and the Q1(a) `with_user` seam (marked PROVISIONAL); nothing commits until §4 clears.
+> and the Q1(a) `with_user` seam; SSG gate PASS ×2 (guardian 8/8 high-conf, sentinel 0 CRIT/HIGH);
+> domain money/order_status/tenant byte-identity lead-verified (0-byte diff vs b28b1764).
 
 ## 1. Frozen revision set (REV-1..REV-10 — must fold before COUNCIL-APPROVED)
 
