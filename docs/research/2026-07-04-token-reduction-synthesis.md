@@ -33,14 +33,23 @@ lossiness collides with our Mandatory-Proof / red-line invariants — hence gate
 
 ## 3. APPLIED this pass (non-protected, via ethics/quality check)
 
-1. **Memory-corpus dedup** — librarian lane merging the 6 confirmed clusters, information-preserving,
-   red-line memories untouched (secrets-incident / dev-login-backdoor / money-RLS-PII stay individual).
-   [outcome folded in on lane return]
-2. **3 measurement scripts** (`scripts/memory-metrics.mjs`, `context-tax.mjs`, `memory-health.mjs`) —
-   zero-dep, read-only, mine existing logs/transcripts. Makes future token decisions data-driven and
-   re-runnable (catches drift), instead of one-off audits. [committed on lane return]
+1. **3 measurement scripts SHIPPED + proven** (`scripts/{memory-metrics,context-tax,memory-health}.mjs`,
+   commit `cbf0d088`) — zero-dep, read-only, reproduce the audit numbers exactly; re-runnable so they
+   catch drift, not one-off. These are the durable win: they made the effort data-driven and
+   immediately **caught a ~27× overclaim** (below).
+2. **Memory-corpus dedup — DOWNGRADED after content verification.** The librarian ran real Jaccard
+   (vs the audit's filename grouping): only **2 of 6 clusters genuinely redundant → ~1,330 tokens**
+   reclaimable, NOT the estimated ~36,500. 4 clusters REFUTED (distinct sessions / live reference
+   hubs / the in-flight orchestration doc — merging would bury reusable pointers). Fact-preserving
+   merge drafts exist in scratchpad; **deferred as marginal** (1.3K tok vs the churn/wikilink-repoint
+   risk on my own memory) — available if the operator wants it. Lesson: verify redundancy by content,
+   not filename, before deleting memory.
 3. **agentmemory patterns** adopted into the map-reduce rule already (distilled returns = the
    context-shrink pattern; narrow grants). Write-time dedup + decay-sweep = future librarian upgrades.
+4. **Live finding from the scripts**: `pre-edit-lessons` fires 479/481 from the SINGLE `docs/**`
+   trigger → strengthens protected proposal #2 (that one trigger narrowing is nearly the whole hook
+   cost). And the biggest oversized memory file is this session's own `rebuild-decision-rust-astro`
+   (6,243 tok) — consolidate at session close.
 
 ## 4. PROPOSED (protected — operator applies; before→after)
 
