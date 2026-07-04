@@ -113,7 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             app = app.merge(auth::auth_router(auth_state.clone()));
             tracing::info!("S2 auth surface mounted");
             app = app.merge(routes::owner::owner_catalog_router(build_owner_states(
-                auth_state,
+                auth_state.clone(),
                 &pools,
                 storage.clone(),
                 &config,
@@ -124,9 +124,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 config.media.entry_photo_global_cap_per_minute,
             ));
             tracing::info!("S4 media surface mounted");
+            // ── S5 orders/money surface (docs/design/rebuild-orders-s5-council/) — the crown-jewel
+            // red-line. Rides the SAME auth-env gate: the owner/customer ops bind the S2 extractors,
+            // so "auth env present" is the S5 precondition too. Dark (mounted, not launched) — the
+            // openapi document lists the ops (openapi.rs) so openapi-diff is satisfied.
+            app = app.merge(routes::orders::orders_router(build_orders_state(
+                auth_state, &pools,
+            )));
+            tracing::info!("S5 orders/money surface mounted");
         }
         Err(err) => {
-            tracing::warn!(%err, "S2 auth + S3 catalog + S4 media surfaces DARK — JWT/auth env not configured; not mounting them");
+            tracing::warn!(%err, "S2 auth + S3 catalog + S4 media + S5 orders surfaces DARK — JWT/auth env not configured; not mounting them");
         }
     }
 
@@ -292,6 +300,19 @@ fn build_owner_states(
             processor: Arc::new(media::processor::RustImageProcessor),
             app_base_url,
         },
+    }
+}
+
+/// Build the S5 orders/money state — a `PgOrdersRepo` over the operational pool (the create tx runs
+/// a GUC-less `pool.begin()`, the owner-status tx a `with_user`, the customer-cancel tx a
+/// `with_tenant`; see `routes/orders/pg.rs`). Reuses the S2 `AuthState` verbatim for the
+/// owner/customer extractors — no new auth.
+fn build_orders_state(auth: auth::AuthState, pools: &Pools) -> routes::orders::OrdersState {
+    routes::orders::OrdersState {
+        auth,
+        repo: Arc::new(routes::orders::pg::PgOrdersRepo::new(
+            pools.operational.clone(),
+        )),
     }
 }
 

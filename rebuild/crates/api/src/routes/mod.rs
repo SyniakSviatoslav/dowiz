@@ -21,6 +21,9 @@ pub mod auth_owner;
 // ── S3 catalog/admin CRUD surface (owner-route census rows 1-89) ──
 pub mod owner;
 
+// ── S5 orders/money surface (docs/design/rebuild-orders-s5-council/) — the crown-jewel red-line ──
+pub mod orders;
+
 // ── S4 media surface (docs/design/rebuild-media-s4-council/) — the UNAUTHENTICATED half.
 // The owner-authenticated half (product-media, product-image, theme logo) lives inside
 // `routes::owner` (product_media.rs, product_image.rs, themes.rs) — see that module's doc.

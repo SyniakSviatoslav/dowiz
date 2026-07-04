@@ -140,6 +140,11 @@ use crate::routes::owner::product_media::{
         // entry-photo; mounted OUTSIDE the bearer gate, see that module's doc):
         crate::routes::media_public::proxy_put_upload,
         crate::routes::media_public::upload_entry_photo,
+        // ── S5 orders/money surface (docs/design/rebuild-orders-s5-council/) ──
+        crate::routes::orders::create_order,
+        crate::routes::orders::get_order,
+        crate::routes::orders::owner_update_status,
+        crate::routes::orders::customer_cancel,
     ),
     components(schemas(
         HealthStatus,
@@ -244,6 +249,12 @@ use crate::routes::owner::product_media::{
         ReorderRequest,
         AvailableToggleRequest,
         EntryPhotoResponse,
+        // ── S5 orders/money schemas ──
+        crate::routes::orders::OrderCreatedResponse,
+        crate::routes::orders::StatusUpdateInput,
+        crate::routes::orders::StatusUpdateResponse,
+        crate::routes::orders::CustomerCancelResponse,
+        crate::routes::orders::OrderView,
     )),
     tags(
         (name = "health", description = "Liveness/health probes"),
@@ -262,6 +273,7 @@ use crate::routes::owner::product_media::{
         (name = "owner-catalog", description = "S3 owner catalog/admin CRUD (products, categories, modifier groups, availability, themes)"),
         (name = "owner-media", description = "S4 owner-authenticated media (product-media ADR-0002 seam, product-image, theme logo)"),
         (name = "media-upload", description = "S4 unauthenticated media (token-proxy-PUT, entry-photo)"),
+        (name = "orders", description = "S5 orders/money (create, status transitions, customer cancel, tri-principal read)"),
     )
 )]
 pub struct ApiDoc;
@@ -461,6 +473,38 @@ mod tests {
         ];
         for path in expected {
             assert!(paths.contains(path), "missing S4 media path: {path}");
+        }
+    }
+
+    /// S5 orders/money paths — the four ops the crown-jewel surface annotated.
+    #[test]
+    fn openapi_document_lists_the_s5_orders_operations() {
+        let doc = ApiDoc::openapi();
+        let paths: std::collections::HashSet<&str> =
+            doc.paths.paths.keys().map(String::as_str).collect();
+        for path in [
+            "/orders",
+            "/orders/{id}",
+            "/orders/{id}/status",
+            "/api/customer/orders/{orderId}/cancel",
+        ] {
+            assert!(paths.contains(path), "missing S5 orders path: {path}");
+        }
+    }
+
+    /// The S5 request/response DTO schemas are registered.
+    #[test]
+    fn openapi_document_includes_s5_orders_schemas() {
+        let doc = ApiDoc::openapi();
+        let schemas = &doc.components.as_ref().unwrap().schemas;
+        for name in [
+            "OrderCreatedResponse",
+            "StatusUpdateInput",
+            "StatusUpdateResponse",
+            "CustomerCancelResponse",
+            "OrderView",
+        ] {
+            assert!(schemas.contains_key(name), "missing S5 schema: {name}");
         }
     }
 

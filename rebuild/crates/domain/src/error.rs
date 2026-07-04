@@ -124,6 +124,51 @@ pub enum ErrorCode {
     InvalidMedia,
     /// 413 — a declared file size exceeds the per-mime ceiling (`product-media.ts:119`).
     FileTooLarge,
+
+    // ── S5 orders/money surface code set (`docs/design/rebuild-orders-s5-council/`) ──
+    // Each is the exact SCREAMING_SNAKE code string the Node order routes send via
+    // `reply.sendError(<status>, '<CODE>', …)`; the status arms below match the Node call site
+    // per-code (the route passes the status explicitly, so the code→status table here is derived
+    // FROM those call sites, `orders.ts` / `customer/orders.ts`).
+    /// 422 — `subtotal < min_order_value` (pickup AND delivery, `orders.ts:498`).
+    MinOrderNotMet,
+    /// 422 — declared cash `< total` (`orders.ts:537`).
+    CashAmountTooLow,
+    /// 422 — a cart product is `is_available = false` on the price snapshot (`orders.ts` §6).
+    ProductUnavailable,
+    /// 422 — a cart product id does not exist for this location (`orders.ts` §6).
+    ProductNotFound,
+    /// 422 — a modifier id is not a valid/available modifier for its product
+    /// (`order-pricing.ts:99`).
+    ModifierUnavailable,
+    /// 422 — a required modifier group's min-select is not met (`order-pricing.ts:118`).
+    ModifierMinNotMet,
+    /// 422 — a modifier group's max-select is exceeded (`order-pricing.ts:124`).
+    ModifierMaxExceeded,
+    /// 422 — the same modifier id appears twice on one line item (`order-pricing.ts:91`).
+    DuplicateModifier,
+    /// 422 — the delivery pin is beyond the last configured tier (`order-pricing.ts:178`).
+    NotDeliverable,
+    /// 422 — no flat fee and no tiers configured for a delivery order (`order-pricing.ts:183`).
+    DeliveryNotConfigured,
+    /// 422 — idempotency key hit with a DIFFERENT `request_hash` (`orders.ts:403`).
+    IdempotencyKeyReused,
+    /// 409 — idempotency-key unique race, surfaced from `23505` (`orders.ts:719`).
+    IdempotencyConflict,
+    /// 403 — an owner tried to drive a SYSTEM-only CONFIRMED/PREPARING/READY→CANCELLED edge
+    /// (`orderAuthz.ts:22`).
+    CancelNotPermitted,
+    /// 409 — PATCH→DELIVERED/PICKED_UP with an active courier binding (`orders.ts:931`).
+    AssignmentActive,
+    /// 409 — IN_DELIVERY without a delivered assignment on PATCH→DELIVERED/PICKED_UP
+    /// (`orders.ts:945`).
+    UseDeliverFlow,
+    /// 409 — customer cancel attempted on a non-IN_DELIVERY order (`customer/orders.ts:296`).
+    CancelNotAllowedStatus,
+    /// 410 — customer cancel past the post-dispatch window (`customer/orders.ts:303`).
+    CancelWindowExpired,
+    /// 409 — order create against an unpublished location (`orders.ts` venue gate; NOT_PUBLISHED).
+    NotPublished,
 }
 
 impl ErrorCode {
@@ -166,6 +211,25 @@ impl ErrorCode {
             // ── S4 media code set ──
             ErrorCode::InvalidMedia => 400,
             ErrorCode::FileTooLarge => 413,
+            // ── S5 orders/money code set (status per the Node route call site) ──
+            ErrorCode::MinOrderNotMet
+            | ErrorCode::CashAmountTooLow
+            | ErrorCode::ProductUnavailable
+            | ErrorCode::ProductNotFound
+            | ErrorCode::ModifierUnavailable
+            | ErrorCode::ModifierMinNotMet
+            | ErrorCode::ModifierMaxExceeded
+            | ErrorCode::DuplicateModifier
+            | ErrorCode::NotDeliverable
+            | ErrorCode::DeliveryNotConfigured
+            | ErrorCode::IdempotencyKeyReused => 422,
+            ErrorCode::IdempotencyConflict
+            | ErrorCode::AssignmentActive
+            | ErrorCode::UseDeliverFlow
+            | ErrorCode::CancelNotAllowedStatus
+            | ErrorCode::NotPublished => 409,
+            ErrorCode::CancelNotPermitted => 403,
+            ErrorCode::CancelWindowExpired => 410,
         }
     }
 }
@@ -364,5 +428,49 @@ mod tests {
         );
         assert_eq!(ErrorCode::InvalidMedia.http_status(), 400);
         assert_eq!(ErrorCode::FileTooLarge.http_status(), 413);
+    }
+
+    /// S5 orders/money codes serialize SCREAMING_SNAKE and map to the `orders.ts`/`customer/orders.ts`
+    /// `sendError` statuses (the code strings are the FE-branchable contract).
+    #[test]
+    fn s5_orders_codes_serialize_and_map_status() {
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::MinOrderNotMet).unwrap(),
+            "\"MIN_ORDER_NOT_MET\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::CashAmountTooLow).unwrap(),
+            "\"CASH_AMOUNT_TOO_LOW\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::IdempotencyKeyReused).unwrap(),
+            "\"IDEMPOTENCY_KEY_REUSED\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::IdempotencyConflict).unwrap(),
+            "\"IDEMPOTENCY_CONFLICT\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::CancelNotPermitted).unwrap(),
+            "\"CANCEL_NOT_PERMITTED\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::UseDeliverFlow).unwrap(),
+            "\"USE_DELIVER_FLOW\""
+        );
+        // Status parity with the Node call sites.
+        assert_eq!(ErrorCode::MinOrderNotMet.http_status(), 422);
+        assert_eq!(ErrorCode::CashAmountTooLow.http_status(), 422);
+        assert_eq!(ErrorCode::IdempotencyKeyReused.http_status(), 422);
+        assert_eq!(ErrorCode::NotDeliverable.http_status(), 422);
+        assert_eq!(ErrorCode::DeliveryNotConfigured.http_status(), 422);
+        assert_eq!(ErrorCode::DuplicateModifier.http_status(), 422);
+        assert_eq!(ErrorCode::IdempotencyConflict.http_status(), 409);
+        assert_eq!(ErrorCode::AssignmentActive.http_status(), 409);
+        assert_eq!(ErrorCode::UseDeliverFlow.http_status(), 409);
+        assert_eq!(ErrorCode::CancelNotAllowedStatus.http_status(), 409);
+        assert_eq!(ErrorCode::NotPublished.http_status(), 409);
+        assert_eq!(ErrorCode::CancelNotPermitted.http_status(), 403);
+        assert_eq!(ErrorCode::CancelWindowExpired.http_status(), 410);
     }
 }
