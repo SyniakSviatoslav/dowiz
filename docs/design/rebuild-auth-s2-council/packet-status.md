@@ -1,18 +1,29 @@
 # S2-AUTH Port — Council Packet · STATUS
 
-## 🟡 COUNCIL-REVIEWED — CONDITIONALLY RATIFIED (PROCEED-WITH-REVISIONS) — NOT YET `COUNCIL-APPROVED`
+## 🟢 COUNCIL-APPROVED (2026-07-04) — cleared to BUILD DARK to the cutover DoD
 
 **Triadic council ran 2026-07-04** (architect + breaker + counsel + decorrelated security-sentinel).
-Verdict: **PROCEED-WITH-REVISIONS, no ETHICAL-STOP** — the design is sound and ports cleanly at the
-crypto core, but a frozen 5-item revision set (`resolution.md`) must fold in and the operator must sign
-the 🔴 items before `COUNCIL-APPROVED`. Seat verdicts: architect RATIFIED-WITH-REVISIONS · breaker
-"the port breaks" (1 CRIT / 6 HIGH — strict-claim parse + Q10 body-`kid`) · counsel PROCEED-WITH-REVISIONS
-· security-sentinel PASS-with-one-HIGH (RETIRE courier-activate). See `resolution.md` for the full record.
+Verdict: **PROCEED-WITH-REVISIONS, no ETHICAL-STOP**. Seat verdicts: architect RATIFIED-WITH-REVISIONS ·
+breaker "the port breaks" (1 CRIT / 6 HIGH — strict-claim parse + Q10 body-`kid`) · counsel
+PROCEED-WITH-REVISIONS · security-sentinel PASS-with-one-HIGH (RETIRE courier-activate). Full record in
+`resolution.md`.
 
-**Blockers to `COUNCIL-APPROVED`:** (1) fold REV-1…REV-5 into `proposal.md`/`threat-model.md`;
-(2) **operator sign-off** on Q1/Q2/Q5/Q6/Q10 + AR-6 rotation runbook + cutover canary plan. Until both,
-this packet is the **description input** only. No 🔴 AUTH row moves to `BUILT` in `traceability.csv`
-until council-APPROVED and every open-question is resolved on the record.
+**OPERATOR SIGN-OFF: APPROVED ALL 🔴 items (2026-07-04, explicit, in-session).** Q1 (rotation runbook +
+dual-kid fast-follow), **Q2 RETIRE courier-activate**, Q5 (localStorage for the port; customer-token
+httpOnly is the lead fast-follow), Q6 (courier per-location re-check as fast-follow), **Q10 no-migration
+canary cutover**, AR-6 key-rotation runbook, cutover canary plan — all approved.
+
+**Scope of the approval (precise):** cleared to (1) fold REV-1…REV-5 as binding build specs, and
+(2) **BUILD the Rust S2 auth surface DARK** to the cutover DoD (below). The **live production cutover
+flip** (routing real auth Node→Rust) remains a **separate future go/no-go** once the surface is built,
+the DoD is green, and the canary has run — building dark is not flipping. AUTH rows advance
+`MAPPED → COUNCIL-APPROVED`; `BUILT` on green DoD; `CUTOVER` only at the future flip.
+
+**Binding on the build (from `resolution.md`):** RETIRE `/api/auth/courier/activate` · REV-1 courier
+`has_location` per-request re-check + `(jti, activeLocationId, sub)` key · REV-2/C1 body-`kid`
+round-trip + cross-verifiable/identical-hash-format contract · REV-3/T-12 customer-scope FIX-IN-PORT ·
+REV-4 middleware tower order (rate-limit/OPTIONS/NO_AUTH) · REV-5 Q11 collapse only after the 4
+divergences are contracted · four Q10 cutover gates · claim-set frozen for the overlap.
 
 - **Lane:** R3 (complete-rebuild) · **Surface:** S2 auth 🔴 (REBUILD-MAP §3 Phase B, 4th strangler)
 - **Date:** 2026-07-04 · **Source:** `fix/audit-remediation@ae9f5360`
