@@ -13,6 +13,7 @@
   "dependencies": {
     "@deliveryos/shared-types": "workspace:*",
     "@deliveryos/ui": "workspace:*",
+    "@deliveryos/voice": "workspace:*",
     "@tabler/icons-webfont": "3.31.0",
     "framer-motion": "^12.40.0",
     "maplibre-gl": "^5.24.0",
