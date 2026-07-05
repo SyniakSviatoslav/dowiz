@@ -352,3 +352,78 @@ integration remains excluded from this backlog's scope — its code exists only 
 un-pushed local sandbox worktrees (partially preserved as an inert `.tar.gz` per
 ledger row #69) and needs a local session to actually integrate, not an autonomous
 continuation run against `origin/fix/audit-remediation`.
+
+## 2026-07-05 — item 6: meta loop — reflections for 69ad3074/aaa0b182/b536ca07 + one curated lesson
+
+**What:** Per STEP 0, re-verified backlog state directly against the repo rather than trusting
+only this file: confirmed items 1–5 all present and matching their commits (ledger row #68,
+`docs/design/harness/SYSTEMS-MAP.md`, `scripts/exec-telemetry.mjs` +
+`scripts/telemetry-analyze.mjs`, the metric-reflection loop draft, and
+`docs/governance/HARNESS-IMPROVEMENTS.md`). Item 6 (the meta loop over commits
+`69ad3074`/`aaa0b182`/`b536ca07`) was the only one not started — confirmed by grepping
+`docs/reflections/` and `docs/lessons/` for those hashes and their subject matter, which found
+nothing for two of the three (the third, `b536ca07`, only had its retroactive ledger row, not a
+causal reflection). Picked item 6 next as instructed.
+
+Read all three commits' diffs and cross-referenced them against the ledger rows their fixes had
+already produced (#61, #64, #65, #66, #67, #68) to make sure each reflection's WHY adds a genuine
+causal layer on top of the ledger's what/where/proof, not a restatement of it. Wrote three
+reflections to `docs/reflections/INBOX/`:
+- `2026-07-05-gdpr-backup-completion-was-unconditional.reflection.md` (commit `69ad3074`): the GDPR
+  anonymizer's unconditional `completed` write and the backup restore-drill's heuristic/wrong-pool
+  check are the same root — a completion signal derived from "the step ran" instead of an
+  independent re-read of the effect.
+- `2026-07-05-proof-hardening-duplicated-invariants.reflection.md` (commit `aaa0b182`): the same
+  root recurring in test code (LC9's self-referential red-arm, LC2's string-pinned IDOR proof),
+  plus a second, distinct root (closed-venue + money-display bugs = the same business rule computed
+  twice, client and server, with no shared source or parity test — echoes the existing
+  secret-store-provenance-trace lesson).
+- `2026-07-05-multi-concern-commit-orphaned-ledger-row.reflection.md` (commit `b536ca07`): why the
+  ledger-row step specifically got dropped in a six-concern commit — named as the third recurrence
+  of the already-lessoned "discipline-triggered step dies without a hook" law (#48 →
+  swarm-mergeback-rot → this), not promoted to a new lesson since its deterministic response
+  already exists (`guardrail-sandbox-staleness.mjs` / `meta-controller.mjs`).
+
+Curated ONE lesson — `docs/lessons/2026-07-05-proof-must-observe-the-effect.md` — from the
+strongest, best-evidenced pattern (four independent instances across two commits, backend and test
+code alike): a completion status or negative-path test that structurally cannot fail on the real
+bug is not a proof, per CLAUDE.md's own Mandatory Proof Rule. Added its `TRIGGER`
+(`apps/api/src/**/*.test.ts`, the layer all four instances lived in) to `docs/lessons/INDEX.md`.
+
+**No new ledger row added.** All four underlying fixes already have red→green ledger rows (#61,
+#64, #67) from when they originally shipped; this run's output is purely the advisory layer
+(reflections + one curated lesson) the self-improvement loop describes, not a new
+guardrail/test/hook, so nothing new qualifies for the ledger.
+
+**Proof:**
+- Docs-only change (3 reflections + 1 lesson + 1 index row, no code/config/test) — per
+  `docs/lessons/2026-06-29-docs-only-no-staging-deploy.md` the staging-deploy + Playwright legs of
+  Ship Discipline are correctly skipped; the full pre-commit hook is the proof.
+- Hit the same cold-container gap flagged in items 3–5's entries and proposed as P4 in
+  `HARNESS-IMPROVEMENTS.md`: the first `Write` failed `pnpm lint:gates` with
+  `ERR_MODULE_NOT_FOUND: @eslint/js` (no `node_modules/`). Ran `pnpm install --frozen-lockfile`
+  (no lockfile/`package.json` touched) then `pnpm -r build`, then re-ran `pnpm lint:gates` clean
+  (0 errors, the same 19 pre-existing fixture warnings every prior entry recorded).
+- `node scripts/guardrail-ledger-integrity.mjs` clean both before and after (79 rows, max #76, all
+  unique) — confirms no ledger row was touched, matching the "no new row" call above.
+- `pnpm -r typecheck` and `pnpm -r build`: all 12 workspace projects green (ran once after the
+  `node_modules` install to confirm the container's build/workspace-link state was sound before
+  trusting the pre-commit hook's own re-run of the same checks).
+- Full pre-commit hook passed on the real commit: no staged JS/TS to lint; `guardrail-corpus-reachability`
+  clean; `guardrail-license` clean (32 envs classified); `guardrail-hook-matchers` clean (6 gates);
+  no i18n changes staged; `pnpm -r typecheck` all 12 projects green; `pnpm -r build` all 12 projects
+  green; Fly config validate + local Docker build skipped (no `flyctl`/Docker daemon in this
+  container — expected, non-blocking, same as every prior run).
+- Commit `953915e` pushed to `origin/fix/audit-remediation`.
+
+**Next:** all 6 ordered backlog items are now done. Per the operator instructions, if all items are
+done this file should record "backlog complete" — see the line below. Any further autonomous run
+against this backlog should re-verify that claim against the repo (per STEP 0's discipline) rather
+than trusting this line alone, in case concurrent operator/other-session work changes the picture.
+
+**Voice FE integration note (recurring, still true):** unchanged from the prior entry — the voice
+front-end integration remains excluded from this backlog's scope; its code exists only in un-pushed
+local sandbox worktrees and needs a local session, not an autonomous continuation run against
+`origin/fix/audit-remediation`.
+
+backlog complete
