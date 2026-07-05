@@ -71,7 +71,14 @@ S1 storefront-read (done in A) → S2 auth 🔴 → S3 catalog/admin CRUD → S4
 > Dark commits: S2 `b28b1764` · S3 `8a787feb` · S4 `cca5606e` · S5 `0fa028cc` · S6 `e13e1434` ·
 > S7 `4703558d` · S8 `b9a0c0d9` · S9 `b795e7d1` · S10 `2ebdf513`; cutover matcher `86049799`. Councils in
 > `docs/design/rebuild-{catalog-s3,media-s4,orders-s5,realtime-s6,courier-s7,jobs-s8,gdpr-s9,platform-admin-s10}-council/`.
-> **REMAINING = the CUTOVER half** (all operator-gated): S2 cutover re-ratification · operator-placed
+> **✅ CUTOVER MECHANISM PROVEN ON STAGING (2026-07-05):** front-door harness live dark (`a9a80584`,
+> 27+12 tests), mig 089 on staging DB, `dowiz-rust-staging` up (flycast-only, S1-only boot). S1 proof:
+> readiness-gate refused live · flip → `x-dowiz-cutover: rust:S1` · theme byte-identical · menu deep-diff
+> **0 leaf diffs** (after 3 oracle-caught parity fixes: imageUrl null `48d97bed`, locationId alias
+> `b01a399f`, APP_BASE_URL per-env) · rollback converged 2,384ms · chaos drill: breaker auto-degraded S1
+> globally at t+20s, zero regression vs baseline smoke. S1 ends node/not-ready — wholesale flip gated on
+> the Astro shell decision (storefront.rs scope cut). flycast upstream = service port 80, NOT :8080.
+> **REMAINING = the CUTOVER half** (all operator-gated): S2 cutover re-ratification ✅ (77d7e979) · operator-placed
 > migrations (S5 085-draft, S8 jobs+notification_dedup, S9 088+queue-claim DEFINER, S10 platform-read
 > DEFINER on owner_notification_targets) · Rust staging-dark deploy · S1-first reversible-switch proof ·
 > per-surface prod flips (S5-money + S9-GDPR = explicit operator go) · S10-flip = Phase-D decommission
