@@ -68,7 +68,11 @@ pub struct PublicMenuProduct {
     pub available: bool,
     pub image_key: Option<String>,
     pub primary_media_id: Option<Uuid>,
-    #[serde(rename = "imageUrl", skip_serializing_if = "Option::is_none")]
+    /// PARITY (S1 staging oracle 2026-07-05): Node emits `"imageUrl": null` for image-less
+    /// products (menu.ts serializes the field unconditionally); `skip_serializing_if` here
+    /// omitted the key entirely — 50 leaf diffs on the /public/locations/demo/menu deep-diff.
+    /// Absent-vs-null is a real contract shape divergence; serialize null like the source.
+    #[serde(rename = "imageUrl")]
     pub image_url: Option<String>,
     /// Free-form JSONB characteristics layer (ADR-0014) — kept as raw JSON since the known-keys
     /// set (kcal/protein/allergens/bom/...) is FE-consumed, not server-authoritative here.
