@@ -24,6 +24,7 @@ import { ApiError, isContractCode, rateLimitError, buildErrorEnvelope } from './
 import { registerReplySendError } from './lib/reply-send-error.js';
 import { resolveSubdomainRewrite } from './lib/subdomain-rewrite.js';
 import { registerCutoverFrontDoor } from './lib/cutover/front-door.js';
+import { installCutoverWsRouter } from './lib/cutover/ws-router.js';
 import { registerCoreRoutes } from './bootstrap/routes.js';
 import { initSentry, getSentry } from './lib/sentry.js';
 import securityHeadersPlugin from './lib/security/headers.js';
@@ -434,7 +435,7 @@ async function main() {
   // Rust must see the rewritten url + server-authoritative correlation id). INERT unless
   // CUTOVER_RUST_UPSTREAM is set (the dark default everywhere): no hook, no DB poll, no
   // probes — byte-identical behavior. All flags seed target='node' (draft migration 089).
-  registerCutoverFrontDoor(fastify, {
+  const cutover = registerCutoverFrontDoor(fastify, {
     pool,
     rustUpstream: env.CUTOVER_RUST_UPSTREAM,
     forceAllNode: env.CUTOVER_FORCE_ALL_NODE === 'true',
@@ -871,6 +872,16 @@ fastify.register(acquisitionRoutes, {
     if (err) throw err;
     console.log(fastify.printRoutes());
     setupWebSocket(fastify, messageBus);
+    // S6 WS cutover router (ADR-0022 REV-S6): WS upgrades never traverse fastify hooks —
+    // `ws` owns the raw 'upgrade' event — so S6 routing wraps that event directly, AFTER
+    // setupWebSocket attached its listener. Inert when CUTOVER_RUST_UPSTREAM is unset; on
+    // an S6 flip only NEW upgrades route to Rust (established sockets stay on Node until
+    // they naturally disconnect). Shares the front-door's flag store: one flip authority.
+    installCutoverWsRouter(fastify.server, {
+      flags: cutover.flags,
+      upstream: env.CUTOVER_RUST_UPSTREAM ? new URL(env.CUTOVER_RUST_UPSTREAM) : null,
+      log: fastify.log,
+    });
   });
 
   fastify.addHook('onClose', async () => {
