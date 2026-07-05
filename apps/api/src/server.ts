@@ -438,6 +438,7 @@ async function main() {
   const cutover = registerCutoverFrontDoor(fastify, {
     pool,
     rustUpstream: env.CUTOVER_RUST_UPSTREAM,
+    astroUpstream: env.CUTOVER_ASTRO_UPSTREAM,
     forceAllNode: env.CUTOVER_FORCE_ALL_NODE === 'true',
     flagsTtlMs: env.CUTOVER_FLAGS_TTL_MS,
     healthIntervalMs: env.CUTOVER_HEALTH_INTERVAL_MS,

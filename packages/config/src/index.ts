@@ -61,6 +61,9 @@ const EnvSchema = z.object({
   // poll, no health probes — byte-identical request handling. Set as a secret per-env
   // only when that env's Rust twin is deployed dark.
   CUTOVER_RUST_UPSTREAM: z.string().url().optional(),
+  // Q6 Astro sub-target: internal Astro SSR app serving the S1 storefront page when S1
+  // is flipped (e.g. http://dowiz-astro-staging.flycast). Unset = S1 HTML stays on Node.
+  CUTOVER_ASTRO_UPSTREAM: z.string().url().optional(),
   // Break-glass (ADR-0022 §4): forces every surface to Node WITHOUT consulting the
   // cutover_flags store — for when the flag store itself is impaired. Runtime env, no DB.
   CUTOVER_FORCE_ALL_NODE: z.enum(['true', 'false']).default('false'),

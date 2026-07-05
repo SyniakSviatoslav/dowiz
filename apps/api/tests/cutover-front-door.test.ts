@@ -86,12 +86,14 @@ function makeUpstream(): Promise<{
 async function makeApp(opts: {
   state: FakePoolState;
   rustUpstream: string | undefined;
+  astroUpstream?: string;
   forceAllNode?: boolean;
 }) {
   const app = Fastify({ logger: false });
   const handle = registerCutoverFrontDoor(app, {
     pool: makeFakePool(opts.state),
     rustUpstream: opts.rustUpstream,
+    astroUpstream: opts.astroUpstream,
     forceAllNode: opts.forceAllNode ?? false,
     flagsTtlMs: 50,
     healthIntervalMs: 30,
@@ -99,6 +101,8 @@ async function makeApp(opts: {
   // Node-side twins of real mapped routes (register() defers → the hook applies).
   await app.register(async (f) => {
     f.get('/api/public/theme/:slug', async () => ({ stack: 'node' })); // S1
+    f.get('/s/:slug', async () => ({ stack: 'node' })); // S1 HTML (astro sub-target)
+    f.get('/s/:slug/checkout', async () => ({ stack: 'node' })); // S1 HTML node-keep
     f.post('/api/owner/locations/:locationId/products', async () => ({ stack: 'node' })); // S3
     f.post('/api/owner/locations/:locationId/settlements/:id/approve', async () => ({ stack: 'node' })); // S5
     f.get('/definitely/not/mapped', async () => ({ stack: 'node-unmapped' }));
@@ -305,6 +309,74 @@ describe('front-door routing (dark-by-default, forward, fail modes)', () => {
       }
     } finally {
       await app.close();
+    }
+  });
+
+  test('S1 Astro partition: page → astro, API → rust, unimplemented page → Node (Q6 sub-target)', async () => {
+    const rust = await makeUpstream();
+    const astro = await makeUpstream();
+    const state: FakePoolState = {
+      rows: [{ surface: 'S1', target: 'rust', readiness_ok: true }],
+      failSelects: false,
+      degradeCalls: [],
+    };
+    const { app, handle, base } = await makeApp({ state, rustUpstream: rust.url, astroUpstream: astro.url });
+    try {
+      await waitFor(() => handle.flags.snapshot().has('S1'));
+      const page = await fetch(`${base}/s/demo`);
+      assert.equal(page.headers.get('x-dowiz-cutover'), 'astro:S1', 'menu page routes to Astro');
+      assert.ok(astro.seen.some((s) => s.url === '/s/demo'));
+      const api = await fetch(`${base}/api/public/theme/demo`);
+      assert.equal(api.headers.get('x-dowiz-cutover'), 'rust:S1', 'API reads stay on Rust');
+      assert.ok(rust.seen.some((s) => s.url === '/api/public/theme/demo'));
+      const keep = await fetch(`${base}/s/demo/checkout`);
+      assert.equal(keep.headers.get('x-dowiz-cutover'), null, 'unimplemented page stays Node');
+      assert.equal(((await keep.json()) as any).stack, 'node');
+      assert.equal(astro.seen.some((s) => s.url.includes('checkout')), false);
+    } finally {
+      await app.close();
+      await rust.close();
+      await astro.close();
+    }
+  });
+
+  test('S1 flipped WITHOUT astro upstream: page stays Node, API goes rust', async () => {
+    const rust = await makeUpstream();
+    const state: FakePoolState = {
+      rows: [{ surface: 'S1', target: 'rust', readiness_ok: true }],
+      failSelects: false,
+      degradeCalls: [],
+    };
+    const { app, handle, base } = await makeApp({ state, rustUpstream: rust.url });
+    try {
+      await waitFor(() => handle.flags.snapshot().has('S1'));
+      const page = await fetch(`${base}/s/demo`);
+      assert.equal(page.headers.get('x-dowiz-cutover'), null);
+      assert.equal(((await page.json()) as any).stack, 'node');
+      const api = await fetch(`${base}/api/public/theme/demo`);
+      assert.equal(api.headers.get('x-dowiz-cutover'), 'rust:S1');
+    } finally {
+      await app.close();
+      await rust.close();
+    }
+  });
+
+  test('astro upstream dead: menu page GET falls through to Node (bodyless fail-safe)', async () => {
+    const rust = await makeUpstream();
+    const state: FakePoolState = {
+      rows: [{ surface: 'S1', target: 'rust', readiness_ok: true }],
+      failSelects: false,
+      degradeCalls: [],
+    };
+    const { app, handle, base } = await makeApp({ state, rustUpstream: rust.url, astroUpstream: 'http://127.0.0.1:1' });
+    try {
+      await waitFor(() => handle.flags.snapshot().has('S1'));
+      const page = await fetch(`${base}/s/demo`);
+      assert.equal(page.status, 200);
+      assert.equal(((await page.json()) as any).stack, 'node', 'dead Astro must fall through, not 5xx');
+    } finally {
+      await app.close();
+      await rust.close();
     }
   });
 

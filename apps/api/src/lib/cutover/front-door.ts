@@ -48,11 +48,31 @@ export interface CutoverFrontDoorOptions {
   pool: Pool;
   /** e.g. http://dowiz-rust-staging.flycast — unset/empty leaves the harness inert. */
   rustUpstream: string | undefined;
+  /**
+   * ADR-0022 Q6 Astro sub-target (operator-approved 2026-07-05): when S1 is flipped,
+   * the storefront HTML page routes to the Astro SSR app instead of the Rust api
+   * (whose human-UA shell is a flagged scope cut). Unset = S1 HTML stays on Node.
+   */
+  astroUpstream?: string | undefined;
   /** 'true' = break-glass: every request is Node, flag store never consulted. */
   forceAllNode: boolean;
   flagsTtlMs: number;
   healthIntervalMs: number;
 }
+
+/** S1 templates served by the Astro SSR app when S1 is flipped (it implements ONLY these). */
+const S1_ASTRO_TEMPLATES: ReadonlySet<string> = new Set(['/s/:slug']);
+/**
+ * S1 HTML templates Astro does NOT implement yet (cart/checkout/order pages). While S1
+ * is flipped these stay on Node — forwarding them to the Rust api would serve its
+ * scope-cut shell (no SPA bundle) to humans. Remove entries as the Astro app grows them.
+ */
+const S1_NODE_KEEP_TEMPLATES: ReadonlySet<string> = new Set([
+  '/s/:slug/cart',
+  '/s/:slug/checkout',
+  '/s/:slug/order/:id',
+  '/s/:slug/orders/:orderId',
+]);
 
 /** REV-C11: front-door budget must be ≥ the surface's real server-side budget. */
 const SURFACE_TIMEOUT_MS: Readonly<Partial<Record<SurfaceId, number>>> = { S1: 15_000 };
@@ -170,6 +190,7 @@ function forwardToRust(
   upstream: URL,
   surface: SurfaceId,
   log: { warn: (o: object, m: string) => void },
+  stackLabel: 'rust' | 'astro' = 'rust',
 ): Promise<'done' | 'fallthrough'> {
   return new Promise((resolve) => {
     const mod = upstream.protocol === 'https:' ? https : http;
@@ -215,7 +236,7 @@ function forwardToRust(
           if (value !== undefined) outHeaders[name] = value;
         }
         // Deterministic served-by oracle for parity E2E + ops (absence ⇒ Node).
-        outHeaders['x-dowiz-cutover'] = `rust:${surface}`;
+        outHeaders['x-dowiz-cutover'] = `${stackLabel}:${surface}`;
         reply.raw.writeHead(res.statusCode ?? 502, outHeaders);
         res.pipe(reply.raw);
         res.on('error', () => reply.raw.destroy());
@@ -300,6 +321,7 @@ export function registerCutoverFrontDoor(
   }
 
   const upstream = new URL(opts.rustUpstream);
+  const astro = opts.astroUpstream ? new URL(opts.astroUpstream) : null;
   const health = new UpstreamHealth(
     new URL('/healthz', upstream),
     opts.healthIntervalMs,
@@ -333,6 +355,28 @@ export function registerCutoverFrontDoor(
     const surface = match.surface as SurfaceId;
     if (surface === 'UNMAPPED' || surface === 'INFRA_NEVER_FLIPS' || surface === 'S6') return;
     if (flags.targetFor(surface) !== 'rust') return;
+
+    // S1 HTML partition (Q6 sub-target): menu page → Astro; unimplemented storefront
+    // pages → Node (explicit keep); everything else S1 (API reads, manifest, media) → Rust.
+    const template = match.template?.template;
+    if (surface === 'S1' && template !== undefined) {
+      if (S1_NODE_KEEP_TEMPLATES.has(template)) return;
+      if (S1_ASTRO_TEMPLATES.has(template)) {
+        if (!astro) return; // no Astro upstream configured → Node keeps the page
+        // No dedicated breaker for Astro: these are all bodyless GETs, so a pre-response
+        // connect failure falls through to Node per-request (the safe direction).
+        const astroOutcome = await forwardToRust(
+          request,
+          reply,
+          astro,
+          surface,
+          { warn: (o, m) => log.warn(o, m) },
+          'astro',
+        );
+        if (astroOutcome === 'fallthrough') return;
+        return;
+      }
+    }
 
     if (!health.healthy) {
       if (NO_AUTO_DEGRADE.has(surface)) {
