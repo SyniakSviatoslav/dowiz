@@ -336,6 +336,14 @@ function showBranchFile(tip, name) {
   return r.status === 0 ? r.stdout : null;
 }
 
+/** Names already present in the tip's telemetry/ tree — used so publish never drops a durable
+ * file just because THIS run's ephemeral checkout doesn't have a local copy of it (R3-8). */
+function listBranchFileNames(tip) {
+  if (!tip) return [];
+  const r = git(['ls-tree', '--name-only', `${tip}:telemetry`]);
+  return r.status === 0 ? r.stdout.split('\n').map((s) => s.trim()).filter(Boolean) : [];
+}
+
 // ---------------------------------------------------------------------------
 // Arg parsing
 // ---------------------------------------------------------------------------
@@ -703,9 +711,15 @@ function cmdPublish(args) {
     else if (forceParentOnce && attempt === 0) tip = forceParentOnce === 'orphan' ? null : forceParentOnce;
 
     // Build the exact blob contents (branch content ∪ unseen local lines — append-only union).
+    // Tip-only files (durable data this run's ephemeral checkout never materialized locally —
+    // e.g. predictions.jsonl on a run that only emits events) are carried forward UNCHANGED so
+    // publish never silently deletes them from the tree (R3-8, guards prediction-resolution-liveness).
+    const localNames = new Set(files.map((f) => f.name));
+    const tipOnlyNames = listBranchFileNames(tip).filter((n) => !localNames.has(n));
+    const allFiles = [...files, ...tipOnlyNames.map((name) => ({ name, local: '' }))];
     const blobs = [];
     let newLines = 0;
-    for (const f of files) {
+    for (const f of allFiles) {
       const existing = tip ? (showBranchFile(tip, f.name) ?? '') : '';
       const content = mergeContent(existing, f.local);
       if (content !== existing) newLines++;

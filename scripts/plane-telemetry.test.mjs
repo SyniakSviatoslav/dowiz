@@ -277,6 +277,24 @@ test('publish: bootstrap racing an existing branch falls through to the append p
   assert.equal(parents, '2', 'second commit must parent on the first (append, not orphan/rewrite)');
 });
 
+test('publish: a run whose ephemeral checkout has NO local predictions.jsonl must not delete the durable one already on the branch (R3-8)', (t) => {
+  const { remote, works: [workA, workB] } = makeRepos(t, 2);
+  // Box A predicts + publishes → branch now carries predictions.jsonl.
+  assert.equal(cli(['predict', '--run-id', 'rA', '--target', 't1', '--prediction', 'p1', '--confidence', '0.6', '--method', 'primary: x | fallback: y'], { root: workA }).status, 0);
+  assert.equal(cli(['publish', '--run-id', 'rA'], { root: workA, env: GIT_ENV }).status, 0);
+  const before = g(['show', 'refs/remotes/origin/telemetry/plane:telemetry/predictions.jsonl'], workA);
+  assert.match(before, /"target":"t1"/);
+
+  // Box B is a fresh ephemeral checkout — it never ran `predict`, so it has no local
+  // predictions.jsonl at all. It only emits + publishes an unrelated event.
+  assert.equal(cli(['emit', '--run-id', 'rB', '--kind', 'sense', '--outcome', 'pass', '--detail', 'box B sense'], { root: workB }).status, 0);
+  assert.ok(!existsSync(join(workB, 'loops/runs/predictions.jsonl')), 'fixture invariant: box B must start with no local predictions.jsonl');
+  assert.equal(cli(['publish', '--run-id', 'rB'], { root: workB, env: GIT_ENV }).status, 0);
+
+  const after = g(['show', `refs/remotes/origin/telemetry/plane:telemetry/predictions.jsonl`], workB);
+  assert.match(after, /"target":"t1"/, 'box B publish must NOT drop the tip-only predictions.jsonl it never had locally');
+});
+
 // ---------------------------------------------------------------------------
 // DoD row: Subprocess safety (R2-M3) — hostile args never reach a shell
 // ---------------------------------------------------------------------------
