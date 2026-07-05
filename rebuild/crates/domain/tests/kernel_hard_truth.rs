@@ -13,7 +13,8 @@
 //!   - Layer 3 Corridor — terminal absorption: no command produces an event out of a terminal state.
 
 use domain::{
-    ALL_STATUSES, Command, Event, OrderState, OrderStatus, Ts, decide, fold, is_terminal, replay,
+    ALL_STATUSES, Command, Event, OrderState, OrderStatus, Ts, decide, decode_log, encode_log, fold,
+    is_terminal, replay,
 };
 use proptest::prelude::*;
 
@@ -109,6 +110,21 @@ proptest! {
             prop_assert_eq!(to, cmd.target());
             prop_assert_eq!(at, cmd.at());
         }
+    }
+
+    /// Codec closure: any log `decide`/`fold` produces survives a canonical-bytes round-trip
+    /// unchanged, and encoding is deterministic — the Immutable Log is faithfully persistable and a
+    /// replayed decode reconstructs the exact same state (the property PQC signing + mesh replication
+    /// both stand on).
+    #[test]
+    fn log_survives_canonical_bytes_round_trip(cmds in prop::collection::vec(any_command(), 0..40)) {
+        let g = OrderState::genesis();
+        let (final_state, log) = run(g, &cmds);
+        let bytes = encode_log(&log).expect("encode");
+        prop_assert_eq!(encode_log(&log).expect("encode2"), bytes.clone()); // deterministic
+        let decoded = decode_log(&bytes).expect("decode");
+        prop_assert_eq!(&decoded, &log);
+        prop_assert_eq!(replay(g, &decoded), final_state); // state reconstructs from decoded log
     }
 
     // ─────────────────────────── Layer 3 — Corridor: terminal absorption ───────────────────────────

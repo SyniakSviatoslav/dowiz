@@ -10,12 +10,14 @@
 // there only. The workspace-level `deny` still applies to every non-test line in this crate.
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
+pub mod codec;
 pub mod error;
 pub mod kernel;
 pub mod money;
 pub mod order_status;
 pub mod tenant;
 
+pub use codec::{CodecError, canonical_bytes, decode_log, encode_log, from_bytes};
 pub use error::{DomainError, ErrorCode, ErrorEnvelope};
 pub use kernel::{Command, Event, OrderState, Ts, decide, fold, replay};
 pub use money::{Lek, MoneyError};
