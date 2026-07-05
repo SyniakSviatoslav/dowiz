@@ -65,6 +65,19 @@ OpenAPI SSOT extracted from the 236-route census · Rust workspace scaffold (cra
 
 **Phase B — strangler surfaces (each = council(🔴) → port → cutover DoD → flag flip):**
 S1 storefront-read (done in A) → S2 auth 🔴 → S3 catalog/admin CRUD → S4 media pipeline (media-worker) → S5 orders/money 🔴 (+`sales_channel` entity + channel attribution) → S6 realtime WS 🔴 → S7 courier/dispatch 🔴 → S8 jobs/notifications → S9 GDPR/compliance 🔴 → S10 platform-admin/provisioning.
+
+> **✅ BUILD-HALF COMPLETE (2026-07-05): ALL 10 surfaces BUILT DARK in Rust**, each council-approved +
+> dual-SSG-gated + cargo-proven (828 api + 35 domain tests, clippy -D/fmt clean, domain byte-frozen).
+> Dark commits: S2 `b28b1764` · S3 `8a787feb` · S4 `cca5606e` · S5 `0fa028cc` · S6 `e13e1434` ·
+> S7 `4703558d` · S8 `b9a0c0d9` · S9 `b795e7d1` · S10 `2ebdf513`; cutover matcher `86049799`. Councils in
+> `docs/design/rebuild-{catalog-s3,media-s4,orders-s5,realtime-s6,courier-s7,jobs-s8,gdpr-s9,platform-admin-s10}-council/`.
+> **REMAINING = the CUTOVER half** (all operator-gated): S2 cutover re-ratification · operator-placed
+> migrations (S5 085-draft, S8 jobs+notification_dedup, S9 088+queue-claim DEFINER, S10 platform-read
+> DEFINER on owner_notification_targets) · Rust staging-dark deploy · S1-first reversible-switch proof ·
+> per-surface prod flips (S5-money + S9-GDPR = explicit operator go) · S10-flip = Phase-D decommission
+> (REV-C10 owner+date HARD GATE). 3 live prod fixes shipped dark along the way (Telegram #75, GDPR #76,
+> photo-purge #74) — prod-merge operator-gated. All rebuild work is LOCAL on `fix/audit-remediation`
+> (diverged from concurrent-session origin `90c7792c` — reconcile before push).
 **Cutover DoD per surface (14 §8):** E2E slice green (as-is specs) + openapi-diff empty + invariant-cluster tests red→green + map-coverage zero-diff for the surface's namespaces + a11y/size budgets + council sign-off & rollback plan for 🔴.
 
 **Phase C — channel-hub heads (post-S5, attach as surfaces stabilize):**
