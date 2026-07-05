@@ -70,6 +70,12 @@ pub async fn get_public_menu(
                 tracing::warn!(%err, %location_id_or_slug, "read_public_menu payload failed to deserialize into PublicMenu");
                 ApiError::new(ErrorCode::Internal, "internal_error", correlation_id.clone())
             })?;
+            // PARITY (S1 staging oracle 2026-07-05): the DB payload carries only snake_case
+            // `location_id`; Node mirrors it into the legacy camelCase alias (menu.ts:146).
+            // Without this, the alias re-serializes as `locationId: null` on live payloads.
+            if menu.location_id_alias.is_none() {
+                menu.location_id_alias = menu.location_id;
+            }
             enrich_image_urls(&mut menu, &state);
             resolve_primary_media(&mut menu, &state).await;
             menu
