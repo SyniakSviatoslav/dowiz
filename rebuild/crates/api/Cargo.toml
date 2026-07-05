@@ -94,7 +94,10 @@ base64 = "0.22"
 # ring-backed rustls stack sqlx already uses — no native build tool needed. Deliberately NOT
 # aws-sdk-s3/object_store (both pull aws-lc-rs, which needs `cmake`, unavailable in this sandbox) —
 # see R2Storage's module doc for the full rationale.
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+# "json" (S8 addition): the Resend email adapter (`jobs::channels::email`) and the VAPID push
+# adapter both POST a JSON body; `serde_json` is already a direct dependency, this feature just
+# wires reqwest's `.json()` builder method to it (no new crate).
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 # SigV4 request signing ONLY (no HTTP client, no AWS SDK) — pairs with reqwest above for R2Storage's
 # GetObject call. Built on ring/hmac/sha2, all already resolved transitively via sqlx-postgres's
 # SCRAM auth, so this + reqwest add 24 new crates total vs. ~70+ for aws-sdk-s3.
@@ -116,6 +119,28 @@ webp = "0.3"
 # (`sha2`'s own dependency graph / `aws-sign-v4`), promoted to a direct dependency here since the
 # media upload-token module calls it directly rather than through another crate's re-export.
 hmac = "0.12"
+
+# ── S8 jobs/notifications port additions (docs/design/rebuild-jobs-s8-council/) ──
+# VAPID signing (`VapidSignatureBuilder`) + RFC 8291 http-ece payload encryption for web-push
+# (Q3 🔴). `default-features = false` drops the crate's bundled HTTP client (isahc, default
+# feature) and its hyper/hyper-tls alternative — this crate is used ONLY to build the signed,
+# encrypted push request (headers + body); the actual POST goes through the `reqwest` client
+# already a direct dependency above (`storage.rs::R2Storage`), so no second HTTP-client stack
+# enters the graph. `hkdf`/`subtle` (the http-ece HKDF derivation + constant-time bits) are
+# already fully resolved transitively (sqlx-postgres's SCRAM auth), so this is a small, focused
+# add — not a new HTTP client, not a new TLS stack.
+web-push = { version = "0.11", default-features = false }
+# Quiet-hours evaluation against `locations.timezone` (§4.1) — the ONLY tz-aware evaluation
+# anywhere in the S8 surface; every cron/job timestamp otherwise stays UTC (Q-UTC-CRON). Kept to
+# the `std` feature only (no `serde`/`arbitrary`/build-script variants) — this crate is used for
+# exactly one lookup (IANA name -> `Tz` -> local hour), not a general timezone-serde surface.
+chrono-tz = { version = "0.10", default-features = false, features = ["std"] }
+# Constant-time comparison for the Telegram webhook secret-token check (REV-S8-2 🔴 fail-closed
+# fix — the FIX-IN-PORT of a live fail-open gap). Already fully resolved transitively (pulled in
+# by `web-push`'s http-ece implementation), promoted to a direct dependency since
+# `routes::telegram_webhook` calls it directly rather than through another crate's re-export —
+# same rationale as `hmac` above.
+subtle = { version = "2", default-features = false }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }

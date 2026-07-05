@@ -35,6 +35,11 @@ pub mod media_public;
 // `routes::courier`'s module doc.
 pub mod courier;
 
+// ── S8 jobs/notifications surface (docs/design/rebuild-jobs-s8-council/) — the ONE axum route
+// this surface owns (REV-S8-2 🔴 fail-closed webhook); everything else in S8 is spawned tasks,
+// see `crate::jobs` module doc.
+pub mod telegram_webhook;
+
 use tower_http::request_id::RequestId;
 
 /// Shared by every S1 handler that builds an `ApiError`: the server-authoritative correlation id

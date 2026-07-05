@@ -178,6 +178,11 @@ use crate::routes::owner::product_media::{
         crate::routes::owner::courier_invites::create_courier_invite,
         crate::routes::owner::courier_invites::list_courier_invites,
         crate::routes::owner::courier_invites::revoke_courier_invite,
+        // ── S8 jobs/notifications surface (docs/design/rebuild-jobs-s8-council/) — the ONE axum
+        // route it owns: the REV-S8-2 fail-closed Telegram webhook. Listed here so the mounted
+        // route is not absent from the generated document (an openapi-diff / contract-parity gate
+        // would otherwise flag a mounted-but-undocumented path — guardian fix).
+        crate::routes::telegram_webhook::telegram_webhook,
     ),
     components(schemas(
         HealthStatus,
@@ -720,5 +725,20 @@ mod tests {
         ] {
             assert!(schemas.contains_key(name), "missing S7 schema: {name}");
         }
+    }
+
+    /// S8's one axum route (the REV-S8-2 fail-closed Telegram webhook) must be present in the
+    /// generated document — it is mounted in `main.rs`, so an openapi-diff / contract-parity gate
+    /// would flag it as a mounted-but-undocumented path if it were absent (guardian fix). A future
+    /// edit that drops the `#[utoipa::path]` or the `paths(...)` entry fails HERE.
+    #[test]
+    fn openapi_document_lists_the_s8_telegram_webhook() {
+        let doc = ApiDoc::openapi();
+        let paths: std::collections::HashSet<&str> =
+            doc.paths.paths.keys().map(String::as_str).collect();
+        assert!(
+            paths.contains("/webhook/telegram/{secret}"),
+            "the mounted S8 Telegram webhook must be in the openapi document"
+        );
     }
 }

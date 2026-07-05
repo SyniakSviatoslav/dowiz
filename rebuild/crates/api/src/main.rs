@@ -12,6 +12,7 @@ mod config;
 mod db;
 mod dto;
 mod error;
+mod jobs;
 mod media;
 mod middleware;
 mod openapi;
@@ -29,6 +30,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::error_handling::HandleErrorLayer;
+use axum::extract::Extension;
 use axum::http::{HeaderName, StatusCode};
 use axum::routing::get;
 use axum::{BoxError, Json, Router};
@@ -111,6 +113,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // so the whole media surface (owner-authenticated + public) launches as one unit.
     match build_auth_state(&pools) {
         Ok(auth_state) => {
+            // Captured BEFORE `auth_state` is moved into S7's `build_courier_states` below — the S8
+            // telegram webhook needs it to fail-closed on an unset secret in prod (guardian fix).
+            let is_production = auth_state.config.node_env.is_production();
             app = app.merge(auth::auth_router(auth_state.clone()));
             tracing::info!("S2 auth surface mounted");
             app = app.merge(routes::owner::owner_catalog_router(build_owner_states(
@@ -155,9 +160,62 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 auth_state, &pools,
             )));
             tracing::info!("S7 courier/dispatch surface mounted");
+
+            // ── S8 jobs/notifications surface (docs/design/rebuild-jobs-s8-council/) — the
+            // background-work RUNTIME, not axum routes (`crate::jobs` module doc): the SKIP
+            // LOCKED claim-loop worker + the cron fleet this build owns. Rides the same
+            // auth-env gate as S3-S7 — money/PII-adjacent crons need the same
+            // "fully configured" precondition every other post-S1 surface does.
+            //
+            // The ONE S8 axum route (REV-S8-2 🔴, fail-closed webhook) — its own tiny
+            // `Extension` layer, since `TelegramWebhookState` is unrelated to every other
+            // surface's state.
+            app = app.merge(
+                Router::new()
+                    .route(
+                        "/webhook/telegram/{secret}",
+                        axum::routing::post(routes::telegram_webhook::telegram_webhook),
+                    )
+                    .layer(Extension(routes::telegram_webhook::TelegramWebhookState {
+                        bot_secret: config
+                            .notifications
+                            .telegram_bot_secret
+                            .clone()
+                            .map(Arc::new),
+                        // Guardian fix: prod + unset secret → fail-closed (reject), never accept-anyone.
+                        require_secret: is_production,
+                    })),
+            );
+            let push_sender = build_push_sender(&config);
+            jobs::worker::spawn(pools.operational.clone(), push_sender);
+            let mut spawned_crons: Vec<&str> = Vec::new();
+            jobs::crons::order_timeout_sweep::spawn(pools.operational.clone());
+            spawned_crons.push("order.timeout_sweep");
+            jobs::crons::settlement::spawn(pools.operational.clone(), |now| {
+                (now - chrono::Duration::days(1), now)
+            });
+            spawned_crons.push("settlement.generate");
+            jobs::crons::refund_reconciler::spawn(pools.operational.clone());
+            spawned_crons.push("refund_due.reconcile");
+            jobs::crons::reconciliation::spawn(pools.operational.clone());
+            spawned_crons.push("reconciliation.nightly");
+            jobs::crons::gdpr_sweep::spawn(pools.operational.clone());
+            spawned_crons.push("anonymizer.gdpr");
+            jobs::crons::liveness::spawn(pools.operational.clone());
+            spawned_crons.push("liveness.check");
+            // Q-BOOT-ASSERT extended to every cron this build owns (not 2/23) — a visible red
+            // deploy instead of a silently-forgotten cron. `anonymizer.gdpr` IS spawned (S8 owns
+            // its timing/single-flight per §2) even though its handler body is a documented no-op
+            // pending S9's erasure semantics (`jobs::crons::gdpr_sweep` module doc).
+            if let Err(missing) = jobs::cron::assert_full_roster_spawned(&spawned_crons) {
+                panic!("S8 boot-assert: cron(s) never spawned: {missing:?}");
+            }
+            tracing::info!(
+                "S8 jobs/notifications surface mounted (claim-loop worker + cron fleet spawned)"
+            );
         }
         Err(err) => {
-            tracing::warn!(%err, "S2 auth + S3 catalog + S4 media + S5 orders + S6 WS + S7 courier surfaces DARK — JWT/auth env not configured; not mounting them");
+            tracing::warn!(%err, "S2 auth + S3 catalog + S4 media + S5 orders + S6 WS + S7 courier + S8 jobs surfaces DARK — JWT/auth env not configured; not mounting them");
         }
     }
 
@@ -408,6 +466,36 @@ fn build_media_public_state(
         app_base_url: std::env::var("APP_BASE_URL")
             .unwrap_or_else(|_| "https://dowiz.fly.dev".to_string()),
         entry_photo_enabled: config.media.entry_photo_enabled,
+    }
+}
+
+/// Builds the S8 VAPID push adapter — `None` when either VAPID key is absent
+/// (`NotificationsConfig::vapid_ready`, `bootstrap/notifications.ts:52` CARRY) so the caller
+/// stays dark exactly like every other optional channel in this surface, or when the
+/// `reqwest::Client` itself fails to build (an environment-level TLS/DNS-resolver init failure,
+/// not a config-shape one — logged, not fatal, since the rest of S8 has no hard dependency on
+/// push specifically).
+fn build_push_sender(
+    config: &config::Config,
+) -> Option<Arc<jobs::channels::push::VapidPushSender>> {
+    if !config.notifications.vapid_ready() {
+        tracing::info!("VAPID keys not configured — push adapter stays dark");
+        return None;
+    }
+    #[allow(
+        clippy::unwrap_used,
+        reason = "vapid_ready() above already proved vapid_private_key is Some"
+    )]
+    let private_key = config.notifications.vapid_private_key.clone().unwrap();
+    match jobs::channels::push::VapidPushSender::new(
+        private_key,
+        config.notifications.vapid_subject.clone(),
+    ) {
+        Ok(sender) => Some(Arc::new(sender)),
+        Err(err) => {
+            tracing::error!(%err, "VAPID push adapter failed to build its HTTP client — push stays dark");
+            None
+        }
     }
 }
 

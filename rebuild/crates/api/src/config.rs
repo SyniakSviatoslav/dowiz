@@ -16,6 +16,82 @@ pub struct Config {
     pub database_url_operational: String,
     pub database_url_session: String,
     pub media: MediaConfig,
+    pub notifications: NotificationsConfig,
+}
+
+/// Wraps a secret so `#[derive(Debug)]`/`{:?}` on any struct holding one never prints the raw
+/// value — the S8 jobs/notifications council packet's 🔴 requirement for the VAPID private key
+/// ("NEVER logged, NEVER in an error payload, NEVER in a DLQ row") generalizes to every secret
+/// this surface carries (`RESEND_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_SECRET`) — a
+/// `tracing::error!(?config, ...)` or a `Debug`-derived error payload must not leak any of them.
+/// Deliberately stronger than `auth::config::AuthConfig` (whose JWT PEM fields are plain
+/// `String`s under a bare `#[derive(Debug)]`) — that module's posture predates this council
+/// packet's explicit red-line; this type is the new, correct default for anything S8 touches.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Secret(String);
+
+impl Secret {
+    pub fn new(value: impl Into<String>) -> Self {
+        Secret(value.into())
+    }
+
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for Secret {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Secret(<redacted>)")
+    }
+}
+
+/// S8 jobs/notifications surface config (`docs/design/rebuild-jobs-s8-council/proposal.md` §4).
+/// Every field is optional at the `Config` level — same "stays dark rather than FATAL-exiting
+/// the whole process" posture as `MediaConfig`: an unconfigured channel soft-disables (the VAPID
+/// push adapter registers only when BOTH keys are set; Telegram/email adapters degrade the same
+/// way their Node originals do) rather than blocking boot. A value that IS present but malformed
+/// (e.g. a non-base64url VAPID key) is still a fail-fast boot error, same as `MediaConfig`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotificationsConfig {
+    /// `VAPID_PUBLIC_KEY` — already read raw by `routes::vapid::get_vapid_public_key` (S1,
+    /// un-migrated CARRY). Duplicated here (not moved) so the push-adapter wiring has a single,
+    /// validated source without disturbing that already-shipped S1 route.
+    pub vapid_public_key: Option<String>,
+    /// `VAPID_PRIVATE_KEY` — raw base64url (URL-safe, no padding) EC private key scalar, the
+    /// Node/PHP/`web-push`-generator convention (`VapidSignatureBuilder::from_base64`, NOT a PEM).
+    /// 🔴 never logged/DLQ'd/committed — see `Secret`'s doc.
+    pub vapid_private_key: Option<Secret>,
+    /// `VAPID_SUBJECT` — a `mailto:`/https URI per RFC 8292. Source has TWO inconsistent
+    /// fallbacks (`bootstrap/notifications.ts:20-23`: `mailto:admin@deliveryos.local`, the
+    /// adapter-registration path that actually runs; `workers/index.ts:92`: `push@deliveryos.app`,
+    /// missing the `mailto:` scheme entirely — a pre-existing inconsistency, NOT silently
+    /// unified). This port CARRIES the registration-path default (`bootstrap`'s), since that is
+    /// the value that is actually live in production today.
+    pub vapid_subject: String,
+    /// `RESEND_API_KEY` — email adapter, ops-alert-only (Q-EMAIL-DIRECT, §4.3). 🔴 secret.
+    pub resend_api_key: Option<Secret>,
+    /// `TELEGRAM_BOT_TOKEN` — send-path bot token. 🔴 secret.
+    pub telegram_bot_token: Option<Secret>,
+    /// `TELEGRAM_BOT_SECRET` — webhook header compare target (Q4 🔴, fail-closed). 🔴 secret.
+    pub telegram_bot_secret: Option<Secret>,
+    /// `TELEGRAM_BOT_USERNAME` — not a secret (used to build a `t.me/<username>` deep link),
+    /// default matches `routes/auth.ts:194`.
+    pub telegram_bot_username: String,
+}
+
+impl Default for NotificationsConfig {
+    fn default() -> Self {
+        NotificationsConfig {
+            vapid_public_key: None,
+            vapid_private_key: None,
+            vapid_subject: "mailto:admin@deliveryos.local".to_string(),
+            resend_api_key: None,
+            telegram_bot_token: None,
+            telegram_bot_secret: None,
+            telegram_bot_username: "dowiz_bot".to_string(),
+        }
+    }
 }
 
 /// S4 media surface config (`docs/design/rebuild-media-s4-council/resolution.md` REV-S4-6:
@@ -108,6 +184,7 @@ impl Config {
             require_postgres_url(vars, "DATABASE_URL_OPERATIONAL", &mut issues);
         let database_url_session = require_postgres_url(vars, "DATABASE_URL_SESSION", &mut issues);
         let media = MediaConfig::from_map(vars, &mut issues);
+        let notifications = NotificationsConfig::from_map(vars, &mut issues);
 
         if !issues.is_empty() {
             return Err(ConfigError { issues });
@@ -123,6 +200,7 @@ impl Config {
             database_url_operational: database_url_operational.unwrap_or_default(),
             database_url_session: database_url_session.unwrap_or_default(),
             media,
+            notifications,
         })
     }
 }
@@ -219,6 +297,78 @@ impl MediaConfig {
             entry_photo_global_cap_per_minute,
         }
     }
+}
+
+impl NotificationsConfig {
+    /// Same "collect every issue, never panic" posture as `MediaConfig::from_map` — an absent
+    /// value soft-disables its channel (pushed into the `Default` below by the caller NOT calling
+    /// this at all in that branch — see `from_map`'s per-field `match`), a PRESENT-but-malformed
+    /// one is a genuine boot-config error.
+    fn from_map(vars: &HashMap<String, String>, issues: &mut Vec<String>) -> Self {
+        use base64::Engine;
+        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+
+        let vapid_public_key = non_empty(vars, "VAPID_PUBLIC_KEY");
+
+        // A P-256 private key scalar is exactly 32 bytes — `VapidSignatureBuilder::from_base64`
+        // (the `web-push` crate) decodes the SAME raw-base64url convention Node's `web-push`
+        // generator + PHP/other VAPID libraries use (NOT a PEM). Validating the decoded LENGTH
+        // here (not just "is it valid base64") catches a truncated/wrong-key paste at boot,
+        // before the adapter ever tries to sign with it.
+        let vapid_private_key = match vars.get("VAPID_PRIVATE_KEY") {
+            None => None,
+            Some(value) if value.is_empty() => None,
+            Some(value) => match URL_SAFE_NO_PAD.decode(value) {
+                Ok(bytes) if bytes.len() == 32 => Some(Secret::new(value.clone())),
+                Ok(bytes) => {
+                    issues.push(format!(
+                        "VAPID_PRIVATE_KEY: must decode (base64url, no padding) to exactly 32 bytes, got {}",
+                        bytes.len()
+                    ));
+                    None
+                }
+                Err(_) => {
+                    issues.push(
+                        "VAPID_PRIVATE_KEY: must be base64url (no padding) encoded".to_string(),
+                    );
+                    None
+                }
+            },
+        };
+
+        let vapid_subject = match vars.get("VAPID_SUBJECT") {
+            None => "mailto:admin@deliveryos.local".to_string(),
+            Some(value) if value.is_empty() => "mailto:admin@deliveryos.local".to_string(),
+            Some(value) => value.clone(),
+        };
+
+        let resend_api_key = non_empty(vars, "RESEND_API_KEY").map(Secret::new);
+        let telegram_bot_token = non_empty(vars, "TELEGRAM_BOT_TOKEN").map(Secret::new);
+        let telegram_bot_secret = non_empty(vars, "TELEGRAM_BOT_SECRET").map(Secret::new);
+        let telegram_bot_username =
+            non_empty(vars, "TELEGRAM_BOT_USERNAME").unwrap_or_else(|| "dowiz_bot".to_string());
+
+        NotificationsConfig {
+            vapid_public_key,
+            vapid_private_key,
+            vapid_subject,
+            resend_api_key,
+            telegram_bot_token,
+            telegram_bot_secret,
+            telegram_bot_username,
+        }
+    }
+
+    /// Both VAPID keys must be present together (`bootstrap/notifications.ts:52` CARRY, §4.1) —
+    /// a public key with no private key (or vice versa) cannot sign, so the push adapter must
+    /// stay dark rather than register half-configured.
+    pub fn vapid_ready(&self) -> bool {
+        self.vapid_public_key.is_some() && self.vapid_private_key.is_some()
+    }
+}
+
+fn non_empty(vars: &HashMap<String, String>, key: &str) -> Option<String> {
+    vars.get(key).filter(|v| !v.is_empty()).cloned()
 }
 
 #[cfg(test)]
@@ -420,5 +570,104 @@ mod tests {
                 .iter()
                 .any(|i| i.starts_with("MEDIA_UPLOAD_TOKEN_SECRET"))
         );
+    }
+
+    // ── S8 NotificationsConfig (docs/design/rebuild-jobs-s8-council/) ──
+
+    /// The exact 32-byte-decoded base64url test key `web-push`'s own doctest uses
+    /// (`VapidSignatureBuilder::from_base64_no_sub` example) — a real, valid VAPID private key
+    /// shape, not an arbitrary string.
+    const TEST_VAPID_PRIVATE_KEY: &str = "IQ9Ur0ykXoHS9gzfYX0aBjy9lvdrjx_PFUXmie9YRcY";
+
+    #[test]
+    fn notifications_config_defaults_to_fully_dark_when_unset() {
+        let vars = map(&base_db_vars());
+        let config = Config::from_map(&vars).unwrap();
+        assert_eq!(config.notifications.vapid_public_key, None);
+        assert!(config.notifications.vapid_private_key.is_none());
+        assert!(!config.notifications.vapid_ready());
+        assert_eq!(
+            config.notifications.vapid_subject, "mailto:admin@deliveryos.local",
+            "carries the bootstrap.ts registration-path default, not the workers/index.ts one \
+             (see NotificationsConfig::vapid_subject doc — the two disagree upstream)"
+        );
+        assert!(config.notifications.resend_api_key.is_none());
+        assert_eq!(config.notifications.telegram_bot_username, "dowiz_bot");
+    }
+
+    #[test]
+    fn notifications_config_vapid_ready_requires_both_keys() {
+        let mut base = base_db_vars();
+        base.push(("VAPID_PUBLIC_KEY", "some-public-key"));
+        let config = Config::from_map(&map(&base)).unwrap();
+        assert!(
+            !config.notifications.vapid_ready(),
+            "public key alone must not flip the adapter on"
+        );
+
+        let mut base = base_db_vars();
+        base.push(("VAPID_PUBLIC_KEY", "some-public-key"));
+        base.push(("VAPID_PRIVATE_KEY", TEST_VAPID_PRIVATE_KEY));
+        let config = Config::from_map(&map(&base)).unwrap();
+        assert!(config.notifications.vapid_ready());
+    }
+
+    #[test]
+    fn notifications_config_rejects_malformed_vapid_private_key() {
+        let mut base = base_db_vars();
+        base.push(("VAPID_PRIVATE_KEY", "not-valid-base64url-!!!"));
+        let err = Config::from_map(&map(&base)).unwrap_err();
+        assert!(
+            err.issues
+                .iter()
+                .any(|i| i.starts_with("VAPID_PRIVATE_KEY"))
+        );
+    }
+
+    #[test]
+    fn notifications_config_rejects_wrong_length_vapid_private_key() {
+        let mut base = base_db_vars();
+        // Valid base64url, but decodes to far fewer than the required 32 bytes.
+        base.push(("VAPID_PRIVATE_KEY", "YWJj"));
+        let err = Config::from_map(&map(&base)).unwrap_err();
+        assert!(
+            err.issues
+                .iter()
+                .any(|i| i.starts_with("VAPID_PRIVATE_KEY") && i.contains("32 bytes"))
+        );
+    }
+
+    /// REV-S8 VAPID guardrail: the private key must be structurally absent from every `Debug`
+    /// format of anything that carries it — `Secret`'s `fmt::Debug` never touches the wrapped
+    /// `String`, so this holds independent of what value is inside. Proven both on the bare
+    /// `Secret` and on the whole `Config` (the shape a `tracing::error!(?config, ...)` or a
+    /// `Debug`-derived error payload would actually print).
+    #[test]
+    fn vapid_private_key_is_absent_from_every_debug_format() {
+        let secret_value = "super-secret-vapid-scalar-value";
+        let secret = Secret::new(secret_value);
+        let rendered = format!("{secret:?}");
+        assert!(!rendered.contains(secret_value));
+        assert_eq!(rendered, "Secret(<redacted>)");
+
+        let mut base = base_db_vars();
+        base.push(("VAPID_PRIVATE_KEY", TEST_VAPID_PRIVATE_KEY));
+        base.push(("RESEND_API_KEY", "re_super_secret_key"));
+        base.push(("TELEGRAM_BOT_TOKEN", "123:AA_super_secret_bot_token"));
+        base.push(("TELEGRAM_BOT_SECRET", "webhook-secret-value"));
+        let config = Config::from_map(&map(&base)).unwrap();
+        let rendered_config = format!("{config:?}");
+        assert!(!rendered_config.contains(TEST_VAPID_PRIVATE_KEY));
+        assert!(!rendered_config.contains("re_super_secret_key"));
+        assert!(!rendered_config.contains("123:AA_super_secret_bot_token"));
+        assert!(!rendered_config.contains("webhook-secret-value"));
+    }
+
+    #[test]
+    fn notifications_config_secrets_are_absent_when_unset() {
+        let vars = map(&base_db_vars());
+        let config = Config::from_map(&vars).unwrap();
+        assert!(config.notifications.telegram_bot_token.is_none());
+        assert!(config.notifications.telegram_bot_secret.is_none());
     }
 }

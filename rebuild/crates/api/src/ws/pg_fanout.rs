@@ -254,7 +254,7 @@ impl PgFanout {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::MediaConfig;
+    use crate::config::{MediaConfig, NotificationsConfig};
 
     fn config(operational: &str, session: &str) -> Config {
         Config {
@@ -262,6 +262,7 @@ mod tests {
             database_url_operational: operational.to_string(),
             database_url_session: session.to_string(),
             media: MediaConfig::default(),
+            notifications: NotificationsConfig::default(),
         }
     }
 
