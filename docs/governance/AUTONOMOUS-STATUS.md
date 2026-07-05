@@ -263,3 +263,92 @@ operator-directed work — not scope creep by this autonomous run — but they m
 `git log --oneline -20` on a future run will not show a contiguous
 autonomous-continuation history; this file remains the authoritative source for
 backlog progress, not the raw commit log.
+
+## 2026-07-05 — item 5: HARNESS-IMPROVEMENTS.md (P1–P5 proposed diffs)
+
+**What:** Per STEP 0, re-verified backlog state directly rather than trusting only this
+file's own "Next" line: confirmed items 1–4 done (ledger row #68, `SYSTEMS-MAP.md`,
+exec-telemetry, metric-reflection all present and matching their commits), item 5
+(`docs/governance/HARNESS-IMPROVEMENTS.md`) absent, item 6 not started. Picked item 5
+next as instructed.
+
+Wrote `docs/governance/HARNESS-IMPROVEMENTS.md` — five reviewable PROPOSED diffs for
+the operator to apply by hand, since every target file is a protected zone this
+autonomous task cannot touch itself:
+- **P1** — move the local `docker build` check out of `.husky/pre-commit` (a slow,
+  disk-risky, non-blocking-on-failure duplicate of the real build) into a new
+  build-only `docker-build` step in `.github/workflows/ci.yml`'s `validate` job.
+- **P2** — split `protect-paths.sh`'s (and `guard-bash.sh`'s) flat `PROTECTED` regex
+  into a `HARD_BLOCK` tier (unchanged: migrations/infra/schema/contracts/env) and a
+  new `ALLOW_WITH_LOG` tier (bare `package.json` edits, formatter configs, test-file
+  globs) that logs to the existing `.claude/logs/harness-events.jsonl` sink instead of
+  hard-blocking.
+- **P3** — two structural exclusions (`docs/`, `e2e/`, `__tests__/`,
+  `*.test/spec/fixture.*`) ahead of `red-line-doubt-gate.sh`'s substring-only `REDLINE`
+  match, so a file merely *named* like a red-line surface (e.g. a UI-copy file named
+  `pricing-copy.ts`) doesn't get the full doubt-pass prompt when it carries none of the
+  runtime risk the gate exists for. The harder `IRREVERSIBLE` (migrations) gate is
+  untouched.
+- **P4** — a new `agent-init-warmup.sh` `SessionStart` hook (idempotent: marker +
+  `node_modules` check, `pnpm install --frozen-lockfile && pnpm -r build`, 2 retries,
+  never blocks) — this directly targets the exact same cold-container problem this
+  file's own last 4 entries in a row hand-fixed and flagged ("this fresh container
+  again had no `node_modules/dist`... worth a HARNESS-IMPROVEMENTS.md proposal"),
+  including this run, which hit it again (see Proof).
+- **P5** — flagged as a design gap, not a diff: no `research-lane` mechanism exists
+  anywhere in the repo yet (confirmed by grep across `.claude/`, `scripts/`,
+  `docs/design/harness/`, `docs/governance/`), so a token-budget diff would be
+  inventing an enforcement point with no real call site to attach it to. Scoped the
+  intended shape (a repo-local default ceiling that composes with, not duplicates,
+  the `Workflow` tool's own `budget.total`/`remaining()`) instead of writing dead code.
+
+**Proof:**
+- This is a **docs-only** change (one new file under `docs/governance/`, no code, no
+  config, no test) — per `docs/lessons/2026-06-29-docs-only-no-staging-deploy.md` the
+  staging-deploy + Playwright-validation legs of Ship Discipline are correctly skipped;
+  commit is sufficient proof for a docs-only change.
+- Every claim in the doc was verified against the live source before writing, not
+  assumed: read `.husky/pre-commit` in full (confirmed step "5/5" is the Docker build,
+  step "4/5" is Fly config validate, and the `deploy` job in `.github/workflows/ci.yml`
+  already does the authoritative `flyctl deploy --remote-only` build); read
+  `protect-paths.sh` and `guard-bash.sh`'s exact `PROTECTED` regexes (confirmed
+  `/package\.json$` is flat, no tier); read `red-line-doubt-gate.sh`'s `REDLINE`/
+  `IRREVERSIBLE` split (confirmed the exclusion proposal only narrows the *prompt*,
+  never the harder `IRREVERSIBLE` migrations gate); grepped `.claude/settings.json`
+  for `SessionStart` (absent — confirmed P4 is net-new, not a duplicate); grepped this
+  file's own history for the repeated cold-container flag (present in the item-3 and
+  item-4 entries verbatim); grepped the whole repo for `research-lane`/`token budget`
+  (only the one `SYSTEMS-MAP.md` mention — confirmed P5 has no existing call site,
+  hence design-flag not diff).
+- **This run hit the flagged cold-container problem itself, live**, giving P4 a fifth
+  real data point: the PostToolUse gate blocked the initial `Write` with a generic
+  "lint:gates failed" message because `pnpm lint:gates` couldn't even start
+  (`ERR_MODULE_NOT_FOUND: @eslint/js` — no `node_modules/`). Ran
+  `pnpm install --frozen-lockfile` (no lockfile/`package.json` touched) then
+  `pnpm -r build`, then re-ran `pnpm lint:gates` clean (0 errors, 19 pre-existing
+  fixture warnings — same count `docs/governance/AUTONOMOUS-STATUS.md`'s item-4 entry
+  recorded) before proceeding. Exactly the workaround P4 proposes automating.
+- No worktree gate for this run: the change is pure prose (a proposals document,
+  nothing that compiles or runs), so per STEP 2's docs-diff-review path (not the
+  code-in-worktree path) the verification was: re-read every quoted/paraphrased
+  source line against the live file (listed above) rather than trusting memory, plus
+  the full pre-commit hook run for real (below) as a belt-and-braces check that the
+  new file doesn't accidentally trip any content gate.
+- Full pre-commit hook passed: no staged JS/TS to lint; `guardrail-corpus-reachability`
+  clean; `guardrail-license` clean (32 envs classified); `guardrail-hook-matchers`
+  clean (6 gates cover their tool lanes); no i18n changes staged; `pnpm -r typecheck`
+  all 12 projects green; `pnpm -r build` all 12 projects green; Fly config validate
+  skipped (no `flyctl` CLI in this container); local Docker build skipped (no Docker
+  daemon socket in this container — expected, non-blocking, same as every prior run).
+- Commit `a22d290` pushed to `origin/fix/audit-remediation`.
+
+**Next:** backlog item 6 — the meta loop: from the git log of commits
+`69ad3074`/`aaa0b182`/`b536ca07`, write reflections to `docs/reflections/INBOX/`,
+curate ONE lesson to `docs/lessons/` (+ a ledger row if it red→green qualifies), per
+CLAUDE.md's self-improvement loop.
+
+**Voice FE integration note (recurring, still true):** the voice front-end
+integration remains excluded from this backlog's scope — its code exists only in
+un-pushed local sandbox worktrees (partially preserved as an inert `.tar.gz` per
+ledger row #69) and needs a local session to actually integrate, not an autonomous
+continuation run against `origin/fix/audit-remediation`.
