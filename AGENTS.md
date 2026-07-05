@@ -192,14 +192,20 @@ For STRUCTURAL questions — what calls what, where is X defined, which routes/h
 **FORGETFUL LIFECYCLE (operator directive 2026-07-05 — sessions are ephemeral, state is durable):**
 The cost of a session grows quadratically with its length (every call re-reads the whole prefix);
 the fix is architectural, not compressive. Task → generate → finish → FORGET:
+- **HARD TOKEN THRESHOLDS (operator directive 2026-07-05, universal — the anti-context-rot ratchet, in ADDITION to the budgets below):**
+  - **Lane recycle @ >80K tokens**: any subagent/lane that crosses **80K tokens** is KILLED, not continued — it returns its checkpoint distillate and the lead dispatches a FRESH lane to finish. A lane never grinds past 80K (its own prefix re-read every call = quadratic rot).
+  - **Session recycle @ 300K tokens**: when the lead session crosses **300K tokens**, SAVE EVERYTHING (h_t frame + memory + ledger + any WIP committed & **pushed to remote**) → write a SHORT session summary → run **`/clean`** → resume in a FRESH session from the durable frame. Never marathon a lead past 300K.
+  - **Always save remotely before any session end / recycle**: commit + push to the remote branch so nothing durable lives only in a local checkout or in chat scratch. Push is the save.
+  - **Always token-reduce**: every turn applies the TOKEN ROUTER (deterministic-first, skeleton/graph-first, distilled returns, batched calls, no re-reading). These thresholds are a backstop, not a licence to spend up to them.
 - **Lead sessions**: hard context budget (25% of window — `context-budget-guard.sh`); at budget →
   persist h_t frame + memory → HANDOFF block → fresh session resumes from the frame, never from
   accumulated history. Durable stores (h_t/*.json, memory, ledger, design artifacts) are the ONLY
   long-term memory; chat history is scratch.
-- **Lanes (subagents)**: step budget in every brief — default **≤25 tool calls**. At budget: STOP,
-  return a checkpoint distillate (state + done + remaining + pointers), lead re-dispatches a FRESH
-  lane from the distillate. Never grind a lane past budget (a 138-call lane re-read its own growing
-  context 138 times). Scope lanes so ~15 calls is the norm.
+- **Lanes (subagents)**: step budget in every brief — default **≤25 tool calls** (AND the 80K-token
+  recycle above, whichever trips first). At budget: STOP, return a checkpoint distillate (state +
+  done + remaining + pointers), lead re-dispatches a FRESH lane from the distillate. Never grind a
+  lane past budget (a 138-call lane re-read its own growing context 138 times). Scope lanes so ~15
+  calls is the norm.
 - **No standing context**: nothing rides in prompts "in case it's needed" — graph/architecture maps
   are QUERIED per step (codebase-memory/repowise), never embedded; tools stay deferred until used;
   reference docs live in docs/ and are read on demand.
