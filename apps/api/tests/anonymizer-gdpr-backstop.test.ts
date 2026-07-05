@@ -53,9 +53,18 @@ function makeHarness(opts: HarnessOpts) {
         statusWrites.push(statusMatch[1]);
         return { rowCount: 1, rows: [] };
       }
-      // N1 data-level backstop re-read.
-      if (/SELECT\s+anonymized_at\s+FROM\s+customers\s+WHERE\s+id\s*=\s*\$1/i.test(sql)) {
-        return { rowCount: opts.reReadAnonymizedAt ? 1 : 0, rows: opts.reReadAnonymizedAt ? [{ anonymized_at: opts.reReadAnonymizedAt }] : [] };
+      // N1 / REV-S9-3 data-level backstop re-read (now the whole subject-graph: customer +
+      // orders + ratings — matched by a stable substring since the query grew a join/subqueries).
+      // These harnesses never model orders/ratings, so orders_remaining/ratings_remaining are
+      // always 0 — preserving the exact old truth table (confirmed iff the customer itself
+      // shows anonymized).
+      if (/customer_anonymized_at/i.test(sql)) {
+        return {
+          rowCount: opts.reReadAnonymizedAt ? 1 : 0,
+          rows: opts.reReadAnonymizedAt
+            ? [{ customer_anonymized_at: opts.reReadAnonymizedAt, orders_remaining: 0, ratings_remaining: 0 }]
+            : [],
+        };
       }
       // Provenance true-tenant lookup (R2-5).
       if (/SELECT\s+location_id\s+FROM\s+customers\s+WHERE\s+id\s*=\s*\$1/i.test(sql)) {

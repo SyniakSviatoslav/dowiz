@@ -64,6 +64,10 @@ test('anonymize() customerId path WITH subject.locationId does not throw at the 
       },
       release() {},
     }),
+    // REV-S9-1 GDPR customer fan-out (resolution.md) reads the subject's orders via
+    // pool.query() directly (mirrors findExpiredCustomers/findExpiredOrders) — 0 rows here so
+    // this fail-closed harness (which never models orders) proceeds with no fan-out.
+    query: async () => ({ rowCount: 0, rows: [] }),
   };
   const service = new AnonymizerService(pool as any, { publish: async () => {} } as any);
   const result = await service.anonymize({

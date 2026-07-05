@@ -67,19 +67,43 @@ export class GdprErasureWorker {
           // N1 fail-loud backstop (resolution-r2.md §1 N1.2 / §2): NEVER write `completed` without a
           // data-level confirmation that the erasure actually took effect. Under NOBYPASSRLS+MIG-2 a
           // context-free erasure silently sees ∅ and no-ops; keying the terminal write off a re-read
-          // of `customers.anonymized_at` converts that silent false Art.17 completion into a loud
-          // `failed` + FAILED signal. (Structural post-flip *success* — the DEFINER gdpr_erase_customer
-          // — rides LC4-MIG / GATE-FLIP-E2E; this backstop makes the interim safe.) The re-read also
-          // credits the idempotent already-anonymized case (skipped, but goal-state reached → success).
+          // converts that silent false Art.17 completion into a loud `failed` + FAILED signal.
+          // (Structural post-flip *success* — the DEFINER gdpr_erase_customer — rides LC4-MIG /
+          // GATE-FLIP-E2E; this backstop makes the interim safe.) The re-read also credits the
+          // idempotent already-anonymized case (skipped, but goal-state reached → success).
+          //
+          // REV-S9-3 (S9 council, resolution.md): this gate used to re-read ONLY
+          // customers.anonymized_at — the GAP-A order fan-out (AnonymizerService.anonymize,
+          // REV-S9-1) can under-erase (a swallowed per-order failure, or — post-flip — an RLS
+          // no-op) yet the worker would still write `completed`. Extend the gate to the WHOLE
+          // subject-graph: the customer row itself, every one of the subject's orders, and every
+          // rating tied to those orders. `completed` fires ONLY when all three are erased;
+          // otherwise `failed`, never a false Art.17 completion.
+          //
+          // S9 REV-S9-3: post-flip needs an orders erasure RLS arm (migration) — under
+          // NOBYPASSRLS this re-read itself needs a context that can see orders/order_ratings
+          // cross-subject; out of scope here (see resolution.md REV-S9-2/3).
           const confirm = await client.query(
-            `SELECT anonymized_at FROM customers WHERE id = $1 AND location_id = $2`,
+            `SELECT
+               c.anonymized_at AS customer_anonymized_at,
+               (SELECT count(*)::int FROM orders o
+                 WHERE o.customer_id = c.id AND o.location_id = c.location_id AND o.anonymized_at IS NULL) AS orders_remaining,
+               (SELECT count(*)::int FROM order_ratings r
+                 JOIN orders o2 ON o2.id = r.order_id
+                 WHERE o2.customer_id = c.id AND o2.location_id = c.location_id AND r.feedback IS NOT NULL) AS ratings_remaining
+             FROM customers c
+             WHERE c.id = $1 AND c.location_id = $2`,
             [customerId, row.location_id],
           );
-          const erasureConfirmed = confirm.rows.length > 0 && confirm.rows[0].anonymized_at != null;
+          const confirmRow = confirm.rows[0];
+          const erasureConfirmed = !!confirmRow
+            && confirmRow.customer_anonymized_at != null
+            && Number(confirmRow.orders_remaining) === 0
+            && Number(confirmRow.ratings_remaining) === 0;
           if (!erasureConfirmed) {
             await client.query(
               `UPDATE gdpr_erasure_requests
-               SET status = 'failed', error_message = 'erasure produced no effect (customers.anonymized_at still null)'
+               SET status = 'failed', error_message = 'erasure incomplete (subject-graph not fully anonymized: customer/orders/ratings)'
                WHERE id = $1`,
               [row.id],
             );
@@ -93,9 +117,12 @@ export class GdprErasureWorker {
             continue;
           }
 
+          // REV-S9-5 (S9 council, resolution.md): gdpr_erasure_requests.subject_phone is
+          // plaintext and otherwise erased by NO path — the erasure record would itself become
+          // a permanent PII record. Null it in the SAME UPDATE that marks completion.
           await client.query(
             `UPDATE gdpr_erasure_requests
-             SET status = 'completed', completed_at = now(), metadata = $1
+             SET status = 'completed', completed_at = now(), metadata = $1, subject_phone = NULL
              WHERE id = $2`,
             [JSON.stringify(result), row.id],
           );

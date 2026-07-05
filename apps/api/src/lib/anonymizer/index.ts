@@ -85,6 +85,48 @@ export class AnonymizerService {
       customersAnonymized += result.anon ? 1 : 0;
       skipped += result.skipped ? 1 : 0;
       storagePurged += result.storagePurged;
+
+      // REV-S9-1 (S9 council GAP-A, docs/design/rebuild-gdpr-s9-council/resolution.md): a GDPR
+      // customer-erasure used to call ONLY anonymizeCustomer — anonymizeOrder (the #74
+      // delivery_photo_key/GPS/address purge) was UNREACHABLE from Art.17, so a subject's own
+      // orders (home address, doorway photo, precise GPS) survived their own "forget me" request
+      // indefinitely. Fan the GDPR customer-erasure out to every one of the subject's orders.
+      // Retention (scope==='retention') is deliberately excluded here: it already ages out
+      // orders on their OWN independent clock via findExpiredOrders — an explicit Art.17
+      // request must not wait for that clock.
+      //
+      // S9 REV-S9-3: post-flip needs an orders erasure RLS arm (migration) — this SELECT and
+      // the per-order anonymizeOrder() calls run under the operational (BYPASSRLS) pool today;
+      // once NOBYPASSRLS flips, `orders`/`order_ratings` need an anonymous_update arm (or the
+      // REV-S9-2 claim DEFINER) or this fan-out silently no-ops post-flip. Out of scope here.
+      if (options.scope === 'gdpr') {
+        const locationId = options.subject.locationId;
+        if (!locationId) {
+          throw new Error('[Anonymizer] gdpr customer erasure requires an explicit subject.locationId scope (fail-closed)');
+        }
+        const ordersRes = await this.pool.query(
+          `SELECT id FROM orders WHERE customer_id = $1 AND location_id = $2`,
+          [options.subject.customerId, locationId],
+        );
+        for (const orderRow of ordersRes.rows) {
+          try {
+            const orderResult = await this.anonymizeOrder(orderRow.id, {
+              ...options,
+              subject: { orderId: orderRow.id, locationId },
+            });
+            ordersAnonymized += orderResult.anon ? 1 : 0;
+            skipped += orderResult.skipped ? 1 : 0;
+            storagePurged += orderResult.storagePurged;
+          } catch (err) {
+            // Tolerated-and-reported (mirrors the avatar/photo purge semantics): one order's
+            // failure must not abort the rest of the subject's orders. The GDPR worker's
+            // completion gate (REV-S9-3) independently re-verifies every order actually
+            // reached anonymized_at before writing `completed`, so a swallowed failure here
+            // can never produce a false Art.17 completion — it surfaces as `failed` instead.
+            console.error(`[Anonymizer] Failed to anonymize order ${orderRow.id} during customer fan-out:`, err);
+          }
+        }
+      }
     }
 
     if (options.subject?.orderId) {
@@ -247,8 +289,21 @@ export class AnonymizerService {
              receiver_handle = NULL,
              receiver_messenger_kind = NULL,
              delivery_photo_key = NULL,
+             delivery_lat = NULL,
+             delivery_lng = NULL,
              anonymized_at = now()
          WHERE id = $1 AND location_id = $2`,
+        [orderId, locationId],
+      );
+
+      // GAP-B/C (S9 council GAP-B/C, resolution.md REV-S9-1): delivery_lat/delivery_lng is the
+      // subject's precise home GPS and order_ratings.feedback is free-text customer PII tied
+      // 1:1 to this order (order_ratings.order_id UNIQUE) — both were nulled by NO erasure path
+      // (delivery_lat/lng above is folded into the same UPDATE as the other order PII; ratings
+      // below run in the SAME transaction/tenant predicate — never a second, context-free
+      // connection).
+      await client.query(
+        `UPDATE order_ratings SET feedback = NULL WHERE order_id = $1 AND location_id = $2 AND feedback IS NOT NULL`,
         [orderId, locationId],
       );
 
