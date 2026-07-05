@@ -31,3 +31,14 @@ NEXT-TIME: Any gate released by a state file needs (a) an expiry in the state it
 LINK:      docs/regressions/REGRESSION-LEDGER.md #47 ; scripts/guardrail-gate-armament.mjs ;
            memory meta-loop-audit-2026-07-02
 ---
+
+**Curation note (librarian, 2026-07-05 daily pass):** Challenged fresh — the causal claim (a
+gate released by a non-expiring state file rots open because armament, not registration, is
+what needed measuring) holds under a hostile re-read: it is directly evidenced by the
+classification.log gap (last DENY 2026-06-21, then 400+ blind ALLOWs) cited in this file, not a
+coincidence of timing. This reflection was ALREADY fully promoted in a prior pass: it is the
+named source of `docs/lessons/2026-07-02-gate-state-file-expiry.md` and its guardrail is ledger
+row #47 — both verified present and green this pass (`scripts/guardrail-gate-armament.mjs`
+exists; `.claude/hooks/guard-bash.sh` is registered in `.claude/settings.json`). The only
+outstanding step was archival, which a prior librarian run evidently omitted. Completing it now
+— no new distillation needed, nothing further to promote.

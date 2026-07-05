@@ -29,7 +29,7 @@ STATUS: active
 
 # Trace a CI/deploy connection failure to its secret STORE before mutating any store
 
-Source: reflection `docs/reflections/INBOX/2026-07-03-trace-config-source-before-mutating.reflection.md`
+Source: reflection `docs/reflections/ARCHIVE/2026-07-03-trace-config-source-before-mutating.reflection.md`
 (now archived — fully promoted here + into the deterministic guardrail below).
 
 The 2026-07-03 prod-deploy saga lost real time to re-setting the *Fly* secret three times against

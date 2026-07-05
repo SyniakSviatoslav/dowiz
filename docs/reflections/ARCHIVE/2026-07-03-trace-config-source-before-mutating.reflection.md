@@ -56,6 +56,19 @@ This is already being ratcheted into a gate: `scripts/ci-connection-preflight.mj
 deterministic pre-deploy check.
 
 ## LINK
-[[merge-to-main-plan-2026-07-02]] · docs/reflections/INBOX/ci-pre-prod-verification-2026-07-03.md
+[[merge-to-main-plan-2026-07-02]] · docs/reflections/ARCHIVE/ci-pre-prod-verification-2026-07-03.md
 (the gate-side reflection; this is the method-side) · docs/design/ci-pre-prod-verification/ ·
 prod-outage-schema-drift-2026-06-20 (P3 recurrence).
+
+---
+
+**Curation note (librarian, 2026-07-05 daily pass):** Challenged fresh. The causal claim (secret
+store confusion cost real time; the deploy target was used as the diagnostic harness) is
+concrete and directly evidenced by this session's own command history — not a coincidence of
+timing. This reflection was ALREADY fully promoted in a prior pass: `docs/lessons/2026-07-03-
+secret-store-provenance-trace.md` names it as its source and its guardrail is ledger row #52,
+both verified present and green this pass (`scripts/ci-connection-preflight.mjs` exists, its
+sibling `scripts/ci-migration-preflight.mjs --self-test` passes 5/5). The prior pass's own
+lesson text said "now archived" but the move never happened — completing that omission now.
+Fixed the stale `docs/reflections/INBOX/...` self-reference in the sibling lesson to point at
+this file's actual (now correct) ARCHIVE path. Nothing further to promote.
