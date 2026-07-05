@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -36,6 +37,19 @@ const TG_STOREFRONT_ACTION = process.env.TG_STOREFRONT_ACTION === 'true';
 // single-use, so a transient failure is NOT retried by re-sending the same /start <token>
 // link — only a fresh reconnect (new token from /admin) reaches this code again.
 const TMA_ENABLED = process.env.TMA_ENABLED === 'true';
+
+/**
+ * Constant-time secret-token compare (S8 council: fail-closed 2nd layer). Returns false on any
+ * non-string / empty / length-mismatch / value-mismatch — never throws, never short-circuits by length
+ * (length is checked before timingSafeEqual, which requires equal-length buffers).
+ */
+function secretTokenMatches(received: unknown, expected: string): boolean {
+  if (typeof received !== 'string' || received.length === 0) return false;
+  const a = Buffer.from(received);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
 
 // Best-effort, timeout-bounded (the shared callTelegramApi has no request timeout —
 // B-SCALE finding: don't let this rare side-effect pin the held operational DB connection
@@ -80,22 +94,17 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
       // But we'll keep it reasonable
     }
   }, async (request, reply) => {
-    // Verify Telegram secret token from header
-    // If telegramBotSecret is configured, prefer validation.
-    // If the header is absent (backward compat with webhooks set without secret_token),
-    // log a warning but process the request — don't break existing connect flows.
+    // Verify Telegram secret token from header (defense-in-depth: the URL path already carries the
+    // bot secret, this is the second layer). Fail CLOSED on any mismatch — missing / empty / wrong
+    // length / wrong value — with a constant-time compare (S8 council; never log the received token).
     const secretToken = request.headers['x-telegram-bot-api-secret-token'];
     if (telegramBotSecret) {
-      if (secretToken && secretToken !== telegramBotSecret) {
-        request.log.warn({
-          received: secretToken,
-          expectedLength: telegramBotSecret.length
-        }, 'Invalid Telegram webhook secret token — mismatched value');
+      if (!secretTokenMatches(secretToken, telegramBotSecret)) {
+        request.log.warn(
+          { hasHeader: secretToken != null && secretToken !== '' },
+          'Telegram webhook secret token invalid or missing — rejecting'
+        );
         return reply.sendError(401, 'UNAUTHORIZED', 'Unauthorized');
-      }
-      if (!secretToken) {
-        request.log.warn({}, 'Telegram webhook secret token header missing — set secret_token on setWebhook');
-        // Process the request anyway for backward compat
       }
     }
 
