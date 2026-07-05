@@ -55,6 +55,19 @@ const EnvSchema = z.object({
   // non-blocking, per-IP rate-limited and best-effort, so capture is safe by default; this flag
   // lets ops silence a misbehaving/abused funnel sensor WITHOUT a deploy (set 'false' as a secret).
   FUNNEL_INGEST_ENABLED: z.enum(['true', 'false']).default('true'),
+  // ── Reversible cutover harness (ADR-0022, rebuild strangler) ──
+  // Internal-only Rust upstream base URL (e.g. http://dowiz-rust-staging.flycast:8080).
+  // UNSET (the default everywhere) leaves the front-door fully inert: no hook, no flag
+  // poll, no health probes — byte-identical request handling. Set as a secret per-env
+  // only when that env's Rust twin is deployed dark.
+  CUTOVER_RUST_UPSTREAM: z.string().url().optional(),
+  // Break-glass (ADR-0022 §4): forces every surface to Node WITHOUT consulting the
+  // cutover_flags store — for when the flag store itself is impaired. Runtime env, no DB.
+  CUTOVER_FORCE_ALL_NODE: z.enum(['true', 'false']).default('false'),
+  // REV-C3: flag propagation is a bounded-TTL poll (LISTEN/NOTIFY is blocked on the
+  // transaction pooler); this TTL is the REAL split-brain window per flip — keep small.
+  CUTOVER_FLAGS_TTL_MS: z.coerce.number().int().positive().default(2000),
+  CUTOVER_HEALTH_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
   // Closed-venue order gate. The audit found POST /orders accepts orders even when the storefront
   // shows "closed". When 'true', the create handler mirrors the storefront's EXACT open/closed
   // computation (apps/api/src/lib/venue-open.ts ← public/menu.ts) and refuses a closed venue with

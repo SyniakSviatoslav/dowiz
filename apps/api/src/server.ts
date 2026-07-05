@@ -23,6 +23,7 @@ import { getFastifyLoggerConfig, correlationStore } from './lib/logger.js';
 import { ApiError, isContractCode, rateLimitError, buildErrorEnvelope } from './lib/api-error.js';
 import { registerReplySendError } from './lib/reply-send-error.js';
 import { resolveSubdomainRewrite } from './lib/subdomain-rewrite.js';
+import { registerCutoverFrontDoor } from './lib/cutover/front-door.js';
 import { registerCoreRoutes } from './bootstrap/routes.js';
 import { initSentry, getSentry } from './lib/sentry.js';
 import securityHeadersPlugin from './lib/security/headers.js';
@@ -424,6 +425,21 @@ async function main() {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
     }
+  });
+
+  // Cutover front-door (ADR-0022) — reversible per-surface strangler routing to the
+  // internal-only Rust twin. Registered HERE deliberately: after the global rate-limit
+  // plugin and the 401 auth-prefix gate above (both apply before any forward — ADR-0022
+  // consequences), and after the subdomain-rewrite + correlation hooks (the matcher and
+  // Rust must see the rewritten url + server-authoritative correlation id). INERT unless
+  // CUTOVER_RUST_UPSTREAM is set (the dark default everywhere): no hook, no DB poll, no
+  // probes — byte-identical behavior. All flags seed target='node' (draft migration 089).
+  registerCutoverFrontDoor(fastify, {
+    pool,
+    rustUpstream: env.CUTOVER_RUST_UPSTREAM,
+    forceAllNode: env.CUTOVER_FORCE_ALL_NODE === 'true',
+    flagsTtlMs: env.CUTOVER_FLAGS_TTL_MS,
+    healthIntervalMs: env.CUTOVER_HEALTH_INTERVAL_MS,
   });
 
   // A2 (ADR-0010): `reply.sendError` — the return-based drop-in for ad-hoc `reply.status(n)

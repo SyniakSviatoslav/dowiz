@@ -1,0 +1,11 @@
+# Keeps the Docker build context small — the Rust workspace build only ever needs
+# Cargo.toml/Cargo.lock/rust-toolchain.toml + crates/. Everything below is either huge
+# (target/, web/node_modules) or irrelevant to the api binary (the web/ Astro/Svelte
+# frontend, spikes/, docs/README) and must never be sent to the docker daemon.
+target/
+web/
+spikes/
+**/*.rs.bk
+.git/
+.gitignore
+README.md

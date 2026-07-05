@@ -1,0 +1,63 @@
+# ============================================================================
+# OPERATOR-GATED DRAFT — protect-paths.sh blocks any in-repo file named
+# `Dockerfile`. Formal placement: cp to rebuild/Dockerfile with human approval.
+# For the operator-authorized staging-dark deploy this content is used verbatim
+# from an out-of-repo working copy (`fly deploy --dockerfile <path>`).
+# ============================================================================
+# dowiz-rust-staging — INTERNAL-ONLY Fly.io staging image for the Rust/axum rebuild API.
+#
+# Two-stage build (cargo-chef deliberately skipped — two-crate workspace, one release binary;
+# the caching win isn't worth the moving parts for a staging image). Plain COPY + cargo build
+# is the documented "acceptable for staging" path.
+#
+# rust-toolchain.toml pins channel="stable" (floating, not reproducible for Docker) — this
+# Dockerfile instead pins the builder to the workspace MSRV floor (rebuild/Cargo.toml
+# [workspace.package] rust-version = "1.85"). Bump in lockstep if the workspace MSRV is raised.
+#
+# glibc, not musl/scratch: the api crate uses runtime-tokio-rustls (sqlx) + rustls-tls (reqwest),
+# no OpenSSL — a static musl/scratch build IS possible later, but staging deliberately stays on
+# glibc + debian:bookworm-slim (not scratch) so operators get a shell (`fly ssh console`) to debug.
+
+FROM rust:1.85-bookworm AS builder
+WORKDIR /app
+
+# Workspace-aware: copy ONLY the Cargo workspace, never `COPY . .` (rebuild/ also holds web/, a
+# separate Astro/Svelte app with its own node_modules, and a 10+GB target/ — belt-and-suspenders
+# alongside .dockerignore).
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates ./crates
+
+# dev-routes is OFF by default (ADR-0003 layer 3: a binary built without it is structurally
+# incapable of minting/accepting a dev-kid token). The crate's own doc comment says staging/CI
+# builds pass --features dev-routes explicitly — followed here. Override with
+# --build-arg CARGO_FEATURES= (empty) for a prod-parity build test.
+ARG CARGO_FEATURES=dev-routes
+RUN cargo build --release --locked --bin api --features "${CARGO_FEATURES}"
+
+FROM debian:bookworm-slim AS runtime
+
+# ca-certificates: reqwest (rustls) still needs the system CA bundle for R2/Resend/VAPID/Telegram
+# outbound TLS calls.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 10001 api \
+    && useradd --uid 10001 --gid api --no-create-home --shell /usr/sbin/nologin api
+
+WORKDIR /app
+COPY --from=builder /app/target/release/api /app/api
+
+# LocalFsStorage's default write dir (main.rs build_storage, LOCAL_STORAGE_DIR default
+# "tmp/imports") — only used when STORAGE_BACKEND != "r2". Ephemeral machine-local disk is fine
+# for staging.
+RUN mkdir -p /app/tmp/imports && chown -R api:api /app
+
+USER api
+
+# Config::DEFAULT_PORT — binds 0.0.0.0:$PORT, defaults 8080 if unset. Set explicitly so this and
+# fly.toml's http_service.internal_port stay in lockstep by inspection.
+ENV PORT=8080
+EXPOSE 8080
+
+ENTRYPOINT ["/app/api"]
