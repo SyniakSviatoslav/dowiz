@@ -426,4 +426,30 @@ front-end integration remains excluded from this backlog's scope; its code exist
 local sandbox worktrees and needs a local session, not an autonomous continuation run against
 `origin/fix/audit-remediation`.
 
+## 2026-07-05 — re-verification run, no new work
+
+**What:** Per STEP 0, re-checked the ordered backlog against the live repo (not just this file)
+before picking any next step, since concurrent sessions may have touched this branch:
+- Item 1: ledger row #68 present, names commit `b536ca07`, describes both fixes (dish-nutrition
+  guard + Cyrillic-font fallback) with proof commands. `node scripts/guardrail-ledger-integrity.mjs`
+  → clean, 79 rows, max #76, no duplicates.
+- Item 2: `docs/design/harness/SYSTEMS-MAP.md` present (19238 bytes).
+- Item 3: `scripts/exec-telemetry.mjs` + `scripts/telemetry-analyze.mjs` present;
+  `loops/registry.md` carries the `telemetry-council-review` DRAFT row.
+- Item 4: `loops/metric-reflection.yaml`, `scripts/metric-reflection.mjs` +
+  `scripts/metric-reflection.test.mjs` present.
+- Item 5: `docs/governance/HARNESS-IMPROVEMENTS.md` present (17613 bytes).
+- Item 6: all three reflections (`2026-07-05-gdpr-backup-completion-was-unconditional`,
+  `2026-07-05-proof-hardening-duplicated-invariants`,
+  `2026-07-05-multi-concern-commit-orphaned-ledger-row`) plus the curated lesson
+  `docs/lessons/2026-07-05-proof-must-observe-the-effect.md` present in `docs/reflections/INBOX/`
+  and `docs/lessons/`.
+
+All 6 items confirmed done directly against files on disk — nothing to pick, nothing to commit.
+Per the operator instructions ("If ALL items are done, append 'backlog complete' ... and do
+nothing else"), this run made no code/doc changes beyond this status entry.
+
+**Voice FE integration note (recurring, still true):** unchanged — excluded from this backlog's
+scope; needs a local session, not an autonomous continuation run.
+
 backlog complete
