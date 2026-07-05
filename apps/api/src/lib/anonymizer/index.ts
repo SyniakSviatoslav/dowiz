@@ -1,0 +1,413 @@
+// @ts-nocheck
+import type { Pool, PoolClient } from 'pg';
+import type { MessageBus } from '@deliveryos/platform';
+import type { StorageProvider } from '../../ports.js';
+import { BUS_CHANNELS } from '../registry.js';
+
+export type AnonymizationScope = 'retention' | 'gdpr';
+export type ActorKind = 'system' | 'owner' | 'customer';
+export type SubjectKind = 'customer' | 'order';
+
+export interface AnonymizeOptions {
+  scope: AnonymizationScope;
+  subject?: {
+    customerId?: string;
+    orderId?: string;
+    locationId?: string;
+  };
+  batchSize?: number;
+  dryRun?: boolean;
+  actorId?: string;
+  /** Provenance (B6/STOP-1): the caller-verified tenant driving this call, when known. */
+  actorLocationId?: string;
+  /** Provenance: e.g. the gdpr_erasure_requests.id that triggered this call, when known. */
+  requestId?: string;
+}
+
+export interface AnonymizeResult {
+  customersAnonymized: number;
+  ordersAnonymized: number;
+  storagePurged: number;
+  r2Marked: number;
+  skipped: number;
+  durationMs: number;
+  dryRun: boolean;
+}
+
+interface AnonymizeSubResult {
+  anon: boolean;
+  skipped: boolean;
+  storagePurged: number;
+}
+
+export class AnonymizerService {
+  constructor(
+    private pool: Pool,
+    private messageBus: MessageBus,
+    private storage?: StorageProvider,
+  ) {}
+
+  async anonymize(options: AnonymizeOptions): Promise<AnonymizeResult> {
+    const start = Date.now();
+    const batchSize = options.batchSize || 100;
+    let customersAnonymized = 0;
+    let ordersAnonymized = 0;
+    let storagePurged = 0;
+    let r2Marked = 0;
+    let skipped = 0;
+
+    if (options.dryRun) {
+      // Dead in production (zero callers pass dryRun:true — B7) but scoped for uniformity: the
+      // fail-closed contract (missing scope => throw) applies uniformly to every by-id path.
+      const dryRunLocationId = options.subject?.locationId;
+      if (!dryRunLocationId) {
+        throw new Error('[Anonymizer] dry-run requires an explicit subject.locationId scope (fail-closed)');
+      }
+      if (options.subject?.customerId) {
+        const res = await this.pool.query(
+          `SELECT anonymized_at IS NOT NULL AS done FROM customers WHERE id = $1 AND location_id = $2`,
+          [options.subject.customerId, dryRunLocationId],
+        );
+        if (res.rows.length > 0 && !res.rows[0].done) customersAnonymized = 1;
+      }
+      if (options.subject?.orderId) {
+        const res = await this.pool.query(
+          `SELECT anonymized_at IS NOT NULL AS done FROM orders WHERE id = $1 AND location_id = $2`,
+          [options.subject.orderId, dryRunLocationId],
+        );
+        if (res.rows.length > 0 && !res.rows[0].done) ordersAnonymized = 1;
+      }
+      return { customersAnonymized, ordersAnonymized, storagePurged, r2Marked, skipped, durationMs: Date.now() - start, dryRun: true };
+    }
+
+    if (options.subject?.customerId) {
+      const result = await this.anonymizeCustomer(options.subject.customerId, options);
+      customersAnonymized += result.anon ? 1 : 0;
+      skipped += result.skipped ? 1 : 0;
+      storagePurged += result.storagePurged;
+
+      // REV-S9-1 (S9 council GAP-A, docs/design/rebuild-gdpr-s9-council/resolution.md): a GDPR
+      // customer-erasure used to call ONLY anonymizeCustomer — anonymizeOrder (the #74
+      // delivery_photo_key/GPS/address purge) was UNREACHABLE from Art.17, so a subject's own
+      // orders (home address, doorway photo, precise GPS) survived their own "forget me" request
+      // indefinitely. Fan the GDPR customer-erasure out to every one of the subject's orders.
+      // Retention (scope==='retention') is deliberately excluded here: it already ages out
+      // orders on their OWN independent clock via findExpiredOrders — an explicit Art.17
+      // request must not wait for that clock.
+      //
+      // S9 REV-S9-3: post-flip needs an orders erasure RLS arm (migration) — this SELECT and
+      // the per-order anonymizeOrder() calls run under the operational (BYPASSRLS) pool today;
+      // once NOBYPASSRLS flips, `orders`/`order_ratings` need an anonymous_update arm (or the
+      // REV-S9-2 claim DEFINER) or this fan-out silently no-ops post-flip. Out of scope here.
+      if (options.scope === 'gdpr') {
+        const locationId = options.subject.locationId;
+        if (!locationId) {
+          throw new Error('[Anonymizer] gdpr customer erasure requires an explicit subject.locationId scope (fail-closed)');
+        }
+        const ordersRes = await this.pool.query(
+          `SELECT id FROM orders WHERE customer_id = $1 AND location_id = $2`,
+          [options.subject.customerId, locationId],
+        );
+        for (const orderRow of ordersRes.rows) {
+          try {
+            const orderResult = await this.anonymizeOrder(orderRow.id, {
+              ...options,
+              subject: { orderId: orderRow.id, locationId },
+            });
+            ordersAnonymized += orderResult.anon ? 1 : 0;
+            skipped += orderResult.skipped ? 1 : 0;
+            storagePurged += orderResult.storagePurged;
+          } catch (err) {
+            // Tolerated-and-reported (mirrors the avatar/photo purge semantics): one order's
+            // failure must not abort the rest of the subject's orders. The GDPR worker's
+            // completion gate (REV-S9-3) independently re-verifies every order actually
+            // reached anonymized_at before writing `completed`, so a swallowed failure here
+            // can never produce a false Art.17 completion — it surfaces as `failed` instead.
+            console.error(`[Anonymizer] Failed to anonymize order ${orderRow.id} during customer fan-out:`, err);
+          }
+        }
+      }
+    }
+
+    if (options.subject?.orderId) {
+      const result = await this.anonymizeOrder(options.subject.orderId, options);
+      ordersAnonymized += result.anon ? 1 : 0;
+      skipped += result.skipped ? 1 : 0;
+      storagePurged += result.storagePurged;
+    }
+
+    if (!options.subject && options.scope === 'retention') {
+      const customers = await this.findExpiredCustomers(options.subject?.locationId, batchSize);
+      for (const c of customers) {
+        const result = await this.anonymizeCustomer(c.id, { ...options, subject: { customerId: c.id, locationId: c.location_id } });
+        if (result.anon) customersAnonymized++;
+        else skipped++;
+        storagePurged += result.storagePurged;
+      }
+
+      const orders = await this.findExpiredOrders(options.subject?.locationId, batchSize);
+      for (const o of orders) {
+        const result = await this.anonymizeOrder(o.id, { ...options, subject: { orderId: o.id, locationId: o.location_id } });
+        if (result.anon) ordersAnonymized++;
+        else skipped++;
+        storagePurged += result.storagePurged;
+      }
+    }
+
+    return {
+      customersAnonymized,
+      ordersAnonymized,
+      storagePurged,
+      r2Marked,
+      skipped,
+      durationMs: Date.now() - start,
+      dryRun: false,
+    };
+  }
+
+  private async anonymizeCustomer(customerId: string, options: AnonymizeOptions): Promise<AnonymizeSubResult> {
+    // Fail-closed (B6): the tenant scope is REQUIRED, never self-derived from the row being
+    // mutated — a caller that omits it gets a throw, not a silent same-row "self-proof."
+    const locationId = options.subject?.locationId;
+    if (!locationId) {
+      throw new Error('[Anonymizer] anonymizeCustomer requires an explicit subject.locationId scope (fail-closed)');
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const lockRes = await client.query(
+        `SELECT anonymized_at, location_id FROM customers WHERE id = $1 AND location_id = $2 FOR UPDATE`,
+        [customerId, locationId],
+      );
+      if (lockRes.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return { anon: false, skipped: true, storagePurged: 0 };
+      }
+      const row = lockRes.rows[0];
+      if (row.anonymized_at) {
+        await client.query('ROLLBACK');
+        return { anon: false, skipped: true, storagePurged: 0 };
+      }
+
+      await client.query(
+        `UPDATE customers
+         SET phone = 'anon_' || gen_random_uuid()::text,
+             name = NULL,
+             marketing_opt_in = false,
+             anonymized_at = now()
+         WHERE id = $1 AND location_id = $2`,
+        [customerId, locationId],
+      );
+
+      let storagePurged = 0;
+      if (this.storage) {
+        const hasAvatarKey = await this.columnExists(client, 'customers', 'avatar_key');
+        if (hasAvatarKey) {
+          const avatarRes = await client.query(
+            `SELECT avatar_key FROM customers WHERE id = $1 AND location_id = $2`,
+            [customerId, locationId],
+          );
+          const avatarKey = avatarRes.rows[0]?.avatar_key;
+          if (avatarKey) {
+            try {
+              await this.storage.delete(avatarKey);
+              storagePurged = 1;
+            } catch (err) {
+              console.error('[Anonymizer] Failed to purge storage:', err);
+            }
+          }
+        }
+      }
+
+      // Audit location_id stamps the SUBJECT'S TRUE tenant — read back from the row itself
+      // (proven == locationId by the predicate above, never trusted blind). actor_location_id/
+      // subject_location_id/request_id give actor-vs-subject provenance (STOP-1 forensic trail).
+      await this.insertAuditLog(client, {
+        scope: options.scope,
+        subjectKind: 'customer',
+        subjectId: customerId,
+        locationId: row.location_id,
+        actorKind: options.actorId ? 'owner' : 'system',
+        actorId: options.actorId || null,
+        metadata: {
+          counts: { customersAnonymized: 1, ordersAnonymized: 0 },
+          actor_location_id: options.actorLocationId ?? null,
+          subject_location_id: row.location_id,
+          request_id: options.requestId ?? null,
+        },
+      });
+
+      await client.query('COMMIT');
+
+      await this.messageBus.publish(BUS_CHANNELS.CUSTOMER_ANONYMIZED, {
+        customerId,
+        locationId,
+        scope: options.scope,
+        timestamp: new Date().toISOString(),
+      });
+
+      return { anon: true, skipped: false, storagePurged };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  private async anonymizeOrder(orderId: string, options: AnonymizeOptions): Promise<AnonymizeSubResult> {
+    // Fail-closed (B6): required, never self-derived from the row (see anonymizeCustomer).
+    const locationId = options.subject?.locationId;
+    if (!locationId) {
+      throw new Error('[Anonymizer] anonymizeOrder requires an explicit subject.locationId scope (fail-closed)');
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const lockRes = await client.query(
+        `SELECT anonymized_at, location_id, delivery_photo_key FROM orders WHERE id = $1 AND location_id = $2 FOR UPDATE`,
+        [orderId, locationId],
+      );
+      if (lockRes.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return { anon: false, skipped: true, storagePurged: 0 };
+      }
+      const row = lockRes.rows[0];
+      if (row.anonymized_at) {
+        await client.query('ROLLBACK');
+        return { anon: false, skipped: true, storagePurged: 0 };
+      }
+      const deliveryPhotoKey = row.delivery_photo_key;
+
+      await client.query(
+        `UPDATE orders
+         SET client_ip_hash = NULL,
+             delivery_address = NULL,
+             delivery_instructions = NULL,
+             customer_messenger_handle = NULL,
+             receiver_name = NULL,
+             receiver_handle = NULL,
+             receiver_messenger_kind = NULL,
+             delivery_photo_key = NULL,
+             delivery_lat = NULL,
+             delivery_lng = NULL,
+             anonymized_at = now()
+         WHERE id = $1 AND location_id = $2`,
+        [orderId, locationId],
+      );
+
+      // GAP-B/C (S9 council GAP-B/C, resolution.md REV-S9-1): delivery_lat/delivery_lng is the
+      // subject's precise home GPS and order_ratings.feedback is free-text customer PII tied
+      // 1:1 to this order (order_ratings.order_id UNIQUE) — both were nulled by NO erasure path
+      // (delivery_lat/lng above is folded into the same UPDATE as the other order PII; ratings
+      // below run in the SAME transaction/tenant predicate — never a second, context-free
+      // connection).
+      await client.query(
+        `UPDATE order_ratings SET feedback = NULL WHERE order_id = $1 AND location_id = $2 AND feedback IS NOT NULL`,
+        [orderId, locationId],
+      );
+
+      // Doorway/entry-photo purge (S4 council REV-S4-7): the delivery photo is customer PII —
+      // leaving the R2 object behind after erasure would survive its own order's GDPR erasure,
+      // public-by-key, indefinitely. Mirrors the avatar_key purge in anonymizeCustomer EXACTLY:
+      // tolerated-and-reported (catch + log), never rethrown, never rolls back the anonymization.
+      let storagePurged = 0;
+      if (this.storage && deliveryPhotoKey) {
+        try {
+          await this.storage.delete(deliveryPhotoKey);
+          storagePurged = 1;
+        } catch (err) {
+          console.error('[Anonymizer] Failed to purge storage:', err);
+        }
+      }
+
+      // Audit location_id stamps the SUBJECT'S TRUE tenant (see anonymizeCustomer).
+      await this.insertAuditLog(client, {
+        scope: options.scope,
+        subjectKind: 'order',
+        subjectId: orderId,
+        locationId: row.location_id,
+        actorKind: options.actorId ? 'owner' : 'system',
+        actorId: options.actorId || null,
+        metadata: {
+          counts: { customersAnonymized: 0, ordersAnonymized: 1 },
+          actor_location_id: options.actorLocationId ?? null,
+          subject_location_id: row.location_id,
+          request_id: options.requestId ?? null,
+        },
+      });
+
+      await client.query('COMMIT');
+
+      await this.messageBus.publish(BUS_CHANNELS.ORDER_ANONYMIZED, {
+        orderId,
+        locationId,
+        scope: options.scope,
+        timestamp: new Date().toISOString(),
+      });
+
+      return { anon: true, skipped: false, storagePurged };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  private async findExpiredCustomers(locationId: string | undefined, limit: number): Promise<Array<{ id: string; location_id: string }>> {
+    const res = await this.pool.query(
+      `SELECT c.id, c.location_id FROM customers c
+       WHERE c.anonymized_at IS NULL
+         AND c.created_at < now() - (SELECT retention_days FROM locations WHERE id = c.location_id) * interval '1 day'
+         AND ($1::uuid IS NULL OR c.location_id = $1)
+       ORDER BY c.created_at ASC
+       LIMIT $2`,
+      [locationId || null, limit],
+    );
+    return res.rows;
+  }
+
+  private async findExpiredOrders(locationId: string | undefined, limit: number): Promise<Array<{ id: string; location_id: string }>> {
+    const res = await this.pool.query(
+      `SELECT o.id, o.location_id FROM orders o
+       WHERE o.anonymized_at IS NULL
+         AND o.created_at < now() - (SELECT retention_days FROM locations WHERE id = o.location_id) * interval '1 day'
+         AND ($1::uuid IS NULL OR o.location_id = $1)
+       ORDER BY o.created_at ASC
+       LIMIT $2`,
+      [locationId || null, limit],
+    );
+    return res.rows;
+  }
+
+  private async insertAuditLog(
+    client: PoolClient,
+    params: {
+      scope: AnonymizationScope;
+      subjectKind: SubjectKind;
+      subjectId: string;
+      locationId: string;
+      actorKind: ActorKind;
+      actorId: string | null;
+      metadata: Record<string, unknown>;
+    },
+  ): Promise<void> {
+    await client.query(
+      `INSERT INTO anonymization_audit_log (scope, subject_kind, subject_id, location_id, actor_kind, actor_id, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [params.scope, params.subjectKind, params.subjectId, params.locationId, params.actorKind, params.actorId, JSON.stringify(params.metadata)],
+    );
+  }
+
+  private async columnExists(client: PoolClient, table: string, column: string): Promise<boolean> {
+    const res = await client.query(
+      `SELECT TRUE FROM pg_attribute
+       WHERE attrelid = $1::regclass
+         AND attname = $2
+         AND NOT attisdropped`,
+      [table, column],
+    );
+    return res.rowCount !== null && res.rowCount > 0;
+  }
+}

@@ -1,0 +1,8 @@
+# rebuild/ is a Cargo workspace; only the build output is ignored — Cargo.lock is committed
+# (this workspace ships binaries, so a reproducible lockfile is the desired default).
+target/
+**/*.rs.bk
+# proptest persists failing-case seeds next to the test binary; these are byproducts of a failed
+# run (incl. transient red→green proofs), not source. Ignore them so they can't be staged by accident.
+**/*.proptest-regressions
+**/proptest-regressions/

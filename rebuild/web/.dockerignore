@@ -1,0 +1,4 @@
+# Keep the fly remote-build context upload small — the image build reinstalls/rebuilds these.
+node_modules
+dist
+server.log

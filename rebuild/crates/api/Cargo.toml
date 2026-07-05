@@ -1,0 +1,160 @@
+[package]
+name = "api"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "api"
+path = "src/main.rs"
+
+[dependencies]
+domain = { path = "../domain" }
+
+# "multipart" added for the S4 media port: product-image/theme-logo/entry-photo all accept
+# `multipart/form-data` uploads (Node's `@fastify/multipart` equivalent) — pulls in `multer`,
+# axum's own official multipart extractor, not a third-party pick.
+# "ws" added for the S6 realtime port (docs/design/rebuild-realtime-s6-council/): the
+# `WebSocketUpgrade` extractor + frame types — pulls in `tokio-tungstenite`/`sha1` (already
+# resolved transitively via sqlx-postgres's SCRAM auth) + `base64` (already a direct dependency
+# below). `query` (the `?token=` dual-accept transport, Q1) is already a default axum feature.
+axum = { version = "0.8", features = ["json", "multipart", "ws"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "fs"] }
+tower = { version = "0.5", features = ["timeout", "util"] }
+tower-http = { version = "0.6", features = ["trace", "request-id", "util"] }
+
+# runtime-tokio + rustls (not native-tls) so the eventual musl/scratch static build (rebuild/Dockerfile)
+# never needs to link OpenSSL — see REBUILD-MAP inventory/13 §Dockerfile.
+# "json" added for the S1 port: read_public_menu/read_preview_menu return jsonb, decoded via
+# serde_json::Value (sqlx's json feature wires that decode) — see crates/api/src/repo.rs.
+# "macros" added ONLY for `#[derive(sqlx::FromRow)]` (crates/api/src/repo.rs::LocationInfoRow —
+# the `/info` query has 24 columns, past the tuple-FromRow impl's arity ceiling). This is
+# DISTINCT from the `query!`/`query_as!` compile-time-checked macros the build brief says not to
+# use (those need a reachable DATABASE_URL + `.sqlx/` cache at compile time; `#[derive(FromRow)]`
+# does not touch a database at all, it only generates a row-decoding impl).
+sqlx = { version = "0.8", default-features = false, features = [
+  "runtime-tokio-rustls",
+  "postgres",
+  "uuid",
+  "chrono",
+  "json",
+  "macros",
+] }
+
+# "raw_value" — the S6 realtime-WS opaque passthrough (REV-S6-3): re-serializing a NOTIFY payload
+# through `serde_json::Value` reorders object keys (its map is a sorted BTreeMap by default), which
+# IS the exact "reorders keys" drift REV-S6-3 forbids — a byte-for-byte golden-frame test caught
+# this live during the build. `RawValue` carries the original bytes through untouched instead.
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Object-safe async trait methods for the S1 port's DB-repo and storage abstractions
+# (`Arc<dyn PublicRepo>`/`Arc<dyn Storage>` in AppState) — native async-fn-in-trait is not yet
+# dyn-compatible on stable, so this well-established crate is the standard workaround (not a
+# speculative addition: every S1 handler needs it for the cfg(test)-stub swap the build brief
+# requires).
+async-trait = "0.1"
+
+# "uuid" feature: utoipa::ToSchema for uuid::Uuid (params/schemas referencing product/order ids).
+utoipa = { version = "5", features = ["axum_extras", "uuid"] }
+
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# ── S2 auth port additions ──
+# RS256 sign/verify + kid-header handling (jwt.ts port) — "use_pem" so RSA keys load from the
+# same `\n`-escaped PEM strings the Node env carries (JWT_PRIVATE_KEY etc.).
+jsonwebtoken = { version = "9", default-features = false, features = ["use_pem"] }
+# Owner/courier password verify (argon2id) — the Rust `argon2` crate reads/writes the same PHC
+# string format (`$argon2id$...`) Node's `argon2` lib produces, so existing hashes verify as-is.
+argon2 = "0.5"
+# sha256 hashing for refresh-token/opaque-code lookups (auth_refresh_tokens.token_hash,
+# customer_track_grants.token_hash, courier invite code_hash) — hex-string digests, never raw
+# bytes, matching Node's `crypto.createHash('sha256').update(x).digest('hex')`.
+sha2 = "0.10"
+hex = "0.4"
+# Opaque token/code generation (64-hex refresh tokens, OAuth handoff codes) — CSPRNG bytes,
+# matching Node's `crypto.randomBytes(32).toString('hex')`.
+rand = "0.8"
+# Courier PII-at-rest encryption (threat-model asset A7) — AES-256-GCM, layout [IV(12)][ct][tag(16)],
+# byte-compatible with the Node `pii-cipher.ts` format so encrypted columns are cross-stack-readable.
+aes-gcm = "0.10"
+base64 = "0.22"
+
+# ── S1 follow-up #2: R2 object-storage backend (crates/api/src/storage.rs::R2Storage) ──
+# "rustls-tls" (not the default "default-tls", which pulls native-tls/OpenSSL) keeps this on the SAME
+# ring-backed rustls stack sqlx already uses — no native build tool needed. Deliberately NOT
+# aws-sdk-s3/object_store (both pull aws-lc-rs, which needs `cmake`, unavailable in this sandbox) —
+# see R2Storage's module doc for the full rationale.
+# "json" (S8 addition): the Resend email adapter (`jobs::channels::email`) and the VAPID push
+# adapter both POST a JSON body; `serde_json` is already a direct dependency, this feature just
+# wires reqwest's `.json()` builder method to it (no new crate).
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+# SigV4 request signing ONLY (no HTTP client, no AWS SDK) — pairs with reqwest above for R2Storage's
+# GetObject call. Built on ring/hmac/sha2, all already resolved transitively via sqlx-postgres's
+# SCRAM auth, so this + reqwest add 24 new crates total vs. ~70+ for aws-sdk-s3.
+aws-sign-v4 = "0.3"
+
+# ── S4 media port additions ──
+# Council-sanctioned image stack (docs/design/rebuild-media-s4-council/resolution.md Q3, decided
+# by spike evidence `rebuild/spikes/image-stack/`): pure-Rust decode/resize, `cc`-only build (no
+# `cmake` anywhere in the graph — `libvips` was rejected for exactly that link-time system-dep
+# trap). "jpeg"/"png" cover the real input classes (spike's `load_from_memory_with_format` path
+# was PNG-only, a breaker H2 gap this port closes). "webp" feature is the container/basic decode
+# path used by `ImageReader` for the rare webp-in re-upload case; the actual q78-82 LOSSY ENCODE
+# goes through the `webp` crate below (`image`'s own WebP encoder is lossless-only, spike-confirmed).
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+# Lossy WebP encode (libwebp-sys, `cc`-only — no cmake/system lib). REQUIRED because `image`'s
+# native WebP encoder has no quality knob (see above).
+webp = "0.3"
+# Upload-token HMAC-SHA256 (REV-S4-2 token-proxy-PUT design) — already resolved transitively
+# (`sha2`'s own dependency graph / `aws-sign-v4`), promoted to a direct dependency here since the
+# media upload-token module calls it directly rather than through another crate's re-export.
+hmac = "0.12"
+
+# ── S8 jobs/notifications port additions (docs/design/rebuild-jobs-s8-council/) ──
+# VAPID signing (`VapidSignatureBuilder`) + RFC 8291 http-ece payload encryption for web-push
+# (Q3 🔴). `default-features = false` drops the crate's bundled HTTP client (isahc, default
+# feature) and its hyper/hyper-tls alternative — this crate is used ONLY to build the signed,
+# encrypted push request (headers + body); the actual POST goes through the `reqwest` client
+# already a direct dependency above (`storage.rs::R2Storage`), so no second HTTP-client stack
+# enters the graph. `hkdf`/`subtle` (the http-ece HKDF derivation + constant-time bits) are
+# already fully resolved transitively (sqlx-postgres's SCRAM auth), so this is a small, focused
+# add — not a new HTTP client, not a new TLS stack.
+web-push = { version = "0.11", default-features = false }
+# Quiet-hours evaluation against `locations.timezone` (§4.1) — the ONLY tz-aware evaluation
+# anywhere in the S8 surface; every cron/job timestamp otherwise stays UTC (Q-UTC-CRON). Kept to
+# the `std` feature only (no `serde`/`arbitrary`/build-script variants) — this crate is used for
+# exactly one lookup (IANA name -> `Tz` -> local hour), not a general timezone-serde surface.
+chrono-tz = { version = "0.10", default-features = false, features = ["std"] }
+# Constant-time comparison for the Telegram webhook secret-token check (REV-S8-2 🔴 fail-closed
+# fix — the FIX-IN-PORT of a live fail-open gap). Already fully resolved transitively (pulled in
+# by `web-push`'s http-ece implementation), promoted to a direct dependency since
+# `routes::telegram_webhook` calls it directly rather than through another crate's re-export —
+# same rationale as `hmac` above.
+subtle = { version = "2", default-features = false }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+# Test-only throwaway RSA-2048 keypair generation (test_support.rs) — replaces committed
+# test_keys/*.pem so no key material enters the tree. Zero new crates: sqlx-mysql already
+# depends on rsa 0.9.10 (fully resolved in Cargo.lock).
+rsa = { version = "0.9", default-features = false, features = ["std", "pem"] }
+
+[features]
+default = []
+# Compiles the dev-auth mint surface (/dev/mock-auth + /api/dev/mock-auth, dev-kid signing/
+# verification) INTO the binary. Deliberately NOT a default feature — ADR-0003 layer 3
+# (dev-kid segregation): a release binary built without this feature is structurally
+# incapable of accepting or minting a dev-kid token, independent of any env var (the runtime
+# ALLOW_DEV_LOGIN/DEV_AUTH_SECRET gate is belt-and-suspenders on TOP of this, not instead of
+# it). Staging/CI builds pass `--features dev-routes` explicitly.
+dev-routes = []

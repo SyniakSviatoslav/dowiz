@@ -1,0 +1,13 @@
+# SOPS + age — local-dev secret management (see secrets/README.md).
+# Encrypts the VALUES in secrets/*.enc.env with age; keys stay readable so diffs are reviewable.
+# Prod/staging runtime still reads from Fly Secrets — this is the local-dev source + an optional
+# `flyctl secrets import` upstream. No external vendor → no new subprocessor (internal-classed).
+#
+# `age:` is the comma-separated list of RECIPIENT public keys (age1…) allowed to decrypt. Add each
+# dev's public key here, then a holder re-encrypts: `sops updatekeys secrets/<env>.enc.env`.
+creation_rules:
+  - path_regex: secrets/.*\.enc\.env$
+    # TODO(operator): replace with real recipient public keys (age1…), comma-separated.
+    # Generate yours: `age-keygen -o ~/.config/sops/age/keys.txt` → the "# public key:" line.
+    age: >-
+      age1REPLACE_WITH_FIRST_DEV_PUBLIC_KEY

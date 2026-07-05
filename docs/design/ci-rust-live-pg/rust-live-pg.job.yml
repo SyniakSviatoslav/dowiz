@@ -1,0 +1,105 @@
+# ============================================================================
+# OPERATOR-GATED DRAFT — place this job into .github/workflows/ci.yml under `jobs:`
+# (.github/** is a red-line protect-path; an agent cannot write it). See OPERATOR-APPLY.md.
+# ============================================================================
+#
+# WHY THIS EXISTS (the one ratchet for the whole cutover bug class):
+# Every SQL defect found during the Rust staging cutover (2026-07-05) was the SAME family —
+# it PASSES as a psql literal / text render but FAILS as a sqlx bind or decode:
+#   • numeric -> f64        (tax_rate, google_rating)            -> /info + order-create 500
+#   • int4    -> i64        (money columns, gdpr count)          -> 503 / stranded erasure
+#   • text    -> enum BIND  (orders.type, order_status_history,  -> order-create + status
+#                            product_media.kind)                    + media-confirm 500
+#   • enum    -> String DEC (o.type, o.payment_method)           -> owner-transition +
+#                                                                    courier-deliver 500
+# The rebuild's DB-touching tests are all `#[ignore]` (need a live Postgres) and NOTHING in
+# CI runs them, so the entire class shipped and was only caught one redeploy at a time on
+# staging. This job runs them against a real Postgres 16 with the real schema — turning the
+# whole class into a build-time failure. It reuses fresh-provision's exact PG+roles+migrations
+# setup (see ci.yml:57-131), so the schema is production-shaped, not a hand-rolled subset.
+
+  rust-live-pg:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # Pin to the workspace MSRV floor (rebuild/Cargo.toml [workspace.package] rust-version).
+          toolchain: '1.85'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install postgres client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      # Same roles fresh-provision uses (bare PG, no Supabase roles). dowiz_app is BYPASSRLS —
+      # the ignored tests' `queue_claim_sees_the_seeded_row_under_bypassrls_today` etc. expect
+      # exactly this (RLS FORCE + NOBYPASSRLS is the B3-flip probe, not the default CI role).
+      - name: Create migrator + app roles
+        env: { PGPASSWORD: postgres }
+        run: |
+          psql "postgresql://postgres@127.0.0.1:5432/postgres" -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE dowiz_migrator LOGIN SUPERUSER PASSWORD 'migrator_pw';" \
+            -c "CREATE ROLE dowiz_app LOGIN BYPASSRLS PASSWORD 'app_pw';"
+
+      # Apply the full migration chain (the same one fresh-provision proves) so the Rust tests
+      # run against the production schema — every enum type, every NOT NULL, every DEFINER fn.
+      - name: Apply schema (node-pg-migrate chain)
+        env:
+          DATABASE_URL_MIGRATIONS: postgresql://dowiz_migrator:migrator_pw@127.0.0.1:5432/postgres
+        run: pnpm --filter @deliveryos/db migrate:up
+
+      # Apply ONLY the DEFINER fns the ignored arms CALL positively: 088 (gdpr_erase_customer),
+      # and — placed by the same 088-adjacent flow — gdpr_claim_erasure_batch + platform_fallback_health.
+      # DELIBERATELY NOT 086/087: the refund-reconciler arm asserts it "degrades gracefully while the
+      # function is UNAPPLIED", so applying app_reconcile_refund_due here would make that arm RED
+      # (ratchet-refinement, live-PG batch run 2026-07-05). If a future arm needs 086/087 applied,
+      # split it into its own step AFTER the degrades-arm, or gate it behind a test filter — never
+      # apply-then-hope. The fns are idempotent CREATE OR REPLACE.
+      - name: Apply the test-called DEFINER drafts (NOT 086/087)
+        env: { PGPASSWORD: migrator_pw }
+        run: |
+          node scripts/rebuild-cutover/apply-migration-draft.mjs \
+            docs/design/audit-fix-rls-reliability/migration-drafts/1790000000088_*.ts \
+            "postgresql://dowiz_migrator:migrator_pw@127.0.0.1:5432/postgres"
+          # gdpr_claim_erasure_batch + platform_fallback_health ship in the cutover DEFINER draft
+          # dir (docs/design/rebuild-cutover-harness/definer-drafts/ once operator-placed); apply
+          # each the same way. Until then the S9-claim / S10-fallback arms stay in the skip list below.
+
+      # Seed the canonical fixture the create/erasure probes need: a published location + one product.
+      # (The anonymous-create probe currently uses Uuid::new_v4() and FK-fails before RLS — a test
+      # defect to fix; until then this seed + that fix let the probe actually exercise admission.)
+      - name: Seed canonical test location
+        env: { PGPASSWORD: migrator_pw }
+        run: |
+          psql "postgresql://dowiz_migrator:migrator_pw@127.0.0.1:5432/postgres" -v ON_ERROR_STOP=1 \
+            -c "INSERT INTO locations (id, slug, name, currency_code, currency_minor_unit, default_locale, published_at) VALUES ('00000000-0000-4000-8000-00000000ceed','ci-seed','CI Seed','ALL',0,'sq',now()) ON CONFLICT (id) DO NOTHING;"
+
+      - name: Rust live-PG suite (the bind/decode class gate)
+        working-directory: rebuild
+        env:
+          DATABASE_URL_OPERATIONAL: postgresql://dowiz_app:app_pw@127.0.0.1:5432/postgres
+          DATABASE_URL_SESSION: postgresql://dowiz_app:app_pw@127.0.0.1:5432/postgres
+        run: |
+          # --include-ignored runs the #[ignore] live-PG tests. Fixture-dependent arms that need a
+          # seeded location/order are pre-seeded by the step above OR filtered here explicitly (keep
+          # the filter list SHORT and reviewed — a silent skip is how this class hid the first time).
+          cargo test --features dev-routes -- --include-ignored \
+            --skip channels:: --skip bridge:: --skip r2_storage

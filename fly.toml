@@ -1,0 +1,44 @@
+app = "dowiz"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Run pending DB migrations in a one-off machine BEFORE new code receives traffic, on
+# EVERY deploy (CI push-to-main or manual flyctl deploy). The bundled migrator
+# (dist/migrate, built by scripts/build-apps.ts) applies 001..head; node-pg-migrate
+# skips already-applied ones. This closes the schema-drift gap that caused a prod
+# outage (image shipped ahead of the DB). If it fails, Fly aborts the rollout (fail-safe:
+# old code keeps serving) instead of crash-looping new code against an old schema.
+# Requires the DATABASE_URL_MIGRATIONS secret on the app.
+[deploy]
+  release_command = "dist/migrate/index.cjs"
+
+[processes]
+  web    = "dist/api/server.cjs"
+  worker = "dist/worker/index.cjs"
+
+[http_service]
+  processes = ["web"]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+
+[[http_service.checks]]
+  # Liveness only — keep this cheap. /health runs ~11 DB queries + external
+  # Telegram/R2 calls and can exceed the timeout under load, which would restart
+  # the machine and drop every live WebSocket. /health stays for ops/readiness.
+  path = "/livez"
+  interval = "15s"
+  timeout = "3s"
+
+[[vm]]
+  processes = ["web"]
+  memory = "512mb"
+
+[[vm]]
+  processes = ["worker"]
+  memory = "256mb"
+
+kill_signal = "SIGTERM"
+kill_timeout = "30s"

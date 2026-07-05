@@ -1,0 +1,57 @@
+# DRAFT scaffold — authored as a design deliverable (docs/design/harness/SKILL-EVOLUTION.md).
+# NOT yet certified: must pass loop-architect M1–M11 + anti-cheat dry-run via
+# `/build-verify-loop verify skill-evolution` before the orchestrator will dispatch it.
+# Structural changes (a gate criterion / block / exit) go through loop-architect, not here.
+# Sibling of sandbox-swarm-gate — REUSES the SSG sandbox+gate substrate (docs/design/harness/SANDBOX-SWARM-GATE.md).
+id: skill-evolution
+version: 0.1
+status: DRAFT            # DRAFT → (loop-architect M1–M11) → CERTIFIED
+intent: "universal capability ratchet — turn a recurring PROCEDURE from experience/task/memory into a reusable SKILL (find→use→expand→create); skills are the THIRD ratchet output beside guardrails (authority) and lessons (advisory); every new/expanded skill iterates in a sandbox and merges through the same quality+safety+ETHICS gate as code"
+problem_signature: "a multi-step procedure has recurred (≥2×) with stable steps and a checkable DoD, and no existing skill fully covers it — worth capturing so future agents don't re-derive it (or re-derive it wrong)"
+trigger: "/loop-orchestrator skill-evolution <recurring procedure> · triggered at fix-close/stage-close alongside librarian curation · skill-creator (create/modify/eval) + find-skills (discover)"
+role_mindset: "curator-builder: FIND before improvising; EXPAND over duplicate; CREATE only when the promotion bar is met; NEVER self-install (.claude/skills/ protected — draft to docs/design/harness/proposed-skills/, operator installs); a skill guides but never substitutes for a guardrail on a red-line"
+preconditions:
+  - "the procedure cleared the promotion bar: recurred ≥2× AND stable steps AND checkable DoD (else route to lesson/guardrail/reflection, not skill)"
+  - "FIND ran first: available-skills list / find-skills checked — no existing skill fully covers it (full→USE, partial→EXPAND, none→CREATE)"
+  - "gate live: SSG quality(triggers-right+works)+safety+ETHICS re-runs on the SKILL.md diff before install (reuse SANDBOX-SWARM-GATE §7) — else do not iterate unrestricted"
+  - "skill-creator + find-skills available; quick_validate.py present"
+execution_skills: [find-skills-discovery, skill-creator-draft, skill-creator-modify, skill-creator-eval, quick-validate, worktree-sandbox, diff-review-gate, security-sentinel-scan, ethics-charter-check, librarian-curation]
+goal: "the recurring procedure is captured as ONE sharp skill (or an existing skill is EXPANDED / USED) that TRIGGERS on the right prompts, WORKS on ≥1 realistic test, has a checkable DoD, passed the gate, and is DRAFTED for operator install — OR the run correctly stopped at a lesson/guardrail per §4 routing"
+verification: "gate rubric (docs/design/harness/SKILL-EVOLUTION.md §7 · reuses SANDBOX-SWARM-GATE §4): A Quality — quick_validate.py green (frontmatter/kebab/≤1024 chars/no angle-brackets) + skill-creator description eval fires on should-trigger & stays quiet on should-not (20-query trigger-eval.json) + steps work on ≥1 test prompt + checkable DoD (not aspirational) + not a duplicate (EXPAND instead); B Safety — no malware/PII/secret/surprise + no gate-weakening step + security-sentinel PASS + no protected-zone/auto-merge instruction; C ETHICS — Charter green (hard, non-removable). Any RED → REJECT back to sandbox"
+iron_principles:
+  - no-fake-green
+  - ethics-charter-non-removable            # C-block cannot be waived/timed-out/override-filed
+  - guards-relocated-not-deleted            # gate re-runs full quality+safety+ethics on skill diff
+  - skill-never-substitutes-guardrail       # machine-catchable bug → guardrail even if a skill teaches it
+  - find-before-create                       # reuse beats reinvention; EXPAND over near-duplicate
+  - no-self-install                          # .claude/skills/ protected → draft, operator installs
+  - bias-to-prune                            # skill store must not grow unboundedly (dilutes triggering)
+  - proof-by-artifact-not-words              # each gate box credited by validator/eval/verdict, not intent
+loop_body: [FIND, USE-OR-EXPAND-OR-CREATE, ITERATE-SANDBOX, GATE, INSTALL-DRAFT, CURATE]
+exit_conditions: "ALL: FIND attempted before any CREATE; procedure cleared §3 bar OR correctly routed to lesson/guardrail; new/expanded skill passed §7 gate (A+B+C each proof-credited) OR explicitly abandoned; skill DRAFTED to docs/design/harness/proposed-skills/ (NOT self-installed into .claude/skills/); curation pass ran/queued (distill·challenge·promote·prune — store did not grow unboundedly); §5 LOOP REPORT emitted; qualified change → reflection"
+gates: [STOP-PROMOTION-BAR-not-met, STOP-GATE-quality-safety, STOP-ETHICS-hard, STOP-INSTALL-operator-only]
+proof_artifacts: [quick-validate-output, trigger-eval-json, skill-creator-eval-result, security-sentinel-verdict, gate-rubric-filled, curation-note, loop-report]
+out_of_scope:
+  - "self-installing a skill into .claude/skills/ (protected — operator installs from the draft)"
+  - "creating a skill for a one-off / trivial task / a procedure that has not recurred (bar not met → lesson or reflection)"
+  - "substituting a skill for a guardrail on a red-line (machine-catchable bug → guardrail regardless)"
+  - "editing .claude/.github even inside the sandbox"
+  - "weakening any gate or writing a step that disables/bypasses one"
+  - "self-certifying this loop (loop-architect owns M1–M11)"
+escalation: "ETHICS-red on a skill → STOP + human (no green overrides). Promotion-bar ambiguity (is it recurred/stable enough?) → doubt-escalation (K=2) → pattern-critic. Structural change to this loop → loop-architect + re-cert. Install decision → operator (never self-install)"
+skills_required: [find-skills, skill-creator, git-worktree, agent-tool-isolation-worktree, repo-access]
+memory_file: loops/memory/skill-evolution.md
+verification_report: loops/reports/skill-evolution-0.1.md   # authored by loop-architect at cert
+
+# Living Loop System wiring (docs/operating-model/living-loop-system-v3.md §1/§5).
+# On finish (success/stall/abort) the loop MUST emit the §5 LOOP REPORT via the finalize seam,
+# which measures git+session-tokens+eco and persists permanently+losslessly to runs_dir.
+harness:
+  runs_dir: loops/runs
+  always_emit_report: true                 # §5 — printed in full to terminal, no flag
+  progress_metric: procedures_not_yet_captured   # ↓=better; breaker watches (stall = K iters no gate-green skill)
+  finalize: >-
+    npx tsx tools/loop-harness/src/cli.ts finalize
+    --record <run.json> --base loops/runs
+    --session $CLAUDE_SESSION_JSONL --since <run_start_commit> --repo .
+  telemetry_collectors: [git_mem, session_tokens, eco]   # tokens/agents/skills ← session JSONL (codeburn source)

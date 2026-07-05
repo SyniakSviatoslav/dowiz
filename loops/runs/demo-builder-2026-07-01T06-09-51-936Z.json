@@ -1,0 +1,205 @@
+{
+  "at": "2026-07-01T06:09:51.936Z",
+  "base_url": "https://dowiz-staging.fly.dev",
+  "storefront_base": "https://dowiz-staging.fly.dev",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 1,
+    "invited": 0,
+    "needs_review": 0,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "gmaps:0x134fdb3c68de013d:0xada5292cc9e31ae1",
+      "name": "ArtePasta",
+      "slug": "artepasta",
+      "warnings": [],
+      "menu_stats": {
+        "nCats": 6,
+        "nItems": 16,
+        "descRatio": 1
+      },
+      "menu_draft": {
+        "categories": [
+          {
+            "name": "Antipasti",
+            "sort_order": 0,
+            "products": [
+              {
+                "name": "Bruschetta al Pomodoro",
+                "price": 350,
+                "description": "Bukë e thekur me domate të freskëta, hudhër, borzilok dhe vaj ulliri extra virgjër.",
+                "sort_order": 0
+              },
+              {
+                "name": "Tagliere Misto",
+                "price": 650,
+                "description": "Përzgjedhje sallamesh italiane dhe djathërash të pjekur, me ullinj dhe grissini.",
+                "sort_order": 1
+              }
+            ]
+          },
+          {
+            "name": "Pasta",
+            "sort_order": 1,
+            "products": [
+              {
+                "name": "Spaghetti alla Carbonara",
+                "price": 700,
+                "description": "Spageti me vezë, guanciale, Pecorino Romano dhe piper të sapobluar.",
+                "sort_order": 0
+              },
+              {
+                "name": "Tagliatelle al Ragù",
+                "price": 750,
+                "description": "Tagliatelle të freskëta me ragù viçi të gatuar ngadalë sipas traditës bolonjeze.",
+                "sort_order": 1
+              },
+              {
+                "name": "Penne all'Arrabbiata",
+                "price": 600,
+                "description": "Penne me salcë domatesh pikante, hudhër, spec djegës dhe majdanoz.",
+                "sort_order": 2
+              },
+              {
+                "name": "Lasagne alla Bolognese",
+                "price": 800,
+                "description": "Shtresa brumi me ragù, beshamel dhe Parmigiano, pjekur në furrë.",
+                "sort_order": 3
+              },
+              {
+                "name": "Gnocchi al Pesto Genovese",
+                "price": 700,
+                "description": "Njoke patatesh të buta me pesto borziloku, pinjol dhe Parmigiano.",
+                "sort_order": 4
+              },
+              {
+                "name": "Fettuccine ai Funghi Porcini",
+                "price": 850,
+                "description": "Fettuccine me kërpudha porcini, krem të lehtë dhe majdanoz të freskët.",
+                "sort_order": 5
+              }
+            ]
+          },
+          {
+            "name": "Risotto",
+            "sort_order": 2,
+            "products": [
+              {
+                "name": "Risotto ai Funghi",
+                "price": 800,
+                "description": "Oriz Arborio me kërpudha të përziera, gjalpë dhe Parmigiano të grirë.",
+                "sort_order": 0
+              },
+              {
+                "name": "Risotto alla Marinara",
+                "price": 900,
+                "description": "Risotto me fruta deti të freskëta, domate cherry dhe një prekje verë të bardhë.",
+                "sort_order": 1
+              }
+            ]
+          },
+          {
+            "name": "Insalata",
+            "sort_order": 3,
+            "products": [
+              {
+                "name": "Insalata Caprese",
+                "price": 550,
+                "description": "Mozzarella fiordilatte, domate të pjekura në diell dhe borzilok me vaj ulliri.",
+                "sort_order": 0
+              },
+              {
+                "name": "Insalata Mista",
+                "price": 400,
+                "description": "Përzierje jeshiljesh të freskëta, domate, kastravec dhe salcë balsamike.",
+                "sort_order": 1
+              }
+            ]
+          },
+          {
+            "name": "Dolce",
+            "sort_order": 4,
+            "products": [
+              {
+                "name": "Tiramisù",
+                "price": 400,
+                "description": "Ëmbëlsira klasike me savoiardi, mascarpone, kafe espresso dhe kakao.",
+                "sort_order": 0
+              },
+              {
+                "name": "Panna Cotta",
+                "price": 350,
+                "description": "Krem i butë vanilje me salcë frutash pylli.",
+                "sort_order": 1
+              }
+            ]
+          },
+          {
+            "name": "Pije",
+            "sort_order": 5,
+            "products": [
+              {
+                "name": "Ujë Natyral 0.5L",
+                "price": 100,
+                "description": "Ujë i pijshëm natyral, shishe 0.5L.",
+                "sort_order": 0
+              },
+              {
+                "name": "Coca-Cola 0.33L",
+                "price": 150,
+                "description": "Pije freskuese e ftohtë, shishe qelqi 0.33L.",
+                "sort_order": 1
+              }
+            ]
+          }
+        ]
+      },
+      "palette": {
+        "primary_color": "#3f7d4f",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111"
+      },
+      "source_id": "f793f049-9a99-4712-8ca4-fef23241057a",
+      "org_id": "8d919519-2a0b-402e-90d8-7a780c8cd70b",
+      "location_id": "e11fe132-8af7-4f62-943c-fcb32fb126d5",
+      "theme_directive": {
+        "location_id": "e11fe132-8af7-4f62-943c-fcb32fb126d5",
+        "primary_color": "#3f7d4f",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111"
+      },
+      "visual_gate": {
+        "pass": true,
+        "viewports": {
+          "mobile": {
+            "url": "https://dowiz-staging.fly.dev/s/artepasta",
+            "itemCount": 16,
+            "consoleErrors": 0,
+            "addCount": 0,
+            "cartCount": 0,
+            "orderBtns": 0,
+            "noindex": true
+          },
+          "desktop": {
+            "url": "https://dowiz-staging.fly.dev/s/artepasta",
+            "itemCount": 16,
+            "consoleErrors": 0,
+            "addCount": 0,
+            "cartCount": 0,
+            "orderBtns": 0,
+            "noindex": true
+          }
+        },
+        "mode": "playwright",
+        "exitCode": 0
+      },
+      "outcome": "certified-preview",
+      "state": "VERIFIED",
+      "preview_url": "https://dowiz-staging.fly.dev/s/artepasta"
+    }
+  ]
+}

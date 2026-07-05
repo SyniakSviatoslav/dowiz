@@ -1,0 +1,558 @@
+/* ── DeliveryOS Design Tokens ── */
+
+:root {
+  /* ── Viewport / safe-area ── */
+  --app-height: 100dvh;
+  --safe-top:    env(safe-area-inset-top,    0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left,   0px);
+  --safe-right:  env(safe-area-inset-right,  0px);
+  /* ── Tap target minimums ── */
+  --tap-min:      44px;
+  --tap-courier:  48px;
+  --tap-critical: 56px;
+  /* ── Breakpoints ── */
+  --bp-tablet:  768px;
+  --bp-desktop: 1280px;
+
+  /* ── Motion durations ── */
+  --motion-instant: 80ms;
+  --motion-fast:    150ms;
+  --motion-base:    240ms;
+  --motion-slow:    400ms;
+
+  /* ── Motion easing curves ── */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);    /* expo-out: appear */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);   /* transitions */
+  --ease-soft:   cubic-bezier(0.4, 0, 0.2, 1);     /* soft movement */
+
+  /* ── Soft-UI elevation (light) ── */
+  --elev-0: none;
+  --elev-1: 0 1px 2px rgba(0,0,0,.04), 0 1px 1px rgba(0,0,0,.03);
+  --elev-2: 0 2px 8px rgba(0,0,0,.05), 0 1px 2px rgba(0,0,0,.04);
+  --elev-3: 0 8px 24px rgba(0,0,0,.07), 0 2px 6px rgba(0,0,0,.05);
+  --elev-4: 0 16px 40px rgba(0,0,0,.10), 0 4px 10px rgba(0,0,0,.06);
+  --blur-surface: 12px;
+
+  /* ── Brand default: dark teal + gold (matches the customer storefront so
+     owner/courier tools share one identity). Derived from primary #d69a3d /
+     bg #061b1a / text #f5efe5 via derivePalette. ── */
+  --brand-primary: #d69a3d;
+  --brand-primary-hover: #ddac60;
+  --brand-primary-light: rgba(214, 154, 61, 0.12);
+  /* Darker variant for solid buttons so white label text clears WCAG AA (4.5:1).
+     color-mix re-resolves against the active preset's --brand-primary on :root,
+     so every theme gets an AA-safe button background without per-theme tuning. */
+  --brand-primary-strong: color-mix(in srgb, var(--brand-primary) 85%, #000000);
+  /* Primary-as-TEXT, AA-safe on the surface. The dark default reads primary
+     directly (gold-on-dark clears AA); derivePalette overrides it per-tenant
+     with a luminance-aware value (e.g. rose darkened for a light surface). */
+  --brand-primary-readable: var(--brand-primary);
+  --brand-accent: #213433;
+  --brand-bg: #061b1a;
+  --brand-surface: #152928;
+  --brand-surface-raised: #213433;
+  --brand-text: #f5efe5;
+  --brand-text-muted: #959a93;
+  --brand-border: #334443;
+  --brand-font-heading: 'Inter', sans-serif;
+  --brand-font-body: 'Inter', sans-serif;
+  --brand-radius: 12px;
+  --brand-radius-sm: 8px;
+  --brand-radius-btn: 78px;
+
+  /* ── Semantic colors ── */
+  --color-success: #059669;
+  --color-warning: #D97706;
+  --color-danger: #DC2626;
+  --color-info: #2563EB;
+  /* FILL variants (always the saturated/dark hue) — for coloured backgrounds with
+     light text. The base --color-* tokens lighten on a dark surface (for TEXT), so
+     fills must use these to keep white/light text AA on dark shells. */
+  --color-success-strong: #059669;
+  --color-warning-strong: #D97706;
+  --color-danger-strong: #DC2626;
+  --color-info-strong: #2563EB;
+  --color-success-light: rgba(5, 150, 105, 0.08);
+  --color-warning-light: rgba(217, 119, 6, 0.08);
+  --color-danger-light: rgba(220, 38, 38, 0.08);
+  --color-info-light: rgba(37, 99, 235, 0.08);
+  --color-on-primary: #ffffff;
+  --color-on-success: #ffffff;
+  --color-on-danger: #ffffff;
+  --color-on-warning: #ffffff;
+  --color-on-info: #ffffff;
+
+  /* ── Status colors ── */
+  --status-pending: #D97706;
+  --status-confirmed: #2563EB;
+  --status-preparing: #F59E0B;
+  --status-ready: #0D9488;
+  --status-in-delivery: #3B82F6;
+  --status-delivered: #059669;
+  --status-rejected: #DC2626;
+  --status-cancelled: #DC2626;
+  --status-scheduled: #7C3AED;
+  --status-picked-up: #0D9488;
+
+  /* ── Status badge backgrounds (20% opacity) ── */
+  --status-pending-bg: rgba(217, 119, 6, 0.2);
+  --status-confirmed-bg: rgba(37, 99, 235, 0.2);
+  --status-preparing-bg: rgba(245, 158, 11, 0.2);
+  --status-ready-bg: rgba(13, 148, 136, 0.2);
+  --status-in-delivery-bg: rgba(59, 130, 246, 0.2);
+  --status-delivered-bg: rgba(5, 150, 105, 0.2);
+  --status-rejected-bg: rgba(220, 38, 38, 0.2);
+  --status-cancelled-bg: rgba(220, 38, 38, 0.2);
+  --status-scheduled-bg: rgba(124, 58, 237, 0.2);
+  --status-picked-up-bg: rgba(13, 148, 136, 0.2);
+
+  /* ── Status badge borders (30% opacity) ── */
+  --status-pending-border: rgba(217, 119, 6, 0.3);
+  --status-confirmed-border: rgba(37, 99, 235, 0.3);
+  --status-preparing-border: rgba(245, 158, 11, 0.3);
+  --status-ready-border: rgba(13, 148, 136, 0.3);
+  --status-in-delivery-border: rgba(59, 130, 246, 0.3);
+  --status-delivered-border: rgba(5, 150, 105, 0.3);
+  --status-rejected-border: rgba(220, 38, 38, 0.3);
+  --status-cancelled-border: rgba(220, 38, 38, 0.3);
+  --status-scheduled-border: rgba(124, 58, 237, 0.3);
+  --status-picked-up-border: rgba(13, 148, 136, 0.3);
+
+  /* ── Status badge light backgrounds (10% opacity) ── */
+  --status-pending-light: rgba(217, 119, 6, 0.1);
+  --status-confirmed-light: rgba(37, 99, 235, 0.1);
+  --status-preparing-light: rgba(245, 158, 11, 0.1);
+  --status-ready-light: rgba(13, 148, 136, 0.1);
+  --status-in-delivery-light: rgba(59, 130, 246, 0.1);
+  --status-delivered-light: rgba(5, 150, 105, 0.1);
+  --status-rejected-light: rgba(220, 38, 38, 0.1);
+  --status-cancelled-light: rgba(220, 38, 38, 0.1);
+  --status-scheduled-light: rgba(124, 58, 237, 0.1);
+  --status-picked-up-light: rgba(13, 148, 136, 0.1);
+
+  /* ── Type scale (modular, additive) ──
+     Exposed in Tailwind as `text-step-*` (NOT the default text-*, which stays
+     Tailwind-stock so existing usages don't resize). Adopt incrementally —
+     see docs/operating-model/typography-scale.md. rem so it respects user zoom. */
+  --text-2xs:  0.6875rem; /* 11px — micro labels: status pills, allergen chips, tabular meta (the
+                             dense tier the ad-hoc text-[10/11px] usages needed; tokenised here) */
+  --text-xs:   0.75rem;   /* 12px — meta, captions, badges */
+  --text-sm:   0.875rem;  /* 14px — secondary body, labels */
+  --text-base: 1rem;      /* 16px — body default */
+  --text-lg:   1.125rem;  /* 18px — lead body, card titles */
+  --text-xl:   1.375rem;  /* 22px — section headings */
+  --text-2xl:  1.75rem;   /* 28px — page headings */
+  --text-3xl:  2.25rem;   /* 36px — hero / display */
+
+  /* Paired line-heights (unitless → scales with font-size) */
+  --leading-tight:   1.15;  /* display / large headings */
+  --leading-snug:    1.3;   /* headings, card titles */
+  --leading-normal:  1.5;   /* body copy */
+  --leading-relaxed: 1.7;   /* long-form / dense reading */
+
+  /* Font weights */
+  --weight-normal:   400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  /* ── Spacing ── */
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── Border radius ── */
+  --radius-none: 0px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* ── Elevation shadows ──
+     DEPRECATED legacy scale: these were heavier than the canonical soft `--elev-*` and produced
+     visibly different shadow weights for the "same" card across screens. Aliased to `--elev-*` so
+     every legacy `shadow-elevation-N` / `var(--elevation-N)` call-site now renders the soft
+     canonical shadow (zero churn, one source of truth). Prefer `--elev-*` in new code. */
+  --elevation-1: var(--elev-1);
+  --elevation-2: var(--elev-2);
+  --elevation-3: var(--elev-3);
+  --elevation-4: var(--elev-4);
+
+  /* ── Z-index layers ── */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal-backdrop: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+
+  /* ── Data-viz series (nutrition macros, charts) — categorical, brand-independent ──
+     Muted, desaturated trio (not the old Tailwind-500 brights): they sit calmly on the warm
+     storefront instead of clashing, while staying distinct (slate-blue / sage / honey) and legible
+     as small bars + glyphs on both light (cream) and dark surfaces. */
+  --chart-protein: #6f8fae; /* muted slate-blue */
+  --chart-carbs:   #7da583; /* muted sage green */
+  --chart-fat:     #c9a05f; /* muted honey/amber */
+}
+
+/* ── Status text on a DARK surface (opt-in) ──
+   The :root status colours are tuned for a light surface; on the dark admin/
+   courier shells the mid-tone hues fail AA on their own faded tints (e.g.
+   confirmed #2563EB = 2.44). This lightens ONLY the status TEXT (badge tints
+   unchanged) to Tailwind-400 shades that clear AA on the dark tints. Opt-in via
+   data-surface="dark" on the shell so the light storefront is untouched. */
+[data-surface="dark"] {
+  --status-pending: #FBBF24;
+  --status-confirmed: #60A5FA;
+  --status-info: #60A5FA;
+  --status-preparing: #FBBF24;
+  --status-ready: #2DD4BF;
+  --status-in-delivery: #93C5FD;
+  --status-delivered: #34D399;
+  --status-rejected: #F87171;
+  --status-cancelled: #F87171;
+  --status-scheduled: #A78BFA;
+  --status-picked-up: #2DD4BF;
+  /* Semantic colours as TEXT (e.g. the "Vonesë!/Delay" label) — lightened to clear
+     AA on the dark surface. Coloured FILLS use --color-*-strong, so this doesn't
+     touch danger buttons / status banners / notification badges. */
+  --color-danger: #F87171;
+  --color-warning: #FBBF24;
+  --color-success: #34D399;
+  --color-info: #60A5FA;
+}
+
+/* ── Dark mode: weaker shadows, depth via borders ── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --elev-1: 0 1px 2px rgba(0,0,0,.4);
+    --elev-2: 0 2px 8px rgba(0,0,0,.5);
+    --elev-3: 0 8px 24px rgba(0,0,0,.6);
+    --elev-4: 0 16px 40px rgba(0,0,0,.7);
+  }
+
+}
+
+/* ── Reduced motion: durations to 0 (state preserved via MotionConfig) ── */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-instant: 0ms;
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   SUNLIGHT MODE — high-contrast outdoor theme (research: AAA ~7:1, flat).
+   Toggled via html[data-sunlight="on"]. Uses !important to win over the
+   tenant palette (applyBrandTheme sets inline vars WITHOUT !important).
+   Forces a light surface (light mode beats dark in direct sun), pushes text
+   to AAA, flattens blur/gradients/soft shadows, and bolds type.
+   ════════════════════════════════════════════════════════════════════════ */
+html[data-sunlight="on"] {
+  --brand-bg: #ffffff !important;
+  --brand-surface: #ffffff !important;
+  --brand-surface-raised: #eef0f1 !important;
+  --brand-text: #0a0a0a !important;        /* ~19:1 on white */
+  --brand-text-muted: #383838 !important;  /* ~10.9:1 — AAA */
+  --brand-border: #141414 !important;      /* hard, visible borders */
+  --brand-accent: #0a0a0a !important;
+  --brand-primary: #8a5a00 !important;     /* darkened gold: dark text stays legible, hue kept */
+  --brand-primary-hover: #6f4800 !important;
+  --brand-primary-strong: #5a3b00 !important;
+  --brand-primary-light: #fff2da !important;
+
+  /* status text → AAA-dark; bg → opaque pale; border → the dark text color */
+  --status-pending: #8a4b00 !important;        --status-pending-bg: #fdebd2 !important;        --status-pending-border: #8a4b00 !important;        --status-pending-light: #fff4e6 !important;
+  --status-confirmed: #1e40af !important;      --status-confirmed-bg: #dbe3fb !important;      --status-confirmed-border: #1e40af !important;      --status-confirmed-light: #eef2fe !important;
+  --status-preparing: #8a4b00 !important;      --status-preparing-bg: #fdebd2 !important;      --status-preparing-border: #8a4b00 !important;      --status-preparing-light: #fff4e6 !important;
+  --status-ready: #0f5d57 !important;          --status-ready-bg: #d3ecea !important;          --status-ready-border: #0f5d57 !important;          --status-ready-light: #e8f6f4 !important;
+  --status-in-delivery: #1e40af !important;    --status-in-delivery-bg: #dbe3fb !important;    --status-in-delivery-border: #1e40af !important;    --status-in-delivery-light: #eef2fe !important;
+  --status-delivered: #166534 !important;      --status-delivered-bg: #d6ecdd !important;      --status-delivered-border: #166534 !important;      --status-delivered-light: #ecf7ef !important;
+  --status-rejected: #991b1b !important;       --status-rejected-bg: #f6dada !important;       --status-rejected-border: #991b1b !important;       --status-rejected-light: #fcecec !important;
+  --status-cancelled: #991b1b !important;      --status-cancelled-bg: #f6dada !important;      --status-cancelled-border: #991b1b !important;      --status-cancelled-light: #fcecec !important;
+  --status-scheduled: #6b21a8 !important;      --status-scheduled-bg: #ecdcf6 !important;      --status-scheduled-border: #6b21a8 !important;      --status-scheduled-light: #f5ecfb !important;
+  --status-picked-up: #0f5d57 !important;      --status-picked-up-bg: #d3ecea !important;      --status-picked-up-border: #0f5d57 !important;      --status-picked-up-light: #e8f6f4 !important;
+
+  /* flatten elevation → crisp 1px outline instead of soft glow */
+  --elevation-1: 0 0 0 1px #141414 !important;
+  --elevation-2: 0 0 0 1px #141414 !important;
+  --elevation-3: 0 0 0 2px #141414 !important;
+  --elevation-4: 0 0 0 2px #141414 !important;
+  --blur-surface: 0px !important;
+}
+
+/* Flatten reflective / low-contrast effects under sun */
+html[data-sunlight="on"] [class*="backdrop-blur"] { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+html[data-sunlight="on"] [class*="bg-gradient"] { background-image: none !important; background-color: var(--brand-surface) !important; }
+html[data-sunlight="on"] * { text-shadow: none !important; }
+html[data-sunlight="on"] [class*="shadow"] { box-shadow: 0 0 0 1px var(--brand-border) !important; }
+
+/* Heavier type for glare legibility */
+html[data-sunlight="on"] body { font-weight: 500; }
+html[data-sunlight="on"] :is(h1, h2, h3, button, a, label, th) { font-weight: 700 !important; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   PAPER / MOEBIUS — internal brand skin for /admin + /courier (NOT the client
+   storefront, which stays white-label per tenant). Scoped to a wrapper that
+   carries data-skin="paper"; it RE-MAPS the existing brand tokens to a warm
+   paper palette and ADDS ink, paper and display-font tokens, so every shadcn /
+   Tailwind component inherits the look with zero forks. Because the scope sits
+   on a descendant of <html>, it wins over ThemeProvider's inline :root vars by
+   proximity (no !important needed). Internal brand is FIXED — never tenant-
+   overridable. Palette verified WCAG AA on all text pairs (ink 15:1 AAA,
+   ink-muted 5.6:1, action-ink 5.8:1).
+   ════════════════════════════════════════════════════════════════════════ */
+[data-skin="paper"] {
+  /* Paper surfaces — warm, not white */
+  --paper-bg:      #F4ECDB;
+  --paper-surface: #FBF5E9;
+  --paper-raised:  #FFFDF7;
+
+  /* Ink — warm, not cold grey */
+  --ink:       #241F1A;
+  --ink-muted: #6B6054;
+  --ink-line:  #C9BCA6;
+
+  /* Accents (Nomadic Tribe palette) — decorative, NOT a bg under text */
+  --sand:      #987654;
+  --teal:      #49C5B6;
+  --teal-deep: #3EA094;
+  --gold:      #ECD06F;
+
+  /* Action — darkened teal so light text clears AA (~5.8:1) */
+  --action:       #246B61;
+  --action-hover: #1C564E;
+  --action-ink:   #FBF5E9;
+
+  /* Re-map brand tokens → shadcn/Tailwind inherit automatically */
+  --brand-bg:             var(--paper-bg);
+  --brand-surface:        var(--paper-surface);
+  --brand-surface-raised: var(--paper-raised);
+  --brand-text:           var(--ink);
+  --brand-text-muted:     var(--ink-muted);
+  --brand-border:         var(--ink-line);
+  --brand-primary:        var(--action);
+  --brand-primary-hover:  var(--action-hover);
+  --brand-primary-strong: var(--action-hover); /* already AA on light text */
+  --brand-primary-light:  rgba(36, 107, 97, 0.10);
+  --brand-accent:         var(--teal-deep);
+  --color-on-primary:     var(--action-ink);
+
+  /* Warm, soft elevation for a light surface (cool black shadows look digital) */
+  --elev-1: 0 1px 2px rgba(60, 40, 20, .06);
+  --elev-2: 0 4px 14px rgba(60, 40, 20, .08);
+  --elev-3: 0 10px 30px rgba(60, 40, 20, .10);
+  --elev-4: 0 18px 44px rgba(60, 40, 20, .13);
+  --elevation-1: 0 1px 3px rgba(60, 40, 20, .10);
+  --elevation-2: 0 4px 12px rgba(60, 40, 20, .12);
+  --elevation-3: 0 8px 24px rgba(60, 40, 20, .14);
+
+  /* Typography — Fraunces gives the warm "book" character of the paper world */
+  --font-display:       'Yeseva One', 'Fraunces', Georgia, serif;
+  --brand-font-heading: 'Yeseva One', 'Fraunces', Georgia, serif;
+  --brand-font-body:    'DM Sans', 'Inter', sans-serif;
+
+  --paper-grain-opacity: 0.06;
+}
+
+/* Display type on internal headings (body stays DM Sans for dense data zones). */
+[data-skin="paper"] :is(h1, h2, h3) {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+}
+
+/* One cheap GPU-light grain layer that NEVER touches data. pointer-events:none so
+   it never eats a click; opt OUT for tables/forms/charts via .data-surface. */
+[data-skin="paper"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  mix-blend-mode: multiply;
+  opacity: var(--paper-grain-opacity);
+  background-image: url("/textures/paper-grain.svg");
+  background-size: 320px 320px;
+}
+[data-skin="paper"] .data-surface {
+  position: relative;
+  z-index: 2;
+  background: var(--paper-surface);
+}
+
+/* Aged-paper-at-night: warm brown-black, warm-white ink, lower grain. Semantic
+   colors stay fixed. Triggered by the app's existing dark-mode attribute. */
+html[data-theme="dark"] [data-skin="paper"],
+[data-skin="paper"][data-theme="dark"] {
+  --paper-bg:      #1E1A16;
+  --paper-surface: #26211B;
+  --paper-raised:  #2F2920;
+  --ink:           #F1E8D8;
+  --ink-muted:     #B0A28C;
+  --ink-line:      #4A4034;
+  --action:        #49C5B6;
+  --action-hover:  #5fd3c5;
+  --action-ink:    #1E1A16;
+  --paper-grain-opacity: 0.04;
+}
+@media (prefers-color-scheme: dark) {
+  [data-skin="paper"] {
+    --paper-bg:      #1E1A16;
+    --paper-surface: #26211B;
+    --paper-raised:  #2F2920;
+    --ink:           #F1E8D8;
+    --ink-muted:     #B0A28C;
+    --ink-line:      #4A4034;
+    --action:        #49C5B6;
+    --action-hover:  #5fd3c5;
+    --action-ink:    #1E1A16;
+    --paper-grain-opacity: 0.04;
+  }
+}
+
+/* ── Paper chrome polish (iteration 2) — scoped character, no data interference ── */
+
+/* Fraunces display character: heavier, high optical size, tighter measure. */
+[data-skin="paper"] h1 { font-weight: 600; font-variation-settings: "opsz" 96, "SOFT" 0, "WONK" 0; letter-spacing: -0.018em; }
+[data-skin="paper"] h2 { font-weight: 600; font-variation-settings: "opsz" 60; letter-spacing: -0.014em; }
+[data-skin="paper"] h3 { font-weight: 550; font-variation-settings: "opsz" 36; }
+
+/* Warm text selection + focus ring in the action teal (instead of the OS blue). */
+[data-skin="paper"] ::selection { background: rgba(73, 197, 182, 0.28); color: var(--ink); }
+[data-skin="paper"] :focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
+
+/* Warm "paper-shimmer" for skeletons instead of cool grey. Scoped to skeleton classes
+   only — deliberately NOT [class*=animate-pulse], which also drives live alert banners
+   (e.g. owner-new-order-banner) that must not get a shimmer gradient. */
+[data-skin="paper"] [class*="skeleton"],
+[data-skin="paper"] [class*="Skeleton"] {
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(152, 118, 84, 0.10) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+}
+
+/* A barely-there inked rule under the grain on raised cards reads as pressed paper.
+   Kept off .data-surface (tables/forms/charts) so dense data stays crisp. */
+[data-skin="paper"] :is(.rounded-lg, .rounded-xl, .rounded-2xl)[class*="border"]:not(.data-surface) {
+  box-shadow: var(--elev-1);
+}
+
+/* ── Deeper ornament (iteration 5) — crafted across the whole internal UI ── */
+[data-skin="paper"] {
+  /* organic soft rectangles instead of hard pills/round — an editorial, hand-made feel */
+  --brand-radius:     16px;
+  --brand-radius-sm:  10px;
+  --brand-radius-btn: 16px;
+}
+/* Confident inked edge on bordered cards/panels (not data tables) — reads as drawn. */
+[data-skin="paper"] :is(.rounded-lg, .rounded-xl, .rounded-2xl)[class*="border"]:not(.data-surface) {
+  border-color: var(--ink-line);
+}
+/* Primary actions: a thin ink hairline + warm lift so the teal button looks inked, not flat. */
+[data-skin="paper"] button.bg-\[var\(--brand-primary\)\],
+[data-skin="paper"] a.bg-\[var\(--brand-primary\)\] {
+  border: 1.5px solid color-mix(in srgb, var(--ink) 65%, var(--action));
+  box-shadow: var(--elev-2);
+}
+/* Inputs: warm inked border + a teal focus glow (replaces the default cool ring). */
+[data-skin="paper"] :is(input, select, textarea) {
+  border-color: var(--ink-line);
+}
+[data-skin="paper"] :is(input, select, textarea):focus {
+  border-color: var(--action);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 28%, transparent);
+}
+
+/* ── Courier MapLibre → warm sepia (item 4) ── The "same WebGL context, no second
+   layer" trick: a CSS filter on the map CANVAS only (not the whole .maplibregl-map,
+   so route lines + white courier/destination markers stay crisp on top). Scoped to
+   the paper skin, so the client storefront's map is untouched. Mild on purpose —
+   navigation contrast on the active-delivery screen still matters. */
+[data-skin="paper"] .maplibregl-canvas {
+  filter: sepia(0.32) saturate(0.95) hue-rotate(-8deg) brightness(1.02) contrast(0.98);
+}
+/* The aged-paper night map: gentler warmth so the dark tiles don't muddy. */
+html[data-theme="dark"] [data-skin="paper"] .maplibregl-canvas,
+[data-skin="paper"][data-theme="dark"] .maplibregl-canvas {
+  filter: sepia(0.18) saturate(0.9) hue-rotate(-6deg) brightness(0.98);
+}
+
+/* PaperIllustration "moment" — a gentle rise/float on the hero sun (the cheap SVG/CSS
+   alternative to a three.js scene; same delight, ~0 bundle). Stilled for reduced motion. */
+@keyframes paper-rise {
+  0%, 100% { transform: translateY(2px); }
+  50%      { transform: translateY(-4px); }
+}
+.paper-rise { animation: paper-rise 6s var(--ease-soft, ease-in-out) infinite; transform-box: fill-box; transform-origin: center; }
+@media (prefers-reduced-motion: reduce) {
+  .paper-rise { animation: none; }
+}
+
+/* ── MicFab halo/bloom (voice control PR-3) ── docs/design/voice-control/VOICE-UI-REFERENCE.md §3.
+   A persistent mic glyph wrapped in a bloom of concentric rings. Idle is fully static (no idle
+   pulse — a pulsing idle mic reads as "always listening", the one forbidden animation). Motion
+   begins only in the 'listening' data-state (after an explicit tap) via two pseudo-elements sized
+   OUTSIDE the 56px disc (pointer-events:none, never affects layout/tap-target):
+     ::before — the amp-reactive ring, driven by the single --amp custom property a rAF loop in
+                MicFab.tsx writes directly on this element (see smoothAmplitude in state-machine.ts).
+     ::after  — the looping "breath" bloom (a calm ambient ring, independent of --amp).
+   Colour is token-only (color-mix of --brand-primary) so paper-skin inherits it for free. */
+.mic-fab { --amp: 0; }
+.mic-fab:active { transform: scale(.97); transition: transform var(--motion-instant) var(--ease-out); }
+
+.mic-fab[data-state="listening"]::before {
+  content: ""; position: absolute; inset: -8px; border-radius: inherit; pointer-events: none;
+  border: 2px solid color-mix(in srgb, var(--brand-primary) 35%, transparent);
+  transform: scale(calc(1 + var(--amp) * 0.22));
+  opacity: calc(0.25 + var(--amp) * 0.5);
+}
+.mic-fab[data-state="listening"]::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand-primary) 35%, transparent);
+  animation: mic-bloom 1800ms var(--ease-out) infinite;
+}
+@keyframes mic-bloom {
+  0%   { transform: scale(1);   opacity: 0.35; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+/* Indeterminate spinner for the 'transcribing' data-state — a rotating conic-gradient ring, no
+   canvas/SVG. Reduced motion swaps the spin for a slow opacity breathe (motion is never the ONLY
+   cue anyway — the partial-transcript pill's text/aria carries the state regardless). */
+.mic-fab__spinner {
+  width: 1.35rem; height: 1.35rem; border-radius: 9999px;
+  background: conic-gradient(from 0deg, transparent, var(--color-on-primary));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);
+  animation: mic-spin 900ms linear infinite;
+}
+@keyframes mic-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mic-fab[data-state="listening"]::after { animation: none; }
+  .mic-fab[data-state="listening"]::before { transform: none; opacity: 0.35; }
+  .mic-fab__spinner { animation: mic-spinner-breathe 1800ms var(--ease-soft, ease-in-out) infinite; }
+}
+@keyframes mic-spinner-breathe {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}

@@ -1,0 +1,57 @@
+# ============================================================================
+# OPERATOR-GATED DRAFT — protect-paths.sh blocks any in-repo file named
+# `fly.toml`. Formal placement: cp to rebuild/web/fly.toml with human approval.
+# For the operator-authorized staging-dark deploy this content is used verbatim
+# from an out-of-repo working copy (`fly deploy --config <path>`).
+# ============================================================================
+# dowiz-astro-staging — INTERNAL-ONLY Fly.io staging app for the Astro 5 storefront
+# (rebuild/web, S1 HTML surface). The cutover front-door routes /s/:slug family here.
+#
+# THIS APP MUST NEVER HAVE A PUBLIC IP. No [[services]] (legacy schema that allocates
+# public-facing ports via handlers=["http","tls"]), no force_https anywhere below. The only
+# route in is Fly private networking: 6PN (dowiz-astro-staging.internal:8080, always-on) or
+# flycast (http://dowiz-astro-staging.flycast — fly-proxy SERVICE port 80 -> internal_port
+# 8080; the flycast address does NOT expose the internal port directly).
+#
+# Deploy sequence (operator-run):
+#   1. fly apps create dowiz-astro-staging --org personal
+#   2. fly ips allocate-v6 --private -a dowiz-astro-staging   # flycast — NEVER allocate-v4/public v6
+#   3. fly deploy <rebuild/web dir> -a dowiz-astro-staging --remote-only --ha=false \
+#        --config <this file's working copy> --dockerfile <Dockerfile.astro-draft working copy>
+#      (no secrets: PUBLIC_API_BASE_URL is a BUILD-TIME bake — see Dockerfile.astro-draft header)
+#   4. fly ips list -a dowiz-astro-staging   # VERIFY: only a private/flycast entry, zero public IPs
+# If a public IP ever appears, release it immediately: fly ips release <ip> -a dowiz-astro-staging
+
+app = "dowiz-astro-staging"
+primary_region = "fra"
+
+[env]
+  # @astrojs/node standalone binds HOST:PORT from env; duplicated from the image ENV so the
+  # binding is auditable from this file alone.
+  HOST = "0.0.0.0"
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+  # force_https intentionally absent — that's a public-facing-only concept; this app has no
+  # public IP for Fly's proxy to terminate/redirect traffic through.
+
+# TCP check, not HTTP: the app has NO health path and NO index route (src/pages holds only
+# /s/[slug] — GET / is a 404, which would fail an http check and wedge deploys). /s/demo does
+# return 200 even with the API down (renders the explicit error state), but an http check there
+# would fan out 3 upstream API fetches every interval; TCP liveness is the right-sized probe.
+[checks]
+  [checks.alive]
+    type = "tcp"
+    port = 8080
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

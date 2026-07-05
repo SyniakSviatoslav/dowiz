@@ -1,0 +1,16 @@
+[
+  {
+    "name": "storefront entry (no map)",
+    "path": [
+      "apps/web/dist/assets/index-*.js",
+      "apps/web/dist/assets/vendor-*.js",
+      "!apps/web/dist/assets/map-*.js"
+    ],
+    "limit": "250 kB"
+  },
+  {
+    "name": "map chunk (lazy)",
+    "path": "apps/web/dist/assets/map-*.js",
+    "limit": "1.2 MB"
+  }
+]

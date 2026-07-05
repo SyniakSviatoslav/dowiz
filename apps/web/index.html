@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="sq">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ea4f16" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Dowiz</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=Cormorant+Garamond:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Yeseva+One&display=swap" rel="stylesheet" />
+    <!-- Tabler icons are now self-hosted (imported in main.tsx → bundled by Vite). No CDN. -->
+    <script>
+      // Sunlight Mode pre-paint: set html[data-sunlight] before first paint to avoid a
+      // flash. Guarded — localStorage throws in sandboxed/blocked contexts.
+      try { var s = localStorage.getItem('dowiz-sunlight'); if (s === 'on' || (s !== 'off' && window.matchMedia && matchMedia('(prefers-contrast: more)').matches)) document.documentElement.setAttribute('data-sunlight', 'on'); } catch (e) {}
+    </script>
+    <script>
+      // Register the service worker so the PWA installs and order push
+      // notifications persist. sw.js is non-caching (skipWaiting + clients.claim),
+      // so it cleanly takes over from any stale worker without serving cached
+      // assets — previously this block UN-registered all workers, which defeated
+      // the push registration in CheckoutPage.
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
+    <script defer data-domain="dowiz.fly.dev" src="https://plausible.io/js/script.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

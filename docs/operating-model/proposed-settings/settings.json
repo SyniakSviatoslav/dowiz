@@ -1,0 +1,110 @@
+{
+ "model": "claude-opus-4-8",
+ "permissions": {
+  "allow": [
+   "Bash(*)",
+   "Edit(*)",
+   "Write(*)",
+   "MultiEdit(*)",
+   "Read(*)",
+   "Glob(*)",
+   "Grep(*)",
+   "PowerShell(*)",
+   "WebFetch",
+   "WebSearch",
+   "Agent",
+   "Task",
+   "Skill",
+   "TodoWrite",
+   "NotebookEdit",
+   "ToolSearch",
+   "Workflow",
+   "Monitor",
+   "mcp__repowise",
+   "mcp__playwright-test",
+   "mcp__browser-use",
+   "mcp__figma-remote-mcp"
+  ],
+  "deny": []
+ },
+ "hooks": {
+  "PreToolUse": [
+   {
+    "matcher": "Edit|Write|MultiEdit",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/protect-paths.sh\""
+     }
+    ]
+   },
+   {
+    "matcher": "Edit|Write|MultiEdit",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre-edit-lessons.sh\""
+     }
+    ]
+   },
+   {
+    "matcher": "Edit|Write|MultiEdit",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/red-line-doubt-gate.sh\""
+     }
+    ]
+   },
+   {
+    "matcher": "Bash",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh\""
+     }
+    ]
+   }
+  ],
+  "PostToolUse": [
+   {
+    "matcher": "Edit|Write|MultiEdit",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-gates.sh\""
+     }
+    ]
+   },
+   {
+    "matcher": "Bash|Edit|Write|MultiEdit",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/loop-detector.sh\""
+     }
+    ]
+   }
+  ],
+  "UserPromptSubmit": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/route-request.sh\""
+     }
+    ]
+   }
+  ],
+  "Stop": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/require-classification.sh\""
+     }
+    ]
+   }
+  ]
+ }
+}

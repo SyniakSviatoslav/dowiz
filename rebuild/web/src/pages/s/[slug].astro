@@ -1,0 +1,106 @@
+---
+// /s/[slug] — the S1 storefront SSR page skeleton (REBUILD-MAP Phase A exit criterion:
+// "storefront-read surface (menu read + Astro `/s/[slug]` SSR) live behind the existing proxy").
+//
+// SSR, not prerendered: `output: 'server'` in astro.config.mjs + no `export const prerender`
+// override here — every request fetches live menu/info/theme from the S1 API (never at build
+// time, per task constraint "no live fetches at build"). Astro.locals/Astro.params are populated
+// per-request only in SSR mode, which is exactly the parity requirement (today's ssr.ts bot
+// branch + serveSpaShell human branch collapse into ONE Astro render here — REBUILD-MAP
+// inventory 11 §4.1 "Astro's actual output — bot/human split disappears for the menu page").
+import StorefrontLayout from '../../layouts/StorefrontLayout.astro';
+import VenueHeader from '../../components/VenueHeader.astro';
+import CategoryChips from '../../components/CategoryChips.astro';
+import ProductCard from '../../components/ProductCard.astro';
+import StorefrontFooter from '../../components/StorefrontFooter.astro';
+import MenuBrowser from '../../components/islands/MenuBrowser.svelte';
+import CartButton from '../../components/islands/CartButton.svelte';
+import { getPublicMenu, getPublicLocationInfo, getPublicTheme, ApiError } from '../../lib/api-client';
+
+const { slug } = Astro.params;
+
+if (!slug) {
+  return Astro.redirect('/');
+}
+
+// Fan out the 3 S1 reads in parallel (menu is the hot path; info + theme are small/cached
+// server-side already — see the S1 YAML x-cache annotations) — Promise.allSettled so a single
+// non-critical failure (e.g. theme 404 on an unthemed tenant, which the API says never happens
+// anyway — theme.ts "NEVER errors") never blanks the whole page.
+const [menuResult, infoResult, themeResult] = await Promise.allSettled([
+  getPublicMenu(slug),
+  getPublicLocationInfo(slug),
+  getPublicTheme(slug),
+]);
+
+// 404 parity: unknown location -> Astro's own 404, not a half-rendered shell (matches
+// ssr.ts:261-263 "unknown location" -> 404, and the task-exit "error matrix" dimension).
+if (menuResult.status === 'rejected' && menuResult.reason instanceof ApiError && menuResult.reason.status === 404) {
+  return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+const menu = menuResult.status === 'fulfilled' ? menuResult.value : null;
+const info = infoResult.status === 'fulfilled' ? infoResult.value : null;
+const theme = themeResult.status === 'fulfilled' ? themeResult.value : null;
+
+// Error-matrix states this skeleton renders explicitly (Task-Exit Rule dimension: states):
+//   success       -> menu with >=1 category
+//   empty-menu    -> menu fetched OK but zero categories/products (unpublished tenant)
+//   fetch-error   -> menu fetch failed for a reason OTHER than 404 (500/503/network) -> retry hint
+// `info`/`theme` failures degrade silently (non-critical, parity with today's .catch(() => {}))
+const isEmpty = menu != null && menu.categories.every((c) => c.products.length === 0);
+const fetchFailed = menuResult.status === 'rejected';
+---
+
+<!-- Parity: ClientLayout.tsx locationName starts '' and falls back to the "Menu" i18n key while
+     loading/unset — NOT the raw slug (StorefrontLayout applies that fallback via client_menu()). -->
+<StorefrontLayout theme={theme} locationName={info?.name ?? menu?.location_name ?? ''}>
+  <a id="top"></a>
+  {info && <VenueHeader info={info} />}
+
+  {fetchFailed && (
+    <div class="menu-state menu-state--error" role="alert">
+      <p>We couldn't load the menu. Please try again in a moment.</p>
+    </div>
+  )}
+
+  {!fetchFailed && isEmpty && (
+    <div class="menu-state menu-state--empty">
+      <p>This restaurant hasn't published its menu yet.</p>
+    </div>
+  )}
+
+  {!fetchFailed && menu && !isEmpty && (
+    <Fragment>
+      <CategoryChips categories={menu.categories} />
+      <MenuBrowser client:load />
+      <div data-product-grid>
+        {menu.categories.map((category) => (
+          <section id={category.id} aria-label={category.name}>
+            <h2 class="category-heading">{category.name}</h2>
+            {category.products.map((product) => (
+              <ProductCard product={product} currencyMinorUnit={menu.currency.minor_unit} />
+            ))}
+          </section>
+        ))}
+      </div>
+    </Fragment>
+  )}
+
+  {info && <StorefrontFooter info={info} />}
+  <CartButton client:idle />
+</StorefrontLayout>
+
+<style>
+  .menu-state {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--brand-text-muted);
+  }
+  .category-heading {
+    font-family: var(--brand-font-heading);
+    font-size: 1.1rem;
+    padding: 1rem 1rem 0.5rem;
+    margin: 0;
+  }
+</style>

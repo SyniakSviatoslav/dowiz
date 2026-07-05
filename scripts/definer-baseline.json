@@ -1,0 +1,57 @@
+{
+  "_note": "FROZEN allowlist of pre-existing SECURITY DEFINER functions created WITHOUT a pinned search_path. Remediated at runtime by MIG-ITEM1 (ALTER FUNCTION … SET search_path = pg_catalog, public, pg_temp). History is immutable; this file must NOT grow — a NEW migration introducing an unpinned definer must pin it, not append here. See docs/design/pg-privilege-hardening/proposal.md §9.",
+  "allow": [
+    {
+      "file": "packages/db/migrations/1780310071220_core-identity.ts",
+      "fn": "app_member_location_ids"
+    },
+    {
+      "file": "packages/db/migrations/1780338982020_upsert_menu_version.ts",
+      "fn": "upsert_menu_version"
+    },
+    {
+      "file": "packages/db/migrations/1780338982021_menu_version_trigger.ts",
+      "fn": "bump_menu_version_trigger_fn"
+    },
+    {
+      "file": "packages/db/migrations/1780338982022_read_public_menu.ts",
+      "fn": "read_public_menu"
+    },
+    {
+      "file": "packages/db/migrations/1780338982028_ssr_public_menu.ts",
+      "fn": "read_public_menu_all_locales"
+    },
+    {
+      "file": "packages/db/migrations/1790000000018_fix-public-menu-slug-lookup.ts",
+      "fn": "public.read_public_menu"
+    },
+    {
+      "file": "packages/db/migrations/1790000000032_public-menu-accept-published.ts",
+      "fn": "public.read_public_menu"
+    },
+    {
+      "file": "packages/db/migrations/1790000000033_localize-modifiers.ts",
+      "fn": "public.read_public_menu"
+    },
+    {
+      "file": "packages/db/migrations/1790000000055_read-public-menu-primary-media.ts",
+      "fn": "public.read_public_menu"
+    },
+    {
+      "file": "packages/db/migrations/1790000000063_read-public-menu-availability.ts",
+      "fn": "public.read_public_menu"
+    },
+    {
+      "file": "packages/db/migrations/1790000000064_read-public-menu-perf.ts",
+      "fn": "public.read_public_menu"
+    },
+    {
+      "file": "packages/db/migrations/1790000000065_products-prep-time.ts",
+      "fn": "public.read_public_menu"
+    },
+    {
+      "file": "packages/db/migrations/1790000000072_c2-read-gate.ts",
+      "fn": "public.read_public_menu"
+    }
+  ]
+}

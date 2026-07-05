@@ -1,0 +1,25 @@
+[
+  {
+    "place_id": "gmaps:0x134fdbde02c0c1e7:0x52f60f9c86a4c652",
+    "slug": "eljos-pizza",
+    "name": "Eljo's Pizza",
+    "cuisine": "pizzeria",
+    "phone": "+355692868698",
+    "menu": [
+      { "name": "Margherita", "category": "Pizza", "price": 500, "description": "Salcë domatesh San Marzano, mozzarela fiordilatte, borzilok i freskët, vaj ulliri." },
+      { "name": "Prosciutto e Funghi", "category": "Pizza", "price": 750, "description": "Salcë domatesh, mozzarela, proshutë cotto, kërpudha të freskëta." },
+      { "name": "Diavola", "category": "Pizza", "price": 800, "description": "Salcë domatesh, mozzarela, sallam pikant, spec djegës, vaj ulliri." },
+      { "name": "Quattro Formaggi", "category": "Pizza", "price": 900, "description": "Mozzarela, gorgonzola, parmezan, provolone mbi bazë të bardhë kremoze." },
+      { "name": "Capricciosa", "category": "Pizza", "price": 850, "description": "Salcë domatesh, mozzarela, proshutë, kërpudha, angjinare, ullinj." },
+      { "name": "Vegjetariane", "category": "Pizza", "price": 700, "description": "Salcë domatesh, mozzarela, speca, kungull, patëllxhan, domate cherry." },
+      { "name": "Spaghetti Bolognese", "category": "Makarona", "price": 650, "description": "Spageti me ragù viçi të gatuar ngadalë dhe parmezan të grirë." },
+      { "name": "Penne Arrabbiata", "category": "Makarona", "price": 600, "description": "Penne me salcë domatesh pikante, hudhër dhe borzilok." },
+      { "name": "Lasagna al Forno", "category": "Makarona", "price": 750, "description": "Lasanja tradicionale me ragù, beshamel dhe parmezan, pjekur në furrë." },
+      { "name": "Sallatë Cesar", "category": "Sallata", "price": 550, "description": "Marule, kroketa buke, parmezan, pulë e pjekur dhe salcë Cesar." },
+      { "name": "Sallatë Greke", "category": "Sallata", "price": 450, "description": "Domate, kastravec, spec, qepë, ullinj Kalamata dhe djathë feta." },
+      { "name": "Bruschetta", "category": "Antipasta", "price": 350, "description": "Bukë e thekur me domate të freskëta, hudhër, borzilok dhe vaj ulliri." },
+      { "name": "Coca-Cola 0.33L", "category": "Pije", "price": 150, "description": "Pije freskuese e ftohtë, shishe qelqi 0.33L." },
+      { "name": "Ujë i Freskët 0.5L", "category": "Pije", "price": 100, "description": "Ujë natyral i pijshëm, shishe 0.5L." }
+    ]
+  }
+]

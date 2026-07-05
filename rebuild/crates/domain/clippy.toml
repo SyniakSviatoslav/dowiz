@@ -1,0 +1,43 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  dowiz-core — The Law of Sovereignty (clippy config)
+#
+#  Scope: THIS FILE GOVERNS THE CORE CRATE ONLY. It is intentionally placed under
+#  crates/domain/ (not the workspace root) and is loaded ONLY by the dedicated
+#  sovereign-core gate, which runs:
+#
+#      CLIPPY_CONF_DIR=$PWD/crates/domain \
+#      cargo clippy -p dowiz-core --lib -- -D warnings
+#
+#  Why not the workspace root: the `api` (shell) crate legitimately calls
+#  Instant::now()/SystemTime::now()/Uuid::new_v4() 800+ times (the realtime WS
+#  loop, IO, tests). A root-level ban would break the shell. The shell is ALLOWED
+#  to touch the outside world; the core is not. Placing the config here — and
+#  linting only `-p dowiz-core --lib` — makes the ban apply to core production
+#  code and nothing else. `--lib` (no test cfg) also exempts #[cfg(test)] modules,
+#  so tenant.rs's tests keep using Uuid::new_v4 freely.
+#
+#  Complement, not replacement, of the wasm32 gate:
+#    - wasm32-unknown-unknown build  → physically removes std::net / std::fs /
+#      std::thread / sockets / OS threads. Those are MODULES, not methods, so they
+#      cannot be expressed in disallowed-methods — the wasm gate is their enforcer.
+#    - disallowed-methods (below)    → catches the clock/entropy calls that DO
+#      compile to wasm (SystemTime/Instant/new_v4) and would otherwise slip the
+#      wasm gate. This is the belt to the wasm gate's suspenders.
+#
+#  Every entry is a METHOD/FUNCTION path (the only thing disallowed-methods
+#  accepts). Modules (std::net, std::fs, std::thread, std::env) are NOT valid here
+#  and are covered by the wasm gate + the cargo-deny dependency bans instead.
+# ─────────────────────────────────────────────────────────────────────────────
+
+disallowed-methods = [
+    { path = "std::time::SystemTime::now", reason = "Core is deterministic: wall-clock time enters as a Ts(i64) inside a Command, never read ambiently. (Law 1: No clock.)" },
+    { path = "std::time::Instant::now", reason = "Core is deterministic: no monotonic clock. Elapsed/deadline logic belongs to the shell. (Law 1: No clock.)" },
+    # Currently UNREACHABLE in production core by construction: crates/domain/Cargo.toml keeps the
+    # `v4` uuid feature in [dev-dependencies] only, so `new_v4` isn't compiled into the --lib graph
+    # at all — calling it in production is a hard COMPILE error, stronger than this lint. We retain
+    # the entry as a TRIPWIRE (`allow-invalid` silences the "unreachable" config warning): if anyone
+    # ever re-adds `v4` to [dependencies], the method becomes reachable and this ban re-activates.
+    { path = "uuid::Uuid::new_v4", allow-invalid = true, reason = "Core is entropy-free: all identifiers arrive inside a Command; the kernel never mints its own. (Law 2: No entropy.) Tests are exempt (linted via --lib, cfg(test) off)." },
+    { path = "std::env::var", reason = "Core has no ambient configuration: inputs arrive as typed values, never read from the environment. (Law 3: No IO.)" },
+    { path = "std::env::var_os", reason = "Core has no ambient configuration: inputs arrive as typed values, never read from the environment. (Law 3: No IO.)" },
+]

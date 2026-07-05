@@ -1,0 +1,41 @@
+operationId,surface,method,path,current_file_line,inventory_row_ref,e2e_specs,redline
+getPublicMenu,S1,GET,/public/locations/{locationIdOrSlug}/menu,apps/api/src/routes/public/menu.ts:231,inv10 §1.3 row 26,e2e/tests/api-real.spec.ts; e2e/tests/menu.spec.ts; e2e/tests/menu-load.spec.ts; e2e/tests/storefront-smoke.spec.ts; e2e/lifecycle-e2e/critical-lifecycle.spec.ts,
+getPublicLocationInfo,S1,GET,/public/locations/{slug}/info,apps/api/src/routes/public/menu.ts:312,inv10 §1.3 row 27,e2e/tests/api-real.spec.ts; e2e/tests/storefront-characteristics.spec.ts; e2e/tests/ux1-storefront-links.spec.ts; e2e/tests/client/venue-state.spec.ts,
+getProductMedia,S1,GET,/public/locations/{slug}/products/{productId}/media,apps/api/src/routes/public/menu.ts:418,inv10 §1.3 row 28,needs-new-E2E (feature dark; no live spec),
+getPublicTheme,S1,GET,/api/public/theme/{slug},apps/api/src/routes/spa-proxy.ts:506,inv10 §1.3 spa-proxy row 9,e2e/tests/ux1-storefront-links.spec.ts; e2e/tests/flow-ui-admin-branding.spec.ts; e2e/tests/storefront-fonts-owner.spec.ts,
+getThemeCss,S1,GET,/public/locations/{locationId}/theme.css,apps/api/src/routes/public/theme.ts:10,inv10 §1.3 row 36,e2e/tests/api-real.spec.ts; e2e/tests/flow-ui-images.spec.ts,
+getStorefrontPage,S1,GET,/s/{slug},apps/api/src/routes/public/ssr.ts:18,inv10 §1.3 row 37,e2e/tests/api-real.spec.ts; e2e/tests/flow-customer-checkout-render.spec.ts; apps/api unit: ssr-jsonld-price.test.ts + ssr-escaping.test.ts,🔴 privacy (shadow noindex/generic-OG)
+getStorefrontCartPage,S1,GET,/s/{slug}/cart,apps/api/src/routes/public/client-flow.ts:15,inv10 §1.3 row 19,e2e/tests/api-real.spec.ts (/s family); e2e/tests/flow-orders-checkout.spec.ts (navigates /s/:slug/cart),
+getStorefrontCheckoutPage,S1,GET,/s/{slug}/checkout,apps/api/src/routes/public/client-flow.ts:16,inv10 §1.3 row 20,e2e/tests/flow-customer-checkout-render.spec.ts; e2e/tests/flow-orders-checkout.spec.ts,
+getStorefrontOrderPage,S1,GET,/s/{slug}/order/{id},apps/api/src/routes/public/client-flow.ts:17,inv10 §1.3 row 21,e2e/tests/flow-customer-track-link.spec.ts,
+getStorefrontOrderPageLegacy,S1,GET,/s/{slug}/orders/{orderId},apps/api/src/routes/public/client-flow.ts:18,inv10 §1.3 row 22,needs-new-E2E (legacy alias untested directly),
+getWebManifest,S1,GET,/s/{slug}/manifest.webmanifest,apps/api/src/routes/public/pwa.ts:7,inv10 §1.3 row 39,e2e/tests/api-real.spec.ts:80,
+getFallbackConfig,S1,GET,/api/public/locations/{slug}/fallback-config,apps/api/src/routes/public/fallback-config.ts:9,inv10 §1.3 row 41,e2e/tests/flow-offline-phone-fallback.spec.ts,
+getImage,S1,GET,/images/* (wildcard),apps/api/src/routes/spa-proxy.ts:158,inv10 §1.3 spa-proxy row 1,e2e/tests/flow-client-product-images.spec.ts; e2e/tests/flow-ui-images.spec.ts; e2e/tests/recent-changes-validation.spec.ts,
+getMediaObject,S1,GET,/media/* (wildcard),apps/api/src/routes/spa-proxy.ts:184,inv10 §1.3 spa-proxy row 2,needs-new-E2E (no spec hits /media/ GET directly),
+getVoiceConfig,S1,GET,/api/public/voice-config,apps/api/src/routes/public/voice-config.ts:11,inv10 §1.3 row 34,needs-new-E2E for the route (unit: apps/api tests/voice-flag.test.ts),
+getVapidPublicKey,S1,GET,/api/push/vapid-public-key,apps/api/src/routes/public/vapid.ts:5,inv10 §1.3 row 35,e2e/tests/api-real.spec.ts:91,
+getExchangeRate,S1,GET,/v1/rates,apps/api/src/routes/public/rates.ts:14,inv10 §1.3 row 38,e2e/tests/flow-ui-proof-comprehensive.spec.ts,
+getRobotsTxt,S1,GET,/robots.txt,apps/api/src/routes/public/seo.ts:45,inv10 §1.3 row 23,e2e/tests/api-real.spec.ts:114,
+getSitemapIndex,S1,GET,/sitemap.xml,apps/api/src/routes/public/seo.ts:90,inv10 §1.3 row 24,needs-new-E2E,
+getSitemapShard,S1,GET,/sitemap-locations-{shard}.xml,apps/api/src/routes/public/seo.ts:121,inv10 §1.3 row 25,needs-new-E2E,🔴 privacy (never list shadow tenants)
+ownerLocalLogin,S2,POST,/api/auth/local/login,apps/api/src/routes/auth/local.ts:36,inv10 CORE row 51; inv14 AUTH-01,e2e/tests/admin-platform-authz.spec.ts; e2e/tests/deploy-validation.spec.ts; e2e/tests/cross-tenant-realtime-qa.spec.ts; e2e/tests/flow-ui-validation.spec.ts (18 spec files total),🔴 AUTH
+googleOauthStart,S2,GET,/api/auth/google,apps/api/src/routes/auth.ts:34,inv10 CORE row 36; inv14 AUTH-02,e2e/tests/flow-onboarding-auth.spec.ts; e2e/tests/api-real.spec.ts; e2e/tests/prod-adr0004-smoke.spec.ts,🔴 AUTH
+googleOauthCallback,S2,GET,/api/auth/google/callback,apps/api/src/routes/auth.ts:62,inv10 CORE row 37; inv14 AUTH-02,e2e/tests/flow-onboarding-auth.spec.ts,🔴 AUTH
+exchangeOauthCode,S2,POST,/api/auth/exchange,apps/api/src/routes/auth.ts:173,inv10 CORE row 38; inv14 AUTH-02,e2e/tests/flow-onboarding-auth.spec.ts,🔴 AUTH
+telegramLoginStart,S2,POST,/api/auth/telegram/start,apps/api/src/routes/auth.ts:191,inv10 CORE row 39; inv14 AUTH-03,e2e/tests/flow-onboarding-auth.spec.ts; e2e/tests/menu-first-onboarding.spec.ts,🔴 AUTH
+telegramLoginPoll,S2,GET,/api/auth/telegram/poll,apps/api/src/routes/auth.ts:202,inv10 CORE row 40; inv14 AUTH-03,e2e/tests/flow-onboarding-auth.spec.ts,🔴 AUTH
+ownerRefresh,S2,POST,/api/auth/refresh,apps/api/src/routes/auth.ts:235,inv10 CORE row 41; inv14 AUTH-09,e2e/tests/owner-fixes-batch.spec.ts; e2e/tests/flow-core-lifecycles.spec.ts,🔴 AUTH (rotation/family-revoke/live re-derive)
+ownerLogout,S2,POST,/api/auth/logout,apps/api/src/routes/auth.ts:325,inv10 CORE row 42; inv14 AUTH-09 + AUTH-GAP-1,e2e/tests/prod-adr0004-smoke.spec.ts; e2e/tests/owner-revocation.spec.ts; e2e/tests/flow-core-lifecycles.spec.ts,🔴 AUTH
+courierActivateDead,S2,POST,/api/auth/courier/activate,apps/api/src/routes/auth.ts:339,inv10 CORE row 43; inv14 AUTH-GAP-2,needs-new-E2E (zero FE callers — RETIRE-or-port decision row),🔴 AUTH (dead flow)
+getCourierInvite,S2,GET,/api/courier/auth/invites/{inviteId},apps/api/src/routes/courier/auth.ts:159,inv10 COURIER row 22; inv14 AUTH-05,e2e/tests/flow-ui-invite-onboarding.spec.ts,
+courierRedeemInvite,S2,POST,/api/courier/auth/invites/{inviteId}/redeem,apps/api/src/routes/courier/auth.ts:23,inv10 COURIER row 21; inv14 AUTH-05,e2e/tests/courier-room-authz-isolation.spec.ts; e2e/tests/cross-tenant-realtime-qa.spec.ts; e2e/tests/flow-ui-courier-core.spec.ts; e2e/tests/flow-core-lifecycles.spec.ts,🔴 AUTH
+courierLogin,S2,POST,/api/courier/auth/login,apps/api/src/routes/courier/auth.ts:219,inv10 COURIER row 23; inv14 AUTH-06,e2e/tests/flow-ui-validation.spec.ts; e2e/tests/flow-ui-courier-actions.spec.ts; e2e/tests/flow-ui-courier-core.spec.ts; e2e/tests/flow-courier-deep.spec.ts,🔴 AUTH
+courierRefresh,S2,POST,/api/courier/auth/refresh,apps/api/src/routes/courier/auth.ts:354,inv10 COURIER row 24; inv14 AUTH-06,e2e/tests/flow-core-lifecycles.spec.ts,🔴 AUTH
+courierLogout,S2,POST,/api/courier/auth/logout,apps/api/src/routes/courier/auth.ts:479,inv10 COURIER row 25; inv14 AUTH-06,e2e/tests/flow-core-lifecycles.spec.ts,🔴 AUTH
+claimAccept,S2,POST,/api/claim/accept,apps/api/src/routes/public/claim.ts:17,inv10 §1.3 row 29; inv14 AUTH-07,unit: apps/api tests/claim-rls.test.ts + flow-simpl-claim-gf2g.test.ts; journey: e2e/journeys/STAGING_AUDIT_2026-06-23.md; e2e/tests/flow-simpl-s6-claim.spec.ts (via mock-auth setup),🔴 AUTH + tenant transfer
+claimRequest,S2,POST,/api/claim/request,apps/api/src/routes/public/claim.ts:49,inv10 §1.3 row 30; inv14 AUTH-07,needs-new-E2E (unit-only coverage per census),
+claimDecline,S2,POST,/api/claim/decline,apps/api/src/routes/public/claim.ts:69,inv10 §1.3 row 31; inv14 AUTH-07,unit: apps/api tests/claim-notice.test.ts; needs-new-E2E,🔴 destructive erase
+customerTrackExchange,S2,POST,/api/customer/track/exchange,apps/api/src/routes/customer/track.ts:28,inv10 CUSTOMER row 35; inv14 AUTH-10,e2e/tests/flow-customer-track-link.spec.ts; e2e/tests/flow-geo-tracking.spec.ts; e2e/tests/flow-sensor-eta-window.spec.ts; e2e/tests/error-contract.spec.ts,🔴 AUTH
+devMockAuth,S2,POST,/dev/mock-auth,apps/api/src/routes/dev/mock-auth.ts:14,inv10 §1.3 row 44; inv14 AUTH-08,e2e/lifecycle-e2e/auth.setup.ts + ~80 specs (mock-auth grep hit-list incl. flow-order-lifecycle-trace/flow-ui-admin-dashboard/mobile-polish),🔴 auth-bypass minter (dev-gated; port all 4 ADR-0003 layers)
+devMockAuthAlias,S2,POST,/api/dev/mock-auth,apps/api/src/server.ts:549,inv10 §1.3 server.ts-inline row 65 (duplicate-implementation flag),same ~80-spec family (helpers call /api/dev/mock-auth),🔴 auth-bypass minter (collapse duplicate body in Rust)

@@ -1,0 +1,32 @@
+{
+  "run_id": "2026-06-05T21:33Z",
+  "env": "staging",
+  "base_url": "https://dowiz.fly.dev",
+  "menu_url": "https://dowiz.fly.dev/s/demo",
+  "verdict": "NO-GO",
+  "trigger": "manual",
+  "summary": {
+    "total_checks": 39,
+    "green": 14,
+    "red": 13,
+    "flaky": 3,
+    "blocked": 10,
+    "blockers": 9,
+    "majors": 8,
+    "minors": 4
+  },
+  "degraded_components": [
+    "settlement (table not created)",
+    "backup_restore (never verified, last failed)",
+    "fallback (0/59 locations configured)"
+  ],
+  "health_status": "degraded",
+  "critical_blockers": [
+    "POST /api/orders returns 404",
+    "No Cloudflare edge deployed",
+    "Zero security headers on SPA root",
+    "Owner auth endpoints missing",
+    "Albanian (sq) locale not rendered in SSR",
+    "0/59 locations have fallback phone (0%)"
+  ]
+}

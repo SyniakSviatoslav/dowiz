@@ -1,0 +1,190 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Build
+        run: pnpm -r build
+        
+      - name: Typecheck
+        run: pnpm -r typecheck
+        
+      - name: Lint
+        run: pnpm lint
+        
+      - name: Lint Gates
+        run: pnpm lint:gates
+
+      # P0 gate-rearm (2026-07-02): verify:all --ci was authored (b517972d) but wired into NO
+      # workflow, so the static guardrail subset (i18n, contrast, NX wiring, DEFINER search_path,
+      # owner-active, deliver-v2, gate-armament...) only ran when someone remembered. Now it gates CI.
+      - name: Verify-all static gates (--ci)
+        run: pnpm verify:all --ci
+
+      - name: Verify migrations ordering
+        run: pnpm verify:migrations
+
+      - name: Verify no secrets in repo
+        run: pnpm verify:secrets
+
+      - name: Compliance gate (privacy-invariants)
+        run: pnpm compliance:gate
+
+  # From-scratch provisioning smoke: a BRAND-NEW Postgres must migrate -> seed ->
+  # boot the API -> serve /health 200 -> serve a published menu. Closes the gap
+  # that verify:migrations (ordering/idempotency only) left, which let the
+  # orders-comma, dup-policy, MAX(uuid), pgboss-not-installed, missing Supabase
+  # roles, and active/open status bugs ship a non-bootable fresh DB.
+  fresh-provision:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace packages
+        run: pnpm -r build
+
+      - name: Install postgres client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Create migrator + app roles (bare PG, no Supabase roles)
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql "postgresql://postgres@127.0.0.1:5432/postgres" -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE dowiz_migrator LOGIN SUPERUSER PASSWORD 'migrator_pw';" \
+            -c "CREATE ROLE dowiz_app LOGIN BYPASSRLS PASSWORD 'app_pw';"
+
+      - name: Generate non-prod secrets env-file
+        # Test-only key material — NEVER prod secrets. DB URLs here are ignored
+        # by the smoke script (overridden by its own exports).
+        run: |
+          cat > .env.ci-fresh <<'EOF'
+          JWT_SIGNING_SECRET=12345678901234567890123456789012
+          JWT_KID=1
+          GOOGLE_CLIENT_ID=ci-fresh.apps.googleusercontent.com
+          GOOGLE_CLIENT_SECRET=ci-fresh-secret
+          VAPID_PUBLIC_KEY=BEu3SBqHCfb9gzfBqkmFeV1WXidH9CgN53_VMDp9mx_61PaFXgPz5gDHuGIXHihtv4IDLKO7aOrvxQpkxaYVP8Y
+          VAPID_PRIVATE_KEY=_R-pnIHQ3TvGlHVOwPiWggeqQNQEdd5Ky_QpHQ2y-7E
+          IP_HASH_SALT=ci-fresh-salt
+          COURIER_PII_ENCRYPTION_KEY=0NbuViiJbBjEEm5fcSfulKasFLiqBNPAbU7kBZ7+oFU=
+          DEV_AUTH_SECRET=ci-fresh-secret
+          EOF
+          # Generate a throwaway RSA keypair for JWT (RS256) signing.
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/jwt_priv.pem 2>/dev/null
+          openssl rsa -in /tmp/jwt_priv.pem -pubout -out /tmp/jwt_pub.pem 2>/dev/null
+          {
+            printf 'JWT_PRIVATE_KEY="'; awk '{printf "%s\\n", $0}' /tmp/jwt_priv.pem; printf '"\n'
+            printf 'JWT_PUBLIC_KEY="';  awk '{printf "%s\\n", $0}' /tmp/jwt_pub.pem;  printf '"\n'
+          } >> .env.ci-fresh
+
+      - name: Verify fresh-from-scratch provisioning
+        env:
+          SUPERUSER_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          SECRETS_ENV_FILE: .env.ci-fresh
+          REDIS_URL: redis://127.0.0.1:6379
+        run: pnpm verify:fresh-provision
+
+  deploy:
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Migrate Database
+        run: pnpm migrate:up
+        env:
+          DATABASE_URL_MIGRATIONS: ${{ secrets.DATABASE_URL_MIGRATIONS }}
+          
+      - name: Deploy to Fly
+        uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Post-deploy E2E smoke (deploy-validation)
+        run: npx playwright test e2e/tests/deploy-validation.spec.ts --project=desktop --reporter=list
+        env:
+          VITE_BASE_URL: "https://dowiz.fly.dev"
+          DEV_AUTH_SECRET: ${{ secrets.DEV_AUTH_SECRET }}
+        timeout-minutes: 5
+
+      - name: Post-deploy E2E regression (core lifecycles)
+        run: npx playwright test e2e/tests/flow-core-lifecycles.spec.ts --project=desktop --reporter=list
+        env:
+          VITE_BASE_URL: "https://dowiz.fly.dev"
+          DEV_AUTH_SECRET: ${{ secrets.DEV_AUTH_SECRET }}
+        timeout-minutes: 5
+
+      - name: Post-deploy E2E Telegram webhook
+        run: npx playwright test e2e/tests/telegram-webhook.spec.ts --project=desktop --reporter=list
+        env:
+          VITE_BASE_URL: "https://dowiz.fly.dev"
+          DEV_AUTH_SECRET: ${{ secrets.DEV_AUTH_SECRET }}
+        timeout-minutes: 3
+
+      - name: Post-deploy E2E Telegram full-flow
+        run: npx playwright test e2e/tests/telegram-full-flow.spec.ts --project=desktop --reporter=list
+        env:
+          VITE_BASE_URL: "https://dowiz.fly.dev"
+          DEV_AUTH_SECRET: ${{ secrets.DEV_AUTH_SECRET }}
+        timeout-minutes: 10

@@ -1,0 +1,21 @@
+{
+  "id": "client-low-tech-careful",
+  "role": "client",
+  "goals": [
+    "order a familiar dish",
+    "not make a mistake"
+  ],
+  "traits": {
+    "patience": "high",
+    "tech_savvy": "low",
+    "careful_or_sloppy": "careful"
+  },
+  "device": "mobile",
+  "viewport": 390,
+  "locale": "al",
+  "network_profile": "4g",
+  "constraints": [
+    "large thumbs, mis-taps",
+    "reads every label"
+  ]
+}

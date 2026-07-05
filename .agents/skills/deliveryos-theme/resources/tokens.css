@@ -1,0 +1,80 @@
+/* ── DeliveryOS CSS Tokens ── */
+/* Paste into every screen's <style> block inside :root {} */
+
+/* ── Figma "Food Delivery" token mapping ──────────────────────
+   primary-black-background #121212  → --brand-bg
+   secoundry-black-background #1e1e1e → --brand-surface
+   third-black-background #2a2a2a   → --brand-surface-raised  (NEW)
+   stroke-1 #2c2c2c                 → --brand-border
+   orange #ea4f16                   → --brand-primary
+   orange-variant #ffa12e           → --brand-primary-hover
+   secoundry-text #a8a8a8           → --brand-text-muted
+   white #ffffff                    → --brand-text
+   Font: Inter 400/500/700          → --brand-font-*
+   card-radius 12px                 → --brand-radius
+   btn-radius 78px                  → --brand-radius-btn
+──────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Food Dark (default — Figma-derived) ── */
+  --brand-primary:        #ea4f16;
+  --brand-primary-hover:  #ffa12e;
+  --brand-primary-light:  rgba(234, 79, 22, 0.12);
+  --brand-accent:         #2a2a2a;
+  --brand-bg:             #121212;
+  --brand-surface:        #1e1e1e;
+  --brand-surface-raised: #2a2a2a;
+  --brand-text:           #ffffff;
+  --brand-text-muted:     #a8a8a8;
+  --brand-border:         #2c2c2c;
+  --brand-font-heading:   'Inter', sans-serif;
+  --brand-font-body:      'Inter', sans-serif;
+  --brand-radius:         12px;
+  --brand-radius-sm:      8px;
+  --brand-radius-btn:     78px;
+
+  /* ── Semantic (NEVER override per theme) ── */
+  --color-success:  #059669;
+  --color-warning:  #D97706;
+  --color-danger:   #DC2626;
+  --color-info:     #2563EB;
+
+  /* ── Order status ── */
+  --status-pending:     #D97706;
+  --status-confirmed:   #2563EB;
+  --status-preparing:   #F59E0B;
+  --status-ready:       #0D9488;
+  --status-in-delivery: #3B82F6;
+  --status-delivered:   #059669;
+  --status-rejected:    #DC2626;
+  --status-cancelled:   #DC2626;
+  --status-scheduled:   #7C3AED;
+  --status-picked-up:   #0D9488;
+}
+
+/* ── Dark-mode override for light presets ── */
+/* Only active when a light preset (Crimson Classic, Ocean Fresh,
+   Sage Garden, Coral Breeze) is applied AND OS prefers dark.
+   No-op for dark presets (Food Dark, Midnight Urban, Royal Gold). */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand-bg:             #0F172A;
+    --brand-surface:        #1E293B;
+    --brand-surface-raised: #263548;
+    --brand-text:           #F1F5F9;
+    --brand-text-muted:     #94A3B8;
+    --brand-border:         #334155;
+    --brand-primary-light:  rgba(234, 79, 22, 0.15);
+    --brand-accent:         #1E1A14;
+  }
+}
+
+/* ── Preset reference (7 presets — see presets.json) ────────
+   Food Dark      #ea4f16 orange    dark  Inter
+   Crimson Classic #C1121F red      light DM Serif Display
+   Ocean Fresh    #0D9488 teal      light Cormorant Garamond
+   Midnight Urban #F97316 orange    dark  DM Sans
+   Sage Garden    #4D7C0F green     light Playfair Display
+   Royal Gold     #B45309 gold      dark  Cormorant Garamond
+   Coral Breeze   #DB2777 pink      light Playfair Display
+──────────────────────────────────────────────────────────── */

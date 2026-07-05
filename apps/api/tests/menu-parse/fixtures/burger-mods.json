@@ -1,0 +1,44 @@
+{
+  "name": "burger-mods",
+  "_note": "Decimal-currency (EUR, minor unit 2) + two modifier groups. Baseline passes.",
+  "expected": {
+    "categories": [{ "externalKey": "burgers", "name": "Burgers" }],
+    "products": [
+      { "externalKey": "b1", "categoryKey": "burgers", "name": "Classic Burger", "price": 850, "currency": "EUR", "available": true },
+      { "externalKey": "b2", "categoryKey": "burgers", "name": "Double Bacon", "price": 1150, "currency": "EUR", "available": true }
+    ],
+    "modifierGroups": [
+      { "externalKey": "cook", "name": "Cooking", "minSelect": 1, "maxSelect": 1, "required": true },
+      { "externalKey": "extras", "name": "Extras", "minSelect": 0, "maxSelect": 3, "required": false }
+    ],
+    "modifiers": [
+      { "externalKey": "cook_m", "groupKey": "cook", "name": "Medium", "priceDelta": 0, "available": true },
+      { "externalKey": "ex_ch", "groupKey": "extras", "name": "Cheese", "priceDelta": 100, "available": true }
+    ],
+    "links": [
+      { "productKey": "b1", "groupKey": "cook", "sortOrder": 0 },
+      { "productKey": "b1", "groupKey": "extras", "sortOrder": 1 }
+    ],
+    "translations": []
+  },
+  "actual": {
+    "categories": [{ "externalKey": "k0", "name": "Burgers" }],
+    "products": [
+      { "externalKey": "k1", "categoryKey": "k0", "name": "Classic Burger", "price": 850, "currency": "EUR", "available": true },
+      { "externalKey": "k2", "categoryKey": "k0", "name": "Double Bacon", "price": 1150, "currency": "EUR", "available": true }
+    ],
+    "modifierGroups": [
+      { "externalKey": "gA", "name": "Cooking", "minSelect": 1, "maxSelect": 1, "required": true },
+      { "externalKey": "gB", "name": "Extras", "minSelect": 0, "maxSelect": 3, "required": false }
+    ],
+    "modifiers": [
+      { "externalKey": "gAm", "groupKey": "gA", "name": "Medium", "priceDelta": 0, "available": true },
+      { "externalKey": "gBm", "groupKey": "gB", "name": "Cheese", "priceDelta": 100, "available": true }
+    ],
+    "links": [
+      { "productKey": "k1", "groupKey": "gA", "sortOrder": 0 },
+      { "productKey": "k1", "groupKey": "gB", "sortOrder": 1 }
+    ],
+    "translations": []
+  }
+}

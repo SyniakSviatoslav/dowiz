@@ -1,0 +1,61 @@
+echo "=== Running Pre-commit Checks ==="
+
+echo "1/4: Linting staged files..."
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' | tr '\n' ' ')
+if [ -n "$STAGED" ]; then
+  npx eslint $STAGED || exit 1
+else
+  echo "No JS/TS staged files to lint."
+fi
+
+echo "1.4: injection-corpus reachability (whole-tree, blocking — tooling-integration-eval G1)..."
+node scripts/guardrail-corpus-reachability.mjs || exit 1
+
+echo "1.4b: license + forbidden-dep + env-classification (whole-tree, blocking — tooling-integration-eval G5)..."
+node scripts/guardrail-license.mjs || exit 1
+
+echo "1.4c: hook matchers cover all edit tools (no gate bypass via MultiEdit)..."
+node scripts/guardrail-hook-matchers.mjs || exit 1
+
+echo "1.5: i18n parity (no missing/TODO translations)..."
+if git diff --cached --name-only --diff-filter=ACM | grep -qE 'packages/ui/src/lib/i18n(-catalog)?\.ts$'; then
+  pnpm exec tsx scripts/i18n-parity.ts || exit 1
+else
+  echo "No i18n changes staged."
+fi
+
+echo "2/4: Typechecking code..."
+pnpm -r typecheck || exit 1
+
+echo "3/4: Building packages and apps..."
+pnpm -r build || exit 1
+
+echo "4/5: Validating Fly.io config..."
+if command -v flyctl >/dev/null 2>&1 || command -v fly >/dev/null 2>&1; then
+  flyctl config validate || fly config validate || exit 1
+  echo "Fly.io config is valid!"
+else
+  echo "Fly CLI not found. Skipping config validation."
+fi
+
+echo "5/5: Checking Fly.io Build (Docker)..."
+if command -v docker >/dev/null 2>&1; then
+  # DISK GUARD (regression fix — docs/incidents/2026-06-28-local-pg-disk-crash.md): Docker shares /dev/sda1
+  # with the local Postgres data dir; the per-commit build orphans layers, and ~50 commits once filled the
+  # disk and crashed PG into WAL-recovery. Reclaim to a free-space target BEFORE the build (tiered, safe),
+  # skip the build if still too low, and reclaim again AFTER to drop the layer this build just orphaned.
+  bash scripts/docker-disk-guard.sh 15
+  AVAIL_GB=$(df -BG --output=avail / 2>/dev/null | tail -1 | tr -dc '0-9')
+  if [ -n "$AVAIL_GB" ] && [ "$AVAIL_GB" -lt 8 ]; then
+    echo "Low disk (${AVAIL_GB}G free after prune) — skipping the local Docker build to protect the disk (cloud build still gates deploy)."
+  elif docker build -t dowiz-check . 2>&1; then
+    echo "Fly.io (Docker) build successful!"
+  else
+    echo "Warning: Docker build failed (local network/env issue). Fly.io builds in cloud — skipping."
+  fi
+  bash scripts/docker-disk-guard.sh 20
+else
+  echo "Docker is not installed or not running. Skipping Fly.io build check."
+fi
+
+echo "=== All checks passed! ==="

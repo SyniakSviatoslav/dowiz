@@ -1,0 +1,14 @@
+{
+  "id": "cafe-basic",
+  "synthetic": true,
+  "ocr": "CAFE AROMA\nEspresso ... 180\nCappuccino ... 250\nFlat White ... 270\nCroissant ... 220",
+  "expected": {
+    "restaurant": { "name": "Cafe Aroma" },
+    "products": [
+      { "name": "Espresso", "price": 180 },
+      { "name": "Cappuccino", "price": 250 },
+      { "name": "Flat White", "price": 270 },
+      { "name": "Croissant", "price": 220 }
+    ]
+  }
+}

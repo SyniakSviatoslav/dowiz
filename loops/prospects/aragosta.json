@@ -1,0 +1,453 @@
+[
+ {
+  "slug": "aragosta",
+  "name": "Aragosta Restaurant",
+  "cuisine": "seafood",
+  "phone": "+355 69 860 3355",
+  "primary": "#1f6f8b",
+  "bg": "#f2f6f7",
+  "menu": [
+   {
+    "name": "Çaj i ftohtë  Pjeshke",
+    "category": "Të tjera",
+    "price": 220,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1f24bfc8a04be564a0",
+    "sort_order": 0
+   },
+   {
+    "name": "Pulsi Beratit Nurellari",
+    "category": "Të tjera",
+    "price": 2750,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564ab",
+    "sort_order": 1
+   },
+   {
+    "name": "Karpaçio Levrek ose Oktapod",
+    "category": "Antipasti & Sallata",
+    "price": 1100,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2224bfc8a04be564b6",
+    "sort_order": 2
+   },
+   {
+    "name": "Lemon Soda",
+    "category": "Pije",
+    "price": 220,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1f24bfc8a04be5649f",
+    "sort_order": 3
+   },
+   {
+    "name": "E Bardha Beratit Çobo",
+    "category": "Të tjera",
+    "price": 2750,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564a8",
+    "sort_order": 4
+   },
+   {
+    "name": "Supë Peshku",
+    "category": "Të tjera",
+    "price": 660,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1724bfc8a04be56491",
+    "sort_order": 5
+   },
+   {
+    "name": "Oktapod Zgare",
+    "category": "Peshk & Detare",
+    "price": 1650,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb0d24bfc8a04be56485",
+    "sort_order": 6
+   },
+   {
+    "name": "Bravo Molle",
+    "category": "Të tjera",
+    "price": 220,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564a7",
+    "sort_order": 7
+   },
+   {
+    "name": "Kallmet Arbëri Riserva",
+    "category": "Të tjera",
+    "price": 3300,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2124bfc8a04be564af",
+    "sort_order": 8
+   },
+   {
+    "name": "Rizoto me Fruta Deti",
+    "category": "Të tjera",
+    "price": 1160,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1724bfc8a04be56490",
+    "sort_order": 9
+   },
+   {
+    "name": "Fileto Pule në Zgarë me Patate",
+    "category": "Mish & Grill",
+    "price": 940,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1a24bfc8a04be56496",
+    "sort_order": 10
+   },
+   {
+    "name": "Red Bull",
+    "category": "Të tjera",
+    "price": 385,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564a4",
+    "sort_order": 11
+   },
+   {
+    "name": "Tortë Tradicionale",
+    "category": "Ëmbëlsira",
+    "price": 330,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2524bfc8a04be564bc",
+    "sort_order": 12
+   },
+   {
+    "name": "Schweppes Tonic Water",
+    "category": "Pije",
+    "price": 220,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1f24bfc8a04be564a1",
+    "sort_order": 13
+   },
+   {
+    "name": "Sprite",
+    "category": "Pije",
+    "price": 220,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1f24bfc8a04be564a2",
+    "sort_order": 14
+   },
+   {
+    "name": "Fanta Exotic",
+    "category": "Pije",
+    "price": 220,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1e24bfc8a04be56499",
+    "sort_order": 15
+   },
+   {
+    "name": "Sallatë Oktapodi",
+    "category": "Antipasti & Sallata",
+    "price": 1650,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2224bfc8a04be564b3",
+    "sort_order": 16
+   },
+   {
+    "name": "Karkalec në Zgarë",
+    "category": "Peshk & Detare",
+    "price": 1870,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb0d24bfc8a04be56484",
+    "sort_order": 17
+   },
+   {
+    "name": "Barbun i Skuqur",
+    "category": "Të tjera",
+    "price": 1320,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1a24bfc8a04be56493",
+    "sort_order": 18
+   },
+   {
+    "name": "Ujë",
+    "category": "Të tjera",
+    "price": 110,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1e24bfc8a04be5649b",
+    "sort_order": 19
+   },
+   {
+    "name": "Merluc i Skuqur",
+    "category": "Të tjera",
+    "price": 1100,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1724bfc8a04be5648d",
+    "sort_order": 20
+   },
+   {
+    "name": "Pecorino",
+    "category": "Të tjera",
+    "price": 2750,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564aa",
+    "sort_order": 21
+   },
+   {
+    "name": "Shesh i Bardhë Arbëri",
+    "category": "Të tjera",
+    "price": 2200,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbc50ff803e27f0484f84",
+    "sort_order": 22
+   },
+   {
+    "name": "Fokaçe",
+    "category": "Të tjera",
+    "price": 330,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1a24bfc8a04be56497",
+    "sort_order": 23
+   },
+   {
+    "name": "Pizza Margherita",
+    "category": "Pizza",
+    "price": 600,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1a24bfc8a04be56495",
+    "sort_order": 24
+   },
+   {
+    "name": "Rizoto me Porcini & Parmigiano",
+    "category": "Të tjera",
+    "price": 990,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb8424bfc8a04be564d1",
+    "sort_order": 25
+   },
+   {
+    "name": "Aragosta Vermentino",
+    "category": "Të tjera",
+    "price": 2750,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2124bfc8a04be564ac",
+    "sort_order": 26
+   },
+   {
+    "name": "Kroketa Merluci",
+    "category": "Të tjera",
+    "price": 790,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2524bfc8a04be564ba",
+    "sort_order": 27
+   },
+   {
+    "name": "Sallatë Stine",
+    "category": "Antipasti & Sallata",
+    "price": 660,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1324bfc8a04be5648b",
+    "sort_order": 28
+   },
+   {
+    "name": "Bravo Pjeshke",
+    "category": "Të tjera",
+    "price": 220,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564a3",
+    "sort_order": 29
+   },
+   {
+    "name": "Djathë Kaçkavall Zgare ose Sade",
+    "category": "Të tjera",
+    "price": 440,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1324bfc8a04be56489",
+    "sort_order": 30
+   },
+   {
+    "name": "Orange Soda",
+    "category": "Pije",
+    "price": 220,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1f24bfc8a04be5649e",
+    "sort_order": 31
+   },
+   {
+    "name": "Kashmer Çobo",
+    "category": "Të tjera",
+    "price": 2750,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2124bfc8a04be564b0",
+    "sort_order": 32
+   },
+   {
+    "name": "Sallatë Greke",
+    "category": "Antipasti & Sallata",
+    "price": 550,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1324bfc8a04be5648c",
+    "sort_order": 33
+   },
+   {
+    "name": "Linguine me Fruta Deti",
+    "category": "Pasta",
+    "price": 1160,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1724bfc8a04be5648f",
+    "sort_order": 34
+   },
+   {
+    "name": "Pizza Proshute Cotto Ullinj",
+    "category": "Pizza",
+    "price": 880,
+    "image_url": "https://imageproxy.wolt.com/assets/6a11405f163733b7fe60b3fb",
+    "sort_order": 35
+   },
+   {
+    "name": "Pizza Diavola",
+    "category": "Pizza",
+    "price": 770,
+    "image_url": "https://imageproxy.wolt.com/assets/6a1140d2508522294be47145",
+    "sort_order": 36
+   },
+   {
+    "name": "Coca cola Zero",
+    "category": "Pije",
+    "price": 220,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1e24bfc8a04be5649c",
+    "sort_order": 37
+   },
+   {
+    "name": "Rizoto me Perime",
+    "category": "Të tjera",
+    "price": 660,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb8024bfc8a04be564d0",
+    "sort_order": 38
+   },
+   {
+    "name": "Fanta Portokall",
+    "category": "Pije",
+    "price": 220,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1e24bfc8a04be5649d",
+    "sort_order": 39
+   },
+   {
+    "name": "Patate të Skuqura",
+    "category": "Të tjera",
+    "price": 330,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1324bfc8a04be5648a",
+    "sort_order": 40
+   },
+   {
+    "name": "Sallatë Çezar",
+    "category": "Antipasti & Sallata",
+    "price": 770,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1724bfc8a04be5648e",
+    "sort_order": 41
+   },
+   {
+    "name": "Sallatë me Fruta Deti",
+    "category": "Antipasti & Sallata",
+    "price": 1100,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2224bfc8a04be564b5",
+    "sort_order": 42
+   },
+   {
+    "name": "Çaj i ftohtë Limon",
+    "category": "Të tjera",
+    "price": 220,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564a6",
+    "sort_order": 43
+   },
+   {
+    "name": "Djathë i  Bardhë Furre ose Sade",
+    "category": "Të tjera",
+    "price": 385,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb0d24bfc8a04be56483",
+    "sort_order": 44
+   },
+   {
+    "name": "Biftek Viçi Në Zgarë me Patate",
+    "category": "Mish & Grill",
+    "price": 1430,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1a24bfc8a04be56494",
+    "sort_order": 45
+   },
+   {
+    "name": "Bravo Rrushi",
+    "category": "Të tjera",
+    "price": 220,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564a5",
+    "sort_order": 46
+   },
+   {
+    "name": "Petulla",
+    "category": "Të tjera",
+    "price": 330,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2524bfc8a04be564b9",
+    "sort_order": 47
+   },
+   {
+    "name": "Kallamare Zgare ose Friturë",
+    "category": "Të tjera",
+    "price": 1430,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb0d24bfc8a04be56486",
+    "sort_order": 48
+   },
+   {
+    "name": "Açuge e Marinuar ose Friturë",
+    "category": "Të tjera",
+    "price": 720,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2224bfc8a04be564b7",
+    "sort_order": 49
+   },
+   {
+    "name": "Chardonnay Collio Cormons",
+    "category": "Të tjera",
+    "price": 3080,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564a9",
+    "sort_order": 50
+   },
+   {
+    "name": "Miks Fruta Deti në Zgarë ose Friturë",
+    "category": "Të tjera",
+    "price": 1980,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb0d24bfc8a04be56482",
+    "sort_order": 51
+   },
+   {
+    "name": "Briosh",
+    "category": "Të tjera",
+    "price": 165,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2524bfc8a04be564bb",
+    "sort_order": 52
+   },
+   {
+    "name": "Sallatë Greke",
+    "category": "Antipasti & Sallata",
+    "price": 330,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2524bfc8a04be564bc",
+    "sort_order": 53
+   },
+   {
+    "name": "Patate të Skuqura",
+    "category": "Të tjera",
+    "price": 110,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1e24bfc8a04be5649b",
+    "sort_order": 54
+   },
+   {
+    "name": "Ujë",
+    "category": "Të tjera",
+    "price": 165,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2524bfc8a04be564bb",
+    "sort_order": 55
+   },
+   {
+    "name": "Briosh",
+    "category": "Të tjera",
+    "price": 330,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2524bfc8a04be564b9",
+    "sort_order": 56
+   },
+   {
+    "name": "Petulla",
+    "category": "Të tjera",
+    "price": 1430,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1a24bfc8a04be56494",
+    "sort_order": 57
+   },
+   {
+    "name": "Biftek Viçi Në Zgarë me Patate",
+    "category": "Mish & Grill",
+    "price": 1100,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb2224bfc8a04be564b5",
+    "sort_order": 58
+   },
+   {
+    "name": "Sallatë me Fruta Deti",
+    "category": "Antipasti & Sallata",
+    "price": 660,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb8024bfc8a04be564d0",
+    "sort_order": 59
+   },
+   {
+    "name": "Rizoto me Perime",
+    "category": "Të tjera",
+    "price": 220,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1e24bfc8a04be5649c",
+    "sort_order": 60
+   },
+   {
+    "name": "Coca cola Zero",
+    "category": "Pije",
+    "price": 880,
+    "image_url": "https://imageproxy.wolt.com/assets/6a11405f163733b7fe60b3fb",
+    "sort_order": 61
+   },
+   {
+    "name": "Pizza Proshute Cotto Ullinj",
+    "category": "Pizza",
+    "price": 1160,
+    "image_url": "https://imageproxy.wolt.com/assets/67fcbb1724bfc8a04be5648f",
+    "sort_order": 62
+   }
+  ]
+ }
+]

@@ -1,0 +1,52 @@
+# DRAFT scaffold — authored as a design deliverable (docs/design/harness/SANDBOX-SWARM-GATE.md).
+# NOT yet certified: must pass loop-architect M1–M11 + anti-cheat dry-run via
+# `/build-verify-loop verify sandbox-swarm-gate` before the orchestrator will dispatch it.
+# Structural changes (a gate criterion / block / exit) go through loop-architect, not here.
+id: sandbox-swarm-gate
+version: 0.1
+status: DRAFT            # DRAFT → (loop-architect M1–M11) → CERTIFIED
+intent: "повторюваний мульти-агентний процес → рой агентів у sandbox-worktree'ах на повну потужність; якість/безпека/ЕТИКА гейт на межі review ПЕРЕД merge (merge-on-green ratchet)"
+problem_signature: "є повторюваний мульти-лейновий процес, який хочемо гнати паралельно на повну, з єдиним review/audit-гейтом перед приземленням у реальну гілку"
+trigger: "/loop-orchestrator sandbox-swarm-gate <ціль; лейни> · scaffold: node scripts/sandbox-swarm-gate.mjs"
+role_mindset: "conductor: партиціонує на collision-free лейни, фанить рой, НЕ мерджить сам — гейт (сильна модель) вирішує merge/reject; ETHICS — тверда, незнімна умова"
+preconditions:
+  - "ціль партиціонується на 2+ collision-free лейни (різні файли/дір/поверхні, без спільного mutable-стану, без порядкової залежності)"
+  - "гейт живий: protect-paths + invariant-guardian + security-sentinel + ETHICS ре-ранають на merge-diff (див. design §9 pairing rule) — ІНАКШЕ не послаблювати sandbox"
+  - "Agent(isolation:worktree) + Workflow доступні (settings allow); model routing (sonnet/opus/fable) активний"
+execution_skills: [worktree-sandbox, parallel-subagent-fanout, diff-review-gate, invariant-guardian-scan, security-sentinel-scan, ethics-charter-check, red-green-proof, ship-discipline]
+goal: "кожен диспатчнутий лейн або MERGED (усі гейт-бокси A/B/C зелені + red-line human-approval присутній) або явно ABANDONED; жодного sandbox без review; LOOP REPORT емітнуто"
+verification: "машинний гейт-рубрик A/B/C (docs/design/harness/SANDBOX-SWARM-GATE.md §4 · scripts/sandbox-swarm-gate.mjs checklist): A pnpm typecheck+build зелені + Mandatory-Proof + red→green + no-false-green; B invariant-guardian PASS + security-sentinel PASS + red-line→human-approval present + protect-paths ре-ранано на diff; C ETHICS Charter зелена (тверда, незнімна). Будь-який RED → REJECT назад у той самий sandbox"
+iron_principles:
+  - no-fake-green
+  - ethics-charter-non-removable          # C-блок неможливо waive/timeout/override-file
+  - guards-relocated-not-deleted           # гейт ре-ранає ПОВНИЙ guard-set на merge-diff
+  - no-auto-merge-of-red-lines             # auth/money/RLS/PII/secrets/migrations → human-approval
+  - harness-stays-protected-in-sandbox     # .claude/.github hard-blocked навіть у sandbox
+  - collision-free-lanes-only              # нуль fan-out на спільний hot-file
+  - proof-by-artifact-not-words
+loop_body: [SCOPE, SPAWN, ITERATE, GATE, MERGE-OR-REJECT, RATCHET]
+exit_conditions: "ВСІ: кожен лейн MERGED або ABANDONED; 0 sandbox un-reviewed; гейт A+B+C зелений для кожного merged лейна; red-line merged → human-approval задокументовано; §5 LOOP REPORT емітнуто; qualified-зміна → reflection + ledger guardrail"
+gates: [STOP-GATE-per-lane, STOP-ETHICS-hard, STOP-REDLINE-human-approval]
+proof_artifacts: [per-lane-gate-rubric-filled, invariant-guardian-verdict, security-sentinel-verdict, typecheck-build-output, lane-proof-playwright-or-request-or-red-green, merge-plan-dry-run, loop-report]
+out_of_scope:
+  - "мерджити зі скрипта (скрипт НЕ мерджить — merge lead-driven, gate-passed, human-approved)"
+  - "послаблювати sandbox без живого гейта (pairing rule §9)"
+  - "редагувати .claude/.github навіть усередині sandbox"
+  - "оминати red-line human-approval / serious-gate / red-line-doubt-gate"
+escalation: "ETHICS-red → STOP + людина (жоден green не перекриває). Red-line diff без approval → serious-gate/Council + оператор. Структурна зміна петлі → loop-architect + ре-cert. Спірний лейн → doubt-escalation (K=2)"
+skills_required: [git-worktree, agent-tool-isolation-worktree, workflow-fanout, headed-browser-or-request-proof, repo-access]
+memory_file: loops/memory/sandbox-swarm-gate.md
+verification_report: loops/reports/sandbox-swarm-gate-0.1.md   # authored by loop-architect at cert
+
+# Living Loop System wiring (docs/operating-model/living-loop-system-v3.md §1/§5).
+# On finish (success/stall/abort) the loop MUST emit the §5 LOOP REPORT via the finalize seam,
+# which measures git+session-tokens+eco and persists permanently+losslessly to runs_dir.
+harness:
+  runs_dir: loops/runs
+  always_emit_report: true                 # §5 — printed in full to terminal, no flag
+  progress_metric: lanes_not_yet_merged    # ↓=better; breaker watches this (stall = K non-merging iters)
+  finalize: >-
+    npx tsx tools/loop-harness/src/cli.ts finalize
+    --record <run.json> --base loops/runs
+    --session $CLAUDE_SESSION_JSONL --since <run_start_commit> --repo .
+  telemetry_collectors: [git_mem, session_tokens, eco]   # tokens/agents/skills ← session JSONL (codeburn source)

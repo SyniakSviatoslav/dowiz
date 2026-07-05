@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeliveryOS — Backups</title>
+  <link href="/dist/tabler/tabler-icons.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/admin/dashboard.js"></script>
+  <style>
+    :root {
+      --brand-bg:#0F172A;--brand-surface:#1E293B;--brand-raised:#263548;
+      --brand-text:#F1F5F9;--brand-muted:#94A3B8;--brand-border:#334155;
+      --brand-primary:#ea4f16;--brand-primary-hover:#ffa12e;
+      --brand-primary-light:rgba(234,79,22,0.12);
+      --brand-radius:12px;--brand-radius-sm:8px;--brand-radius-btn:78px;
+      --color-success:#059669;--color-warning:#D97706;--color-danger:#DC2626;--color-info:#2563EB;
+    }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--brand-bg); color:var(--brand-text); }
+    .backup-row { background:var(--brand-surface); border:1px solid var(--brand-border); border-radius:10px; padding:14px 16px; transition:border-color 0.2s; }
+    .backup-row:hover { border-color:var(--brand-primary); }
+    .badge-passed { background:var(--color-success);color:#fff; }
+    .badge-failed { background:var(--color-danger);color:#fff; }
+    .badge-pending { background:var(--color-warning);color:#fff; }
+    .badge-in_progress { background:var(--color-info);color:#fff; }
+    .badge-completed { background:var(--color-success);color:#fff; }
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:100; }
+    .modal-content { background:var(--brand-raised); border:1px solid var(--brand-border); border-radius:12px; padding:24px; max-width:480px; width:90%; }
+    select, input { background:var(--brand-bg); border:1px solid var(--brand-border); border-radius:8px; padding:8px 12px; color:var(--brand-text); font-size:14px; width:100%; }
+    select:focus, input:focus { outline:2px solid var(--brand-primary); outline-offset:-1px; }
+    @media (max-width:640px) { .backup-grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <button id="themeBtn" onclick="cycleTheme()" class="fixed top-4 right-4 z-50 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full cursor-pointer" style="background:var(--brand-surface);border:1px solid var(--brand-border);color:var(--brand-muted);">
+    <i class="ti ti-palette"></i><span id="themeLabel">Food Dark</span>
+  </button>
+
+  <div class="flex flex-col min-h-screen">
+    <header class="flex items-center justify-between px-6 py-3 border-b" style="border-color:var(--brand-border);background:var(--brand-surface);">
+      <div class="flex items-center gap-3">
+        <h1 class="text-lg font-bold">DeliveryOS</h1>
+        <span class="text-sm px-2 py-0.5 rounded-full" style="background:var(--brand-primary);color:#fff;" id="statusBadge">disconnected</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm" style="color:var(--brand-muted);">
+        <a href="/admin/dashboard.html" class="hover:text-white">Dashboard</a>
+        <a href="/admin/orders.html" class="hover:text-white">Orders</a>
+        <a href="/admin/gdpr.html" class="hover:text-white">GDPR</a>
+        <a href="/admin/health.html" class="hover:text-white">Health</a>
+        <a href="/admin/backups.html" class="hover:text-white font-semibold" style="color:var(--brand-text);">Backups</a>
+      </div>
+    </header>
+
+    <div class="flex-1 p-6 max-w-4xl mx-auto w-full">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold">Backups</h2>
+          <p class="text-sm mt-0.5" style="color:var(--brand-muted);">Recent backup snapshots and restore-test results.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="triggerVerify()" class="px-3 py-1.5 text-xs rounded-full cursor-pointer flex items-center gap-1" style="background:var(--brand-primary);color:#fff;border:none;">
+            <i class="ti ti-refresh"></i> Run verify now
+          </button>
+          <a href="/admin/health.html" class="px-3 py-1.5 text-xs rounded-full" style="background:var(--brand-surface);border:1px solid var(--brand-border);color:var(--brand-text);text-decoration:none;">
+            <i class="ti ti-heartbeat"></i> Health
+          </a>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="flex items-center gap-3 mb-4">
+        <select id="typeFilter" onchange="loadBackups()" style="width:auto;min-width:120px;">
+          <option value="">All types</option>
+          <option value="hourly">Hourly</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+        <select id="statusFilter" onchange="loadBackups()" style="width:auto;min-width:120px;">
+          <option value="">All status</option>
+          <option value="completed">Completed</option>
+          <option value="failed">Failed</option>
+          <option value="in_progress">In progress</option>
+        </select>
+        <span class="text-xs" style="color:var(--brand-muted);" id="backupCount"></span>
+      </div>
+
+      <!-- Backups list -->
+      <div class="space-y-2" id="backupsContainer">
+        <div class="text-center py-8" style="color:var(--brand-muted);">Loading backups...</div>
+      </div>
+
+      <!-- Loading overlay for verify -->
+      <div id="verifyOverlay" class="modal-overlay hidden">
+        <div class="modal-content text-center">
+          <div class="text-lg mb-2">⏳ Running restore-test...</div>
+          <p class="text-sm" style="color:var(--brand-muted);">This may take several minutes. The page will update when complete.</p>
+          <div class="mt-4 w-full h-1 rounded-full" style="background:var(--brand-border);overflow:hidden;">
+            <div class="h-full" style="background:var(--brand-primary);width:30%;animation:progress 30s ease-in-out infinite;"></div>
+          </div>
+        </div>
+      </div>
+
+      <style>
+        @keyframes progress { 0% { width:5%; } 50% { width:60%; } 100% { width:95%; } }
+      </style>
+    </div>
+  </div>
+
+  <script>
+    async function loadBackups() {
+      const container = document.getElementById('backupsContainer');
+      const typeFilter = document.getElementById('typeFilter').value;
+      const statusFilter = document.getElementById('statusFilter').value;
+
+      try {
+        const params = new URLSearchParams();
+        if (typeFilter) params.set('type', typeFilter);
+        if (statusFilter) params.set('status', statusFilter);
+
+        const token = getOwnerToken();
+        const headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        const res = await fetch('/api/admin/backups?' + params.toString(), { headers });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+
+        document.getElementById('backupCount').textContent = data.backups.length + ' backup(s)';
+
+        if (data.backups.length === 0) {
+          container.innerHTML = '<div class="text-center py-8" style="color:var(--brand-muted);">No backups found.</div>';
+          return;
+        }
+
+        container.innerHTML = data.backups.map(b => {
+          const typeLabel = b.type.charAt(0).toUpperCase() + b.type.slice(1);
+          const size = b.size_bytes ? (b.size_bytes / 1024 / 1024).toFixed(1) + ' MB' : '—';
+          const date = new Date(b.created_at).toLocaleString();
+          const restoreBadge = renderRestoreBadge(b);
+          return `
+            <div class="backup-row">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3 flex-1 min-w-0">
+                  <div class="w-2 h-2 rounded-full" style="background:${b.status === 'completed' ? 'var(--color-success)' : b.status === 'failed' ? 'var(--color-danger)' : 'var(--color-warning)'};"></div>
+                  <div class="min-w-0">
+                    <div class="font-medium text-sm truncate">${typeLabel} — ${date}</div>
+                    <div class="text-xs" style="color:var(--brand-muted);">
+                      ${b.id.substring(0, 8)}… · ${size}
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                  ${restoreBadge}
+                  <span class="text-xs px-2 py-0.5 rounded-full badge-${b.status}">${b.status}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        container.innerHTML = '<div class="text-center py-8" style="color:var(--color-danger);">Failed to load: ' + err.message + '</div>';
+      }
+    }
+
+    function renderRestoreBadge(backup) {
+      if (!backup.restore_test_result) return '';
+      const r = backup.restore_test_result;
+      if (r === 'passed') return '<span class="text-xs px-2 py-0.5 rounded-full badge-passed"><i class="ti ti-check"></i> Verify OK</span>';
+      if (r === 'failed') return '<span class="text-xs px-2 py-0.5 rounded-full badge-failed"><i class="ti ti-x"></i> Verify FAIL</span>';
+      if (r === 'in_progress') return '<span class="text-xs px-2 py-0.5 rounded-full badge-pending"><i class="ti ti-loader"></i> Verifying...</span>';
+      return '';
+    }
+
+    async function triggerVerify() {
+      if (!confirm('Run restore-test now? This will restore the latest daily backup to an isolated sandbox and run smoke-checks.')) return;
+
+      document.getElementById('verifyOverlay').classList.remove('hidden');
+      try {
+        const token = getOwnerToken();
+        const res = await fetch('/api/admin/backups/verify', {
+          method: 'POST',
+          headers: { ...(token ? { 'Authorization': 'Bearer ' + token } : {}), 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const result = await res.json();
+        alert(result.success ? '✅ Verify passed!' : '❌ Verify failed: ' + (result.error || 'Unknown'));
+        loadBackups();
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        document.getElementById('verifyOverlay').classList.add('hidden');
+      }
+    }
+
+    // Initial load
+    loadBackups();
+    setInterval(loadBackups, 30000);
+  </script>
+</body>
+</html>

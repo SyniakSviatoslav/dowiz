@@ -1,0 +1,20 @@
+{
+  "id": "owner-ipad",
+  "role": "owner",
+  "goals": [
+    "run service from a tablet on the counter"
+  ],
+  "traits": {
+    "patience": "med",
+    "tech_savvy": "med",
+    "careful_or_sloppy": "sloppy"
+  },
+  "device": "tablet",
+  "viewport": 768,
+  "locale": "al",
+  "network_profile": "wifi",
+  "constraints": [
+    "touch only",
+    "greasy-finger taps"
+  ]
+}

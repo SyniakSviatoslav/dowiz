@@ -1,0 +1,106 @@
+---
+// Static SSR product card — parity: packages/ui/src/components/client/ProductCard.tsx (used-by
+// 3 files, census 3.1: "SvC, SSR-rendered by Astro + hydrated"). Server-rendered markup carries
+// every data- attribute the MenuBrowser island needs for event delegation (single listener on the
+// grid container, not one per card) — add-to-cart, price, and modifier presence are all readable
+// from the DOM without a second fetch.
+import type { PublicMenuProduct } from '../lib/api-types';
+
+interface Props {
+  product: PublicMenuProduct;
+  currencyMinorUnit: number;
+}
+const { product, currencyMinorUnit } = Astro.props;
+
+function formatPrice(minorUnits: number, minorUnitDigits: number): string {
+  const value = minorUnitDigits > 0 ? minorUnits / 10 ** minorUnitDigits : minorUnits;
+  return minorUnitDigits > 0 ? value.toFixed(minorUnitDigits) : String(value);
+}
+
+const hasModifiers = product.modifier_groups.length > 0;
+---
+
+<article
+  class="product-card"
+  data-product-id={product.id}
+  data-product-name={product.name}
+  data-product-price={product.price}
+>
+  {product.imageUrl && (
+    <img class="product-image" src={product.imageUrl} alt="" loading="lazy" width="96" height="96" />
+  )}
+  <div class="product-body">
+    <h3 class="product-name">{product.name}</h3>
+    {product.description && <p class="product-description">{product.description}</p>}
+    <div class="product-meta">
+      <span class="product-price">{formatPrice(product.price, currencyMinorUnit)}</span>
+      {product.prep_time_minutes != null && (
+        <span class="product-prep">~{product.prep_time_minutes} min</span>
+      )}
+    </div>
+  </div>
+  <button
+    class="product-add"
+    type="button"
+    data-add-to-cart={product.id}
+    aria-label={`Add ${product.name} to cart`}
+  >
+    {hasModifiers ? 'Choose' : 'Add'}
+  </button>
+</article>
+
+<style>
+  .product-card {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--brand-border);
+    align-items: center;
+  }
+  .product-image {
+    border-radius: 0.5rem;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .product-body {
+    flex: 1;
+    min-width: 0;
+  }
+  .product-name {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+  .product-description {
+    margin: 0.2rem 0 0;
+    font-size: 0.8rem;
+    color: var(--brand-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .product-meta {
+    margin-top: 0.35rem;
+    font-size: 0.85rem;
+    display: flex;
+    gap: 0.5rem;
+    color: var(--brand-text-muted);
+  }
+  .product-price {
+    color: var(--brand-text);
+    font-weight: 600;
+  }
+  .product-add {
+    flex-shrink: 0;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: var(--radius-full);
+    border: none;
+    background: var(--brand-primary);
+    color: var(--brand-bg);
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 0 1rem;
+  }
+</style>

@@ -1,0 +1,21 @@
+id: exit-audit
+version: 0.1
+status: DRAFT
+intent: "змагально довести (або спростувати) завершеність ЦІЛОЇ фази перед переходом"
+problem_signature: "перед переходом між фазами: чи фаза реально завершена?"
+trigger: "/exit-audit <фаза>"
+role_mindset: "exit-аудитор (змагальний): припускай, що фаза НЕ готова; спробуй зламати твердження про завершення"
+preconditions: ["етапи фази заявлені завершеними", "система піднімається", "наскрізні червоні лінії фази визначені"]
+execution_skills: [phase-coverage-check, adversarial-probe, e2e-run, contract-parity, security-tenant-probe, verdict-author]
+goal: "доведено/спростовано: усі етапи зелені, червоні лінії фази тримаються, критичний шлях E2E зелений"
+verification: "кожен етап фази має зелений чекпойнт; наскрізні червоні лінії фази доведені доказом; критичний шлях трьох ролей E2E зелений; крос-tenant=0; нуль секретів; (Фаза 5) критерій реального платного заказу адресовано"
+iron_principles: [adversarial-completion, red-lines-proven-not-claimed, evidence-over-assertion, launch-trigger-reality, audit-does-not-fix, no-fake-green]
+loop_body: [SENSE, DIAGNOSE, ACT, VERIFY, REPEAT]
+exit_conditions: "ВСІ: кожен чекпойнт етапу зелений; червоні лінії фази доведені; E2E критичний шлях зелений; security/tenant-проби чисті; вердикт записано; (Фаза 5) реальний платний заказ — критерій"
+gates: [STOP-COVERAGE, STOP-VERDICT]
+proof_artifacts: [phase-coverage-matrix, red-line-probe-evidence, e2e-run, security-probe, exit-verdict]
+out_of_scope: [лагодити-тут]
+escalation: "FAIL → перелік дір назад у build-stage/error-fix; серйозна архітектурна діра → /council"
+skills_required: [repo-access, test-runner, headed-browser]
+memory_file: loops/memory/exit-audit.md
+verification_report: loops/reports/exit-audit-0.1.md

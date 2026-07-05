@@ -1,0 +1,231 @@
+[
+ {
+  "slug": "lamuse",
+  "name": "L'Amuse",
+  "cuisine": "mediterranean",
+  "primary": "#2f7d76",
+  "bg": "#f7f3ea",
+  "menu": [
+   {
+    "name": "Variety Di Sushi 36 Pz",
+    "category": "Të tjera",
+    "price": 4600,
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6fdea4a83292eef409f",
+    "sort_order": 0
+   },
+   {
+    "name": "Uramaki California 9pcs",
+    "category": "Peshk & Detare",
+    "price": 1480,
+    "description": "Salmon, shrimp, avocado, sesame, mayonnaise, rice, seaweed, wasabi, ginger",
+    "description_sq": "Salmon, shrimp, avocado, sesame, mayonnaise, rice, seaweed, wasabi, ginger",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40a9",
+    "sort_order": 1
+   },
+   {
+    "name": "Tempura Di Gambero 6 Pz",
+    "category": "Të tjera",
+    "price": 1320,
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6feea4a83292eef40a3",
+    "sort_order": 2
+   },
+   {
+    "name": "Uramaki Philadelphia e Special",
+    "category": "Peshk & Detare",
+    "price": 1650,
+    "description": "Philadelphia, rice, salmon, shrimp tempura, wasabi, ginger, leek",
+    "description_sq": "Philadelphia, rice, salmon, shrimp tempura, wasabi, ginger, leek",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb701ea4a83292eef40b1",
+    "sort_order": 3
+   },
+   {
+    "name": "Hot Roll Philadelphia 8 Pz",
+    "category": "Të tjera",
+    "price": 1210,
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6fdea4a83292eef40a0",
+    "sort_order": 4
+   },
+   {
+    "name": "Sakura",
+    "category": "Peshk & Detare",
+    "price": 1430,
+    "description": "Salmon, rice, cucumber, philadelphia, avocado, teriyaki",
+    "description_sq": "Salmon, rice, cucumber, philadelphia, avocado, teriyaki",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6feea4a83292eef40a2",
+    "sort_order": 5
+   },
+   {
+    "name": "Tempura Special Dello Chef 8 Pz",
+    "category": "Peshk & Detare",
+    "price": 1430,
+    "description": "Shrimp, teriyaki, philadelphia, avocado, sesame",
+    "description_sq": "Shrimp, teriyaki, philadelphia, avocado, sesame",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6ffea4a83292eef40a8",
+    "sort_order": 6
+   },
+   {
+    "name": "Mix Nigiri 6 Pieces",
+    "category": "Peshk & Detare",
+    "price": 1320,
+    "description": "Salmon, tuna, wasabi rice, ginger, mushrooms, leeks",
+    "description_sq": "Salmon, tuna, wasabi rice, ginger, mushrooms, leeks",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6ffea4a83292eef40a5",
+    "sort_order": 7
+   },
+   {
+    "name": "Gringo Uramaki",
+    "category": "Peshk & Detare",
+    "price": 1320,
+    "description": "Avocado, rice, philadelphia, shrimp, wasabi, teriyaki ginger, leek",
+    "description_sq": "Avocado, rice, philadelphia, shrimp, wasabi, teriyaki ginger, leek",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40aa",
+    "sort_order": 8
+   },
+   {
+    "name": "Salmon Sashimi 8 Pieces",
+    "category": "Peshk & Detare",
+    "price": 1320,
+    "description": "Salmon, arugula, fish egg, caramelized onion, wasabi, ginger",
+    "description_sq": "Salmon, arugula, fish egg, caramelized onion, wasabi, ginger",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6ffea4a83292eef40a6",
+    "sort_order": 9
+   },
+   {
+    "name": "Salmon Hosomaki 8 Pieces",
+    "category": "Peshk & Detare",
+    "price": 1210,
+    "description": "Salmon, rice, seaweed, wasabi, ginger",
+    "description_sq": "Salmon, rice, seaweed, wasabi, ginger",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6ffea4a83292eef40a4",
+    "sort_order": 10
+   },
+   {
+    "name": "Uramaki Primavera 8pcs",
+    "category": "Peshk & Detare",
+    "price": 1480,
+    "description": "Salmon, mango, cream cheese, white fish, sesame, ginger, fish roe, rice, seaweed, avocado, wasabi",
+    "description_sq": "Salmon, mango, cream cheese, white fish, sesame, ginger, fish roe, rice, seaweed, avocado, wasabi",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40ad",
+    "sort_order": 11
+   },
+   {
+    "name": "Sushi Dragon",
+    "category": "Peshk & Detare",
+    "price": 1210,
+    "description": "Salmon, philadelphia, mushrooms, leeks, wasabi, ginger",
+    "description_sq": "Salmon, philadelphia, mushrooms, leeks, wasabi, ginger",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6feea4a83292eef40a1",
+    "sort_order": 12
+   },
+   {
+    "name": "Big Rolls",
+    "category": "Peshk & Detare",
+    "price": 1650,
+    "description": "Spring rolls, rice, salmon, philadelphia, teriyaki, mayonnaise, sweet chilli",
+    "description_sq": "Spring rolls, rice, salmon, philadelphia, teriyaki, mayonnaise, sweet chilli",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6ffea4a83292eef40a7",
+    "sort_order": 13
+   },
+   {
+    "name": "Salmon Futomaki",
+    "category": "Antipasti & Sallata",
+    "price": 1380,
+    "description": "Salmon, philadelphia, cucumber, salad, rice, seaweed",
+    "description_sq": "Salmon, philadelphia, cucumber, salad, rice, seaweed",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40ab",
+    "sort_order": 14
+   },
+   {
+    "name": "Pesce Bianco Marinado In Citrus Salsa",
+    "category": "Të tjera",
+    "price": 1060,
+    "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40ac",
+    "sort_order": 15
+   },
+   {
+    "name": "Big Rolls",
+    "category": "Peshk & Detare",
+    "price": 1210,
+    "description": "Spring rolls, rice, salmon, philadelphia, teriyaki, mayonnaise, sweet chilli",
+    "description_sq": "Spring rolls, rice, salmon, philadelphia, teriyaki, mayonnaise, sweet chilli",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6fdea4a83292eef40a0",
+    "sort_order": 16
+   },
+   {
+    "name": "Hot Roll Philadelphia 8 Pz",
+    "category": "Të tjera",
+    "price": 1430,
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6feea4a83292eef40a2",
+    "sort_order": 17
+   },
+   {
+    "name": "Sakura",
+    "category": "Peshk & Detare",
+    "price": 1320,
+    "description": "Salmon, rice, cucumber, philadelphia, avocado, teriyaki",
+    "description_sq": "Salmon, rice, cucumber, philadelphia, avocado, teriyaki",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6feea4a83292eef40a3",
+    "sort_order": 18
+   },
+   {
+    "name": "Tempura Di Gambero 6 Pz",
+    "category": "Të tjera",
+    "price": 1430,
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6ffea4a83292eef40a8",
+    "sort_order": 19
+   },
+   {
+    "name": "Tempura Special Dello Chef 8 Pz",
+    "category": "Peshk & Detare",
+    "price": 4600,
+    "description": "Shrimp, teriyaki, philadelphia, avocado, sesame",
+    "description_sq": "Shrimp, teriyaki, philadelphia, avocado, sesame",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6fdea4a83292eef409f",
+    "sort_order": 20
+   },
+   {
+    "name": "Variety Di Sushi 36 Pz",
+    "category": "Të tjera",
+    "price": 1380,
+    "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40ab",
+    "sort_order": 21
+   },
+   {
+    "name": "Salmon Futomaki",
+    "category": "Antipasti & Sallata",
+    "price": 1210,
+    "description": "Salmon, philadelphia, cucumber, salad, rice, seaweed",
+    "description_sq": "Salmon, philadelphia, cucumber, salad, rice, seaweed",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb6feea4a83292eef40a1",
+    "sort_order": 22
+   },
+   {
+    "name": "Sushi Dragon",
+    "category": "Peshk & Detare",
+    "price": 1320,
+    "description": "Salmon, philadelphia, mushrooms, leeks, wasabi, ginger",
+    "description_sq": "Salmon, philadelphia, mushrooms, leeks, wasabi, ginger",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40aa",
+    "sort_order": 23
+   },
+   {
+    "name": "Gringo Uramaki",
+    "category": "Peshk & Detare",
+    "price": 1650,
+    "description": "Avocado, rice, philadelphia, shrimp, wasabi, teriyaki ginger, leek",
+    "description_sq": "Avocado, rice, philadelphia, shrimp, wasabi, teriyaki ginger, leek",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb701ea4a83292eef40b1",
+    "sort_order": 24
+   },
+   {
+    "name": "Uramaki Philadelphia e Special",
+    "category": "Peshk & Detare",
+    "price": 1480,
+    "description": "Philadelphia, rice, salmon, shrimp tempura, wasabi, ginger, leek",
+    "description_sq": "Philadelphia, rice, salmon, shrimp tempura, wasabi, ginger, leek",
+    "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40a9",
+    "sort_order": 25
+   }
+  ]
+ }
+]

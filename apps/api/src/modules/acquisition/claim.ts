@@ -1,0 +1,209 @@
+import crypto from 'node:crypto';
+import type { Pool, PoolClient } from 'pg';
+import { advance, getById, flagTerminal, type Queryable } from './service.js';
+import { hashToken, hardDeleteShadow } from './provisioning.js';
+import { verifyShadowPreview } from './provision-verifier.js';
+
+// P6 CLAIM PHASE — the ownership-transfer authority. A single-use, short-TTL, opaque-256-bit claim
+// token transfers a SHADOW org (owner_id NULL) to an authenticated owner THROUGH RLS (claim_accept,
+// migration 071), then the owner reviews/authors the menu and publishes via the existing gated path.
+// Council verdict: docs/design/p6-claim-council-verdict.md.
+
+const INVITE_TTL_MS = 72 * 60 * 60 * 1000; // 72h — a human round-trip, not minutes
+
+export class ClaimError extends Error {
+  constructor(readonly code: string, message?: string) {
+    super(message ?? code);
+    this.name = 'ClaimError';
+  }
+}
+
+/** SECURITY DEFINER-style hash of the invited contact (email/phone) for audit + future email-match. */
+export function hashContact(contact: string): string {
+  return crypto.createHash('sha256').update(contact.trim().toLowerCase(), 'utf8').digest('hex');
+}
+
+/**
+ * VERIFIED floor (council C7 / P-2) — the minimal legal PROVISIONED→VERIFIED without P6-6's Playwright
+ * verifier: the spine FKs exist AND the public preview renders (read_preview_menu non-null). A shadow
+ * that doesn't actually render must not be offered for claim.
+ */
+export async function markVerified(pool: Pool, acquisitionSourceId: string): Promise<void> {
+  const src = await getById(pool, acquisitionSourceId);
+  if (!src) throw new ClaimError('SOURCE_NOT_FOUND');
+  if (!src.org_id || !src.location_id) throw new ClaimError('NOT_VERIFIABLE', 'spine not provisioned');
+  const loc = await pool.query('SELECT slug FROM locations WHERE id = $1', [src.location_id]);
+  const slug = (loc.rows[0] as { slug?: string } | undefined)?.slug;
+  if (!slug) throw new ClaimError('NOT_VERIFIABLE', 'location missing');
+  // P6-6 ProvisionVerifier: the rendered preview must pass every external-boundary invariant (served,
+  // has items, honest banner, noindex, generic OG, never-orderable) before the shadow is offered for claim.
+  const verdict = await verifyShadowPreview(pool, slug);
+  if (!verdict.ok) throw new ClaimError('NOT_VERIFIABLE', `preview failed checks: ${verdict.failed.join(', ')}`);
+  await advance(pool, acquisitionSourceId, 'VERIFIED');
+}
+
+/**
+ * Mint a single-use claim invite for a VERIFIED/CLAIM_OFFERED source. Returns the PLAINTEXT token ONCE
+ * (only the hash is stored). The partial-unique index makes a second active invite fail (race guard).
+ * Advances VERIFIED→CLAIM_OFFERED. `invitedContact` (if given) is hashed for audit / future email-match.
+ */
+export async function mintClaimInvite(
+  pool: Pool,
+  acquisitionSourceId: string,
+  invitedContact?: string,
+): Promise<{ token: string; expiresAt: Date }> {
+  const src = await getById(pool, acquisitionSourceId);
+  if (!src) throw new ClaimError('SOURCE_NOT_FOUND');
+  if (src.state !== 'VERIFIED' && src.state !== 'CLAIM_OFFERED') {
+    throw new ClaimError('NOT_OFFERABLE', `source state ${src.state} is not VERIFIED/CLAIM_OFFERED`);
+  }
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
+  try {
+    await pool.query(
+      `INSERT INTO claim_invites (acquisition_source_id, token_hash, invited_contact_hash, expires_at)
+       VALUES ($1, $2, $3, $4)`,
+      [acquisitionSourceId, hashToken(token), invitedContact ? hashContact(invitedContact) : null, expiresAt],
+    );
+  } catch (e) {
+    if ((e as { code?: string }).code === '23505') throw new ClaimError('ACTIVE_INVITE_EXISTS');
+    throw e;
+  }
+  if (src.state === 'VERIFIED') await advance(pool, acquisitionSourceId, 'CLAIM_OFFERED');
+  return { token, expiresAt };
+}
+
+/** Resolve a valid, unconsumed invite to its source id (token is the SOLE selector — council K2). */
+async function resolveActiveInvite(db: Queryable, token: string): Promise<string> {
+  const res = await db.query(
+    `SELECT acquisition_source_id FROM claim_invites
+      WHERE token_hash = encode(sha256($1::bytea), 'hex')
+        AND used_at IS NULL AND revoked_at IS NULL AND expires_at > now()
+      FOR UPDATE`,
+    [token],
+  );
+  const row = res.rows[0] as { acquisition_source_id?: string } | undefined;
+  if (!row?.acquisition_source_id) throw new ClaimError('INVALID_OR_EXPIRED_TOKEN');
+  return row.acquisition_source_id;
+}
+
+/**
+ * Accept a claim: transfer ownership of the shadow to `userId` via the token-gated SECURITY DEFINER
+ * `claim_transfer` carve-out (one atomic statement). The TOKEN is the sole authority — org/location are
+ * derived from the matched invite inside the fn, never the request (no IDOR/enum). The fn leaves
+ * status='closed' + published_at NULL (NO auto-publish — B3), erases the raw scraped blob (H-erase),
+ * and voids outstanding provisioning grants (H-void). Its 'CLAIMERR:<code>' raises map to ClaimError.
+ */
+export async function acceptClaim(
+  pool: Pool,
+  token: string,
+  userId: string,
+): Promise<{ orgId: string; locationId: string }> {
+  // G-F2g (flow-simpl §6): the WEB claim path REFUSES a token-only (NULL invited_contact_hash) invite.
+  // Such an invite would let a leaked token bind ownership to ANY authenticated account (the council R3-1
+  // theft vector — `claim_transfer` only enforces the recipient match when the hash is non-NULL). The web
+  // surface therefore requires a bound recipient; token-only invites are operator/CLI-only, never
+  // web-claimable. (Refusing accept does NOT touch the token-only decline/erase path — that only erases.)
+  const inv = await pool.query(
+    `SELECT invited_contact_hash FROM claim_invites
+      WHERE token_hash = encode(sha256($1::bytea), 'hex') AND used_at IS NULL
+        AND (expires_at IS NULL OR expires_at > now()) LIMIT 1`,
+    [token],
+  );
+  if (inv.rows[0] && inv.rows[0].invited_contact_hash == null) {
+    throw new ClaimError('CONTACT_REQUIRED');
+  }
+  try {
+    const res = await pool.query('SELECT org_id, location_id FROM claim_transfer($1, $2)', [token, userId]);
+    const row = res.rows[0] as { org_id: string; location_id: string } | undefined;
+    if (!row) throw new ClaimError('NOT_CLAIMABLE');
+    return { orgId: row.org_id, locationId: row.location_id };
+  } catch (e) {
+    const m = /CLAIMERR:(\w+)/.exec((e as Error).message ?? '');
+    if (m) throw new ClaimError(m[1]!);
+    throw e;
+  }
+}
+
+/**
+ * Decline + erase (council H-decline / C2): TOKEN-ONLY, no registration. Anyone holding the invite (the
+ * restaurant) can erase the unconsented shadow in one action. Hard-deletes the spine + raw blob, marks
+ * the invite consumed, and abandons the source.
+ */
+export async function declineAndErase(pool: Pool, token: string): Promise<void> {
+  // Validate + burn the invite first (so the token can't be replayed), then erase.
+  const client = await pool.connect();
+  let sourceId: string;
+  try {
+    await client.query('BEGIN');
+    sourceId = await resolveActiveInvite(client, token);
+    await client.query(
+      `UPDATE claim_invites SET used_at = now(), revoked_at = now()
+        WHERE token_hash = encode(sha256($1::bytea), 'hex') AND used_at IS NULL`,
+      [token],
+    );
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+  await hardDeleteShadow(pool, sourceId); // clears spine + place_raw + menu_draft + grants
+  await flagTerminal(pool, sourceId, 'ABANDONED', 'owner declined the preview (erased)');
+  // CC4 — a decline is a first-class health signal. Structured log = a log-based metric (decline rate);
+  // paired with logged complaints (recordComplaint), the key signal is decline-WITHOUT-complaint.
+  console.log(JSON.stringify({ event: 'acquisition.shadow_declined', acquisition_source_id: sourceId, at: new Date().toISOString() }));
+}
+
+/**
+ * CC4 — record a complaint / C&D against an acquisition (the OTHER half of the health signal). Structured
+ * log only (no migration); ops calls this when a restaurant objects. decline-without-complaint = the count
+ * of `acquisition.shadow_declined` events minus `acquisition.complaint` events over a window.
+ */
+export function recordComplaint(placeId: string, note?: string): void {
+  console.log(JSON.stringify({ event: 'acquisition.complaint', place_id: placeId, note: note ?? null, at: new Date().toISOString() }));
+}
+
+/**
+ * Art-14 first-contact notice (council CC1) — written for the HOSTILE recipient, NOT a growth-hack CTA.
+ * Returned to the ops minter to deliver to the restaurant's official contact alongside the claim/decline
+ * links. Honest: identity, purpose, data categories, SOURCE (your public site/Places), retention, rights
+ * (incl. erasure + complaint), and an EQUALLY-prominent one-click decline-and-erase (no registration).
+ */
+export function buildArt14Notice(opts: { previewUrl: string; claimUrl: string; declineUrl: string; controller?: string }): {
+  subject: string;
+  body: string;
+} {
+  const controller = opts.controller ?? 'Dowiz';
+  return {
+    subject: 'We built a preview of your restaurant from your public website — your options inside',
+    body: [
+      `We are ${controller}. You did not ask us to do this, and we want to be upfront about it: we built a`,
+      `non-live PREVIEW of your menu from your restaurant's PUBLIC website and public Google Places listing.`,
+      ``,
+      `What we used: your business name, address, and the menu items + prices published on your own public`,
+      `pages. Purpose: to show you what an online ordering page could look like. It is NOT a live store, it`,
+      `cannot take orders, and it is hidden from search engines.`,
+      ``,
+      `Preview: ${opts.previewUrl}`,
+      ``,
+      `Your options, both one click:`,
+      `  • CLAIM it (free) — review, correct, and decide whether to go live: ${opts.claimUrl}`,
+      `  • DELETE it — remove the preview and erase the data we used, no account needed: ${opts.declineUrl}`,
+      ``,
+      `Your rights: you can access, correct, or erase this data, and complain to your data protection`,
+      `authority. The data came from your own public website / the Google Places API. If you do nothing, the`,
+      `preview is automatically deleted shortly. Questions: reply to this message.`,
+    ].join('\n'),
+  };
+}
+
+/** Reaper (council H-abandoned-TTL): expired/unused invites → revoked; SHORT TTL for a public shadow. */
+export async function reapExpiredInvites(pool: Pool): Promise<number> {
+  const res = await pool.query(
+    `UPDATE claim_invites SET revoked_at = now()
+      WHERE used_at IS NULL AND revoked_at IS NULL AND expires_at < now()`,
+  );
+  return res.rowCount ?? 0;
+}

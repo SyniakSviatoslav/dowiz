@@ -1,0 +1,571 @@
+[
+  {
+    "place_id": "gmaps:0x134fdb3c68de013d:0xada5292cc9e31ae1",
+    "slug": "artepasta",
+    "name": "ArtePasta",
+    "cuisine": "italian",
+    "phone": "+355698245001",
+    "primary": "#e11b22",
+    "bg": "#faf6f0",
+    "menu": [
+      {
+        "name": "Pasta Piramida",
+        "category": "Pasta",
+        "price": 990,
+        "description": "Signature pasta with porcini, a rich mushroom cream, stracciatella and walnuts.",
+        "ingredients": [
+          "Porcini mushrooms",
+          "Mushroom cream",
+          "Stracciatella",
+          "Walnuts"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002788a4d8a18717eed1",
+        "description_sq": "Porcini, krem kërpudhë, straciatella, arra"
+      },
+      {
+        "name": "Pasta Casarecce San Daniele",
+        "category": "Pasta",
+        "price": 930,
+        "description": "Casarecce with San Daniele prosciutto, pistachio, cream and mushrooms.",
+        "ingredients": [
+          "San Daniele prosciutto",
+          "Pistachio",
+          "Cream",
+          "Mushrooms"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002788a4d8a18717eed2",
+        "description_sq": "Proshutë San Daniele, pistacchio, krem, kërpudha"
+      },
+      {
+        "name": "Pasta Arte",
+        "category": "Pasta",
+        "price": 930,
+        "description": "The house special: gnocchi with four cheeses, shrimp, mustard and honey.",
+        "ingredients": [
+          "Gnocchi",
+          "Four cheeses",
+          "Shrimp",
+          "Mustard",
+          "Honey"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002788a4d8a18717eece",
+        "description_sq": "Gnocchi, 4 djathërat, karkalec, mustardë, mjaltë, galetë"
+      },
+      {
+        "name": "Tagliatelle Carne & Tartufo",
+        "category": "Pasta",
+        "price": 880,
+        "description": "Tagliatelle with beef, garlic, truffle cream, parmigiano and mushrooms.",
+        "ingredients": [
+          "Beef",
+          "Garlic",
+          "Truffle cream",
+          "Parmigiano",
+          "Mushrooms"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002488a4d8a18717eec9",
+        "description_sq": "Mish viçi, hudhër, krem tartufi, parmigiano, kërpudha"
+      },
+      {
+        "name": "Rigatoni Notte Umbria",
+        "category": "Pasta",
+        "price": 880,
+        "description": "Rigatoni with onion, mushrooms and porcini.",
+        "ingredients": [
+          "Onion",
+          "Mushrooms",
+          "Porcini"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002d88a4d8a18717eee0",
+        "description_sq": "Qepë, kërpudha, porcini"
+      },
+      {
+        "name": "Linguine Carbonara",
+        "category": "Pasta",
+        "price": 710,
+        "description": "Roman classic — pancetta, egg, pecorino romano and black pepper.",
+        "ingredients": [
+          "Pancetta",
+          "Egg",
+          "Pecorino romano",
+          "Black pepper"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002c88a4d8a18717eedb",
+        "description_sq": "Pancetta, vezë, pecorino romano, piper i zi"
+      },
+      {
+        "name": "Linguine Frutti di Mare",
+        "category": "Pasta",
+        "price": 710,
+        "description": "Seafood linguine with shrimp, calamari, mussels and parsley.",
+        "ingredients": [
+          "Shrimp",
+          "Calamari",
+          "Mussels",
+          "Parsley"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002c88a4d8a18717eeda",
+        "description_sq": "Karkalec, kallamar, midhje, majdanoz"
+      },
+      {
+        "name": "Linguine Genovese",
+        "category": "Pasta",
+        "price": 710,
+        "description": "Linguine with pesto, pancetta, onion, basil and cherry tomatoes.",
+        "ingredients": [
+          "Pesto",
+          "Pancetta",
+          "Onion",
+          "Basil",
+          "Cherry tomatoes"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002a88a4d8a18717eed7",
+        "description_sq": "Pesto, pancete, qepë, borzilok, pomodorini"
+      },
+      {
+        "name": "Rigatoni Quattro Formaggi",
+        "category": "Pasta",
+        "price": 710,
+        "description": "Four-cheese rigatoni — parmigiano, gorgonzola, pecorino grana and honey.",
+        "ingredients": [
+          "Parmigiano",
+          "Gorgonzola",
+          "Pecorino grana",
+          "Honey"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002788a4d8a18717eed0",
+        "description_sq": "Parmigiano, gorgonzola, pechorino grana, galete, mjaltë"
+      },
+      {
+        "name": "Rigatoni Prato Verde",
+        "category": "Pasta",
+        "price": 710,
+        "description": "Rigatoni with arugula, mozzarella, pesto, basil and pine nuts.",
+        "ingredients": [
+          "Arugula",
+          "Mozzarella",
+          "Pesto",
+          "Basil",
+          "Pine nuts"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002c88a4d8a18717eedd",
+        "description_sq": "Rukola, mozzarella, pesto, borzilok, stika pishe, pistak"
+      },
+      {
+        "name": "Tagliatelle Affumicata",
+        "category": "Pasta",
+        "price": 710,
+        "description": "Smoked tagliatelle with pesto, parsley, garlic, onion, basil and pancetta.",
+        "ingredients": [
+          "Pesto",
+          "Parsley",
+          "Garlic",
+          "Onion",
+          "Basil",
+          "Pancetta"
+        ]
+      },
+      {
+        "name": "Tagliatelle Gamberi e Zucchine",
+        "category": "Pasta",
+        "price": 660,
+        "description": "Tagliatelle with shrimp, zucchini and parsley.",
+        "ingredients": [
+          "Shrimp",
+          "Zucchini",
+          "Parsley"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002488a4d8a18717eecb",
+        "description_sq": "Karkalec, kungull, majdanoz"
+      },
+      {
+        "name": "Tagliatelle Prosciutto di Parma",
+        "category": "Pasta",
+        "price": 660,
+        "description": "Tagliatelle with broccoli, cooked ham and cream.",
+        "ingredients": [
+          "Broccoli",
+          "Cooked ham",
+          "Cream"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002488a4d8a18717eecd",
+        "description_sq": "Brokoli, proshutë cotto, panna"
+      },
+      {
+        "name": "Rigatoni Arrabbiata",
+        "category": "Pasta",
+        "price": 600,
+        "description": "Spicy rigatoni with garlic, chili, onion, tomato sauce and parsley.",
+        "ingredients": [
+          "Garlic",
+          "Chili",
+          "Onion",
+          "Tomato sauce",
+          "Parsley"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002488a4d8a18717eecc",
+        "description_sq": "Hudhër, pikant, qepë, salcë domate, majdanoz"
+      },
+      {
+        "name": "Spaghetti All'Amatriciana",
+        "category": "Pasta",
+        "price": 600,
+        "description": "Spaghetti with bacon, basil, onion, tomato sauce and parmigiano.",
+        "ingredients": [
+          "Bacon",
+          "Basil",
+          "Onion",
+          "Tomato sauce",
+          "Parmigiano"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002a88a4d8a18717eed6",
+        "description_sq": "Spek, borzilok, qepë, salcë al pomodoro, parmigiano, pomodorini"
+      },
+      {
+        "name": "Spaghetti Al Pomodoro",
+        "category": "Pasta",
+        "price": 600,
+        "description": "Spaghetti with tomato sauce, basil, garlic and parmigiano.",
+        "ingredients": [
+          "Tomato sauce",
+          "Basil",
+          "Garlic",
+          "Parmigiano"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949011a88a4d8a18717ef06",
+        "description_sq": "Salcë al pomodoro, borzilok, hudhër, parmigiano, burrata"
+      },
+      {
+        "name": "Tagliatelle Bolognese",
+        "category": "Pasta",
+        "price": 600,
+        "description": "Tagliatelle with slow-cooked ground beef ragù, parmigiano and parsley.",
+        "ingredients": [
+          "Ground beef",
+          "Tomato sauce",
+          "Parmigiano",
+          "Parsley"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002c88a4d8a18717eed9",
+        "description_sq": "Mish i grirë, salcë domate, parmigiano, majdanoz"
+      },
+      {
+        "name": "Tagliatelle Al Tartufo",
+        "category": "Pasta",
+        "price": 600,
+        "description": "Tagliatelle in truffle cream with parmigiano and galette.",
+        "ingredients": [
+          "Truffle cream",
+          "Parmigiano",
+          "Galette"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002c88a4d8a18717eedc",
+        "description_sq": "Krem tartufi, parmigiano, galette"
+      },
+      {
+        "name": "Spaghetti Aglio Olio e Peperoncino",
+        "category": "Pasta",
+        "price": 550,
+        "description": "Garlic, chili, parsley, olive oil and black pepper.",
+        "ingredients": [
+          "Garlic",
+          "Chili",
+          "Parsley",
+          "Olive oil",
+          "Black pepper"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002a88a4d8a18717eed5",
+        "description_sq": "Hudhër, spec pikant, majdanoz, vaj ulliri, piper, krem djathi"
+      },
+      {
+        "name": "Spaghetti Al Pesto",
+        "category": "Pasta",
+        "price": 500,
+        "description": "Spaghetti with pesto, basil, parmigiano and pine nuts.",
+        "ingredients": [
+          "Pesto",
+          "Basil",
+          "Parmigiano",
+          "Pine nuts"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002a88a4d8a18717eed8",
+        "description_sq": "Pesto, borzilok, parmigiano, stika pishe"
+      },
+      {
+        "name": "Lasagna",
+        "category": "Pasta",
+        "price": 550,
+        "description": "Traditional baked lasagna with beef ragù, béchamel and parmigiano.",
+        "ingredients": [
+          "Beef ragù",
+          "Béchamel",
+          "Parmigiano"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949003288a4d8a18717eee9"
+      },
+      {
+        "name": "Gnocchi alla Toscana",
+        "category": "Gnocchi",
+        "price": 770,
+        "description": "Potato gnocchi in mushroom sauce with basil, truffle cream and stracciatella.",
+        "ingredients": [
+          "Mushroom sauce",
+          "Basil",
+          "Truffle cream",
+          "Stracciatella"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002d88a4d8a18717eede",
+        "description_sq": "Salcë kërpudhe, borzilok, krem tartufi, stracciatella"
+      },
+      {
+        "name": "Gnocchi alla Sorrentina",
+        "category": "Gnocchi",
+        "price": 710,
+        "description": "Potato gnocchi with mozzarella, tomato sauce, parmigiano and basil.",
+        "ingredients": [
+          "Mozzarella",
+          "Tomato sauce",
+          "Parmigiano",
+          "Basil"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002d88a4d8a18717eedf",
+        "description_sq": "Mozzarrella, salcë domate, parmigiano, borzilok, piper"
+      },
+      {
+        "name": "Ravioli Rosé",
+        "category": "Ravioli",
+        "price": 820,
+        "description": "Ravioli in rosé sauce with cream, tomato, burrata and mushrooms.",
+        "ingredients": [
+          "Cream",
+          "Tomato sauce",
+          "Burrata",
+          "Mushrooms"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002d88a4d8a18717eee2",
+        "description_sq": "Pana, salcë domate, burrata, kërpudha"
+      },
+      {
+        "name": "Ravioli Pere e Noci",
+        "category": "Ravioli",
+        "price": 820,
+        "description": "Pear-and-walnut ravioli with parmigiano, honey and gorgonzola.",
+        "ingredients": [
+          "Pear",
+          "Walnuts",
+          "Parmigiano",
+          "Honey",
+          "Gorgonzola"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949003088a4d8a18717eee5",
+        "description_sq": "Arra, parmigiano, mjaltë, dardhë, gorgonzola"
+      },
+      {
+        "name": "Ravioli Spinach",
+        "category": "Ravioli",
+        "price": 770,
+        "description": "Spinach ravioli with cheese cream and truffle cream.",
+        "ingredients": [
+          "Spinach",
+          "Cheese cream",
+          "Truffle cream"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002d88a4d8a18717eee1",
+        "description_sq": "Spinaq, krem djathi, krem tartufi, stika"
+      },
+      {
+        "name": "Ravioli Gamberoni",
+        "category": "Ravioli",
+        "price": 770,
+        "description": "Prawn ravioli with tomato sauce, zucchini and garlic.",
+        "ingredients": [
+          "Prawns",
+          "Tomato sauce",
+          "Zucchini",
+          "Garlic"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949003088a4d8a18717eee6",
+        "description_sq": "Karkalec, salcë pomodori, kungull, hudhër"
+      },
+      {
+        "name": "Antipasta Arte",
+        "category": "Antipasti",
+        "price": 1100,
+        "description": "A sharing board of crudo ham, mortadella, spicy salami, gorgonzola and mozzarella.",
+        "ingredients": [
+          "Prosciutto crudo",
+          "Mortadella",
+          "Spicy salami",
+          "Gorgonzola",
+          "Mozzarella"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949003088a4d8a18717eee7",
+        "description_sq": "Proshutë crudo, mortadella, pikant, gorgonzola, mozzarella, parmigiano"
+      },
+      {
+        "name": "Sallata Arte",
+        "category": "Salads",
+        "price": 550,
+        "description": "Arugula salad with walnuts, cherry tomatoes, vinaigrette and pomegranate.",
+        "ingredients": [
+          "Arugula",
+          "Walnuts",
+          "Cherry tomatoes",
+          "Vinaigrette",
+          "Pomegranate"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949002a88a4d8a18717eed4",
+        "description_sq": "Rukola, arra, pomodorini, venegretë, shegë"
+      },
+      {
+        "name": "Sallata Chef",
+        "category": "Salads",
+        "price": 490,
+        "description": "Mixed-leaf salad with cherry tomatoes, ricotta and galette.",
+        "ingredients": [
+          "Mixed salad",
+          "Cherry tomatoes",
+          "Ricotta",
+          "Galette"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949003088a4d8a18717eee3",
+        "description_sq": "Sallate mix, pomodorini, riccota, galetë"
+      },
+      {
+        "name": "Tiramisu",
+        "category": "Dessert",
+        "price": 380,
+        "description": "Classic tiramisu with mascarpone, espresso-soaked savoiardi and cocoa.",
+        "ingredients": [
+          "Mascarpone",
+          "Savoiardi",
+          "Espresso",
+          "Cocoa"
+        ],
+        "image_url": "https://imageproxy.wolt.com/assets/6949003088a4d8a18717eee4"
+      },
+      {
+        "name": "House White Wine (Bottle)",
+        "category": "Wine",
+        "price": 1980,
+        "description": "House white wine, full bottle."
+      },
+      {
+        "name": "House Red Wine (Bottle)",
+        "category": "Wine",
+        "price": 1980,
+        "description": "House red wine, full bottle."
+      },
+      {
+        "name": "House Wine (Small Bottle)",
+        "category": "Wine",
+        "price": 1100,
+        "description": "House wine, small bottle."
+      },
+      {
+        "name": "Birra Moretti 0.66 L",
+        "category": "Beer",
+        "price": 600,
+        "description": "Italian lager, 0.66 L bottle.",
+        "image_url": "https://imageproxy.wolt.com/assets/694957bd88a4d8a187182844"
+      },
+      {
+        "name": "Coca-Cola",
+        "category": "Soft Drinks",
+        "price": 190,
+        "description": "Chilled Coca-Cola.",
+        "image_url": "https://imageproxy.wolt.com/assets/6949585e88a4d8a187182861"
+      },
+      {
+        "name": "Coca-Cola Zero",
+        "category": "Soft Drinks",
+        "price": 190,
+        "description": "Chilled Coca-Cola Zero.",
+        "image_url": "https://imageproxy.wolt.com/assets/6949593b6e37f9d39e3b23ea"
+      },
+      {
+        "name": "Fanta Portokall",
+        "category": "Soft Drinks",
+        "price": 190,
+        "description": "Orange Fanta.",
+        "image_url": "https://imageproxy.wolt.com/assets/694959c86e37f9d39e3b254e"
+      },
+      {
+        "name": "Fanta Exotic",
+        "category": "Soft Drinks",
+        "price": 190,
+        "description": "Exotic Fanta.",
+        "image_url": "https://imageproxy.wolt.com/assets/694959f8a473d9384b510104"
+      },
+      {
+        "name": "Lemon Soda",
+        "category": "Soft Drinks",
+        "price": 190,
+        "description": "Chilled lemon soda.",
+        "image_url": "https://imageproxy.wolt.com/assets/69495aaaa473d9384b510392"
+      },
+      {
+        "name": "Orange Soda",
+        "category": "Soft Drinks",
+        "price": 190,
+        "description": "Chilled orange soda.",
+        "image_url": "https://imageproxy.wolt.com/assets/69495a7ca473d9384b510254"
+      },
+      {
+        "name": "Red Bull",
+        "category": "Soft Drinks",
+        "price": 330,
+        "description": "Red Bull energy drink.",
+        "image_url": "https://imageproxy.wolt.com/assets/694958216e37f9d39e3b22e9"
+      },
+      {
+        "name": "Pomegranate Juice (Bio)",
+        "category": "Bio Juices",
+        "price": 310,
+        "description": "Cold-pressed organic pomegranate juice."
+      },
+      {
+        "name": "Blueberry Juice (Bio)",
+        "category": "Bio Juices",
+        "price": 200,
+        "description": "Organic blueberry juice."
+      },
+      {
+        "name": "Apple Juice (Bio)",
+        "category": "Bio Juices",
+        "price": 200,
+        "description": "Organic apple juice."
+      },
+      {
+        "name": "Peach Juice (Bio)",
+        "category": "Bio Juices",
+        "price": 200,
+        "description": "Organic peach juice."
+      },
+      {
+        "name": "Glass Water 0.75 L",
+        "category": "Water",
+        "price": 200,
+        "description": "Still water, 0.75 L glass bottle."
+      },
+      {
+        "name": "Glass Water 0.5 L",
+        "category": "Water",
+        "price": 140,
+        "description": "Still water, 0.5 L glass bottle."
+      },
+      {
+        "name": "Detox Water",
+        "category": "Water",
+        "price": 130,
+        "description": "Infused detox water."
+      },
+      {
+        "name": "Kids Water",
+        "category": "Water",
+        "price": 110,
+        "description": "Small still water for kids."
+      }
+    ]
+  }
+]

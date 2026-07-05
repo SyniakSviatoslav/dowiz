@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeliveryOS — Live Dashboard</title>
+  <link href="/dist/tabler/tabler-icons.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/admin/dashboard.js"></script>
+  <style>
+    :root {
+      --brand-bg:#0F172A;--brand-surface:#1E293B;--brand-raised:#263548;
+      --brand-text:#F1F5F9;--brand-muted:#94A3B8;--brand-border:#334155;
+      --brand-primary:#ea4f16;--brand-primary-hover:#ffa12e;
+      --status-pending:#D97706;--status-confirmed:#2563EB;--status-preparing:#F59E0B;
+      --status-en-route:#3B82F6;--status-delivered:#059669;--status-cancelled:#DC2626;
+    }
+    body { font-family: 'Inter',system-ui,sans-serif; background:var(--brand-bg); color:var(--brand-text); }
+    .kanban-col { min-width:280px; max-width:320px; flex-shrink:0; }
+    .order-card { background:var(--brand-surface); border:1px solid var(--brand-border); border-radius:12px; padding:12px; }
+    .order-card:hover { border-color:var(--brand-primary); }
+    .hide-scrollbar::-webkit-scrollbar { display:none; }
+    .hide-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
+    .reconnect-banner { position:fixed; top:0; left:0; right:0; z-index:100; text-align:center; padding:8px; font-size:14px; }
+  </style>
+</head>
+<body>
+  <div id="reconnectBanner" class="reconnect-banner hidden"></div>
+  <div class="flex flex-col h-screen">
+    <!-- Header -->
+    <header class="flex items-center justify-between px-6 py-3 border-b" style="border-color:var(--brand-border);background:var(--brand-surface);">
+      <div class="flex items-center gap-3">
+        <h1 class="text-lg font-bold">DeliveryOS</h1>
+        <span class="text-sm px-2 py-0.5 rounded-full" style="background:var(--brand-primary);color:#fff;" id="statusBadge">connecting</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm" style="color:var(--brand-muted);">
+        <a href="/admin/dashboard.html" class="hover:text-white">Dashboard</a>
+        <a href="/admin/orders.html" class="hover:text-white">Orders</a>
+        <a href="/admin/active-delivery.html" class="hover:text-white">Active Delivery</a>
+        <a href="/admin/alerts.html" class="hover:text-white">Alerts</a>
+        <a href="/admin/signals.html" class="hover:text-white">Signals</a>
+        <a href="/admin/settings-security.html" class="hover:text-white">Security</a>
+      </div>
+    </header>
+
+    <!-- Dead channel banner (hidden by default) -->
+    <div id="deadChannelBanner" class="hidden px-6 py-2 text-sm flex items-center justify-between" style="background:#DC262620;border-bottom:1px solid #DC262640;">
+      <span><i class="ti ti-bell-off mr-1"></i> <span id="deadChannelText">Channels offline</span></span>
+      <button onclick="location.reload()" class="underline text-xs" style="background:none;border:none;color:inherit;cursor:pointer;">Re-check</button>
+    </div>
+
+    <!-- Dwell alert banner (hidden by default) -->
+    <div id="dwellBanner" class="hidden px-6 py-2 text-sm flex items-center justify-between" style="background:#DC262620;border-bottom:1px solid #DC262640;">
+      <span><i class="ti ti-bell-alert mr-1"></i> <span id="dwellBannerText">Active dwell alerts</span></span>
+      <a href="/admin/alerts.html" class="underline text-xs">View</a>
+    </div>
+
+    <!-- Metrics bar -->
+    <div class="flex gap-4 px-6 py-3 text-sm overflow-x-auto hide-scrollbar" id="metricsBar" style="background:var(--brand-surface);border-bottom:1px solid var(--brand-border);"></div>
+
+    <!-- Kanban columns -->
+    <div class="flex-1 overflow-x-auto p-6">
+      <div class="flex gap-4 h-full" id="kanbanContainer"></div>
+    </div>
+  </div>
+
+  <script>
+  (async () => {
+    const token = getOwnerToken();
+    const locationId = getLocationId();
+    if (!token || !locationId) {
+      document.body.innerHTML = `<div class="flex items-center justify-center h-screen" style="color:var(--brand-muted);"><div class="text-center"><p class="text-lg mb-2">Not authenticated</p><p class="text-sm">Please <a href="/29-admin-login.html" class="underline">log in</a> first.</p></div></div>`;
+      return;
+    }
+
+    const STATUSES = ['PENDING','CONFIRMED','PREPARING','IN_DELIVERY','DELIVERED','CANCELLED'];
+    const STATUS_LABELS = {PENDING:'Pending',CONFIRMED:'Confirmed',PREPARING:'Preparing',IN_DELIVERY:'En Route',DELIVERED:'Delivered',CANCELLED:'Cancelled'};
+    const STATUS_COLORS = {PENDING:'var(--status-pending)',CONFIRMED:'var(--status-confirmed)',PREPARING:'var(--status-preparing)',IN_DELIVERY:'var(--status-en-route)',DELIVERED:'var(--status-delivered)',CANCELLED:'var(--status-cancelled)'};
+    const allOrders = new Map();
+    let dwellTimer = null;
+    let snapshotData = null;
+    let activeAlertCount = 0;
+    let activeSignalCount = 0;
+
+    const statusBadge = document.getElementById('statusBadge');
+    const metricsBar = document.getElementById('metricsBar');
+    const kanban = document.getElementById('kanbanContainer');
+    const reconnectBanner = document.getElementById('reconnectBanner');
+    const dwellBanner = document.getElementById('dwellBanner');
+    const dwellBannerText = document.getElementById('dwellBannerText');
+
+    function setStatus(status, msg) {
+      statusBadge.textContent = msg || status;
+      if (status === 'connected' || status === 'subscribed') {
+        statusBadge.style.background = 'var(--status-delivered)';
+        reconnectBanner.classList.add('hidden');
+      } else if (status === 'reconnecting' || status === 'disconnected') {
+        statusBadge.style.background = 'var(--status-pending)';
+        reconnectBanner.textContent = 'Reconnecting...';
+        reconnectBanner.classList.remove('hidden');
+        reconnectBanner.style.background = 'var(--status-pending)';
+      } else if (status === 'failed') {
+        statusBadge.style.background = 'var(--status-cancelled)';
+        reconnectBanner.textContent = 'Connection lost. Retrying...';
+        reconnectBanner.classList.remove('hidden');
+        reconnectBanner.style.background = 'var(--status-cancelled)';
+      } else {
+        statusBadge.style.background = 'var(--status-confirmed)';
+      }
+    }
+
+    function renderMetrics(counts) {
+      metricsBar.innerHTML = STATUSES.map(s => {
+        const cnt = counts?.[s] ?? 0;
+        return `<div class="flex items-center gap-1.5 px-3 py-1 rounded-full whitespace-nowrap" style="background:${STATUS_COLORS[s]}20;border:1px solid ${STATUS_COLORS[s]}40;">
+          <span class="w-2 h-2 rounded-full" style="background:${STATUS_COLORS[s]}"></span>
+          <span>${STATUS_LABELS[s]}:</span>
+          <span class="font-bold">${cnt}</span>
+        </div>`;
+      }).join('');
+    }
+
+    function renderKanban(orders, counts) {
+      kanban.innerHTML = STATUSES.map(s => {
+        const colOrders = orders.filter(o => o.status === s);
+        return `<div class="kanban-col flex flex-col gap-2">
+          <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full" style="background:${STATUS_COLORS[s]}"></span>
+              <span class="font-semibold text-sm">${STATUS_LABELS[s]}</span>
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full" style="background:${STATUS_COLORS[s]}20;color:var(--brand-muted);">${colOrders.length}</span>
+          </div>
+          <div class="flex flex-col gap-2 overflow-y-auto hide-scrollbar" style="max-height:calc(100vh - 200px);">
+            ${colOrders.map(o => renderCard(o)).join('')}
+            ${colOrders.length === 0 ? '<div class="text-xs py-8 text-center" style="color:var(--brand-muted);">No orders</div>' : ''}
+          </div>
+        </div>`;
+      }).join('');
+      renderMetrics(counts);
+    }
+
+    function renderCard(order) {
+      const canConfirm = order.status === 'PENDING';
+      const canReject = order.status === 'PENDING' || order.status === 'CONFIRMED' || order.status === 'PREPARING';
+      const preflight = order.preflight || order.metadata?.preflight;
+      const preflightTriggered = preflight && typeof preflight === 'object' && preflight.outcome === 'clean' && preflight.confirmedReasons?.length > 0;
+      return `<div class="order-card slide-in" data-order-id="${order.orderId}" data-status="${order.status}" data-created-at="${order.createdAt}" style="${preflightTriggered ? 'border-left:4px solid #7C3AED;' : ''}">
+        <div class="flex items-start justify-between mb-2">
+          <div>
+            <div class="font-mono text-xs" style="color:var(--brand-muted);">#${order.orderId.slice(0,8)}</div>
+            <div class="font-bold text-lg">${(order.total / 100).toFixed(2)} ${order.currency}</div>
+          </div>
+          <span class="text-xs font-mono" data-created-at="${order.createdAt}">${formatDwell(order.dwellSeconds)}</span>
+        </div>
+        <div class="text-sm mb-2" style="color:var(--brand-muted);">${order.customerNameMasked}</div>
+        <div class="text-xs mb-3" style="color:var(--brand-muted);">${order.itemCount} items${order.paymentMethod ? ' · ' + order.paymentMethod : ''}${preflightTriggered ? ' <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium" style="background:#7C3AED20;color:#A78BFA;"><i class="ti ti-shield-check"></i> cleared</span>' : ''}</div>
+        <div class="flex gap-2">
+          ${canConfirm ? `<button onclick="doConfirm('${order.orderId}')" class="flex-1 px-3 py-1.5 text-xs font-medium rounded-lg text-white" style="background:var(--status-confirmed);">Confirm</button>` : ''}
+          ${canReject ? `<button onclick="doReject('${order.orderId}')" class="flex-1 px-3 py-1.5 text-xs font-medium rounded-lg" style="background:transparent;border:1px solid var(--status-cancelled);color:var(--status-cancelled);">Reject</button>` : ''}
+        </div>
+      </div>`;
+    }
+
+    function updateOrderInKanban(orderId, status, statusUpdatedAt) {
+      const existing = allOrders.get(orderId);
+      if (existing) {
+        existing.status = status;
+        existing.statusUpdatedAt = statusUpdatedAt || existing.statusUpdatedAt;
+      }
+      rebuildView();
+    }
+
+    function addOrderFromEvent(data) {
+      if (!allOrders.has(data.orderId)) {
+        allOrders.set(data.orderId, {
+          orderId: data.orderId,
+          status: data.status || 'PENDING',
+          total: data.total || 0,
+          currency: data.currency || 'ALL',
+          createdAt: data.createdAt || new Date().toISOString(),
+          statusUpdatedAt: data.statusUpdatedAt || data.createdAt,
+          customerNameMasked: data.customerNameMasked || '***',
+          customerPhoneMasked: data.customerPhoneMasked || '***',
+          itemCount: data.itemCount || 0,
+          dwellSeconds: 0,
+        });
+      }
+      rebuildView();
+    }
+
+    function rebuildView() {
+      const orders = Array.from(allOrders.values());
+      const counts = {};
+      for (const s of STATUSES) counts[s] = 0;
+      for (const o of orders) { counts[o.status] = (counts[o.status] || 0) + 1; }
+      renderKanban(orders, counts);
+    }
+
+    function applySnapshot(data) {
+      snapshotData = data;
+      activeAlertCount = data.activeAlertCount || 0;
+      activeSignalCount = data.activeSignalCount || 0;
+      updateDwellBanner();
+      window.updateSignalBanner();
+      allOrders.clear();
+      for (const o of data.orders) {
+        allOrders.set(o.orderId, o);
+      }
+      // Add active deliveries as orders if not already
+      for (const d of (data.activeDeliveries || [])) {
+        if (!allOrders.has(d.orderId)) {
+          allOrders.set(d.orderId, {
+            orderId: d.orderId,
+            status: d.status || 'IN_DELIVERY',
+            total: 0,
+            currency: 'ALL',
+            createdAt: d.pickedUpAt || new Date().toISOString(),
+            statusUpdatedAt: d.pickedUpAt,
+            customerNameMasked: '***',
+            customerPhoneMasked: '***',
+            itemCount: 0,
+            dwellSeconds: 0,
+          });
+        }
+      }
+      rebuildView();
+    }
+
+    function updateDwellBanner() {
+      if (activeAlertCount > 0) {
+        dwellBanner.classList.remove('hidden');
+        dwellBannerText.textContent = `${activeAlertCount} active dwell alert${activeAlertCount !== 1 ? 's' : ''}`;
+      } else {
+        dwellBanner.classList.add('hidden');
+      }
+    }
+
+    window.updateSignalBanner = () => {
+      let banner = document.getElementById('signalBanner');
+      if (activeSignalCount > 0) {
+        if (!banner) {
+          banner = document.createElement('div');
+          banner.id = 'signalBanner';
+          banner.className = 'px-6 py-2 text-sm flex items-center justify-between';
+          banner.style.cssText = 'background:#7C3AED20;border-bottom:1px solid #7C3AED40;';
+          banner.innerHTML = `<span><i class="ti ti-shield-alert mr-1"></i> <span id="signalBannerText">${activeSignalCount} signal${activeSignalCount !== 1 ? 's' : ''}</span></span>
+          <a href="/admin/signals.html" class="underline text-xs">View</a>`;
+          dwellBanner.parentNode.insertBefore(banner, dwellBanner.nextSibling);
+        } else {
+          document.getElementById('signalBannerText').textContent = `${activeSignalCount} signal${activeSignalCount !== 1 ? 's' : ''}`;
+          banner.classList.remove('hidden');
+        }
+      } else if (banner) {
+        banner.classList.add('hidden');
+      }
+    };
+
+    function showNotification(text) {
+      let n = document.getElementById('notifToast');
+      if (!n) {
+        n = document.createElement('div');
+        n.id = 'notifToast';
+        n.className = 'fixed bottom-4 right-4 px-4 py-2 rounded-lg text-sm shadow-lg z-50';
+        n.style.cssText = 'background:var(--brand-primary);color:#fff;';
+        document.body.appendChild(n);
+      }
+      n.textContent = text;
+      n.classList.remove('hidden');
+      n.style.opacity = '1';
+      setTimeout(() => { n.style.opacity = '0'; setTimeout(() => n.classList.add('hidden'), 300); }, 3000);
+    }
+
+    // ─── WS Events ──────────────────────────────────────────────────
+    function handleWSEvent(msg) {
+      const d = msg.data || msg.payload || msg;
+      if (msg.type === 'order.created' || msg.type === 'order.pending') {
+        addOrderFromEvent(d);
+      } else if (msg.type === 'order.confirmed' || msg.type === 'order.rejected' ||
+                 msg.type === 'order.preparing' || msg.type === 'order.in_delivery' ||
+                 msg.type === 'order.delivered' || msg.type === 'order.cancelled') {
+        const statusMap = { 'order.created':'PENDING','order.pending':'PENDING','order.confirmed':'CONFIRMED',
+          'order.rejected':'REJECTED','order.preparing':'PREPARING','order.in_delivery':'IN_DELIVERY',
+          'order.delivered':'DELIVERED','order.cancelled':'CANCELLED' };
+        const newStatus = statusMap[msg.type] || d.status;
+        if (d.orderId) updateOrderInKanban(d.orderId, newStatus, d.statusUpdatedAt);
+      } else if (msg.type === 'courier.assignment_created') {
+        if (d.orderId) updateOrderInKanban(d.orderId, 'IN_DELIVERY', new Date().toISOString());
+      } else if (msg.type === 'preflight.signal_raised') {
+        showNotification(`Signal: ${d.kind} (${d.severity})`);
+        if (typeof activeSignalCount !== 'undefined') activeSignalCount++;
+        updateSignalBanner?.();
+      } else if (msg.type === 'preflight.signal_acknowledged' || msg.type === 'preflight.signal_dismissed') {
+        if (typeof activeSignalCount !== 'undefined') activeSignalCount = Math.max(0, activeSignalCount - 1);
+        updateSignalBanner?.();
+      } else if (msg.type === 'dwell.alert_created') {
+        activeAlertCount++;
+        updateDwellBanner();
+      } else if (msg.type === 'dwell.alert_acknowledged' || msg.type === 'dwell.alert_resolved') {
+        activeAlertCount = Math.max(0, activeAlertCount - 1);
+        updateDwellBanner();
+      }
+    }
+
+    // ─── Actions ────────────────────────────────────────────────────
+    window.doConfirm = async (orderId) => {
+      try {
+        const btn = event?.target;
+        if (btn) { btn.disabled = true; btn.textContent = '...'; }
+        await confirmOrder(locationId, orderId, token);
+        updateOrderInKanban(orderId, 'CONFIRMED', new Date().toISOString());
+      } catch (e) {
+        alert(e.error || 'Failed to confirm');
+        // Refresh snapshot on error to get current state
+        try { applySnapshot(await fetchSnapshot(locationId, token)); } catch {}
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Confirm'; }
+      }
+    };
+
+    window.doReject = async (orderId) => {
+      const reason = prompt('Rejection reason (optional):');
+      try {
+        const btn = event?.target;
+        if (btn) { btn.disabled = true; btn.textContent = '...'; }
+        await rejectOrder(locationId, orderId, reason || undefined, token);
+        updateOrderInKanban(orderId, 'CANCELLED', new Date().toISOString());
+      } catch (e) {
+        alert(e.error || 'Failed to reject');
+        try { applySnapshot(await fetchSnapshot(locationId, token)); } catch {}
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Reject'; }
+      }
+    };
+
+    // ─── Init ───────────────────────────────────────────────────────
+    try {
+      setStatus('loading', 'loading...');
+      const snapshot = await fetchSnapshot(locationId, token);
+      applySnapshot(snapshot);
+
+      // Start dwell timer
+      if (dwellTimer) clearInterval(dwellTimer);
+      dwellTimer = startDwellTimers(kanban);
+
+      // Check dead channels
+      checkDeadChannels(locationId, token);
+
+      // Connect WS
+      const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${location.host}`;
+      new DashboardWSClient({
+        url: wsUrl,
+        token,
+        locationId,
+        onStatusChange: setStatus,
+        onEvent: handleWSEvent,
+      });
+    } catch (e) {
+      setStatus('error', 'Error');
+      document.getElementById('kanbanContainer').innerHTML =
+        `<div class="flex items-center justify-center w-full"><div class="text-center" style="color:var(--brand-muted);">
+          <p class="text-lg mb-2">Failed to load dashboard</p>
+          <p class="text-sm">${e.message}</p>
+          <button onclick="location.reload()" class="mt-4 px-4 py-2 rounded-lg text-sm" style="background:var(--brand-primary);color:#fff;">Reload</button>
+        </div></div>`;
+    }
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+{
+  "mcpServers": {
+    "codebase-memory": {
+      "command": "/root/.local/bin/codebase-memory-mcp",
+      "args": [],
+      "description": "codebase-memory-mcp: structural knowledge GRAPH (tree-sitter+LSP, TS+Rust) — query code structure (search_graph/trace_path/get_architecture/get_code_snippet/detect_changes) instead of reading files one-by-one. ~99% fewer tokens for structural questions. Index: project 'root-dowiz' at ~/.cache/codebase-memory-mcp/. Complements VSA (data payloads) + repowise (why-synthesis)."
+    },
+    "repowise": {
+      "command": "repowise",
+      "args": [
+        "mcp",
+        "/root/dowiz",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "REPOWISE_EMBEDDER": "ollama",
+        "OLLAMA_EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+        "OLLAMA_BASE_URL": "http://127.0.0.1:11434"
+      },
+      "description": "repowise: codebase intelligence — docs, graph, git signals, dead code, decisions"
+    },
+    "playwright-test": {
+      "command": "npx",
+      "args": [
+        "playwright",
+        "run-test-mcp-server",
+        "--headless"
+      ],
+      "env": {
+        "VITE_BASE_URL": "https://dowiz.fly.dev"
+      },
+      "description": "playwright agents: planner/generator/healer drive tests against the running app"
+    },
+    "browser-use": {
+      "command": "uvx",
+      "args": [
+        "browser-use[cli]",
+        "--mcp"
+      ],
+      "env": {
+        "ANONYMIZED_TELEMETRY": "false",
+        "BROWSER_USE_TELEMETRY": "false"
+      },
+      "description": "browser-use: on-demand agentic browse/extract over MCP (uvx, not hosted; self-host lib not cloud). LLM-backed tools need OpenRouter BYOK env (OPENAI_API_KEY + OPENAI_BASE_URL=https://openrouter.ai/api/v1) — see TOOLING-REGISTRY.md."
+    }
+  }
+}

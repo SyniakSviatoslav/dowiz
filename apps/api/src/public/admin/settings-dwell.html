@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeliveryOS — Dwell Settings</title>
+  <link href="/dist/tabler/tabler-icons.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/admin/dashboard.js"></script>
+  <style>
+    :root {
+      --brand-bg:#0F172A;--brand-surface:#1E293B;--brand-raised:#263548;
+      --brand-text:#F1F5F9;--brand-muted:#94A3B8;--brand-border:#334155;
+      --brand-primary:#ea4f16;--brand-primary-hover:#ffa12e;
+    }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--brand-bg); color:var(--brand-text); }
+    .setting-card { background:var(--brand-surface); border:1px solid var(--brand-border); border-radius:12px; padding:16px; }
+    .setting-card:hover { border-color:var(--brand-primary); }
+    input[type="number"] { background:var(--brand-bg); border:1px solid var(--brand-border); border-radius:8px; padding:8px 12px; color:var(--brand-text); width:100px; }
+    input[type="number"]:focus { outline:2px solid var(--brand-primary); outline-offset:-1px; }
+  </style>
+</head>
+<body>
+  <div class="flex flex-col min-h-screen">
+    <header class="flex items-center justify-between px-6 py-3 border-b" style="border-color:var(--brand-border);background:var(--brand-surface);">
+      <div class="flex items-center gap-3">
+        <h1 class="text-lg font-bold">DeliveryOS</h1>
+        <span class="text-sm px-2 py-0.5 rounded-full" style="background:var(--brand-primary);color:#fff;" id="statusBadge">disconnected</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm" style="color:var(--brand-muted);">
+        <a href="/admin/dashboard.html" class="hover:text-white">Dashboard</a>
+        <a href="/admin/orders.html" class="hover:text-white">Orders</a>
+        <a href="/admin/active-delivery.html" class="hover:text-white">Active Delivery</a>
+        <a href="/admin/alerts.html" class="hover:text-white">Alerts</a>
+        <a href="/admin/settings-dwell.html" class="hover:text-white font-semibold" style="color:var(--brand-text);">Dwell</a>
+      </div>
+    </header>
+
+    <div class="flex-1 p-6 max-w-2xl mx-auto w-full">
+      <h2 class="text-xl font-bold mb-1">Dwell Thresholds</h2>
+      <p class="text-sm mb-6" style="color:var(--brand-muted);">Set the time (in seconds) after which an order in a given status triggers a dwell alert.</p>
+
+      <div id="settingsForm">
+        <div class="text-center py-16" style="color:var(--brand-muted);" id="loadingState">Loading settings...</div>
+      </div>
+
+      <div class="flex items-center gap-3 mt-6">
+        <button onclick="saveSettings()" id="saveBtn" class="px-6 py-2 rounded-lg font-medium" style="background:var(--brand-primary);color:#fff;">Save Changes</button>
+        <button onclick="resetDefaults()" class="px-4 py-2 rounded-lg text-sm" style="background:transparent;border:1px solid var(--brand-border);color:var(--brand-muted);">Reset to defaults</button>
+        <span id="saveStatus" class="text-sm" style="color:var(--status-reserved);"></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (async () => {
+    const token = getOwnerToken();
+    const locationId = getLocationId();
+    if (!token || !locationId) {
+      document.body.innerHTML = `<div class="flex items-center justify-center h-screen" style="color:var(--brand-muted);"><div class="text-center"><p class="text-lg mb-2">Not authenticated</p><p class="text-sm">Please <a href="/29-admin-login.html" class="underline">log in</a> first.</p></div></div>`;
+      return;
+    }
+
+    const DEFAULTS = { pending_s: 60, confirmed_s: 300, preparing_s: 600, en_route_s: 900 };
+    let currentValues = { ...DEFAULTS };
+    let dirty = false;
+
+    const settingsForm = document.getElementById('settingsForm');
+    const saveBtn = document.getElementById('saveBtn');
+    const saveStatus = document.getElementById('saveStatus');
+
+    const STATUS_CONFIG = [
+      { key: 'pending_s', label: 'Pending', status: 'PENDING', desc: 'Time before a pending order triggers a dwell alert.' },
+      { key: 'confirmed_s', label: 'Confirmed', status: 'CONFIRMED', desc: 'Time before a confirmed order triggers a dwell alert.' },
+      { key: 'preparing_s', label: 'Preparing', status: 'PREPARING', desc: 'Time before an order in preparation triggers a dwell alert.' },
+      { key: 'en_route_s', label: 'En Route', status: 'IN_DELIVERY', desc: 'Time before a delivery in progress triggers a dwell alert.' },
+    ];
+
+    function renderSettings(values) {
+      settingsForm.innerHTML = `<div class="space-y-3">${STATUS_CONFIG.map(cfg => {
+        const val = values[cfg.key] ?? DEFAULTS[cfg.key];
+        return `<div class="setting-card flex items-center justify-between">
+          <div>
+            <div class="font-medium">${cfg.label}</div>
+            <div class="text-xs mt-0.5" style="color:var(--brand-muted);">${cfg.desc}</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="number" min="10" max="3600" step="5"
+                   data-key="${cfg.key}"
+                   value="${val}"
+                   onchange="onChange(this)"
+                   class="text-right">
+            <span class="text-sm" style="color:var(--brand-muted);">sec</span>
+          </div>
+        </div>`;
+      }).join('')}</div>`;
+    }
+
+    window.onChange = (el) => {
+      const key = el.dataset.key;
+      const val = parseInt(el.value, 10);
+      if (val >= 10 && val <= 3600) {
+        currentValues[key] = val;
+        dirty = true;
+        saveStatus.textContent = 'Unsaved changes';
+        saveStatus.style.color = 'var(--status-pending)';
+      }
+    };
+
+    async function loadSettings() {
+      try {
+        const res = await fetch(`/api/owner/locations/${locationId}/settings/dwell`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(`Failed: ${res.status}`);
+        const data = await res.json();
+        currentValues = { ...DEFAULTS, ...(data.dwellThresholds || {}) };
+        renderSettings(currentValues);
+        dirty = false;
+        saveStatus.textContent = '';
+      } catch (e) {
+        settingsForm.innerHTML = `<div class="text-center py-16" style="color:var(--status-active);">Error: ${e.message}</div>`;
+      }
+    }
+
+    window.saveSettings = async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+      saveStatus.textContent = '';
+      try {
+        const res = await fetch(`/api/owner/locations/${locationId}/settings/dwell`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dwellThresholds: currentValues }),
+        });
+        if (!res.ok) throw new Error(`Failed: ${res.status}`);
+        dirty = false;
+        saveStatus.textContent = 'Saved';
+        saveStatus.style.color = 'var(--status-resolved)';
+        setTimeout(() => { saveStatus.textContent = ''; }, 3000);
+      } catch (e) {
+        saveStatus.textContent = `Error: ${e.message}`;
+        saveStatus.style.color = 'var(--status-active)';
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Changes';
+      }
+    };
+
+    window.resetDefaults = () => {
+      currentValues = { ...DEFAULTS };
+      renderSettings(currentValues);
+      dirty = true;
+      saveStatus.textContent = 'Reset to defaults (unsaved)';
+      saveStatus.style.color = 'var(--status-pending)';
+    };
+
+    // Confirmation before leaving with unsaved changes
+    window.addEventListener('beforeunload', (e) => {
+      if (dirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${location.host}`;
+    new DashboardWSClient({
+      url: wsUrl,
+      token,
+      locationId,
+      onStatusChange: (status) => {
+        const badge = document.getElementById('statusBadge');
+        if (badge) {
+          badge.textContent = status;
+          badge.style.background = status === 'subscribed' ? 'var(--status-resolved)' : 'var(--status-pending)';
+        }
+      },
+    });
+
+    await loadSettings();
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+id: autoupgrade
+version: 0.2
+status: DRAFT
+intent: "автономно знаходити зміни, що ДОВЕДЕНО прискорюють ітерацію за менші ресурси; безпечний клас застосовувати машинно, ризиковий — лише пропонувати"
+problem_signature: "потрібен machine-gated self-upgrade: знайти→дослідити→класифікувати→(оракул)→застосувати|відкотити, з твердою межею"
+trigger: "/autoupgrade (headless, background)"
+role_mindset: "machine-gated, не ungated: оракул (green+no-sec-regression+доведений speedup+reversible) — гейт; firm boundary auth/RLS/secrets/payments/PII НІКОЛИ автономно"
+preconditions: ["v3-FINAL харнес присутній", "sandbox+credential-isolation (§4)", "телеметрія для grounding (runs/metrics.jsonl, codeburn)"]
+execution_skills: [map-from-telemetry, contained-web-research, classify-firm-boundary, machine-oracle, atomic-rollback]
+goal: "за прогон: змапити кандидатів з реальної телеметрії, класифікувати A/B fail-safe, (коли оракул готовий) застосувати лише доведено-швидші Class A, відкотити решту; §5 звіт"
+verification: "Class A kept лише якщо ОРАКУЛ: повний green + RLS/auth/secret асерції тримають + benchmark-replay ≥5% краще + записаний revert; інакше atomic rollback. Class B — лише в чергу людині"
+iron_principles: [machine-gated-not-ungated, firm-boundary-never-auto, proven-speedup-or-rollback, sandbox-no-prod-secrets, web-is-untrusted-data-never-execute, one-change-at-a-time, no-fake-green]
+loop_body: [MAP, RESEARCH, CLASSIFY, APPLY-VERIFY-or-ROLLBACK, REPORT, FEED]
+exit_conditions: "батч кандидатів оцінено; Class A — kept(доведено)|rolled-back; Class B — у черзі людині; §5 звіт надруковано+збережено"
+gates: [FIRM-BOUNDARY-STOP, ORACLE-GATE]
+proof_artifacts: [candidate-list-with-class, oracle-before-after-metric, rollback-records, class-B-human-queue, §5-report]
+out_of_scope: [auth/RLS/secrets/payments/PII-автозміни, schema/migrations-авто, architecture/topology-авто, major-breaking-deps-авто]
+escalation: "Class B → черга людині (механізм GRADUATE §8c v3-FINAL); сумнів → B; будь-яка межа → STOP"
+skills_required: [repo-access, telemetry-access, sandbox]
+memory_file: loops/memory/autoupgrade.md
+verification_report: loops/reports/autoupgrade-0.1.md
+
+# Living Loop System wiring (docs/operating-model/living-loop-system-v3.md §1/§5).
+harness:
+  runs_dir: loops/runs
+  always_emit_report: true
+  progress_metric: candidates_remaining_in_batch   # ↓=better
+  finalize: "tools/loop-harness/src/autoupgrade.ts (runAutoupgrade → §5 report; report-only this pass)"
+  telemetry_collectors: [git_mem, session_tokens, eco]
+
+# Build status (docs/operating-model/autoupgrade-loop-v1.md §8).
+build_status:
+  done: "END-TO-END FUNCTIONAL. §8 step2 (MAP→CLASSIFY→REPORT) + step3 (oracle, 7 tests) + step4 (Class-A auto-apply --apply) + adapter (benchmark.ts+repo-apply.ts, git-checkout atomic revert, 5 tests) + the MAP source (detectors.ts configTuneDetector: operator-declared tunables → repo-perf candidates with mechanical patches, 5 pipeline tests proving detect→classify-A→apply→benchmark→KEEP|ROLLBACK on real git)."
+  done_extra: "§4 containment (containment.ts: assertCredentialIsolation refuses --apply with prod secrets in env; isTrustedSource allowlist = only mechanical detectors auto-apply) + §8c Class-B queue (proposals.ts: durable deduped human-gated proposals.json, status preserved, never auto-applied). 11 tests; live run queued the SECURITY-DEFINER migration."
+  done_v02: "v0.2 trust-spine deepening (loop-architect CERTIFIED, M1–M11 + anti-cheat mutant): EvoMap-insight A proven-upgrade registry (proven-upgrades.ts: append-only deduped genes {version,patch_ref,metric before/after,speedup_pct,revert,provenance,caller-ts,count} in loops/runs/proven-upgrades.json; recordKeptUpgrades wires KEEP→gene, lens-gated) + STORM-insight B decorrelated lenses (classify = security·reversibility·perf, ALL-must-pass→A, any-fail→B; evaluateLenses exported, auditable). Report-only DEFAULT + applyCandidate DISABLE + firm boundary UNCHANGED (run-#5 staged-security→B re-proven). 129 loop-harness tests green; mutant on security lens → 10 RED."
+  deferred: "§4 runtime sandbox/agent-vault key-brokering (env-guard is the code side), contained web-research, worktree concurrency upgrade (only at >1 loop, teamConcurrency 1 today), widen-after-clean-runs. NOT wiring pg-boss into apps/api (autonomous repo-mutation doesn't belong in the customer-serving server — use cron/CI)."
+  boundary: "Class B NEVER reaches apply. Only autonomous repo-mutation path = operator-declared config tuning (mechanical+bounded+reversible+benchmarked). No tunables.json declared → 0 repo-perf candidates (safe default). Declare loops/autoupgrade.tunables.json to enable (see .example.json)."

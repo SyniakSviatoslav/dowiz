@@ -1,0 +1,51 @@
+---
+// Static footer — parity: MenuPage.tsx:1723-1807. Name, address, hours; socials/tap-to-call
+// intentionally omitted from this skeleton pass (data exists on PublicLocationInfo already;
+// wiring is a 10-line follow-up, not a structural gap).
+import type { PublicLocationInfo } from '../lib/api-types';
+
+interface Props {
+  info: PublicLocationInfo;
+}
+const { info } = Astro.props;
+const dayLabels: Record<string, string> = {
+  monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu',
+  friday: 'Fri', saturday: 'Sat', sunday: 'Sun',
+};
+---
+
+<footer class="storefront-footer">
+  <p class="footer-name">{info.name}</p>
+  {info.address && <p class="footer-address">{info.address}</p>}
+  {info.weeklyHours && (
+    <table class="footer-hours">
+      <tbody>
+        {info.weeklyHours.map((d) => (
+          <tr>
+            <td>{dayLabels[d.day] ?? d.day}</td>
+            <td>{d.isOpen ? `${d.open}–${d.close}` : 'Closed'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )}
+</footer>
+
+<style>
+  .storefront-footer {
+    padding: 1.5rem 1rem 3rem;
+    color: var(--brand-text-muted);
+    font-size: 0.85rem;
+  }
+  .footer-name {
+    font-weight: 600;
+    color: var(--brand-text);
+  }
+  .footer-hours {
+    margin-top: 0.5rem;
+    border-collapse: collapse;
+  }
+  .footer-hours td {
+    padding: 0.15rem 0.75rem 0.15rem 0;
+  }
+</style>

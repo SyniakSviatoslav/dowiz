@@ -1,0 +1,23 @@
+[
+  { "query": "I've got the audit synthesis with 9 critical findings across money, authz, RLS and the frontend — I want to hit all four at once, not one after another. How should I set this up?", "should_trigger": true },
+  { "query": "spin up an agent for each of the 12 restaurant prospects and build their demo storefronts in parallel", "should_trigger": true },
+  { "query": "these five migrations are totally independent, can we fan out and do them all at the same time", "should_trigger": true },
+  { "query": "max lanes on this please — I need the courier routes, the owner GDPR endpoints, and the admin CRM page all refactored today", "should_trigger": true },
+  { "query": "last time I ran two agents on the checkout code they clobbered each other's edits to orders.ts. I want to run several agents again but not have that happen — how do I split the work so they don't collide?", "should_trigger": true },
+  { "query": "we have 8 unrelated failing test files in different subsystems, dispatch one investigator per file concurrently", "should_trigger": true },
+  { "query": "run these in parallel: update the i18n keys, fix the modifier-groups route, and rewrite the settings page — but keep them from stepping on each other", "should_trigger": true },
+  { "query": "I'm about to emit a bunch of Agent tool-uses in one turn to remediate the six-lane audit. before I do, help me partition it so no two lanes own the same file", "should_trigger": true },
+  { "query": "parallel remediation across the whole authz surface — 15 IDOR sites in different owner routes, want them all going at once", "should_trigger": true },
+  { "query": "do all of these at once and give each its own worktree so the git index doesn't get shared between them", "should_trigger": true },
+
+  { "query": "the money lane and the FE lane both need to edit i18n-catalog.ts — should I just let whichever finishes first win?", "should_trigger": false },
+  { "query": "refactor server.ts to split the route registration out of the god-file", "should_trigger": false },
+  { "query": "run the playwright reliability gate against staging and give me a GO/NO-GO", "should_trigger": false },
+  { "query": "is there a skill that can help me discover other skills for deployment tasks?", "should_trigger": false },
+  { "query": "certify the sandbox-swarm-gate loop — run it through the M1-M11 rubric", "should_trigger": false },
+  { "query": "two of my background agents finished and now I need to review their diffs and decide whether to merge — what's the gate checklist?", "should_trigger": false },
+  { "query": "this change depends on the migration landing first, then the API, then the frontend — walk me through the order", "should_trigger": false },
+  { "query": "write a contextual commit for the money LC1 fix I just finished", "should_trigger": false },
+  { "query": "just fix the typo in the checkout heading, it's a one-liner", "should_trigger": false },
+  { "query": "how do I make a new skill for the audit-remediation workflow and test that it triggers correctly?", "should_trigger": false }
+]

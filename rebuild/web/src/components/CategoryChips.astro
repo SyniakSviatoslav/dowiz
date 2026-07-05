@@ -1,0 +1,57 @@
+---
+// Static, zero-JS-by-default category nav — parity: MenuPage.tsx:493-533 ("category tap = jump-nav
+// anchor, NOT filter"). Plain <a href="#id"> anchors work with zero JavaScript (native browser
+// scroll-to-fragment); the MenuBrowser island progressively enhances this with smooth-scroll +
+// IntersectionObserver scroll-spy (active chip state) — see src/components/islands/MenuBrowser.svelte.
+import type { PublicMenuCategory } from '../lib/api-types';
+
+interface Props {
+  categories: PublicMenuCategory[];
+}
+const { categories } = Astro.props;
+---
+
+<nav class="category-nav" aria-label="Menu categories" data-island-target="category-nav">
+  <a href="#top" class="category-chip" data-category-chip="__all">All</a>
+  {categories.map((c) => (
+    <a href={`#${c.id}`} class="category-chip" data-category-chip={c.id}>
+      {c.name}
+      <span class="category-chip-count">{c.products.length}</span>
+    </a>
+  ))}
+</nav>
+
+<style>
+  .category-nav {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding: 0.75rem 1rem;
+    position: sticky;
+    top: 3.5rem;
+    z-index: var(--z-sticky);
+    background: var(--brand-bg);
+    border-bottom: 1px solid var(--brand-border);
+    scrollbar-width: none;
+  }
+  .category-chip {
+    flex-shrink: 0;
+    padding: 0.4rem 0.9rem;
+    border-radius: var(--radius-full);
+    background: var(--brand-surface-raised);
+    color: var(--brand-text);
+    text-decoration: none;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  .category-chip[aria-pressed='true'],
+  .category-chip:target {
+    background: var(--brand-primary);
+    color: var(--brand-bg);
+  }
+  .category-chip-count {
+    opacity: 0.6;
+    margin-left: 0.25rem;
+    font-size: 0.75em;
+  }
+</style>

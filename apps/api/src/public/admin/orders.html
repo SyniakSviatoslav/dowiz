@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeliveryOS — Orders</title>
+  <link href="/dist/tabler/tabler-icons.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/admin/dashboard.js"></script>
+  <style>
+    :root {
+      --brand-bg:#0F172A;--brand-surface:#1E293B;--brand-raised:#263548;
+      --brand-text:#F1F5F9;--brand-muted:#94A3B8;--brand-border:#334155;
+      --brand-primary:#ea4f16;
+    }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--brand-bg); color:var(--brand-text); }
+    table { width:100%; border-collapse:collapse; }
+    th, td { padding:10px 12px; text-align:left; border-bottom:1px solid var(--brand-border); font-size:14px; }
+    th { font-weight:600; color:var(--brand-muted); font-size:12px; text-transform:uppercase; letter-spacing:0.05em; }
+    tr:hover { background:var(--brand-raised); }
+    .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+  </style>
+</head>
+<body>
+  <div class="flex flex-col h-screen">
+    <header class="flex items-center justify-between px-6 py-3 border-b" style="border-color:var(--brand-border);background:var(--brand-surface);">
+      <div class="flex items-center gap-3">
+        <h1 class="text-lg font-bold">DeliveryOS</h1>
+        <span class="text-sm" style="color:var(--brand-muted);">Orders</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm" style="color:var(--brand-muted);">
+        <a href="/admin/dashboard.html" class="hover:text-white">Dashboard</a>
+        <a href="/admin/orders.html" class="text-white">Orders</a>
+        <a href="/admin/active-delivery.html" class="hover:text-white">Active Delivery</a>
+      </div>
+    </header>
+
+    <div class="px-6 py-4 border-b" style="border-color:var(--brand-border);background:var(--brand-surface);">
+      <div class="flex items-center gap-3 flex-wrap">
+        <select id="statusFilter" class="px-3 py-1.5 rounded-lg text-sm" style="background:var(--brand-raised);border:1px solid var(--brand-border);color:var(--brand-text);">
+          <option value="">All statuses</option>
+          <option value="PENDING">Pending</option>
+          <option value="CONFIRMED">Confirmed</option>
+          <option value="PREPARING">Preparing</option>
+          <option value="IN_DELIVERY">En Route</option>
+          <option value="DELIVERED">Delivered</option>
+          <option value="CANCELLED">Cancelled</option>
+        </select>
+        <span class="text-xs" style="color:var(--brand-muted);" id="orderCount"></span>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-auto px-6 py-4">
+      <table>
+        <thead><tr>
+          <th>Order</th><th>Status</th><th>Total</th><th>Customer</th><th>Items</th><th>Created</th><th>Dwell</th>
+        </tr></thead>
+        <tbody id="ordersBody"><tr><td colspan="7" class="text-center py-8" style="color:var(--brand-muted);">Loading...</td></tr></tbody>
+      </table>
+      <div id="pagination" class="flex items-center justify-between mt-4 text-sm" style="color:var(--brand-muted);"></div>
+    </div>
+  </div>
+
+  <script>
+  (async () => {
+    const token = getOwnerToken();
+    const locationId = getLocationId();
+    if (!token || !locationId) { document.body.innerHTML = '<div class="flex items-center justify-center h-screen"><p>Not authenticated. <a href="/29-admin-login.html">Log in</a>.</p></div>'; return; }
+
+    const STATUS_COLORS = {PENDING:'#D97706',CONFIRMED:'#2563EB',PREPARING:'#F59E0B',IN_DELIVERY:'#3B82F6',DELIVERED:'#059669',CANCELLED:'#DC2626',REJECTED:'#DC2626'};
+    let currentCursor = null;
+    let hasMore = false;
+    let allOrders = [];
+
+    async function loadOrders(status, cursor) {
+      const opts = { limit: 50 };
+      if (status) opts.status = status;
+      if (cursor) opts.cursor = cursor;
+      const data = await fetchSnapshot(locationId, token, opts);
+      allOrders = data.orders || [];
+      hasMore = !!data.nextCursor;
+      currentCursor = data.nextCursor;
+      renderTable(allOrders);
+      document.getElementById('orderCount').textContent = `${allOrders.length} orders`;
+      document.getElementById('pagination').innerHTML = hasMore
+        ? `<button onclick="loadMore()" class="px-3 py-1 rounded-lg text-sm" style="background:var(--brand-raised);border:1px solid var(--brand-border);">Load more</button>`
+        : '<span>All orders loaded</span>';
+    }
+
+    function renderTable(orders) {
+      const tbody = document.getElementById('ordersBody');
+      if (orders.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8" style="color:var(--brand-muted);">No orders found</td></tr>';
+        return;
+      }
+      tbody.innerHTML = orders.map(o => `<tr>
+        <td class="font-mono text-xs">#${o.orderId.slice(0,8)}</td>
+        <td><span class="status-dot" style="background:${STATUS_COLORS[o.status]||'#666'}"></span>${o.status}</td>
+        <td class="font-mono">${(o.total/100).toFixed(2)} ${o.currency}</td>
+        <td title="${o.customerPhoneMasked}">${o.customerNameMasked}</td>
+        <td>${o.itemCount}</td>
+        <td class="text-xs" style="color:var(--brand-muted);">${new Date(o.createdAt).toLocaleString()}</td>
+        <td class="font-mono text-xs" data-created-at="${o.createdAt}">${formatDwell(o.dwellSeconds)}</td>
+      </tr>`).join('');
+    }
+
+    window.loadMore = async () => {
+      const status = document.getElementById('statusFilter').value;
+      await loadOrders(status || undefined, currentCursor);
+    };
+
+    document.getElementById('statusFilter').addEventListener('change', async (e) => {
+      currentCursor = null;
+      await loadOrders(e.target.value || undefined, null);
+    });
+
+    // Init
+    await loadOrders('', null);
+    setInterval(() => {
+      const els = document.querySelectorAll('[data-created-at]');
+      for (const el of els) {
+        const createdAt = new Date(el.dataset.createdAt).getTime();
+        el.textContent = formatDwell(Math.floor((Date.now() - createdAt) / 1000));
+      }
+    }, 1000);
+  })();
+  </script>
+</body>
+</html>

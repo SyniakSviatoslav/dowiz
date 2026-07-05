@@ -1,0 +1,14 @@
+{
+  "_comment": "Operator-declared safe tunables for the autoupgrade config-tune detector. Copy to loops/autoupgrade.tunables.json to enable autonomous config tuning. The loop will MECHANICALLY try each candidate value, run the benchmark + green + security, and (oracle) KEEP the value only if it is >=5% faster — else atomic git rollback. YOU bound the search space (which knobs, which safe values); the loop does the search+measure+keep. This is the ONLY autonomous repo-mutation path, by design: mechanical + bounded + reversible + benchmarked. Never put auth/RLS/secrets/payments/PII/schema knobs here.",
+  "tunables": [
+    {
+      "id": "example-batch-size",
+      "file": "path/to/some/dev-loop-script.ts",
+      "find": "BATCH_SIZE = (\\d+)",
+      "candidates": ["100", "250", "500"],
+      "benchmark": { "cmd": "node", "args": ["--import", "tsx", "path/to/bench.ts"], "metric": { "parse": "ELAPSED_MS=(\\d+)" } },
+      "green": { "cmd": "node", "args": ["--test", "--import", "tsx", "path/to/affected.test.ts"] },
+      "security": { "cmd": "echo", "args": ["ok"] }
+    }
+  ]
+}

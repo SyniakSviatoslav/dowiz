@@ -1,0 +1,20 @@
+{
+  "id": "owner-mid-service-stoplist",
+  "role": "owner",
+  "goals": [
+    "86 a sold-out item live without breaking orders"
+  ],
+  "traits": {
+    "patience": "low",
+    "tech_savvy": "med",
+    "careful_or_sloppy": "careful"
+  },
+  "device": "tablet",
+  "viewport": 768,
+  "locale": "al",
+  "network_profile": "wifi",
+  "constraints": [
+    "mid-rush",
+    "must be instant"
+  ]
+}

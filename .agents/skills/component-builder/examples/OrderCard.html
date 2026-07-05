@@ -1,0 +1,241 @@
+<style>
+  .order-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--brand-bg);
+    border: 1px solid var(--brand-border);
+    border-left: 3px solid transparent;
+    border-radius: var(--brand-radius);
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    font-family: var(--brand-font-body);
+  }
+
+  .order-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .order-number {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--brand-text);
+  }
+
+  .order-time {
+    font-size: 12px;
+    color: var(--brand-text-muted);
+  }
+
+  .order-items {
+    font-size: 14px;
+    color: var(--brand-text);
+    margin-bottom: 12px;
+    line-height: 1.4;
+  }
+
+  .order-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--brand-border);
+    padding-top: 12px;
+  }
+
+  .order-total {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--brand-text);
+  }
+
+  .order-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn {
+    padding: 6px 12px;
+    border-radius: var(--brand-radius-btn);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    border: none;
+  }
+
+  .btn:active {
+    transform: scale(0.98);
+  }
+
+  .btn-primary {
+    background: var(--brand-primary);
+    color: var(--brand-bg);
+  }
+
+  .btn-primary:hover {
+    background: var(--brand-primary-hover);
+  }
+
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--brand-border);
+    color: var(--brand-text);
+  }
+
+  .courier-info {
+    font-size: 12px;
+    color: var(--brand-text-muted);
+    background: var(--brand-surface);
+    padding: 8px;
+    border-radius: var(--brand-radius-sm);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Status Colors */
+  .order-card.status-pending {
+    border-left-color: var(--status-pending);
+  }
+  .order-card.status-confirmed {
+    border-left-color: var(--status-confirmed);
+  }
+  .order-card.status-preparing {
+    border-left-color: var(--status-preparing);
+  }
+  .order-card.status-in-delivery {
+    border-left-color: var(--status-in-delivery);
+  }
+
+  /* Status Badge */
+  .status-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-transform: uppercase;
+  }
+
+  .status-badge.pending { color: var(--status-pending); background: #FFFBEB; }
+  .status-badge.confirmed { color: var(--status-confirmed); background: #EFF6FF; }
+  .status-badge.preparing { color: var(--status-preparing); background: #FEF3C7; }
+  .status-badge.in-delivery { color: var(--status-in-delivery); background: #DBEAFE; }
+
+  /* Animations */
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.85); }
+  }
+
+  .pulse-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: currentColor;
+    animation: pulse-dot 1.2s infinite ease-in-out;
+  }
+  
+  .timer-critical {
+    color: var(--color-danger);
+    font-weight: 600;
+  }
+
+  @keyframes slideInLeft {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .order-card {
+    animation: slideInLeft 0.2s ease-out forwards;
+  }
+  
+  @media (prefers-reduced-motion: reduce) {
+    .pulse-indicator { animation: none; }
+    .order-card { animation: none; }
+  }
+</style>
+
+<!-- 1. PENDING Variant (New Order) -->
+<article class="order-card status-pending">
+  <div class="order-header">
+    <span class="order-number">#A-1042</span>
+    <div class="status-badge pending">
+      <span class="pulse-indicator"></span> Очікує
+    </div>
+  </div>
+  <div class="order-items">
+    2x Піца Маргарита (30см)<br>
+    1x Домашній лимонад
+  </div>
+  <div class="order-footer">
+    <span class="order-total">820 ₴</span>
+    <div class="order-actions">
+      <span class="order-time timer-critical">Залишилось 02:14</span>
+      <button class="btn btn-primary">Прийняти</button>
+    </div>
+  </div>
+</article>
+
+<!-- 2. CONFIRMED Variant -->
+<article class="order-card status-confirmed">
+  <div class="order-header">
+    <span class="order-number">#A-1041</span>
+    <div class="status-badge confirmed">Прийнято</div>
+  </div>
+  <div class="order-items">
+    1x Паста Карбонара<br>
+    1x Салат Цезар
+  </div>
+  <div class="order-footer">
+    <span class="order-total">450 ₴</span>
+    <div class="order-actions">
+      <button class="btn btn-outline">Деталі</button>
+      <button class="btn btn-primary">Готувати</button>
+    </div>
+  </div>
+</article>
+
+<!-- 3. PREPARING Variant (with Courier info) -->
+<article class="order-card status-preparing">
+  <div class="order-header">
+    <span class="order-number">#A-1039</span>
+    <div class="status-badge preparing">Готується</div>
+  </div>
+  <div class="order-items">
+    3x Піца Пепероні (40см)<br>
+    2x Coca-Cola (0.5л)
+  </div>
+  <div class="courier-info">
+    🚚 Кур'єр: Олександр (буде через 5 хв)
+  </div>
+  <div class="order-footer">
+    <span class="order-total">1200 ₴</span>
+    <div class="order-actions">
+      <button class="btn btn-primary">Готово до видачі</button>
+    </div>
+  </div>
+</article>
+
+<!-- 4. IN_DELIVERY Variant -->
+<article class="order-card status-in-delivery">
+  <div class="order-header">
+    <span class="order-number">#A-1035</span>
+    <div class="status-badge in-delivery">В дорозі</div>
+  </div>
+  <div class="order-items">
+    1x Сет Філадельфія<br>
+  </div>
+  <div class="order-footer">
+    <span class="order-total">650 ₴</span>
+    <div class="order-actions">
+      <span class="order-time">Передано кур'єру о 14:22</span>
+    </div>
+  </div>
+</article>
