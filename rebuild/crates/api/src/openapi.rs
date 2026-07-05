@@ -197,6 +197,25 @@ use crate::routes::owner::gdpr::{
         // route is not absent from the generated document (an openapi-diff / contract-parity gate
         // would otherwise flag a mounted-but-undocumented path — guardian fix).
         crate::routes::telegram_webhook::telegram_webhook,
+        // ── S10 platform-admin/provisioning surface (docs/design/rebuild-platform-admin-s10-council/)
+        // — the LAST surface. Plane A (`/api/admin/*`, behind the REV-S10-1 runtime plane-gate) +
+        // Plane B (`/internal/acquisition/*`, behind the ops-secret gate). Listed so the mounted-dark
+        // routes are not absent from the generated document (openapi-diff / contract-parity gate).
+        crate::routes::admin::list_backups,
+        crate::routes::admin::verify_backup,
+        crate::routes::admin::dr_report,
+        crate::routes::admin::fallback_health,
+        crate::routes::admin::r2_check,
+        crate::routes::admin::notification_audit,
+        crate::routes::internal_acquisition::create,
+        crate::routes::internal_acquisition::extract,
+        crate::routes::internal_acquisition::provision_mint,
+        crate::routes::internal_acquisition::provision_spine,
+        crate::routes::internal_acquisition::provision_hard_delete,
+        crate::routes::internal_acquisition::claim_verify,
+        crate::routes::internal_acquisition::claim_mint,
+        crate::routes::internal_acquisition::complaint,
+        crate::routes::internal_acquisition::retention_sweep,
     ),
     components(schemas(
         HealthStatus,
@@ -352,6 +371,13 @@ use crate::routes::owner::gdpr::{
         GdprRequestDetail,
         RetentionResponse,
         UpdateRetentionRequest,
+        // ── S10 platform-admin/provisioning schemas ──
+        crate::routes::admin::BackupRow,
+        crate::routes::admin::FallbackHealthRow,
+        crate::routes::admin::R2Coverage,
+        crate::routes::admin::DrillOutcome,
+        crate::routes::internal_acquisition::SpineResult,
+        crate::routes::internal_acquisition::Art14Notice,
     )),
     tags(
         (name = "health", description = "Liveness/health probes"),
@@ -374,6 +400,8 @@ use crate::routes::owner::gdpr::{
         (name = "courier", description = "S7 courier operational plane (shifts, assignments, cash-as-proof delivery, earnings/history, payouts read)"),
         (name = "owner-couriers", description = "S7 owner-side courier management (roster, deactivate/role, live map, breadcrumb route, invites)"),
         (name = "owner-gdpr", description = "S9 GDPR/compliance (erasure requests, status, retention settings) — the reddest surface in the rebuild"),
+        (name = "platform-admin", description = "S10 platform-ops plane (/api/admin/*, behind the runtime platform_admins allowlist gate) — backups list/drill/dr-report, cross-tenant fallback health, notification audit"),
+        (name = "acquisition", description = "S10 acquisition-ops plane (/internal/acquisition/*, behind the ops-secret gate) — source/extract/provision/claim/complaint/retention"),
     )
 )]
 pub struct ApiDoc;

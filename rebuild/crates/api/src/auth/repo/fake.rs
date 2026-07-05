@@ -41,6 +41,9 @@ pub struct FakeAuthRepo {
     pub track_grants: Mutex<HashMap<String, TrackGrantEntry>>,
     pub claim_contact_bound: Mutex<HashMap<String, bool>>,
     pub claim_transfers: Mutex<HashMap<String, ClaimTransferResult>>,
+    /// S10 REV-S10-3: records the recipient `claim_transfer` was invoked with, so a test can prove
+    /// the recipient is the AUTHENTICATED sub (never a body-supplied id) — the IDOR guard.
+    pub claim_transfer_recipient: Mutex<Option<Uuid>>,
     pub shadows: Mutex<HashMap<String, bool>>,
     /// Track the last created courier session id so tests can assert a session was minted.
     pub last_created_session: Mutex<Option<Uuid>>,
@@ -261,8 +264,10 @@ impl AuthRepo for FakeAuthRepo {
     async fn claim_transfer(
         &self,
         token: &str,
-        _user_id: Uuid,
+        user_id: Uuid,
     ) -> Result<Result<(Uuid, Uuid), String>, AuthRepoError> {
+        // S10 REV-S10-3: record the recipient so a test can prove it is the authenticated sub.
+        *self.claim_transfer_recipient.lock().unwrap() = Some(user_id);
         Ok(self
             .claim_transfers
             .lock()

@@ -41,6 +41,11 @@ pub mod jwt;
 pub mod middleware;
 pub mod mount;
 pub mod pii;
+// S10 platform-admin plane-gate (docs/design/rebuild-platform-admin-s10-council/, REV-S10-1) — the
+// RUNTIME root-hook analogue that gates every `/api/admin/*` request (registered/sibling/future/
+// unregistered) on the `platform_admins` allowlist. Lives in `auth` because it is an auth boundary
+// (like the S2 extractors), but adds NO new claim variant (RED LINE, Q-ADMIN-NO-CLAIM).
+pub mod plane_gate;
 pub mod repo;
 pub mod service;
 pub mod store;

@@ -104,13 +104,14 @@ pub async fn claim_decline(
     if req.token.len() < 16 || req.token.len() > 256 {
         return bare(StatusCode::BAD_REQUEST, "VALIDATION_FAILED");
     }
-    // declineAndErase is a multi-step erase (resolve+burn invite, hard-delete shadow). In this port
-    // the destructive erase is delegated to the same claim data-access surface. A token that does
-    // not resolve to an active invite → bare 401 (claim.ts:79). The erase itself is a DB operation
-    // (KEEP disposition — the hard-delete helpers stay server-side); modeled as a repo call whose
-    // absence of a matching invite is the 401 path.
+    // declineAndErase is a multi-step erase (resolve+burn invite, hard-delete shadow). A token that
+    // does not resolve to an active invite → bare 401 (claim.ts:79).
+    // ⚠️ LAUNCH-BLOCKER (SSG S10 LOW): the destructive erase (burn invite + hard_delete_shadow) is NOT
+    // yet wired here — this only READS `claim_invite_is_contact_bound` and returns erased:true. Per the
+    // Art-14 dignity rule ("erase as easy as claim"), the decline MUST perform the erase before the S10
+    // flip; do NOT launch this path returning erased:true without erasing. Safe while DARK (no caller).
     match state.repo.claim_invite_is_contact_bound(&req.token).await {
-        // `Some(_)` = an active invite exists for this token → erase proceeds → 200 erased.
+        // `Some(_)` = an active invite exists → erase MUST proceed (launch-blocker above) → 200 erased.
         Ok(Some(_)) => Json(ClaimDeclineResponse { erased: true }).into_response(),
         // No matching active invite → any ClaimError maps to a bare 401 (Q-CLAIM-DECLINE).
         Ok(None) => bare(StatusCode::UNAUTHORIZED, "INVALID_OR_EXPIRED_TOKEN"),
@@ -218,6 +219,52 @@ mod tests {
         let (status, json) = json_body(resp).await;
         assert_eq!(status, StatusCode::CONFLICT);
         assert_eq!(json, serde_json::json!({ "error": "ALREADY_CLAIMED" }));
+    }
+
+    // ── S10 REV-S10-3 (breaker M1): the transfer recipient is the AUTHENTICATED sub, NEVER a body
+    //    field — the structural IDOR guard. `ClaimTokenRequest` has ONLY `token`; there is no
+    //    request-supplied `user_id` a caller could point the transfer at. A courier/customer token
+    //    CAN reach accept (verifyAuth-only, matching Node), but its `sub` is the recipient and the
+    //    `claim_transfer` DEFINER's contact-binding is the transfer authority — no attacker-chosen id. ──
+
+    #[tokio::test]
+    async fn claim_accept_recipient_is_authenticated_sub_not_a_body_field() {
+        // The Fake records which recipient `claim_transfer` was invoked with; assert it equals the
+        // token's `sub`, proving the recipient is derived from the SESSION, never the request body.
+        // A concrete `Arc<FakeAuthRepo>` handle is kept (the trait object hides the recorder).
+        let repo = Arc::new(FakeAuthRepo::default());
+        let token = "s".repeat(32);
+        let org = Uuid::new_v4();
+        let loc = Uuid::new_v4();
+        repo.claim_contact_bound
+            .lock()
+            .unwrap()
+            .insert(token.clone(), true);
+        repo.claim_transfers
+            .lock()
+            .unwrap()
+            .insert(token.clone(), Ok((org, loc)));
+        let state = AuthState::test_state(repo.clone());
+        let authed_sub = Uuid::new_v4();
+        // The OwnerClaims `sub` defaults to `user_id` (claims.rs); use that as the authenticated sub.
+        let verified = VerifiedClaims(Claims::Owner(OwnerClaims::new(authed_sub, None)));
+        let resp = claim_accept(
+            Extension(state),
+            verified,
+            Json(ClaimTokenRequest {
+                token: token.clone(),
+            }),
+        )
+        .await;
+        let (status, _) = json_body(resp).await;
+        assert_eq!(status, StatusCode::OK);
+        // The recipient recorded by the transfer must be the authenticated sub — not any body value.
+        let seen = *repo.claim_transfer_recipient.lock().unwrap();
+        assert_eq!(
+            seen,
+            Some(authed_sub),
+            "REV-S10-3: recipient is the authenticated sub, never a request-supplied id (no IDOR)"
+        );
     }
 
     #[tokio::test]

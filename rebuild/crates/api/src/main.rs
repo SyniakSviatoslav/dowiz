@@ -116,6 +116,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Captured BEFORE `auth_state` is moved into S7's `build_courier_states` below — the S8
             // telegram webhook needs it to fail-closed on an unset secret in prod (guardian fix).
             let is_production = auth_state.config.node_env.is_production();
+            // Captured BEFORE the same S7 move — the S10 runtime plane-gate (REV-S10-1) verifies the
+            // bearer at request time and so needs the JWT verifier at the OUTERMOST layer below.
+            let auth_verifier = auth_state.verifier.clone();
             app = app.merge(auth::auth_router(auth_state.clone()));
             tracing::info!("S2 auth surface mounted");
             app = app.merge(routes::owner::owner_catalog_router(build_owner_states(
@@ -213,9 +216,69 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tracing::info!(
                 "S8 jobs/notifications surface mounted (claim-loop worker + cron fleet spawned)"
             );
+
+            // ── S10 platform-admin/provisioning surface (docs/design/rebuild-platform-admin-s10-council/)
+            // — the LAST strangler surface + highest-privilege plane. Rides the SAME auth-env gate as
+            // S3-S8. Dark (mounted, not launched). Two planes with two DISTINCT gates:
+            //  • Plane A (`/api/admin/*`) — the 6 platform-ops routes, protected by the REV-S10-1 RUNTIME
+            //    plane-gate applied as the OUTERMOST layer below.
+            //  • Plane B (`/internal/acquisition/*`) — 9 provisioning/claim routes behind the ops-secret
+            //    gate (a ROUTER-scoped layer — the faithful port of Node's PLUGIN `onRequest`, not root).
+            app = app.merge(routes::admin::admin_router(
+                routes::admin::PlatformAdminState {
+                    repo: Arc::new(routes::admin::PgAdminOpsRepo::new(
+                        pools.operational.clone(),
+                    )),
+                    // Q-DRILL-NODE-CARVEOUT: the thin Rust trigger carries the actor to the (dark) Node drill.
+                    drill: Arc::new(routes::admin::NodeRestoreDrill),
+                    // ADMIN_DRILLS_ENABLED scopes ONLY the two heavy drills; the recovery reads never darken.
+                    drills_enabled: std::env::var("ADMIN_DRILLS_ENABLED").as_deref() == Ok("true"),
+                },
+            ));
+            app = app.merge(
+                routes::internal_acquisition::acquisition_router(
+                    routes::internal_acquisition::AcquisitionState {
+                        repo: Arc::new(routes::internal_acquisition::PgAcquisitionRepo::new(
+                            pools.operational.clone(),
+                        )),
+                        base_url: std::env::var("APP_BASE_URL")
+                            .unwrap_or_else(|_| "https://dowiz.fly.dev".to_string()),
+                    },
+                )
+                // Q-PROVISION-SECRET: the ops-secret gate, fail-closed-404 when PROVISION_OPS_SECRET is
+                // unset (read from env, NOT the config Zod schema — decoupled from dev-login, B4).
+                .layer(axum::middleware::from_fn_with_state(
+                    routes::internal_acquisition::OpsGateState {
+                        secret: std::env::var("PROVISION_OPS_SECRET")
+                            .ok()
+                            .filter(|s| !s.is_empty())
+                            .map(|s| Arc::new(config::Secret::new(s))),
+                    },
+                    routes::internal_acquisition::ops_secret_gate,
+                )),
+            );
+            // REV-S10-1 (CRIT, LOAD-BEARING): the runtime platform-admin plane-gate as the OUTERMOST
+            // layer on the FULLY-MERGED app — the axum analogue of Node's root-instance `onRequest` hook
+            // (`platform-admin.ts:76`). Applied LAST so it runs FIRST on EVERY request: any `/api/admin/*`
+            // path (registered, sibling, future, or entirely unregistered) is 401/403'd HERE before axum
+            // routing, so no admin route can escape the `platform_admins` allowlist gate — the fail-SAFE
+            // property a nested-Router+lint cannot give (breaker C1). Proven by attack:
+            // `auth::plane_gate::tests::admin_plane_gate_denies_unregistered_future_route`.
+            app = app.layer(axum::middleware::from_fn_with_state(
+                auth::plane_gate::PlatformAdminGateState::new(
+                    auth_verifier,
+                    Arc::new(auth::plane_gate::PgPlatformAdminRepo::new(
+                        pools.operational.clone(),
+                    )),
+                ),
+                auth::plane_gate::platform_admin_plane_gate,
+            ));
+            tracing::info!(
+                "S10 platform-admin/provisioning surface mounted (RUNTIME plane-gate armed as outermost layer)"
+            );
         }
         Err(err) => {
-            tracing::warn!(%err, "S2 auth + S3 catalog + S4 media + S5 orders + S6 WS + S7 courier + S8 jobs surfaces DARK — JWT/auth env not configured; not mounting them");
+            tracing::warn!(%err, "S2 auth + S3 catalog + S4 media + S5 orders + S6 WS + S7 courier + S8 jobs + S10 platform-admin surfaces DARK — JWT/auth env not configured; not mounting them");
         }
     }
 

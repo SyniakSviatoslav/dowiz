@@ -1,5 +1,10 @@
+// S10 platform-admin/provisioning surface (docs/design/rebuild-platform-admin-s10-council/) — the
+// LAST strangler surface + highest-privilege plane. Plane A (`/api/admin/*`) behind the RUNTIME
+// plane-gate (`auth::plane_gate`); Plane B (`/internal/acquisition/*`) behind the ops-secret gate.
+pub mod admin;
 pub mod fallback_config;
 pub mod health;
+pub mod internal_acquisition;
 pub mod manifest;
 pub mod media_proxy;
 pub mod menu;
