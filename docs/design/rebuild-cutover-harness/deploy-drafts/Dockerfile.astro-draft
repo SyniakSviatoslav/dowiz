@@ -1,0 +1,58 @@
+# ============================================================================
+# OPERATOR-GATED DRAFT — protect-paths.sh blocks any in-repo file named
+# `Dockerfile`. Formal placement: cp to rebuild/web/Dockerfile with human
+# approval. For the operator-authorized staging-dark deploy this content is
+# used verbatim from an out-of-repo working copy (`fly deploy --dockerfile <path>`).
+# ============================================================================
+# dowiz-astro-staging — INTERNAL-ONLY Fly.io staging image for the Astro 5 +
+# Svelte 5 islands storefront (rebuild/web, S1 HTML surface).
+#
+# Build context: rebuild/web (self-contained package with its own pnpm-lock.yaml;
+# NOT part of the root pnpm workspace — pnpm-workspace.yaml globs apps/*, packages/*,
+# tools/*, spikes/* only). A .dockerignore in rebuild/web excludes node_modules/ and
+# dist/ from the remote-build context upload (~254MB otherwise).
+#
+# ⚠️ PUBLIC_API_BASE_URL IS BAKED AT BUILD TIME, NOT READ AT RUNTIME.
+# src/lib/api-client.ts reads it via `import.meta.env?.PUBLIC_API_BASE_URL`, which Vite
+# statically compiles into `__vite_import_meta_env__` in dist/server/pages/s/_slug_.astro.mjs
+# (verified: only `process.env._` is merged at runtime — a Fly secret CANNOT repoint it).
+# To change the API base you MUST rebuild with a different --build-arg. The value lands in
+# the SERVER bundle only (verified: zero occurrences in dist/client/ — islands never call
+# the API), so a flycast URL here never leaks to browsers.
+
+FROM node:22-slim AS build
+WORKDIR /app
+
+# Pin pnpm to the version that authored pnpm-lock.yaml (local toolchain = 9.4.0).
+# npm -g instead of corepack: deterministic, no corepack signature-key churn.
+RUN npm install -g pnpm@9.4.0
+
+COPY package.json pnpm-lock.yaml ./
+# Dev deps required: `pnpm build` runs prebuild (paraglide-js compile) + astro build.
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+
+# Baked into the server bundle at `astro build` time (see header). Default targets the
+# Rust API twin over Fly private networking; flycast routes via fly-proxy service port 80
+# -> dowiz-rust-staging's internal_port 8080, so no port suffix here.
+ARG PUBLIC_API_BASE_URL=http://dowiz-rust-staging.flycast
+ENV PUBLIC_API_BASE_URL=${PUBLIC_API_BASE_URL}
+RUN pnpm build
+
+FROM node:22-slim AS runtime
+WORKDIR /app
+
+# @astrojs/node standalone output is fully self-contained — dist/ only, NO node_modules
+# needed at runtime (proven: dist copied to an empty dir boots and serves 200 on /s/demo).
+COPY --from=build --chown=node:node /app/dist ./dist
+
+# node:22-slim ships a non-root `node` user (uid 1000).
+USER node
+
+# @astrojs/node standalone honours HOST/PORT env. 0.0.0.0 so Fly's proxy can reach it;
+# 8080 stays in lockstep with fly.astro.staging.toml-draft's http_service.internal_port.
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=8080
+EXPOSE 8080
+
+CMD ["node", "dist/server/entry.mjs"]
