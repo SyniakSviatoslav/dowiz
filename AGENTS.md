@@ -242,3 +242,12 @@ not an advisory note. Reasoning and skills are the LAST line, never the first.
   (3) add a circuit to the registry for each best-practice whose VIOLATION is mechanically detectable
   (deprecated API, unsafe default, anti-pattern). A `require_together` circuit gates that the cached doc
   exists before the dependency is added. Full spec: `docs/operating-model/KNOWLEDGE-AS-CIRCUITS.md`.
+
+**THE EYE (operator directive 2026-07-05 — a parallel real-time monitor, mechanical not agentic):**
+A cheap deterministic watcher (PostToolUse, `.claude/hooks/eye-guard.sh`, staged in
+`docs/operating-model/proposed-eye/`) tallies signals per session and HALTS the agent for inspection
+ONLY at **≥3 bad OR ≥1 critical** signal — CRITICAL = a hard block / red-line trip (`RED-LINE`,
+`BLOCKED`), BAD = a plain tool failure (`is_error`/`success:false`). Below threshold it is SILENT: the
+eye is FORBIDDEN to slow or pause work without ≥3 bad or ≥1 critical. No LLM — pure counting, so it is
+near-zero token. It fires `continue:false` + an inspect directive, then resets. Composes with the
+circuits, loop-detector, doubt-gate, and token circuits (their signals are what it counts).
