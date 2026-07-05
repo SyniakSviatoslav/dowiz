@@ -224,3 +224,21 @@ the fix is architectural, not compressive. Task → generate → finish → FORG
 - **Pre-flight gate before state-premised dispatches**: snapshot the state a lane is premised on; `vsa integrity <expected.json> <actual.json> [--fields id,status,courier_id] [--age-ms N --corridor-ms M]` (or `dispatch.mjs --expect/--actual`) circuit-breaks at $0 when SHC diverges — the corrupted flow dies before spending its ~17K lane floor. A mismatch younger than the **sync corridor** is IN-FLIGHT (pass + warn + verify on landing), older is DIVERGED (block).
 - **Hybrid critic trigger (spec §4)**: continuous monitoring stays CHEAP (graph/VSA sweep, SMC auditor, SHC spot-checks). The EXPENSIVE native-depth audit lane is spawned only on an objective deterministic signal — SHC mismatch, IDR persisting beyond the corridor, SMC drop (a state lost its writer), or FCE degradation in `vsa report`. Signals are advisory; the gate/test/human stays the authority. Red-line audits keep their floor (sweep + independent critic lane) regardless.
 - **Telemetry**: `vsa lane <ok|fail> <tok> [label]` after every finished lane; `vsa report` prints FCE (ok-lanes/100K tok) + circuit-break savings. Every `integrity` run self-ledgers.
+
+**KNOWLEDGE-AS-CIRCUITS (operator directive 2026-07-05 — knowledge becomes machinery, not memory/reasoning):**
+Every error-pattern, lesson, and core programming / system-design rule is a HARD MECHANICAL CIRCUIT,
+not an advisory note. Reasoning and skills are the LAST line, never the first.
+- **Registry + runner**: circuits live in `docs/operating-model/circuits/registry.json` (machine-readable
+  error-patterns/lessons/design-rules/best-practices); `scripts/run-circuits.mjs [files|--staged]`
+  enforces them deterministically (RED-LINE → exit 2, warn → exit 1). Wired into pre-commit + a
+  PostToolUse hook so a repeated error-pattern or a broken core rule (money=float, missing RLS FORCE,
+  raw `any`, process.exit, …) emits its signal AUTOMATICALLY — no reliance on the agent noticing.
+- **Promotion is mandatory, not optional**: any qualified lesson/repeat-error/red-line (self-improvement
+  loop) MUST be added to the registry as a circuit (red→green), same session. A fix without a circuit is
+  not done. Never weaken a circuit to pass — fix the code.
+- **Library/framework/language protocol (research-first, cache, circuit-per-best-practice)**: before
+  USING any new library/framework/language, (1) research its official docs + current best practices,
+  (2) cache a distilled note in `docs/libraries/<name>.md` (memory/docs — never re-research from memory),
+  (3) add a circuit to the registry for each best-practice whose VIOLATION is mechanically detectable
+  (deprecated API, unsafe default, anti-pattern). A `require_together` circuit gates that the cached doc
+  exists before the dependency is added. Full spec: `docs/operating-model/KNOWLEDGE-AS-CIRCUITS.md`.

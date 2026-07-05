@@ -1,0 +1,43 @@
+{
+  "_doc": "KNOWLEDGE-AS-CIRCUITS registry — the machine-readable form of our error-patterns / lessons / design-rules / library best-practices. Each entry is a HARD mechanical circuit run by scripts/run-circuits.mjs. Add one whenever a lesson/pattern qualifies (repeat error, red-line, or a library best-practice collision). Never weaken a circuit to make code pass; fix the code. Seeded with a few real circuits — the librarian/harness appends the rest (loop-work).",
+  "circuits": [
+    {
+      "id": "money-no-float-in-core",
+      "source": "ledger #77 sqlx bind/decode class + integer-money invariant (ADR-rust-money-newtype)",
+      "severity": "red-line",
+      "glob": "rebuild/crates/domain/**/*.rs",
+      "type": "forbid",
+      "pattern": "\\bas f64\\b|\\bas f32\\b|\\bf64\\b|\\bf32\\b",
+      "message": "The sovereign money core must be integer-only (Lek(i64)); no float type may appear. Read money as ::bigint -> i64."
+    },
+    {
+      "id": "no-raw-any-ts",
+      "source": "test-integrity banned classes (no-raw-any) [[test-integrity-rules-2026-06-27]]",
+      "severity": "warn",
+      "glob": "apps/**/*.ts",
+      "type": "forbid",
+      "pattern": ":\\s*any\\b|\\bas any\\b",
+      "message": "Raw `any` erases type safety (banned class). Use a real type or `unknown` + narrowing."
+    },
+    {
+      "id": "no-process-exit-ts",
+      "source": "scripts-ops-guardrails no-process-exit intent (clippy::exit analog)",
+      "severity": "warn",
+      "glob": "apps/**/src/**/*.ts",
+      "type": "forbid",
+      "pattern": "process\\.exit\\s*\\(",
+      "message": "process.exit() kills the process mid-flight (no cleanup). Throw/return an error to the caller instead."
+    },
+    {
+      "id": "rls-force-on-enable",
+      "source": "RLS FORCE red-line invariant (owner-active membership, ADR-0004)",
+      "severity": "red-line",
+      "glob": "packages/db/migrations/**/*.sql",
+      "type": "require_together",
+      "pattern": "ENABLE ROW LEVEL SECURITY",
+      "required": "FORCE ROW LEVEL SECURITY",
+      "flags": "mi",
+      "message": "A table with ENABLE ROW LEVEL SECURITY must also FORCE it (table owners/BYPASSRLS bypass ENABLE-only RLS)."
+    }
+  ]
+}
