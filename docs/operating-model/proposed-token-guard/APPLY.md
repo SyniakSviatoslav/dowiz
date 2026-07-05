@@ -26,8 +26,29 @@ inside subagents in this harness:
 ],
 "SubagentStop": [
   { "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/token-circuit-guard.sh\"" } ] }
+],
+"Stop": [
+  { "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-recycle-guard.sh\"" } ] }
 ]
 ```
+
+Also install the Stop-hook: `cp docs/operating-model/proposed-token-guard/session-recycle-guard.sh
+.claude/hooks/ && chmod +x .claude/hooks/session-recycle-guard.sh`.
+
+## AUTOMATIC restart (the launcher)
+
+`session-recycle-guard.sh` (Stop) writes `.claude/state/RECYCLE` when a session ends ≥300K;
+`scripts/claude-recycle-loop.sh` watches that signal and relaunches a FRESH session (the
+SessionStart context-primer resurfaces the memory index + handoff). Run Claude through it:
+
+```bash
+bash scripts/claude-recycle-loop.sh              # interactive
+bash scripts/claude-recycle-loop.sh -p '<task>'  # headless/autonomous — fully automatic recycle
+```
+
+Headless/autonomous sessions recycle fully automatically. Interactive sessions get the guard's
+save+push directive; when that session ends, the loop relaunches. Proven locally (mock: 2 recycles →
+3 sessions). `CLAUDE_MAX_RESTARTS` (default 20) is the runaway backstop.
 
 (Merge the PostToolUse entry with what's already there — don't replace the array.)
 
