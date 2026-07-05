@@ -1,10 +1,16 @@
 [package]
-name = "domain"
+# Claim the sovereign identity. The crate PACKAGE is `dowiz-core`; the LIB name stays `domain` (below)
+# so every `use domain::...` across the workspace is unchanged — a rename with zero import churn.
+name = "dowiz-core"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
+
+# Lib name stays `domain` (package is `dowiz-core`) → import paths unchanged workspace-wide.
+[lib]
+name = "domain"
 
 [lints]
 workspace = true

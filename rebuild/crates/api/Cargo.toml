@@ -14,7 +14,7 @@ name = "api"
 path = "src/main.rs"
 
 [dependencies]
-domain = { path = "../domain" }
+domain = { package = "dowiz-core", path = "../domain" }
 
 # "multipart" added for the S4 media port: product-image/theme-logo/entry-photo all accept
 # `multipart/form-data` uploads (Node's `@fastify/multipart` equivalent) — pulls in `multer`,
