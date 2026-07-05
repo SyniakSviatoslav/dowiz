@@ -578,6 +578,16 @@ function composeSummary(runId, events, predictions) {
   return { text: lines.join('\n'), verdict, runEvents };
 }
 
+/** Pure status classifier for the chunk-fallback send path (never-cheat-green, H3): the caller
+ * must report exactly what happened — full success, partial, or total failure — never a blanket
+ * "sent" regardless of whether any chunk's HTTP call actually succeeded. */
+export function chunkSendStatus(okCount, total) {
+  if (total <= 0) return 'sent:chunked';
+  if (okCount === total) return 'sent:chunked';
+  if (okCount > 0) return `failed:chunk_partial(${okCount}/${total})`;
+  return 'failed:chunk_all';
+}
+
 async function tgApi(token, method, body, isForm = false) {
   const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: 'POST',
@@ -639,11 +649,16 @@ async function cmdSend(args) {
       fd.append('document', new Blob([slice], { type: 'application/json' }), `plane-run-${runId}.jsonl`);
       const docOk = await tgApi(token, 'sendDocument', fd, true).catch(() => false);
       if (!docOk && !sentSummary) {
-        // chunk-at-3800 fallback only if the document send failed
-        for (let i = 0, n = Math.ceil(text.length / 3800); i < n; i++) {
-          await tgApi(token, 'sendMessage', { chat_id: chat, text: `(${i + 1}/${n}) ${text.slice(i * 3800, (i + 1) * 3800)}`, disable_web_page_preview: true }).catch(() => {});
+        // chunk-at-3800 fallback only if the document send failed. Every chunk's result is
+        // tracked — NEVER report "sent" on an unchecked await (H3/never-cheat-green): a 403/
+        // network-blocked run must surface as failed:chunk_*, not as a false "sent:chunked".
+        const n = Math.ceil(text.length / 3800);
+        let okCount = 0;
+        for (let i = 0; i < n; i++) {
+          const ok = await tgApi(token, 'sendMessage', { chat_id: chat, text: `(${i + 1}/${n}) ${text.slice(i * 3800, (i + 1) * 3800)}`, disable_web_page_preview: true }).catch(() => false);
+          if (ok) okCount++;
         }
-        status = 'sent:chunked';
+        status = chunkSendStatus(okCount, n);
       } else if (!docOk) status = 'sent:doc_failed';
     }
     writeStatus({ telegram: { status, ts: nowIso(), run_id: runId } });

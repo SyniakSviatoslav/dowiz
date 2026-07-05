@@ -15,7 +15,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
-import { redactFreeText, sanitizeRemote, scanForSecrets, dedupeEvents, sortEvents } from './plane-telemetry.mjs';
+import { redactFreeText, sanitizeRemote, scanForSecrets, dedupeEvents, sortEvents, chunkSendStatus } from './plane-telemetry.mjs';
 
 const CLI = join(import.meta.dirname, 'plane-telemetry.mjs');
 const MOD_URL = pathToFileURL(CLI).href;
@@ -385,6 +385,17 @@ test('send with env unset: skips CLEANLY (exit 0) but LOUDLY, and the skip lands
   assert.equal(events.length, 1, 'send outcome must be recorded as an event');
   assert.equal(events[0].outcome, 'skipped');
   assert.match(events[0].detail, /telegram=skipped:env_unset/);
+});
+
+test('chunkSendStatus: never reports "sent" unless every chunk actually succeeded (H3/never-cheat-green)', () => {
+  // The bug this guards: the chunk-fallback send loop used to `await tgApi(...).catch(() => {})`
+  // and then unconditionally set status='sent:chunked' after the loop, regardless of whether any
+  // individual HTTP call actually succeeded — so a fully network-blocked run (every chunk 403/
+  // timed out) still reported "sent:chunked", a false green in the durable status/digest.
+  assert.equal(chunkSendStatus(3, 3), 'sent:chunked', 'all chunks ok → genuinely sent');
+  assert.equal(chunkSendStatus(0, 3), 'failed:chunk_all', 'zero chunks ok → must NOT say sent');
+  assert.equal(chunkSendStatus(1, 3), 'failed:chunk_partial(1/3)', 'partial success must be visible, not rounded up to sent');
+  assert.equal(chunkSendStatus(0, 0), 'sent:chunked', 'zero-length text → trivially nothing to fail sending');
 });
 
 // ---------------------------------------------------------------------------
