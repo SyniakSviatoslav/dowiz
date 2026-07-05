@@ -81,6 +81,7 @@ loops/runs/*
 !loops/runs/metrics.jsonl
 !loops/runs/routing.jsonl
 !loops/runs/registry.json
+!loops/runs/dep-baseline.json
 loops/prospects/
 # Committed-by-accident classes: log dumps at root, python bytecode
 /*.txt
