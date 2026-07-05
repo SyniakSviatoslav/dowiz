@@ -603,7 +603,15 @@ impl OrdersRepo for PgOrdersRepo {
 /// `false` = 409 CONFLICT) + the R2-3 assignment-terminalize fold + the L-A `refund_due` fold +
 /// history + lifecycle bus. Uses [`state::transition_effects`] for the fold decisions. Runs inside
 /// the caller's tenant-seated tx. Returns `Ok(true)` on apply, `Ok(false)` on a status-race.
-async fn apply_transition(
+///
+/// `pub(crate)` (not module-private): S7 courier/dispatch (`routes::courier::assignments`) is the
+/// SECOND caller of this exact mutator (`docs/design/rebuild-courier-s7-council/proposal.md` §4.3
+/// — "every order-side transition funnels through S5's `updateOrderStatus`"). This function is
+/// already GUC-agnostic (it takes an open `&mut Transaction`, does not itself seat any GUC) — S7
+/// opens its OWN `with_tenant(activeLocationId)` transaction for the courier-side assignment/shift
+/// writes, then calls this SAME function for the order-side fold, so the two surfaces never fork
+/// the fold logic. Nothing about this function's body changes for the new caller.
+pub(crate) async fn apply_transition(
     txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     order_id: Uuid,
     location_id: Uuid,

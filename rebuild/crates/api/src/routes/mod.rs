@@ -29,6 +29,12 @@ pub mod orders;
 // `routes::owner` (product_media.rs, product_image.rs, themes.rs) — see that module's doc.
 pub mod media_public;
 
+// ── S7 courier/dispatch surface (docs/design/rebuild-courier-s7-council/) — the courier
+// operational plane (shifts/assignments/me/settlements). The owner-side courier-management half
+// (roster, invites) lives inside `routes::owner` (couriers.rs, courier_invites.rs) — see
+// `routes::courier`'s module doc.
+pub mod courier;
+
 use tower_http::request_id::RequestId;
 
 /// Shared by every S1 handler that builds an `ApiError`: the server-authoritative correlation id

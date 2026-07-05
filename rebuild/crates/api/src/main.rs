@@ -135,14 +135,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )));
             tracing::info!("S5 orders/money surface mounted");
             // ── S6 realtime-WS surface (docs/design/rebuild-realtime-s6-council/) — the 🔴
-            // realtime-authz + cross-tenant fan-out red-line. Rides the SAME auth-env gate: WS
-            // admission reuses the S2 verifier (`AuthState.verifier.verify`), so "auth env
-            // present" is the S6 precondition too. Mounting the `/ws` route and SPAWNING the
-            // `PgListener` fan-out task are two halves of one dark launch — neither is reachable
-            // by a real client until the cutover proxy steers traffic here (REV-S6-5); running the
-            // listener dark now is exactly "deploying dark code to verify," not "launching" it.
+            // realtime-authz + cross-tenant fan-out red-line. Rides the SAME auth-env gate. Mounting
+            // `/ws` and SPAWNING the `PgListener` fan-out are two halves of one dark launch (REV-S6-5).
             let (ws_state, ws_lifecycle_rx) = ws::WsState::build(
-                auth_state,
+                auth_state.clone(),
                 Arc::new(ws::repo::PgWsAuthzRepo::new(pools.operational.clone())),
                 std::env::var("WS_URL_TOKEN_ACCEPT")
                     .map(|v| v != "false")
@@ -151,9 +147,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             app = app.merge(ws::ws_router(ws_state.clone()));
             tokio::spawn(ws::run_fanout(ws_state, config.clone(), ws_lifecycle_rx));
             tracing::info!("S6 realtime-WS surface mounted (PgListener fan-out task spawned)");
+            // ── S7 courier/dispatch surface (docs/design/rebuild-courier-s7-council/) — the courier
+            // operational plane. Same auth-env gate; every courier op binds the S2 CourierSession
+            // extractor; owner-side courier management lives inside the S3/S4 owner_catalog_router.
+            // Takes the final `auth_state` move (S6 above cloned it).
+            app = app.merge(routes::courier::courier_router(build_courier_states(
+                auth_state, &pools,
+            )));
+            tracing::info!("S7 courier/dispatch surface mounted");
         }
         Err(err) => {
-            tracing::warn!(%err, "S2 auth + S3 catalog + S4 media + S5 orders + S6 WS surfaces DARK — JWT/auth env not configured; not mounting them");
+            tracing::warn!(%err, "S2 auth + S3 catalog + S4 media + S5 orders + S6 WS + S7 courier surfaces DARK — JWT/auth env not configured; not mounting them");
         }
     }
 
@@ -311,13 +315,63 @@ fn build_owner_states(
             app_base_url: app_base_url.clone(),
         },
         product_image: routes::owner::product_image::ProductImageState {
-            auth,
+            auth: auth.clone(),
             repo: Arc::new(routes::owner::product_image::PgProductImageRepo::new(
                 pools.operational.clone(),
             )),
             storage,
             processor: Arc::new(media::processor::RustImageProcessor),
             app_base_url,
+        },
+        // S7 owner-side courier management — same auth-env gate, same OwnerClaimsExt layer as S3/S4;
+        // the repos seat `app.current_tenant` via `with_tenant` (the courier/service RLS root), NOT
+        // `with_user` (see routes/owner/couriers.rs & courier_invites.rs module docs).
+        couriers: routes::owner::couriers::CouriersState {
+            auth: auth.clone(),
+            repo: Arc::new(routes::owner::couriers::PgCouriersRepo::new(
+                pools.operational.clone(),
+            )),
+        },
+        courier_invites: routes::owner::courier_invites::CourierInvitesState {
+            auth,
+            repo: Arc::new(routes::owner::courier_invites::PgCourierInvitesRepo::new(
+                pools.operational.clone(),
+            )),
+        },
+    }
+}
+
+/// Build the S7 courier-side operational state (`docs/design/rebuild-courier-s7-council/`). Each
+/// submodule repo is a `Pg*Repo` over the operational pool; every courier read+write inside routes
+/// through `db::with_tenant(activeLocationId)` (the courier/service RLS root — REV-S7-1 complete
+/// seat census). Reuses the S2 `AuthState` verbatim for the `CourierSession` extractor (the
+/// per-request session-liveness bind, REV-S7-7) — no new auth.
+fn build_courier_states(auth: auth::AuthState, pools: &Pools) -> routes::courier::CourierStates {
+    routes::courier::CourierStates {
+        auth: auth.clone(),
+        shifts: routes::courier::shifts::ShiftsState {
+            auth: auth.clone(),
+            repo: Arc::new(routes::courier::shifts::PgShiftsRepo::new(
+                pools.operational.clone(),
+            )),
+        },
+        assignments: routes::courier::assignments::AssignmentsState {
+            auth: auth.clone(),
+            repo: Arc::new(routes::courier::assignments::PgAssignmentsRepo::new(
+                pools.operational.clone(),
+            )),
+        },
+        me: routes::courier::me::MeState {
+            auth: auth.clone(),
+            repo: Arc::new(routes::courier::me::PgMeRepo::new(
+                pools.operational.clone(),
+            )),
+        },
+        settlements: routes::courier::settlements::SettlementsState {
+            auth,
+            repo: Arc::new(routes::courier::settlements::PgSettlementsRepo::new(
+                pools.operational.clone(),
+            )),
         },
     }
 }

@@ -169,6 +169,45 @@ pub enum ErrorCode {
     CancelWindowExpired,
     /// 409 — order create against an unpublished location (`orders.ts` venue gate; NOT_PUBLISHED).
     NotPublished,
+
+    // ── S7 courier/dispatch code set (`docs/design/rebuild-courier-s7-council/`) ──
+    /// 409 — `/me/shift/end` or `/shifts/transition→offline` with an active courier binding
+    /// (`shifts.ts:142,225`).
+    ActiveDeliveryExists,
+    /// 409 — `/shifts/transition→offline` while `on_delivery` (`shifts.ts:214`).
+    CannotGoOfflineWithActiveOrder,
+    /// 409 — `/shifts/transition→available` while `on_delivery` (must go through delivered,
+    /// `shifts.ts:253`).
+    InvalidTransition,
+    /// 400 — `/shifts/transition→available` with no `lat`/`lng` (`shifts.ts:258`).
+    GpsRequired,
+    /// 400 — `/shifts/ping` outside the location's geofence radius (`shifts.ts:349`).
+    GpsOutOfRange,
+    /// 409 — `/shifts/ping` with no active (`available`/`on_delivery`) shift (`shifts.ts:360`).
+    NoActiveShift,
+    /// 404 — `/assignments/:id/reject` on a foreign/non-`assigned` assignment (`assignments.ts:199`).
+    AssignmentNotFoundOrNotAssigned,
+    /// 404 — `/assignments/:id/picked-up` on a foreign/non-`accepted` assignment
+    /// (`assignments.ts:260`).
+    AssignmentNotFoundOrNotAccepted,
+    /// 404 — `/assignments/:id/delivered` on a foreign/non-`picked_up` assignment
+    /// (`assignments.ts:330`).
+    AssignmentNotFoundOrNotPickedUp,
+    /// 404 — `/assignments/:id/cancel` or `/abort` outside `accepted`/`picked_up`
+    /// (`assignments.ts:441,505`).
+    AssignmentNotFoundOrInvalidStatus,
+    /// 404 — `/assignments/:id/decline` on a foreign/non-`offered` assignment
+    /// (`assignments.ts:551`).
+    AssignmentNotFoundOrNotOffered,
+    /// 422 — `completeDelivery`'s no-partial-handover rule: `paid_full` requires `cash === total`
+    /// exactly (`deliveryCompletion.ts:64`, REV-S7-8 — CARRY verbatim, protects the courier).
+    CashAmountMismatch,
+    /// 409 — a crypto-prepaid "mark delivered" whose order is not yet `payment_status='paid'`
+    /// (`deliveryCompletion.ts:71`, dark until crypto flips).
+    PrepaidNotPaid,
+    /// 400 — an owner courier-invite request with `role !== 'courier'` (`courier-invites.ts:35` —
+    /// an invite must never be able to mint an owner).
+    InvalidRole,
 }
 
 impl ErrorCode {
@@ -230,6 +269,19 @@ impl ErrorCode {
             | ErrorCode::NotPublished => 409,
             ErrorCode::CancelNotPermitted => 403,
             ErrorCode::CancelWindowExpired => 410,
+            // ── S7 courier/dispatch code set ──
+            ErrorCode::ActiveDeliveryExists
+            | ErrorCode::CannotGoOfflineWithActiveOrder
+            | ErrorCode::InvalidTransition
+            | ErrorCode::NoActiveShift
+            | ErrorCode::PrepaidNotPaid => 409,
+            ErrorCode::GpsRequired | ErrorCode::GpsOutOfRange | ErrorCode::InvalidRole => 400,
+            ErrorCode::AssignmentNotFoundOrNotAssigned
+            | ErrorCode::AssignmentNotFoundOrNotAccepted
+            | ErrorCode::AssignmentNotFoundOrNotPickedUp
+            | ErrorCode::AssignmentNotFoundOrInvalidStatus
+            | ErrorCode::AssignmentNotFoundOrNotOffered => 404,
+            ErrorCode::CashAmountMismatch => 422,
         }
     }
 }
@@ -472,5 +524,54 @@ mod tests {
         assert_eq!(ErrorCode::NotPublished.http_status(), 409);
         assert_eq!(ErrorCode::CancelNotPermitted.http_status(), 403);
         assert_eq!(ErrorCode::CancelWindowExpired.http_status(), 410);
+    }
+
+    /// S7 courier/dispatch codes serialize SCREAMING_SNAKE and map to the
+    /// `courier/{shifts,assignments}.ts`/`deliveryCompletion.ts`/`courier-invites.ts` `sendError`
+    /// statuses (`docs/design/rebuild-courier-s7-council/resolution.md`).
+    #[test]
+    fn s7_courier_codes_serialize_and_map_status() {
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::ActiveDeliveryExists).unwrap(),
+            "\"ACTIVE_DELIVERY_EXISTS\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::CashAmountMismatch).unwrap(),
+            "\"CASH_AMOUNT_MISMATCH\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::PrepaidNotPaid).unwrap(),
+            "\"PREPAID_NOT_PAID\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::AssignmentNotFoundOrNotAssigned).unwrap(),
+            "\"ASSIGNMENT_NOT_FOUND_OR_NOT_ASSIGNED\""
+        );
+        assert_eq!(ErrorCode::ActiveDeliveryExists.http_status(), 409);
+        assert_eq!(ErrorCode::CannotGoOfflineWithActiveOrder.http_status(), 409);
+        assert_eq!(ErrorCode::InvalidTransition.http_status(), 409);
+        assert_eq!(ErrorCode::NoActiveShift.http_status(), 409);
+        assert_eq!(ErrorCode::GpsRequired.http_status(), 400);
+        assert_eq!(ErrorCode::GpsOutOfRange.http_status(), 400);
+        assert_eq!(ErrorCode::InvalidRole.http_status(), 400);
+        assert_eq!(
+            ErrorCode::AssignmentNotFoundOrNotAssigned.http_status(),
+            404
+        );
+        assert_eq!(
+            ErrorCode::AssignmentNotFoundOrNotAccepted.http_status(),
+            404
+        );
+        assert_eq!(
+            ErrorCode::AssignmentNotFoundOrNotPickedUp.http_status(),
+            404
+        );
+        assert_eq!(
+            ErrorCode::AssignmentNotFoundOrInvalidStatus.http_status(),
+            404
+        );
+        assert_eq!(ErrorCode::AssignmentNotFoundOrNotOffered.http_status(), 404);
+        assert_eq!(ErrorCode::CashAmountMismatch.http_status(), 422);
+        assert_eq!(ErrorCode::PrepaidNotPaid.http_status(), 409);
     }
 }

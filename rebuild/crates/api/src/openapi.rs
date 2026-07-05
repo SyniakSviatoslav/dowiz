@@ -145,6 +145,39 @@ use crate::routes::owner::product_media::{
         crate::routes::orders::get_order,
         crate::routes::orders::owner_update_status,
         crate::routes::orders::customer_cancel,
+        // ── S7 courier/dispatch surface (docs/design/rebuild-courier-s7-council/) ──
+        // Courier-side (CourierSession-authenticated): shifts, assignments, me, settlements.
+        crate::routes::courier::shifts::get_shift,
+        crate::routes::courier::shifts::start_shift,
+        crate::routes::courier::shifts::end_shift,
+        crate::routes::courier::shifts::shifts_transition,
+        crate::routes::courier::shifts::shifts_ping,
+        crate::routes::courier::assignments::list_assignments,
+        crate::routes::courier::assignments::get_assignment,
+        crate::routes::courier::assignments::accept_assignment,
+        crate::routes::courier::assignments::reject_assignment,
+        crate::routes::courier::assignments::picked_up_assignment,
+        crate::routes::courier::assignments::delivered_assignment,
+        crate::routes::courier::assignments::cancel_assignment,
+        crate::routes::courier::assignments::abort_assignment,
+        crate::routes::courier::assignments::decline_assignment,
+        crate::routes::courier::me::get_profile,
+        crate::routes::courier::me::patch_messenger,
+        crate::routes::courier::me::get_audit_log,
+        crate::routes::courier::me::patch_password,
+        crate::routes::courier::me::get_earnings,
+        crate::routes::courier::me::get_history,
+        crate::routes::courier::settlements::get_payouts,
+        crate::routes::courier::settlements::get_payout_detail,
+        // Owner-side courier management (OwnerClaimsExt-authenticated; mounted in the owner router).
+        crate::routes::owner::couriers::list_couriers,
+        crate::routes::owner::couriers::patch_courier,
+        crate::routes::owner::couriers::get_couriers_live,
+        crate::routes::owner::couriers::get_order_route,
+        crate::routes::owner::couriers::get_courier_details,
+        crate::routes::owner::courier_invites::create_courier_invite,
+        crate::routes::owner::courier_invites::list_courier_invites,
+        crate::routes::owner::courier_invites::revoke_courier_invite,
     ),
     components(schemas(
         HealthStatus,
@@ -255,6 +288,42 @@ use crate::routes::owner::product_media::{
         crate::routes::orders::StatusUpdateResponse,
         crate::routes::orders::CustomerCancelResponse,
         crate::routes::orders::OrderView,
+        // ── S7 courier/dispatch schemas ──
+        // shifts.rs
+        crate::routes::courier::shifts::ShiftStatusResponse,
+        crate::routes::courier::shifts::StartShiftRequest,
+        crate::routes::courier::shifts::StartShiftResponse,
+        crate::routes::courier::shifts::EndShiftResponse,
+        crate::routes::courier::shifts::TransitionRequest,
+        crate::routes::courier::shifts::TransitionResponse,
+        crate::routes::courier::shifts::PingRequest,
+        crate::routes::courier::shifts::PingResponse,
+        // assignments.rs (`SimpleSuccessResponse` is `{success:bool}` — registered ONCE here; the
+        // structurally-identical `me::SimpleSuccessResponse` reuses the same component name).
+        crate::routes::courier::assignments::RestaurantBrief,
+        crate::routes::courier::assignments::CustomerBrief,
+        crate::routes::courier::assignments::AssignmentTaskResponse,
+        crate::routes::courier::assignments::AssignmentsListResponse,
+        crate::routes::courier::assignments::SimpleSuccessResponse,
+        crate::routes::courier::assignments::CancelResponse,
+        crate::routes::courier::assignments::DeliveredRequest,
+        crate::routes::courier::assignments::CancelRequest,
+        crate::routes::courier::assignments::AbortRequest,
+        crate::routes::courier::assignments::PaymentOutcome,
+        // me.rs
+        crate::routes::courier::me::PatchMessengerRequest,
+        crate::routes::courier::me::PatchMessengerResponse,
+        crate::routes::courier::me::PatchPasswordRequest,
+        // owner/couriers.rs (`SuccessResponse` is `{success:bool}` — registered ONCE here; the
+        // identical `courier_invites::SuccessResponse` reuses the same component name).
+        crate::routes::owner::couriers::PatchCourierRequest,
+        crate::routes::owner::couriers::SuccessResponse,
+        crate::routes::owner::couriers::ListCouriersResponse,
+        crate::routes::owner::couriers::CouriersLiveResponse,
+        crate::routes::owner::couriers::OrderRouteResponse,
+        // owner/courier_invites.rs
+        crate::routes::owner::courier_invites::CreateCourierInviteRequest,
+        crate::routes::owner::courier_invites::CreateCourierInviteResponse,
     )),
     tags(
         (name = "health", description = "Liveness/health probes"),
@@ -274,6 +343,8 @@ use crate::routes::owner::product_media::{
         (name = "owner-media", description = "S4 owner-authenticated media (product-media ADR-0002 seam, product-image, theme logo)"),
         (name = "media-upload", description = "S4 unauthenticated media (token-proxy-PUT, entry-photo)"),
         (name = "orders", description = "S5 orders/money (create, status transitions, customer cancel, tri-principal read)"),
+        (name = "courier", description = "S7 courier operational plane (shifts, assignments, cash-as-proof delivery, earnings/history, payouts read)"),
+        (name = "owner-couriers", description = "S7 owner-side courier management (roster, deactivate/role, live map, breadcrumb route, invites)"),
     )
 )]
 pub struct ApiDoc;
@@ -566,6 +637,88 @@ mod tests {
             "UpdateThemeResponse",
         ] {
             assert!(schemas.contains_key(name), "missing S3 schema: {name}");
+        }
+    }
+
+    /// S7 courier/dispatch paths — the 18 courier-side ops + 7 owner-side courier-management ops.
+    /// A future edit that drops a `#[utoipa::path]` from the `paths(...)` list fails HERE.
+    #[test]
+    fn openapi_document_lists_the_s7_courier_operations() {
+        let doc = ApiDoc::openapi();
+        let paths: std::collections::HashSet<&str> =
+            doc.paths.paths.keys().map(String::as_str).collect();
+        for path in [
+            // courier-side (CourierSession-authenticated)
+            "/api/courier/me/shift",
+            "/api/courier/me/shift/start",
+            "/api/courier/me/shift/end",
+            "/api/courier/shifts/transition",
+            "/api/courier/shifts/ping",
+            "/api/courier/me/assignments",
+            "/api/courier/assignments/{id}",
+            "/api/courier/assignments/{id}/accept",
+            "/api/courier/assignments/{id}/reject",
+            "/api/courier/assignments/{id}/picked-up",
+            "/api/courier/assignments/{id}/delivered",
+            "/api/courier/assignments/{id}/cancel",
+            "/api/courier/assignments/{id}/abort",
+            "/api/courier/assignments/{id}/decline",
+            "/api/courier/me",
+            "/api/courier/me/messenger",
+            "/api/courier/me/audit-log",
+            "/api/courier/me/password",
+            "/api/courier/me/earnings",
+            "/api/courier/me/history",
+            "/api/courier/me/payouts",
+            "/api/courier/me/payouts/{id}",
+            // owner-side courier management (OwnerClaimsExt-authenticated)
+            "/api/owner/locations/{locationId}/couriers",
+            "/api/owner/locations/{locationId}/couriers/live",
+            "/api/owner/locations/{locationId}/couriers/{courierId}",
+            "/api/owner/locations/{locationId}/couriers/{courierId}/details",
+            "/api/owner/locations/{locationId}/orders/{orderId}/route",
+            "/api/owner/locations/{locationId}/courier-invites",
+            "/api/owner/locations/{locationId}/courier-invites/{inviteId}",
+        ] {
+            assert!(paths.contains(path), "missing S7 courier path: {path}");
+        }
+    }
+
+    /// The S7 request/response DTO schemas are registered (incl. the two `{success:bool}` shapes
+    /// registered once under their canonical name — `SimpleSuccessResponse`/`SuccessResponse`).
+    #[test]
+    fn openapi_document_includes_s7_courier_schemas() {
+        let doc = ApiDoc::openapi();
+        let schemas = &doc.components.as_ref().unwrap().schemas;
+        for name in [
+            "ShiftStatusResponse",
+            "StartShiftRequest",
+            "StartShiftResponse",
+            "EndShiftResponse",
+            "TransitionRequest",
+            "TransitionResponse",
+            "PingRequest",
+            "PingResponse",
+            "AssignmentTaskResponse",
+            "AssignmentsListResponse",
+            "SimpleSuccessResponse",
+            "CancelResponse",
+            "DeliveredRequest",
+            "CancelRequest",
+            "AbortRequest",
+            "PaymentOutcome",
+            "PatchMessengerRequest",
+            "PatchMessengerResponse",
+            "PatchPasswordRequest",
+            "PatchCourierRequest",
+            "SuccessResponse",
+            "ListCouriersResponse",
+            "CouriersLiveResponse",
+            "OrderRouteResponse",
+            "CreateCourierInviteRequest",
+            "CreateCourierInviteResponse",
+        ] {
+            assert!(schemas.contains_key(name), "missing S7 schema: {name}");
         }
     }
 }

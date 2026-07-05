@@ -75,6 +75,8 @@ use crate::auth::claims::OwnerClaims;
 use crate::error::ApiError;
 
 pub mod categories;
+pub mod courier_invites;
+pub mod couriers;
 pub mod menu_availability;
 pub mod modifier_groups;
 pub mod product_image;
@@ -171,6 +173,14 @@ pub struct OwnerCatalogStates {
     /// to hold five more routes.
     pub product_media: product_media::ProductMediaState,
     pub product_image: product_image::ProductImageState,
+    /// S7 owner-side courier management (`docs/design/rebuild-courier-s7-council/`) — roster,
+    /// deactivate/role (with session revoke), live map, breadcrumb route, invite mint/list/revoke.
+    /// Bundled into the SAME `OwnerCatalogStates`/`owner_catalog_router` as S3/S4 because every op
+    /// reuses the identical `OwnerClaimsExt`/`bearer_and_dev_gate` layer stack — no reason for a
+    /// parallel router. (These tables are RLS-keyed on `app.current_tenant`, so the repos seat via
+    /// `db::with_tenant`, NOT `with_user` — see each submodule's doc; the router wiring is identical.)
+    pub couriers: couriers::CouriersState,
+    pub courier_invites: courier_invites::CourierInvitesState,
 }
 
 /// Assemble the S3 catalog/admin CRUD surface (35 ops) PLUS the S4 media council's
@@ -316,6 +326,35 @@ pub fn owner_catalog_router(states: OwnerCatalogStates) -> axum::Router {
             post(product_image::upload_product_image)
                 .layer(DefaultBodyLimit::max(product_image::MAX_UPLOAD_BYTES)),
         )
+        // ── S7 owner-side courier management (docs/design/rebuild-courier-s7-council/) ──
+        .route(
+            "/api/owner/locations/{locationId}/couriers",
+            get(couriers::list_couriers),
+        )
+        .route(
+            "/api/owner/locations/{locationId}/couriers/live",
+            get(couriers::get_couriers_live),
+        )
+        .route(
+            "/api/owner/locations/{locationId}/couriers/{courierId}",
+            patch(couriers::patch_courier),
+        )
+        .route(
+            "/api/owner/locations/{locationId}/couriers/{courierId}/details",
+            get(couriers::get_courier_details),
+        )
+        .route(
+            "/api/owner/locations/{locationId}/orders/{orderId}/route",
+            get(couriers::get_order_route),
+        )
+        .route(
+            "/api/owner/locations/{locationId}/courier-invites",
+            post(courier_invites::create_courier_invite).get(courier_invites::list_courier_invites),
+        )
+        .route(
+            "/api/owner/locations/{locationId}/courier-invites/{inviteId}",
+            delete(courier_invites::revoke_courier_invite),
+        )
         // REV-4 pre-route gate — innermost of the cross-cutting layers, same position as S2.
         .layer(axum::middleware::from_fn(
             crate::auth::middleware::bearer_and_dev_gate,
@@ -329,6 +368,8 @@ pub fn owner_catalog_router(states: OwnerCatalogStates) -> axum::Router {
         .layer(axum::Extension(states.themes))
         .layer(axum::Extension(states.product_media))
         .layer(axum::Extension(states.product_image))
+        .layer(axum::Extension(states.couriers))
+        .layer(axum::Extension(states.courier_invites))
         // Outermost: mint + propagate the correlation id (see fn doc for why this is here).
         .layer(PropagateRequestIdLayer::new(correlation_header.clone()))
         .layer(SetRequestIdLayer::new(correlation_header, MakeRequestUuid))
@@ -509,11 +550,19 @@ mod tests {
                 app_base_url: "https://dowiz.fly.dev".to_string(),
             },
             product_image: product_image::ProductImageState {
-                auth,
+                auth: auth.clone(),
                 repo: Arc::new(product_image::fake::FakeProductImageRepo::default()),
                 storage: Arc::new(crate::storage::LocalFsStorage::new(std::env::temp_dir())),
                 processor: Arc::new(crate::media::processor::RustImageProcessor),
                 app_base_url: "https://dowiz.fly.dev".to_string(),
+            },
+            couriers: couriers::CouriersState {
+                auth: auth.clone(),
+                repo: Arc::new(couriers::fake::FakeCouriersRepo::default()),
+            },
+            courier_invites: courier_invites::CourierInvitesState {
+                auth,
+                repo: Arc::new(courier_invites::fake::FakeCourierInvitesRepo::default()),
             },
         }
     }
