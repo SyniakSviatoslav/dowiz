@@ -23,3 +23,4 @@ error signature. file is repo-relative.
 | .github/workflows/** | docs/lessons/2026-07-03-secret-store-provenance-trace.md |
 | ESSLREQUIRED | docs/lessons/2026-07-03-secret-store-provenance-trace.md |
 | packages/db/migrations/** | docs/lessons/2026-07-03-prod-staging-schema-drift.md |
+| apps/api/src/**/*.test.ts | docs/lessons/2026-07-05-proof-must-observe-the-effect.md |
