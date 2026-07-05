@@ -4,42 +4,47 @@
 //! loop, never the erasure semantics." Q-GDPR-GLOBAL-SINGLETON (§11): the Node original serializes
 //! ALL erasure work behind one global `singletonKey` (at most one erasure in-flight system-wide);
 //! this port carries that same single-flight posture via the advisory lock (never the
-//! per-erasure-request CAS the quirk register recommends investigating — that's a product
-//! decision for whoever builds S9, not this scheduling shim).
+//! per-erasure-request CAS the quirk register recommends investigating — REV-S9-2 adopts the CAS
+//! at the CLAIM statement itself instead, see `crate::jobs::gdpr_erasure::CLAIM_PENDING_SQL`).
 //!
-//! ## Scope note — plumbing only, intentionally incomplete pending S9
-//! This module is deliberately a SKELETON: it acquires the single-flight lock and would drive a
-//! batch-of-10 `SKIP LOCKED` claim loop over an erasure-request queue, but the exact request
-//! table/DEFINER function this calls into is S9's to design (not yet built on this tree, per the
-//! rebuild-map's own phase ordering — S8 lands before S9). Wiring the real claim query here NOW
-//! would mean guessing at a schema this build has not verified, for a red-line PII-erasure
-//! operation — the wrong kind of guess to make. [`run_once`] is therefore a documented no-op
-//! today; `main.rs` does not spawn it (see that module's doc) until S9 supplies the real call.
+//! ## S9 landed — this module now WIRES the real erasure semantics (was a documented no-op)
+//! [`run_once`] used to be a SKELETON (`GdprSweepOutcome::NotYetWired`) because the request
+//! table/DEFINER function this calls into was S9's to design. S9 has now landed
+//! (`crate::jobs::gdpr_erasure`, `docs/design/rebuild-gdpr-s9-council/`) — this cron's job is
+//! UNCHANGED (acquire the single-flight lock, drive the batch loop on a fixed interval); it now
+//! calls [`crate::jobs::gdpr_erasure::run_once_batch`] for the actual claim + erase + completion-
+//! gate work instead of doing nothing. S8 still owns ONLY the timing/single-flight; the erasure
+//! semantics live entirely in `jobs::gdpr_erasure` (S9), per the scope line above.
 
 use crate::jobs::advisory_lock::ANONYMIZER_RETENTION;
 use crate::jobs::cron::try_with_lock;
+use crate::jobs::gdpr_erasure::{self, BatchOutcome};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GdprSweepOutcome {
-    /// No erasure-request claim query is wired yet (S9 scope, see module doc) — the lock was
-    /// still exercised (proving single-flight plumbing works), but no rows were processed.
-    NotYetWired,
-}
+/// Matches the Node worker's `LIMIT 10` batch size (`anonymizer-gdpr.ts:31`).
+const BATCH_SIZE: i64 = 10;
 
-pub async fn run_once(pool: &sqlx::PgPool) -> Result<Option<GdprSweepOutcome>, sqlx::Error> {
+pub async fn run_once(pool: &sqlx::PgPool) -> Result<Option<BatchOutcome>, sqlx::Error> {
     try_with_lock(pool, ANONYMIZER_RETENTION, || async {
-        tracing::debug!(
-            cron = "anonymizer.gdpr",
-            "single-flight lock acquired; erasure claim loop is S9 scope, not yet wired (see module doc)"
-        );
-        Ok(GdprSweepOutcome::NotYetWired)
+        let outcome = gdpr_erasure::run_once_batch(pool, BATCH_SIZE).await?;
+        if outcome.claimed > 0 {
+            tracing::info!(
+                cron = "anonymizer.gdpr",
+                claimed = outcome.claimed,
+                completed = outcome.completed,
+                failed = outcome.failed,
+                retried = outcome.retried,
+                "gdpr erasure batch processed"
+            );
+        }
+        Ok(outcome)
     })
     .await
 }
 
 /// Spawned dark (mounted, scheduling-only) alongside every other S8 cron — S8 owns the timing +
-/// single-flight plumbing per §2 scope even though S9 hasn't landed the erasure semantics yet
-/// (module doc). Per-minute cadence matches the other batch-oriented sweeps in this fleet.
+/// single-flight plumbing per §2 scope; the erasure semantics it now calls into are S9's
+/// (`crate::jobs::gdpr_erasure`, module doc). Per-minute cadence matches the other batch-oriented
+/// sweeps in this fleet.
 pub fn spawn(pool: sqlx::PgPool) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
@@ -68,9 +73,12 @@ mod tests {
             .expect("pool must connect");
 
         let first = run_once(&pool).await.expect("must not error");
-        assert_eq!(first, Some(GdprSweepOutcome::NotYetWired));
+        assert!(
+            first.is_some(),
+            "the lock must be acquired in a single-runner test"
+        );
         // A second call must ALSO succeed (proving the first call released the lock, not held it).
         let second = run_once(&pool).await.expect("must not error");
-        assert_eq!(second, Some(GdprSweepOutcome::NotYetWired));
+        assert!(second.is_some());
     }
 }

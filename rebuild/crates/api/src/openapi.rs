@@ -41,6 +41,12 @@ use crate::routes::owner::product_media::{
     PresignRequest, PresignResponse, PresignUpload, ReorderRequest,
 };
 
+// ── S9 GDPR/compliance schemas ──
+use crate::routes::owner::gdpr::{
+    AuditLogEntry, CreateGdprRequestBody, CreateGdprRequestResponse, GdprRequestDetail,
+    GdprRequestSummary, ListGdprRequestsResponse, RetentionResponse, UpdateRetentionRequest,
+};
+
 #[derive(OpenApi)]
 #[openapi(
     paths(
@@ -178,6 +184,14 @@ use crate::routes::owner::product_media::{
         crate::routes::owner::courier_invites::create_courier_invite,
         crate::routes::owner::courier_invites::list_courier_invites,
         crate::routes::owner::courier_invites::revoke_courier_invite,
+        // ── S9 GDPR/compliance surface (docs/design/rebuild-gdpr-s9-council/) — the reddest
+        // surface in the rebuild (irreversible erasure). 5 ops: create/list/get gdpr-requests +
+        // get/put retention settings.
+        crate::routes::owner::gdpr::create_gdpr_request,
+        crate::routes::owner::gdpr::list_gdpr_requests,
+        crate::routes::owner::gdpr::get_gdpr_request,
+        crate::routes::owner::gdpr::get_retention_settings,
+        crate::routes::owner::gdpr::put_retention_settings,
         // ── S8 jobs/notifications surface (docs/design/rebuild-jobs-s8-council/) — the ONE axum
         // route it owns: the REV-S8-2 fail-closed Telegram webhook. Listed here so the mounted
         // route is not absent from the generated document (an openapi-diff / contract-parity gate
@@ -329,6 +343,15 @@ use crate::routes::owner::product_media::{
         // owner/courier_invites.rs
         crate::routes::owner::courier_invites::CreateCourierInviteRequest,
         crate::routes::owner::courier_invites::CreateCourierInviteResponse,
+        // ── S9 GDPR/compliance schemas (owner/gdpr.rs) ──
+        CreateGdprRequestBody,
+        CreateGdprRequestResponse,
+        GdprRequestSummary,
+        ListGdprRequestsResponse,
+        AuditLogEntry,
+        GdprRequestDetail,
+        RetentionResponse,
+        UpdateRetentionRequest,
     )),
     tags(
         (name = "health", description = "Liveness/health probes"),
@@ -350,6 +373,7 @@ use crate::routes::owner::product_media::{
         (name = "orders", description = "S5 orders/money (create, status transitions, customer cancel, tri-principal read)"),
         (name = "courier", description = "S7 courier operational plane (shifts, assignments, cash-as-proof delivery, earnings/history, payouts read)"),
         (name = "owner-couriers", description = "S7 owner-side courier management (roster, deactivate/role, live map, breadcrumb route, invites)"),
+        (name = "owner-gdpr", description = "S9 GDPR/compliance (erasure requests, status, retention settings) — the reddest surface in the rebuild"),
     )
 )]
 pub struct ApiDoc;
@@ -724,6 +748,42 @@ mod tests {
             "CreateCourierInviteResponse",
         ] {
             assert!(schemas.contains_key(name), "missing S7 schema: {name}");
+        }
+    }
+
+    /// S9 GDPR/compliance paths — the 5 ops this build annotated (create/list/get gdpr-requests +
+    /// get/put retention settings). A future edit that drops a `#[utoipa::path]` from
+    /// `paths(...)` fails HERE (same posture as every other per-surface pinning test above).
+    #[test]
+    fn openapi_document_lists_the_s9_gdpr_operations() {
+        let doc = ApiDoc::openapi();
+        let paths: std::collections::HashSet<&str> =
+            doc.paths.paths.keys().map(String::as_str).collect();
+        for path in [
+            "/api/owner/locations/{locationId}/gdpr-requests",
+            "/api/owner/locations/{locationId}/gdpr-requests/{requestId}",
+            "/api/owner/locations/{locationId}/settings/retention",
+        ] {
+            assert!(paths.contains(path), "missing S9 GDPR path: {path}");
+        }
+    }
+
+    /// The S9 request/response DTO schemas are registered.
+    #[test]
+    fn openapi_document_includes_s9_gdpr_schemas() {
+        let doc = ApiDoc::openapi();
+        let schemas = &doc.components.as_ref().unwrap().schemas;
+        for name in [
+            "CreateGdprRequestBody",
+            "CreateGdprRequestResponse",
+            "GdprRequestSummary",
+            "ListGdprRequestsResponse",
+            "AuditLogEntry",
+            "GdprRequestDetail",
+            "RetentionResponse",
+            "UpdateRetentionRequest",
+        ] {
+            assert!(schemas.contains_key(name), "missing S9 schema: {name}");
         }
     }
 

@@ -77,6 +77,7 @@ use crate::error::ApiError;
 pub mod categories;
 pub mod courier_invites;
 pub mod couriers;
+pub mod gdpr;
 pub mod menu_availability;
 pub mod modifier_groups;
 pub mod product_image;
@@ -181,6 +182,13 @@ pub struct OwnerCatalogStates {
     /// `db::with_tenant`, NOT `with_user` — see each submodule's doc; the router wiring is identical.)
     pub couriers: couriers::CouriersState,
     pub courier_invites: courier_invites::CourierInvitesState,
+    /// S9 GDPR/compliance (`docs/design/rebuild-gdpr-s9-council/`) — the reddest surface in the
+    /// rebuild (irreversible erasure). Bundled into the SAME `OwnerCatalogStates`/
+    /// `owner_catalog_router` for the identical reason S4/S7 are: every op reuses the same
+    /// `OwnerClaimsExt`/`bearer_and_dev_gate` layer stack. The erasure ENGINE itself
+    /// (`crate::jobs::gdpr_erasure`) is NOT here — this state only covers the request
+    /// lifecycle/reads this file's router mounts.
+    pub gdpr: gdpr::GdprState,
 }
 
 /// Assemble the S3 catalog/admin CRUD surface (35 ops) PLUS the S4 media council's
@@ -355,6 +363,26 @@ pub fn owner_catalog_router(states: OwnerCatalogStates) -> axum::Router {
             "/api/owner/locations/{locationId}/courier-invites/{inviteId}",
             delete(courier_invites::revoke_courier_invite),
         )
+        // ── S9 GDPR/compliance (docs/design/rebuild-gdpr-s9-council/) — the reddest surface in
+        // the rebuild. Q-COOLDOWN (carry verbatim): fastify 30/min on the create route ONLY
+        // (`gdpr.ts:34-36`) — the SAME per-route `RateLimitLayer` shape S4's entry-photo uses.
+        .route(
+            "/api/owner/locations/{locationId}/gdpr-requests",
+            post(gdpr::create_gdpr_request)
+                .layer(crate::middleware::ratelimit::RateLimitLayer::new(
+                    30,
+                    std::time::Duration::from_secs(60),
+                ))
+                .merge(get(gdpr::list_gdpr_requests)),
+        )
+        .route(
+            "/api/owner/locations/{locationId}/gdpr-requests/{requestId}",
+            get(gdpr::get_gdpr_request),
+        )
+        .route(
+            "/api/owner/locations/{locationId}/settings/retention",
+            get(gdpr::get_retention_settings).put(gdpr::put_retention_settings),
+        )
         // REV-4 pre-route gate — innermost of the cross-cutting layers, same position as S2.
         .layer(axum::middleware::from_fn(
             crate::auth::middleware::bearer_and_dev_gate,
@@ -370,6 +398,7 @@ pub fn owner_catalog_router(states: OwnerCatalogStates) -> axum::Router {
         .layer(axum::Extension(states.product_image))
         .layer(axum::Extension(states.couriers))
         .layer(axum::Extension(states.courier_invites))
+        .layer(axum::Extension(states.gdpr))
         // Outermost: mint + propagate the correlation id (see fn doc for why this is here).
         .layer(PropagateRequestIdLayer::new(correlation_header.clone()))
         .layer(SetRequestIdLayer::new(correlation_header, MakeRequestUuid))
@@ -561,8 +590,12 @@ mod tests {
                 repo: Arc::new(couriers::fake::FakeCouriersRepo::default()),
             },
             courier_invites: courier_invites::CourierInvitesState {
-                auth,
+                auth: auth.clone(),
                 repo: Arc::new(courier_invites::fake::FakeCourierInvitesRepo::default()),
+            },
+            gdpr: gdpr::GdprState {
+                auth,
+                repo: Arc::new(gdpr::fake::FakeGdprRepo::default()),
             },
         }
     }

@@ -205,8 +205,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             spawned_crons.push("liveness.check");
             // Q-BOOT-ASSERT extended to every cron this build owns (not 2/23) — a visible red
             // deploy instead of a silently-forgotten cron. `anonymizer.gdpr` IS spawned (S8 owns
-            // its timing/single-flight per §2) even though its handler body is a documented no-op
-            // pending S9's erasure semantics (`jobs::crons::gdpr_sweep` module doc).
+            // its timing/single-flight per §2); it now drives the real S9 erasure semantics
+            // (`jobs::gdpr_erasure`, `jobs::crons::gdpr_sweep` module doc) rather than a no-op.
             if let Err(missing) = jobs::cron::assert_full_roster_spawned(&spawned_crons) {
                 panic!("S8 boot-assert: cron(s) never spawned: {missing:?}");
             }
@@ -391,8 +391,17 @@ fn build_owner_states(
             )),
         },
         courier_invites: routes::owner::courier_invites::CourierInvitesState {
-            auth,
+            auth: auth.clone(),
             repo: Arc::new(routes::owner::courier_invites::PgCourierInvitesRepo::new(
+                pools.operational.clone(),
+            )),
+        },
+        // S9 GDPR/compliance (docs/design/rebuild-gdpr-s9-council/) — the request-lifecycle/reads
+        // surface only; the erasure ENGINE (crate::jobs::gdpr_erasure) is wired into the S8 cron
+        // fleet separately, below.
+        gdpr: routes::owner::gdpr::GdprState {
+            auth,
+            repo: Arc::new(routes::owner::gdpr::PgGdprRepo::new(
                 pools.operational.clone(),
             )),
         },

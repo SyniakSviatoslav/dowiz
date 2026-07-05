@@ -30,10 +30,9 @@ use sqlx::PgExecutor;
 /// Every cron name this build spawns — the boot-assert roster (module doc). Kept in sync with
 /// `crate::jobs::crons`'s actual set by the test below (a cron module added there without a
 /// matching entry here fails that test, not silently passes an incomplete assert).
-/// `anonymizer.gdpr` IS in this roster even though its handler body is a documented no-op today
-/// (`crate::jobs::crons::gdpr_sweep`'s module doc: the erasure semantics are S9 scope) — S8 owns
-/// its cron TIMING/single-flight per §2 regardless of whether S9 has landed yet, so the boot-assert
-/// still requires it to be spawned.
+/// `anonymizer.gdpr` IS in this roster — S8 owns its cron TIMING/single-flight per §2; it now
+/// drives the real S9 erasure semantics (`crate::jobs::gdpr_erasure`,
+/// `crate::jobs::crons::gdpr_sweep`'s module doc), not a no-op.
 pub const EXPECTED_CRON_NAMES: &[&str] = &[
     "order.timeout_sweep",
     "settlement.generate",

@@ -9,6 +9,10 @@
 //! - [`runner`] — the `SKIP LOCKED` claim/complete/fail loop (Q1 🔴).
 //! - [`backoff`] — retry backoff+jitter (Q-BARE-DEFAULTS).
 //! - [`dedup`] — REV-S8-1 (🔴 CRIT) durable claim-before-send.
+//! - [`gdpr_erasure`] — S9 GDPR/compliance erasure ENGINE semantics (`docs/design/
+//!   rebuild-gdpr-s9-council/`) — the customer/order/ratings fan-out, the subject-graph
+//!   completion gate, subject_phone erasure, the queue-claim (REV-S9-1..9). `crons::gdpr_sweep`
+//!   owns only the cron timing that calls into this module.
 //! - [`advisory_lock`] — the cron lock-id registry (Q10).
 //! - [`consent`] — opt-out + quiet-hours pure decision logic (Q3 🔴).
 //! - [`dispatch`] — claim-check payload, seat-first customer-status read (REV-S8-5b), error
@@ -37,6 +41,7 @@ pub mod crons;
 pub mod ddl;
 pub mod dedup;
 pub mod dispatch;
+pub mod gdpr_erasure;
 pub mod runner;
 pub mod worker;
 pub mod worker_roster;
