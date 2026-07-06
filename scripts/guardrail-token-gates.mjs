@@ -32,7 +32,13 @@ function run(toolName, toolInput, extraEnv = {}) {
     cwd: FIX, env: { ...baseEnv, ...extraEnv }, encoding: 'utf8', timeout: 15000,
   });
 }
+function runHook(hook, payload, extraEnv = {}) {
+  return spawnSync('bash', [join(HOOKS, hook)], {
+    input: JSON.stringify(payload), cwd: FIX, env: { ...baseEnv, ...extraEnv }, encoding: 'utf8', timeout: 15000,
+  });
+}
 const denies = (r) => /"permissionDecision":\s*"deny"/.test(r.stdout || '');
+const nudges = (r) => /additionalContext/.test(r.stdout || '');
 
 const failures = [];
 const check = (name, ok, detail) => {
@@ -93,6 +99,17 @@ check('fable dispatch with a MALFORMED override → DENY (fail-closed)', denies(
 rmOverride();
 check('fable check honors TOKEN_FABLE_MODE=warn → warn, no block', run('Agent', fableAgent, { TOKEN_FABLE_MODE: 'warn' }).status === 0 && !denies(run('Agent', fableAgent, { TOKEN_FABLE_MODE: 'warn' })));
 check('non-Fable model (haiku) is NOT touched by the Fable check', run('Agent', { description: 'x', subagent_type: 'Explore', model: 'haiku', prompt: 'x' }).status === 0 && !denies(run('Agent', { description: 'x', subagent_type: 'Explore', model: 'haiku', prompt: 'x' })));
+
+// ── distill-nudge.sh — PostToolUse Bash (WARN on big undistilled output, never blocks) ──
+console.log('distill-nudge.sh — PostToolUse Bash (warn, never blocks):');
+const big = 'x'.repeat(20000);
+const dn = (cmd, stdout) => runHook('distill-nudge.sh', { tool_name: 'Bash', tool_input: { command: cmd }, tool_response: { stdout, stderr: '' } });
+check('big undistilled Bash output → nudge emitted (additionalContext), never blocks', nudges(dn('cat huge.log', big)) && !denies(dn('cat huge.log', big)) && dn('cat huge.log', big).status === 0);
+check('big undistilled output → _hev warn line', eventsHas('"hook":"distill-nudge","event":"warn"'));
+check('small output → silent (over-block guard)', (dn('ls', 'y'.repeat(2000)).stdout || '') === '');
+check('big output already distilled (repowise distill) → silent', (dn("repowise distill 'cat huge.log'", big).stdout || '') === '');
+check('big output with a | tail cap → silent', (dn('cat huge.log | tail -50', big).stdout || '') === '');
+check('non-Bash tool untouched (multi-line command safe too)', (runHook('distill-nudge.sh', { tool_name: 'Read', tool_input: {}, tool_response: { stdout: big } }).stdout || '') === '');
 
 // ── degraded (fail-open) ─────────────────────────────────────────────────────
 console.log('agent-dispatch-gate.sh — degraded (fail-open on unparseable input):');

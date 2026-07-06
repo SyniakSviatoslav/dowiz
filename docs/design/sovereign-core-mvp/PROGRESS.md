@@ -51,10 +51,13 @@
    `UserPromptSubmit` with `CONTEXT_WINDOW=1000000 CONTEXT_BUDGET_PCT=30` (fires at 300K). Re-armed
    hermetically with the tuned env (fires at 350K, silent at 220K, silent on missing transcript). Fires on
    the NEXT user prompt if live context ≥300K — the mechanical teeth for the FORGETFUL LIFECYCLE.
-4. **B3** distill-nudge (PostToolUse Bash, WARN) → **B4** wire `audit-token-router` into weekly curation +
-   THE EYE (`--self-test` in the guardrail suite so the auditor can't rot; exit-1 = a `bad` EYE signal) →
-   **B5** ratchets (pin `context-budget-guard.sh` + `distill-nudge.sh` in `guardrail-hook-matchers.mjs`,
-   KNOWLEDGE-AS-CIRCUITS entry, ledger). NOTE B5: context-budget-guard registration not yet pinned.
+4. **B3 — DONE 2026-07-06:** `distill-nudge.sh` (PostToolUse Bash, WARN) — nudges (never blocks) when a
+   command returns >8K chars undistilled; size + distill-marker computed in-parser (multi-line-command safe);
+   `additionalContext` channel + `_hev` warn. +6 armament cases; LIVE-VERIFIED (fired on a real 8.3K dump).
+   Next: **B4** wire `audit-token-router` into weekly curation + THE EYE (`--self-test` in the guardrail
+   suite so the auditor can't rot; exit-1 = a `bad` EYE signal) → **B5** ratchets (pin `context-budget-guard.sh`
+   + `distill-nudge.sh` in `guardrail-hook-matchers.mjs`, KNOWLEDGE-AS-CIRCUITS entry, ledger). NOTE B5:
+   context-budget-guard + distill-nudge registrations not yet pinned in hook-matchers.
 5. Then **PART A** (incremental modular strangler moves) after the Part B exit gate. All BEFORE money.
 2. **STRUCTURE-UPGRADE.md Part A** — incremental strangler moves (A0 `module.toml` manifests, A1 boundary
    gate, A2 `channel.rs` pilot, A4 route-freeze, A5 placement). A3 (orders split) BLOCKED on GRAND-PLAN 0b-5.

@@ -92,6 +92,15 @@
       "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/loop-detector.sh\""
      }
     ]
+   },
+   {
+    "matcher": "Bash",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/distill-nudge.sh\""
+     }
+    ]
    }
   ],
   "UserPromptSubmit": [
