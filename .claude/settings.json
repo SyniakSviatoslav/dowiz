@@ -102,6 +102,14 @@
       "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/route-request.sh\""
      }
     ]
+   },
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "CONTEXT_WINDOW=1000000 CONTEXT_BUDGET_PCT=30 bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/context-budget-guard.sh\""
+     }
+    ]
    }
   ],
   "Stop": [

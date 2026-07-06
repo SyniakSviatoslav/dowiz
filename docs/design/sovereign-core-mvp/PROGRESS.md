@@ -47,11 +47,14 @@
 2. **RATCHET model-check warn→deny** once `_hev` shows the `model:` habit took (measure with
    `scripts/audit-token-router.mjs` trend going down): flip the check's default `MODE` warn→deny (the
    ratchet point is commented in the hook). Re-run the armament (deny path already proven).
-3. **B2:** `cp docs/operating-model/proposed-hooks/context-budget-guard.sh .claude/hooks/` + register under
-   `UserPromptSubmit` with `CONTEXT_WINDOW=1000000 CONTEXT_BUDGET_PCT=30` (fires at 300K). Re-arm its fixtures.
+3. **B2 — DONE 2026-07-06:** `context-budget-guard.sh` copied to `.claude/hooks/` + registered under
+   `UserPromptSubmit` with `CONTEXT_WINDOW=1000000 CONTEXT_BUDGET_PCT=30` (fires at 300K). Re-armed
+   hermetically with the tuned env (fires at 350K, silent at 220K, silent on missing transcript). Fires on
+   the NEXT user prompt if live context ≥300K — the mechanical teeth for the FORGETFUL LIFECYCLE.
 4. **B3** distill-nudge (PostToolUse Bash, WARN) → **B4** wire `audit-token-router` into weekly curation +
    THE EYE (`--self-test` in the guardrail suite so the auditor can't rot; exit-1 = a `bad` EYE signal) →
-   **B5** ratchets (pre-commit registration pins, KNOWLEDGE-AS-CIRCUITS entry, ledger).
+   **B5** ratchets (pin `context-budget-guard.sh` + `distill-nudge.sh` in `guardrail-hook-matchers.mjs`,
+   KNOWLEDGE-AS-CIRCUITS entry, ledger). NOTE B5: context-budget-guard registration not yet pinned.
 5. Then **PART A** (incremental modular strangler moves) after the Part B exit gate. All BEFORE money.
 2. **STRUCTURE-UPGRADE.md Part A** — incremental strangler moves (A0 `module.toml` manifests, A1 boundary
    gate, A2 `channel.rs` pilot, A4 route-freeze, A5 placement). A3 (orders split) BLOCKED on GRAND-PLAN 0b-5.
