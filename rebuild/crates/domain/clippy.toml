@@ -24,9 +24,20 @@
 #      compile to wasm (SystemTime/Instant/new_v4) and would otherwise slip the
 #      wasm gate. This is the belt to the wasm gate's suspenders.
 #
-#  Every entry is a METHOD/FUNCTION path (the only thing disallowed-methods
-#  accepts). Modules (std::net, std::fs, std::thread, std::env) are NOT valid here
-#  and are covered by the wasm gate + the cargo-deny dependency bans instead.
+#  Every entry under disallowed-methods is a METHOD/FUNCTION path. Modules
+#  (std::net, std::fs, std::thread, std::env) are NOT valid here and are covered
+#  by the wasm gate + the cargo-deny dependency bans instead.
+#
+#  disallowed-types (below) — no clock/entropy/IO law, but the same kind of
+#  silent-divergence risk: f64/f32 are IEEE-754, and float arithmetic is not
+#  guaranteed bit-identical across native (x86_64/aarch64, possibly using FMA
+#  fused-multiply-add) and wasm32 targets, or even across native codegen with
+#  different optimization levels. A core that is meant to be replayed
+#  deterministically native↔wasm cannot contain floats without risking a
+#  native/wasm result that silently disagrees. Money in this crate is already
+#  integer-only (Lek, see money.rs) by construction; this ban makes that
+#  invariant mechanical so it survives when pricing.rs eventually moves in from
+#  the shell (see docs/design/sovereign-core-mvp/LEAD-REVIEW.md finding F2).
 # ─────────────────────────────────────────────────────────────────────────────
 
 disallowed-methods = [
@@ -40,4 +51,9 @@ disallowed-methods = [
     { path = "uuid::Uuid::new_v4", allow-invalid = true, reason = "Core is entropy-free: all identifiers arrive inside a Command; the kernel never mints its own. (Law 2: No entropy.) Tests are exempt (linted via --lib, cfg(test) off)." },
     { path = "std::env::var", reason = "Core has no ambient configuration: inputs arrive as typed values, never read from the environment. (Law 3: No IO.)" },
     { path = "std::env::var_os", reason = "Core has no ambient configuration: inputs arrive as typed values, never read from the environment. (Law 3: No IO.)" },
+]
+
+disallowed-types = [
+    { path = "f64", reason = "Core is float-free: IEEE-754 arithmetic is not guaranteed bit-identical native↔wasm32 (FMA, codegen), which would silently break deterministic replay. Money is Lek (i64 minor units); use integers. (LEAD-REVIEW.md F2.)" },
+    { path = "f32", reason = "Core is float-free: IEEE-754 arithmetic is not guaranteed bit-identical native↔wasm32 (FMA, codegen), which would silently break deterministic replay. Money is Lek (i64 minor units); use integers. (LEAD-REVIEW.md F2.)" },
 ]
