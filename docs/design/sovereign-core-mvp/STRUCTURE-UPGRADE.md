@@ -270,6 +270,16 @@ are exempt, mirroring the wasm32 gate's `--lib` scope so the two gates cannot dr
   check` red at every call site → restore.
 - **Red-line:** no (attribution is write-only, never read by pricing/state/authz — doctrine
   verified in `channel.rs` header) · **Effort:** S
+- **STATUS: ✅ DONE 2026-07-06.** `git mv` → `crates/api/src/modules/channel_attribution/mod.rs`;
+  old path `routes/orders/channel.rs` is now an 8-line `pub use crate::modules::channel_attribution::*`
+  shim (the single call site `routes/orders/mod.rs:330` byte-identical). `mod modules;` added to
+  `main.rs`; `modules/mod.rs` + `channel_attribution/module.toml` (hub-module, depends=[]) stamped.
+  **Proofs:** moved `mod.rs` byte-identical to pre-move `channel.rs` (empty diff — the mechanical-move
+  proof, stronger than git's rename % which the surviving shim hides); 9 moved unit tests pass; call
+  site diff empty; `cargo check -p api` + `module-integrity` green; **RED proof** — blanking the shim
+  re-export → `error[E0425]: cannot find function channel_from_header in module channel` at the exact
+  call site (line 330) → restore → green. Ledger #87. This dir is the landing zone for GRAND-PLAN
+  1.1/1.5 (each its own module + council).
 
 ### A3 · Orders module boundary — AFTER 0b-5 + 1.3 land (M)
 - **Scope:** once the shell flip (0b-5: handlers pass through the ONE `decide` door) and the

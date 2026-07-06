@@ -26,9 +26,13 @@ FRESH session (F5 anti-context-rot).
   `depends=[]` → red → restore → green); self-test caught 2 real parser bugs. Wired: `--self-test` in
   `run-armaments.sh` (pre-commit 1.4d) + real-tree in `.husky/pre-commit` 1.4e (cargo-guarded) + CI step in
   `proposed-sovereign-core-ci/APPLY.md`. Schema = STRUCTURE-UPGRADE.md §MODULE-CONTRACT. Ledger #86.
-- **NEXT: A2** (pilot module — `git mv channel.rs → modules/channel_attribution/mod.rs` + shim + hub-module
-  manifest; byte-identical, rename-similarity proof) → **A4** (legacy `apps/api` route-freeze guardrail) →
-  **A5** (placement-rule paper into GRAND-PLAN conventions). A3 stays BLOCKED on GRAND-PLAN 0b-5 + 1.3.
+- **A2 pilot module — ✅ DONE.** `channel.rs` → `modules/channel_attribution/mod.rs` (git mv, byte-identical)
+  + 8-line `pub use` shim at the old path (single call site untouched) + hub-module manifest. `mod modules;`
+  in main.rs. Proofs: empty byte-diff, 9 moved tests pass, `cargo check -p api` + module-integrity green,
+  RED proof (blanked shim → E0425 at the call site → restore). Ledger #87. Landing zone for GRAND-PLAN 1.1/1.5.
+- **NEXT: A4** (legacy `apps/api` route-registration freeze guardrail — count baseline + `guardrail-legacy-freeze.mjs`
+  reds on INCREASE) → **A5** (placement-rule paper into GRAND-PLAN conventions block). A3 stays BLOCKED on
+  GRAND-PLAN 0b-5 + 1.3. After A4/A5 → Part A exit; then the red-line money boundary (GRAND-PLAN 0b, FRESH session).
 
 ## DONE (2026-07-06)
 - **STRUCTURE-UPGRADE Part B · B1 warn-gate (this run; operator picked rollout A = warn-then-ratchet):**

@@ -1,0 +1,10 @@
+# Module manifest — channel_attribution (STRUCTURE-UPGRADE A2, the pilot hub module). Machine-checked
+# by scripts/module-integrity.mjs: this module may NOT import another module's internals (undeclared
+# `use crate::modules::*` reds the gate). Schema: STRUCTURE-UPGRADE.md §MODULE-CONTRACT.
+name = "channel_attribution"  # the module id (dir name); NOT a cargo package
+kind = "hub-module"
+depends = []                  # a pure normalizer — imports no other module
+events_in = []                # write-only: it never READS a decision input
+events_out = []               # attribution is folded to orders.metadata write-only; it emits no event
+contract = "rebuild/crates/api/src/modules/channel_attribution/mod.rs"  # write-only doctrine in the //! header
+red_line = false              # never read by pricing/state/dispatch/authz — doctrine-verified, safe to move

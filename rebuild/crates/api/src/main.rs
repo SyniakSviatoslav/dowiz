@@ -15,6 +15,9 @@ mod error;
 mod jobs;
 mod media;
 mod middleware;
+// Hub modules (STRUCTURE-UPGRADE Part A) — each ATOMIC with a module.toml manifest, gated by
+// scripts/module-integrity.mjs. Modules depend on core + ports, never each other's internals.
+mod modules;
 mod openapi;
 mod repo;
 mod routes;
