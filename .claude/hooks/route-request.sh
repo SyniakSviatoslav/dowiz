@@ -27,15 +27,30 @@ _hev() {
 }
 
 
-# don't nudge if a system command was already invoked
+# don't nudge if a system command was already invoked, or if this "prompt" is not a human
+# ask at all but an auto-relayed system artifact (background-task completion notice, etc.).
+# MEASURED 2026-07-06 (.claude/logs/harness-events.jsonl, 529 route-request fires / 4.2d):
+# 481/529 (91%) — 240/270 nudge-serious + 241/259 nudge-repeat — were `<task-notification>`
+# payloads, not user requests. A task-notification reports that a background tool call
+# already finished; nudging "run /council before code" at that point is a non-sequitur —
+# the real enforcement for whatever that background call did lives in the PreToolUse gates
+# (serious-gate.sh / red-line-doubt-gate.sh / protect-paths.sh), which already ran at the
+# actual tool-call and are untouched by this exclusion.
 case "$prompt" in
   /council*|/loop-orchestrator*|/loop*|/build-verify-loop*|/converge-loop*) exit 0 ;;
+  *'<task-notification>'*) exit 0 ;;
 esac
 
 low="$(printf '%s' "$prompt" | tr '[:upper:]' '[:lower:]')"
 ctx=""
 
-SERIOUS='міграц|migrat|schema|схем|контракт|contract|zod|гро[шж]|pric|цін|payment|оплат|cash|готівк|ledger|rls|auth|jwt|tenant|webhook|idempoten|state.?machine|стан.?замовлен|order.?status|websocket|realtime|реалтайм|geocode|notify|сповіщен|telegram|stripe|2checkout|sheets|рефактор|refactor|нова.?фіч|new.?feature|видали|drop.?table|незворотн|деструктив'
+# NOTE: "рефактор|refactor", "нова.?фіч|new.?feature" and bare "видали" (Ukr. "delete") were
+# removed from SERIOUS 2026-07-06 — the nudge text itself says to ignore exactly this case
+# ("дрібне (косметика/локальний рефактор без контракт-впливу) — ігноруй цей нудж"), so firing
+# on the bare words contradicted the hook's own stated policy. Genuinely destructive deletes
+# remain caught via `drop.?table` / `незворотн` / `деструктив`; a refactor or new feature that
+# ALSO touches schema/auth/money/RLS/etc. still fires via those separate, unchanged keywords.
+SERIOUS='міграц|migrat|schema|схем|контракт|contract|zod|гро[шж]|pric|цін|payment|оплат|cash|готівк|ledger|rls|auth|jwt|tenant|webhook|idempoten|state.?machine|стан.?замовлен|order.?status|websocket|realtime|реалтайм|geocode|notify|сповіщен|telegram|stripe|2checkout|sheets|drop.?table|незворотн|деструктив'
 REPEAT='щораз|кожн|повторюва|repeat|регулярн|періодичн|автоматизу|automate|\bloop\b|цикл|every.?(day|time|week|hour|min|[0-9])|each.?(day|time)|nightly|weekly|hourly|daily|cron|schedul|recurring|always.?do|щодня'
 
 if printf '%s' "$low" | grep -Eq "$SERIOUS"; then
