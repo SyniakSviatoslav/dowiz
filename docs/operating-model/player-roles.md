@@ -3,6 +3,11 @@
 > Governed by [agent-operating-model.md](./agent-operating-model.md). System-fit over individual
 > cleverness — "chemistry" is a **shared contract** (classification + hooks + design system + shared
 > layer) each player executes independently of talent.
+>
+> **How the expensive players' metacognition transfers to the cheap ones →
+> [metacognition-transfer.md](./metacognition-transfer.md)** — the planner's reasoning is compiled into
+> each step's DoD+gate+red-line; the executor's is two mechanical moves (reconcile-vs-reality,
+> RED-prove-the-guard) any doer runs. Talent is not in the loop; the contract is.
 
 ## Roles
 | Role | Who | Job |
