@@ -20,6 +20,15 @@ pub mod tenant;
 pub use codec::{CodecError, canonical_bytes, decode_log, encode_log, from_bytes};
 pub use error::{DomainError, ErrorCode, ErrorEnvelope};
 pub use kernel::{Command, Event, OrderState, Ts, decide, fold, replay};
+// Sovereign-core money composition (GRAND-PLAN 0b-1) — re-exported so the shell adapter
+// (`api::routes::orders::pricing`) and pg.rs can `use domain::kernel::pricing::{…}` (or the flat
+// `domain::…`) for the pure integer money surface. The core `DeliveryTier`/`FeeLocation` are
+// integer-meter; the shell keeps its own f64 same-named shapes (see kernel::pricing doc-comments).
+pub use kernel::pricing::{
+    DeliveryTier, FeeLocation, GroupInfo, ModifierInfo, PricedModifierRow, PricedOrderItemRow,
+    PricingError, PricingItem, PricingSnapshot, ProductInfo, apply_tax, charged_tax, compose_total,
+    compute_line_total, compute_order_pricing, delivery_fee_for_order, resolve_delivery_fee,
+};
 pub use money::{Lek, MoneyError};
 pub use order_status::{ALL_STATUSES, OrderStatus, assert_transition, can_transition, is_terminal};
 pub use tenant::TenantId;

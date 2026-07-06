@@ -289,7 +289,7 @@ impl OrdersRepo for PgOrdersRepo {
                 Ok(v) => v,
                 Err(e) => {
                     txn.rollback().await.ok();
-                    return Ok(CreateOutcome::Rejected(pricing_code(e.code), e.message));
+                    return Ok(CreateOutcome::Rejected(e.code, e.message));
                 }
             };
 
@@ -323,7 +323,7 @@ impl OrdersRepo for PgOrdersRepo {
                 Ok(f) => f,
                 Err(e) => {
                     txn.rollback().await.ok();
-                    return Ok(CreateOutcome::Rejected(pricing_code(e.code), e.message));
+                    return Ok(CreateOutcome::Rejected(e.code, e.message));
                 }
             };
 
@@ -983,21 +983,6 @@ fn order_row(r: CreatedRow) -> Result<OrderCreatedResponse, RepoError> {
     })
 }
 
-/// Map a pricing error `code` string to the domain `ErrorCode`.
-fn pricing_code(code: &str) -> ErrorCode {
-    match code {
-        "MIN_ORDER_NOT_MET" => ErrorCode::MinOrderNotMet,
-        "NOT_DELIVERABLE" => ErrorCode::NotDeliverable,
-        "DELIVERY_NOT_CONFIGURED" => ErrorCode::DeliveryNotConfigured,
-        "DUPLICATE_MODIFIER" => ErrorCode::DuplicateModifier,
-        "MODIFIER_UNAVAILABLE" => ErrorCode::ModifierUnavailable,
-        "MODIFIER_MIN_NOT_MET" => ErrorCode::ModifierMinNotMet,
-        "MODIFIER_MAX_EXCEEDED" => ErrorCode::ModifierMaxExceeded,
-        "PRODUCT_NOT_FOUND" => ErrorCode::ProductNotFound,
-        _ => ErrorCode::ProductUnavailable,
-    }
-}
-
 fn parse_status(s: &str) -> Option<OrderStatus> {
     serde_json::from_value(serde_json::Value::String(s.to_string())).ok()
 }
@@ -1071,20 +1056,6 @@ mod tests {
             let pg = status_pg(status);
             assert_eq!(parse_status(pg), Some(status), "{status:?} round-trips");
         }
-    }
-
-    #[test]
-    fn pricing_code_maps_all_codes() {
-        assert_eq!(pricing_code("MIN_ORDER_NOT_MET"), ErrorCode::MinOrderNotMet);
-        assert_eq!(pricing_code("NOT_DELIVERABLE"), ErrorCode::NotDeliverable);
-        assert_eq!(
-            pricing_code("DUPLICATE_MODIFIER"),
-            ErrorCode::DuplicateModifier
-        );
-        assert_eq!(
-            pricing_code("PRODUCT_NOT_FOUND"),
-            ErrorCode::ProductNotFound
-        );
     }
 
     /// REV-S5-1 DISCRIMINATING NOBYPASSRLS PROBE (the DoD gate). Requires a live Postgres on a

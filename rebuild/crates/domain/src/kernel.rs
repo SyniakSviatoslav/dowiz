@@ -28,6 +28,10 @@
 // step); today they are the honest relocation of the decisions the shell already consumes.
 pub mod idempotency;
 pub mod policy;
+// Sovereign-core money composition (GRAND-PLAN 0b-1) — the pure order-total arithmetic relocated
+// from the `api` shell (`routes/orders/pricing.rs`). Integer-only (no f64 — the disallowed-types
+// gate proves it); the shell keeps a thin f64 adapter over this module.
+pub mod pricing;
 
 use crate::{DomainError, OrderStatus, order_status::assert_transition};
 use serde::{Deserialize, Serialize};
