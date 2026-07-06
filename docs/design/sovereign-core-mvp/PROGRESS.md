@@ -19,6 +19,17 @@ entry (YAGNI — no committed agent-dispatching script exists to guard yet); THE
 **→ Next phase = PART A** (modular strangler moves) — a different, Rust-crate-touching workstream; start it in a
 FRESH session (F5 anti-context-rot).
 
+## PART A STATUS — IN PROGRESS (2026-07-06, fresh session)
+- **A0 manifest contract + A1 boundary gate — ✅ DONE.** `rebuild/crates/{domain,api}/module.toml` stamped;
+  `scripts/module-integrity.mjs` (pure core + hermetic `--self-test`) enforces schema + `depends`==`cargo
+  metadata` + core ban-list + hub-module cross-import + contract-existence. RED→GREEN proven live (api
+  `depends=[]` → red → restore → green); self-test caught 2 real parser bugs. Wired: `--self-test` in
+  `run-armaments.sh` (pre-commit 1.4d) + real-tree in `.husky/pre-commit` 1.4e (cargo-guarded) + CI step in
+  `proposed-sovereign-core-ci/APPLY.md`. Schema = STRUCTURE-UPGRADE.md §MODULE-CONTRACT. Ledger #86.
+- **NEXT: A2** (pilot module — `git mv channel.rs → modules/channel_attribution/mod.rs` + shim + hub-module
+  manifest; byte-identical, rename-similarity proof) → **A4** (legacy `apps/api` route-freeze guardrail) →
+  **A5** (placement-rule paper into GRAND-PLAN conventions). A3 stays BLOCKED on GRAND-PLAN 0b-5 + 1.3.
+
 ## DONE (2026-07-06)
 - **STRUCTURE-UPGRADE Part B · B1 warn-gate (this run; operator picked rollout A = warn-then-ratchet):**
   new `.claude/hooks/agent-dispatch-gate.sh` — PreToolUse `Agent|Task` gate, WARN mode (never blocks),

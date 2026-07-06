@@ -1,0 +1,11 @@
+# Module manifest — dowiz-core (STRUCTURE-UPGRADE A0). NOT decoration: machine-checked against
+# `cargo metadata` reality by scripts/module-integrity.mjs in pre-commit + run-armaments — a drift
+# between what this declares and the real dependency graph reds the gate (the only defense against
+# manifest-rot, per STRUCTURE-UPGRADE.md self-critique). Schema: STRUCTURE-UPGRADE.md §MODULE-CONTRACT.
+name = "dowiz-core"            # cargo PACKAGE name (lib name is `domain`)
+kind = "core"                 # pure kernel: money, state machine, codec, policy, idempotency
+depends = []                  # the core depends on NOTHING (compiler-enforced; wasm32 gate proves it)
+events_in = []                # no event ingress yet (Envelope/SyncPort = GRAND-PLAN 0b-2/1.3)
+events_out = []
+contract = "rebuild/README.md"
+red_line = true               # money + order-lifecycle invariants live here — changes need council/guardian

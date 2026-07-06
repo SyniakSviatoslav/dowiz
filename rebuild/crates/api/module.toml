@@ -1,0 +1,10 @@
+# Module manifest — api shell-adapter (STRUCTURE-UPGRADE A0). Machine-checked against `cargo metadata`
+# by scripts/module-integrity.mjs: `depends` must EQUAL the workspace-internal deps (declared≠actual =
+# red). Schema: STRUCTURE-UPGRADE.md §MODULE-CONTRACT.
+name = "api"                  # cargo PACKAGE name
+kind = "shell-adapter"        # axum routes, pg interpreter, auth, ws, jobs, media — touches the outside world
+depends = ["dowiz-core"]      # the shell depends ONLY on the core (direction: shell → core, never back)
+events_in = []                # hub-module events land here once A5/1.x modules exist
+events_out = []
+contract = "docs/design/sovereign-core-mvp/STRUCTURE-UPGRADE.md"
+red_line = false              # per-file red-line is enforced by protect-paths/invariant-guardian, not the crate

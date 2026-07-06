@@ -20,6 +20,13 @@ node scripts/guardrail-hook-matchers.mjs || exit 1
 echo "1.4d: governance armaments armed, not just registered (gates can still deny; no rot off the runner)..."
 bash scripts/run-armaments.sh || exit 1
 
+echo "1.4e: module-integrity (module.toml manifests match the real cargo dependency graph)..."
+if command -v cargo >/dev/null 2>&1; then
+  node scripts/module-integrity.mjs || exit 1
+else
+  echo "cargo not installed — skipping the crate-dep reality check (self-test still ran in 1.4d; CI enforces the full gate)."
+fi
+
 echo "1.5: i18n parity (no missing/TODO translations)..."
 if git diff --cached --name-only --diff-filter=ACM | grep -qE 'packages/ui/src/lib/i18n(-catalog)?\.ts$'; then
   pnpm exec tsx scripts/i18n-parity.ts || exit 1

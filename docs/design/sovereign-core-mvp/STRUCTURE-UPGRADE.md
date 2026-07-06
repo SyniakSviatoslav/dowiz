@@ -209,6 +209,29 @@ boundaries + manifests + events, not maximal file motion.
   missing/malformed manifest or a declared-vs-actual dep mismatch. **RED proof:** declare
   `depends=[]` for `api` → gate red (actual dep on `domain` undeclared) → fix → green.
 - **Red-line:** no · **Effort:** S
+- **STATUS: ✅ DONE 2026-07-06.** `rebuild/crates/{domain,api}/module.toml` stamped + green;
+  gated by `scripts/module-integrity.mjs` (below). RED proof recorded live (api `depends=[]` →
+  `declared≠actual` red → restore → green). The channel primitive is stamped in A2, not here.
+
+#### MODULE-CONTRACT — the `module.toml` schema (A0)
+
+One flat TOML file per unit, all keys required, machine-checked against reality by
+`scripts/module-integrity.mjs`:
+
+| key | type | meaning | checked against |
+|---|---|---|---|
+| `name` | string | for `core`/`shell-adapter`: the cargo PACKAGE name; for `hub-module`: the module id | must be a real workspace package (crate-level) |
+| `kind` | `core \| shell-adapter \| hub-module` | topology role | enum |
+| `depends` | string[] | crate-level: workspace PACKAGE names it deps on; hub-module: other module ids it may import | crate-level ⇒ MUST equal `cargo metadata` workspace-internal deps; hub-module ⇒ superset of its `use crate::modules::*` imports |
+| `events_in` / `events_out` | string[] | `Envelope<Event>` variants consumed / emitted (empty until 0b-2/1.3) | reserved (schema-only for now) |
+| `contract` | string | repo-relative doc pointer describing the behavioural contract | file MUST exist (dangling = rot) |
+| `red_line` | bool | changes here need council / invariant-guardian | schema-only signal |
+
+Enforcement tiers: (a) schema + contract-existence + hub-module cross-import → always (cargo-free,
+runs in `--self-test`); (b) crate-level `depends`==actual + core ban-list → needs `cargo metadata`
+(degrades to a logged SKIP when cargo is absent, like sovereign-gate's cargo-deny). The core ban-list
+(`tokio,sqlx,axum,reqwest,rand,chrono,time`) is scoped to PRODUCTION deps only — dev-deps (proptest→rand)
+are exempt, mirroring the wasm32 gate's `--lib` scope so the two gates cannot drift apart.
 
 ### A1 · `scripts/module-integrity.mjs` — the boundary gate (S)
 - **Scope:** deterministic (no LLM) script: (1) parses all `module.toml`; (2) `cargo metadata`
@@ -222,6 +245,15 @@ boundaries + manifests + events, not maximal file motion.
 - **Gate (D5):** itself. **RED proofs:** (a) add `use crate::modules::x` across modules
   undeclared → red; (b) add `chrono` to `domain/Cargo.toml` on a throwaway branch → red.
 - **Red-line:** no · **Effort:** S
+- **STATUS: ✅ DONE 2026-07-06.** Built as a pure core (`checkIntegrity`) + real-tree driver +
+  hermetic `--self-test` (14 DENY/over-block assertions, no cargo/fs — the armament caught two real
+  parser bugs: inline-comment stripping). Both RED proofs proven: (a) covered by the self-test
+  `hub-module imports another module undeclared` case; (b) covered by the self-test `core carries a
+  banned production dep (chrono)` case (via synthetic metadata — the real `domain/Cargo.toml` is
+  concurrent-staged and MUST NOT be touched). Wired: `--self-test` into `run-armaments.sh` (pre-commit
+  1.4d, cargo-free) + real-tree into `.husky/pre-commit` 1.4e (cargo-guarded). CI wiring = staged proposal
+  (`.github` operator-gated). NOTE: implemented as one default gate (schema folded in) + `--self-test`,
+  not the planned `--schema`/`--self-test` split — the schema check runs unconditionally in default mode.
 
 ### A2 · Pilot module: channel attribution (S)
 - **Scope:** prove the module pattern on the safest unit: `git mv

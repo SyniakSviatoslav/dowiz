@@ -36,7 +36,16 @@ Everything below is proven locally (2026-07-05, rustc/cargo 1.96.1):
         run: bash rebuild/scripts/sovereign-gate.sh
       - name: Core unit tests (transition matrix, money, error taxonomy)
         run: cargo test --manifest-path rebuild/crates/domain/Cargo.toml
+      - name: Module-integrity gate (STRUCTURE-UPGRADE A0/A1 — module.toml matches the real dep graph)
+        run: node scripts/module-integrity.mjs
 ```
+
+**Module-integrity (added 2026-07-06, STRUCTURE-UPGRADE A0/A1):** `scripts/module-integrity.mjs`
+enforces the modular-boundary manifests (`rebuild/crates/*/module.toml`) against `cargo metadata`
+reality — declared `depends` == actual, core stays free of the banned production deps, hub-modules
+never import each other's internals, contract pointers resolve. It runs in `.husky/pre-commit` (1.4e,
+cargo-guarded) + its cargo-free `--self-test` runs in `run-armaments.sh` (1.4d); the CI step above is
+the required-check backstop (needs the Rust toolchain for `cargo metadata`, hence this job).
 
 ## Notes
 
