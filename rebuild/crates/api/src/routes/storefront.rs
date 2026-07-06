@@ -129,10 +129,23 @@ fn spa_shell_html(
     )
 }
 
-/// Ports `renderShadowPreview` (`preview-render.ts:45-100`), simplified per module scope cut but
-/// preserving the H3 safety invariant: generic `<title>`/OG, real name ONLY in the body banner.
-fn shadow_preview_html(menu: &PublicMenu) -> String {
-    let banner = "This is a preview mockup built from this restaurant's public website — it is NOT a live store and cannot take orders.";
+/// Ports `renderShadowPreview` (`preview-render.ts:45-100`), simplified per module scope cut.
+///
+/// Link-unfurl policy CHANGED 2026-07-06 (operator directive, overriding the original H3 generic-OG
+/// rule): a shadow (demo) tenant now advertises its REAL identity — `og:title` = name, `og:image` =
+/// the per-venue card at `{base_url}/og/{slug}.png` (served by the Node front-door) — so a pasted
+/// `/s/:slug` unfurls as a product card. The operator-protective invariants are kept: `noindex` stays
+/// (the caller sets `X-Robots-Tag` + the meta below), and the body carries an honest "demo — not yet
+/// live" banner. Mirrors `apps/api/src/lib/preview-render.ts`. Context:
+/// docs/design/demo-preview-upgrades/PLAN.md §3.
+fn shadow_preview_html(menu: &PublicMenu, slug: &str, base_url: &str) -> String {
+    let name = &menu.location_name;
+    let banner = format!(
+        "Demo i ndërtuar për {name} nga menuja publike — ende jo dyqan aktiv. Klikoni për ta bërë live."
+    );
+    let og_title = format!("{name} — Menu Digjitale");
+    let og_image = format!("{base_url}/og/{slug}.png");
+    let og_url = format!("{base_url}/s/{slug}");
     let mut sections = String::new();
     for cat in &menu.categories {
         sections.push_str(&format!("<section><h2>{}</h2><ul>", escape_html(&cat.name)));
@@ -142,10 +155,13 @@ fn shadow_preview_html(menu: &PublicMenu) -> String {
         sections.push_str("</ul></section>");
     }
     format!(
-        "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"robots\" content=\"noindex, nofollow\" /><title>Restaurant preview · Dowiz</title><meta property=\"og:title\" content=\"Restaurant menu preview · Dowiz\" /><meta property=\"og:description\" content=\"An unclaimed menu preview on Dowiz.\" /></head><body><div class=\"banner\">{}</div><h1>{}</h1>{}</body></html>",
-        escape_html(banner),
-        escape_html(&menu.location_name),
-        sections,
+        "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"robots\" content=\"noindex, nofollow\" /><title>{title} · Dowiz</title><meta property=\"og:title\" content=\"{title}\" /><meta property=\"og:description\" content=\"Menu online · porosi pa komision · të dhënat mbeten tuajat.\" /><meta property=\"og:type\" content=\"website\" /><meta property=\"og:image\" content=\"{img}\" /><meta property=\"og:image:width\" content=\"1200\" /><meta property=\"og:image:height\" content=\"630\" /><meta property=\"og:url\" content=\"{url}\" /><meta name=\"twitter:card\" content=\"summary_large_image\" /><meta name=\"twitter:image\" content=\"{img}\" /></head><body><div class=\"banner\">{banner}</div><h1>{name_esc}</h1>{sections}</body></html>",
+        title = escape_html(&og_title),
+        img = escape_html(&og_image),
+        url = escape_html(&og_url),
+        banner = escape_html(&banner),
+        name_esc = escape_html(name),
+        sections = sections,
     )
 }
 
@@ -379,12 +395,15 @@ fn bot_menu_html(
     base_url: &str,
 ) -> String {
     let title = format!("{} — Order Online | Dowiz", menu.location_name);
+    let og_image = format!("{base_url}/og/{slug}.png");
     let json_ld = escape_json_ld(&build_json_ld(menu, info, slug, base_url).to_string());
     format!(
-        "<!doctype html>\n<html lang=\"{}\"><head><meta charset=\"utf-8\" /><title>{}</title><meta property=\"og:title\" content=\"{}\" /><script type=\"application/ld+json\">{}</script></head><body><h1>{}</h1></body></html>",
+        "<!doctype html>\n<html lang=\"{}\"><head><meta charset=\"utf-8\" /><title>{}</title><meta property=\"og:title\" content=\"{}\" /><meta property=\"og:image\" content=\"{}\" /><meta property=\"og:image:width\" content=\"1200\" /><meta property=\"og:image:height\" content=\"630\" /><meta name=\"twitter:card\" content=\"summary_large_image\" /><meta name=\"twitter:image\" content=\"{}\" /><script type=\"application/ld+json\">{}</script></head><body><h1>{}</h1></body></html>",
         menu.default_locale,
         escape_html(&title),
         escape_html(&title),
+        escape_html(&og_image),
+        escape_html(&og_image),
         json_ld,
         escape_html(&menu.location_name),
     )
@@ -434,7 +453,7 @@ pub async fn get_storefront_page(
     if let Ok(PreviewLookup::Found(preview)) = state.repo.read_preview_menu(&slug).await {
         let menu = crate::service::adapt_preview_menu(&preview);
         let body = if bot {
-            shadow_preview_html(&menu)
+            shadow_preview_html(&menu, &slug, &state.app_base_url)
         } else {
             spa_shell_html(None, &slug, true)
         };
@@ -759,20 +778,19 @@ mod tests {
     }
 
     #[test]
-    fn shadow_preview_html_never_puts_real_name_in_title_or_og() {
+    fn shadow_preview_html_advertises_real_name_and_card_but_stays_noindex() {
+        // Policy CHANGED 2026-07-06 (operator directive): the shadow preview now advertises the REAL
+        // name in og:title and the per-venue card in og:image, while KEEPING noindex + the honest
+        // demo banner. See docs/design/demo-preview-upgrades/PLAN.md §3.
         let menu = crate::service::adapt_preview_menu(&serde_json::json!({
             "name": "Real Secret Restaurant Name",
             "categories": [],
         }));
-        let html = shadow_preview_html(&menu);
-        assert!(html.contains("<title>Restaurant preview · Dowiz</title>"));
-        assert!(!html.contains("<title>Real Secret Restaurant Name"));
-        assert!(html.contains("og:title\" content=\"Restaurant menu preview"));
-        assert!(
-            html.contains("Real Secret Restaurant Name"),
-            "real name still appears in the BODY banner"
-        );
-        assert!(html.contains("noindex, nofollow"));
+        let html = shadow_preview_html(&menu, "secret-slug", "https://dowiz.example");
+        assert!(html.contains("og:title\" content=\"Real Secret Restaurant Name — Menu Digjitale"));
+        assert!(html.contains("og:image\" content=\"https://dowiz.example/og/secret-slug.png\""));
+        assert!(html.contains("<h1>Real Secret Restaurant Name</h1>"), "real name in body");
+        assert!(html.contains("noindex, nofollow"), "operator-protective: noindex kept");
     }
 
     #[tokio::test]

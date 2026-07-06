@@ -23,6 +23,7 @@ import menuAvailabilityRoutes from '../routes/owner/menu-availability.js';
 import locationRoutes from '../routes/owner/locations.js';
 import publicMenuRoutes from '../routes/public/menu.js';
 import ssrRoutes from '../routes/public/ssr.js';
+import ogCardRoutes from '../routes/public/og-card.js';
 import brandingPreviewRoutes from '../routes/public/branding-preview.js';
 import seoRoutes from '../routes/public/seo.js';
 import clientFlowRoutes from '../routes/public/client-flow.js';
@@ -104,6 +105,7 @@ export async function registerCoreRoutes(fastify: FastifyInstance, deps: CoreRou
   fastify.register(locationRoutes);
   fastify.register(publicMenuRoutes);
   fastify.register(ssrRoutes, { db: pool });
+  fastify.register(ogCardRoutes, { db: pool });
   fastify.register(brandingPreviewRoutes);
   fastify.register(seoRoutes, { db: pool });
   fastify.register(clientFlowRoutes, { db: pool });

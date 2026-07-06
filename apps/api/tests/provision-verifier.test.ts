@@ -42,7 +42,7 @@ maybe('a well-formed shadow preview passes ALL verifier checks', async () => {
   const { slug } = await provision(WITH_MENU);
   const v = await verifyShadowPreview(pool, slug);
   assert.equal(v.ok, true, `expected ok, failed: ${v.failed.join(',')}`);
-  assert.deepEqual(v.checks, { served: true, hasItems: true, banner: true, noindex: true, genericOg: true, neverOrderable: true });
+  assert.deepEqual(v.checks, { served: true, hasItems: true, banner: true, noindex: true, richOg: true, neverOrderable: true });
 });
 
 maybe('an EMPTY-menu shadow fails verification (hasItems) → markVerified throws', async () => {

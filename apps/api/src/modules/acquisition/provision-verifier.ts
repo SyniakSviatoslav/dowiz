@@ -10,9 +10,9 @@ import { renderShadowPreview, type PreviewMenu } from '../../lib/preview-render.
 export interface VerifyChecks {
   served: boolean; // read_preview_menu returns the shadow (owner_id NULL + closed + published_at NULL)
   hasItems: boolean; // the menu actually has products
-  banner: boolean; // honest "not a live store" label renders
-  noindex: boolean; // robots noindex present
-  genericOg: boolean; // real name is NOT in <title>/og:* (B2/H3 — no unfurl leak)
+  banner: boolean; // honest "demo — not yet live" label renders
+  noindex: boolean; // robots noindex present (unfurl ≠ search index)
+  richOg: boolean; // real name IS in og:title + per-venue card is og:image (operator directive 2026-07-06)
   neverOrderable: boolean; // no cart/checkout/add-to-cart affordance
 }
 export interface VerifyResult {
@@ -31,21 +31,23 @@ export async function verifyShadowPreview(pool: Pool, slug: string): Promise<Ver
     hasItems: false,
     banner: false,
     noindex: false,
-    genericOg: false,
+    richOg: false,
     neverOrderable: false,
   };
 
   if (menu) {
-    const html = renderShadowPreview(menu);
+    const baseUrl = process.env.APP_BASE_URL || 'https://dowiz.fly.dev';
+    const html = renderShadowPreview(menu, { ogImageUrl: `${baseUrl}/og/${slug}.png`, baseUrl });
     const itemCount = (menu.categories ?? []).reduce((n, c) => n + (c.products?.length ?? 0), 0);
     checks.hasItems = itemCount > 0;
-    checks.banner = /not a live store/i.test(html);
+    checks.banner = /ende jo dyqan aktiv/i.test(html);
     checks.noindex = /<meta name="robots" content="noindex/i.test(html);
-    // generic OG: the real name must NOT appear in <title> or any og:* metadata.
+    // rich OG (operator directive 2026-07-06, replaces the old generic-OG/H3 gate): the real name IS in
+    // og:title and the per-venue card IS the og:image, so a pasted link unfurls as a product card.
     const title = html.match(/<title>([^<]*)<\/title>/)?.[1] ?? '';
-    const ogContents = [...html.matchAll(/<meta property="og:[^"]+" content="([^"]*)"/g)].map((m) => m[1] ?? '');
+    const ogTitle = html.match(/<meta property="og:title" content="([^"]*)"/)?.[1] ?? '';
     const name = menu.name ?? '';
-    checks.genericOg = !!name && !title.includes(name) && !ogContents.some((c) => c.includes(name));
+    checks.richOg = !!name && title.includes(name) && ogTitle.includes(name) && /<meta property="og:image"/.test(html);
     checks.neverOrderable = !/add to cart|checkout|\bcart\b/i.test(html);
   }
 

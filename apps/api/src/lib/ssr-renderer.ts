@@ -349,7 +349,10 @@ export async function renderMenuPage(
           <meta name="description" content="${metaDesc}" />
           <title>${title}</title>
           <${OgMetaTags} loc=${menu.location} slug=${slug} baseUrl=${appBase} />
-          <meta property="og:image" content="${appBase}/og-image.png" />
+          <meta property="og:image" content="${appBase}/og/${slug}.png" />
+          <meta property="og:image:width" content="1200" />
+          <meta property="og:image:height" content="630" />
+          <meta name="twitter:image" content="${appBase}/og/${slug}.png" />
           <${HreflangLinks} slug=${slug} supportedLocales=${supportedLocales} defaultLocale=${defaultLocale} baseUrl=${appBase} />
           <link rel="canonical" href="${appBase}/s/${slug}" />
           <meta name="dos-location-id" content="${loc.id}" />

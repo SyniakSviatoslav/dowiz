@@ -35,7 +35,9 @@ export default (async function ssrRoutes(fastify: any, opts: any) {
       if (previewMenu) {
         reply.header('X-Robots-Tag', 'noindex, nofollow');
         if (isBot(request.headers['user-agent'])) {
-          return reply.type('text/html').send(renderShadowPreview(previewMenu));
+          const baseUrl = process.env.APP_BASE_URL || 'https://dowiz.fly.dev';
+          const ogImageUrl = `${baseUrl}/og/${encodeURIComponent(slug)}.png`;
+          return reply.type('text/html').send(renderShadowPreview(previewMenu, { ogImageUrl, baseUrl }));
         }
         return serveSpaShell(reply, db, slug);
       }

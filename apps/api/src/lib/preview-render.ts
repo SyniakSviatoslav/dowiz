@@ -41,11 +41,22 @@ function fmtPrice(minor: number, code: string, minorUnit: number): string {
   return `${value} ${escapeHtml(code)}`;
 }
 
-/** Render the labeled, never-orderable, noindex, generic-OG preview HTML for a shadow tenant. */
-export function renderShadowPreview(menu: PreviewMenu): string {
+/**
+ * Render the labeled, never-orderable, noindex preview HTML for a shadow (demo) tenant.
+ *
+ * Link-unfurl policy (operator directive 2026-07-06, overriding the original H3 generic-OG rule):
+ * the card advertises the REAL venue identity (og:title = name, og:image = the per-venue card) so a
+ * pasted /s/:slug unfurls as a product card in chats. The operator-protective invariants are kept:
+ * `noindex` stays (unfurl ≠ search index) and the body carries an honest "demo — not yet live" banner
+ * + a claim/decline CTA. Full context: docs/design/demo-preview-upgrades/PLAN.md §3.
+ */
+export function renderShadowPreview(menu: PreviewMenu, opts: { ogImageUrl?: string; baseUrl?: string } = {}): string {
   const code = menu.currency?.code ?? 'ALL';
   const minorUnit = menu.currency?.minor_unit ?? 0;
-  const banner = 'This is a preview mockup built from this restaurant’s public website — it is NOT a live store and cannot take orders.';
+  const ogImg = opts.ogImageUrl ?? '';
+  const ogUrl = opts.baseUrl ? `${opts.baseUrl}/s/${menu.slug}` : '';
+  const ogTitle = `${menu.name} — Menu Digjitale`;
+  const banner = `Demo i ndërtuar për ${menu.name} nga menuja publike — ende jo dyqan aktiv. Klikoni për ta bërë live.`;
 
   const sections = (menu.categories ?? [])
     .map((c) => {
@@ -70,10 +81,17 @@ export function renderShadowPreview(menu: PreviewMenu): string {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>Restaurant preview · Dowiz</title>
-  <meta property="og:title" content="Restaurant menu preview · Dowiz" />
-  <meta property="og:description" content="An unclaimed menu preview on Dowiz." />
+  <title>${escapeHtml(ogTitle)} · Dowiz</title>
+  <meta property="og:title" content="${escapeHtml(ogTitle)}" />
+  <meta property="og:description" content="Menu online · porosi pa komision · të dhënat mbeten tuajat." />
   <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Dowiz" />
+  <meta property="og:locale" content="sq_AL" />
+  ${ogUrl ? `<meta property="og:url" content="${escapeHtml(ogUrl)}" />` : ''}
+  ${ogImg ? `<meta property="og:image" content="${escapeHtml(ogImg)}" /><meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />` : ''}
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${escapeHtml(ogTitle)}" />
+  ${ogImg ? `<meta name="twitter:image" content="${escapeHtml(ogImg)}" />` : ''}
   <style>
     body{font-family:system-ui,sans-serif;margin:0;color:#1a1a1a;background:#faf8f4}
     .banner{background:#fff3cd;border-bottom:1px solid #e6d8a8;padding:12px 16px;font-size:14px}
@@ -93,7 +111,7 @@ export function renderShadowPreview(menu: PreviewMenu): string {
   <div class="wrap">
     <h1>${escapeHtml(menu.name)}</h1>
     ${sections || '<p>No menu items available.</p>'}
-    <div class="cta"><strong>Is this your restaurant?</strong><br/>You can claim this preview to edit or remove it.</div>
+    <div class="cta"><strong>A është ky restoranti juaj?</strong><br/>Merreni falas për ta bërë live, redaktuar ose hequr.</div>
   </div>
 </body>
 </html>`;

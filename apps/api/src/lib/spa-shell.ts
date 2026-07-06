@@ -83,10 +83,13 @@ function buildTenantMeta(m: TenantMeta): string {
     `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
     `<meta name="twitter:description" content="${escapeHtml(desc)}" />`,
   ];
-  if (m.logoUrl) {
-    tags.push(`<meta property="og:image" content="${escapeHtml(m.logoUrl)}" />`);
-    tags.push(`<meta name="twitter:image" content="${escapeHtml(m.logoUrl)}" />`);
-  }
+  // Per-venue OG card (GET /og/:slug.png) — supersedes the bare logo so link unfurls / email previews
+  // render the product card, not just a logo. og-card falls back to a brand gradient when no photo.
+  const ogImage = `${baseUrl}/og/${encodeURIComponent(m.slug)}.png`;
+  tags.push(`<meta property="og:image" content="${escapeHtml(ogImage)}" />`);
+  tags.push(`<meta property="og:image:width" content="1200" />`);
+  tags.push(`<meta property="og:image:height" content="630" />`);
+  tags.push(`<meta name="twitter:image" content="${escapeHtml(ogImage)}" />`);
   return tags.join('\n    ');
 }
 
@@ -134,7 +137,9 @@ export async function serveSpaShell(reply: any, db: any, slug: string): Promise<
       // P6-2 (B2/C1): a shadow tenant (org.owner_id IS NULL) is unconsented — NEVER advertise its
       // real name/logo to humans or unfurlers, and mark it noindex. The honest labeled preview is P6-3.
       isShadow = row.owner_id === null || row.owner_id === undefined;
-      if (row.name && !isShadow) {
+      // Build tenant meta for shadows too now (operator directive 2026-07-06: demos advertise their real
+      // identity in unfurls). `noindex` is still enforced below for shadows — unfurl ≠ search index.
+      if (row.name) {
         tenant = { name: row.name, address: row.address ?? null, logoUrl: row.logo_url ?? null, slug };
       }
     }
@@ -164,13 +169,18 @@ export async function serveSpaShell(reply: any, db: any, slug: string): Promise<
     try { reply.raw.removeHeader('X-Frame-Options'); } catch { /* ignore */ }
   }
 
-  // P6-2 (B2/C1): shadow tenant → noindex header + a robots-noindex shell with NO real identity.
+  // Shadow tenant → noindex header + noindex shell. Since 2026-07-06 (operator directive) the shadow
+  // shell ALSO carries the real per-venue meta (title + OG card) so a human's tab / non-bot unfurl is
+  // rich; `noindex` still keeps it out of search. The honest "demo — not yet live" banner lives in the
+  // storefront's preview mode (is_preview) and in the bot-path renderShadowPreview.
   if (isShadow) {
     reply.header('X-Robots-Tag', 'noindex, nofollow');
     try {
-      return reply.type('text/html').send(injectNoindex(readShell()));
+      const shell = readShell();
+      const withMeta = tenant ? injectTenantMeta(shell, buildTenantMeta(tenant)) : shell;
+      return reply.type('text/html').send(injectNoindex(withMeta));
     } catch (err: any) {
-      console.debug('[spa-shell] noindex injection failed, serving static shell:', err?.message);
+      console.debug('[spa-shell] shadow meta injection failed, serving static shell:', err?.message);
       return reply.sendFile('index.html');
     }
   }
