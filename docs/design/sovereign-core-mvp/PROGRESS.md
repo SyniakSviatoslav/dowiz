@@ -74,39 +74,32 @@ FRESH session (F5 anti-context-rot).
 - **Plans committed** (`33caae75`): MANIFESTO/DECISIONS/ANALYSIS/GRAND-PLAN/LEAD-REVIEW/STRUCTURE-UPGRADE.
 
 ## NEXT SEQUENCE
-1. **B1 fable-check — DONE 2026-07-06** (operator "use cheaper models instead of fable"): Check 2 in
-   `agent-dispatch-gate.sh` DENIES `model: fable` unless a non-expired human-only
-   `.claude/state/fable-override` line exists (fail-closed; guard-bash OVERRIDES + protect-paths pin it
-   human-only). Armament +6 fable cases; LIVE-VERIFIED (a real fable dispatch was refused). Model-routing
-   memory v3.1 = arc Fable-override rescinded. **Next B1 increment:** `LANE-CLASS`/router-stamp checks —
-   ONLY after the stamp convention is written into AGENTS.md (else pure nudge-spam), each with an armament case.
-2. **RATCHET model-check warn→deny** once `_hev` shows the `model:` habit took (measure with
-   `scripts/audit-token-router.mjs` trend going down): flip the check's default `MODE` warn→deny (the
-   ratchet point is commented in the hook). Re-run the armament (deny path already proven).
-3. **B2 — DONE 2026-07-06:** `context-budget-guard.sh` copied to `.claude/hooks/` + registered under
-   `UserPromptSubmit` with `CONTEXT_WINDOW=1000000 CONTEXT_BUDGET_PCT=30` (fires at 300K). Re-armed
-   hermetically with the tuned env (fires at 350K, silent at 220K, silent on missing transcript). Fires on
-   the NEXT user prompt if live context ≥300K — the mechanical teeth for the FORGETFUL LIFECYCLE.
-4. **B3 — DONE 2026-07-06:** `distill-nudge.sh` (PostToolUse Bash, WARN) — nudges (never blocks) when a
-   command returns >8K chars undistilled; size + distill-marker computed in-parser (multi-line-command safe);
-   `additionalContext` channel + `_hev` warn. +6 armament cases; LIVE-VERIFIED (fired on a real 8.3K dump).
-5. **B4/B5 anti-rot wiring — DONE 2026-07-06** (motivated by the stale gate-armament found this session —
-   armaments off the enforced runner rot): new `scripts/run-armaments.sh` runs the 5 fast governance
-   armaments (hook-matchers, gate-armament, token-gates, `audit-token-router --self-test`, ledger-integrity)
-   DECOUPLED from the slow pnpm build — run it before any `--no-verify` harness commit. Wired into
-   `.husky/pre-commit` step 1.4d. `distill-nudge.sh` + `context-budget-guard.sh` registrations now PINNED in
-   `guardrail-hook-matchers.mjs` (8 gates). **Remaining B5** (deferred): KNOWLEDGE-AS-CIRCUITS registry entry
-   (a `require_together` circuit: a committed script that dispatches agents must contain `model:`) + wire
-   `run-armaments.sh` into THE EYE (`proposed-eye/eye-guard.sh`) once THE EYE is applied (still proposed).
-6. **Then PART A** (incremental modular strangler moves) after the Part B exit gate. All BEFORE money.
-2. **STRUCTURE-UPGRADE.md Part A** — incremental strangler moves (A0 `module.toml` manifests, A1 boundary
-   gate, A2 `channel.rs` pilot, A4 route-freeze, A5 placement). A3 (orders split) BLOCKED on GRAND-PLAN 0b-5.
-3. **Money boundary — GRAND-PLAN 0b:** extract `pricing.rs` (f64-boundary split; f64 haversine stays in
-   shell) + corridors behind `decide`. Verify with a DECORRELATED, independent, hand-derived (NON-mirror)
-   money oracle + byte-parity + sovereign gate green. Delegate the oracle to a FRESH opus worker
-   (decorrelation — a same/rotted reviewer is how #56 shipped "certified green").
-4. Then Envelope+events, proptests, shell-flip (REUSE the existing cutover shadow-diff, F1), CI+cargo-deny
+**Part B (token-enforcement) = COMPLETE. Part A (modular topology) = COMPLETE (A0·A1·A2·A4·A5, commits
+fd444fbc→b6666bc6, ledgers #86–88 — see the PART A STATUS block above).** The next UNCOMPLETED step is #1.
+
+1. **▶ NEXT — Money boundary (GRAND-PLAN 0b-1), the red-line crown jewel. FRESH SESSION (F5 mandatory).**
+   Extract `rebuild/crates/api/src/routes/orders/pricing.rs` (884 lines) into the core (`crates/domain`)
+   with the f64-boundary split: the pure INTEGER money fns (`apply_tax`, `compute_line_total`,
+   `compose_total`, `charged_tax`, `compute_order_pricing`) move to core; the f64 seam STAYS in the shell —
+   `tax_rate: f64` is converted to `rate_micro` (i64 micro-units) at the shell edge BEFORE crossing into
+   core, and `distance_km` (Haversine) + geo pins (`FeeLocation.lat/lng`, tier `max_distance_km`) stay in
+   the shell (fee-from-distance selection is i64 and can move once distance is resolved shell-side). Then
+   corridors behind the single `decide` door (0b-3/0b-5). **VERIFY (non-negotiable):** a DECORRELATED,
+   independent, hand-derived, NON-mirror money oracle — delegate to a FRESH `model: opus` sub-agent that
+   re-derives expected values from the Node source + spec, NOT from the Rust code under test (a same/rotted
+   reviewer is how #56 shipped "certified green") — plus BYTE-PARITY against the existing hand-derived test
+   vectors (`order_total_composition_byte_parity_vs_hand_derived_vectors` etc. already in pricing.rs) + the
+   f64-ban clippy gate + `bash rebuild/scripts/sovereign-gate.sh` green. **Red-line:** invariant-guardian +
+   Triad Council (system-architect/breaker/counsel) BEFORE code. **STOP + record in BLOCKERS on ANY
+   byte-parity mismatch or money/RLS/auth uncertainty — do NOT guess or ship.** Keep the concurrent
+   request_hash work excluded from every commit.
+2. Then Envelope+events, proptests, shell-flip (REUSE the existing cutover shadow-diff, F1), CI+cargo-deny
    (`.github` operator-gated) → Phase 1 hub → Phase 2 MVP.
+3. Deferred (non-blocking, pick up opportunistically): RATCHET the B1 model-check warn→deny once
+   `audit-token-router` shows model-less <10%; B1 LANE-CLASS/router-stamp checks after the stamp convention
+   is written into AGENTS.md; KNOWLEDGE-AS-CIRCUITS `require_together` entry once a committed
+   agent-dispatching script exists to guard; wire `run-armaments.sh` into THE EYE once THE EYE is applied.
+   A3 (orders module split) stays BLOCKED on GRAND-PLAN 0b-5 + 1.3 — do NOT start early.
 
 ## GUARDRAILS (every run)
 Enforce `rebuild/scripts/sovereign-gate.sh` + cargo tests. Commit+push ONLY when green, scoped, EXCLUDING the
