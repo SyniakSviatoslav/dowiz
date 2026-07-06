@@ -29,6 +29,11 @@ workspace = true
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+# Canonical-bytes hashing for the S5 idempotency request-hash (codec::request_hash). Both are pure
+# Rust (RustCrypto sha2 + hex) — no getrandom/entropy, no IO — so the wasm32 sovereignty gate stays
+# green. Digest of the canonical JSON body, lowercase hex; the cross-stack byte-identity contract.
+sha2 = "0.10"
+hex = "0.4"
 # NO `v4` here — that feature pulls a randomness source (getrandom) into the PRODUCTION
 # dependency graph, which the wasm32 sovereignty gate rejects (entropy in the core, Law 2).
 # The core only needs the `Uuid` TYPE + serde. `Uuid::new_v4()` is a test-only convenience,
