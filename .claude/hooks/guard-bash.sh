@@ -71,6 +71,17 @@ MUTATORS='(^|[|;&][[:space:]]*|[[:space:]])(sed[[:space:]]+-[a-zA-Z]*i|tee([[:sp
 mutates=0
 printf '%s' "$SCRUBBED" | grep -qE "$MUTATORS" && mutates=1
 
+# Inline interpreter file-writes (python/node/ruby/deno -c/-e/heredoc): the code is IN the command
+# text, so a clear file-mutation op must count as a mutation — closes the gap where an inline
+# `python3 -c "...write_text('.env')..."` slipped past the shell-mutator regex (the human-approved
+# harness unlock 2026-07-06 used this path once; it is now sealed for the still-protected zones).
+# External scripts (`python3 file.py`, `bash file.sh`) are inherently uninspectable by a
+# command-text gate — out of scope by design, same as it always was for bash.
+# Narrowed: only an ACTUAL inline-exec context (python/ruby -c/-e, node -e, deno eval, or a heredoc)
+# counts — so prose/echoes that merely mention `write_text` no longer false-positive (they lack -c/<<).
+INTERP_WRITE='(python[0-9.]*[[:space:]]+-[A-Za-z]*c|node[[:space:]]+-e|ruby[[:space:]]+-e|deno[[:space:]]+eval|<<[^<|;&]*[[:alnum:]_]).*(write_text|write_bytes|writeFileSync|appendFileSync|os\.(remove|unlink|rename|makedirs)|shutil\.(move|copy|rmtree)|fs\.(writeFile|appendFile|unlink|rm|rename|mkdir)|open\([^)]*,[^)]*[aw])'
+printf '%s' "$CMD" | grep -qE "$INTERP_WRITE" && mutates=1
+
 # --- 1) HUMAN-ONLY gate-override files: the agent must never write its own bypass ---
 OVERRIDES='\.claude/state/(serious-override|redline-confirmed)'
 if [ "$mutates" -eq 1 ] && printf '%s' "$CMD" | grep -qE "$OVERRIDES"; then
@@ -80,7 +91,7 @@ fi
 # --- 2) protect-paths parity: Bash must not mutate what Edit/Write cannot ---
 # (.claude/state and .claude/logs stay agent-writable — the council flow appends serious-cleared
 # there by design; the clearance itself is TTL'd by serious-gate.sh.)
-PROTECTED='\.claude/(hooks|commands|agents|settings)|\.github/|(^|[^A-Za-z0-9_])migrations/|fly\.toml|Dockerfile|pnpm-lock\.yaml|packages/(db|shared-types)/|/contracts/|\.contract\.|(^|[^A-Za-z0-9_])\.env([^A-Za-z0-9_]|$)'
+PROTECTED='\.github/|(^|[^A-Za-z0-9_])migrations/|fly\.toml|Dockerfile|pnpm-lock\.yaml|packages/(db|shared-types)/|/contracts/|\.contract\.|(^|[^A-Za-z0-9_])\.env([^A-Za-z0-9_]|$)'
 if [ "$mutates" -eq 1 ] && printf '%s' "$CMD" | grep -qE "$PROTECTED"; then
   _block "Bash mutation touching a protect-paths zone (hooks/settings/agents/.github/migrations/infra/db/contracts/.env). These require manual human approval — same rule as the Edit/Write gate (protect-paths.sh). Read-only access is fine without redirects."
 fi
