@@ -9,6 +9,16 @@
 **Concurrent staged work — NOT ours, NEVER commit:** `rebuild/Cargo.lock`,
 `rebuild/crates/api/src/routes/orders/*`, `rebuild/crates/domain/{Cargo.toml,src/codec*}`.
 
+## PART B STATUS — substantially COMPLETE (2026-07-06)
+B0 baseline · B1 model-check (warn, live) · B1 fable-check (deny, live) · B2 context-budget-guard (live) ·
+B3 distill-nudge (warn, live) · B4 auditor+self-test · B5 armament-runner+pins — all shipped + live-verified.
+**Exit gate:** token-gates green ✓ · hook-matchers green (8 gates) ✓ · `_hev` shows real deny/warn traffic ✓ ·
+full B0-vs-post-B1 delta = pending session accumulation (the ratchet trigger). **Deferred (not blocking):**
+LANE-CLASS/router-stamp checks (need the stamp convention written into AGENTS.md first); KNOWLEDGE-AS-CIRCUITS
+entry (YAGNI — no committed agent-dispatching script exists to guard yet); THE EYE wiring (EYE still proposed).
+**→ Next phase = PART A** (modular strangler moves) — a different, Rust-crate-touching workstream; start it in a
+FRESH session (F5 anti-context-rot).
+
 ## DONE (2026-07-06)
 - **STRUCTURE-UPGRADE Part B · B1 warn-gate (this run; operator picked rollout A = warn-then-ratchet):**
   new `.claude/hooks/agent-dispatch-gate.sh` — PreToolUse `Agent|Task` gate, WARN mode (never blocks),

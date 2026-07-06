@@ -183,3 +183,14 @@ the log) OR a hard-deny gated on a grace flag — a genuine design fork surfaced
 The 43 `fable` dispatches are NOT all violations: the operator sanctioned Fable for *plan authoring*
 this arc — B1's human-only expiring `fable-override` is the correct discriminator, so the raw count
 overstates the true violation rate (Fable on 2 `Explore` lanes is off-policy regardless).
+
+### Post-B1 live signal (2026-07-06) — the gate is ARMED, not just registered
+
+Part B exit-gate criterion "`_hev` shows real ALLOW/DENY traffic." First session with the gate live
+produced real decisions in `.claude/logs/harness-events.jsonl`:
+`agent-dispatch-gate deny` ×1 (a `model: fable` dispatch REFUSED), `agent-dispatch-gate warn` ×1
+(a model-less Explore lane nudged), `distill-nudge warn` ×1 (an ~8.3K undistilled Bash dump).
+The gate caught the lead's own behavior and changed it (operator's "use cheaper models" now enforced).
+**The full B0-vs-post-B1 violation DELTA needs session accumulation** — re-run `audit-token-router`
+over the next N sessions; the model-less rate trend (baseline 86%) is the ratchet trigger for
+promoting Check 1 warn→deny. Tracked in PROGRESS.md NEXT SEQUENCE.
