@@ -141,3 +141,45 @@ ticks measured at 0/100 LLM calls. This is a product-cost line, independent of d
    but never persists `orders.status` (row stays IN_DELIVERY). UI/DB state divergence; contract-class.
 2. `SCHEDULED` exists in `OrderStatusEnum` but has no writer anywhere in apps/api/src.
 3. `PENDING` is insert-only (never an UPDATE target) — consistent with the timeout sweep design.
+
+## 10. B0 baseline — measured TOKEN ROUTER / MODEL ROUTING violation rate (2026-07-06)
+
+STRUCTURE-UPGRADE.md Part B, step **B0 · Baseline before enforcing**. Source: `scripts/audit-token-router.mjs`
+(deterministic, $0, read-only) over **95 session transcripts** (`~/.claude/projects/-root-dowiz/*.jsonl`).
+Re-run: `node scripts/audit-token-router.mjs`. Measured, not assumed (VSA rule 0).
+
+| rule (auditor metric) | count | rate | tier |
+|---|---|---|---|
+| **Agent dispatches (total)** | **1027** | — | — |
+| (a) no explicit `model:` | **885** | **86%** of dispatches | EXIT-1 |
+| (e) `model: fable` | 43 | 4% (across 5 sessions) | EXIT-1 |
+| (d) unstamped >1KB raw JSON in prompt | 8 | 0.8% | advisory |
+| (c) batching-miss candidates (≥3 single-tool turns) | 86 | — | advisory, human-judged |
+| peak lead-session context | 999,580 | ⚠ ran to the full window (≫300K recycle) | datapoint |
+| (b) per-lane 80K crossings | — | **not measurable from lead transcript** (sub-agent sidechains never appear: `isSidechain` False on all 2464 marked lines) | honest gap |
+
+**Model-less dispatches (885) by `subagent_type`** — the surface B1's `model:`-required check would DENY:
+
+| subagent_type | model-less count |
+|---|---|
+| general-purpose | 340 |
+| system-architect / system-breaker / counsel (triad council) | 110 / 105 / 93 |
+| Explore (read-only, inherits parent by convention) | 106 |
+| _(no subagent_type → default agent)_ | 54 |
+| security-sentinel / invariant-guardian / test-scout / others | 78 (combined) |
+
+**Compliant tail:** only ~99 of 1027 dispatches (**≈10%**) carry an explicit non-Fable `model:`
+(46 gp=sonnet, 20 default=opus, 9 invariant-guardian=opus, 9 security-sentinel=opus, others).
+
+### Load-bearing finding for B1 (drives a rollout decision, recorded in PROGRESS.md)
+
+A **blind hard-DENY** on "`model:` absent" would have blocked **~90% of the current dispatch
+pattern on day one** — including 106 legitimate `Explore` read-only lanes that inherit the parent
+model by convention, and the triad-council agents. This is precisely the #47 over-block failure
+mode the plan warns about, now quantified rather than feared. **B1 must not ship as a blind
+hard-deny.** The data supports a **warn-then-ratchet rollout** (PostToolUse/soft nudge that logs
+`_hev` WARN + names the fix, promoted to PreToolUse DENY only after the stamp habit is measurable in
+the log) OR a hard-deny gated on a grace flag — a genuine design fork surfaced for the operator.
+The 43 `fable` dispatches are NOT all violations: the operator sanctioned Fable for *plan authoring*
+this arc — B1's human-only expiring `fable-override` is the correct discriminator, so the raw count
+overstates the true violation rate (Fable on 2 `Explore` lanes is off-policy regardless).
