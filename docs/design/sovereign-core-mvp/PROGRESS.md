@@ -19,6 +19,32 @@ entry (YAGNI — no committed agent-dispatching script exists to guard yet); THE
 **→ Next phase = PART A** (modular strangler moves) — a different, Rust-crate-touching workstream; start it in a
 FRESH session (F5 anti-context-rot).
 
+## PHASE 0b STATUS — 0b-1 DONE (2026-07-06, fresh session)
+- **0b-1 money boundary (GRAND-PLAN 0b-1) — ✅ DONE.** `pricing.rs` (884 lines) extracted from the
+  `api` shell into `rebuild/crates/domain/src/kernel/pricing.rs` — integer-only by construction
+  (core `disallowed-types` clippy gate bans f64/f32 outright). A thin shell adapter survives at the
+  old path (`routes/orders/pricing.rs`) as the single float chokepoint: owns `distance_km`
+  (Haversine) + converts `tax_rate→rate_micro` and `distance_km→distance_m` (whole meters) before
+  calling the core; `pg.rs`/`shifts.rs` keep their existing f64 signatures unchanged.
+  **Guard split** (Breaker-caught gap in the design review): the old f64 short-circuit
+  (`subtotal==0 || tax_rate<=0.0 || !is_finite → Ok(0)`) is split by domain, not dropped — core
+  catches `subtotal==0||rate_micro<=0` (protects every future caller), shell catches
+  `!tax_rate.is_finite()` before conversion (±Infinity maps to a positive `i64::MAX` the core guard
+  can't see) — together reproduce the old `Ok(0)` for every exotic input. `compute_order_pricing`'s
+  `HashMap`/`HashSet` (the core's first would-be entropy source) → `BTreeMap`/`BTreeSet`.
+  `PricingError.code` moves from a shell `&str` to `domain::ErrorCode`, deleting pg.rs's redundant
+  `pricing_code` string mirror. **Verified:** a decorrelated oracle (fresh opus, blind to the Rust
+  code) hand-derived 28 expected values from the Node reference alone — all match
+  (`oracle-vectors.md`). 80 core tests + 56 api tests green; `sovereign-gate.sh` green (wasm32 +
+  disallowed-types); RED→GREEN clippy proof independently re-verified (inject f64 → Gate 2 fails →
+  revert → green); `invariant-guardian` read: PASS, no flags. Design process: Triadic Council ran
+  first (proposal+breaker-findings+counsel-opinion+resolution, HARD EXIT reached, GO) — operator then
+  removed the council requirement for this step going forward (kept + built on the existing
+  artifacts); the actual code implementation proceeded on the decorrelated oracle + byte-parity +
+  invariant-guardian read + sovereign-gate, no further council. Design docs:
+  `docs/design/sovereign-core-money-boundary-0b1/{proposal,resolution,oracle-vectors,ADR}.md`.
+  Commit: `c10814ab`.
+
 ## PART A STATUS — IN PROGRESS (2026-07-06, fresh session)
 - **A0 manifest contract + A1 boundary gate — ✅ DONE.** `rebuild/crates/{domain,api}/module.toml` stamped;
   `scripts/module-integrity.mjs` (pure core + hermetic `--self-test`) enforces schema + `depends`==`cargo
@@ -75,33 +101,39 @@ FRESH session (F5 anti-context-rot).
 
 ## NEXT SEQUENCE
 **Part B (token-enforcement) = COMPLETE. Part A (modular topology) = COMPLETE (A0·A1·A2·A4·A5, commits
-fd444fbc→b6666bc6, ledgers #86–88 — see the PART A STATUS block above).** The next UNCOMPLETED step is #1.
+fd444fbc→b6666bc6, ledgers #86–88). 0b-1 (money boundary) = COMPLETE (commit `c10814ab` — see PHASE 0b
+STATUS above).** The next UNCOMPLETED step is #1.
 
-1. **▶ NEXT — Money boundary (GRAND-PLAN 0b-1), the red-line crown jewel. FRESH SESSION (F5 mandatory).**
-   Extract `rebuild/crates/api/src/routes/orders/pricing.rs` (884 lines) into the core (`crates/domain`)
-   with the f64-boundary split: the pure INTEGER money fns (`apply_tax`, `compute_line_total`,
-   `compose_total`, `charged_tax`, `compute_order_pricing`) move to core; the f64 seam STAYS in the shell —
-   `tax_rate: f64` is converted to `rate_micro` (i64 micro-units) at the shell edge BEFORE crossing into
-   core, and `distance_km` (Haversine) + geo pins (`FeeLocation.lat/lng`, tier `max_distance_km`) stay in
-   the shell (fee-from-distance selection is i64 and can move once distance is resolved shell-side). Then
-   corridors behind the single `decide` door (0b-3/0b-5). **VERIFY (non-negotiable):** a DECORRELATED,
-   independent, hand-derived, NON-mirror money oracle — delegate to a FRESH `model: opus` sub-agent that
-   re-derives expected values from the Node source + spec, NOT from the Rust code under test (a same/rotted
-   reviewer is how #56 shipped "certified green") — plus BYTE-PARITY against the existing hand-derived test
-   vectors (`order_total_composition_byte_parity_vs_hand_derived_vectors` etc. already in pricing.rs) + the
-   f64-ban clippy gate + `bash rebuild/scripts/sovereign-gate.sh` green. **⛔ NO COUNCIL (removed 2026-07-06):**
-   do NOT convene any Triadic/Architect-Breaker-Counsel council — proceed DIRECTLY on the decorrelated
-   oracle + byte-parity + invariant-guardian read + gates. The design already exists (ADR + proposal +
-   resolution, commits fc0c4272→7584f035, council concluded GO) — build on it. **STOP + record in BLOCKERS on
-   ANY byte-parity mismatch or money/RLS/auth uncertainty — do NOT guess or ship.** Keep the concurrent
-   request_hash work excluded from every commit.
-2. Then Envelope+events, proptests, shell-flip (REUSE the existing cutover shadow-diff, F1), CI+cargo-deny
-   (`.github` operator-gated) → Phase 1 hub → Phase 2 MVP.
+1. **▶ NEXT — 0b-2: Event vocabulary + `Envelope { seq, at, cause }` (GRAND-PLAN 0b-2). FRESH SESSION
+   (F5 mandatory).** Grow the kernel's alphabet: `Event` gains `Priced { totals… }`,
+   `RefundObligated { amount }`, `BindingTerminalized { … }`; every event carried in
+   `Envelope { seq: u64, at: Ts, cause: CommandHash }` (`cause` = the codec/request_hash canonical
+   hash). `OrderState` grows a money snapshot (`Lek` totals, now available via `kernel::pricing`
+   post-0b-1) + `BindingState` so `fold` can accumulate. **Gate (D5):** exhaustive-match compile gate
+   (no `_` arm in `fold` — clippy `wildcard_enum_match_arm` deny) + Hard-Truth replay test extended +
+   canonical-bytes round-trip property test. RED proof: add a dummy variant without a fold arm →
+   compile fails; corrupt one serialized field → round-trip test red. **Red-line:** touches money
+   types — per the operator's 2026-07-06 directive, NO Triadic council; proceed on invariant-guardian
+   read + the deterministic gates above. **NOTE:** this touches `rebuild/crates/domain/src/codec.rs`
+   (`CommandHash` exposure) — check whether the concurrent `request_hash` workstream
+   (`rebuild/crates/domain/src/codec*`) has landed/is still in flight before touching that file; if
+   still concurrent, coordinate scope or defer the `codec.rs` sub-step and record in BLOCKERS.
+2. Then 0b-3 (corridors behind `decide`), 0b-4 (Hard Truth L1–L2), 0b-5 (shell-flip, REUSE the
+   existing cutover shadow-diff, F1), 0b-6 (CI+cargo-deny, `.github` operator-gated) → Phase 1 hub →
+   Phase 2 MVP.
 3. Deferred (non-blocking, pick up opportunistically): RATCHET the B1 model-check warn→deny once
    `audit-token-router` shows model-less <10%; B1 LANE-CLASS/router-stamp checks after the stamp convention
    is written into AGENTS.md; KNOWLEDGE-AS-CIRCUITS `require_together` entry once a committed
    agent-dispatching script exists to guard; wire `run-armaments.sh` into THE EYE once THE EYE is applied.
-   A3 (orders module split) stays BLOCKED on GRAND-PLAN 0b-5 + 1.3 — do NOT start early.
+   A3 (orders module split) stays BLOCKED on GRAND-PLAN 0b-5 + 1.3 — do NOT start early. R1 (sub-meter
+   delivery-tier divergence, 0b-1 defer-flag) — revisit the moment any tier-author UI spec opens; land
+   a `≤3-dp` `max_distance_km` validation/CHECK as that spec's DoD (see
+   `docs/design/sovereign-core-money-boundary-0b1/resolution.md` L1). Also non-blocking:
+   `pnpm lint:gates` is broken in this environment (`ERR_MODULE_NOT_FOUND: @eslint/js` — declared as
+   `eslint: ^9.10.0` in `package.json` but the installed `eslint.config.js` imports `@eslint/js`,
+   which isn't a declared dependency at all) — hit independently by 3 separate agents this run; does
+   NOT block commits (pre-commit only lints staged JS/TS, none were staged), only spams the
+   `post-edit-gates.sh` PostToolUse hook. A JS-tooling fix, out of scope for this Rust-core arc.
 
 ## GUARDRAILS (every run)
 Enforce `rebuild/scripts/sovereign-gate.sh` + cargo tests. Commit+push ONLY when green, scoped, EXCLUDING the
