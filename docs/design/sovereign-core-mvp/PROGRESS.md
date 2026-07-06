@@ -38,12 +38,12 @@
 - **Plans committed** (`33caae75`): MANIFESTO/DECISIONS/ANALYSIS/GRAND-PLAN/LEAD-REVIEW/STRUCTURE-UPGRADE.
 
 ## NEXT SEQUENCE
-1. **B1 next increments (warn mode, ONE check at a time):** add the **fable-without-override** check —
-   `model: fable` → warn unless a non-expired human-only `.claude/state/fable-override` line
-   (`<slug>|<unix-expiry>`, wall-clock compared in-hook, fail-closed) is present; extend guard-bash
-   `OVERRIDES` + protect-paths so the agent can't write its own bypass. Then the `LANE-CLASS`/router-stamp
-   checks ONLY after the stamp convention is documented in AGENTS.md (else pure nudge-spam). Each with a
-   `guardrail-token-gates.mjs` case.
+1. **B1 fable-check — DONE 2026-07-06** (operator "use cheaper models instead of fable"): Check 2 in
+   `agent-dispatch-gate.sh` DENIES `model: fable` unless a non-expired human-only
+   `.claude/state/fable-override` line exists (fail-closed; guard-bash OVERRIDES + protect-paths pin it
+   human-only). Armament +6 fable cases; LIVE-VERIFIED (a real fable dispatch was refused). Model-routing
+   memory v3.1 = arc Fable-override rescinded. **Next B1 increment:** `LANE-CLASS`/router-stamp checks —
+   ONLY after the stamp convention is written into AGENTS.md (else pure nudge-spam), each with an armament case.
 2. **RATCHET model-check warn→deny** once `_hev` shows the `model:` habit took (measure with
    `scripts/audit-token-router.mjs` trend going down): flip the check's default `MODE` warn→deny (the
    ratchet point is commented in the hook). Re-run the armament (deny path already proven).

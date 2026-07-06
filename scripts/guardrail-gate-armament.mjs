@@ -99,6 +99,7 @@ check('sed -i into .claude/hooks now ALLOWED (unlock 340a8c3a)', bash('sed -i s/
 check('sed -i into packages/db/migrations still blocked (exit 2)', bash('sed -i s/a/b/ packages/db/migrations/999_x.sql').status === 2);
 check('redirect into .github blocked (exit 2)', bash('echo x > .github/workflows/ci.yml').status === 2);
 check('agent writing its own gate override blocked (exit 2)', bash('echo bypass > .claude/state/serious-override').status === 2);
+check('agent writing its own fable-override blocked (exit 2)', bash('echo x|9999999999 > .claude/state/fable-override').status === 2);
 check('git push origin main blocked (exit 2)', bash('git push origin main').status === 2);
 check('prod fly deploy blocked (exit 2)', bash('flyctl deploy --remote-only').status === 2);
 check('pnpm add blocked (exit 2)', bash('pnpm add leftpad').status === 2);

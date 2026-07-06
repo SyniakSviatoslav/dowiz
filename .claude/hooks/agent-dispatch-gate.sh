@@ -76,7 +76,9 @@ case "$TOOL_NAME" in
   *) exit 0 ;;
 esac
 
-MODE="${TOKEN_GATE_MODE:-warn}"   # RATCHET POINT: default warn; promote to deny when _hev shows habit.
+MODE="${TOKEN_GATE_MODE:-warn}"        # model-absent check: warn (86% today); ratchet to deny on _hev habit.
+FABLE_MODE="${TOKEN_FABLE_MODE:-deny}" # fable check: DENY by default (operator 2026-07-06: use cheaper models;
+                                       # low blast radius ~4%, human-only expiring override is the escape hatch).
 SLUG_SHORT="$(printf '%s' "$SLUG" | cut -c1-80)"
 
 _deny() {
@@ -95,6 +97,28 @@ MODEL_LC="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]
 if [ -z "$MODEL_LC" ]; then
   MSG="MODEL ROUTING: Agent dispatch '${SLUG_SHORT}' has no explicit model: — add one (haiku doer / opus reasoning-only; never Fable for lanes). AGENTS.md MODEL ROUTING."
   if [ "$MODE" = "deny" ]; then _deny "$MSG"; else _warn "$MSG [warn-only; ratcheting to deny once habitual]"; fi
+fi
+
+# ── Check 2: no Fable for dispatch lanes ─────────────────────────────────────
+# Operator 2026-07-06: "use cheaper models instead of fable". Human-only EXPIRING override:
+# .claude/state/fable-override, one line per grant `<slug>|<unix-expiry>`; a single non-expired
+# line authorizes the arc (D4-style). Expiry is embedded in the line and compared to wall-clock
+# HERE, fail-closed — never a cleanup step (lesson 2026-07-02-gate-state-file-expiry #47). guard-bash
+# OVERRIDES + protect-paths keep the file human-only, so an agent cannot write its own bypass.
+if printf '%s' "$MODEL_LC" | grep -q 'fable'; then
+  OVERRIDE_FILE="$ROOT/.claude/state/fable-override"
+  now="$(date +%s)"
+  active=0
+  if [ -f "$OVERRIDE_FILE" ]; then
+    while IFS='|' read -r _oslug oexp _rest || [ -n "$_oslug" ]; do
+      case "$oexp" in ''|*[!0-9]*) continue ;; esac   # malformed/empty expiry → ignore (fail-closed)
+      if [ "$oexp" -gt "$now" ]; then active=1; break; fi
+    done < "$OVERRIDE_FILE"
+  fi
+  if [ "$active" -eq 0 ]; then
+    MSG="MODEL ROUTING: Fable is OFF for dispatch lanes (operator 2026-07-06: use cheaper models — haiku doer / sonnet / opus reasoning). Re-dispatch '${SLUG_SHORT}' with a cheaper model; a human may add a non-expired .claude/state/fable-override line for a sanctioned exception."
+    if [ "$FABLE_MODE" = "warn" ]; then _warn "$MSG [warn-only]"; else _deny "$MSG"; fi
+  fi
 fi
 
 exit 0

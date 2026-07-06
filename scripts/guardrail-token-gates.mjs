@@ -11,7 +11,7 @@
 //
 // Run: node scripts/guardrail-token-gates.mjs
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -68,6 +68,31 @@ check('compliant dispatch still ALLOWED in deny mode (over-block guard)', d2.sta
 
 const d3 = run('TaskCreate', { subject: 'x' }, { TOKEN_GATE_MODE: 'deny' });
 check('TaskCreate never blocked even in deny mode (exact-name guard)', d3.status === 0 && !denies(d3));
+
+// ── Check 2: no Fable for lanes (deny by default; human-only EXPIRING override) ──
+console.log('agent-dispatch-gate.sh — Fable check (deny default + expiring override):');
+const STATE = join(FIX, '.claude/state');
+mkdirSync(STATE, { recursive: true });
+const OVERRIDE = join(STATE, 'fable-override');
+const now = Math.floor(Date.now() / 1000);
+const fableAgent = { description: 'author plan', subagent_type: 'general-purpose', model: 'fable', prompt: 'x' };
+const rmOverride = () => { if (existsSync(OVERRIDE)) unlinkSync(OVERRIDE); };
+
+rmOverride();
+check('fable dispatch with NO override → DENY', denies(run('Agent', fableAgent)));
+
+writeFileSync(OVERRIDE, `sanctioned-arc|${now + 3600}\n`);
+check('fable dispatch with a FRESH override → ALLOWED (over-block guard)', run('Agent', fableAgent).status === 0 && !denies(run('Agent', fableAgent)));
+
+writeFileSync(OVERRIDE, `stale-arc|${now - 10}\n`);
+check('fable dispatch with an EXPIRED override → DENY (fail-closed)', denies(run('Agent', fableAgent)));
+
+writeFileSync(OVERRIDE, 'garbage-no-expiry\n');
+check('fable dispatch with a MALFORMED override → DENY (fail-closed)', denies(run('Agent', fableAgent)));
+
+rmOverride();
+check('fable check honors TOKEN_FABLE_MODE=warn → warn, no block', run('Agent', fableAgent, { TOKEN_FABLE_MODE: 'warn' }).status === 0 && !denies(run('Agent', fableAgent, { TOKEN_FABLE_MODE: 'warn' })));
+check('non-Fable model (haiku) is NOT touched by the Fable check', run('Agent', { description: 'x', subagent_type: 'Explore', model: 'haiku', prompt: 'x' }).status === 0 && !denies(run('Agent', { description: 'x', subagent_type: 'Explore', model: 'haiku', prompt: 'x' })));
 
 // ── degraded (fail-open) ─────────────────────────────────────────────────────
 console.log('agent-dispatch-gate.sh — degraded (fail-open on unparseable input):');

@@ -51,7 +51,7 @@ case "$FILE" in
   *) REL="$FILE" ;;
 esac
 
-PROTECTED='(^|/)(migrations|\.github)/|(^|/)(fly\.toml|Dockerfile|pnpm-lock\.yaml)$|/package\.json$|packages/shared-types/|packages/db/|/contracts/|\.contract\.|/\.env'
+PROTECTED='(^|/)(migrations|\.github)/|(^|/)(fly\.toml|Dockerfile|pnpm-lock\.yaml)$|/package\.json$|packages/shared-types/|packages/db/|/contracts/|\.contract\.|/\.env|\.claude/state/fable-override'
 
 if echo "$REL" | grep -qE "$PROTECTED"; then
   echo "BLOCKED: '$REL' is in a protected zone (contracts/schema/infra/governance). This is an IMPROVEMENT requiring manual approval." >&2

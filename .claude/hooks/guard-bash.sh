@@ -83,7 +83,7 @@ INTERP_WRITE='(python[0-9.]*[[:space:]]+-[A-Za-z]*c|node[[:space:]]+-e|ruby[[:sp
 printf '%s' "$CMD" | grep -qE "$INTERP_WRITE" && mutates=1
 
 # --- 1) HUMAN-ONLY gate-override files: the agent must never write its own bypass ---
-OVERRIDES='\.claude/state/(serious-override|redline-confirmed)'
+OVERRIDES='\.claude/state/(serious-override|redline-confirmed|fable-override)'
 if [ "$mutates" -eq 1 ] && printf '%s' "$CMD" | grep -qE "$OVERRIDES"; then
   _block "'.claude/state/{serious-override,redline-confirmed}' are HUMAN-ONLY release files. The human types the override themselves (e.g. via '! <command>'). An agent writing its own gate bypass defeats the gate."
 fi
