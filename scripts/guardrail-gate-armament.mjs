@@ -90,7 +90,13 @@ check('stale (>60min) confirmation does NOT release the gate (DENY)', denies(run
 // ── guard-bash.sh (blocking = exit 2) ───────────────────────────────────────
 console.log('guard-bash.sh:');
 const bash = (command) => runHook('guard-bash.sh', { command });
-check('sed -i into .claude/hooks blocked (exit 2)', bash('sed -i s/a/b/ .claude/hooks/serious-gate.sh').status === 2);
+// .claude/hooks is AGENT-EDITABLE since the operator unlock (340a8c3a: ".claude/* unlock …
+// money/secrets/schema/CI + human-only override files stay protected"). guard-bash no longer
+// blocks a sed into it — this assertion was stale-red from 340a8c3a onward (gate-armament isn't in
+// pre-commit, so it went unnoticed). It now asserts the UNLOCKED reality; the still-protected zones
+// below (schema/migrations, .github, override files) keep guard-bash's sed-mutation coverage proven.
+check('sed -i into .claude/hooks now ALLOWED (unlock 340a8c3a)', bash('sed -i s/a/b/ .claude/hooks/serious-gate.sh').status === 0);
+check('sed -i into packages/db/migrations still blocked (exit 2)', bash('sed -i s/a/b/ packages/db/migrations/999_x.sql').status === 2);
 check('redirect into .github blocked (exit 2)', bash('echo x > .github/workflows/ci.yml').status === 2);
 check('agent writing its own gate override blocked (exit 2)', bash('echo bypass > .claude/state/serious-override').status === 2);
 check('git push origin main blocked (exit 2)', bash('git push origin main').status === 2);
