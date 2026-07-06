@@ -23,12 +23,18 @@ const EDIT_TOOLS = ['Edit', 'Write', 'MultiEdit'];
 // UserPromptSubmit nudge remains). It is intentionally absent from this list so this guardrail
 // matches that decision instead of demanding a hook the operator removed. If the council gate is
 // ever re-enabled, re-add it here so its matcher stays Edit|Write|MultiEdit (no MultiEdit bypass).
+// agent-dispatch-gate.sh (STRUCTURE-UPGRADE Part B / B1, 2026-07-06): the MODEL ROUTING dispatch
+// gate. Both dispatch tool names asserted (Agent = current, Task = future rename) so the matcher
+// can't drift out from under the gate. Ships in warn-mode (never blocks) — but #47 warns the
+// easiest "fix" for a noisy gate is to unregister it, so registration is pinned here to fail loudly.
+const DISPATCH_TOOLS = ['Agent', 'Task'];
 const MUST_COVER = [
   { hook: 'protect-paths.sh', event: 'PreToolUse', tools: EDIT_TOOLS },
   { hook: 'pre-edit-lessons.sh', event: 'PreToolUse', tools: EDIT_TOOLS },
   { hook: 'red-line-doubt-gate.sh', event: 'PreToolUse', tools: EDIT_TOOLS },
   { hook: 'post-edit-gates.sh', event: 'PostToolUse', tools: EDIT_TOOLS },
   { hook: 'guard-bash.sh', event: 'PreToolUse', tools: ['Bash'] },
+  { hook: 'agent-dispatch-gate.sh', event: 'PreToolUse', tools: DISPATCH_TOOLS },
 ];
 
 if (!existsSync(SETTINGS)) {

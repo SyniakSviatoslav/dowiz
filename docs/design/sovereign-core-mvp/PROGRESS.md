@@ -10,7 +10,18 @@
 `rebuild/crates/api/src/routes/orders/*`, `rebuild/crates/domain/{Cargo.toml,src/codec*}`.
 
 ## DONE (2026-07-06)
-- **STRUCTURE-UPGRADE Part B · B0 baseline (this run):** built `scripts/audit-token-router.mjs` — the
+- **STRUCTURE-UPGRADE Part B · B1 warn-gate (this run; operator picked rollout A = warn-then-ratchet):**
+  new `.claude/hooks/agent-dispatch-gate.sh` — PreToolUse `Agent|Task` gate, WARN mode (never blocks),
+  logs `_hev` + nudges on the one check B0 proved matters most (missing `model:`, 86%). Deny path armed
+  (`TOKEN_GATE_MODE=deny`) so the ratchet is a config flip. Armament `scripts/guardrail-token-gates.mjs`
+  (11 cases, red→green — caught a real tab-vs-newline empty-field parse bug). Registered in
+  `settings.json`; pinned in `guardrail-hook-matchers.mjs` (#47 anti-unregister). **LIVE-VERIFIED:** a
+  real model-less Explore dispatch fired the hook → `_hev` warn, non-blocking (agent completed).
+- **Fixed a pre-existing stale governance test** (`guardrail-gate-armament.mjs`): the `340a8c3a` unlock
+  narrowed guard-bash to make `.claude/hooks/` agent-editable but left the "sed into .claude/hooks blocked"
+  assertion red (gate-armament isn't in pre-commit, so it went unnoticed). Now asserts the unlocked reality
+  + keeps a still-protected-zone (migrations) sed-block case. red→green.
+- **STRUCTURE-UPGRADE Part B · B0 baseline (prev run):** built `scripts/audit-token-router.mjs` — the
   deterministic $0 read-only auditor (B4's script, needed first for B0). Self-test red→green proven
   (a/e→exit1 + over-block guards for the JSON-blob heuristic + TaskCreate-exclusion). Ran it over 95
   transcripts → baseline appended as §10 to `docs/research/token-economy-comparison-2026-07-05.md`.
@@ -27,17 +38,21 @@
 - **Plans committed** (`33caae75`): MANIFESTO/DECISIONS/ANALYSIS/GRAND-PLAN/LEAD-REVIEW/STRUCTURE-UPGRADE.
 
 ## NEXT SEQUENCE
-1. **STRUCTURE-UPGRADE.md Part B · B1** — the dispatch gate. B0 (DONE) changed its shape: a blind hard-DENY
-   on missing `model:` would block ~90% of the real dispatch pattern (incl. 106 legit Explore lanes +
-   triad council). **DECISION NEEDED before B1 ships (see BLOCKERS): warn-then-ratchet vs grace-flagged
-   hard-deny.** Recommended sequence once decided: land B1 as PostToolUse WARN first (logs `_hev` WARN +
-   names the `model:`/`LANE-CLASS:` fix, ZERO block), let the stamp habit build in `_hev`, THEN promote the
-   habitual-compliant checks to PreToolUse DENY. Still: ONE check at a time, each with a
-   `guardrail-token-gates.mjs` armament case proving DENY + non-over-block (narrow-never-remove; #1 risk =
-   #47 wholesale-unregister). `context-budget-guard.sh` (B2) already staged in `proposed-hooks/`.
-1b. **B5 wiring (cheap, do alongside):** add `node scripts/audit-token-router.mjs --self-test` to the
-   guardrail suite / weekly curation so the auditor itself can't rot; feed its exit-1 into THE EYE as a `bad`
-   signal once B1 is armed.
+1. **B1 next increments (warn mode, ONE check at a time):** add the **fable-without-override** check —
+   `model: fable` → warn unless a non-expired human-only `.claude/state/fable-override` line
+   (`<slug>|<unix-expiry>`, wall-clock compared in-hook, fail-closed) is present; extend guard-bash
+   `OVERRIDES` + protect-paths so the agent can't write its own bypass. Then the `LANE-CLASS`/router-stamp
+   checks ONLY after the stamp convention is documented in AGENTS.md (else pure nudge-spam). Each with a
+   `guardrail-token-gates.mjs` case.
+2. **RATCHET model-check warn→deny** once `_hev` shows the `model:` habit took (measure with
+   `scripts/audit-token-router.mjs` trend going down): flip the check's default `MODE` warn→deny (the
+   ratchet point is commented in the hook). Re-run the armament (deny path already proven).
+3. **B2:** `cp docs/operating-model/proposed-hooks/context-budget-guard.sh .claude/hooks/` + register under
+   `UserPromptSubmit` with `CONTEXT_WINDOW=1000000 CONTEXT_BUDGET_PCT=30` (fires at 300K). Re-arm its fixtures.
+4. **B3** distill-nudge (PostToolUse Bash, WARN) → **B4** wire `audit-token-router` into weekly curation +
+   THE EYE (`--self-test` in the guardrail suite so the auditor can't rot; exit-1 = a `bad` EYE signal) →
+   **B5** ratchets (pre-commit registration pins, KNOWLEDGE-AS-CIRCUITS entry, ledger).
+5. Then **PART A** (incremental modular strangler moves) after the Part B exit gate. All BEFORE money.
 2. **STRUCTURE-UPGRADE.md Part A** — incremental strangler moves (A0 `module.toml` manifests, A1 boundary
    gate, A2 `channel.rs` pilot, A4 route-freeze, A5 placement). A3 (orders split) BLOCKED on GRAND-PLAN 0b-5.
 3. **Money boundary — GRAND-PLAN 0b:** extract `pricing.rs` (f64-boundary split; f64 haversine stays in
@@ -54,13 +69,6 @@ in BLOCKERS below (do NOT guess or ship) on: unresolvable gate-red, byte-parity 
 uncertainty, a harness edit risking recoverability, or a genuine product-vision fork. Skip an unresolved
 recorded blocker. Keep context lean — delegate fiddly/risky work to fresh workers with an explicit `model:`.
 
-## BLOCKERS (awaiting operator — soft: do not block other Part-B/GRAND-PLAN work)
-- **B1 rollout mode (design fork surfaced by the B0 data).** B0 measured that ≈90% of real dispatches
-  omit `model:` (886-ish incl. Explore + the triad council agents). A blind hard-DENY B1 would block the
-  operator's own normal dispatch pattern from call one — an over-block against live workflow, which the
-  autonomy mandate says to STOP + record rather than guess. Two safe paths:
-  (A) **warn-then-ratchet** — B1 ships as a PostToolUse WARN that names the fix and logs `_hev`; promote to
-      PreToolUse DENY per-check only once the log shows the stamp habit took (recommended; lowest blast radius).
-  (B) **grace-flagged hard-deny** — ship DENY now behind a human-only expiring `.claude/state/token-gate-grace`
-      that fails OPEN until a date, so the operator opts into teeth when ready.
-  Auditor + baseline are already committed and useful regardless. Awaiting operator pick of A vs B.
+## BLOCKERS (awaiting operator)
+- _none currently._ (B1 rollout fork RESOLVED 2026-07-06: operator chose **A · warn-then-ratchet**; B1
+  warn-gate shipped + live-verified this run. Ratchet to deny is data-gated on the `_hev` habit trend.)

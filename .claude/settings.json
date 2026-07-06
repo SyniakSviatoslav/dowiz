@@ -63,6 +63,15 @@
       "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh\""
      }
     ]
+   },
+   {
+    "matcher": "Agent|Task",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/agent-dispatch-gate.sh\""
+     }
+    ]
    }
   ],
   "PostToolUse": [
