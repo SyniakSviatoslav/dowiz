@@ -1,0 +1,115 @@
+# rebuild/deny.toml — cargo-deny supply-chain gate (Phase-0b "seal the core" hardening).
+#
+# Wired as Gate 3 in scripts/sovereign-gate.sh. Four checks, each with teeth:
+#   advisories — RUSTSEC vulnerabilities (always hard-fail) + yanked crates (deny) + unmaintained
+#                (checked across the whole graph, incl. transitive/dev).
+#   bans       — wildcard ("*") version reqs denied outright; duplicate-version bloat warned, not
+#                blocked (Rust's ecosystem churns windows-* / http-* majors constantly — blocking
+#                on that would be noise, not signal). No blanket `skip`/`skip-tree` entries.
+#   licenses   — permissive allow-list only. The workspace's OWN crates (api, dowiz-core) are
+#                AGPL-3.0-or-later per ADR-020 — that is this project's license, not a dependency
+#                obligation, so it is scoped to those two crates via `exceptions`, never added to
+#                the blanket `allow` list (which would silently bless a third-party AGPL dep too).
+#                Any other copyleft dependency must earn its own narrow, commented exception here
+#                — never a blanket allow.
+#   sources    — crates.io only; anything else (git/other registries) is a hard fail. There are
+#                zero non-crates.io deps today (verified via Cargo.lock), so `allow-git` stays empty.
+#
+# Full docs: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+# Scoped to the triples this workspace actually targets: the dev/CI host (gnu), the eventual
+# musl/scratch static build (REBUILD-MAP §Dockerfile, not yet built), and the domain crate's
+# wasm32 sovereignty gate (Gate 1). This is NOT a "skip" hack — it prunes platform-conditional
+# deps (e.g. UEFI's `r-efi`, WASI-preview shims) that this project will never compile for, which
+# would otherwise pollute the license/advisory graph with irrelevant platforms.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "wasm32-unknown-unknown",
+]
+all-features = false
+no-default-features = false
+
+[output]
+feature-depth = 1
+
+# ── advisories: RUSTSEC vulnerabilities + yanked + unmaintained ─────────────────────────────────
+[advisories]
+# Vulnerabilities are always a hard error (not configurable in current cargo-deny — the
+# `severity-threshold`/`vulnerability` knobs were removed upstream for exactly this reason).
+yanked = "deny"
+unmaintained = "all"
+# Deliberately empty: as of 2026-07-06 `cargo deny check advisories` surfaces two real,
+# unresolved findings — RUSTSEC-2023-0071 (rsa crate, Marvin timing-sidechannel, no patch
+# upstream yet; reached via web-push -> jwt-simple -> superboring -> rsa) and a yanked
+# `num-bigint 0.4.7` (reached via jsonwebtoken -> simple_asn1). Neither is ignored here: the
+# point of this gate is that it can go RED on a real issue, not rubber-stamp it away. Both are
+# reported to the operator as actionable follow-ups (bump/replace the JWT/push dependency
+# chain), not silenced in config.
+ignore = []
+
+# ── bans: no wildcard deps, no blanket skips ────────────────────────────────────────────────────
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# Path deps between our OWN private (publish = false) workspace crates — e.g. api's
+# `domain = { package = "dowiz-core", path = "../domain" }` — have no registry version and would
+# otherwise trip `wildcards` as a false positive. This does NOT weaken the check against the
+# real risk (an unpinned "*" requirement on a public-registry crate still denies).
+allow-wildcard-paths = true
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+allow-workspace = false
+allow = []
+deny = []
+skip = []
+skip-tree = []
+
+# ── licenses: permissive allow-list; copyleft is exception-only, never blanket ─────────────────
+[licenses]
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.8
+exceptions = [
+    # This project's own crates — AGPL-3.0-or-later is the workspace's license (ADR-020), not a
+    # dependency obligation. Scoped per-crate so a THIRD-PARTY AGPL dependency would still fail.
+    { allow = ["AGPL-3.0-or-later"], crate = "api" },
+    { allow = ["AGPL-3.0-or-later"], crate = "dowiz-core" },
+
+    # ece (RFC 8188 HTTP Encrypted Content-Encoding, pulled in transitively by web-push for
+    # VAPID push-payload encryption) is MPL-2.0 — weak, file-level copyleft: obligations attach
+    # only to modifications of ece's own source files, not to this workspace. Reviewed and
+    # accepted 2026-07-06 for Phase-0b. Flagged here (NOT in the blanket `allow` list above) so
+    # it stays visible to future license review instead of silently blessing copyleft-in-general.
+    { allow = ["MPL-2.0"], crate = "ece" },
+]
+
+[licenses.private]
+ignore = false
+
+# ── sources: crates.io only ─────────────────────────────────────────────────────────────────────
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
+
+[sources.allow-org]
+github = []
+gitlab = []
+bitbucket = []
