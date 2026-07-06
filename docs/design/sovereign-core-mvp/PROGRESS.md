@@ -54,11 +54,15 @@
 4. **B3 — DONE 2026-07-06:** `distill-nudge.sh` (PostToolUse Bash, WARN) — nudges (never blocks) when a
    command returns >8K chars undistilled; size + distill-marker computed in-parser (multi-line-command safe);
    `additionalContext` channel + `_hev` warn. +6 armament cases; LIVE-VERIFIED (fired on a real 8.3K dump).
-   Next: **B4** wire `audit-token-router` into weekly curation + THE EYE (`--self-test` in the guardrail
-   suite so the auditor can't rot; exit-1 = a `bad` EYE signal) → **B5** ratchets (pin `context-budget-guard.sh`
-   + `distill-nudge.sh` in `guardrail-hook-matchers.mjs`, KNOWLEDGE-AS-CIRCUITS entry, ledger). NOTE B5:
-   context-budget-guard + distill-nudge registrations not yet pinned in hook-matchers.
-5. Then **PART A** (incremental modular strangler moves) after the Part B exit gate. All BEFORE money.
+5. **B4/B5 anti-rot wiring — DONE 2026-07-06** (motivated by the stale gate-armament found this session —
+   armaments off the enforced runner rot): new `scripts/run-armaments.sh` runs the 5 fast governance
+   armaments (hook-matchers, gate-armament, token-gates, `audit-token-router --self-test`, ledger-integrity)
+   DECOUPLED from the slow pnpm build — run it before any `--no-verify` harness commit. Wired into
+   `.husky/pre-commit` step 1.4d. `distill-nudge.sh` + `context-budget-guard.sh` registrations now PINNED in
+   `guardrail-hook-matchers.mjs` (8 gates). **Remaining B5** (deferred): KNOWLEDGE-AS-CIRCUITS registry entry
+   (a `require_together` circuit: a committed script that dispatches agents must contain `model:`) + wire
+   `run-armaments.sh` into THE EYE (`proposed-eye/eye-guard.sh`) once THE EYE is applied (still proposed).
+6. **Then PART A** (incremental modular strangler moves) after the Part B exit gate. All BEFORE money.
 2. **STRUCTURE-UPGRADE.md Part A** — incremental strangler moves (A0 `module.toml` manifests, A1 boundary
    gate, A2 `channel.rs` pilot, A4 route-freeze, A5 placement). A3 (orders split) BLOCKED on GRAND-PLAN 0b-5.
 3. **Money boundary — GRAND-PLAN 0b:** extract `pricing.rs` (f64-boundary split; f64 haversine stays in

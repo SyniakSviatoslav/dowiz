@@ -28,6 +28,9 @@ const EDIT_TOOLS = ['Edit', 'Write', 'MultiEdit'];
 // can't drift out from under the gate. Ships in warn-mode (never blocks) — but #47 warns the
 // easiest "fix" for a noisy gate is to unregister it, so registration is pinned here to fail loudly.
 const DISPATCH_TOOLS = ['Agent', 'Task'];
+// token-reduction gates (STRUCTURE-UPGRADE Part B): registration pinned so the #47 "just
+// unregister the noisy gate" anti-pattern fails loudly in pre-commit. context-budget-guard has no
+// tool matcher (UserPromptSubmit) → tools:[] just asserts it stays registered.
 const MUST_COVER = [
   { hook: 'protect-paths.sh', event: 'PreToolUse', tools: EDIT_TOOLS },
   { hook: 'pre-edit-lessons.sh', event: 'PreToolUse', tools: EDIT_TOOLS },
@@ -35,6 +38,8 @@ const MUST_COVER = [
   { hook: 'post-edit-gates.sh', event: 'PostToolUse', tools: EDIT_TOOLS },
   { hook: 'guard-bash.sh', event: 'PreToolUse', tools: ['Bash'] },
   { hook: 'agent-dispatch-gate.sh', event: 'PreToolUse', tools: DISPATCH_TOOLS },
+  { hook: 'distill-nudge.sh', event: 'PostToolUse', tools: ['Bash'] },
+  { hook: 'context-budget-guard.sh', event: 'UserPromptSubmit', tools: [] },
 ];
 
 if (!existsSync(SETTINGS)) {
