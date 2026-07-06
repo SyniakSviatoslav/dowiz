@@ -29,6 +29,14 @@ CI wiring, cargo-deny, `sales_channel` entity.
 - **Effort:** S ≤ ½ day · M = 1–2 days · L = 3–5 days (lane-days, haiku-doer where routable).
 - Ship discipline applies to every shipping step: feature branch → staging deploy (migrations on
   staging DB FIRST) → proof pasted → prod only on explicit approval/merge.
+- **Module placement (BINDING — STRUCTURE-UPGRADE A5):** every NEW hub feature below (1.1 channels
+  registry, 1.5 channels surface, 2.1 distribution, 2.4 aggregator-view trait, and any Phase-1/2
+  hub module) lands as `rebuild/crates/api/src/modules/<name>/` WITH a `module.toml` manifest
+  (schema: STRUCTURE-UPGRADE.md §MODULE-CONTRACT), consuming/emitting only `Envelope<Event>` via
+  ports — NEVER importing another module's internals. Each step keeps its own scope/gate/council as
+  written; this pins only WHERE it lands, and `scripts/module-integrity.mjs` (armed by A1) enforces
+  the boundary mechanically (undeclared `use crate::modules::<other>` reds pre-commit). The pilot
+  `modules/channel_attribution/` (A2) is the reference shape.
 
 ---
 

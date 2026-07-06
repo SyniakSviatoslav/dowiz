@@ -27,6 +27,9 @@ else
   echo "cargo not installed — skipping the crate-dep reality check (self-test still ran in 1.4d; CI enforces the full gate)."
 fi
 
+echo "1.4f: legacy-api freeze (strangled Node shell apps/api may not grow route registrations)..."
+node scripts/guardrail-legacy-freeze.mjs || exit 1
+
 echo "1.5: i18n parity (no missing/TODO translations)..."
 if git diff --cached --name-only --diff-filter=ACM | grep -qE 'packages/ui/src/lib/i18n(-catalog)?\.ts$'; then
   pnpm exec tsx scripts/i18n-parity.ts || exit 1

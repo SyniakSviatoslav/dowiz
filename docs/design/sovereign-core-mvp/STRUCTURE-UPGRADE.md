@@ -307,6 +307,13 @@ are exempt, mirroring the wasm32 gate's `--lib` scope so the two gates cannot dr
 - **Gate (D5):** the guardrail in pre-commit. **RED proof:** add a dummy route registration to
   `apps/api` on a throwaway branch → red.
 - **Red-line:** no · **Effort:** S
+- **STATUS: ✅ DONE 2026-07-06.** `scripts/guardrail-legacy-freeze.mjs` — counts Fastify route
+  registrations in `apps/api/src` (method call + leading-`/` string path; excludes tests/scripts) and
+  reds on INCREASE. Baseline `scripts/legacy-api-baseline.json` = **237** across 68 files (the JS
+  match-count; the shell's real leaf-route surface). Decrease → `--update` ratchets the floor down.
+  Hermetic `--self-test` (regex counts routes not `Map/params.get`; grew→red / shrank / frozen). RED
+  proof: a dummy `apps/api` route → `237 → 238 +1` red (names the file) → remove → green. Wired:
+  `--self-test` in `run-armaments.sh` + real check in `.husky/pre-commit` 1.4f. Ledger #88.
 
 ### A5 · Placement rule for all Phase-1/2 hub work (paper, S)
 - **Scope:** one binding convention added to GRAND-PLAN's conventions block: every new hub
@@ -316,6 +323,16 @@ are exempt, mirroring the wasm32 gate's `--lib` scope so the two gates cannot dr
   steps keep their own scopes, gates, and councils (1.1/1.2/2.2/2.3 stay council-gated as
   written there); this move only pins WHERE they land, and A1's gate enforces it mechanically.
 - **Gate:** `module-integrity.mjs` (already armed by A1). **Red-line:** no · **Effort:** S
+- **STATUS: ✅ DONE 2026-07-06.** Binding convention added to `GRAND-PLAN.md` §Conventions ("Module
+  placement (BINDING — STRUCTURE-UPGRADE A5)"): every new hub feature lands as
+  `rebuild/crates/api/src/modules/<name>/` with a manifest, `Envelope<Event>` via ports only, no
+  cross-module internals — `module-integrity.mjs` enforces it. `modules/channel_attribution/` (A2) is
+  the reference shape. Paper move; the gate is A1's (already armed).
+
+**PART A EXIT (2026-07-06):** A0 · A1 · A2 · A4 · A5 all ✅ DONE + gated. A3 (orders split) stays
+BLOCKED on GRAND-PLAN 0b-5 + 1.3 (hard dependency — do not start early; it sits on the #1 failure root).
+→ Next: the red-line **money boundary** (GRAND-PLAN 0b-1 — extract `pricing.rs` with the f64-boundary
+split, decorrelated hand-derived oracle) in a FRESH session.
 
 ## Deferred (YAGNI — each with its unlock trigger, D6 discipline)
 

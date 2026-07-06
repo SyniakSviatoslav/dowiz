@@ -30,9 +30,20 @@ FRESH session (F5 anti-context-rot).
   + 8-line `pub use` shim at the old path (single call site untouched) + hub-module manifest. `mod modules;`
   in main.rs. Proofs: empty byte-diff, 9 moved tests pass, `cargo check -p api` + module-integrity green,
   RED proof (blanked shim → E0425 at the call site → restore). Ledger #87. Landing zone for GRAND-PLAN 1.1/1.5.
-- **NEXT: A4** (legacy `apps/api` route-registration freeze guardrail — count baseline + `guardrail-legacy-freeze.mjs`
-  reds on INCREASE) → **A5** (placement-rule paper into GRAND-PLAN conventions block). A3 stays BLOCKED on
-  GRAND-PLAN 0b-5 + 1.3. After A4/A5 → Part A exit; then the red-line money boundary (GRAND-PLAN 0b, FRESH session).
+- **A4 legacy-freeze — ✅ DONE.** `scripts/guardrail-legacy-freeze.mjs` + `legacy-api-baseline.json`
+  (count=237/68 files) reds on any `apps/api` route-registration INCREASE; hermetic `--self-test`; RED
+  proof (237→238 → red → remove). Wired: run-armaments (self-test) + pre-commit 1.4f (real). Ledger #88.
+- **A5 placement rule — ✅ DONE.** Binding "Module placement (A5)" convention added to GRAND-PLAN
+  §Conventions — new hub features land in `crates/api/src/modules/<name>/` with a manifest, events-only,
+  enforced by module-integrity. Paper move; gate = A1's.
+- **🟢 PART A EXIT (2026-07-06):** A0·A1·A2·A4·A5 all DONE + gated (3 commits: fd444fbc A0/A1, f1e647fb A2,
+  + A4/A5). A3 (orders split) stays BLOCKED on GRAND-PLAN 0b-5 + 1.3 (do NOT start early — #1 failure root).
+- **NEXT PHASE = the red-line MONEY BOUNDARY (GRAND-PLAN 0b-1), in a FRESH session (F5):** extract
+  `pricing.rs` (884-line) into the core with the f64-boundary split (pure integer money → core; f64
+  haversine STAYS in the shell), then corridors behind the single `decide` door. Verify with a
+  DECORRELATED, independent, hand-derived (NON-mirror) money oracle + byte-parity + sovereign gate green
+  — delegate the oracle to a FRESH opus worker (a same/rotted reviewer is how #56 shipped "certified
+  green"). This is red-line: invariant-guardian + council. STOP-and-record if any byte-parity mismatch.
 
 ## DONE (2026-07-06)
 - **STRUCTURE-UPGRADE Part B · B1 warn-gate (this run; operator picked rollout A = warn-then-ratchet):**

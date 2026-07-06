@@ -28,6 +28,7 @@ run "gate-armament (serious/red-line/guard-bash armed, not just registered)" nod
 run "token-gates (dispatch warn/deny/fable/distill armed + over-block guards)" node scripts/guardrail-token-gates.mjs
 run "audit-token-router --self-test (a/e → exit1, over-block guards)" node scripts/audit-token-router.mjs --self-test
 run "module-integrity --self-test (manifest-boundary DENY + over-block guards)" node scripts/module-integrity.mjs --self-test
+run "legacy-freeze --self-test (route-count regex + freeze compare logic)" node scripts/guardrail-legacy-freeze.mjs --self-test
 run "ledger-integrity (unique rows)" node scripts/guardrail-ledger-integrity.mjs
 rm -f /tmp/armament-$$.out 2>/dev/null || true
 
