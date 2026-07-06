@@ -19,6 +19,45 @@ entry (YAGNI — no committed agent-dispatching script exists to guard yet); THE
 **→ Next phase = PART A** (modular strangler moves) — a different, Rust-crate-touching workstream; start it in a
 FRESH session (F5 anti-context-rot).
 
+## PHASE 0b STATUS — 0b-1 + 0b-2 DONE (2026-07-06)
+
+- **0b-2 event vocabulary + `Envelope { seq, at, cause }` (GRAND-PLAN 0b-2) — ✅ DONE (this commit).**
+  Grew the kernel alphabet from the lone `StatusChanged` to the money/binding facts the live lifecycle
+  already produces (matching `policy::TransitionEffects`): `Event::Priced { subtotal, delivery_fee,
+  tax_total, total }` (all `Lek`), `RefundObligated { amount: Lek }`, `BindingTerminalized`. Added
+  `OrderTotals` (4 integer `Lek`), `CommandHash(String)` (serde-transparent), and
+  `Envelope { seq: u64, at: Ts, cause: CommandHash, event: Event }`. `OrderState` grew a money snapshot
+  (`totals: Option<OrderTotals>`), `refund_due: Option<Lek>`, and `binding_terminalized: bool`;
+  `genesis()` stays `const` (None/None/false). `fold` is now the **accumulating** fold — exhaustive
+  `match *event` (no `_` arm), each arm carries `..*state` and writes only its own field, SET-not-sum on
+  money so the fold stays TOTAL (no fallible arithmetic). Added `replay_envelopes`.
+  **KEY DESIGN CALLS (plan-vs-reality reconciliations):** (1) `CommandHash` is an OPAQUE core newtype
+  SUPPLIED by the shell (like `Ts`), NOT computed in-core — the plan's `codec/request_hash.rs`
+  placement pre-dated the discovery that `build_request_hash` lives in the `api` shell
+  (`routes/orders/request_hash.rs`), which the core cannot reach; the core owns only the type it carries.
+  (2) `decide` is UNCHANGED (still emits only `StatusChanged`) — EMITTING the new facts = corridor
+  wiring = 0b-3, deliberately deferred (scope discipline). The new aggregate is inert on the live path
+  (the api shell consumes only `kernel::{pricing,idempotency,policy}`, never `OrderState`/`fold`/`Event`
+  — invariant-guardian confirmed). (3) `at` stays on the frozen `StatusChanged`; the newer facts carry
+  no independent time — the `Envelope` records log-time.
+  **Gate (D5):** exhaustive-match compile gate = **rustc E0004** (no `_` arm → a new variant without a
+  fold arm is a hard COMPILE ERROR — the strongest gate, the compiler itself). RED proof re-verified:
+  injecting `Event::DummyRedProof` → `error[E0004]: non-exhaustive patterns … not covered`. BELT against
+  the one E0004 dodge (silencing it with `_ => *state`): a deterministic source self-test
+  `fold_stays_exhaustive_no_wildcard_arm` (reads fold's own source, whitespace-insensitive, fails on any
+  `_=>` arm; RED proof: inject `_=>` → test FAILED). **clippy `wildcard_enum_match_arm` was evaluated
+  as the belt and REJECTED as a false-green** — clippy 1.96 fires it only crate-wide on an owned
+  direct-binding match, NEVER on fold's `&Event`/deref match, so a fn-level `#[deny]` or gate lint would
+  have LOOKED green while guarding nothing (documented in `fold`'s doc-comment). Hard-Truth replay
+  extended (mixed-log reconstructs status+money+binding) + canonical-bytes round-trip property tests for
+  the grown alphabet AND for `Envelope` logs (cause included). **Verified:** 86 core lib + 6 hard_truth
+  + 9 kernel_hard_truth tests green; `sovereign-gate.sh` Gate 1 (wasm32) + Gate 2 (disallowed-types,
+  float-free) green; `cargo check -p api` clean (no shell regression); invariant-guardian read (opus,
+  decorrelated) = PASS/high/no-flags. Gate 3 (cargo-deny) fails ONLY on the pre-existing
+  RUSTSEC-2023-0071 (rsa Marvin Attack) + yanked num-bigint in the api web-push/jwt chain — NOT this
+  change (zero deps added, Cargo.lock untouched); tracked for the auth/crypto work. Files:
+  `rebuild/crates/domain/src/{kernel.rs,lib.rs}`, `tests/kernel_hard_truth.rs`. Commit: this change.
+
 ## PHASE 0b STATUS — 0b-1 DONE (2026-07-06, fresh session)
 - **0b-1 money boundary (GRAND-PLAN 0b-1) — ✅ DONE.** `pricing.rs` (884 lines) extracted from the
   `api` shell into `rebuild/crates/domain/src/kernel/pricing.rs` — integer-only by construction
@@ -102,22 +141,26 @@ FRESH session (F5 anti-context-rot).
 ## NEXT SEQUENCE
 **Part B (token-enforcement) = COMPLETE. Part A (modular topology) = COMPLETE (A0·A1·A2·A4·A5, commits
 fd444fbc→b6666bc6, ledgers #86–88). 0b-1 (money boundary) = COMPLETE (commit `c10814ab` — see PHASE 0b
-STATUS above).** The next UNCOMPLETED step is #1.
+STATUS above). 0b-2 (event vocabulary + Envelope) = COMPLETE (this commit — see PHASE 0b STATUS
+above).** The next UNCOMPLETED step is #2 (0b-3: compose corridors behind `decide`).
 
-1. **▶ NEXT — 0b-2: Event vocabulary + `Envelope { seq, at, cause }` (GRAND-PLAN 0b-2). FRESH SESSION
-   (F5 mandatory).** Grow the kernel's alphabet: `Event` gains `Priced { totals… }`,
-   `RefundObligated { amount }`, `BindingTerminalized { … }`; every event carried in
-   `Envelope { seq: u64, at: Ts, cause: CommandHash }` (`cause` = the codec/request_hash canonical
-   hash). `OrderState` grows a money snapshot (`Lek` totals, now available via `kernel::pricing`
-   post-0b-1) + `BindingState` so `fold` can accumulate. **Gate (D5):** exhaustive-match compile gate
-   (no `_` arm in `fold` — clippy `wildcard_enum_match_arm` deny) + Hard-Truth replay test extended +
-   canonical-bytes round-trip property test. RED proof: add a dummy variant without a fold arm →
-   compile fails; corrupt one serialized field → round-trip test red. **Red-line:** touches money
-   types — per the operator's 2026-07-06 directive, NO Triadic council; proceed on invariant-guardian
-   read + the deterministic gates above. **NOTE:** this touches `rebuild/crates/domain/src/codec.rs`
-   (`CommandHash` exposure) — check whether the concurrent `request_hash` workstream
-   (`rebuild/crates/domain/src/codec*`) has landed/is still in flight before touching that file; if
-   still concurrent, coordinate scope or defer the `codec.rs` sub-step and record in BLOCKERS.
+1. **0b-2 (event vocabulary + Envelope) — ✅ DONE** (this commit; see PHASE 0b STATUS above). The
+   concurrent `request_hash` workstream was already landed+clean (`codec.rs` @ `d5f9deb3`), so no
+   codec collision; `CommandHash` ended up an opaque core newtype (shell-supplied), not a codec fn.
+
+2. **▶ NEXT — 0b-3: Compose the corridors behind the single `decide` door (GRAND-PLAN 0b-3). FRESH
+   SESSION (F5 mandatory).** This is the WIRE step 0b-2 deliberately left undone: make `decide` EMIT
+   the new facts. Fold the pure corridors that today live beside `decide` — `policy::{actor-gate,
+   transition_effects (terminalize→BindingTerminalized, refund_due→RefundObligated), cc1_strand_guard,
+   needs_honest_dispatch}` + `kernel::pricing` (→ `Priced`) + `kernel::idempotency` — INTO the single
+   `decide` door, so one command yields the full event set (`StatusChanged` + the money/binding facts)
+   under one Envelope. **Gate (D5):** the existing Hard-Truth replay/determinism/round-trip suite must
+   stay green AND extend to assert `decide` now emits the composed facts on the relevant edges (e.g.
+   Cancel of a priced order → `[StatusChanged, BindingTerminalized, RefundObligated]`); byte-parity vs
+   the Node reference for any newly-emitted money numbers; sovereign gate green. **Red-line:** money
+   types — invariant-guardian read, NO council (removed 2026-07-06). STOP-and-record on any byte-parity
+   mismatch. **NOTE:** check the concurrent `request_hash`/orders workstream state before touching
+   `codec.rs`/`routes/orders/*`; those remain the "NOT ours, never commit" set (top of this file).
 2. Then 0b-3 (corridors behind `decide`), 0b-4 (Hard Truth L1–L2), 0b-5 (shell-flip, REUSE the
    existing cutover shadow-diff, F1), 0b-6 (CI+cargo-deny, `.github` operator-gated) → Phase 1 hub →
    Phase 2 MVP.

@@ -13,8 +13,9 @@
 //!   - Layer 3 Corridor — terminal absorption: no command produces an event out of a terminal state.
 
 use domain::{
-    ALL_STATUSES, Command, Event, OrderState, OrderStatus, Ts, decide, decode_log, encode_log, fold,
-    is_terminal, replay,
+    ALL_STATUSES, Command, CommandHash, Envelope, Event, Lek, OrderState, OrderStatus, OrderTotals,
+    Ts, canonical_bytes, decide, decode_log, encode_log, fold, from_bytes, is_terminal, replay,
+    replay_envelopes,
 };
 use proptest::prelude::*;
 
@@ -35,10 +36,31 @@ fn run(genesis: OrderState, commands: &[Command]) -> (OrderState, Vec<Event>) {
     (state, log)
 }
 
-/// The `to` a `StatusChanged` event carries (the only event variant today).
-fn event_to(e: &Event) -> OrderStatus {
-    let Event::StatusChanged { to, .. } = e;
-    *to
+/// The `to` a `StatusChanged` event carries (the status-moving variant). The 0b-2 money/binding
+/// facts do not move the machine, so only `StatusChanged` reports a target here.
+fn status_change_to(e: &Event) -> Option<OrderStatus> {
+    match e {
+        Event::StatusChanged { to, .. } => Some(*to),
+        Event::Priced { .. } | Event::RefundObligated { .. } | Event::BindingTerminalized => None,
+    }
+}
+
+/// A non-negative money amount (the only kind `Lek` represents).
+fn any_lek() -> impl Strategy<Value = Lek> {
+    (0i64..1_000_000_000).prop_map(|v| Lek::new(v).expect("non-negative"))
+}
+
+/// Any event variant — the full 0b-2 alphabet, with arbitrary caller-supplied data.
+fn any_event() -> impl Strategy<Value = Event> {
+    prop_oneof![
+        (any_status(), any_status(), any::<i64>())
+            .prop_map(|(from, to, t)| Event::StatusChanged { from, to, at: Ts(t) }),
+        (any_lek(), any_lek(), any_lek(), any_lek()).prop_map(|(subtotal, delivery_fee, tax_total, total)| {
+            Event::Priced { subtotal, delivery_fee, tax_total, total }
+        }),
+        any_lek().prop_map(|amount| Event::RefundObligated { amount }),
+        Just(Event::BindingTerminalized),
+    ]
 }
 
 /// Any command variant, with an arbitrary caller-supplied timestamp.
@@ -89,8 +111,10 @@ proptest! {
         for k in 0..=log.len() {
             let partial = replay(g, &log[..k]);
             if k > 0 {
-                // each prefix ends on exactly the status the k-th accepted event moved to
-                prop_assert_eq!(partial.status, event_to(&log[k - 1]));
+                // each prefix ends on exactly the status the k-th accepted event moved to (every
+                // event `run` accepts is a StatusChanged — `decide` emits nothing else pre-0b-3)
+                let moved_to = status_change_to(&log[k - 1]).expect("run's log is StatusChanged-only");
+                prop_assert_eq!(partial.status, moved_to);
             } else {
                 prop_assert_eq!(partial.status, OrderStatus::Pending);
             }
@@ -102,10 +126,13 @@ proptest! {
     /// command's time verbatim — time PASSES THROUGH, it is never invented by the core.
     #[test]
     fn decide_event_is_consistent_when_legal(status in any_status(), cmd in any_command()) {
-        let state = OrderState { status };
+        let state = OrderState { status, ..OrderState::genesis() };
         if let Ok(events) = decide(&state, cmd) {
             prop_assert_eq!(events.len(), 1);
-            let Event::StatusChanged { from, to, at } = events[0];
+            // `decide` emits ONLY `StatusChanged` (the money/binding facts are 0b-3-reachable, not here).
+            let Event::StatusChanged { from, to, at } = events[0] else {
+                return Err(TestCaseError::fail("decide must emit a StatusChanged"));
+            };
             prop_assert_eq!(from, status);
             prop_assert_eq!(to, cmd.target());
             prop_assert_eq!(at, cmd.at());
@@ -136,7 +163,7 @@ proptest! {
     fn terminal_states_absorb_all_commands(cmd in any_command()) {
         for &status in ALL_STATUSES.iter() {
             if is_terminal(status) {
-                let state = OrderState { status };
+                let state = OrderState { status, ..OrderState::genesis() };
                 prop_assert!(
                     decide(&state, cmd).is_err(),
                     "terminal {status:?} must absorb {cmd:?}"
@@ -144,4 +171,76 @@ proptest! {
             }
         }
     }
+
+    // ─────────────────── 0b-2 — the grown alphabet: fold totality + canonical bytes ───────────────────
+
+    /// The whole 0b-2 alphabet (not just the `decide`-reachable `StatusChanged`) folds TOTALLY: an
+    /// arbitrary log of any events never panics, and replaying it is deterministic. This exercises the
+    /// money/binding fold arms directly (they are not yet `decide`-reachable — that is 0b-3).
+    #[test]
+    fn fold_over_any_event_log_is_total_and_deterministic(events in prop::collection::vec(any_event(), 0..40)) {
+        let g = OrderState::genesis();
+        prop_assert_eq!(replay(g, &events), replay(g, &events));
+    }
+
+    /// Every event in the grown alphabet is faithfully persistable: an arbitrary log survives a
+    /// canonical-bytes round-trip unchanged, encoding is deterministic, and the state reconstructs
+    /// from the decoded log. Extends the pre-0b-2 codec-closure property to the money/binding facts.
+    #[test]
+    fn any_event_log_survives_canonical_bytes_round_trip(events in prop::collection::vec(any_event(), 0..40)) {
+        let g = OrderState::genesis();
+        let final_state = replay(g, &events);
+        let bytes = encode_log(&events).expect("encode");
+        prop_assert_eq!(encode_log(&events).expect("encode2"), bytes.clone()); // deterministic
+        let decoded = decode_log(&bytes).expect("decode");
+        prop_assert_eq!(&decoded, &events);
+        prop_assert_eq!(replay(g, &decoded), final_state);
+    }
+
+    /// An ENVELOPE log — the persisted row form carrying `seq`/`at`/`cause` — survives a
+    /// canonical-bytes round-trip unchanged (the `CommandHash` cause included), and replaying the
+    /// envelopes reconstructs exactly what folding the bare events does. This is the property mesh
+    /// replication + PQC signing stand on: every node derives identical bytes for the same log.
+    #[test]
+    fn envelope_log_round_trips_and_replays_to_the_same_state(events in prop::collection::vec(any_event(), 0..40)) {
+        let g = OrderState::genesis();
+        let envelopes: Vec<Envelope> = events
+            .iter()
+            .enumerate()
+            .map(|(i, &event)| Envelope {
+                seq: i as u64,
+                at: Ts(i as i64),
+                cause: CommandHash(format!("cause-{i}")),
+                event,
+            })
+            .collect();
+        let bytes = canonical_bytes(&envelopes).expect("encode envelopes");
+        prop_assert_eq!(canonical_bytes(&envelopes).expect("encode2"), bytes.clone()); // deterministic
+        let decoded: Vec<Envelope> = from_bytes(&bytes).expect("decode envelopes");
+        prop_assert_eq!(&decoded, &envelopes);
+        prop_assert_eq!(replay_envelopes(g, &decoded), replay(g, &events));
+    }
+}
+
+// A compile-time anchor for the 0b-2 DoD: `OrderTotals` is the money-snapshot shape the `Priced`
+// fact records, four integer `Lek` fields. Referencing it here keeps the import honest and documents
+// the exact shape a reader should expect from `state.totals`.
+#[test]
+fn order_totals_is_four_integer_lek_fields() {
+    let t = OrderTotals {
+        subtotal: Lek::new(1_000).unwrap(),
+        delivery_fee: Lek::new(200).unwrap(),
+        tax_total: Lek::new(120).unwrap(),
+        total: Lek::new(1_320).unwrap(),
+    };
+    // total == subtotal + delivery_fee + tax_total for this constructed snapshot (a reader's sanity
+    // check on the field meaning — the fold stores whatever the `Priced` fact carried, verbatim).
+    assert_eq!(
+        t.total,
+        t.subtotal
+            .checked_add(t.delivery_fee)
+            .unwrap()
+            .checked_add(t.tax_total)
+            .unwrap()
+    );
 }

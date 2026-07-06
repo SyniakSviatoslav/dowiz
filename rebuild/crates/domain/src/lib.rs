@@ -19,7 +19,10 @@ pub mod tenant;
 
 pub use codec::{CodecError, canonical_bytes, decode_log, encode_log, from_bytes};
 pub use error::{DomainError, ErrorCode, ErrorEnvelope};
-pub use kernel::{Command, Event, OrderState, Ts, decide, fold, replay};
+pub use kernel::{
+    Command, CommandHash, Envelope, Event, OrderState, OrderTotals, Ts, decide, fold, replay,
+    replay_envelopes,
+};
 // Sovereign-core money composition (GRAND-PLAN 0b-1) — re-exported so the shell adapter
 // (`api::routes::orders::pricing`) and pg.rs can `use domain::kernel::pricing::{…}` (or the flat
 // `domain::…`) for the pure integer money surface. The core `DeliveryTier`/`FeeLocation` are
