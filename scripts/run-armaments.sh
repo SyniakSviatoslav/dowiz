@@ -29,6 +29,7 @@ run "token-gates (dispatch warn/deny/fable/distill armed + over-block guards)" n
 run "audit-token-router --self-test (a/e → exit1, over-block guards)" node scripts/audit-token-router.mjs --self-test
 run "module-integrity --self-test (manifest-boundary DENY + over-block guards)" node scripts/module-integrity.mjs --self-test
 run "legacy-freeze --self-test (route-count regex + freeze compare logic)" node scripts/guardrail-legacy-freeze.mjs --self-test
+run "cloud-session-report --self-test (token/time parse + outbound secret-scan)" node scripts/cloud-session-report.mjs --self-test
 run "ledger-integrity (unique rows)" node scripts/guardrail-ledger-integrity.mjs
 rm -f /tmp/armament-$$.out 2>/dev/null || true
 

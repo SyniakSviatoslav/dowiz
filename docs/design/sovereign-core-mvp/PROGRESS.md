@@ -43,7 +43,7 @@ FRESH session (F5 anti-context-rot).
   haversine STAYS in the shell), then corridors behind the single `decide` door. Verify with a
   DECORRELATED, independent, hand-derived (NON-mirror) money oracle + byte-parity + sovereign gate green
   — delegate the oracle to a FRESH opus worker (a same/rotted reviewer is how #56 shipped "certified
-  green"). This is red-line: invariant-guardian + council. STOP-and-record if any byte-parity mismatch.
+  green"). This is red-line: invariant-guardian read (NO council — removed 2026-07-06). STOP-and-record if any byte-parity mismatch.
 
 ## DONE (2026-07-06)
 - **STRUCTURE-UPGRADE Part B · B1 warn-gate (this run; operator picked rollout A = warn-then-ratchet):**
@@ -89,9 +89,11 @@ fd444fbc→b6666bc6, ledgers #86–88 — see the PART A STATUS block above).** 
    re-derives expected values from the Node source + spec, NOT from the Rust code under test (a same/rotted
    reviewer is how #56 shipped "certified green") — plus BYTE-PARITY against the existing hand-derived test
    vectors (`order_total_composition_byte_parity_vs_hand_derived_vectors` etc. already in pricing.rs) + the
-   f64-ban clippy gate + `bash rebuild/scripts/sovereign-gate.sh` green. **Red-line:** invariant-guardian +
-   Triad Council (system-architect/breaker/counsel) BEFORE code. **STOP + record in BLOCKERS on ANY
-   byte-parity mismatch or money/RLS/auth uncertainty — do NOT guess or ship.** Keep the concurrent
+   f64-ban clippy gate + `bash rebuild/scripts/sovereign-gate.sh` green. **⛔ NO COUNCIL (removed 2026-07-06):**
+   do NOT convene any Triadic/Architect-Breaker-Counsel council — proceed DIRECTLY on the decorrelated
+   oracle + byte-parity + invariant-guardian read + gates. The design already exists (ADR + proposal +
+   resolution, commits fc0c4272→7584f035, council concluded GO) — build on it. **STOP + record in BLOCKERS on
+   ANY byte-parity mismatch or money/RLS/auth uncertainty — do NOT guess or ship.** Keep the concurrent
    request_hash work excluded from every commit.
 2. Then Envelope+events, proptests, shell-flip (REUSE the existing cutover shadow-diff, F1), CI+cargo-deny
    (`.github` operator-gated) → Phase 1 hub → Phase 2 MVP.
