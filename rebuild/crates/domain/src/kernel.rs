@@ -20,6 +20,15 @@
 //! status state machine expressed as the single `decide`/`fold` law, with time and identity entering
 //! only as data on a Command (never read from a clock or an RNG — Laws 1 & 2).
 
+// Sovereign-core Phase-Zero Step 3 — the pure lifecycle decisions that used to live in the `api`
+// shell (`routes/orders/state.rs`), now relocated into the core alongside the `decide`/`fold` law they
+// belong with. `policy` = actor-gate + fold-effects + CC-1 strand guards + honest-dispatch gate;
+// `idempotency` = the create-idempotency branch decision. Both are float/clock/entropy/IO-free (the
+// wasm sovereignty gate proves it). They are not yet composed INTO `decide` (that is the final wire
+// step); today they are the honest relocation of the decisions the shell already consumes.
+pub mod idempotency;
+pub mod policy;
+
 use crate::{DomainError, OrderStatus, order_status::assert_transition};
 use serde::{Deserialize, Serialize};
 
