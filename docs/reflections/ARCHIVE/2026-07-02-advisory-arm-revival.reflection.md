@@ -34,3 +34,11 @@ NEXT-TIME: When designing any recurring obligation, specify in the same breath (
 LINK:      docs/regressions/REGRESSION-LEDGER.md #48 ; scripts/agent-health-pass.mjs ;
            [[meta-loop-audit-2026-07-02]]
 ---
+
+**Curation note (librarian, 2026-07-06 weekly pass):** Council retro — cause-critic CONFIRMS the
+WHY (high confidence, no counter-example found). Fully closed: ledger row #48 already documents
+the guardrails this reflection called for (`scripts/guardrail-ledger-integrity.mjs`,
+`scripts/loops-registry-sync.mjs`, `scripts/agent-health-pass.mjs`), and the causal principle
+("a recurring obligation needs an artifact + a checker + a log line, or it dies") is already
+encoded in `CLAUDE.md`'s Self-improvement loop section. No new lesson — nothing left to distill.
+Archived.

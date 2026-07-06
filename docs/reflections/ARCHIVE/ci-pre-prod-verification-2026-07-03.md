@@ -109,3 +109,15 @@ green, red arms proven). Medium on FULL mode until it runs once in CI against a 
 - [[plane-telemetry-closed-loop-2026-07-02]] (durable-local illusion = same "property-of-the-target"
   category error as prod≠staging)
 - docs/design/ci-pre-prod-verification/proposal.md · docs/proposals/ci-pre-prod-verification-wiring.md
+
+---
+
+**Curation note (librarian, 2026-07-06 weekly pass):** Council retro — cause-critic CONFIRMS the
+common root across all six patterns (high confidence). Already fully distilled in a prior pass
+into `docs/lessons/2026-07-03-prod-staging-schema-drift.md` and
+`docs/lessons/2026-07-03-rotate-prod-role-staging-rehearsal.md` (ledger rows #51, #52); that
+lesson's Source line already referenced this file as archived, but the move never happened —
+performed now. CI wiring for `scripts/ci-connection-preflight.mjs` /
+`scripts/ci-migration-preflight.mjs` / `scripts/ci-schema-drift.mjs` remains a staged operator
+proposal (`docs/proposals/ci-pre-prod-verification-wiring.md`, protect-path) — carried forward
+as a PR proposal, not enacted here (out of librarian's writable scope). No new lesson needed.

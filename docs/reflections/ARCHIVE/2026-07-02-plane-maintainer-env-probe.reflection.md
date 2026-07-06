@@ -49,3 +49,15 @@ cse_01Psnn1SgcmYwwqpZoyE1xtv's transcript; explicitly flagged as the open verifi
 - [[plane-maintainer-agent-2026-07-02]]
 - [[claude-cloud-github-authz-2026-07-02]]
 - [[memory-corpus-meta-patterns-2026-07-02]] (verify-artifact-not-proxy)
+
+---
+
+**Curation note (librarian, 2026-07-06 weekly Council retro):** cause-critic CONFIRMS the WHY
+(high confidence — memory-as-proxy for remote mutable state is a real, reproducible hazard, not
+a coincidence). ratchet-critic: NOT distilled into `docs/lessons/` — the `pre-edit-lessons` hook
+fires only on Edit/Write/MultiEdit `tool_input.file_path`, never on a remote API tool call
+(`RemoteTrigger get/update/run`), so a docs/lessons entry here would be dead weight (never
+injects; violates "store must not grow" bias, same reasoning as the design-system-prune-collision
+precedent). Proposed instead as a CLAUDE.md pointer for a human to add — see PR PROPOSALS
+("Remote State Discipline: always `get` before `update`/`run` on cached remote API state") — the
+librarian does not write CLAUDE.md. Archived.

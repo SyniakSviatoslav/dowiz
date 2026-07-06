@@ -26,3 +26,19 @@ decisions (worktrees-by-default, re-verify a `--no-verify` commit) that need a h
 call, not a librarian promotion. Left in INBOX for the Council retro (CLAUDE.md self-improvement
 loop step 5, "On a big change / hard fix, the Council retro ... synthesises reflections") rather
 than archived — item 3's re-verify action is still open.
+
+---
+
+**Curation note (librarian, 2026-07-06 weekly Council retro):** cause-critic CONFIRMS the WHY
+(high confidence — shared mutable git index with no owner for staged-but-uncommitted state).
+ratchet-critic disposition of the three candidate ratchets:
+1. **Pre-commit session-attribution guard** — no-op. Self-flagged infeasible by the original
+   author; no session-attribution primitive exists in the harness.
+2. **Tier-2 "atomic edit→add→commit" lesson** — no-op. Would never inject: the `pre-edit-lessons`
+   hook fires only on Edit/Write/MultiEdit `tool_input.file_path`, never on a Bash `git commit`.
+3. **Re-verify commit `06471162` against the full gate** — no-op as a standing guardrail (a
+   one-off historical-commit check isn't mechanizable as a recurring gate). Note: `guard-bash.sh`
+   IS now registered (ledger row #47, same day), which is the practical safeguard against this
+   exact recurrence going forward — but does not retroactively re-verify that specific commit.
+Worktree-isolation-by-default for concurrent sessions is a process/tooling decision needing a
+human/Council call — carried forward as a PR proposal, not enacted here. Archived.

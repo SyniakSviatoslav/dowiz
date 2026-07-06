@@ -31,3 +31,9 @@ NEXT-TIME: Any gate released by a state file needs (a) an expiry in the state it
 LINK:      docs/regressions/REGRESSION-LEDGER.md #47 ; scripts/guardrail-gate-armament.mjs ;
            memory meta-loop-audit-2026-07-02
 ---
+
+**Curation note (librarian, 2026-07-06 weekly pass):** Council retro — cause-critic CONFIRMS the
+WHY (high confidence; ledger #47 evidence — last real DENY 2026-06-21, then 400+ blind ALLOWs —
+matches the claimed mechanism exactly). Fully closed: ledger row #47 AND
+`docs/lessons/2026-07-02-gate-state-file-expiry.md` were already distilled directly from this
+reflection in a prior pass. No new lesson. Archived.

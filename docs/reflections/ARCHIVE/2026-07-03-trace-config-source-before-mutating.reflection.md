@@ -59,3 +59,11 @@ deterministic pre-deploy check.
 [[merge-to-main-plan-2026-07-02]] · docs/reflections/INBOX/ci-pre-prod-verification-2026-07-03.md
 (the gate-side reflection; this is the method-side) · docs/design/ci-pre-prod-verification/ ·
 prod-outage-schema-drift-2026-06-20 (P3 recurrence).
+
+---
+
+**Curation note (librarian, 2026-07-06 weekly pass):** Council retro — cause-critic CONFIRMS the
+WHY (high confidence). Already fully distilled in a prior pass into
+`docs/lessons/2026-07-03-secret-store-provenance-trace.md` (ledger row #52) — that lesson file's
+own Source line already read "now archived", but the actual move never happened. This pass
+performs the move to close that gap. No new lesson needed.
