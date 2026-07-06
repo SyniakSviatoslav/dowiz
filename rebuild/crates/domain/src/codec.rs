@@ -8,6 +8,13 @@
 //!
 //! `serde_json` is the current wire. rkyv/protobuf (Manifesto §1 binary serialization) is a future
 //! ADDITIVE swap BEHIND this seam — the core types never change, only the encoder bolted on here.
+//!
+//! Sibling module [`request_hash`] — the S5 idempotency canonicalisation — lives here too: it is the
+//! same family (deterministic canonical bytes → a content hash), relocated from the `api` shell in
+//! Phase-Zero Step 3. It hashes an ALREADY-INTEGER-projected input (the f64→i64 coordinate projection
+//! stays in the shell, keeping this core float-free).
+
+pub mod request_hash;
 
 use crate::kernel::Event;
 use serde::{Serialize, de::DeserializeOwned};

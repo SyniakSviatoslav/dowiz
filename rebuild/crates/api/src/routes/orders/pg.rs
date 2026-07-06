@@ -27,7 +27,7 @@ use super::pricing::{
     self, DeliveryTier, FeeLocation, GroupInfo, ModifierInfo, PricingItem, PricingSnapshot,
     ProductInfo,
 };
-use super::request_hash::{CanonicalItemInput, CanonicalRequestInput, build_request_hash};
+use super::request_hash::{CanonicalItemInput, CanonicalRequestInput, build_request_hash, project_coord};
 use super::state::{self, BindingState, ExistingKey, IdempotencyDecision};
 use super::{
     CreateOrderCommand, CreateOutcome, CustomerCancelOutcome, OrderCreatedResponse,
@@ -144,6 +144,7 @@ impl OrdersRepo for PgOrdersRepo {
         let customer_id = cmd
             .customer_sub
             .map_or_else(|| "anonymous".to_string(), |s| s.to_string());
+        // Raw f64 pin — the delivery-fee ladder (distance tiers) still consumes these coordinates.
         let pin = input.delivery.as_ref().map(|d| (d.pin.lat, d.pin.lng));
         let request_hash = build_request_hash(&CanonicalRequestInput {
             location_id: location_id.to_string(),
@@ -157,7 +158,9 @@ impl OrdersRepo for PgOrdersRepo {
                     modifier_ids: i.modifier_ids.iter().map(Uuid::to_string).collect(),
                 })
                 .collect(),
-            pin,
+            // Project f64 → REV-S5-2 integer pin at the boundary (shell owns the float→int cast);
+            // the sovereign-core canonicaliser receives integers only.
+            pin: pin.map(|(lat, lng)| (project_coord(lat), project_coord(lng))),
             address_text: input.delivery.as_ref().and_then(|d| d.address_text.clone()),
             cash_pay_with: input.cash_pay_with,
             currency_code: "ALL".to_string(),
