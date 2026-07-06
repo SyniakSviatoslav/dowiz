@@ -61,3 +61,17 @@ resolution of that prediction is itself the first calibration data point.
   (verify-artifact-not-proxy, advisory-vs-authority, council-before-code)
 - docs/design/plane-telemetry-principles/ (proposal, breaker ROUND 1-3, counsel, resolution)
 - docs/adr/ADR-plane-telemetry-and-calibration.md · REGRESSION-LEDGER #49
+
+---
+
+**Curation note (librarian, 2026-07-06 weekly Council retro):** cause-critic CONFIRMS both
+causal roots (high confidence). Root 1 (durable-local illusion) is fully closed — ledger row #49
++ the telemetry guardrails (`scripts/plane-telemetry.mjs`, `plane-telemetry.test.mjs` 15/15,
+plane-guard checks) already implement it. Root 2's residual NEXT-TIME ("verify referenced repo
+paths exist on the remote branch before wiring trigger prompts") is operator/review guidance for
+a remote-config update (trigger prompts on claude.ai) — not a repo file-edit pattern a
+pre-edit-hook or eslint rule can see. ratchet-critic: no-op, no actionable artifact. pattern-critic
+groups this with the cross-cutting "verify state against its authoritative source before acting"
+theme also present in plane-maintainer-env-probe, trace-config-source, and ci-pre-prod-verification
+— already substantially covered by the existing triggered lessons on those three surfaces; no new
+cross-cutting artifact warranted this pass. Archived.
