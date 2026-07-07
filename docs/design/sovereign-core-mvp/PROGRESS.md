@@ -210,11 +210,13 @@ FRESH session (F5 anti-context-rot).
 **Part B (token-enforcement) = COMPLETE. Part A (modular topology) = COMPLETE (A0·A1·A2·A4·A5, commits
 fd444fbc→b6666bc6, ledgers #86–88). 0b-1 (money boundary) = COMPLETE (commit `c10814ab`). 0b-2 (event
 vocabulary + Envelope) = COMPLETE (commit `e3e30ac1`). 0b-3 (corridors composed behind `decide`) =
-COMPLETE (commit `31520e8a`). 0b-4 (Hard Truth Layers 1–2) = ✅ COMPLETE (this session).** 
-The next UNCOMPLETED step is the keystone **0b-5 (shell flip to `kernel::decide`)** — the deployed-reality
-step, red-line, council sign-off before staging deploy; REUSE the existing cutover shadow-diff.
+COMPLETE (commit `31520e8a`). 0b-4 (Hard Truth Layers 1–2) = ✅ COMPLETE (2026-07-07). 0b-5 (shell flip
+to `kernel::decide`) = ✅ CODE COMPLETE (this session; commit `92cc239b`).** 
+The REMAINING step is the **deployed-reality RED proof on staging** (the load-bearing gate): inject a
+corridor refusal → deploy → observe CorridorBreach on a real API request → order immutability verified
+→ revert injection → verify success. Then stage-verify + reliability-gate → shipped.
 
-1. **0b-4 (Hard Truth Layers 1–2 — determinism + replay/totality) — ✅ COMPLETE (2026-07-07, fresh session).**
+1. **0b-4 (Hard Truth Layers 1–2 — determinism + replay/totality) — ✅ COMPLETE (2026-07-07).**
    All layers green in `cargo test` alone (971 tests: 841 api + 112 domain-lib + 6 hard_truth + 12 kernel_hard_truth + 7 other):
    - **L1 Determinism:** `kernel_run_is_deterministic` (proptest: arbitrary command stream → run twice → event logs + final states identical by CANONICAL BYTES, not `Eq` only)
    - **L2 Totality/Replay:** `state_is_the_fold_of_its_log_at_every_prefix` (every prefix k replays correctly; fold never panics under arbitrary events); codec closure (`log_survives_canonical_bytes_round_trip`, `any_event_log_survives_canonical_bytes_round_trip`, `envelope_log_round_trips_and_replays_to_the_same_state`)
@@ -222,11 +224,22 @@ step, red-line, council sign-off before staging deploy; REUSE the existing cutov
    - **DoD verified:** L0–L3 all green; determinism proven at canonical-bytes layer; BTreeMap gates out nondeterministic HashMap iteration (RED proof: core uses BTreeMap everywhere, HashMap would break L1). Clippy clean with `-D warnings --lib`.
    - **Files:** `rebuild/crates/domain/tests/kernel_hard_truth.rs` (12 proptests + exhaustive enum suite). Commit: none needed (0b-3 carried all kernel logic; 0b-4 was verification-only).
 
-2. **▶ NEXT (RED-LINE) — 0b-5: Shell flips to `kernel::decide` — the deployed-reality step.** The live Rust
-   transition + create handlers stop calling the corridor fns individually and pass through the ONE door;
-   `pg.rs::apply_transition` becomes the interpreter of `Vec<Envelope<Event>>` (SQL stays in shell). This is
-   the keystone: without it, `decide` is a mirror-oracle that staging never executes. Council sign-off +
-   staging `/reliability-gate` verification before prod.
+1b. **0b-5 (Shell flips to `kernel::decide`) — ✅ CODE COMPLETE (2026-07-07, this session; commit `92cc239b`).**
+   The owner status paths (`owner_update_status`, `owner_order_action`) no longer call the three corridor fns
+   individually (`assert_transition`, `assert_owner_target_allowed`, `cc1_strand_guard`). Instead: build
+   observed `Context` (binding state + refundable_paid) → map target→`Command` → call `domain::decide(&state,
+   cmd, &ctx)` → fold the emitted events via new `apply_events()`. Grep-proof: zero direct calls to corridor
+   fns in `orders/pg.rs` (only `compute_order_pricing` remains in `create_order`, deferred). Tests: 841 api +
+   137 core green, 0 failures. Files: `pg.rs` (330 ins / 136 del), `state.rs` (removed dead re-exports).
+   Both `apply_transition` (for customer_cancel + S7 courier, not-yet-flipped) and `apply_events` (for owner,
+   flipped) share the same SQL helpers (`guarded_status_update`, `terminalize_binding_fold`, `record_refund_due_fold`,
+   `status_history_audit`) so the folds never fork. Wire messages preserved exactly (actor-gate → "Cancelling…",
+   CC-1 → "deliver flow", machine → DomainError Display).
+
+2. **▶ NEXT (DEPLOYED-REALITY RED PROOF) — 0b-5 RED proof on staging.** The load-bearing gate: `decide` is
+   EXECUTED (not a mirror-oracle). Method: inject a corridor REFUSAL in the kernel → deploy to staging →
+   real API request that would succeed → observe `CorridorBreach` error → order immutability proven → revert
+   injection → request succeeds. Then stage-verify + `/reliability-gate` GO verdict → ready for prod.
 
 3. Deferred (non-blocking, pick up opportunistically): RATCHET the B1 model-check warn→deny once
    `audit-token-router` shows model-less <10%; B1 LANE-CLASS/router-stamp checks after the stamp convention
@@ -261,9 +274,7 @@ MVP projection: $247–304 lead-loop with Haiku+opus red-line+A1 (vs ~$1,200–1
 (this session stays Haiku unfrozen; next session applies it to default). Commits stay on feat/sovereign-core-phase-zero 
 (no push to main until secrets-scrub force-push gate).
 
-## BLOCKERS (awaiting operator)
-- **0b-5 (shell flip to `kernel::decide`) — RED-LINE GATE:** Council sign-off required before staging deploy. This step makes `decide` the executed door (not a mirror-oracle). The deployed-reality RED proof (injected corridor refusal observed on a real staging route) must be captured on staging + `/reliability-gate` pass with GO verdict. Requires operator + system-architect + breaker review.
-- **Haiku pin apply-ready** (already applied via `/model` this session; default is now Haiku 4.5)
-- **Persistent event-log (1.2):** red-line "L", dependent on 0b-5 completion. Falsifiable gate: no bugs on Haiku, or cost estimate invalidates.
-- **Free-LLM bridge (B5):** gated on operator data-governance sign-off + keys (BLOCKER). OpenRouter bridge 
-  = staged opt-in, not wired by default.
+## BLOCKERS (awaiting operator + staging actions)
+- **0b-5 RED PROOF — NEXT (immediate):** Inject a corridor REFUSAL on a proof branch, deploy to staging, run real API test (Confirm→InDelivery edge), expect `CorridorBreach` + immutability, revert, verify success. Captures the routed-reality proof: `decide` IS the executed door on the deployed API. Without this, 0b-5 code is live but unproven (mirror-oracle risk). Effort: 1–2 hours (inject→test→revert cycle). No council needed (disabled 2026-07-05), but staging-proof is mandatory before prod.
+- **Persistent event-log (0b-6/1.2):** red-line "L" architecture step (the Immutable Log), depends on 0b-5 RED proof passing. Falsifiable gate: no bugs on Haiku during event-log work, or cost estimate invalidates.
+- **Free-LLM bridge (B5):** gated on operator data-governance sign-off + keys (BLOCKER). OpenRouter bridge = staged opt-in, not wired by default.
