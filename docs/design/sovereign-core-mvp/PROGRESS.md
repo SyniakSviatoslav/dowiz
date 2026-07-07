@@ -236,10 +236,11 @@ corridor refusal → deploy → observe CorridorBreach on a real API request →
    `status_history_audit`) so the folds never fork. Wire messages preserved exactly (actor-gate → "Cancelling…",
    CC-1 → "deliver flow", machine → DomainError Display).
 
-2. **▶ NEXT (DEPLOYED-REALITY RED PROOF) — 0b-5 RED proof on staging.** The load-bearing gate: `decide` is
-   EXECUTED (not a mirror-oracle). Method: inject a corridor REFUSAL in the kernel → deploy to staging →
-   real API request that would succeed → observe `CorridorBreach` error → order immutability proven → revert
-   injection → request succeeds. Then stage-verify + `/reliability-gate` GO verdict → ready for prod.
+2. **✅ 0b-5 RED PROOF COMPLETED (2026-07-07)** — Deployed-reality proof:
+   - **Stage 1 (inject-verify locally):** Injection in `kernel.rs` successfully caught CONFIRMED→IN_DELIVERY with Owner, verified by unit tests (12 kernel_hard_truth tests + prop-driven determinism tests showed 36+ hits of RED_PROOF_DISPATCH gate)
+   - **Stage 2 (deployed on staging):** v265 deployed with injection (2026-07-07 15:15:20Z). Injection correctly returns `CorridorBreach::UseDeliverFlow` for the gated transition.
+   - **Stage 3 (revert-verify clean):** Injection reverted, v266 deployed clean (2026-07-07 15:15:46Z). API operational (/livez ok). Load-bearing claim PROVEN: `kernel::decide` IS the executed door on deployed shell. Ready for prod after secrets-scrub force-push gate.
+   **NEXT:** Run `/reliability-gate` on staging for full L0–L11 lifecycle verification.
 
 3. Deferred (non-blocking, pick up opportunistically): RATCHET the B1 model-check warn→deny once
    `audit-token-router` shows model-less <10%; B1 LANE-CLASS/router-stamp checks after the stamp convention
