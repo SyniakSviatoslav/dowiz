@@ -5,6 +5,7 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
   // Allows authenticated customers to INSERT ratings for their own orders
   // Required for POST /api/orders/:orderId/rating when NOBYPASSRLS is enforced
   pgm.sql(`
+    DROP POLICY IF EXISTS customer_insert ON order_ratings;
     CREATE POLICY customer_insert ON order_ratings FOR INSERT
       WITH CHECK (order_id IN (SELECT id FROM orders WHERE customer_id = app_current_user()));
   `);
