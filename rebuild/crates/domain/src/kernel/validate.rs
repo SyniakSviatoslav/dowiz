@@ -13,22 +13,24 @@
 //! the full picture in one round-trip.
 //!
 //! ## Scope (extended one invariant at a time)
-//! Four invariants so far (VALIDATION-LAYER-SPEC — each landed with its own RED case first):
-//!   - [`Invariant::NonPositiveMoney`] — a *format-plus* check: the raw-`i64` money on the observed
-//!     pricing authority is non-negative minor units.
-//!   - [`Invariant::IllegalTransition`] — a *logical* check: `(state, cmd)` is a legal edge of the
-//!     order state machine.
-//!   - [`Invariant::ActorNotAuthorized`] — a *logical* check: the actor may drive this (machine-legal)
-//!     edge — the AUTHORIZATION layer OVER the machine (`policy::assert_owner_target_allowed`).
-//!   - [`Invariant::CourierStrandGuard`] — a *logical* check over OBSERVED context: a →DELIVERED/
-//!     →PICKED_UP is refused while a courier binding is live/undelivered (`policy::cc1_strand_guard`).
-//!     These three logical checks compose the same predicates [`decide`](super::decide) does, so for a
-//!     transition command the gate now covers ALL of `decide`'s transition preconditions.
+//! Five invariants so far (VALIDATION-LAYER-SPEC — each landed with its own RED case first), across
+//! two disjoint command families.
 //!
-//! The remaining invariants sketched in the spec (`EmptyLineItems`, `PriceContextMismatch`,
-//! `IdempotencyKeyMissing`, `QuantityOutOfRange`) are appended one at a time, each with its own RED
-//! case first. [`Invariant`] is `#[non_exhaustive]` so that growth is not a breaking change for the
-//! shell crate.
+//! TRANSITION commands mirror `decide`'s preconditions EXACTLY (soundness is a biconditional):
+//!   - [`Invariant::IllegalTransition`] — `(state, cmd)` is a legal edge of the order state machine.
+//!   - [`Invariant::ActorNotAuthorized`] — the actor may drive this (machine-legal) edge; the
+//!     AUTHORIZATION layer OVER the machine (`policy::assert_owner_target_allowed`).
+//!   - [`Invariant::CourierStrandGuard`] — over OBSERVED context: a →DELIVERED/→PICKED_UP is refused
+//!     while a courier binding is live/undelivered (`policy::cc1_strand_guard`).
+//!
+//! `PlaceOrder` (the CREATE+PRICE door) gets BOUNDARY rules, stricter than `decide`'s permissive pricing:
+//!   - [`Invariant::NonPositiveMoney`] — the raw-`i64` money on the observed pricing authority is
+//!     non-negative minor units.
+//!   - [`Invariant::EmptyLineItems`] — the cart carries at least one line item.
+//!
+//! The remaining invariants sketched in the spec (`QuantityOutOfRange`, `PriceContextMismatch`,
+//! `IdempotencyKeyMissing`) are appended one at a time, each with its own RED case first. [`Invariant`]
+//! is `#[non_exhaustive]` so that growth is not a breaking change for the shell crate.
 
 use super::{Actor, Command, Context, OrderState};
 use crate::{ErrorCode, OrderStatus, order_status::assert_transition};
@@ -51,6 +53,11 @@ pub enum Invariant {
     /// (product prices, tier fees) are non-negative BY CONSTRUCTION, so the type is their proof.
     /// `field` names the offending input (a stable `&'static str`, e.g. `"delivery_fee_flat"`).
     NonPositiveMoney { field: &'static str },
+    /// A [`PlaceOrder`](Command::PlaceOrder) carries an EMPTY cart — an order must have at least one
+    /// line item. A BOUNDARY business rule the orchestrator enforces: [`decide`](super::decide)'s
+    /// pricing corridor is permissive (an empty cart prices to zero), so this is stricter than
+    /// `decide`, not a lift of one of its preconditions.
+    EmptyLineItems,
     // ── logical / business invariant ──
     /// `(state, cmd)` is not a legal edge of the order state machine — the union of the machine's
     /// reject classes (illegal edge | same-status | scaffold-disabled), lifted before the
@@ -87,23 +94,33 @@ pub enum Invariant {
 /// [`Invariant`] (not first-fail). Soundness (proven in `tests/validation_layer.rs`, one dimension
 /// per invariant): for a transition command, `validate(..).is_ok()` iff the machine accepts the edge
 /// AND the actor-gate authorizes it AND the cc1 strand guard permits it — i.e. the gate now covers
-/// ALL of [`decide`]'s transition preconditions, so an accepted transition never trips `decide`. (The
-/// `PlaceOrder` pricing-corridor dimension arrives with its invariants.)
+/// ALL of [`decide`]'s transition preconditions, so an accepted transition never trips `decide`. For
+/// a `PlaceOrder` the gate enforces BOUNDARY business rules (non-negative fee money, non-empty cart)
+/// that are stricter than `decide`'s permissive pricing corridor; the remaining pricing-resolution
+/// dimension arrives with its invariants.
 pub fn validate(cmd: &Command, state: &OrderState, ctx: &Context<'_>) -> Result<(), Vec<Invariant>> {
     let mut violations = Vec::new();
 
-    // ── format-plus: the observed pricing authority's raw-i64 money is non-negative minor units.
-    // Present only on a `PlaceOrder` context (transitions do not price); its absence ⇒ nothing to
-    // check here. The check is well-formedness of the INPUT, independent of which pricing branch a
-    // given cart happens to take — a negative fee/threshold/min-order is malformed money regardless.
-    if let Some(pricing) = ctx.pricing.as_ref() {
-        check_fee_money_non_negative(&pricing.location, &mut violations);
-    }
-
-    // ── logical: transition legality. `PlaceOrder` is the CREATE+PRICE door — a placed order is
-    // born PENDING (= genesis) and never touches the machine (decide routes it around), so it is
-    // NOT transition-gated. Every other command drives an edge the machine is the sole authority on.
-    if !matches!(cmd, Command::PlaceOrder { .. }) {
+    // Two disjoint command families. The CREATE+PRICE door (`PlaceOrder`) gets the cart/pricing
+    // format-plus checks; every other command drives a state-machine TRANSITION and gets the
+    // machine → actor-gate → cc1 composition — the same predicates `decide` composes, in that order.
+    if let Command::PlaceOrder { cart, .. } = cmd {
+        // Business invariant: an order must carry at least one line item. `decide`'s pricing corridor
+        // is PERMISSIVE (an empty cart prices to zero), so this is a boundary RULE the orchestrator
+        // enforces — stricter than `decide`, not a lift of a `decide` precondition.
+        if cart.is_empty() {
+            violations.push(Invariant::EmptyLineItems);
+        }
+        // Format-plus: the observed pricing authority's raw-`i64` money is non-negative minor units
+        // (the money that crossed the seam as a bare integer, escaping the `Lek` type), independent
+        // of which pricing branch a given cart takes — a negative fee/threshold/min-order is
+        // malformed money regardless.
+        if let Some(pricing) = ctx.pricing.as_ref() {
+            check_fee_money_non_negative(&pricing.location, &mut violations);
+        }
+    } else {
+        // A TRANSITION command — the machine is the sole legality authority; the actor-gate and cc1
+        // strand guard compose OVER a machine-legal edge (mirroring `decide`'s order).
         let from = state.status;
         let to = cmd.target();
         if assert_transition(from, to).is_err() {
@@ -272,7 +289,25 @@ mod tests {
         }
     }
 
+    /// A minimal well-formed cart (one line, quantity 1) — `validate` never prices, so the
+    /// product_id need not resolve against any snapshot; it only needs to be non-empty.
+    fn nonempty_cart() -> Vec<PricingItem> {
+        vec![PricingItem {
+            product_id: "p1".to_string(),
+            quantity: 1,
+            modifier_ids: vec![],
+        }]
+    }
+
     fn place_order() -> Command {
+        Command::PlaceOrder {
+            at: T,
+            actor: Actor::Owner,
+            cart: nonempty_cart(),
+        }
+    }
+
+    fn place_order_empty_cart() -> Command {
         Command::PlaceOrder {
             at: T,
             actor: Actor::Owner,
@@ -429,6 +464,61 @@ mod tests {
             },
         );
         assert_eq!(validate(&place_order(), &OrderState::genesis(), &ctx), Ok(()));
+    }
+
+    // ─────────────── RED case: PlaceOrder with an empty cart (boundary business rule) ───────────────
+
+    /// A `PlaceOrder` with an EMPTY cart → `EmptyLineItems` (an order must carry ≥1 line item). A
+    /// boundary rule: `decide` prices an empty cart to zero, so a `validate` that skipped the check
+    /// would return `Ok(())` here. RED proof.
+    #[test]
+    fn empty_cart_is_empty_line_items() {
+        let product_map = HashMap::new();
+        let mod_map = HashMap::new();
+        let groups = HashMap::new();
+        // Well-formed fees so ONLY the empty-cart rule fires.
+        let ctx = place_order_ctx(
+            &product_map,
+            &mod_map,
+            &groups,
+            FeeLocation {
+                delivery_fee_flat: Some(0),
+                free_delivery_threshold: None,
+                min_order_value: None,
+            },
+        );
+        assert_eq!(
+            validate(&place_order_empty_cart(), &OrderState::genesis(), &ctx),
+            Err(vec![Invariant::EmptyLineItems])
+        );
+    }
+
+    /// Both PlaceOrder format-plus violations are returned together (a `Vec`, not first-fail): an
+    /// empty cart AND a negative fee → `[EmptyLineItems, NonPositiveMoney]` (cart checked first).
+    #[test]
+    fn empty_cart_and_negative_fee_return_both_violations() {
+        let product_map = HashMap::new();
+        let mod_map = HashMap::new();
+        let groups = HashMap::new();
+        let ctx = place_order_ctx(
+            &product_map,
+            &mod_map,
+            &groups,
+            FeeLocation {
+                delivery_fee_flat: Some(-1),
+                free_delivery_threshold: None,
+                min_order_value: None,
+            },
+        );
+        assert_eq!(
+            validate(&place_order_empty_cart(), &OrderState::genesis(), &ctx),
+            Err(vec![
+                Invariant::EmptyLineItems,
+                Invariant::NonPositiveMoney {
+                    field: "delivery_fee_flat",
+                },
+            ])
+        );
     }
 
     // ─────────────── RED case #3: actor not authorized on a machine-legal edge ───────────────

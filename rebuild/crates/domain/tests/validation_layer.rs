@@ -19,7 +19,7 @@
 
 use domain::{
     ALL_STATUSES, Actor, BindingState, Command, Context, FeeLocation, Invariant, Lek, OrderState,
-    OrderStatus, PriceInputs, PricingSnapshot, Ts, assert_transition, validate,
+    OrderStatus, PriceInputs, PricingItem, PricingSnapshot, Ts, assert_transition, validate,
 };
 // The actor-gate predicate `decide` composes — reused verbatim so the soundness property is tied to
 // the SAME source of truth the kernel uses (not a re-transcription of the rule).
@@ -200,7 +200,9 @@ proptest! {
                 price_includes_tax: false,
             }),
         };
-        let cmd = Command::PlaceOrder { at: Ts(1), actor: Actor::Owner, cart: vec![] };
+        // A NON-EMPTY cart so `EmptyLineItems` never fires — this property isolates the money dimension.
+        let cart = vec![PricingItem { product_id: "p1".to_string(), quantity: 1, modifier_ids: vec![] }];
+        let cmd = Command::PlaceOrder { at: Ts(1), actor: Actor::Owner, cart };
         let result = validate(&cmd, &OrderState::genesis(), &ctx);
 
         let any_negative = [delivery_fee_flat, free_delivery_threshold, min_order_value]
@@ -213,6 +215,44 @@ proptest! {
                 violations.iter().all(|v| matches!(v, Invariant::NonPositiveMoney { .. })),
                 "PlaceOrder fee refusals must all be NonPositiveMoney, got {:?}", violations
             );
+        }
+    }
+
+    /// EmptyLineItems soundness — a `PlaceOrder` trips `EmptyLineItems` iff its cart is empty
+    /// (independent of the — here well-formed — fees). Falsifiable: dropping the check makes an empty
+    /// cart pass. A boundary business rule, so this is validate's OWN definition, not a decide mirror.
+    #[test]
+    fn place_order_flags_empty_cart_iff_empty(line_count in 0usize..4) {
+        let cart: Vec<PricingItem> = (0..line_count)
+            .map(|i| PricingItem { product_id: format!("p{i}"), quantity: 1, modifier_ids: vec![] })
+            .collect();
+        let was_empty = cart.is_empty();
+        let product_map = HashMap::new();
+        let mod_map = HashMap::new();
+        let groups = HashMap::new();
+        let ctx = Context {
+            binding: NO_BINDING,
+            refundable_paid: Lek::ZERO,
+            pricing: Some(PriceInputs {
+                snapshot: PricingSnapshot {
+                    product_map: &product_map,
+                    mod_map: &mod_map,
+                    groups_by_product: &groups,
+                },
+                is_pickup: true,
+                // Well-formed (non-negative) fees so ONLY EmptyLineItems can fire.
+                location: FeeLocation { delivery_fee_flat: Some(0), free_delivery_threshold: None, min_order_value: None },
+                distance_m: None,
+                tiers: &[],
+                rate_micro: 0,
+                price_includes_tax: false,
+            }),
+        };
+        let cmd = Command::PlaceOrder { at: Ts(1), actor: Actor::Owner, cart };
+        let result = validate(&cmd, &OrderState::genesis(), &ctx);
+        prop_assert_eq!(result.is_err(), was_empty);
+        if let Err(violations) = result {
+            prop_assert_eq!(violations, vec![Invariant::EmptyLineItems]);
         }
     }
 }
