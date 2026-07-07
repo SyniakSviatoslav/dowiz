@@ -4380,4 +4380,110 @@ export const catalog: Record<string, CatalogEntry> = {
     sq: 'Kontrolli me zë nuk është i disponueshëm tani',
     uk: 'Голосове керування зараз недоступне',
   },
+
+  // ── LANDING (Bebop entry page) — full dry wit in all three; money/CTA plain ──
+  'lp.hud_tag': { en: 'Sovereign ordering — est. void', sq: 'Porositje sovrane — themeluar në zbrazëti', uk: 'Суверенні замовлення — засн. у порожнечі' },
+  'lp.scroll': { en: 'Scroll', sq: 'Rrëshqit', uk: 'Гортай' },
+  'lp.cta_claim': { en: 'Claim your storefront', sq: 'Merr dyqanin tënd', uk: 'Забери свою вітрину' },
+  'lp.cta_menu': { en: 'Upload your menu', sq: 'Ngarko menunë tënde', uk: 'Завантаж своє меню' },
+
+  'lp.s1_eyebrow': { en: 'Session 01 — The Pitch', sq: 'Seanca 01 — Oferta', uk: 'Сесія 01 — Пропозиція' },
+  'lp.s1_title_a': { en: 'Your kitchen.', sq: 'Kuzhina jote.', uk: 'Твоя кухня.' },
+  'lp.s1_title_b': { en: 'Your customers.', sq: 'Klientët e tu.', uk: 'Твої клієнти.' },
+  'lp.s1_title_c': { en: 'Your money.', sq: 'Paratë e tua.', uk: 'Твої гроші.' },
+  'lp.s1_lede': {
+    en: 'Novel concept, we know. Dowiz is sovereign ordering for independent kitchens — no middleman, no percentage claws, no platform holding your customers hostage.',
+    sq: 'Koncept i ri, e dimë. Dowiz është porositje sovrane për kuzhinat e pavarura — pa ndërmjetës, pa kthetra përqindjesh, pa platformë që mban peng klientët e tu.',
+    uk: 'Свіжа думка, ми знаємо. Dowiz — суверенні замовлення для незалежних кухонь: без посередника, без відсоткових пазурів, без платформи, що тримає твоїх клієнтів у заручниках.',
+  },
+
+  'lp.s2_eyebrow': { en: 'Session 02 — The Cut', sq: 'Seanca 02 — Prerja', uk: 'Сесія 02 — Відсоток' },
+  'lp.s2_lede': {
+    en: 'Commission: zero. That number is not a typo. Aggregators take a quarter of every plate. We take none — the sale is yours, whole.',
+    sq: 'Komisioni: zero. Ky numër nuk është gabim shtypi. Agreguesit marrin një të katërtën e çdo pjate. Ne s’marrim asgjë — shitja është e jotja, e plotë.',
+    uk: 'Комісія: нуль. Це не друкарська помилка. Агрегатори забирають чверть з кожної тарілки. Ми — нічого. Продаж твій, цілий.',
+  },
+
+  'lp.s3_eyebrow': { en: 'Session 03 — What’s Yours', sq: 'Seanca 03 — Çfarë të përket', uk: 'Сесія 03 — Що твоє' },
+  'lp.s3_title': { en: 'Your customers know', sq: 'Klientët e tu njohin', uk: 'Твої клієнти знають' },
+  'lp.s3_title_em': { en: 'your name, not ours.', sq: 'emrin tënd, jo tonin.', uk: 'твоє імʼя, не наше.' },
+  'lp.s3_lede': {
+    en: 'Names, numbers, orders — every record is yours, in your hands, exportable, never locked behind a login you don’t control. The platform is a conduit, not a landlord.',
+    sq: 'Emra, numra, porosi — çdo e dhënë është e jotja, në duart e tua, e eksportueshme, kurrë e mbyllur pas një hyrjeje që s’e kontrollon. Platforma është një kanal, jo pronar.',
+    uk: 'Імена, номери, замовлення — кожен запис твій, у твоїх руках, з експортом, ніколи не замкнений за чужим логіном. Платформа — це канал, а не орендодавець.',
+  },
+
+  'lp.s4_eyebrow': { en: 'Session 04 — Many Doors', sq: 'Seanca 04 — Shumë dyer', uk: 'Сесія 04 — Багато дверей' },
+  'lp.s4_title': { en: 'Every entrance.', sq: 'Çdo hyrje.', uk: 'Кожен вхід.' },
+  'lp.s4_title_em': { en: 'One pass.', sq: 'Një sportel.', uk: 'Один пас.' },
+  'lp.s4_lede': {
+    en: 'Wherever a hungry human already is — send them a door. Every order lands on the same kitchen screen.',
+    sq: 'Kudo që ndodhet tashmë një njeri i uritur — dërgoji një derë. Çdo porosi bie në të njëjtin ekran kuzhine.',
+    uk: 'Де б не була голодна людина — надішли їй двері. Кожне замовлення падає на той самий екран кухні.',
+  },
+  'lp.door_web': { en: 'Web', sq: 'Web', uk: 'Веб' },
+  'lp.door_web_v': { en: 'A link that is yours', sq: 'Një lidhje që është e jotja', uk: 'Посилання, що твоє' },
+  'lp.door_qr': { en: 'QR', sq: 'QR', uk: 'QR' },
+  'lp.door_qr_v': { en: 'On the table, on the door', sq: 'Në tavolinë, në derë', uk: 'На столі, на дверях' },
+  'lp.door_tg': { en: 'Telegram', sq: 'Telegram', uk: 'Telegram' },
+  'lp.door_tg_v': { en: 'Order inside the chat', sq: 'Porosit brenda bisedës', uk: 'Замовлення прямо в чаті' },
+  'lp.door_ig': { en: 'Instagram', sq: 'Instagram', uk: 'Instagram' },
+  'lp.door_ig_v': { en: 'From the bio, to the pass', sq: 'Nga bio, te sporteli', uk: 'З біо — на видачу' },
+  'lp.door_wa': { en: 'WhatsApp', sq: 'WhatsApp', uk: 'WhatsApp' },
+  'lp.door_wa_v': { en: 'Where they already talk', sq: 'Aty ku tashmë flasin', uk: 'Там, де вже спілкуються' },
+  'lp.door_kiosk': { en: 'Kiosk', sq: 'Kiosk', uk: 'Кіоск' },
+  'lp.door_kiosk_v': { en: 'The counter, unmanned', sq: 'Banaku, pa njeri', uk: 'Стійка без людини' },
+
+  'lp.s5_eyebrow': { en: 'Session 05 — The Machine', sq: 'Seanca 05 — Makina', uk: 'Сесія 05 — Машина' },
+  'lp.s5_title': { en: 'Cold logic.', sq: 'Logjikë e ftohtë.', uk: 'Холодна логіка.' },
+  'lp.s5_title_em': { en: 'Warm mission.', sq: 'Mision i ngrohtë.', uk: 'Тепла місія.' },
+  'lp.f1_h': { en: 'Deterministic core', sq: 'Bërthamë deterministike', uk: 'Детерміноване ядро' },
+  'lp.f1_p': {
+    en: 'Every order runs through one auditable Rust engine. It cannot invent a price or lose a sale. It simply refuses to lie.',
+    sq: 'Çdo porosi kalon nëpër një motor të vetëm Rust, të auditueshëm. S’mund të shpikë çmim e as të humbë shitje. Thjesht refuzon të gënjejë.',
+    uk: 'Кожне замовлення проходить через один аудитований рушій на Rust. Він не вигадає ціну й не втратить продаж. Він просто відмовляється брехати.',
+  },
+  'lp.f2_h': { en: 'Yours to keep', sq: 'E jotja për ta mbajtur', uk: 'Твоє назавжди' },
+  'lp.f2_p': {
+    en: 'Event-sourced and exportable. Walk away any time and take everything with you. Sovereignty is built in, not promised.',
+    sq: 'E bazuar në ngjarje dhe e eksportueshme. Ik kurdo dhe merr gjithçka me vete. Sovraniteti është i ndërtuar, jo i premtuar.',
+    uk: 'Побудоване на подіях, з експортом. Іди будь-коли й забирай усе з собою. Суверенність вбудована, а не обіцяна.',
+  },
+  'lp.f3_h': { en: 'Hybrid by design', sq: 'Hibrid nga natyra', uk: 'Гібрид за задумом' },
+  'lp.f3_p': {
+    en: 'Cold reptilian precision united with an authentic mission. Hybrid is a feature, not a bug.',
+    sq: 'Përpikëri e ftohtë reptiliane e bashkuar me një mision autentik. Hibridi është veçori, jo defekt.',
+    uk: 'Холодна рептильна точність, поєднана зі справжньою місією. Гібрид — це фіча, а не баг.',
+  },
+
+  'lp.end_kicker': { en: 'See you, space cowboy', sq: 'Shihemi, kauboj i hapësirës', uk: 'Бувай, космічний ковбою' },
+  'lp.end_line': { en: 'Ready to own', sq: 'Gati të zotërosh', uk: 'Готовий володіти' },
+  'lp.end_line_em': { en: 'your channel?', sq: 'kanalin tënd?', uk: 'своїм каналом?' },
+
+  'lp.f_product': { en: 'Product', sq: 'Produkti', uk: 'Продукт' },
+  'lp.f_company': { en: 'Company', sq: 'Kompania', uk: 'Компанія' },
+  'lp.f_privacy': { en: 'Privacy', sq: 'Privatësia', uk: 'Приватність' },
+  'lp.f_source': { en: 'Source', sq: 'Kodi burim', uk: 'Джерело' },
+  'lp.f_credit_h': { en: 'Design', sq: 'Dizajni', uk: 'Дизайн' },
+  'lp.f_credit': {
+    en: 'Structure inspired by Nomadic Tribe by makemepulse. Skinned in warm cosmo-noir. Kudos to the originals —',
+    sq: 'Struktura e frymëzuar nga Nomadic Tribe e makemepulse. Veshur në kozmo-noir të ngrohtë. Falë origjinalëve —',
+    uk: 'Структуру навіяно Nomadic Tribe від makemepulse. Оформлено в теплий космо-нуар. Шана оригіналу —',
+  },
+  'lp.f_legal': {
+    en: 'Hybrid is a feature, not a bug. Built with devotion; held together by spite. Yours, not ours.',
+    sq: 'Hibridi është veçori, jo defekt. Ndërtuar me përkushtim; mbajtur bashkë me inat. E jotja, jo e jona.',
+    uk: 'Гібрид — це фіча, а не баг. Зроблено з відданістю; тримається на впертості. Твоє, не наше.',
+  },
+
+  // ── City-pop radio easter egg ──
+  'lp.radio_hint': { en: 'Tune in — city pop radio', sq: 'Sintonizohu — radio city pop', uk: 'Налаштуйся — сіті-поп радіо' },
+  'lp.radio_station': { en: 'DOWIZ FM', sq: 'DOWIZ FM', uk: 'DOWIZ FM' },
+  'lp.radio_close': { en: 'Close', sq: 'Mbyll', uk: 'Закрити' },
+  'lp.radio_now': { en: 'Now playing — Japanese city pop', sq: 'Po luan — city pop japonez', uk: 'Зараз грає — японський сіті-поп' },
+  'lp.radio_paused': { en: 'Paused. The night is still out there.', sq: 'Ndalur. Nata është ende atje jashtë.', uk: 'Пауза. Ніч усе ще там, назовні.' },
+  'lp.radio_off': { en: 'Signal lost — the night shift is on a smoke break.', sq: 'Sinjali humbi — turni i natës doli për një cigare.', uk: 'Сигнал зник — нічна зміна вийшла на перекур.' },
+  'lp.radio_genre': { en: 'City pop // for the 2 a.m. shift', sq: 'City pop // për turnin e 2 të natës', uk: 'Сіті-поп // для зміни о 2-й ночі' },
+  'lp.radio_play': { en: 'Tune in', sq: 'Sintonizohu', uk: 'Увімкнути' },
+  'lp.radio_stop': { en: 'Stop', sq: 'Ndalo', uk: 'Стоп' },
 };

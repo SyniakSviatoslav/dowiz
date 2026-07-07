@@ -556,3 +556,172 @@ html[data-theme="dark"] [data-skin="paper"] .maplibregl-canvas,
   0%, 100% { opacity: 0.5; }
   50%      { opacity: 1; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   BEBOP — the internal Dowiz brand skin for /admin + /courier + platform
+   surfaces (landing, login, 404, privacy). NOT the client storefront, which
+   stays white-label per tenant. Replaces the retired Paper/Moebius skin.
+
+   IDENTITY: "warm cosmo-noir" — Cowboy Bebop grade × cosmo-gothic cathedral ×
+   Ukrainian irony. THE HYBRID: cold reptilian machine-logic (mono readouts,
+   teal signal, 150ms snap) united with a warm god-blessed soul (amber lamp-
+   light, serif headlines, the languid ambient drift). Grade rule (research):
+   90% muted warm-dark field, ~10% saturated accent doing the emotional work.
+   Never #000000 for surfaces — warm/teal-tinted near-blacks carry the "2 a.m.
+   somewhere" mood. One meaningful saturated accent per view.
+
+   STATUS: DORMANT until consumers flip data-skin="paper" → "bebop" (Pass 2).
+   Preview by hand-setting data-skin="bebop" on a shell root.
+   Contrast targets APCA Lc ≥ 60 (≈WCAG AA); re-verify each pair WITH grain
+   overlay applied before locking. Sources: docs/design/dowiz-brand/BRAND-BIBLE.md
+   ════════════════════════════════════════════════════════════════════════ */
+[data-skin="bebop"] {
+  /* ── NOIR FIELD — cool/warm near-blacks (the 90%, the machine's hull) ── */
+  --void:      #12100E;   /* warm near-black — base canvas */
+  --hull:      #1A1E1F;   /* teal-tinted charcoal — raised surface (ship interior) */
+  --slate:     #232A2E;   /* slate-teal — elevated panel/modal */
+  --ink-night: #2A2F52;   /* deep indigo — optional night-exterior accent surface */
+
+  /* ── WARM PUNCTUATION — the amber/rust life (the ~10%, the soul) ── */
+  --amber:      #E8A544;  /* tungsten lamp-pool — PRIMARY interactive/brand */
+  --amber-hi:   #F0B95E;  /* lit amber — hover */
+  --amber-deep: #C68530;  /* dimmed amber — pressed/strong */
+  --rust:       #B26850;  /* sienna/rust — secondary warm accent */
+  --gold:       #C79675;  /* mustard-camel — muted decorative accent */
+  --ember:      #FC3C04;  /* cigarette/neon orange — rare high-impact kicker only */
+
+  /* ── SIGNAL — cool counterpoint (the reptilian machine's readouts) ── */
+  --teal:       #46B0A4;  /* Bebop teal — success / alive / data-signal */
+  --cyan:       #3FB7C4;  /* HUD glow — rare */
+  --magenta:    #C8438F;  /* neon signage — rare highlight only */
+
+  /* ── DANGER — dried blood, muted then saturated ── */
+  --blood:       #E0543E; /* danger text/icon (large; pair with icon, never color-only) */
+  --blood-deep:  #B9080E; /* saturated danger — rare, high-consequence */
+
+  /* ── NEUTRALS — bone & aged paper (text on noir) ── */
+  --bone:      #F2E9DB;   /* primary text — ≈15:1 on --void (AAA) */
+  --taupe:     #BCB09C;   /* secondary text — ≈8:1 (AA body) */
+  --ash:       #8F8474;   /* muted — ≈4.6:1 (AA large / secondary only, never small body) */
+  --card-paper:#E8DFD3;   /* aged-paper ground — title-card chips, light surfaces */
+
+  /* ── STROKES — warm hairlines (the scarred grid) ── */
+  --hairline:  #3A3128;   /* dividers/strokes — decorative (low contrast by design) */
+  --stroke:    #4B4034;   /* input borders, focus rails */
+
+  /* ── Re-map brand tokens → shadcn / Tailwind inherit automatically ── */
+  --brand-bg:             var(--void);
+  --brand-surface:        var(--hull);
+  --brand-surface-raised: var(--slate);
+  --brand-text:           var(--bone);
+  --brand-text-muted:     var(--taupe);
+  --brand-border:         var(--hairline);
+  --brand-primary:        var(--amber);
+  --brand-primary-hover:  var(--amber-hi);
+  --brand-primary-strong: var(--amber-deep);
+  --brand-primary-light:  rgba(232, 165, 68, 0.12);
+  --brand-accent:         var(--teal);
+  --color-on-primary:     var(--void);   /* dark ink on amber — very high contrast */
+  --color-success:        var(--teal);
+  --color-warning:        var(--amber);
+  --color-danger:         var(--blood);
+  --color-info:           var(--cyan);
+
+  /* ── Elevation = warmer+lighter surface step, not shadow-only (dark UIs lose
+     shadow legibility). Shadows stay warm/inky, never cool-black. ── */
+  --elev-1: 0 1px 2px rgba(0,0,0,.30);
+  --elev-2: 0 4px 14px rgba(0,0,0,.38), 0 1px 2px rgba(0,0,0,.30);
+  --elev-3: 0 10px 30px rgba(0,0,0,.46), 0 2px 6px rgba(0,0,0,.34);
+  --elev-4: 0 18px 44px rgba(0,0,0,.52);
+  --elevation-1: 0 1px 3px rgba(0,0,0,.34);
+  --elevation-2: 0 4px 12px rgba(0,0,0,.42);
+  --elevation-3: 0 8px 24px rgba(0,0,0,.50);
+
+  /* ── TYPOGRAPHY — hybrid three-register system ──
+     serif headline (soul, warm cathedral)  ·  condensed caps (title-card impact)
+     ·  sans workhorse (boring on purpose)  ·  mono (the machine's CRT readout) */
+  --font-display:         'Fraunces', 'DM Serif Display', Georgia, serif;
+  --font-condensed:       'Oswald', 'Bebas Neue', 'DM Sans', sans-serif;
+  --brand-font-heading:   'Fraunces', 'DM Serif Display', Georgia, serif;
+  --brand-font-body:      'DM Sans', 'Inter', sans-serif;
+  --font-mono:            'Space Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+  /* ── MOTION — jazz: two curves. Languid idle → sharp engage (the Bebop hold) ── */
+  --ease-jazz-in:   cubic-bezier(0.23, 1, 0.32, 1);   /* entrance: fast attack, long decel, slight overshoot */
+  --ease-jazz-snap: cubic-bezier(0.32, 0.72, 0, 1);   /* interaction: tight, immediate */
+  --dur-reveal:  480ms;   /* content reveals */
+  --dur-banner:  900ms;   /* hero/banner reveals */
+  --dur-snap:    180ms;   /* dropdowns, hovers, presses (150–220ms) */
+  --dur-ambient: 48s;     /* the "Horizon Drift" idle loop */
+
+  /* ── TEXTURE — film grain opacity (applied via ::after below) ── */
+  --grain-opacity: 0.05;
+
+  color-scheme: dark;
+}
+
+/* One cheap GPU-light 35mm film-grain layer over the noir field. pointer-events
+   :none so it never eats a click; opt OUT for data/tables/forms/charts + the
+   Horizon-Drift stage via .data-surface / .stage-surface. Static data-URI (no
+   per-frame cost); frozen under reduced-motion below. */
+[data-skin="bebop"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+[data-skin="bebop"] :is(.data-surface, .stage-surface)::after { display: none; }
+
+/* Warm-serif display headings; body stays DM Sans for dense data zones. */
+[data-skin="bebop"] :is(h1, h2, h3) {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  letter-spacing: -0.012em;
+}
+/* Section labels / "SESSION" markers / eyebrows use the condensed-caps register. */
+[data-skin="bebop"] .eyebrow,
+[data-skin="bebop"] .session-label {
+  font-family: var(--font-condensed);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 600;
+}
+/* Prices, order IDs, timestamps, gauges — the machine speaks in mono. */
+[data-skin="bebop"] :is(.mono, .price, .order-id, [data-numeric]) {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-skin="bebop"] ::selection { background: rgba(232, 165, 68, 0.30); color: var(--void); }
+[data-skin="bebop"] :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+/* ── DAYLIGHT COURIER VARIANT — high-contrast light remap for outdoor sun
+   readability (operator decision 2026-07-07). Scoped: courier surface adds
+   data-daylight="true". Keeps amber identity but darkens it for AA on light. ── */
+[data-skin="bebop"][data-daylight="true"] {
+  --brand-bg:             #EDE6D8;  /* warm daylight paper */
+  --brand-surface:        #FBF5E9;
+  --brand-surface-raised: #FFFDF7;
+  --brand-text:           #1A1712;  /* warm ink — AAA on daylight */
+  --brand-text-muted:     #5A5044;
+  --brand-border:         #C9BCA6;
+  --brand-primary:        #A85F14;  /* darkened amber — AA on light + white ink */
+  --brand-primary-hover:  #8F4E0E;
+  --brand-primary-strong: #8F4E0E;
+  --brand-primary-light:  rgba(168, 95, 20, 0.10);
+  --color-on-primary:     #FFF8EC;
+  --color-success:        #1F6E5A;
+  --color-danger:         #B0201B;
+  color-scheme: light;
+}
+/* Grain off in daylight (kills contrast under sun). */
+[data-skin="bebop"][data-daylight="true"]::after { display: none; }
+
+/* Reduced-motion: freeze grain + any ambient loop to a static frame. */
+@media (prefers-reduced-motion: reduce) {
+  [data-skin="bebop"]::after { animation: none; }
+}

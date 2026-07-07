@@ -1,6 +1,6 @@
 import { StrictMode, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { MotionConfig, AnimatePresence, motion } from 'framer-motion';
 import { ThemeProvider, I18nProvider, CurrencyProvider, ErrorBoundary, t, ease, duration } from '@deliveryos/ui';
 // Self-hosted Tabler icon webfont (was a jsdelivr CDN <link> in index.html). Vite bundles the CSS
@@ -18,6 +18,7 @@ import { InstallPrompt } from './components/pwa/InstallPrompt.js';
 // storefront. All lazy mounts sit inside the AnimatedRoutes <Suspense> and the
 // app-level <ErrorBoundary> (chunk-load failures surface there, not as a blank page).
 const LoginPage = lazy(() => import('./pages/admin/LoginPage.js').then(m => ({ default: m.LoginPage })));
+const LandingPage = lazy(() => import('./pages/landing/LandingPage.js').then(m => ({ default: m.LandingPage })));
 const StartPage = lazy(() => import('./pages/MenuFirstOnboarding.js').then(m => ({ default: m.StartPage })));
 const AuthCallback = lazy(() => import('./pages/admin/AuthCallback.js').then(m => ({ default: m.AuthCallback })));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage.js').then(m => ({ default: m.PrivacyPage })));
@@ -47,7 +48,7 @@ function AnimatedRoutes() {
       >
         <Suspense fallback={<LoadingFallback />}>
           <Routes location={location}>
-            <Route path="/" element={<Navigate to="/start" replace />} />
+            <Route path="/" element={<LandingPage />} />
             <Route path="/start" element={<StartPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
