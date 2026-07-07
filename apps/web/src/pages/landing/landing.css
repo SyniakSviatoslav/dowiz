@@ -95,6 +95,11 @@
   animation: lp-ship-drift var(--dur-ambient, 48s) linear infinite;
   filter: drop-shadow(0 0 18px rgba(232, 165, 68, 0.35));
 }
+.lp-ship svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
 /* horizontal anamorphic flare trailing the ship */
 .lp-ship__flare {
   position: absolute;

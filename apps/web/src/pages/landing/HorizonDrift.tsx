@@ -17,7 +17,7 @@ export function HorizonDrift() {
       <div className="lp-planet" />
       <div className="lp-ship">
         <div className="lp-ship__flare" />
-        <svg viewBox="0 0 240 90" width="100%" height="auto" role="presentation">
+        <svg viewBox="0 0 240 90" width="100%" role="presentation">
           <defs>
             <linearGradient id="hullGrad" x1="0" y1="0" x2="1" y2="1">
               <stop offset="0" stopColor="#2a2f34" />
