@@ -13,13 +13,17 @@
 //! the full picture in one round-trip.
 //!
 //! ## Scope (extended one invariant at a time)
-//! Three invariants so far (VALIDATION-LAYER-SPEC — each landed with its own RED case first):
+//! Four invariants so far (VALIDATION-LAYER-SPEC — each landed with its own RED case first):
 //!   - [`Invariant::NonPositiveMoney`] — a *format-plus* check: the raw-`i64` money on the observed
 //!     pricing authority is non-negative minor units.
 //!   - [`Invariant::IllegalTransition`] — a *logical* check: `(state, cmd)` is a legal edge of the
 //!     order state machine.
 //!   - [`Invariant::ActorNotAuthorized`] — a *logical* check: the actor may drive this (machine-legal)
 //!     edge — the AUTHORIZATION layer OVER the machine (`policy::assert_owner_target_allowed`).
+//!   - [`Invariant::CourierStrandGuard`] — a *logical* check over OBSERVED context: a →DELIVERED/
+//!     →PICKED_UP is refused while a courier binding is live/undelivered (`policy::cc1_strand_guard`).
+//!     These three logical checks compose the same predicates [`decide`](super::decide) does, so for a
+//!     transition command the gate now covers ALL of `decide`'s transition preconditions.
 //!
 //! The remaining invariants sketched in the spec (`EmptyLineItems`, `PriceContextMismatch`,
 //! `IdempotencyKeyMissing`, `QuantityOutOfRange`) are appended one at a time, each with its own RED
@@ -27,7 +31,7 @@
 //! shell crate.
 
 use super::{Actor, Command, Context, OrderState};
-use crate::{OrderStatus, order_status::assert_transition};
+use crate::{ErrorCode, OrderStatus, order_status::assert_transition};
 
 /// A named LOGICAL invariant the boundary enforces — each is a rule, not a serde/format error.
 ///
@@ -66,6 +70,14 @@ pub enum Invariant {
         actor: &'static str,
         cmd: &'static str,
     },
+    /// The courier-binding STRAND guard forbids this →DELIVERED/→PICKED_UP transition (CC-1) — reusing
+    /// `policy::cc1_strand_guard` over the OBSERVED [`ctx.binding`](super::Context). No order is marked
+    /// done while a courier is still strand-bound. `reason` = `"ACTIVE_BINDING"` (a live binding exists
+    /// → complete via the deliver flow) or `"REQUIRES_DELIVER_FLOW"` (IN_DELIVERY with no delivered
+    /// binding). Evaluated ONLY on a machine-LEGAL edge, mirroring where [`decide`](super::decide)
+    /// composes cc1 (after the machine + actor-gate). The first invariant that reads observed context,
+    /// not just the command.
+    CourierStrandGuard { reason: &'static str },
 }
 
 /// Validate a command against the current state and observed context BEFORE [`decide`](super::decide).
@@ -73,9 +85,10 @@ pub enum Invariant {
 /// TOTAL, side-effect-free, no panics, no I/O (Laws 1–3) — like [`decide`], it reads only its
 /// arguments. Returns `Ok(())` when [`decide`] may run, or `Err` carrying EVERY violated
 /// [`Invariant`] (not first-fail). Soundness (proven in `tests/validation_layer.rs`, one dimension
-/// per invariant): for a transition command, `validate(..).is_ok()` iff BOTH the machine accepts the
-/// edge AND the actor-gate authorizes it — so an accepted command never trips [`decide`]'s machine or
-/// actor-gate precondition. (The cc1/pricing dimensions arrive with their invariants.)
+/// per invariant): for a transition command, `validate(..).is_ok()` iff the machine accepts the edge
+/// AND the actor-gate authorizes it AND the cc1 strand guard permits it — i.e. the gate now covers
+/// ALL of [`decide`]'s transition preconditions, so an accepted transition never trips `decide`. (The
+/// `PlaceOrder` pricing-corridor dimension arrives with its invariants.)
 pub fn validate(cmd: &Command, state: &OrderState, ctx: &Context<'_>) -> Result<(), Vec<Invariant>> {
     let mut violations = Vec::new();
 
@@ -98,17 +111,32 @@ pub fn validate(cmd: &Command, state: &OrderState, ctx: &Context<'_>) -> Result<
                 from: status_name(from),
                 cmd: command_name(cmd),
             });
-        } else if cmd.actor() == Actor::Owner
-            && super::policy::assert_owner_target_allowed(from, to).is_err()
-        {
-            // The AUTHORIZATION layer OVER the machine — evaluated only for a machine-LEGAL edge, as
-            // `decide` composes it (machine first, then actor-gate). The deliver-v2 sweep made
+        } else {
+            // A machine-LEGAL edge — the layers OVER the machine now apply, in the order `decide`
+            // composes them (machine → actor-gate → cc1). Both are collected (not first-fail); they
+            // are mutually exclusive by target in practice (owner-forbidden edges target CANCELLED,
+            // cc1 targets DELIVERED/PICKED_UP), so at most one fires — but the Vec is honest about it.
+
+            // The AUTHORIZATION layer OVER the machine: the deliver-v2 sweep made
             // CONFIRMED/PREPARING/READY→CANCELLED machine-legal but SYSTEM-only; an owner is refused
             // there while `System` (dispatch-grace) keeps it.
-            violations.push(Invariant::ActorNotAuthorized {
-                actor: actor_name(cmd.actor()),
-                cmd: command_name(cmd),
-            });
+            if cmd.actor() == Actor::Owner
+                && super::policy::assert_owner_target_allowed(from, to).is_err()
+            {
+                violations.push(Invariant::ActorNotAuthorized {
+                    actor: actor_name(cmd.actor()),
+                    cmd: command_name(cmd),
+                });
+            }
+
+            // The CC-1 STRAND guard, read over the OBSERVED `ctx.binding`: a →DELIVERED/→PICKED_UP
+            // with a live (or IN_DELIVERY-but-undelivered) courier binding is refused, so no order is
+            // marked done while a courier is still strand-bound. A no-op for every other target.
+            if let Err(code) = super::policy::cc1_strand_guard(to, from, ctx.binding) {
+                violations.push(Invariant::CourierStrandGuard {
+                    reason: cc1_reason(code),
+                });
+            }
         }
     }
 
@@ -151,6 +179,19 @@ fn status_name(status: OrderStatus) -> &'static str {
         OrderStatus::Cancelled => "CANCELLED",
         OrderStatus::Scheduled => "SCHEDULED",
         OrderStatus::PickedUp => "PICKED_UP",
+    }
+}
+
+/// The stable label for a CC-1 strand-guard refusal, mapped from the `ErrorCode`
+/// [`cc1_strand_guard`](super::policy::cc1_strand_guard) returns. That fn yields ONLY
+/// [`AssignmentActive`](ErrorCode::AssignmentActive) or [`UseDeliverFlow`](ErrorCode::UseDeliverFlow);
+/// the catch-all is an unreachable-today backstop that keeps `validate` TOTAL (never panics) if the
+/// upstream guard ever grows a new code.
+fn cc1_reason(code: ErrorCode) -> &'static str {
+    match code {
+        ErrorCode::AssignmentActive => "ACTIVE_BINDING",
+        ErrorCode::UseDeliverFlow => "REQUIRES_DELIVER_FLOW",
+        _ => "STRAND_GUARD",
     }
 }
 
@@ -470,6 +511,110 @@ mod tests {
                     actor: Actor::Owner
                 },
                 &in_delivery,
+                &plain_ctx()
+            ),
+            Ok(())
+        );
+    }
+
+    // ─────────────── RED case #4: CC-1 strand guard over observed binding ───────────────
+
+    fn ctx_with_binding(binding: BindingState) -> Context<'static> {
+        Context {
+            binding,
+            refundable_paid: Lek::ZERO,
+            pricing: None,
+        }
+    }
+
+    /// A →DELIVERED with an ACTIVE courier binding is refused — complete via the deliver flow —
+    /// `CourierStrandGuard { "ACTIVE_BINDING" }`. IN_DELIVERY→DELIVERED is the machine-legal edge; the
+    /// active binding is OBSERVED on the context (the first invariant that reads `ctx.binding`). RED
+    /// proof: a `validate` that skipped cc1 would return `Ok(())` here.
+    #[test]
+    fn active_binding_blocks_mark_delivered() {
+        let in_delivery = OrderState {
+            status: OrderStatus::InDelivery,
+            ..OrderState::genesis()
+        };
+        let ctx = ctx_with_binding(BindingState {
+            has_active_binding: true,
+            has_delivered_binding: false,
+        });
+        assert_eq!(
+            validate(
+                &Command::MarkDelivered {
+                    at: T,
+                    actor: Actor::System
+                },
+                &in_delivery,
+                &ctx
+            ),
+            Err(vec![Invariant::CourierStrandGuard {
+                reason: "ACTIVE_BINDING",
+            }])
+        );
+    }
+
+    /// IN_DELIVERY→DELIVERED with NO delivered binding must route through the deliver flow —
+    /// `CourierStrandGuard { "REQUIRES_DELIVER_FLOW" }` — so an order is never marked done out from
+    /// under a live dispatch.
+    #[test]
+    fn in_delivery_without_delivered_binding_requires_deliver_flow() {
+        let in_delivery = OrderState {
+            status: OrderStatus::InDelivery,
+            ..OrderState::genesis()
+        };
+        assert_eq!(
+            validate(
+                &Command::MarkDelivered {
+                    at: T,
+                    actor: Actor::System
+                },
+                &in_delivery,
+                &plain_ctx()
+            ),
+            Err(vec![Invariant::CourierStrandGuard {
+                reason: "REQUIRES_DELIVER_FLOW",
+            }])
+        );
+    }
+
+    /// cc1 PERMITS the completeDelivery path (a `delivered` assignment exists → IN_DELIVERY→DELIVERED)
+    /// and a never-dispatched manual pickup (READY→PICKED_UP, no binding) — the gate is precise, not a
+    /// blanket done-block.
+    #[test]
+    fn cc1_permits_completed_delivery_and_manual_pickup() {
+        let in_delivery = OrderState {
+            status: OrderStatus::InDelivery,
+            ..OrderState::genesis()
+        };
+        let delivered = ctx_with_binding(BindingState {
+            has_active_binding: false,
+            has_delivered_binding: true,
+        });
+        assert_eq!(
+            validate(
+                &Command::MarkDelivered {
+                    at: T,
+                    actor: Actor::System
+                },
+                &in_delivery,
+                &delivered
+            ),
+            Ok(())
+        );
+        let ready = OrderState {
+            status: OrderStatus::Ready,
+            ..OrderState::genesis()
+        };
+        assert_eq!(
+            validate(
+                &Command::MarkPickedUp {
+                    at: T,
+                    actor: Actor::System
+                },
+                &ready,
                 &plain_ctx()
             ),
             Ok(())

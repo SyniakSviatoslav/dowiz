@@ -4,17 +4,18 @@
 //! Where the inline unit tests in `kernel/validate.rs` pin the concrete RED cases (an illegal edge,
 //! a negative fee), these prove the LAWS over arbitrary inputs:
 //!   - **Totality** — `validate` never panics, for any state × command (Law: total, like `decide`).
-//!   - **Transition soundness** — for a transition command, `validate(..).is_ok()` iff the machine
-//!     accepts the edge AND (for an owner) the actor-gate authorizes it. The load-bearing property:
-//!     an accepted command never trips `decide`'s `assert_transition` OR actor-gate precondition.
-//!     A companion property isolates the actor dimension over the machine-legal edges.
+//!   - **Transition soundness** — for a transition command over any observed binding,
+//!     `validate(..).is_ok()` iff the machine accepts the edge AND (for an owner) the actor-gate
+//!     authorizes it AND the cc1 strand guard permits it. The load-bearing property: the gate now
+//!     accepts EXACTLY `decide`'s transition preconditions. Companion properties isolate the actor
+//!     and cc1 dimensions.
 //!   - **Money soundness** — for a `PlaceOrder`, `validate` errs iff some observed fee field is
 //!     negative, and every such error is a `NonPositiveMoney` (never a spurious other invariant).
 //!
-//! Scope note: full cross-`decide` soundness also needs the cc1-strand + pricing preconditions,
-//! which arrive as those invariants land (one dimension at a time). Here soundness is stated over
-//! TRANSITION commands for the machine + actor-gate dimensions — `PlaceOrder` routes around the
-//! machine and its pricing preconditions are not yet lifted, so it is excluded by construction.
+//! Scope note: transition-command soundness is now CLOSED (machine + actor-gate + cc1). The one
+//! remaining `decide` precondition is the `PlaceOrder` pricing corridor — `PlaceOrder` routes around
+//! the machine and its pricing preconditions are not yet lifted, so full `validate.ok ⟺ decide.ok`
+//! over ALL commands lands with the pricing invariants.
 
 use domain::{
     ALL_STATUSES, Actor, BindingState, Command, Context, FeeLocation, Invariant, Lek, OrderState,
@@ -22,7 +23,7 @@ use domain::{
 };
 // The actor-gate predicate `decide` composes — reused verbatim so the soundness property is tied to
 // the SAME source of truth the kernel uses (not a re-transcription of the rule).
-use domain::kernel::policy::assert_owner_target_allowed;
+use domain::kernel::policy::{assert_owner_target_allowed, cc1_strand_guard};
 use proptest::prelude::*;
 use std::collections::HashMap;
 
@@ -31,13 +32,24 @@ const NO_BINDING: BindingState = BindingState {
     has_delivered_binding: false,
 };
 
-/// A transition context — no pricing authority, so only the machine invariant can fire.
-fn plain_ctx() -> Context<'static> {
+/// A transition context — no pricing authority — carrying the given courier-binding facts.
+fn ctx_with(binding: BindingState) -> Context<'static> {
     Context {
-        binding: NO_BINDING,
+        binding,
         refundable_paid: Lek::ZERO,
         pricing: None,
     }
+}
+
+/// Any courier-binding facts — the 2×2 of (active, delivered) — so cc1 is exercised across every
+/// strand state a transition can observe.
+fn any_binding() -> impl Strategy<Value = BindingState> {
+    (any::<bool>(), any::<bool>()).prop_map(|(has_active_binding, has_delivered_binding)| {
+        BindingState {
+            has_active_binding,
+            has_delivered_binding,
+        }
+    })
 }
 
 fn any_status() -> impl Strategy<Value = OrderStatus> {
@@ -77,64 +89,75 @@ proptest! {
     fn validate_is_total_over_state_x_transition_command(
         status in any_status(),
         cmd in any_transition_command(),
+        binding in any_binding(),
     ) {
         let state = OrderState { status, ..OrderState::genesis() };
         // Totality witness: the call RETURNS a value (Ok or Err) rather than panicking — either arm
-        // is acceptable here; the point is that the function is total over the whole input space.
-        let outcome = validate(&cmd, &state, &plain_ctx());
+        // is acceptable here; the point is that the function is total over the whole input space
+        // (every state × command × observed binding).
+        let outcome = validate(&cmd, &state, &ctx_with(binding));
         prop_assert!(outcome.is_ok() || outcome.is_err());
     }
 
-    /// Transition soundness — the load-bearing property, now spanning BOTH dimensions the gate
-    /// covers. For any transition command, `validate(..).is_ok()` iff the machine accepts the edge
-    /// AND (for an owner) the actor-gate authorizes it.
+    /// Transition soundness — the load-bearing property, now spanning ALL THREE dimensions the gate
+    /// covers. For any transition command over any observed binding, `validate(..).is_ok()` iff the
+    /// machine accepts the edge AND (for an owner) the actor-gate authorizes it AND the cc1 strand
+    /// guard permits it — i.e. the gate accepts EXACTLY what `decide`'s transition preconditions do.
     ///
-    /// Falsifiable: a `validate` that checked only `can_transition` (and so missed the same-status
-    /// reject) breaks the machine half; a `validate` that dropped the actor-gate would accept an
-    /// owner-driven SYSTEM-only cancel that `assert_owner_target_allowed` rejects, breaking the
-    /// actor half.
+    /// Falsifiable per dimension: dropping the same-status check breaks the machine half; dropping the
+    /// actor-gate accepts an owner-driven SYSTEM-only cancel; dropping cc1 accepts an IN_DELIVERY→
+    /// DELIVERED over a live/undelivered binding. The generated `binding` exercises the cc1 half.
     #[test]
-    fn transition_gate_accepts_exactly_the_machine_and_actor_edges(
+    fn transition_gate_accepts_exactly_the_machine_actor_and_cc1_edges(
         status in any_status(),
         cmd in any_transition_command(),
+        binding in any_binding(),
     ) {
+        let ctx = ctx_with(binding);
         let state = OrderState { status, ..OrderState::genesis() };
-        let gate_ok = validate(&cmd, &state, &plain_ctx()).is_ok();
-        // The dimensions validate covers so far: the machine edge AND (for an owner) the actor-gate.
+        let gate_ok = validate(&cmd, &state, &ctx).is_ok();
+        // The exact conjunction of `decide`'s transition preconditions, each from its own predicate.
         let machine_ok = assert_transition(status, cmd.target()).is_ok();
         let actor_ok = cmd.actor() != Actor::Owner
             || assert_owner_target_allowed(status, cmd.target()).is_ok();
+        // cc1 only applies over a machine-legal edge (as decide composes it); on a machine-illegal
+        // edge the machine half already forces the conjunction false, so gating cc1 on machine_ok
+        // keeps the reference model identical to validate's control flow.
+        let cc1_ok = !machine_ok || cc1_strand_guard(cmd.target(), status, binding).is_ok();
         prop_assert_eq!(
-            gate_ok, machine_ok && actor_ok,
-            "{:?} @ {:?}: gate {} vs machine&&actor {}", cmd, status, gate_ok, machine_ok && actor_ok
+            gate_ok, machine_ok && actor_ok && cc1_ok,
+            "{:?} @ {:?} binding {:?}: gate {} vs machine&&actor&&cc1 {}",
+            cmd, status, binding, gate_ok, machine_ok && actor_ok && cc1_ok
         );
-        // And when the gate refuses, it is one of the two transition invariants — never a foreign one.
-        if let Err(violations) = validate(&cmd, &state, &plain_ctx()) {
+        // And when the gate refuses, it is one of the THREE transition invariants — never a foreign one.
+        if let Err(violations) = validate(&cmd, &state, &ctx) {
             prop_assert!(
                 violations.iter().all(|v| matches!(v,
-                    Invariant::IllegalTransition { .. } | Invariant::ActorNotAuthorized { .. })),
-                "a transition refusal must be IllegalTransition|ActorNotAuthorized, got {:?}", violations
+                    Invariant::IllegalTransition { .. }
+                    | Invariant::ActorNotAuthorized { .. }
+                    | Invariant::CourierStrandGuard { .. })),
+                "a transition refusal must be IllegalTransition|ActorNotAuthorized|CourierStrandGuard, got {:?}", violations
             );
         }
     }
 
-    /// Actor soundness (the new dimension, isolated) — over the machine-LEGAL edges (where the
-    /// actor-gate applies), the gate refuses EXACTLY the owner-driven edges `assert_owner_target_allowed`
-    /// forbids, and every such refusal is an `ActorNotAuthorized`. `prop_assume` restricts to real
-    /// edges so the property ranges over the actor dimension alone. Falsifiable: dropping the
-    /// actor-gate flips every owner-forbidden case from `Err`→`Ok`.
+    /// Actor soundness (the dimension, isolated) — over the machine-LEGAL edges, with a cc1-PERMISSIVE
+    /// binding (a `delivered` assignment exists, so cc1 never fires), the gate refuses EXACTLY the
+    /// owner-driven edges `assert_owner_target_allowed` forbids, and every such refusal is an
+    /// `ActorNotAuthorized`. Conditioned INSIDE the body (a `prop_assume` on the sparse-legal edges
+    /// would exhaust proptest's rejection limit). Falsifiable: dropping the actor-gate flips every
+    /// owner-forbidden case from `Err`→`Ok`.
     #[test]
     fn owner_gate_matches_the_actor_gate_on_machine_legal_edges(
         status in any_status(),
         cmd in any_transition_command(),
     ) {
-        // The actor-gate sits OVER a machine-legal edge; machine-ILLEGAL edges are covered by the
-        // transition property above, so here we assert only when the edge is REAL — conditioned
-        // INSIDE the body (a `prop_assume` would reject the sparse-legal majority — legal edges are
-        // ~15% of status×cmd pairs — and exhaust proptest's rejection limit).
         if assert_transition(status, cmd.target()).is_ok() {
             let state = OrderState { status, ..OrderState::genesis() };
-            let result = validate(&cmd, &state, &plain_ctx());
+            // A delivered binding ⇒ cc1 permits every →DELIVERED/→PICKED_UP, so only the actor
+            // dimension can refuse here — isolating this property to the actor-gate.
+            let ctx = ctx_with(BindingState { has_active_binding: false, has_delivered_binding: true });
+            let result = validate(&cmd, &state, &ctx);
             let actor_forbids = cmd.actor() == Actor::Owner
                 && assert_owner_target_allowed(status, cmd.target()).is_err();
             prop_assert_eq!(result.is_err(), actor_forbids);

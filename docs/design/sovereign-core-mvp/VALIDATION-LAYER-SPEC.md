@@ -75,14 +75,20 @@ tests stay green).
 
 ## Invariants landed so far — ✅ (2026-07-07)
 
-Three invariants, each landed RED-first, one at a time; `decide` byte-unchanged throughout:
+Four invariants, each landed RED-first, one at a time; `decide` byte-unchanged throughout:
 `NonPositiveMoney` (step 1), `IllegalTransition` (step 1), **`ActorNotAuthorized` (step 2)** — lifts
 `policy::assert_owner_target_allowed`, evaluated ONLY on a machine-legal edge (mirrors decide's
-machine-then-actor composition), adding the SECOND soundness dimension (`gate.ok ⟺ machine ∧
-actor-gate` for transition cmds). RED-proven via a scoped actor-gate mutant (the concrete actor case +
-two actor proptests go RED; machine/money/acceptance stay green). Note: the isolated actor proptest
-conditions INSIDE the body, not via `prop_assume` — legal edges are ~15% of `status×cmd` pairs, so a
-`prop_assume` there exhausts proptest's rejection limit.
+machine-then-actor composition) — and **`CourierStrandGuard` (step 3)** — lifts
+`policy::cc1_strand_guard` over the OBSERVED `ctx.binding` (the first invariant reading observed
+context, not just the command), `reason` ∈ {`ACTIVE_BINDING`, `REQUIRES_DELIVER_FLOW`}.
+
+**Transition-command soundness is now CLOSED:** for a transition command over any observed binding,
+`validate.is_ok() ⟺ machine ∧ actor-gate ∧ cc1` — the gate accepts EXACTLY `decide`'s transition
+preconditions. Each dimension RED-proven via a scoped mutant (disabling that one predicate reds its
+concrete cases + the comprehensive biconditional; the other dimensions + acceptance stay green).
+Note: dimension-isolated proptests condition INSIDE the body, not via `prop_assume` — legal edges are
+~15% of `status×cmd` pairs, so a `prop_assume` there exhausts proptest's rejection limit; concrete RED
+cases are pinned by deterministic inline unit tests so falsifiability never rides on the sampler.
 
 ## First atomic step — ✅ DONE (2026-07-07)
 
@@ -101,9 +107,11 @@ fee < 0`). Falsifiability shown with an always-`Ok` mutant → the 4 rejection a
 RED while acceptance stays green. Sovereign-gate green (wasm32 + `--lib` clippy `-D warnings`); full
 `cargo test` green (119). Reflection: `docs/reflections/INBOX/2026-07-07-validation-layer-step1`.
 
-**NEXT (extend, one invariant at a time — each with its RED case first):** the CC-1 strand-guard
-dimension (`cc1_strand_guard` — closes the third soundness dimension, needs a binding-carrying `ctx`),
-`EmptyLineItems` (PlaceOrder cart non-empty), then `PriceContextMismatch` / `IdempotencyKeyMissing` /
-`QuantityOutOfRange`. Full cross-`decide` soundness (validate.ok ⟺ decide.ok over ALL commands) lands
-once the cc1 + pricing dimensions are lifted. STILL HUMAN-GATED: wiring `validate` INTO the seam and
-the 0b-5 shell cutover (no cutover until the invariant set the shell relies on is proven).
+**NEXT (extend, one invariant at a time — each with its RED case first):** the `PlaceOrder` dimension —
+`EmptyLineItems` (cart non-empty) and `QuantityOutOfRange` (per-line quantity > 0), then the pricing
+corridor (`PriceContextMismatch` — cart product_ids must resolve against the `ctx` snapshot). Lifting
+those CLOSES full cross-`decide` soundness (`validate.ok ⟺ decide.ok` over ALL commands, transition +
+PlaceOrder). `IdempotencyKeyMissing` is DEFERRED — the current `Command` carries no idempotency key, so
+it needs a command-vocabulary change (a separate, larger step). STILL HUMAN-GATED: wiring `validate`
+INTO the seam and the 0b-5 shell cutover (no cutover until the invariant set the shell relies on is
+proven).
