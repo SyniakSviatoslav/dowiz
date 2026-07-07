@@ -10,7 +10,6 @@
 use async_trait::async_trait;
 use axum::extract::{Extension, Path, Json};
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use utoipa::ToSchema;
@@ -21,8 +20,12 @@ use crate::error::ApiError;
 use crate::repo::RepoError;
 use crate::routes::correlation_id_string;
 use tower_http::request_id::RequestId;
+use domain::ErrorCode;
 
-use super::{assert_active_owner_membership, require_location_access};
+use super::require_location_access;
+
+pub mod pg;
+pub use pg::PgChannelsRepo;
 
 #[derive(Clone)]
 pub struct ChannelsState {
@@ -30,7 +33,7 @@ pub struct ChannelsState {
     pub repo: std::sync::Arc<dyn ChannelsRepo>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct ChannelRow {
     pub id: Uuid,
     pub location_id: Uuid,
@@ -38,6 +41,8 @@ pub struct ChannelRow {
     pub name: String,
     pub token: String,
     pub active: bool,
+    #[serde(serialize_with = "crate::dto::serialize_js_instant")]
+    #[schema(value_type = String)]
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -96,15 +101,17 @@ pub trait ChannelsRepo: Send + Sync {
     tag = "channels"
 )]
 pub async fn list_channels(
+    Extension(state): Extension<ChannelsState>,
     OwnerClaimsExt(claims): OwnerClaimsExt,
     Extension(auth): Extension<AuthState>,
-    Extension(state): Extension<ChannelsState>,
     Path(location_id): Path<Uuid>,
+    Extension(request_id): Extension<RequestId>,
 ) -> Result<Json<Vec<ChannelRow>>, ApiError> {
-    require_location_access(&auth, &claims, location_id).await?;
+    let correlation_id = correlation_id_string(&request_id);
+    require_location_access(&auth, &claims, location_id, &correlation_id).await?;
     state.repo.list(claims.user_id, location_id).await
         .map(Json)
-        .map_err(Into::into)
+        .map_err(|_| ApiError::new(ErrorCode::Internal, "internal_error", correlation_id))
 }
 
 #[utoipa::path(
@@ -115,14 +122,17 @@ pub async fn list_channels(
     tag = "channels"
 )]
 pub async fn create_channel(
+    Extension(state): Extension<ChannelsState>,
     OwnerClaimsExt(claims): OwnerClaimsExt,
     Extension(auth): Extension<AuthState>,
-    Extension(state): Extension<ChannelsState>,
     Path(location_id): Path<Uuid>,
+    Extension(request_id): Extension<RequestId>,
     Json(req): Json<CreateChannelRequest>,
 ) -> Result<(StatusCode, Json<ChannelRow>), ApiError> {
-    require_location_access(&auth, &claims, location_id).await?;
-    let channel = state.repo.create(claims.user_id, location_id, req.kind, req.name).await?;
+    let correlation_id = correlation_id_string(&request_id);
+    require_location_access(&auth, &claims, location_id, &correlation_id).await?;
+    let channel = state.repo.create(claims.user_id, location_id, req.kind, req.name).await
+        .map_err(|_| ApiError::new(ErrorCode::Internal, "internal_error", correlation_id))?;
     Ok((StatusCode::CREATED, Json(channel)))
 }
 
@@ -134,15 +144,18 @@ pub async fn create_channel(
     tag = "channels"
 )]
 pub async fn update_channel(
+    Extension(state): Extension<ChannelsState>,
     OwnerClaimsExt(claims): OwnerClaimsExt,
     Extension(auth): Extension<AuthState>,
-    Extension(state): Extension<ChannelsState>,
     Path((location_id, channel_id)): Path<(Uuid, Uuid)>,
+    Extension(request_id): Extension<RequestId>,
     Json(req): Json<UpdateChannelRequest>,
 ) -> Result<Json<ChannelRow>, ApiError> {
-    require_location_access(&auth, &claims, location_id).await?;
-    state.repo.update(claims.user_id, location_id, channel_id, req.name, req.active).await?
-        .ok_or_else(|| ApiError::not_found("Channel not found"))
+    let correlation_id = correlation_id_string(&request_id);
+    require_location_access(&auth, &claims, location_id, &correlation_id).await?;
+    state.repo.update(claims.user_id, location_id, channel_id, req.name, req.active).await
+        .map_err(|_| ApiError::new(ErrorCode::Internal, "internal_error", correlation_id.clone()))?
+        .ok_or_else(|| ApiError::new(ErrorCode::NotFound, "Channel not found", correlation_id))
         .map(Json)
 }
 
@@ -153,13 +166,16 @@ pub async fn update_channel(
     tag = "channels"
 )]
 pub async fn delete_channel(
+    Extension(state): Extension<ChannelsState>,
     OwnerClaimsExt(claims): OwnerClaimsExt,
     Extension(auth): Extension<AuthState>,
-    Extension(state): Extension<ChannelsState>,
     Path((location_id, channel_id)): Path<(Uuid, Uuid)>,
+    Extension(request_id): Extension<RequestId>,
 ) -> Result<StatusCode, ApiError> {
-    require_location_access(&auth, &claims, location_id).await?;
-    state.repo.delete(claims.user_id, location_id, channel_id).await?;
+    let correlation_id = correlation_id_string(&request_id);
+    require_location_access(&auth, &claims, location_id, &correlation_id).await?;
+    state.repo.delete(claims.user_id, location_id, channel_id).await
+        .map_err(|_| ApiError::new(ErrorCode::Internal, "internal_error", correlation_id))?;
     Ok(StatusCode::NO_CONTENT)
 }
 

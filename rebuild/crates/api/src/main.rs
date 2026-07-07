@@ -406,6 +406,12 @@ fn build_owner_states(
                 pools.operational.clone(),
             )),
         },
+        channels: routes::owner::channels::ChannelsState {
+            auth: auth.clone(),
+            repo: Arc::new(routes::owner::channels::PgChannelsRepo::new(
+                pools.operational.clone(),
+            )),
+        },
         modifier_groups: routes::owner::modifier_groups::ModifierGroupsState {
             auth: auth.clone(),
             repo: Arc::new(routes::owner::modifier_groups::PgModifierGroupsRepo::new(
