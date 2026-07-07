@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 import { assertTransition, type OrderStatus } from '@deliveryos/domain';
 import type { MessageBus } from '@deliveryos/platform';
-import { BUS_CHANNELS, orderChannel, dashboardChannel } from './registry.js';
+import { BUS_CHANNELS, orderChannel, dashboardChannel, courierChannel } from './registry.js';
 import { synthesizeAndPersistEtaWindow } from './etaGather.js';
 
 // ORDER-TRACKING: per-transition timestamp column for each status the machine
@@ -287,5 +287,23 @@ export async function updateOrderStatus(
     await opts.messageBus.publish(BUS_CHANNELS.ORDER_CONFIRMED, { orderId, locationId: dbLocationId });
   } else if (newStatus === 'REJECTED' && dbLocationId) {
     await opts.messageBus.publish(BUS_CHANNELS.ORDER_REJECTED, { orderId, locationId: dbLocationId });
+  }
+
+  // Notify assigned courier when order is ready for pickup
+  if (newStatus === 'READY' && dbLocationId) {
+    const courierRes = await client.query(
+      `SELECT courier_id FROM courier_assignments WHERE order_id = $1 AND status IN ('offered', 'assigned', 'accepted', 'picked_up')`,
+      [orderId]
+    );
+    if (courierRes.rows.length > 0) {
+      const courierId = courierRes.rows[0].courier_id;
+      await opts.messageBus.publish(courierChannel(courierId), {
+        type: 'order.status',
+        orderId,
+        status: newStatus,
+        locationId: dbLocationId,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 }

@@ -77,7 +77,7 @@ export default (async function ownerDashboardRoutes(fastify: any, opts: any) {
     const countSql = `
       SELECT o.status, COUNT(*)::int AS cnt
       FROM orders o
-      WHERE o.location_id = $1
+      WHERE o.location_id = $1 AND DATE(o.created_at) = CURRENT_DATE
       GROUP BY o.status
     `;
 
