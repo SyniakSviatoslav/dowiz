@@ -42,6 +42,7 @@ export class MemoryStore {
   // Build corpus IDF and re-embed every node with it (deterministic). Smoothed IDF is always > 0, so
   // ubiquitous tokens get a small weight (not dropped) and distinctive tokens dominate.
   finalize() {
+    if (this._embed) return this; // injected embedder already produced final vectors; no IDF re-embed
     const N = this._nodes.size || 1;
     const df = new Map();
     for (const n of this._nodes.values()) {
@@ -59,7 +60,7 @@ export class MemoryStore {
   incoming(id) { return this._in.get(id) || []; }
   // deterministic vector index: cosine over all node vectors, tie-broken by id (canonical order).
   vectorTopK(text, k = 8) {
-    const q = embed(text, this.idf);
+    const q = this._embed ? this._embed(text) : embed(text, this.idf);
     return this.nodes()
       .map((n) => ({ id: n.id, score: cosine(q, n.vec) }))
       .sort((a, b) => (b.score - a.score) || (a.id < b.id ? -1 : 1))

@@ -26,6 +26,13 @@ advice — if a move can't be stated as "do X and observe Y," it isn't in this d
 > this doc an *ultimate harness for any model used*: a cheap model wins not by reasoning better but
 > by being pointed at ground truth instead of a proxy.
 
+> **Retrieval realization → [`meta-cognition-layer.md`](meta-cognition-layer.md).** §0·GP as a running
+> engine: a **deterministic** knowledge retriever over the harness's own corpus (recall@5 = 1.0, offline,
+> cross-process byte-identical, tamper-checked) that **any** model consults *before acting* —
+> `node spikes/living-knowledge/search.mjs "<question>"` → the canonical rule/guardrail/loop file, not a
+> remembered approximation. Same question → same files for every model (determinism = model-agnostic).
+> The model's parametric recall is the proxy; the layer is the ground truth. Prefer the layer.
+
 - **Ground truth** = a deterministic verdict read off the *real artifact*: a glob/pattern gate, a
   failing test, a re-read of the source at `file:line`, canonical bytes, the value re-read from the
   DB the code actually wrote.

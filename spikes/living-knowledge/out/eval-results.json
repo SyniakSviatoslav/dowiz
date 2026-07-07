@@ -1,20 +1,20 @@
 {
-  "corpus": {
-    "files": 77,
-    "edges": 172
-  },
   "k": 5,
-  "baseRecall": 0.813,
-  "actRecall": 0.875,
-  "basePrec": 0.225,
-  "actPrec": 0.25,
-  "hitMeanTop1": 0.452,
-  "missMeanTop1": 0.357,
-  "deterministic": true,
+  "corpus": 77,
+  "hitQueries": 29,
+  "missQueries": 3,
+  "hashRecall": 0.621,
+  "hybrid": {
+    "model": "Xenova/bge-small-en-v1.5",
+    "recall": 1,
+    "realConf": 0.7079,
+    "nonsenseConf": 0.5978,
+    "deterministic": true,
+    "cacheBuilt": 0
+  },
   "layers": {
     "nodeCount": 77,
     "edgeCount": 172,
-    "islands": 29,
-    "disconnectedLayerPairs": []
+    "islands": 29
   }
 }

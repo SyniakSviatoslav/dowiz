@@ -27,17 +27,27 @@ No-orphan gate: **all 17 guardrails wired to a runner** (exit 0). Each formerly-
 
 Enforced permanently by `scripts/guardrail-no-orphan-guardrails.mjs` (run-armaments): a guardrail no runner invokes is dead machinery — a false-positive green — and now reds the suite.
 
-## Living-knowledge retrieval — activation vs pure-vector baseline (the "old" approach)
+## Living-knowledge retrieval — the DETERMINISTIC hybrid engine (superseded the activation approach)
 
-Corpus: 77 files, 172 reference edges, K=5. Backend-agnostic (identical on MemoryStore or the HelixStore mirror).
+Corpus: 77 files, K=5, hard hand-verified oracle (29 hit + 3 expected-MISS). Engine = semantic
+(bge-small, summary-anchored chunks, max-pool) ⊕ stemmed BM25 ⊕ title-label, fused 0.45/0.35/0.20.
+Reproduce every number: `cd spikes/living-knowledge && node eval.mjs` (+ `LK_WEIGHTS` for the ladder).
 
-| Metric | Baseline (pure vector) | Activation (bands) |
+| Metric | Old (hash pure-vector) | Hybrid engine (2026-07-07) |
 |---|---|---|
-| recall@5 | 0.813 | **0.875** (Δ 0.062) |
-| precision@5 | 0.225 | **0.25** |
-| mean top-1 confidence: real vs nonsense query | — | **0.452 vs 0.357** (separable) |
-| determinism (bit-identical reruns) | — | **true** |
-| cross-layer analysis (brain-in-brain) | not possible | **29 island nodes**,  disconnected layer-pairs over 77 nodes/172 edges |
+| recall@5 | 0.621 | **1.000** (Δ +0.379) |
+| capability ladder | — | hash 0.621 → +semantic 0.862 → +bm25 0.966 → +title **1.000** |
+| best-passage confidence: real vs nonsense | — | **0.708 vs 0.598** (separable) |
+| determinism | — | **byte-identical, same- AND cross-process** |
+| cache integrity | — | **payload digest + model + coverage (tamper/staleness red)** |
+| falsifiability self-test | — | **GREEN** (every invariant reds under sabotage; `selftest.mjs`) |
+| lives & self-improves | — | **GREEN** (`probe-living.mjs`: live-corpus fn · staleness · ratcheted ladder) |
+| cross-layer (brain-in-brain) | not possible | **29 island nodes** (self-found improvement backlog) |
+
+Note: spreading **activation as a ranker** was measured net-negative on this hard oracle (hub flooding)
+and RETIRED from retrieval — the earlier 0.875 was on an 8-query oracle. The graph substrate remains for
+cross-layer structural analysis. The engine is the model-agnostic meta-cognition layer
+(`docs/operating-model/meta-cognition-layer.md`).
 
 ## HelixDB (Option C: sovereign default + dev-gated real-engine adapter)
 

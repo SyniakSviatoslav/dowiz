@@ -19,7 +19,7 @@ export const ROOT = (() => { try { return execSync('git rev-parse --show-topleve
 
 const lsFiles = (dir, re) => { try { return readdirSync(join(ROOT, dir)).filter((f) => re.test(f)).map((f) => `${dir}/${f}`); } catch { return []; } };
 
-function collect() {
+export function collect() {
   const layers = {
     'core-rules': [
       '.claude/CLAUDE.md', 'AGENTS.md',
@@ -59,6 +59,11 @@ function collect() {
   return files;
 }
 
+// The exact text a node is embedded from. Exported so the semantic prewarm embeds byte-identical
+// strings to what the store will look up (any drift → a cache miss → a loud throw, never a silent zero).
+export const ETEXT_SLICE = 8000;
+export const nodeEtext = (f) => `${f.title || basename(f.rel)} ${(f.text || '').slice(0, ETEXT_SLICE)}`;
+
 export function buildStore(store) {
   const files = collect();
   if (files.length === 0) throw new Error('ingest: no files collected (wrong ROOT?)');
@@ -66,7 +71,7 @@ export function buildStore(store) {
   const span = maxT - minT || 1;
 
   for (const f of files) {
-    store.addNode({ id: f.rel, label: f.layer, title: f.title, text: f.text.slice(0, 8000), meta: { path: f.rel, recency: (f.mtime - minT) / span } });
+    store.addNode({ id: f.rel, label: f.layer, title: f.title, text: f.text.slice(0, ETEXT_SLICE), meta: { path: f.rel, recency: (f.mtime - minT) / span } });
   }
   // reference edges: file A mentions file B's repo-path OR distinctive basename.
   const byBase = new Map();
