@@ -25,7 +25,13 @@
         USING ( EXISTS (SELECT 1 FROM orders o WHERE o.id = order_events.order_id AND
   o.location_id IN (SELECT app_member_location_ids())) );
 
-      ALTER TABLE order_events REVOKE UPDATE, DELETE FROM app;
+    `);
+
+    pgm.sql(`
+      DO $$
+      BEGIN
+        BEGIN EXECUTE 'REVOKE UPDATE, DELETE ON order_events FROM dowiz_app'; EXCEPTION WHEN OTHERS THEN END;
+      END $$;
     `);
   }
 
