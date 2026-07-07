@@ -211,9 +211,17 @@ the fix is architectural, not compressive. Task → generate → finish → FORG
   reference docs live in docs/ and are read on demand.
 
 **MODEL ROUTING v3 (operator directive 2026-07-05 late — Fable OFF everywhere; supersedes v2 "Fable OFF for lanes only"):**
+- **§0·GP — GROUND TRUTH over PROXY REASONING (operator 2026-07-07, governs this whole block).** The
+  council + the critic/review **proxy** agents (architect/breaker/counsel · cause/pattern/ratchet-critic ·
+  invariant-guardian · security-sentinel · research-verifier · librarian · test-scout) + the
+  advisory-injection hooks (pre-edit-lessons · route-request · loop-detector) were **REMOVED**; the
+  deterministic harness gates stay. Rule: prefer a deterministic ground-truth check (test/gate/re-read
+  of real bytes) over any proxy; a decorrelated cross-model read is an **on-demand, human-gated
+  exception** (e.g. a one-shot audit sanctioned via `.claude/state/fable-override`), never standing
+  machinery, and it only *signals* — a gate/human decides. Spec: `docs/operating-model/model-agnostic-playbook.md` §0·GP.
 - **Fable: OFF — main session AND all lanes.** `.claude/settings.json` pins `model: claude-opus-4-8` as the session default; re-enabling Fable is a per-task operator override (`/model`), never a default. Every `Agent` call still MUST pass an explicit `model:`.
 - **`haiku` = the default doer** — ports with a written recipe, searches/sweeps/inventories, probes, mechanical transforms, test-writing to a spec, distillation.
-- **`opus` = reasoning-critical ONLY** — council critics (architect/breaker/counsel), red-line design, adversarial verification where a miss costs money/PII, judging.
+- **`opus` = reasoning-critical ONLY** — red-line design, adversarial verification where a miss costs money/PII, judging. (The standing council critics were removed 2026-07-07; a decorrelated read is now an on-demand, human-gated exception per §0·GP — prefer a deterministic check.)
 - **Free/out-of-band models** (OpenRouter bridge, `:free` slugs) for decorrelated second opinions and bulk research once the bridge is re-validated (slugs were dead 2026-06-22) — never for red-line authority.
 - **Deterministic beats all of them**: before ANY lane, apply rule −1 — source-quote packs via grep/script (not an LLM re-reading files to verify citations), diffs/probes/counts/regen in code. An LLM verifying "line X says Y" is burning tokens on `grep`.
 - Main-session default is **opus 4.8** (pinned in `.claude/settings.json`; `/model` stays the per-session override). Standing shape: opus lead/reasoning, haiku doers, never Fable.
@@ -222,7 +230,7 @@ the fix is architectural, not compressive. Task → generate → finish → FORG
 
 **PROACTIVE INTEGRITY (operator spec 2026-07-05 — the lazy immune system, `tools/vsa/src/integrity.mjs`):**
 - **Pre-flight gate before state-premised dispatches**: snapshot the state a lane is premised on; `vsa integrity <expected.json> <actual.json> [--fields id,status,courier_id] [--age-ms N --corridor-ms M]` (or `dispatch.mjs --expect/--actual`) circuit-breaks at $0 when SHC diverges — the corrupted flow dies before spending its ~17K lane floor. A mismatch younger than the **sync corridor** is IN-FLIGHT (pass + warn + verify on landing), older is DIVERGED (block).
-- **Hybrid critic trigger (spec §4)**: continuous monitoring stays CHEAP (graph/VSA sweep, SMC auditor, SHC spot-checks). The EXPENSIVE native-depth audit lane is spawned only on an objective deterministic signal — SHC mismatch, IDR persisting beyond the corridor, SMC drop (a state lost its writer), or FCE degradation in `vsa report`. Signals are advisory; the gate/test/human stays the authority. Red-line audits keep their floor (sweep + independent critic lane) regardless.
+- **Hybrid critic trigger (spec §4)**: continuous monitoring stays CHEAP (graph/VSA sweep, SMC auditor, SHC spot-checks). The EXPENSIVE native-depth audit lane is spawned only on an objective deterministic signal — SHC mismatch, IDR persisting beyond the corridor, SMC drop (a state lost its writer), or FCE degradation in `vsa report`. Signals are advisory; the gate/test/human stays the authority. Red-line audits keep their floor: a deterministic sweep + every load-bearing claim verified against the real bytes (ground truth over proxy — §0·GP; a decorrelated cross-model read is on-demand + human-gated, not a standing critic lane).
 - **Telemetry**: `vsa lane <ok|fail> <tok> [label]` after every finished lane; `vsa report` prints FCE (ok-lanes/100K tok) + circuit-break savings. Every `integrity` run self-ledgers.
 
 **KNOWLEDGE-AS-CIRCUITS (operator directive 2026-07-05 — knowledge becomes machinery, not memory/reasoning):**

@@ -19,6 +19,35 @@ advice — if a move can't be stated as "do X and observe Y," it isn't in this d
 
 ---
 
+## §0·GP — The governing principle (operator 2026-07-07): GROUND TRUTH over PROXY REASONING
+
+> **"Harness must remain, but ground truth over proxy reasoning."** This is the meta-cognition
+> layer's constitution — the one rule that orders all the others, for any model. It is what makes
+> this doc an *ultimate harness for any model used*: a cheap model wins not by reasoning better but
+> by being pointed at ground truth instead of a proxy.
+
+- **Ground truth** = a deterministic verdict read off the *real artifact*: a glob/pattern gate, a
+  failing test, a re-read of the source at `file:line`, canonical bytes, the value re-read from the
+  DB the code actually wrote.
+- **Proxy** = anything that stands in for that verdict: a second model's opinion (a review/critic
+  subagent, a council), an advisory reasoning-nudge injected before you act, a cached datum trusted
+  without re-reading, a mirror-oracle test.
+
+**The rule:** *when a ground-truth check is available, it wins and the proxy is not consulted.* A
+proxy is used ONLY when no deterministic check exists for the question — and even then it only
+**signals**; it never decides and never gates. If you find yourself about to trust a proxy, first
+ask "can I write the deterministic check instead?" — if yes, write it (it becomes a permanent gate:
+the ratchet, X4).
+
+This **reprioritizes every move below.** **U3 (ground truth over proxy) is the spine.** The
+reviewer-decorrelation moves (**U4 · §3 · X5**) are now **conditional** — reach for a decorrelated
+reviewer only where a deterministic check is genuinely impossible. This is why, on 2026-07-07, the
+**council + the critic/review proxy agents + the advisory-injection hooks were removed** while the
+**deterministic harness gates were kept**: a gate is ground truth; a critic is a proxy. What survives
+enforcement is machinery, not opinion (§6).
+
+---
+
 ## §0 · Universal core — the moves EVERY role runs, regardless of model or role
 
 These six run in every role. They are the model-agnostic floor.
@@ -53,12 +82,16 @@ These six run in every role. They are the model-agnostic floor.
   the code under test. *Earned:* the #1 failure root across 81 ledger rows + 19 reflections ("live
   reality ≠ edited model") — this is the D5 verification spine. *Family:* proxy-vs-ground-truth.
 
-- **U4 · Decorrelate the reviewer.** The thing that checks the work must be a **different model /
-  context than the one that produced it.** On a red-line (money / RLS / PII / schema / auth) this is
-  mandatory. *Move:* spawn a fresh reviewer, instruct it to *refute*, hand it the source-of-truth to
-  diff against. *Earned:* a rotted / same-context reviewer is how #56 shipped "certified green"; the
-  0b-1/0b-2/0b-3 money steps each passed a fresh-opus `invariant-guardian` read. *Family:*
-  mirror-oracle.
+- **U4 · Decorrelate the reviewer — CONDITIONAL (§0·GP): only when no deterministic check exists.**
+  First try to make the check *ground truth*: a failing test, a re-read of the real bytes, a
+  circuit. Reach for a **different model / context than the one that produced the work** only where
+  a deterministic check is genuinely impossible — and when you do, it only **signals**; a gate or a
+  human decides, never the reviewer. *Move:* prefer writing the check; if impossible, spawn a fresh
+  reviewer instructed to *refute*, handed the source-of-truth to diff against. *Earned:* a rotted /
+  same-context reviewer is how #56 shipped "certified green" — but the durable fix was the 28
+  hand-derived oracle vectors (a check), not the review. (Historical: the 0b-1/0b-2/0b-3 money steps
+  used a fresh-opus `invariant-guardian` read; that review-agent proxy was removed 2026-07-07 in
+  favour of the canonical-bytes/oracle-vector checks it was shadowing.) *Family:* mirror-oracle.
 
 - **U5 · Scope discipline + deferral-with-trigger.** Do exactly this step's scope. Defer the adjacent
   temptation with a **named unlock trigger**, and never start work that is **blocked** on an unshipped
@@ -133,8 +166,10 @@ the hard thinking **once** and freeze it into artifacts. Checklist:
 1. **Be adversarial, not confirmatory.** Ask "find N ways this breaks / is wrong," default to
    *refuted* under uncertainty. Reverse-engineering a diff is itself generation, so a confirmatory read
    just re-derives the author's blind spot.
-2. **Be decorrelated (U4).** Review on a different model/context than the author; on red-line, a fresh
-   reviewer is mandatory, not optional.
+2. **Be decorrelated (U4) — but only if you're here at all (§0·GP).** A reviewer runs only where no
+   deterministic ground-truth check exists; if a check is writable, the reviewer's real job is to
+   *write it* (and promote it to a gate), not to opine. When you do review, use a different
+   model/context than the author and default to *refuted*.
 3. **Check the guard's RED exists and fires along its dimension (U2).** A green test is not evidence;
    a test proven to go red on the real defect is.
 4. **Diff against the source of truth, not the author's claim (U3).** For a "port X verbatim" change,
@@ -200,7 +235,11 @@ A move only counts as *codified* when a mechanism enforces it **regardless of wh
   false-positives, **narrow** the rule (diff-aware, added-lines-only, exempt `docs/*.md`) — never lower
   the threshold and never unregister it. A gate that trains operators to ignore red is worse than no
   gate; a blind day-one DENY that blocks ~90% of legit traffic gets torn out under pressure (Root 3).
-- **Decorrelated review** — a fresh subagent on a different model (U4/X5), mandatory on red-line.
+- **Decorrelated review (conditional, §0·GP)** — used ONLY where no deterministic check exists; it
+  *signals*, a gate/human decides. Prefer promoting the check to a circuit/test (the ratchet, X4) so
+  the review is never needed again. (The standing council + critic/review proxy agents were removed
+  2026-07-07; a decorrelated read is now an on-demand, human-gated exception — e.g. a one-shot
+  cross-model audit — not standing machinery.)
 - **THE EYE + the Doubt ladder** — halt on ≥3 bad / ≥1 critical signal; escalate the cheapest-
   sufficient rung on a genuine fork (U6).
 - **MODEL / TOKEN ROUTER** (`AGENTS.md`) — the router assigns the *role* (planner reasoning / doer /
@@ -219,6 +258,16 @@ A move only counts as *codified* when a mechanism enforces it **regardless of wh
 - **Everyone:** reconcile-vs-reality · RED-prove-along-the-dimension · ground-truth-over-proxy ·
   decorrelate-the-reviewer · scope+trigger · escalate-genuine-forks.
 
+### The pocket constitution (read this if you read nothing else)
+
+**Ground truth over proxy reasoning (§0·GP).** For any question, ask: *is there a deterministic check
+I can read off the real artifact?* If yes — write/run it; it decides, and it becomes a permanent gate.
+If no — a proxy (a decorrelated read) may *signal*, but a gate or a human decides. The harness is the
+set of deterministic checks; it stays. Opinion-machinery (councils, standing critics, advisory
+nudges) is proxy; it goes. Any model that runs this ordering is running the harness — that is what
+makes it model-agnostic.
+
 *Related:* [`player-roles.md`](player-roles.md) · [`metacognition-transfer.md`](metacognition-transfer.md)
 · [`task-exit-rule.md`](task-exit-rule.md) · [`agentic-map-reduce.md`](agentic-map-reduce.md) ·
-reflection `docs/reflections/INBOX/2026-07-07-0b3-decide-composition.reflection.md`.
+reflections `docs/reflections/INBOX/2026-07-07-0b3-decide-composition.reflection.md` +
+`2026-07-07-ground-truth-over-proxy.reflection.md` (the §0·GP removal).

@@ -37,6 +37,23 @@ else
   echo "No i18n changes staged."
 fi
 
+# ── DYNAMIC VERIFICATION SCOPE (operator 2026-07-07: "if a change does not require a full build, no
+# point running all verifications + container build"). Deterministic check on the STAGED PATHS: the
+# heavy steps (typecheck / build / Fly / Docker) can only fail from a change to the built artifact —
+# app/package code or build config. A docs/.claude/loops/tooling-only change cannot, so we skip them
+# and save minutes (this once TIMED OUT on a .claude-only commit). INCLUSIVE by design: ANY match →
+# full build. The cheap whole-tree guardrails above ALWAYS ran regardless (they protect repo
+# integrity for free). Escape hatch: FORCE_FULL_PRECOMMIT=1 forces the full path. This is the harness
+# scaling its own verification depth to the actual change — deterministic, not a guess.
+BUILD_RELEVANT=$(git diff --cached --name-only --diff-filter=ACMRD | grep -E '^(apps|packages)/|(^|/)(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|Dockerfile|\.dockerignore|fly\.toml)$|(^|/)tsconfig[^/]*\.json$|(^|/)vite\.config\.[tj]s$' || true)
+if [ "${FORCE_FULL_PRECOMMIT:-0}" != "1" ] && [ -z "$BUILD_RELEVANT" ]; then
+  echo "2-5/5: no build-relevant files staged (docs/.claude/loops/tooling only) — skipping typecheck, build, Fly + Docker. [dynamic-scope; FORCE_FULL_PRECOMMIT=1 to override]"
+  echo "=== All checks passed! ==="
+  exit 0
+fi
+echo "Build-relevant change detected — running full typecheck/build/Docker verification:"
+printf '  %s\n' $BUILD_RELEVANT | head -8
+
 echo "2/4: Typechecking code..."
 pnpm -r typecheck || exit 1
 
