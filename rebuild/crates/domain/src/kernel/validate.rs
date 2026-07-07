@@ -12,19 +12,21 @@
 //! every violated [`Invariant`], not an internal first-fail early-return) so the orchestrator gets
 //! the full picture in one round-trip.
 //!
-//! ## Scope (first atomic step — one invariant at a time)
-//! Two invariants only, the smallest useful pair (VALIDATION-LAYER-SPEC §"First atomic step"):
+//! ## Scope (extended one invariant at a time)
+//! Three invariants so far (VALIDATION-LAYER-SPEC — each landed with its own RED case first):
 //!   - [`Invariant::NonPositiveMoney`] — a *format-plus* check: the raw-`i64` money on the observed
 //!     pricing authority is non-negative minor units.
 //!   - [`Invariant::IllegalTransition`] — a *logical* check: `(state, cmd)` is a legal edge of the
 //!     order state machine.
+//!   - [`Invariant::ActorNotAuthorized`] — a *logical* check: the actor may drive this (machine-legal)
+//!     edge — the AUTHORIZATION layer OVER the machine (`policy::assert_owner_target_allowed`).
 //!
-//! The richer invariants sketched in the spec (`EmptyLineItems`, `ActorNotAuthorized`,
-//! `PriceContextMismatch`, `IdempotencyKeyMissing`, `QuantityOutOfRange`) are appended one at a
-//! time, each with its own RED case first. [`Invariant`] is `#[non_exhaustive]` so that growth is
-//! not a breaking change for the shell crate.
+//! The remaining invariants sketched in the spec (`EmptyLineItems`, `PriceContextMismatch`,
+//! `IdempotencyKeyMissing`, `QuantityOutOfRange`) are appended one at a time, each with its own RED
+//! case first. [`Invariant`] is `#[non_exhaustive]` so that growth is not a breaking change for the
+//! shell crate.
 
-use super::{Command, Context, OrderState};
+use super::{Actor, Command, Context, OrderState};
 use crate::{OrderStatus, order_status::assert_transition};
 
 /// A named LOGICAL invariant the boundary enforces — each is a rule, not a serde/format error.
@@ -54,15 +56,26 @@ pub enum Invariant {
         from: &'static str,
         cmd: &'static str,
     },
+    /// The actor is not authorized to drive this (machine-legal) edge — the AUTHORIZATION layer OVER
+    /// the machine (`policy::assert_owner_target_allowed`). Today: an [`Owner`](super::Actor::Owner)
+    /// may not drive the SYSTEM-only widened cancel edges (CONFIRMED/PREPARING/READY→CANCELLED, the
+    /// dispatch-grace path); [`System`](super::Actor::System) keeps them. Evaluated ONLY for a
+    /// machine-LEGAL edge (the gate sits over a real edge), mirroring where [`decide`](super::decide)
+    /// composes it (machine first, then actor-gate). `actor`/`cmd` = SCREAMING_SNAKE wire names.
+    ActorNotAuthorized {
+        actor: &'static str,
+        cmd: &'static str,
+    },
 }
 
 /// Validate a command against the current state and observed context BEFORE [`decide`](super::decide).
 ///
 /// TOTAL, side-effect-free, no panics, no I/O (Laws 1–3) — like [`decide`], it reads only its
 /// arguments. Returns `Ok(())` when [`decide`] may run, or `Err` carrying EVERY violated
-/// [`Invariant`] (not first-fail). Soundness (the property tying the two layers, proven in
-/// `tests/validation_layer.rs`): for a transition command, `validate(..).is_ok()` iff the machine
-/// would accept the edge — so an accepted command never trips [`decide`]'s machine precondition.
+/// [`Invariant`] (not first-fail). Soundness (proven in `tests/validation_layer.rs`, one dimension
+/// per invariant): for a transition command, `validate(..).is_ok()` iff BOTH the machine accepts the
+/// edge AND the actor-gate authorizes it — so an accepted command never trips [`decide`]'s machine or
+/// actor-gate precondition. (The cc1/pricing dimensions arrive with their invariants.)
 pub fn validate(cmd: &Command, state: &OrderState, ctx: &Context<'_>) -> Result<(), Vec<Invariant>> {
     let mut violations = Vec::new();
 
@@ -83,6 +96,17 @@ pub fn validate(cmd: &Command, state: &OrderState, ctx: &Context<'_>) -> Result<
         if assert_transition(from, to).is_err() {
             violations.push(Invariant::IllegalTransition {
                 from: status_name(from),
+                cmd: command_name(cmd),
+            });
+        } else if cmd.actor() == Actor::Owner
+            && super::policy::assert_owner_target_allowed(from, to).is_err()
+        {
+            // The AUTHORIZATION layer OVER the machine — evaluated only for a machine-LEGAL edge, as
+            // `decide` composes it (machine first, then actor-gate). The deliver-v2 sweep made
+            // CONFIRMED/PREPARING/READY→CANCELLED machine-legal but SYSTEM-only; an owner is refused
+            // there while `System` (dispatch-grace) keeps it.
+            violations.push(Invariant::ActorNotAuthorized {
+                actor: actor_name(cmd.actor()),
                 cmd: command_name(cmd),
             });
         }
@@ -127,6 +151,15 @@ fn status_name(status: OrderStatus) -> &'static str {
         OrderStatus::Cancelled => "CANCELLED",
         OrderStatus::Scheduled => "SCHEDULED",
         OrderStatus::PickedUp => "PICKED_UP",
+    }
+}
+
+/// The SCREAMING_SNAKE wire name of an actor (matches the `Actor` serde rename) — carried on
+/// [`Invariant::ActorNotAuthorized`].
+fn actor_name(actor: Actor) -> &'static str {
+    match actor {
+        Actor::Owner => "OWNER",
+        Actor::System => "SYSTEM",
     }
 }
 
@@ -355,5 +388,91 @@ mod tests {
             },
         );
         assert_eq!(validate(&place_order(), &OrderState::genesis(), &ctx), Ok(()));
+    }
+
+    // ─────────────── RED case #3: actor not authorized on a machine-legal edge ───────────────
+
+    /// The deliver-v2 sweep widened the MACHINE to permit CONFIRMED/PREPARING/READY→CANCELLED, but
+    /// those are SYSTEM-only edges: an OWNER driving one is machine-legal yet unauthorized → the
+    /// boundary reports `ActorNotAuthorized` (never `IllegalTransition` — the edge IS a real edge).
+    /// RED proof: a `validate` that skipped the actor-gate would return `Ok(())` here.
+    #[test]
+    fn owner_on_a_system_only_cancel_edge_is_actor_not_authorized() {
+        for from in [
+            OrderStatus::Confirmed,
+            OrderStatus::Preparing,
+            OrderStatus::Ready,
+        ] {
+            let state = OrderState {
+                status: from,
+                ..OrderState::genesis()
+            };
+            assert_eq!(
+                validate(
+                    &Command::Cancel {
+                        at: T,
+                        actor: Actor::Owner
+                    },
+                    &state,
+                    &plain_ctx()
+                ),
+                Err(vec![Invariant::ActorNotAuthorized {
+                    actor: "OWNER",
+                    cmd: "CANCEL",
+                }]),
+                "owner must be actor-gated off {from:?}→CANCELLED"
+            );
+        }
+    }
+
+    /// The gate is PRECISE, not a blanket owner-cancel ban: `System` keeps the widened cancel edges
+    /// (dispatch-grace), and an owner keeps the cancels it IS authorized for (PENDING→CANCELLED
+    /// pre-confirm, IN_DELIVERY→CANCELLED no-show).
+    #[test]
+    fn system_keeps_and_owner_keeps_authorized_cancels() {
+        let confirmed = OrderState {
+            status: OrderStatus::Confirmed,
+            ..OrderState::genesis()
+        };
+        // System drives the SYSTEM-only edge → passes the gate (actor-gate applies to owners only).
+        assert_eq!(
+            validate(
+                &Command::Cancel {
+                    at: T,
+                    actor: Actor::System
+                },
+                &confirmed,
+                &plain_ctx()
+            ),
+            Ok(())
+        );
+        // Owner keeps PENDING→CANCELLED (pre-confirm).
+        assert_eq!(
+            validate(
+                &Command::Cancel {
+                    at: T,
+                    actor: Actor::Owner
+                },
+                &OrderState::genesis(),
+                &plain_ctx()
+            ),
+            Ok(())
+        );
+        // Owner keeps IN_DELIVERY→CANCELLED (no-show).
+        let in_delivery = OrderState {
+            status: OrderStatus::InDelivery,
+            ..OrderState::genesis()
+        };
+        assert_eq!(
+            validate(
+                &Command::Cancel {
+                    at: T,
+                    actor: Actor::Owner
+                },
+                &in_delivery,
+                &plain_ctx()
+            ),
+            Ok(())
+        );
     }
 }

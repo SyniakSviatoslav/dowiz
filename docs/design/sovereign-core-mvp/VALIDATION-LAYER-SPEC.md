@@ -73,6 +73,17 @@ human-gated. Build on a feature branch, guardian review, no shell cutover (0b-5)
 proven. Keep `decide` unchanged in this step (add the gate around it; refactor shared predicates only if
 tests stay green).
 
+## Invariants landed so far — ✅ (2026-07-07)
+
+Three invariants, each landed RED-first, one at a time; `decide` byte-unchanged throughout:
+`NonPositiveMoney` (step 1), `IllegalTransition` (step 1), **`ActorNotAuthorized` (step 2)** — lifts
+`policy::assert_owner_target_allowed`, evaluated ONLY on a machine-legal edge (mirrors decide's
+machine-then-actor composition), adding the SECOND soundness dimension (`gate.ok ⟺ machine ∧
+actor-gate` for transition cmds). RED-proven via a scoped actor-gate mutant (the concrete actor case +
+two actor proptests go RED; machine/money/acceptance stay green). Note: the isolated actor proptest
+conditions INSIDE the body, not via `prop_assume` — legal edges are ~15% of `status×cmd` pairs, so a
+`prop_assume` there exhausts proptest's rejection limit.
+
 ## First atomic step — ✅ DONE (2026-07-07)
 
 Read `kernel.rs` L84–330 (Command/OrderState/Context/decide) + `kernel/policy.rs` → write `validate.rs`
@@ -90,8 +101,9 @@ fee < 0`). Falsifiability shown with an always-`Ok` mutant → the 4 rejection a
 RED while acceptance stays green. Sovereign-gate green (wasm32 + `--lib` clippy `-D warnings`); full
 `cargo test` green (119). Reflection: `docs/reflections/INBOX/2026-07-07-validation-layer-step1`.
 
-**NEXT (extend, one invariant at a time — each with its RED case first):** `EmptyLineItems` (PlaceOrder
-cart non-empty) or `ActorNotAuthorized` (lift `policy::assert_owner_target_allowed` — adds the second
-soundness dimension). Then `PriceContextMismatch` / `IdempotencyKeyMissing` / `QuantityOutOfRange`.
-STILL HUMAN-GATED: wiring `validate` INTO the seam and the 0b-5 shell cutover (no cutover until the
-invariant set the shell relies on is proven).
+**NEXT (extend, one invariant at a time — each with its RED case first):** the CC-1 strand-guard
+dimension (`cc1_strand_guard` — closes the third soundness dimension, needs a binding-carrying `ctx`),
+`EmptyLineItems` (PlaceOrder cart non-empty), then `PriceContextMismatch` / `IdempotencyKeyMissing` /
+`QuantityOutOfRange`. Full cross-`decide` soundness (validate.ok ⟺ decide.ok over ALL commands) lands
+once the cc1 + pricing dimensions are lifted. STILL HUMAN-GATED: wiring `validate` INTO the seam and
+the 0b-5 shell cutover (no cutover until the invariant set the shell relies on is proven).
