@@ -15,6 +15,10 @@
 //! - [`dto`] — `CreateOrderInput` full schema: 6-value messenger_kind + receiver{} (REV-S5-3).
 
 pub mod channel;
+/// Phase 2.2 — the Sovereign-Core direct checkout (`POST /api/orders`, `x-dowiz-cutover`): the
+/// server-price-authority guard (forbidden client price fields) + the `hub_checkout` launch flag over
+/// the S5 create funnel.
+pub mod checkout;
 pub mod dto;
 pub mod pricing;
 pub mod request_hash;
@@ -296,75 +300,10 @@ pub struct OrdersState {
 }
 
 // ─────────────────────────────── handlers ───────────────────────────────
-
-/// `POST /orders` — anonymous create (no auth extractor; the create path seats NO `app.user_id`,
-/// REV-S5-1). Parses + validates `CreateOrderInput` (REV-S5-3), normalizes the `x-channel` header
-/// (Q-CHANNEL-META), then hands the whole funnel to the repo's GUC-less tx.
-#[utoipa::path(
-    post, path = "/api/orders", tag = "orders",
-    responses(
-        (status = 201, description = "Order created", body = OrderCreatedResponse),
-        (status = 200, description = "Idempotent replay of an existing order", body = OrderCreatedResponse),
-        (status = 400, description = "VALIDATION_FAILED", body = domain::ErrorEnvelope),
-        (status = 422, description = "Business gate (MIN_ORDER_NOT_MET / CASH_AMOUNT_TOO_LOW / pricing / IDEMPOTENCY_KEY_REUSED)", body = domain::ErrorEnvelope),
-        (status = 409, description = "IDEMPOTENCY_CONFLICT / NOT_PUBLISHED", body = domain::ErrorEnvelope),
-        (status = 503, description = "Transient DB contention — retry", body = domain::ErrorEnvelope),
-    ))]
-pub async fn create_order(
-    Extension(state): Extension<OrdersState>,
-    Extension(request_id): Extension<RequestId>,
-    headers: HeaderMap,
-    axum::Json(raw): axum::Json<serde_json::Value>,
-) -> Result<axum::response::Response, ApiError> {
-    let correlation_id = correlation_id_string(&request_id);
-
-    // .strict() parse (deny_unknown_fields) → 400 VALIDATION_FAILED on any drift.
-    let input: dto::CreateOrderInput = serde_json::from_value(raw).map_err(|e| {
-        ApiError::validation_failed_400(format!("Validation error: {e}"), correlation_id.clone())
-    })?;
-    input
-        .validate()
-        .map_err(|msg| ApiError::validation_failed_400(msg, correlation_id.clone()))?;
-
-    // x-channel → write-only metadata (Q-CHANNEL-META). Header, never a body field (schema .strict()).
-    let channel = channel::channel_from_header(
-        headers
-            .get_all("x-channel")
-            .iter()
-            .filter_map(|v| v.to_str().ok()),
-    );
-
-    let cmd = CreateOrderCommand {
-        input,
-        channel,
-        customer_sub: None, // anonymous checkout is the create path; a customer token would refine.
-    };
-
-    let outcome = state.repo.create_order(cmd).await.map_err(|e| {
-        // Log the real cause (the client only gets an opaque INTERNAL). A money-path 500 with
-        // no logged cause is an operability hole — the create funnel touches many statements and
-        // "500 INTERNAL" alone is undiagnosable (staging cutover 2026-07-05).
-        tracing::error!(%correlation_id, error = %e.0, "order create failed");
-        ApiError::new(
-            ErrorCode::Internal,
-            "internal_error",
-            correlation_id.clone(),
-        )
-    })?;
-
-    match outcome {
-        CreateOutcome::Created(order) => {
-            Ok((StatusCode::CREATED, axum::Json(order)).into_response())
-        }
-        CreateOutcome::Replayed(order) => Ok((StatusCode::OK, axum::Json(order)).into_response()),
-        CreateOutcome::Rejected(code, msg) => Err(ApiError::new(code, msg, correlation_id)),
-        CreateOutcome::Transient => Err(ApiError::new(
-            ErrorCode::ServiceUnavailable,
-            "Service temporarily unavailable, please try again",
-            correlation_id,
-        )),
-    }
-}
+//
+// `POST /api/orders` (anonymous create + the Phase 2.2 `x-dowiz-cutover` checkout) lives in
+// [`checkout`] — its money-safety guard (server price authority) + the launch flag are the Phase 2.2
+// additions over the S5 funnel. The router below wires [`checkout::create_order`].
 
 /// `PATCH /orders/:id/status` — owner-driven transition (OwnerClaimsExt narrows role structurally;
 /// a courier/customer token cannot reach here).
@@ -733,7 +672,7 @@ pub fn orders_router(state: OrdersState) -> axum::Router {
     let correlation_header = axum::http::HeaderName::from_static("x-correlation-id");
 
     axum::Router::new()
-        .route("/api/orders", post(create_order))
+        .route("/api/orders", post(checkout::create_order))
         .route("/api/orders/{id}", get(get_order))
         .route("/api/orders/{id}/status", patch(owner_update_status))
         .route(
@@ -1029,6 +968,114 @@ mod handler_tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    // ─────────────────────── Phase 2.2 — x-dowiz-cutover checkout guards (HTTP) ───────────────────────
+
+    /// PHASE 2.2 RED PROOF 1 (HTTP boundary): a `x-dowiz-cutover` request that injects a client
+    /// `subtotal` is refused `400 VALIDATION_FAILED` BEFORE the repo is ever reached — the server is
+    /// the sole price authority. RED: drop the `checkout::reject_client_price_fields` guard (or
+    /// `subtotal` from its list) and this flips to a 201 with the client's price accepted.
+    #[tokio::test]
+    async fn cutover_create_with_injected_subtotal_is_400_validation_failed() {
+        let repo = Arc::new(FakeOrdersRepo::default());
+        // If the guard were bypassed the repo's canned Created would 201 — proving the guard is what
+        // produces the 400 (the repo is primed to succeed).
+        *repo.create.lock().unwrap() = Some(CreateOutcome::Created(OrderCreatedResponse {
+            id: Uuid::new_v4(),
+            location_id: Uuid::new_v4(),
+            status: OrderStatus::Pending,
+            subtotal: lek(1000),
+            total: lek(1300),
+            delivery_instructions: None,
+            created_at: None,
+        }));
+        let mut body = valid_create_body();
+        body["subtotal"] = serde_json::json!(1); // the malicious injected price
+        let app = orders_router(state_with(repo));
+        let (status, json) = json_body(
+            app.oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/orders")
+                    .header("content-type", "application/json")
+                    .header("x-dowiz-cutover", "true")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(json["code"], "VALIDATION_FAILED");
+        // Isolate the checkout guard from serde's `deny_unknown_fields` backstop (which would also 400
+        // with code VALIDATION_FAILED, but message "unknown field"): the guard names the field as
+        // FORBIDDEN. RED: remove the guard → serde's message has no "forbidden" → this assert fails.
+        assert!(
+            json["message"].as_str().unwrap_or("").contains("forbidden"),
+            "the 400 must come from the checkout price-authority guard (message names the forbidden \
+             field), not merely the serde backstop; got: {}",
+            json["message"]
+        );
+    }
+
+    /// PHASE 2.2 (HTTP boundary) — the GREEN counterpart: a clean cutover cart (item ids + quantities
+    /// only, no money field) passes the guard and reaches the funnel → 201. Proves the guard does not
+    /// false-positive on a legitimate server-priced checkout.
+    #[tokio::test]
+    async fn cutover_create_clean_cart_reaches_repo_201() {
+        let repo = Arc::new(FakeOrdersRepo::default());
+        *repo.create.lock().unwrap() = Some(CreateOutcome::Created(OrderCreatedResponse {
+            id: Uuid::new_v4(),
+            location_id: Uuid::new_v4(),
+            status: OrderStatus::Pending,
+            subtotal: lek(1000),
+            total: lek(1300),
+            delivery_instructions: None,
+            created_at: None,
+        }));
+        let app = orders_router(state_with(repo));
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/orders")
+                    .header("content-type", "application/json")
+                    .header("x-dowiz-cutover", "true")
+                    .body(Body::from(valid_create_body().to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    /// Every forbidden money field is refused on a cutover request (not just `subtotal`) — the whole
+    /// client-price surface is closed.
+    #[tokio::test]
+    async fn cutover_create_rejects_each_forbidden_price_field() {
+        for field in super::checkout::FORBIDDEN_PRICE_FIELDS {
+            let mut body = valid_create_body();
+            body[field] = serde_json::json!(1);
+            let app = orders_router(state_with(Arc::new(FakeOrdersRepo::default())));
+            let (status, json) = json_body(
+                app.oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/orders")
+                        .header("content-type", "application/json")
+                        .header("x-dowiz-cutover", "true")
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap(),
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "`{field}` must 400");
+            assert_eq!(json["code"], "VALIDATION_FAILED", "`{field}` → VALIDATION_FAILED");
+        }
     }
 
     /// Owner PATCH: an actor-gate rejection (REV-S5-9) surfaces as 403 CANCEL_NOT_PERMITTED through

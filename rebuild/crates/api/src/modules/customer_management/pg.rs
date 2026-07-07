@@ -3,7 +3,18 @@ use uuid::Uuid;
 
 use crate::repo::RepoError;
 use crate::routes::owner::assert_active_owner_membership;
+use crate::db::TenantTxnError;
 use super::{CustomerRepo, CustomerRow};
+
+fn map_txn_err(err: TenantTxnError) -> RepoError {
+    match err {
+        TenantTxnError::Begin(e)
+        | TenantTxnError::SetTenant(e)
+        | TenantTxnError::Work(e)
+        | TenantTxnError::Commit(e) => RepoError(e),
+        TenantTxnError::WorkThenRollbackFailed { work, .. } => RepoError(work),
+    }
+}
 
 pub struct PgCustomerRepo {
     pub pool: PgPool,
@@ -75,7 +86,7 @@ impl CustomerRepo for PgCustomerRepo {
             })
         })
         .await
-        .map_err(|e| RepoError(e))
+        .map_err(map_txn_err)
     }
 
     async fn get_customer(
@@ -107,7 +118,7 @@ impl CustomerRepo for PgCustomerRepo {
             })
         })
         .await
-        .map_err(|e| RepoError(e))
+        .map_err(map_txn_err)
     }
 
     async fn delete_customer(
@@ -144,7 +155,7 @@ impl CustomerRepo for PgCustomerRepo {
             })
         })
         .await
-        .map_err(|e| RepoError(e))
+        .map_err(map_txn_err)
     }
 
     async fn verify_customer_erased(

@@ -1425,10 +1425,10 @@ mod tests {
 
         // Seed a test event.
         let event = Event::Priced {
-            subtotal: Lek(1000),
-            delivery_fee: Lek(200),
-            tax_total: Lek(120),
-            total: Lek(1320),
+            subtotal: Lek::new(1000).unwrap(),
+            delivery_fee: Lek::new(200).unwrap(),
+            tax_total: Lek::new(120).unwrap(),
+            total: Lek::new(1320).unwrap(),
         };
         let payload = serde_json::to_vec(&event).expect("event must serialize");
         let mut hasher = Sha256::new();

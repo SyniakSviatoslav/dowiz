@@ -147,7 +147,8 @@ use crate::routes::owner::gdpr::{
         crate::routes::media_public::proxy_put_upload,
         crate::routes::media_public::upload_entry_photo,
         // ── S5 orders/money surface (docs/design/rebuild-orders-s5-council/) ──
-        crate::routes::orders::create_order,
+        // Phase 2.2 moved `POST /api/orders` into `orders::checkout` (the x-dowiz-cutover checkout).
+        crate::routes::orders::checkout::create_order,
         crate::routes::orders::get_order,
         crate::routes::orders::owner_update_status,
         crate::routes::orders::confirm_order,

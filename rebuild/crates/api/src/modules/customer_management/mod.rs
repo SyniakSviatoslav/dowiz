@@ -24,6 +24,7 @@ use crate::repo::RepoError;
 use domain::ErrorCode;
 
 pub mod pg;
+pub use pg::PgCustomerRepo;
 
 #[derive(Clone)]
 pub struct CustomerManagementState {
@@ -69,35 +70,31 @@ pub struct ListCustomersQuery {
 
 #[async_trait]
 pub trait CustomerRepo: Send + Sync {
-    /// List customers for a location (paginated, searchable by phone/name).
+    /// List customers for a location (paginated, searchable). `Ok(None)` = membership check failed.
     async fn list_customers(
         &self,
+        owner_user_id: Uuid,
         location_id: Uuid,
         search: Option<String>,
         limit: i64,
         offset: i64,
-    ) -> Result<Vec<CustomerRow>, RepoError>;
+    ) -> Result<Option<Vec<CustomerRow>>, RepoError>;
 
-    /// Get a single customer by ID (must belong to location).
+    /// Get a single customer by ID. `Ok(None)` = membership check failed OR row not found.
     async fn get_customer(
         &self,
+        owner_user_id: Uuid,
         location_id: Uuid,
         customer_id: Uuid,
     ) -> Result<Option<CustomerRow>, RepoError>;
 
-    /// Create or upsert a customer (upsert on phone per location).
-    async fn create_or_upsert_customer(
-        &self,
-        location_id: Uuid,
-        req: CreateOrUpsertCustomerRequest,
-    ) -> Result<CustomerRow, RepoError>;
-
-    /// Delete a customer (erasure: returns count of orders that had customer_id zeroed).
+    /// Delete a customer (erasure). `Ok(None)` = membership check failed, `Ok(Some(...))` = counts.
     async fn delete_customer(
         &self,
+        owner_user_id: Uuid,
         location_id: Uuid,
         customer_id: Uuid,
-    ) -> Result<(u64, u64), RepoError>; // (customers deleted, order records updated)
+    ) -> Result<Option<(u64, u64)>, RepoError>; // (customers deleted, order records updated)
 
     /// Erasure oracle: verify customer is absent from all surfaces.
     /// Returns (absent_from_customers, absent_from_order_refs, is_truly_erased).
