@@ -109,10 +109,29 @@ proptest! {
     /// final state AND the identical event log — every time. No clock/entropy/ordering can leak in
     /// (there is none to leak). Because `run` also completes for EVERY generated stream, this is the
     /// Layer-2 totality witness too.
+    ///
+    /// 0b-4 DoD — determinism is proven by CANONICAL BYTES, "not `Eq` only": the byte layer is the
+    /// one the downstream promises actually stand on. A content hash / PQC signature over the log
+    /// (Phase 3) and cross-node mesh replication (every node must derive identical bytes for the same
+    /// log — codec.rs module doc) compare BYTES, never Rust `PartialEq`; and a future encoder swap
+    /// behind the `codec` seam (serde_json → rkyv/protobuf) could break byte-determinism while `Eq`
+    /// stayed green. So we pin BOTH: the value-level `Eq` (cheap, states the intent) AND the encoded
+    /// bytes of the event log and the final aggregate.
     #[test]
     fn kernel_run_is_deterministic(cmds in prop::collection::vec(any_command(), 0..40)) {
         let g = OrderState::genesis();
-        prop_assert_eq!(run(g, &cmds), run(g, &cmds));
+        let (state1, log1) = run(g, &cmds);
+        let (state2, log2) = run(g, &cmds);
+        // Value-level determinism (the intent, cheaply).
+        prop_assert_eq!(state1, state2); // OrderState: Copy
+        prop_assert_eq!(&log1, &log2);
+        // Byte-level determinism (the load-bearing form — 0b-4 DoD): the event log and the final
+        // aggregate each encode to IDENTICAL canonical bytes, run to run.
+        prop_assert_eq!(encode_log(&log1).expect("encode log1"), encode_log(&log2).expect("encode log2"));
+        prop_assert_eq!(
+            canonical_bytes(&state1).expect("encode state1"),
+            canonical_bytes(&state2).expect("encode state2")
+        );
     }
 
     // ─────────────────────────── Layer 2 — Replay / totality ───────────────────────────
