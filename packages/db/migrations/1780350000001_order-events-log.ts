@@ -30,4 +30,3 @@
   }
 
   export async function down(): Promise<void> {}
-  EOF
