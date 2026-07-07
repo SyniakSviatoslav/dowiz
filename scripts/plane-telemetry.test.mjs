@@ -353,6 +353,23 @@ test('kill-switch: PLANE_TELEMETRY_DISABLED=true → no-op exit 0, nothing writt
   assert.ok(!existsSync(join(root, 'loops/runs', EVENTS_FILE)), 'kill-switch must not write');
 });
 
+test('send with Telegram network unreachable: status is failed:*, NEVER sent:* (H3 — a swallowed 403 must not read as success)', (t) => {
+  const root = tmp(t);
+  assert.equal(cli(['emit', '--run-id', 'rTgFail', '--kind', 'report', '--outcome', 'pass', '--detail', 'ok'], { root }).status, 0);
+  // env present (unlike the skip test above) but every tgApi call is forced to resolve `false` —
+  // this is what a proxy-level 403 looks like: fetch() resolves normally with res.ok=false, it
+  // does NOT throw, so a naive `.catch()` around it never sees the failure.
+  const r = cli(['send', '--run-id', 'rTgFail'], {
+    root,
+    env: { TELEGRAM_BOT_TOKEN: 'fake-token', PLANE_REPORT_CHAT_ID: 'fake-chat', PLANE_TELEMETRY_TEST_FORCE_TG_FAIL: '1' },
+  });
+  assert.equal(r.status, 0, 'a dead Telegram must never fail the run');
+  assert.equal(readStatus(root).telegram.status, 'failed:chunk_send', 'unreachable Telegram must report failed:*, not sent:*');
+  const events = readLocal(root).filter((e) => e.run_id === 'rTgFail' && e.target === 'telegram');
+  assert.equal(events.length, 1);
+  assert.equal(events[0].outcome, 'error', 'a false-positive sent status would wrongly record outcome=pass');
+});
+
 test('send with env unset: skips CLEANLY (exit 0) but LOUDLY, and the skip lands in the digest status line (H3)', (t) => {
   const root = tmp(t);
   assert.equal(cli(['emit', '--run-id', 'rS', '--kind', 'report', '--outcome', 'pass', '--detail', 'ok'], { root }).status, 0);

@@ -48,7 +48,8 @@
 //      PLANE_TELEMETRY_AUTHOR_ALLOWLIST (provenance), PLANE_TELEMETRY_NO_GH=1 (treat gh unavailable).
 // Test-only seams (LOUD on stderr, never set in production):
 //      PLANE_TELEMETRY_TEST_DISABLE_PATTERN, PLANE_TELEMETRY_TEST_DISABLE_SANITIZE,
-//      PLANE_TELEMETRY_TEST_FORCE_PARENT, PLANE_TELEMETRY_TEST_FORCE_PARENT_ONCE.
+//      PLANE_TELEMETRY_TEST_FORCE_PARENT, PLANE_TELEMETRY_TEST_FORCE_PARENT_ONCE,
+//      PLANE_TELEMETRY_TEST_FORCE_TG_FAIL (tgApi always resolves false — simulate network failure).
 //
 // All git/gh subprocess calls: spawnSync ARG ARRAYS, shell:false — zero string interpolation (R2-M3).
 // Node stdlib only. No new deps. UTC-only timestamps.
@@ -571,6 +572,7 @@ function composeSummary(runId, events, predictions) {
 }
 
 async function tgApi(token, method, body, isForm = false) {
+  if (process.env.PLANE_TELEMETRY_TEST_FORCE_TG_FAIL) return false; // deterministic network-failure simulation (tests)
   const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: 'POST',
     ...(isForm ? { body } : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
@@ -631,11 +633,17 @@ async function cmdSend(args) {
       fd.append('document', new Blob([slice], { type: 'application/json' }), `plane-run-${runId}.jsonl`);
       const docOk = await tgApi(token, 'sendDocument', fd, true).catch(() => false);
       if (!docOk && !sentSummary) {
-        // chunk-at-3800 fallback only if the document send failed
-        for (let i = 0, n = Math.ceil(text.length / 3800); i < n; i++) {
-          await tgApi(token, 'sendMessage', { chat_id: chat, text: `(${i + 1}/${n}) ${text.slice(i * 3800, (i + 1) * 3800)}`, disable_web_page_preview: true }).catch(() => {});
+        // chunk-at-3800 fallback only if the document send failed — track REAL per-chunk
+        // delivery (a network-level 403/rejection resolves tgApi to `false`, it does not throw,
+        // so the previous unconditional `status = 'sent:chunked'` here was a false-positive:
+        // every chunk could fail and this would still report success).
+        const n = Math.ceil(text.length / 3800);
+        let chunksOk = 0;
+        for (let i = 0; i < n; i++) {
+          const ok = await tgApi(token, 'sendMessage', { chat_id: chat, text: `(${i + 1}/${n}) ${text.slice(i * 3800, (i + 1) * 3800)}`, disable_web_page_preview: true }).catch(() => false);
+          if (ok) chunksOk += 1;
         }
-        status = 'sent:chunked';
+        status = chunksOk === 0 ? 'failed:chunk_send' : chunksOk < n ? 'sent:chunked_partial' : 'sent:chunked';
       } else if (!docOk) status = 'sent:doc_failed';
     }
     writeStatus({ telegram: { status, ts: nowIso(), run_id: runId } });
