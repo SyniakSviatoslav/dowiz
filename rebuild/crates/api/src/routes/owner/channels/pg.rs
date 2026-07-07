@@ -2,10 +2,10 @@
 
 use async_trait::async_trait;
 use uuid::Uuid;
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 
 use crate::repo::RepoError;
-use super::{ChannelsRepo, ChannelRow};
+use super::{ChannelsRepo, ChannelRow, ChannelWithAttribution};
 use crate::routes::owner::assert_active_owner_membership;
 
 pub struct PgChannelsRepo {
@@ -41,6 +41,54 @@ impl ChannelsRepo for PgChannelsRepo {
                 .fetch_all(&mut **txn)
                 .await
                 .map_err(|e| e.into())
+            })
+        })
+        .await
+        .map_err(map_txn_err)
+    }
+
+    async fn list_with_attribution(
+        &self,
+        owner_user_id: Uuid,
+        location_id: Uuid,
+    ) -> Result<Vec<ChannelWithAttribution>, RepoError> {
+        crate::db::with_user(&self.pool, owner_user_id, move |txn| {
+            Box::pin(async move {
+                // Seat the RLS context: membership read first.
+                if !assert_active_owner_membership(txn, owner_user_id, location_id).await? {
+                    return Ok(Vec::new());
+                }
+                let rows = sqlx::query(
+                    "SELECT sc.id, sc.location_id, sc.kind, sc.name, sc.token, sc.active, sc.created_at,
+                            COALESCE(COUNT(o.id), 0)::bigint as order_count
+                     FROM sales_channels sc
+                     LEFT JOIN orders o ON o.location_id = sc.location_id
+                                       AND (o.metadata->>'channel') = sc.kind
+                     WHERE sc.location_id = $1
+                     GROUP BY sc.id, sc.location_id, sc.kind, sc.name, sc.token, sc.active, sc.created_at
+                     ORDER BY sc.created_at DESC",
+                )
+                .bind(location_id)
+                .fetch_all(&mut **txn)
+                .await?;
+
+                let results = rows
+                    .into_iter()
+                    .map(|row| {
+                        let channel = ChannelRow {
+                            id: row.get("id"),
+                            location_id: row.get("location_id"),
+                            kind: row.get("kind"),
+                            name: row.get("name"),
+                            token: row.get("token"),
+                            active: row.get("active"),
+                            created_at: row.get("created_at"),
+                        };
+                        let order_count = row.get("order_count");
+                        ChannelWithAttribution { channel, order_count }
+                    })
+                    .collect();
+                Ok(results)
             })
         })
         .await

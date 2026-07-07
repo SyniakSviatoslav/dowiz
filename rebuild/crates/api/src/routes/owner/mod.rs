@@ -322,10 +322,14 @@ pub fn owner_catalog_router(states: OwnerCatalogStates) -> axum::Router {
             "/api/owner/menu/categories/{id}",
             delete(categories::delete_category_alias),
         )
-        // ── channels.rs (Phase 1.1 — sales channel registry) ──
+        // ── channels.rs (Phase 1.1 — sales channel registry; Phase 1.5 — attribution dashboard) ──
         .route(
             "/api/owner/locations/{locationId}/channels",
             post(channels::create_channel).get(channels::list_channels),
+        )
+        .route(
+            "/api/owner/locations/{locationId}/channels/with-attribution",
+            get(channels::list_channels_with_attribution),
         )
         .route(
             "/api/owner/locations/{locationId}/channels/{channelId}",

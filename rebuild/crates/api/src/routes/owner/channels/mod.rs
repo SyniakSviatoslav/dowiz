@@ -60,6 +60,14 @@ pub struct UpdateChannelRequest {
     pub active: Option<bool>,
 }
 
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct ChannelWithAttribution {
+    #[serde(flatten)]
+    pub channel: ChannelRow,
+    /// Order count attributed to this channel (from orders.metadata.channel).
+    pub order_count: i64,
+}
+
 #[async_trait]
 pub trait ChannelsRepo: Send + Sync {
     async fn list(
@@ -67,6 +75,12 @@ pub trait ChannelsRepo: Send + Sync {
         owner_user_id: Uuid,
         location_id: Uuid,
     ) -> Result<Vec<ChannelRow>, RepoError>;
+
+    async fn list_with_attribution(
+        &self,
+        owner_user_id: Uuid,
+        location_id: Uuid,
+    ) -> Result<Vec<ChannelWithAttribution>, RepoError>;
 
     async fn create(
         &self,
@@ -110,6 +124,27 @@ pub async fn list_channels(
     let correlation_id = correlation_id_string(&request_id);
     require_location_access(&auth, &claims, location_id, &correlation_id).await?;
     state.repo.list(claims.user_id, location_id).await
+        .map(Json)
+        .map_err(|_| ApiError::new(ErrorCode::Internal, "internal_error", correlation_id))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/owner/locations/{locationId}/channels/with-attribution",
+    params(("locationId" = Uuid, Path, description = "Location ID")),
+    responses((status = 200, description = "List of channels with order attribution counts", body = Vec<ChannelWithAttribution>)),
+    tag = "channels"
+)]
+pub async fn list_channels_with_attribution(
+    Extension(state): Extension<ChannelsState>,
+    OwnerClaimsExt(claims): OwnerClaimsExt,
+    Extension(auth): Extension<AuthState>,
+    Path(location_id): Path<Uuid>,
+    Extension(request_id): Extension<RequestId>,
+) -> Result<Json<Vec<ChannelWithAttribution>>, ApiError> {
+    let correlation_id = correlation_id_string(&request_id);
+    require_location_access(&auth, &claims, location_id, &correlation_id).await?;
+    state.repo.list_with_attribution(claims.user_id, location_id).await
         .map(Json)
         .map_err(|_| ApiError::new(ErrorCode::Internal, "internal_error", correlation_id))
 }
