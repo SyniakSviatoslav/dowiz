@@ -9,19 +9,19 @@
 //! What STAYS in the shell: [`classify_pg_error`]/[`PgErrorClass`]. SQLSTATE is Postgres vocabulary,
 //! and platform words never enter the core (the split the sovereign gate enforces by construction).
 
-// Pure decisions, now sovereign-core — re-exported so `super::state::assert_owner_target_allowed`,
-// `state::transition_effects`, `state::cc1_strand_guard`, `state::needs_honest_dispatch`,
-// `state::idempotency_decision`, and the `BindingState`/`ExistingKey`/`IdempotencyDecision` types all
-// keep resolving exactly as before.
-// Only the decisions the shell actually calls are re-exported (the rest of `policy` —
-// `LifecycleEvent`, `TransitionEffects`, `status_at_column` — is reached via the return value of
-// `transition_effects`, so importing the names here would be dead. Any future direct caller imports
-// them from their real home, `domain::kernel::policy`).
+// Pure decisions, now sovereign-core — re-exported so `state::transition_effects`,
+// `state::needs_honest_dispatch`, `state::idempotency_decision`, and the
+// `BindingState`/`ExistingKey`/`IdempotencyDecision` types keep resolving exactly as before.
+//
+// 0b-5 SHELL FLIP: the owner actor-gate and the CC-1 courier strand guard are NO LONGER re-exported
+// here — the owner status paths compose the ONE `kernel::decide` door, which owns those corridors as
+// internals (0b-3), so the shell no longer calls them directly (only `decide`, in the core, does).
+// `transition_effects` stays re-exported for the callers NOT YET flipped
+// (`pg::apply_transition`, i.e. customer_cancel + the S7 courier surface). The rest of `policy`
+// (`LifecycleEvent`, `TransitionEffects`, `status_at_column`) is reached via the `transition_effects`
+// return value or `domain::kernel::policy` directly, so importing the names here would be dead.
 pub use domain::kernel::idempotency::{ExistingKey, IdempotencyDecision, idempotency_decision};
-pub use domain::kernel::policy::{
-    BindingState, assert_owner_target_allowed, cc1_strand_guard, needs_honest_dispatch,
-    transition_effects,
-};
+pub use domain::kernel::policy::{BindingState, needs_honest_dispatch, transition_effects};
 
 // ─────────────────────── Transient-PG classification (orders.ts:718-728) ───────────────────────
 // SQLSTATE is Postgres vocabulary → this is the ONE piece of the old state.rs that STAYS in the shell.

@@ -21,7 +21,9 @@
 
 use uuid::Uuid;
 
-use domain::{ErrorCode, Lek, OrderStatus};
+use domain::{
+    Actor, Command, Context, DomainError, ErrorCode, Event, Lek, OrderState, OrderStatus, Ts, decide,
+};
 
 use super::pricing::{
     self, DeliveryTier, FeeLocation, GroupInfo, ModifierInfo, PricingItem, PricingSnapshot,
@@ -467,33 +469,33 @@ impl OrdersRepo for PgOrdersRepo {
                     return Ok(StatusUpdateOutcome::NotFound);
                 };
 
-                // 2. Machine legality (frozen matrix) → 400/409 class.
-                if let Err(e) = domain::assert_transition(current, new_status) {
-                    let code = e.code();
-                    return Ok(StatusUpdateOutcome::Rejected(code, e.to_string()));
-                }
-                // 3. Actor-gate (orderAuthz.ts) — owner may not drive SYSTEM-only cancels → 403.
-                if let Err(code) = state::assert_owner_target_allowed(current, new_status) {
-                    return Ok(StatusUpdateOutcome::Rejected(
-                        code,
-                        "Cancelling an order in preparation is not available".to_string(),
-                    ));
-                }
-                // 4. CC-1 strand guard (orders.ts:929) for DELIVERED/PICKED_UP.
-                if new_status == OrderStatus::Delivered || new_status == OrderStatus::PickedUp {
-                    let binding = read_binding_state(txn, order_id).await?;
-                    if let Err(code) = state::cc1_strand_guard(new_status, current, binding) {
-                        let msg = if code == ErrorCode::AssignmentActive {
-                            "Order has an active courier assignment — complete it via the deliver flow"
-                        } else {
-                            "Order is in delivery without a delivered assignment — complete it via the deliver flow"
-                        };
-                        return Ok(StatusUpdateOutcome::Rejected(code, msg.to_string()));
-                    }
-                }
-                // 5. Honest dispatch (orders.ts:962) — REV-S5-9 L2 CARRY: dispatch-then-advance. The
-                // dispatch ENGINE is S7; carry the ORDERING with the engine stubbed to "no courier"
-                // (stay put, never advance-then-orphan).
+                // 2. The ONE `decide` door (0b-5 shell flip). The machine legality, the actor-gate
+                // (orderAuthz.ts), and the CC-1 strand guard (orders.ts:929) are no longer scattered
+                // shell calls — they compose INSIDE `decide`, which emits the full fold event set.
+                // The corridors read OBSERVED context (never intent): the courier-binding facts
+                // (CC-1, only for DELIVERED/PICKED_UP) and the refundable paid sum (L-A refund, only
+                // for terminal-cancel targets); everything else stays the never-dispatched/unpaid
+                // default so no extra read is done on the hot forward path.
+                let ctx = build_transition_context(txn, order_id, new_status).await?;
+                let at = Ts(chrono::Utc::now().timestamp_millis());
+                let cmd = match owner_command_for(current, new_status, at) {
+                    Ok(cmd) => cmd,
+                    Err(e) => return Ok(reject_status_update(e)),
+                };
+                let order_state = OrderState {
+                    status: current,
+                    ..OrderState::genesis()
+                };
+                let events = match decide(&order_state, cmd, &ctx) {
+                    Ok(events) => events,
+                    Err(e) => return Ok(reject_status_update(e)),
+                };
+
+                // 3. Honest dispatch (orders.ts:962) — REV-S5-9 L2 CARRY: dispatch-then-advance. Stays
+                // a PRE-APPLY shell gate (not folded into `decide`). `decide` has already vetted
+                // legality/actor/CC-1 above, so an ILLEGAL →IN_DELIVERY is rejected there (never
+                // dispatched); here the engine is stubbed to "no courier" → stay put, never
+                // advance-then-orphan. The decided events are discarded — nothing is applied.
                 if state::needs_honest_dispatch(new_status, order_type == "delivery") {
                     return Ok(StatusUpdateOutcome::Dispatched {
                         status: current, // stayed put (no courier) — the F1-orphan fix
@@ -501,8 +503,8 @@ impl OrdersRepo for PgOrdersRepo {
                         reason: Some("no_courier".to_string()),
                     });
                 }
-                // 6. Apply the transition + folds.
-                match apply_transition(txn, order_id, location_id, current, new_status).await? {
+                // 4. Apply the decided event set (guarded UPDATE + folds).
+                match apply_events(txn, order_id, location_id, &events).await? {
                     true => Ok(StatusUpdateOutcome::Updated(new_status)),
                     false => Ok(StatusUpdateOutcome::Rejected(
                         ErrorCode::Conflict,
@@ -546,26 +548,24 @@ impl OrdersRepo for PgOrdersRepo {
                 let Some(current) = parse_status(&current_str) else {
                     return Ok(StatusUpdateOutcome::NotFound);
                 };
-                if let Err(e) = domain::assert_transition(current, new_status) {
-                    return Ok(StatusUpdateOutcome::Rejected(e.code(), e.to_string()));
-                }
-                if let Err(code) = state::assert_owner_target_allowed(current, new_status) {
-                    return Ok(StatusUpdateOutcome::Rejected(
-                        code,
-                        "Cancelling an order in preparation is not available".to_string(),
-                    ));
-                }
-                if new_status == OrderStatus::Delivered || new_status == OrderStatus::PickedUp {
-                    let binding = read_binding_state(txn, order_id).await?;
-                    if let Err(code) = state::cc1_strand_guard(new_status, current, binding) {
-                        let msg = if code == ErrorCode::AssignmentActive {
-                            "Order has an active courier assignment — complete it via the deliver flow"
-                        } else {
-                            "Order is in delivery without a delivered assignment — complete it via the deliver flow"
-                        };
-                        return Ok(StatusUpdateOutcome::Rejected(code, msg.to_string()));
-                    }
-                }
+                // The ONE `decide` door (0b-5 shell flip) — machine + actor-gate + CC-1 compose here,
+                // emitting the fold event set. Same composition as `owner_update_status`; this method
+                // differs only in the URL-location IDOR scope (the SELECT above) and the REJECTED
+                // `rejection_reason` write below.
+                let ctx = build_transition_context(txn, order_id, new_status).await?;
+                let at = Ts(chrono::Utc::now().timestamp_millis());
+                let cmd = match owner_command_for(current, new_status, at) {
+                    Ok(cmd) => cmd,
+                    Err(e) => return Ok(reject_status_update(e)),
+                };
+                let order_state = OrderState {
+                    status: current,
+                    ..OrderState::genesis()
+                };
+                let events = match decide(&order_state, cmd, &ctx) {
+                    Ok(events) => events,
+                    Err(e) => return Ok(reject_status_update(e)),
+                };
                 if state::needs_honest_dispatch(new_status, order_type == "delivery") {
                     return Ok(StatusUpdateOutcome::Dispatched {
                         status: current,
@@ -573,7 +573,7 @@ impl OrdersRepo for PgOrdersRepo {
                         reason: Some("no_courier".to_string()),
                     });
                 }
-                match apply_transition(txn, order_id, location_id, current, new_status).await? {
+                match apply_events(txn, order_id, location_id, &events).await? {
                     true => {
                         // rejection_reason is set separately (updateOrderStatus doesn't own it —
                         // dashboard.ts:652), same tx, only on REJECTED with a reason.
@@ -753,10 +753,11 @@ impl OrdersRepo for PgOrdersRepo {
 
 // ─────────────────────────────── shared SQL helpers ───────────────────────────────
 
-/// The `updateOrderStatus` mutator (`orderStatusService.ts`) — the status-guarded UPDATE (0 rows →
-/// `false` = 409 CONFLICT) + the R2-3 assignment-terminalize fold + the L-A `refund_due` fold +
-/// history + lifecycle bus. Uses [`state::transition_effects`] for the fold decisions. Runs inside
-/// the caller's tenant-seated tx. Returns `Ok(true)` on apply, `Ok(false)` on a status-race.
+/// The `updateOrderStatus` mutator (`orderStatusService.ts`), `(current, new)` form — the
+/// status-guarded UPDATE (0 rows → `false` = 409 CONFLICT) + the R2-3 assignment-terminalize fold +
+/// the L-A `refund_due` fold + history + lifecycle bus. Reads [`state::transition_effects`] for the
+/// fold decisions and replays them through the shared SQL helpers below. Runs inside the caller's
+/// tenant-seated tx. Returns `Ok(true)` on apply, `Ok(false)` on a status-race.
 ///
 /// `pub(crate)` (not module-private): S7 courier/dispatch (`routes::courier::assignments`) is the
 /// SECOND caller of this exact mutator (`docs/design/rebuild-courier-s7-council/proposal.md` §4.3
@@ -764,7 +765,12 @@ impl OrdersRepo for PgOrdersRepo {
 /// already GUC-agnostic (it takes an open `&mut Transaction`, does not itself seat any GUC) — S7
 /// opens its OWN `with_tenant(activeLocationId)` transaction for the courier-side assignment/shift
 /// writes, then calls this SAME function for the order-side fold, so the two surfaces never fork
-/// the fold logic. Nothing about this function's body changes for the new caller.
+/// the fold logic.
+///
+/// 0b-5 SHELL-FLIP NOTE: the OWNER status paths no longer reach this `(current, new)` entry — they
+/// compose `kernel::decide` and apply its emitted events via [`apply_events`]. This function stays
+/// the `transition_effects`-driven entry for the callers NOT YET flipped (customer_cancel + the S7
+/// courier surface); both entries share the SQL helpers below, so the folds can never fork.
 pub(crate) async fn apply_transition(
     txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     order_id: Uuid,
@@ -773,13 +779,73 @@ pub(crate) async fn apply_transition(
     new_status: OrderStatus,
 ) -> Result<bool, sqlx::Error> {
     let fx = state::transition_effects(current, new_status);
-    let new_str = status_pg(new_status);
-    let current_str = status_pg(current);
+    // Status-guarded UPDATE (anti-race) — 0 rows → 409 CONFLICT (concurrent transition).
+    if !guarded_status_update(txn, order_id, current, new_status).await? {
+        return Ok(false);
+    }
+    if fx.terminalize_assignment {
+        terminalize_binding_fold(txn, order_id, new_status).await?;
+    }
+    if fx.record_refund_due {
+        record_refund_due_fold(txn, order_id).await?;
+    }
+    status_history_audit(txn, order_id, location_id, current, new_status).await?;
+    // REV-S5-9 L1: the ORDER_CONFIRMED/REJECTED bus folds are published post-apply. The WS bus
+    // transport is S6 — CARRY the fold DECISION (fx.lifecycle_event) here; the publish is a no-op
+    // seam until S6 wires the bus (documented, not silently dropped).
+    let _lifecycle = fx.lifecycle_event;
+    Ok(true)
+}
 
-    // Status-guarded UPDATE (anti-race). The stamp column comes from the fixed allowlist (never user
-    // input — safe to interpolate), matching orderStatusService.ts:114.
-    let stamp = fx
-        .stamp_column
+/// The `updateOrderStatus` mutator, EVENT form (0b-5 shell flip) — the OWNER status paths compose
+/// the ONE `kernel::decide` door and REPLAY its decided facts here, rather than re-reading
+/// `transition_effects`. `StatusChanged` (which carries `from`/`to`) drives the guarded UPDATE;
+/// `BindingTerminalized` (R2-3) and `RefundObligated` (L-A) each TRIGGER their fold — same SQL, same
+/// side effects, only the trigger changed (the decided event instead of the shell-computed `fx`).
+/// Shares the SQL helpers with [`apply_transition`], so the two entries can never fork the folds.
+/// Returns `Ok(true)` on apply, `Ok(false)` on a status-race. `Event::Priced` (PlaceOrder only)
+/// never reaches this transition path and is ignored by construction.
+async fn apply_events(
+    txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    order_id: Uuid,
+    location_id: Uuid,
+    events: &[Event],
+) -> Result<bool, sqlx::Error> {
+    // `decide` emits exactly one StatusChanged per transition command; it carries the from/to the
+    // guarded UPDATE + history key on. Absent (unreachable for a transition decide) ⇒ nothing to apply.
+    let Some((from, to)) = events.iter().find_map(|e| match e {
+        Event::StatusChanged { from, to, .. } => Some((*from, *to)),
+        _ => None,
+    }) else {
+        return Ok(true);
+    };
+    if !guarded_status_update(txn, order_id, from, to).await? {
+        return Ok(false); // 0 rows → 409 CONFLICT (concurrent transition)
+    }
+    if events.iter().any(|e| matches!(e, Event::BindingTerminalized)) {
+        terminalize_binding_fold(txn, order_id, to).await?;
+    }
+    if events
+        .iter()
+        .any(|e| matches!(e, Event::RefundObligated { .. }))
+    {
+        record_refund_due_fold(txn, order_id).await?;
+    }
+    status_history_audit(txn, order_id, location_id, from, to).await?;
+    Ok(true)
+}
+
+/// Status-guarded UPDATE (anti-race): moves `from → to` iff the row is still at `from`, stamping the
+/// `*_at` allowlist column for `to` (`status_at_column`, `orderStatusService.ts:114`) and clearing
+/// `timeout_at`. The stamp column is a fixed enum→column allowlist (never user input — safe to
+/// interpolate). `Ok(false)` on a 0-row race. Shared by both apply entries.
+async fn guarded_status_update(
+    txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    order_id: Uuid,
+    from: OrderStatus,
+    to: OrderStatus,
+) -> Result<bool, sqlx::Error> {
+    let stamp = domain::kernel::policy::status_at_column(to)
         .map(|c| format!(", {c} = now()"))
         .unwrap_or_default();
     let sql = format!(
@@ -787,77 +853,94 @@ pub(crate) async fn apply_transition(
            WHERE id = $2 AND status = $3::order_status RETURNING id"
     );
     let updated: Option<(Uuid,)> = sqlx::query_as(&sql)
-        .bind(new_str)
+        .bind(status_pg(to))
         .bind(order_id)
-        .bind(current_str)
+        .bind(status_pg(from))
         .fetch_optional(&mut **txn)
         .await?;
-    if updated.is_none() {
-        return Ok(false); // 0 rows → 409 CONFLICT (concurrent transition)
-    }
+    Ok(updated.is_some())
+}
 
-    // R2-3 assignment-terminalize fold.
-    if fx.terminalize_assignment {
-        sqlx::query(
-            "WITH freed AS (
-               UPDATE courier_assignments SET status = 'cancelled', cancelled_at = now(),
-                      cancellation_reason = 'order_' || lower($2)
-                WHERE order_id = $1 AND status IN ('offered','assigned','accepted','picked_up')
-               RETURNING shift_id)
-             UPDATE courier_shifts SET status = 'available'
-              WHERE id IN (SELECT shift_id FROM freed WHERE shift_id IS NOT NULL)",
-        )
-        .bind(order_id)
-        .bind(new_str)
+/// R2-3 assignment-terminalize fold (`orderStatusService.ts:139`): terminalize the active courier
+/// binding + free its shift in the SAME tx (`cancellation_reason = 'order_' || lower(<to>)`).
+async fn terminalize_binding_fold(
+    txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    order_id: Uuid,
+    to: OrderStatus,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "WITH freed AS (
+           UPDATE courier_assignments SET status = 'cancelled', cancelled_at = now(),
+                  cancellation_reason = 'order_' || lower($2)
+            WHERE order_id = $1 AND status IN ('offered','assigned','accepted','picked_up')
+           RETURNING shift_id)
+         UPDATE courier_shifts SET status = 'available'
+          WHERE id IN (SELECT shift_id FROM freed WHERE shift_id IS NOT NULL)",
+    )
+    .bind(order_id)
+    .bind(status_pg(to))
+    .execute(&mut **txn)
+    .await?;
+    Ok(())
+}
+
+/// L-A `refund_due` fold (`orderStatusService.ts:165`, SAVEPOINT-wrapped, idempotent, fail-closed
+/// per order). Records a `refund_due` payment_event per `paid` payment. Inert until crypto flips (no
+/// `paid` rows). A fold failure rolls back its SAVEPOINT and PROPAGATES (ESC-2 — the cancel aborts).
+async fn record_refund_due_fold(
+    txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    order_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("SAVEPOINT refund_due_fold")
         .execute(&mut **txn)
         .await?;
-    }
-
-    // L-A refund_due fold (SAVEPOINT-wrapped, idempotent). Inert until crypto flips (no `paid` rows).
-    if fx.record_refund_due {
-        sqlx::query("SAVEPOINT refund_due_fold")
-            .execute(&mut **txn)
-            .await?;
-        let fold: Result<_, sqlx::Error> = sqlx::query(
-            "INSERT INTO payment_events
-               (payment_id, location_id, provider, provider_payment_id, type, amount_minor, currency_code, signature_verified)
-             SELECT p.id, p.location_id, p.provider, p.provider_payment_id, 'refund_due', p.amount_minor, p.currency_code, true
-               FROM payments p WHERE p.order_id = $1 AND p.status = 'paid'
-             ON CONFLICT DO NOTHING",
-        )
-        .bind(order_id)
-        .execute(&mut **txn)
-        .await;
-        match fold {
-            Ok(_) => {
-                sqlx::query("RELEASE SAVEPOINT refund_due_fold")
-                    .execute(&mut **txn)
-                    .await?;
-            }
-            Err(_) => {
-                // fail-closed per order (ESC-2): roll back the fold and propagate — the cancel aborts.
-                sqlx::query("ROLLBACK TO SAVEPOINT refund_due_fold")
-                    .execute(&mut **txn)
-                    .await?;
-                return Err(sqlx::Error::Protocol("refund_due fold failed".into()));
-            }
+    let fold: Result<_, sqlx::Error> = sqlx::query(
+        "INSERT INTO payment_events
+           (payment_id, location_id, provider, provider_payment_id, type, amount_minor, currency_code, signature_verified)
+         SELECT p.id, p.location_id, p.provider, p.provider_payment_id, 'refund_due', p.amount_minor, p.currency_code, true
+           FROM payments p WHERE p.order_id = $1 AND p.status = 'paid'
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(order_id)
+    .execute(&mut **txn)
+    .await;
+    match fold {
+        Ok(_) => {
+            sqlx::query("RELEASE SAVEPOINT refund_due_fold")
+                .execute(&mut **txn)
+                .await?;
+            Ok(())
+        }
+        Err(_) => {
+            // fail-closed per order (ESC-2): roll back the fold and propagate — the cancel aborts.
+            sqlx::query("ROLLBACK TO SAVEPOINT refund_due_fold")
+                .execute(&mut **txn)
+                .await?;
+            Err(sqlx::Error::Protocol("refund_due fold failed".into()))
         }
     }
+}
 
-    // order_status_history audit (SAVEPOINT best-effort — a history failure never rolls back the
-    // applied status).
+/// order_status_history audit (SAVEPOINT best-effort — a history failure never rolls back the
+/// applied status). `$3/$4::order_status` — enum columns bound as text (same class as
+/// CREATE_ORDER_SQL's type::order_type); uncast, this INSERT threw and the SAVEPOINT silently
+/// swallowed the audit row (staging oracle 2026-07-05) — data loss under a green status update.
+async fn status_history_audit(
+    txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    order_id: Uuid,
+    location_id: Uuid,
+    from: OrderStatus,
+    to: OrderStatus,
+) -> Result<(), sqlx::Error> {
     sqlx::query("SAVEPOINT osh").execute(&mut **txn).await?;
     let hist: Result<_, sqlx::Error> = sqlx::query(
-        // $3/$4::order_status — enum columns bound as text (same class as CREATE_ORDER_SQL's
-        // type::order_type). Uncast, this INSERT threw and the SAVEPOINT silently swallowed the
-        // status-history audit row (staging oracle 2026-07-05) — data loss under a green status update.
         "INSERT INTO order_status_history (order_id, location_id, from_status, to_status, actor, comment)
          VALUES ($1, $2, $3::order_status, $4::order_status, 'system:updateOrderStatus', NULL)",
     )
     .bind(order_id)
     .bind(location_id)
-    .bind(current_str)
-    .bind(new_str)
+    .bind(status_pg(from))
+    .bind(status_pg(to))
     .execute(&mut **txn)
     .await;
     if hist.is_err() {
@@ -869,13 +952,7 @@ pub(crate) async fn apply_transition(
             .execute(&mut **txn)
             .await?;
     }
-
-    // REV-S5-9 L1: the ORDER_CONFIRMED/REJECTED bus folds are published post-apply. The WS bus
-    // transport is S6 — CARRY the fold DECISION (fx.lifecycle_event) here; the publish is a no-op
-    // seam until S6 wires the bus (documented, not silently dropped).
-    let _lifecycle = fx.lifecycle_event;
-
-    Ok(true)
+    Ok(())
 }
 
 async fn read_binding_state(
@@ -899,6 +976,123 @@ async fn read_binding_state(
         has_active_binding: active.is_some(),
         has_delivered_binding: delivered.is_some(),
     })
+}
+
+/// Assemble the OBSERVED [`Context`] a transition `decide` reads (the corridors' non-intent inputs),
+/// reading ONLY what the target needs so the hot forward path adds no query:
+///   • the courier-binding facts (CC-1 strand guard) — only for a DELIVERED/PICKED_UP target;
+///   • the refundable PAID sum (L-A refund obligation) — only for a terminal-cancel target
+///     (CANCELLED/REJECTED).
+/// Every other target keeps the never-dispatched/unpaid default (`decide`'s cc1/refund corridors are
+/// no-ops for it), so this reads nothing for an ordinary forward transition.
+async fn build_transition_context(
+    txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    order_id: Uuid,
+    target: OrderStatus,
+) -> Result<Context<'static>, sqlx::Error> {
+    let binding = if target == OrderStatus::Delivered || target == OrderStatus::PickedUp {
+        read_binding_state(txn, order_id).await?
+    } else {
+        BindingState {
+            has_active_binding: false,
+            has_delivered_binding: false,
+        }
+    };
+    let refundable_paid = if target == OrderStatus::Cancelled || target == OrderStatus::Rejected {
+        read_refundable_paid(txn, order_id).await?
+    } else {
+        Lek::ZERO
+    };
+    Ok(Context::for_transition(binding, refundable_paid))
+}
+
+/// The sum of PAID payments for an order — the L-A `refund_due` amount the terminal-cancel corridor
+/// reads (kernel `Context.refundable_paid`). ZERO today (crypto dark, no `paid` rows), so `decide`
+/// emits no `RefundObligated` and [`apply_events`] runs no refund fold — byte-identical to the
+/// pre-0b-5 path, whose refund SQL matched 0 rows on every terminal cancel. When crypto flips and
+/// real `paid` rows appear, this drives the obligation exactly as the fold SQL records it (one
+/// `refund_due` event per paid payment, so `sum > 0` ⇔ the fold has ≥1 row to write).
+async fn read_refundable_paid(
+    txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    order_id: Uuid,
+) -> Result<Lek, sqlx::Error> {
+    let row: (i64,) = sqlx::query_as(
+        "SELECT COALESCE(SUM(amount_minor), 0)::bigint FROM payments
+          WHERE order_id = $1 AND status = 'paid'",
+    )
+    .bind(order_id)
+    .fetch_one(&mut **txn)
+    .await?;
+    Ok(Lek::new(row.0).unwrap_or(Lek::ZERO))
+}
+
+/// Map an OWNER-driven target [`OrderStatus`] to the kernel [`Command`] that drives it (WHO =
+/// [`Actor::Owner`], WHEN = the caller-supplied `at`). Every reachable machine target has a command;
+/// PENDING/SCHEDULED are UNREACHABLE targets (`order_status.rs`: SCHEDULED is scaffold-disabled both
+/// directions, PENDING is a target from nowhere) so no command targets them and `decide` cannot be
+/// reached — the refusal is classified HERE with the machine's own precedence (same-status →
+/// scaffold → illegal), byte-identical to the machine-legality check this door now composes.
+fn owner_command_for(
+    from: OrderStatus,
+    to: OrderStatus,
+    at: Ts,
+) -> Result<Command, DomainError> {
+    let actor = Actor::Owner;
+    Ok(match to {
+        OrderStatus::Confirmed => Command::Confirm { at, actor },
+        OrderStatus::Rejected => Command::Reject { at, actor },
+        OrderStatus::Preparing => Command::StartPreparing { at, actor },
+        // MarkReady and RevertToReady both target READY and yield an identical `decide` event set
+        // (the effects derive from from/to, not the command variant); MarkReady covers both, incl.
+        // the IN_DELIVERY→READY revert (transition_effects still terminalizes the binding there).
+        OrderStatus::Ready => Command::MarkReady { at, actor },
+        OrderStatus::InDelivery => Command::Dispatch { at, actor },
+        OrderStatus::Delivered => Command::MarkDelivered { at, actor },
+        OrderStatus::PickedUp => Command::MarkPickedUp { at, actor },
+        OrderStatus::Cancelled => Command::Cancel { at, actor },
+        OrderStatus::Pending | OrderStatus::Scheduled => {
+            return Err(if from == to {
+                DomainError::SameStatus(from)
+            } else if to == OrderStatus::Scheduled || from == OrderStatus::Scheduled {
+                DomainError::ScaffoldDisabled { from, to }
+            } else {
+                DomainError::IllegalTransition { from, to }
+            });
+        }
+    })
+}
+
+/// Map a `decide` refusal to the owner status-update rejection outcome, preserving the EXACT wire
+/// message the pre-0b-5 shell returned for each corridor (the wire `code` is carried verbatim by
+/// `DomainError`; only the human message was corridor-specific in the old scattered calls).
+fn reject_status_update(e: DomainError) -> StatusUpdateOutcome {
+    let (code, msg) = match e {
+        // Actor-gate (orderAuthz.ts) — owner may not drive the SYSTEM-only widened cancel edges.
+        DomainError::CorridorBreach {
+            corridor: "actor_gate",
+            code,
+        } => (
+            code,
+            "Cancelling an order in preparation is not available".to_string(),
+        ),
+        // CC-1 strand guard (orders.ts:929-955) — active binding vs IN_DELIVERY-without-delivered.
+        DomainError::CorridorBreach {
+            corridor: "cc1_strand",
+            code,
+        } => (
+            code,
+            if code == ErrorCode::AssignmentActive {
+                "Order has an active courier assignment — complete it via the deliver flow"
+            } else {
+                "Order is in delivery without a delivered assignment — complete it via the deliver flow"
+            }
+            .to_string(),
+        ),
+        // Machine class (illegal/scaffold/same-status) — the DomainError Display is the wire message,
+        // exactly as the old `Rejected(e.code(), e.to_string())` produced.
+        other => (other.code(), other.to_string()),
+    };
+    StatusUpdateOutcome::Rejected(code, msg)
 }
 
 #[allow(clippy::type_complexity)]
