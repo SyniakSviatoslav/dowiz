@@ -412,6 +412,12 @@ fn build_owner_states(
                 pools.operational.clone(),
             )),
         },
+        customers: routes::owner::customers::CustomersState {
+            auth: auth.clone(),
+            repo: Arc::new(crate::modules::customer_management::PgCustomerRepo::new(
+                pools.operational.clone(),
+            )),
+        },
         modifier_groups: routes::owner::modifier_groups::ModifierGroupsState {
             auth: auth.clone(),
             repo: Arc::new(routes::owner::modifier_groups::PgModifierGroupsRepo::new(

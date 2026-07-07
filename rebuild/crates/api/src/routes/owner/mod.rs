@@ -76,6 +76,7 @@ use crate::error::ApiError;
 
 pub mod categories;
 pub mod channels;
+pub mod customers;
 pub mod courier_invites;
 pub mod couriers;
 pub mod dwell_settings;
@@ -202,6 +203,7 @@ pub struct OwnerCatalogStates {
     pub products: products::ProductsState,
     pub categories: categories::CategoriesState,
     pub channels: channels::ChannelsState,
+    pub customers: customers::CustomersState,
     pub modifier_groups: modifier_groups::ModifierGroupsState,
     pub menu_availability: menu_availability::MenuAvailabilityState,
     pub themes: themes::ThemesState,
@@ -334,6 +336,15 @@ pub fn owner_catalog_router(states: OwnerCatalogStates) -> axum::Router {
         .route(
             "/api/owner/locations/{locationId}/channels/{channelId}",
             patch(channels::update_channel).delete(channels::delete_channel),
+        )
+        // ── customers.rs (Phase 2.3 — owned customer data + erasure oracle) ──
+        .route(
+            "/api/owner/locations/{locationId}/customers",
+            get(customers::list_customers),
+        )
+        .route(
+            "/api/owner/locations/{locationId}/customers/{customerId}",
+            get(customers::get_customer).delete(customers::delete_customer),
         )
         // ── dwell_settings.rs (owner dwell thresholds GET/PUT) ──
         .route(
@@ -517,6 +528,7 @@ pub fn owner_catalog_router(states: OwnerCatalogStates) -> axum::Router {
         .layer(axum::Extension(states.products))
         .layer(axum::Extension(states.categories))
         .layer(axum::Extension(states.channels))
+        .layer(axum::Extension(states.customers))
         .layer(axum::Extension(states.modifier_groups))
         .layer(axum::Extension(states.menu_availability))
         .layer(axum::Extension(states.themes))
