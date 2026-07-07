@@ -89,8 +89,8 @@ if [ "$mutates" -eq 1 ] && printf '%s' "$CMD" | grep -qE "$OVERRIDES"; then
 fi
 
 # --- 2) protect-paths parity: Bash must not mutate what Edit/Write cannot ---
-# (.claude/state and .claude/logs stay agent-writable — the council flow appends serious-cleared
-# there by design; the clearance itself is TTL'd by serious-gate.sh.)
+# (.claude/state and .claude/logs stay agent-writable by design — state files are TTL'd by
+# the gates that own them.)
 PROTECTED='\.github/|(^|[^A-Za-z0-9_])migrations/|fly\.toml|Dockerfile|pnpm-lock\.yaml|packages/(db|shared-types)/|/contracts/|\.contract\.|(^|[^A-Za-z0-9_])\.env([^A-Za-z0-9_]|$)'
 if [ "$mutates" -eq 1 ] && printf '%s' "$CMD" | grep -qE "$PROTECTED"; then
   _block "Bash mutation touching a protect-paths zone (hooks/settings/agents/.github/migrations/infra/db/contracts/.env). These require manual human approval — same rule as the Edit/Write gate (protect-paths.sh). Read-only access is fine without redirects."
@@ -117,7 +117,7 @@ fi
 
 # --- 5) dependency mutations: lockfile is a protected zone ---
 if printf '%s' "$CMD" | grep -qE '(^|[|;&][[:space:]]*|[[:space:]])(pnpm[[:space:]]+(add|remove)[[:space:]]|npm[[:space:]]+(install|i)[[:space:]]+[^-[:space:]]|yarn[[:space:]]+add[[:space:]])'; then
-  _block "dependency add/remove mutates pnpm-lock.yaml (protected). New deps go through the council/human (plain 'pnpm install' restore is allowed)."
+  _block "dependency add/remove mutates pnpm-lock.yaml (protected). New deps go through the human (plain 'pnpm install' restore is allowed)."
 fi
 
 exit 0

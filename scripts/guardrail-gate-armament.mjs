@@ -21,7 +21,7 @@ const ROOT = process.cwd();
 const HOOKS = process.env.GATE_HOOKS_DIR || join(ROOT, '.claude/hooks');
 // V2 = hooks carry the P1 harness-events telemetry; those cases are version-gated so this
 // guardrail stays green while the applied hooks are still V1.
-const V2 = readFileSync(join(HOOKS, 'serious-gate.sh'), 'utf8').includes('harness-events');
+const V2 = readFileSync(join(HOOKS, 'guard-bash.sh'), 'utf8').includes('harness-events');
 const FIX = mkdtempSync(join(tmpdir(), 'gate-armament-'));
 const STATE = join(FIX, '.claude/state');
 mkdirSync(STATE, { recursive: true });
@@ -50,27 +50,9 @@ function check(name, ok, detail) {
   else { console.error(`  ✗ ${name}${detail ? ` — ${detail}` : ''}`); failures.push(name); }
 }
 
-const now = Math.floor(Date.now() / 1000);
-const seriousFile = { file_path: join(FIX, 'apps/api/src/routes/payments.ts') }; // matches SERIOUS (payment)
-const clearedPath = join(STATE, 'serious-cleared');
-
-// ── serious-gate.sh ─────────────────────────────────────────────────────────
-console.log('serious-gate.sh:');
-writeFileSync(clearedPath, 'old-slug-one\nold-slug-two\n'); // legacy bare slugs (the 06-21→07-02 hole)
-check('legacy bare-slug clearance does NOT open the gate (DENY)', denies(runHook('serious-gate.sh', seriousFile)));
-
-writeFileSync(clearedPath, `expired-slug|${now - 10}\n`);
-check('expired clearance does NOT open the gate (DENY)', denies(runHook('serious-gate.sh', seriousFile)));
-
-writeFileSync(clearedPath, `fresh-slug|${now + 3600}\n`);
-const fresh = runHook('serious-gate.sh', seriousFile);
-check('fresh slug|expiry clearance opens the gate (ALLOW)', fresh.status === 0 && !denies(fresh));
-const log = join(FIX, '.claude/logs/classification.log');
-check('ALLOW is logged with the clearing slug', existsSync(log) && readFileSync(log, 'utf8').includes('cleared(fresh-slug)'));
-
-writeFileSync(clearedPath, '');
-const nonSerious = runHook('serious-gate.sh', { file_path: join(FIX, 'apps/web/src/components/Footer.tsx') });
-check('non-serious surface passes without clearance (ALLOW)', nonSerious.status === 0 && !denies(nonSerious));
+// serious-gate.sh (council gate) + pre-edit-lessons.sh REMOVED 2026-07-07 (operator: ground truth
+// over proxy reasoning). Their armament cases are gone; the surviving deterministic gates below
+// (red-line-doubt-gate irreversible-migration confirm + guard-bash Bash-lane block) stay proven.
 
 // ── red-line-doubt-gate.sh ──────────────────────────────────────────────────
 console.log('red-line-doubt-gate.sh:');
@@ -95,7 +77,7 @@ const bash = (command) => runHook('guard-bash.sh', { command });
 // blocks a sed into it — this assertion was stale-red from 340a8c3a onward (gate-armament isn't in
 // pre-commit, so it went unnoticed). It now asserts the UNLOCKED reality; the still-protected zones
 // below (schema/migrations, .github, override files) keep guard-bash's sed-mutation coverage proven.
-check('sed -i into .claude/hooks now ALLOWED (unlock 340a8c3a)', bash('sed -i s/a/b/ .claude/hooks/serious-gate.sh').status === 0);
+check('sed -i into .claude/hooks now ALLOWED (unlock 340a8c3a)', bash('sed -i s/a/b/ .claude/hooks/red-line-doubt-gate.sh').status === 0);
 check('sed -i into packages/db/migrations still blocked (exit 2)', bash('sed -i s/a/b/ packages/db/migrations/999_x.sql').status === 2);
 check('redirect into .github blocked (exit 2)', bash('echo x > .github/workflows/ci.yml').status === 2);
 check('agent writing its own gate override blocked (exit 2)', bash('echo bypass > .claude/state/serious-override').status === 2);
@@ -105,26 +87,14 @@ check('prod fly deploy blocked (exit 2)', bash('flyctl deploy --remote-only').st
 check('pnpm add blocked (exit 2)', bash('pnpm add leftpad').status === 2);
 check('staging fly deploy allowed (Ship Discipline)', bash('flyctl deploy -a dowiz-staging --remote-only').status === 0);
 check('plain command allowed', bash('ls -la apps/').status === 0);
-check('read-only access to protected path allowed', bash('cat .claude/hooks/serious-gate.sh').status === 0);
-check('stderr-scrub: hook run with 2>/dev/null allowed', bash('bash .claude/hooks/serious-gate.sh 2>/dev/null').status === 0);
+check('read-only access to protected path allowed', bash('cat .claude/hooks/red-line-doubt-gate.sh').status === 0);
+check('stderr-scrub: hook run with 2>/dev/null allowed', bash('bash .claude/hooks/red-line-doubt-gate.sh 2>/dev/null').status === 0);
 check('feature-branch push allowed', bash('git push origin feat/some-branch').status === 0);
 
-// ── V2 (P1 telemetry + docs exemption) — version-gated ─────────────────────
+// ── V2 (P1 telemetry) — version-gated ──────────────────────────────────────
 if (V2) {
-  console.log('V2 (harness-events + docs exemption):');
-  writeFileSync(clearedPath, '');
-  const docsEdit = runHook('serious-gate.sh', { file_path: join(FIX, 'docs/regressions/REGRESSION-LEDGER.md') });
-  check('docs/* (ledger append) passes without clearance (ALLOW)', docsEdit.status === 0 && !denies(docsEdit));
-  check('serious-gate DENY leaves a harness-events line', eventsHas('"hook":"serious-gate","event":"deny"'));
+  console.log('V2 (harness-events telemetry):');
   check('guard-bash block leaves a harness-events line', eventsHas('"hook":"guard-bash","event":"block"'));
-
-  // pre-edit-lessons: fixture INDEX + lesson → injection + hit-count event
-  mkdirSync(join(FIX, 'docs/lessons'), { recursive: true });
-  writeFileSync(join(FIX, 'docs/lessons/INDEX.md'), '| TRIGGER | file |\n|---|---|\n| packages/ui/src/theme/**.css | docs/lessons/test-lesson.md |\n');
-  writeFileSync(join(FIX, 'docs/lessons/test-lesson.md'), 'TRIGGER: packages/ui/src/theme/**.css\nACTION: test action fires\nLINK: docs/regressions/REGRESSION-LEDGER.md\n');
-  const inject = runHook('pre-edit-lessons.sh', { file_path: join(FIX, 'packages/ui/src/theme/foo.css') });
-  check('pre-edit-lessons injects a matched lesson', (inject.stdout || '').includes('test action fires'));
-  check('lesson injection leaves a hit-count event', eventsHas('"hook":"pre-edit-lessons","event":"inject"'));
 }
 
 rmSync(FIX, { recursive: true, force: true });

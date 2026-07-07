@@ -100,7 +100,7 @@ Before this edit, state your doubt-pass (skill: doubt-escalation):
   1) OPTIONS considered — the 2–3 approaches you weighed;
   2) WHY THIS one — evidence (file:line / ADR / invariant / test) that it dominates;
   3) REVERSIBILITY — how this is undone if wrong (revert / flag-off / no data loss).
-If a security/invariant doubt survives → raise security-sentinel or invariant-guardian for a file:line check, then resume.
+If a security/invariant doubt survives → get GROUND TRUTH before resuming: grep the invariant, read the real source at file:line, or write a failing test — not a second opinion.
 Advisory only (this gate does not block; protect-paths.sh enforces hard zones separately)."
 if command -v jq >/dev/null 2>&1; then
   jq -nc --arg c "$CTX" '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$c}}'

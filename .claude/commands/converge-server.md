@@ -4,7 +4,7 @@ argument-hint: <опц. скоуп: домен/ендпоінт>
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 Запусти петлю backend-contract-convergence (loops/backend-contract-convergence.yaml). Скоуп: «$ARGUMENTS».
-Скелет SENSE→DIAGNOSE→ACT→VERIFY→REPEAT; дотримуй гейти (STOP-CONTRACT-MAP, STOP-MIGRATION) й iron principles картки. 🔴 forward-only міграції; RLS ENABLE+FORCE; integer-гроші; idempotency у PG. Зміна контракту, що ламає клієнтів → /council. Training-mode на гейтах. Онови loops/memory/backend-contract-convergence.md.
+Скелет SENSE→DIAGNOSE→ACT→VERIFY→REPEAT; дотримуй гейти (STOP-CONTRACT-MAP, STOP-MIGRATION) й iron principles картки. 🔴 forward-only міграції; RLS ENABLE+FORCE; integer-гроші; idempotency у PG. Зміна контракту, що ламає клієнтів → ескалюй людині. Training-mode на гейтах. Онови loops/memory/backend-contract-convergence.md.
 
 ## Телеметрія (обов'язково — фініш БУДЬ-ЯКОГО результату)
 На success/stall/abort виклич finalize харнесу за інструкцією `harness:` вузла картки loops/<id>.yaml

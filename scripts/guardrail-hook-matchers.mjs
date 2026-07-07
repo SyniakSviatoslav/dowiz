@@ -18,11 +18,13 @@ const SETTINGS = join(ROOT, '.claude/settings.json');
 // sed -i/node script via Bash could mutate protected paths ungoverned (the guard existed but was
 // unregistered since 43a018c1). It must stay registered under a Bash matcher.
 const EDIT_TOOLS = ['Edit', 'Write', 'MultiEdit'];
-// serious-gate.sh (council gate) was DELIBERATELY UNREGISTERED from settings.json on 2026-07-05
-// (operator-approved council-disable — council is now optional, not required; the route-request
-// UserPromptSubmit nudge remains). It is intentionally absent from this list so this guardrail
-// matches that decision instead of demanding a hook the operator removed. If the council gate is
-// ever re-enabled, re-add it here so its matcher stays Edit|Write|MultiEdit (no MultiEdit bypass).
+// PROXY-REASONING REMOVAL (operator 2026-07-07, "harness must remain, but ground truth over proxy
+// reasoning"): serious-gate.sh (council gate), pre-edit-lessons.sh (advisory lesson injection),
+// route-request.sh (council/loop nudge) and loop-detector.sh (doubt-ladder nudge) were DELETED — a
+// proxy (2nd-model opinion / advisory reasoning-nudge) is not a ground-truth gate. They are
+// intentionally absent from this list. The deterministic edit-governance gates below still cover
+// every edit tool lane (no MultiEdit/Bash bypass). If any is ever restored, re-add it here so its
+// matcher stays Edit|Write|MultiEdit.
 // agent-dispatch-gate.sh (STRUCTURE-UPGRADE Part B / B1, 2026-07-06): the MODEL ROUTING dispatch
 // gate. Both dispatch tool names asserted (Agent = current, Task = future rename) so the matcher
 // can't drift out from under the gate. Ships in warn-mode (never blocks) — but #47 warns the
@@ -33,7 +35,6 @@ const DISPATCH_TOOLS = ['Agent', 'Task'];
 // tool matcher (UserPromptSubmit) → tools:[] just asserts it stays registered.
 const MUST_COVER = [
   { hook: 'protect-paths.sh', event: 'PreToolUse', tools: EDIT_TOOLS },
-  { hook: 'pre-edit-lessons.sh', event: 'PreToolUse', tools: EDIT_TOOLS },
   { hook: 'red-line-doubt-gate.sh', event: 'PreToolUse', tools: EDIT_TOOLS },
   { hook: 'post-edit-gates.sh', event: 'PostToolUse', tools: EDIT_TOOLS },
   { hook: 'guard-bash.sh', event: 'PreToolUse', tools: ['Bash'] },

@@ -8,8 +8,8 @@
 # warn after the spend. RATCHET (B3 clause): after ≥1 week of _hev data, if one command-shape
 # repeats un-distilled ≥3×, promote that literal shape into a PreToolUse deny-list (narrow rule).
 #
-# Non-blocking: emits the nudge via hookSpecificOutput.additionalContext (same channel as
-# loop-detector.sh) + one _hev WARN line. Fail-open on any parse error.
+# Non-blocking: emits the nudge via hookSpecificOutput.additionalContext + one _hev WARN line.
+# Fail-open on any parse error.
 set -uo pipefail
 
 INPUT="$(cat)"
