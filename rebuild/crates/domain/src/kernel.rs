@@ -28,6 +28,11 @@
 // step); today they are the honest relocation of the decisions the shell already consumes.
 pub mod idempotency;
 pub mod policy;
+// The Validation Layer (VALIDATION-LAYER-SPEC) — the invariant gate the orchestrator/shell runs
+// BEFORE `decide`. Pure/total/IO-free like the rest of the kernel (the wasm sovereignty gate
+// proves it); it lifts `decide`'s preconditions to the seam and returns every violation as data.
+// It does NOT modify `decide` (the gate sits AROUND it) — wiring/cutover (0b-5) stays human-gated.
+pub mod validate;
 // Sovereign-core money composition (GRAND-PLAN 0b-1) — the pure order-total arithmetic relocated
 // from the `api` shell (`routes/orders/pricing.rs`). Integer-only (no f64 — the disallowed-types
 // gate proves it); the shell keeps a thin f64 adapter over this module.

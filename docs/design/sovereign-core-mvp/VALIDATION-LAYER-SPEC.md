@@ -73,8 +73,25 @@ human-gated. Build on a feature branch, guardian review, no shell cutover (0b-5)
 proven. Keep `decide` unchanged in this step (add the gate around it; refactor shared predicates only if
 tests stay green).
 
-## First atomic step (next session)
+## First atomic step — ✅ DONE (2026-07-07)
 
 Read `kernel.rs` L84–330 (Command/OrderState/Context/decide) + `kernel/policy.rs` → write `validate.rs`
 with the `NonPositiveMoney` + `IllegalTransition` invariants only (smallest useful pair) + their two RED
 proptests → green → extend. One invariant at a time; each with its RED case first.
+
+**Delivered:** `rebuild/crates/domain/src/kernel/validate.rs` (`validate` + `#[non_exhaustive] Invariant`
+with the two variants); `decide` byte-unchanged. `NonPositiveMoney` guards only the raw-`i64` money that
+escaped the `Lek` type at the seam (`FeeLocation.{delivery_fee_flat,free_delivery_threshold,min_order_value}`
+— the `Lek` fields are non-negative by construction). `IllegalTransition` delegates to `assert_transition`
+(folds illegal|same-status|scaffold), a clean superset of `decide`'s machine precondition.
+**Proof:** 6 inline unit tests (concrete RED cases + green) + `tests/validation_layer.rs` proptests
+(totality; machine-soundness biconditional `gate.ok == machine.ok` for transition cmds; money `err iff a
+fee < 0`). Falsifiability shown with an always-`Ok` mutant → the 4 rejection assertions + 2 proptests go
+RED while acceptance stays green. Sovereign-gate green (wasm32 + `--lib` clippy `-D warnings`); full
+`cargo test` green (119). Reflection: `docs/reflections/INBOX/2026-07-07-validation-layer-step1`.
+
+**NEXT (extend, one invariant at a time — each with its RED case first):** `EmptyLineItems` (PlaceOrder
+cart non-empty) or `ActorNotAuthorized` (lift `policy::assert_owner_target_allowed` — adds the second
+soundness dimension). Then `PriceContextMismatch` / `IdempotencyKeyMissing` / `QuantityOutOfRange`.
+STILL HUMAN-GATED: wiring `validate` INTO the seam and the 0b-5 shell cutover (no cutover until the
+invariant set the shell relies on is proven).

@@ -26,6 +26,9 @@ pub use kernel::{
 // The CC-1 strand-guard input a caller must supply on a [`Context`] — re-exported so the shell (and
 // tests) can build a `Context` without reaching into `kernel::policy`.
 pub use kernel::policy::BindingState;
+// The Validation Layer (VALIDATION-LAYER-SPEC) — the invariant gate the shell runs before `decide`.
+// `Invariant` is the violation vocabulary; `validate` is the total gate function.
+pub use kernel::validate::{Invariant, validate};
 // Sovereign-core money composition (GRAND-PLAN 0b-1) — re-exported so the shell adapter
 // (`api::routes::orders::pricing`) and pg.rs can `use domain::kernel::pricing::{…}` (or the flat
 // `domain::…`) for the pure integer money surface. The core `DeliveryTier`/`FeeLocation` are
