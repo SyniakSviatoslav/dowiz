@@ -243,6 +243,7 @@ export default (async function customerOrderRoutes(fastify: any, opts: any) {
       if (row.delivered_at && Date.now() - new Date(row.delivered_at).getTime() > 24 * 60 * 60 * 1000) {
         return reply.sendError(409, 'RATING_WINDOW_CLOSED', 'Rating window has closed');
       }
+      await db.query(`SELECT set_config('app.user_id', $1, true)`, [userId]);
       await db.query(`
         INSERT INTO order_ratings (order_id, location_id, courier_id, customer_id, rating, feedback)
         VALUES ($1, $2, $3, $4, $5, $6)
