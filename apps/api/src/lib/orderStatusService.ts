@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 import { assertTransition, type OrderStatus } from '@deliveryos/domain';
 import type { MessageBus } from '@deliveryos/platform';
-import { BUS_CHANNELS, orderChannel, dashboardChannel, courierChannel } from './registry.js';
+import { BUS_CHANNELS, orderChannel, dashboardChannel } from './registry.js';
 import { synthesizeAndPersistEtaWindow } from './etaGather.js';
 
 // ORDER-TRACKING: per-transition timestamp column for each status the machine
@@ -297,7 +297,7 @@ export async function updateOrderStatus(
     );
     if (courierRes.rows.length > 0) {
       const courierId = courierRes.rows[0].courier_id;
-      await opts.messageBus.publish(courierChannel(courierId), {
+      await opts.messageBus.publish(`courier:${courierId}`, {
         type: 'order.status',
         orderId,
         status: newStatus,
