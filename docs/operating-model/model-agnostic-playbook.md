@@ -248,6 +248,67 @@ A move only counts as *codified* when a mechanism enforces it **regardless of wh
 
 ---
 
+## §7 · The self-evolving harness — grow by verified proposal, prune by deterministic proof
+
+The living-organism vision (operator 2026-07-07): the harness self-evolves on **actual verified
+checks / deterministic math truth**, not on judgment. Two mechanisms, both pure §0·GP — one produces
+work, one removes rot. They are the organism's anabolism and catabolism, and neither ever trusts an
+opinion.
+
+### §7·A · Speculative execution — speculative decoding lifted from tokens to tasks
+
+Speculative decoding makes a big model fast: a cheap **draft** model proposes tokens, the big model
+**verifies them in parallel**, keeps the draft's tokens exactly where they match its own
+distribution, and recomputes only where they don't. Lift it from tokens to tasks — this is the
+mechanical form of TOKEN/MODEL ROUTING under §0·GP:
+
+- **Draft** = the cheapest adequate model (haiku doer) emits the candidate — a diff, a fix, a plan
+  step, a distillation.
+- **Verify** = a **deterministic ground-truth check**: the planner's Gate+RED pair, a test, a
+  circuit, canonical bytes, a re-read of the real surface. **Not a proxy reviewer** — the verifier
+  must be a *check*, or this collapses back into the removed critic-proxy pattern.
+- **Accept** on pass: keep the draft. This is the common case and where the speedup lives — you got
+  target-model correctness at draft-model cost *because the check caught any miss*.
+- **Reject → fallback**: on fail, recompute that one piece on the stronger model (opus) and re-verify.
+  A wrong draft is caught, never rubber-stamped.
+- **The acceptance rate is MEASURABLE** (gate pass-rates in the `_hev` log). Route more to the draft
+  as its verified-acceptance rises, pull back where it falls — the router tunes itself on ground
+  truth. A task with **no writable deterministic check is not a speculation candidate**: do it at the
+  target model, or first build the check.
+
+The one invariant: *speculation is only as good as its verifier, so the verifier is always a
+deterministic check, never a second opinion.* That is the whole difference between §7·A and the
+critic-proxy layer that was removed.
+
+### §7·B · Deterministic-proof auto-deletion — the pruning half (operator decision 2026-07-07)
+
+Operator policy: **deterministic math truth is allowed to eliminate rotten/biased processes or code
+itself** — the harness may **auto-delete**, not merely propose, when a deterministic proof
+establishes rot. This is the pruning dual of §7·A: §0·GP turned on the harness's own body.
+
+- **The trigger is a PROOF, never a heuristic or an opinion.** Admissible rot-proofs are
+  deterministic and **re-runnable**: (a) *dead reference* — zero inbound references in the real
+  import/dispatch graph; (b) *decoration guard* — RED-prove fails (inject the exact defect; the guard
+  never reds ⇒ it protects nothing); (c) *net-negative proxy* — a ground-truth check on its own
+  output measures negative value/cost; (d) *dangling reference* — points only at already-removed
+  machinery. If you cannot state the rot as a check another run reproduces, you may **not** auto-delete
+  — you propose (drop to a human).
+- **Safety envelope (mandatory, non-negotiable):** the deletion is **git-reversible**; it **never**
+  auto-touches a red-line surface (money / RLS / PII / auth / migrations / secrets) — those still gate
+  to a human (U6); the **proof commits alongside the deletion** so the removal is reproducible, not a
+  one-off judgment; and both are **logged on an enforced path** (event-line — Structural Root 3).
+- **Precedent — this already happened by hand on 2026-07-07:** the proxy layer was removed because a
+  deterministic classification (ground-truth gate vs proxy) plus a ground-truth verify (`grep` proved
+  no live file references a removed proxy; both arming guardrails green) *proved* the rot. §7·B makes
+  that same move a re-runnable mechanism instead of a manual pass — the organism pruning itself on
+  proof, the operator's "deterministic math truth eliminates the rotten" made literal.
+
+Together: **§7·A accepts cheap work the ground truth verifies; §7·B deletes machinery the ground
+truth proves rotten.** That is the entire self-evolution loop — and it is why the harness can be
+cheap *and* not rot.
+
+---
+
 ### One-line summary per role (the pocket version)
 
 - **Planner:** freeze the reasoning into a 7-field contract whose Gate+RED the doer can run blind;
