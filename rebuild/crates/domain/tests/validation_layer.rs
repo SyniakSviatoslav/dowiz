@@ -255,4 +255,41 @@ proptest! {
             prop_assert_eq!(violations, vec![Invariant::EmptyLineItems]);
         }
     }
+
+    /// QuantityOutOfRange soundness — a single-line `PlaceOrder` trips `QuantityOutOfRange { 1, 99 }`
+    /// iff the line quantity is outside `[1, 99]` (the shell cart-line Zod contract), independent of
+    /// the — here well-formed — fees. Falsifiable: dropping the range check makes an out-of-range
+    /// quantity pass.
+    #[test]
+    fn place_order_flags_quantity_out_of_range_iff_outside_1_99(qty in -10i64..120) {
+        let product_map = HashMap::new();
+        let mod_map = HashMap::new();
+        let groups = HashMap::new();
+        let ctx = Context {
+            binding: NO_BINDING,
+            refundable_paid: Lek::ZERO,
+            pricing: Some(PriceInputs {
+                snapshot: PricingSnapshot {
+                    product_map: &product_map,
+                    mod_map: &mod_map,
+                    groups_by_product: &groups,
+                },
+                is_pickup: true,
+                location: FeeLocation { delivery_fee_flat: Some(0), free_delivery_threshold: None, min_order_value: None },
+                distance_m: None,
+                tiers: &[],
+                rate_micro: 0,
+                price_includes_tax: false,
+            }),
+        };
+        // One non-empty line (so EmptyLineItems never fires) with the generated quantity.
+        let cart = vec![PricingItem { product_id: "p1".to_string(), quantity: qty, modifier_ids: vec![] }];
+        let cmd = Command::PlaceOrder { at: Ts(1), actor: Actor::Owner, cart };
+        let result = validate(&cmd, &OrderState::genesis(), &ctx);
+        let out_of_range = !(1..=99).contains(&qty);
+        prop_assert_eq!(result.is_err(), out_of_range);
+        if let Err(violations) = result {
+            prop_assert_eq!(violations, vec![Invariant::QuantityOutOfRange { min: 1, max: 99 }]);
+        }
+    }
 }

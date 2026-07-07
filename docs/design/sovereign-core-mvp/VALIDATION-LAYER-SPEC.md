@@ -75,7 +75,7 @@ tests stay green).
 
 ## Invariants landed so far — ✅ (2026-07-07)
 
-Five invariants, each landed RED-first, one at a time; `decide` byte-unchanged throughout. Two
+Six invariants, each landed RED-first, one at a time; `decide` byte-unchanged throughout. Two
 DISJOINT command families:
 
 **TRANSITION commands** — `IllegalTransition` (step 1), **`ActorNotAuthorized`** (step 2, lifts
@@ -86,10 +86,13 @@ binding, `validate.is_ok() ⟺ machine ∧ actor-gate ∧ cc1` — the gate acce
 transition path does.
 
 **`PlaceOrder`** (the CREATE+PRICE door) — `NonPositiveMoney` (step 1), **`EmptyLineItems`** (step 4,
-cart carries ≥1 line item). These are BOUNDARY business rules the orchestrator enforces, STRICTER than
-`decide`'s permissive pricing corridor (an empty cart / a zero-qty line prices fine in the pure core),
-NOT lifts of a `decide` precondition — so their soundness is validate's OWN definition (`err iff the
-input is malformed`), not a `decide` biconditional.
+cart carries ≥1 line item), **`QuantityOutOfRange`** (step 5, every line quantity ∈ `[1, 99]`, mirroring
+the shell cart-line Zod `z.number().int().positive().max(99)`). These are BOUNDARY business rules the
+orchestrator enforces, STRICTER than `decide`'s permissive pricing corridor (an empty cart / a zero-qty
+line prices fine in the pure core), NOT lifts of a `decide` precondition — so their soundness is
+validate's OWN definition (`err iff the input is malformed`), not a `decide` biconditional. Grounded in
+the pure core: `checked_mul_qty` rejects qty < 0 but accepts qty = 0, so the sound floor is 0 while the
+business floor is 1.
 
 Each dimension RED-proven via a scoped mutant (disabling that one predicate reds its concrete cases +
 its proptest; the other dimensions + acceptance stay green). Dimension-isolated proptests condition
@@ -114,12 +117,10 @@ fee < 0`). Falsifiability shown with an always-`Ok` mutant → the 4 rejection a
 RED while acceptance stays green. Sovereign-gate green (wasm32 + `--lib` clippy `-D warnings`); full
 `cargo test` green (119). Reflection: `docs/reflections/INBOX/2026-07-07-validation-layer-step1`.
 
-**NEXT (extend, one invariant at a time — each with its RED case first):** `QuantityOutOfRange`
-(per-line quantity ≥ 1 — a boundary rule; note the pure core accepts qty 0 and REJECTS qty < 0 via
-`checked_mul_qty`, so the sound floor that mirrors `decide` is `≥ 0`, but the business floor is `≥ 1`),
-then `PriceContextMismatch` (cart product_ids must resolve against the `ctx` snapshot — this one DOES
-lift a `decide` precondition: `compute_order_pricing` rejects an unknown product). Lifting the pricing
-resolution moves toward full cross-`decide` soundness on the PlaceOrder side. `IdempotencyKeyMissing` is
-DEFERRED — the current `Command` carries no idempotency key, so it needs a command-vocabulary change (a
+**NEXT (extend, one invariant at a time — each with its RED case first):** `PriceContextMismatch` — cart
+product_ids (and modifier_ids) must resolve against the `ctx` pricing snapshot. This one DOES lift a
+`decide` precondition (`compute_order_pricing` rejects an unknown product/modifier), so it moves the
+PlaceOrder side toward a real `decide` biconditional rather than a pure boundary rule. `IdempotencyKeyMissing`
+is DEFERRED — the current `Command` carries no idempotency key, so it needs a command-vocabulary change (a
 separate, larger step). STILL HUMAN-GATED: wiring `validate` INTO the seam and the 0b-5 shell cutover
 (no cutover until the invariant set the shell relies on is proven).

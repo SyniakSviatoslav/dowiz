@@ -13,7 +13,7 @@
 //! the full picture in one round-trip.
 //!
 //! ## Scope (extended one invariant at a time)
-//! Five invariants so far (VALIDATION-LAYER-SPEC — each landed with its own RED case first), across
+//! Six invariants so far (VALIDATION-LAYER-SPEC — each landed with its own RED case first), across
 //! two disjoint command families.
 //!
 //! TRANSITION commands mirror `decide`'s preconditions EXACTLY (soundness is a biconditional):
@@ -27,13 +27,22 @@
 //!   - [`Invariant::NonPositiveMoney`] — the raw-`i64` money on the observed pricing authority is
 //!     non-negative minor units.
 //!   - [`Invariant::EmptyLineItems`] — the cart carries at least one line item.
+//!   - [`Invariant::QuantityOutOfRange`] — every line quantity is in `[1, 99]` (the shell cart-line
+//!     Zod contract).
 //!
-//! The remaining invariants sketched in the spec (`QuantityOutOfRange`, `PriceContextMismatch`,
-//! `IdempotencyKeyMissing`) are appended one at a time, each with its own RED case first. [`Invariant`]
-//! is `#[non_exhaustive]` so that growth is not a breaking change for the shell crate.
+//! The remaining invariants sketched in the spec (`PriceContextMismatch`, `IdempotencyKeyMissing`) are
+//! appended one at a time, each with its own RED case first. [`Invariant`] is `#[non_exhaustive]` so
+//! that growth is not a breaking change for the shell crate.
 
 use super::{Actor, Command, Context, OrderState};
 use crate::{ErrorCode, OrderStatus, order_status::assert_transition};
+
+/// The per-line quantity bounds the orchestrator enforces, mirroring the shell cart-line Zod schema
+/// `z.number().int().positive().max(99)` (`packages/shared-types/src/legacy.ts:34`). A BOUNDARY rule:
+/// the pure core is looser (it accepts `0` and rejects only negatives, via `checked_mul_qty`), so
+/// these bounds are the shell's contract, not a lift of a `decide` precondition.
+const MIN_LINE_QUANTITY: i64 = 1;
+const MAX_LINE_QUANTITY: i64 = 99;
 
 /// A named LOGICAL invariant the boundary enforces — each is a rule, not a serde/format error.
 ///
@@ -58,6 +67,11 @@ pub enum Invariant {
     /// pricing corridor is permissive (an empty cart prices to zero), so this is stricter than
     /// `decide`, not a lift of one of its preconditions.
     EmptyLineItems,
+    /// A [`PlaceOrder`](Command::PlaceOrder) line carries a quantity outside `[min, max]`. A BOUNDARY
+    /// business rule mirroring the shell cart-line Zod schema `z.number().int().positive().max(99)`
+    /// (`packages/shared-types/src/legacy.ts:34`) — stricter than the pure core (which accepts `0` and
+    /// rejects only negatives via `checked_mul_qty`). `min`/`max` are the enforced bounds (`1`/`99`).
+    QuantityOutOfRange { min: i64, max: i64 },
     // ── logical / business invariant ──
     /// `(state, cmd)` is not a legal edge of the order state machine — the union of the machine's
     /// reject classes (illegal edge | same-status | scaffold-disabled), lifted before the
@@ -110,6 +124,19 @@ pub fn validate(cmd: &Command, state: &OrderState, ctx: &Context<'_>) -> Result<
         // enforces — stricter than `decide`, not a lift of a `decide` precondition.
         if cart.is_empty() {
             violations.push(Invariant::EmptyLineItems);
+        }
+        // Boundary rule: every line quantity is in `[MIN, MAX]` (the shell cart-line Zod contract).
+        // Reported ONCE (the variant names the bounds, not the offending line), so N bad lines don't
+        // produce N identical entries; an empty cart has no lines, so this never fires alongside
+        // `EmptyLineItems` for the same order.
+        if cart
+            .iter()
+            .any(|item| item.quantity < MIN_LINE_QUANTITY || item.quantity > MAX_LINE_QUANTITY)
+        {
+            violations.push(Invariant::QuantityOutOfRange {
+                min: MIN_LINE_QUANTITY,
+                max: MAX_LINE_QUANTITY,
+            });
         }
         // Format-plus: the observed pricing authority's raw-`i64` money is non-negative minor units
         // (the money that crossed the seam as a bare integer, escaping the `Lek` type), independent
@@ -518,6 +545,100 @@ mod tests {
                     field: "delivery_fee_flat",
                 },
             ])
+        );
+    }
+
+    // ─────────────── RED case: PlaceOrder line quantity out of [1, 99] (boundary rule) ───────────────
+
+    fn place_order_qty(quantity: i64) -> Command {
+        Command::PlaceOrder {
+            at: T,
+            actor: Actor::Owner,
+            cart: vec![PricingItem {
+                product_id: "p1".to_string(),
+                quantity,
+                modifier_ids: vec![],
+            }],
+        }
+    }
+
+    fn well_formed_place_order_ctx<'a>(
+        product_map: &'a HashMap<String, crate::ProductInfo>,
+        mod_map: &'a HashMap<String, crate::ModifierInfo>,
+        groups: &'a HashMap<String, Vec<crate::GroupInfo>>,
+    ) -> Context<'a> {
+        place_order_ctx(
+            product_map,
+            mod_map,
+            groups,
+            FeeLocation {
+                delivery_fee_flat: Some(0),
+                free_delivery_threshold: None,
+                min_order_value: None,
+            },
+        )
+    }
+
+    /// A line quantity outside `[1, 99]` → `QuantityOutOfRange { 1, 99 }` (the shell Zod
+    /// `.positive().max(99)` contract). Covers the floor (`0`, negative) and the ceiling (`>99`). RED
+    /// proof: a `validate` that skipped the range check would return `Ok(())` for these.
+    #[test]
+    fn out_of_range_quantities_are_flagged() {
+        let (product_map, mod_map, groups) = (HashMap::new(), HashMap::new(), HashMap::new());
+        let ctx = well_formed_place_order_ctx(&product_map, &mod_map, &groups);
+        for bad in [0, -1, 100, 1_000] {
+            assert_eq!(
+                validate(&place_order_qty(bad), &OrderState::genesis(), &ctx),
+                Err(vec![Invariant::QuantityOutOfRange { min: 1, max: 99 }]),
+                "quantity {bad} must be out of range"
+            );
+        }
+    }
+
+    /// The inclusive boundary values `1` and `99` (and a mid value) are IN range → no violation.
+    #[test]
+    fn boundary_quantities_1_and_99_are_in_range() {
+        let (product_map, mod_map, groups) = (HashMap::new(), HashMap::new(), HashMap::new());
+        let ctx = well_formed_place_order_ctx(&product_map, &mod_map, &groups);
+        for good in [1, 50, 99] {
+            assert_eq!(
+                validate(&place_order_qty(good), &OrderState::genesis(), &ctx),
+                Ok(()),
+                "quantity {good} must be in range"
+            );
+        }
+    }
+
+    /// A single out-of-range line flags ONCE (the variant names the bounds, not the line), even
+    /// among valid lines — no duplicate entries.
+    #[test]
+    fn quantity_out_of_range_reported_once_across_lines() {
+        let cmd = Command::PlaceOrder {
+            at: T,
+            actor: Actor::Owner,
+            cart: vec![
+                PricingItem {
+                    product_id: "p1".to_string(),
+                    quantity: 2,
+                    modifier_ids: vec![],
+                },
+                PricingItem {
+                    product_id: "p2".to_string(),
+                    quantity: 0,
+                    modifier_ids: vec![],
+                },
+                PricingItem {
+                    product_id: "p3".to_string(),
+                    quantity: 200,
+                    modifier_ids: vec![],
+                },
+            ],
+        };
+        let (product_map, mod_map, groups) = (HashMap::new(), HashMap::new(), HashMap::new());
+        let ctx = well_formed_place_order_ctx(&product_map, &mod_map, &groups);
+        assert_eq!(
+            validate(&cmd, &OrderState::genesis(), &ctx),
+            Err(vec![Invariant::QuantityOutOfRange { min: 1, max: 99 }])
         );
     }
 
