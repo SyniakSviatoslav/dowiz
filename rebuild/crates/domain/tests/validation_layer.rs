@@ -18,8 +18,9 @@
 //! over ALL commands lands with the pricing invariants.
 
 use domain::{
-    ALL_STATUSES, Actor, BindingState, Command, Context, FeeLocation, Invariant, Lek, OrderState,
-    OrderStatus, PriceInputs, PricingItem, PricingSnapshot, Ts, assert_transition, validate,
+    ALL_STATUSES, Actor, BindingState, Command, Context, ErrorCode, FeeLocation, Invariant, Lek,
+    OrderState, OrderStatus, PriceInputs, PricingItem, PricingSnapshot, Ts, assert_transition,
+    compute_order_pricing, validate,
 };
 // The actor-gate predicate `decide` composes — reused verbatim so the soundness property is tied to
 // the SAME source of truth the kernel uses (not a re-transcription of the rule).
@@ -39,6 +40,23 @@ fn ctx_with(binding: BindingState) -> Context<'static> {
         refundable_paid: Lek::ZERO,
         pricing: None,
     }
+}
+
+/// A `product_map` resolving each id (price immaterial — `validate` checks only presence), so a
+/// `PlaceOrder` proptest can be well-formed on the price-reconciliation dimension and isolate the
+/// dimension under test.
+fn products(ids: &[&str]) -> HashMap<String, domain::ProductInfo> {
+    ids.iter()
+        .map(|id| {
+            (
+                id.to_string(),
+                domain::ProductInfo {
+                    name: (*id).to_string(),
+                    price: Lek::ZERO,
+                },
+            )
+        })
+        .collect()
 }
 
 /// Any courier-binding facts — the 2×2 of (active, delivered) — so cc1 is exercised across every
@@ -180,7 +198,8 @@ proptest! {
         free_delivery_threshold in any_fee_field(),
         min_order_value in any_fee_field(),
     ) {
-        let product_map = HashMap::new();
+        // "p1" resolves so the price-reconciliation dimension is well-formed — isolating money.
+        let product_map = products(&["p1"]);
         let mod_map = HashMap::new();
         let groups = HashMap::new();
         let ctx = Context {
@@ -227,7 +246,8 @@ proptest! {
             .map(|i| PricingItem { product_id: format!("p{i}"), quantity: 1, modifier_ids: vec![] })
             .collect();
         let was_empty = cart.is_empty();
-        let product_map = HashMap::new();
+        // Every generated line ("p0".."p2") resolves, so ONLY EmptyLineItems can fire.
+        let product_map = products(&["p0", "p1", "p2", "p3"]);
         let mod_map = HashMap::new();
         let groups = HashMap::new();
         let ctx = Context {
@@ -262,7 +282,8 @@ proptest! {
     /// quantity pass.
     #[test]
     fn place_order_flags_quantity_out_of_range_iff_outside_1_99(qty in -10i64..120) {
-        let product_map = HashMap::new();
+        // "p1" resolves so the price-reconciliation dimension is well-formed — isolating quantity.
+        let product_map = products(&["p1"]);
         let mod_map = HashMap::new();
         let groups = HashMap::new();
         let ctx = Context {
@@ -290,6 +311,64 @@ proptest! {
         prop_assert_eq!(result.is_err(), out_of_range);
         if let Err(violations) = result {
             prop_assert_eq!(violations, vec![Invariant::QuantityOutOfRange { min: 1, max: 99 }]);
+        }
+    }
+
+    /// PriceContextMismatch soundness — a `PlaceOrder` trips `PriceContextMismatch` iff some cart
+    /// line's product_id is ABSENT from the observed snapshot's `product_map`, which is EXACTLY the
+    /// `ProductNotFound` precondition `decide` runs (kernel `price_cart` → `compute_order_pricing`).
+    /// Tied to the SAME predicate the kernel composes (`compute_order_pricing`), NOT a re-transcription
+    /// of validate's own membership test: with modifiers empty and no groups that fn's ONLY reject path
+    /// is `ProductNotFound`, so `validate` errs (with exactly `[PriceContextMismatch]`) iff the real
+    /// pricing corridor would reject the cart with `ProductNotFound`. Falsifiable: dropping the
+    /// resolution check makes an unknown product pass `validate` while `decide` would still breach.
+    #[test]
+    fn place_order_flags_price_context_mismatch_iff_a_product_is_unknown(
+        // Each line draws from three KNOWN ids + one UNKNOWN ("ghost"); the map registers only the
+        // three known ids, so a line hitting "ghost" is the unknown case.
+        ids in prop::collection::vec(prop::sample::select(vec!["p0", "p1", "p2", "ghost"]), 1..4),
+    ) {
+        let product_map = products(&["p0", "p1", "p2"]);
+        let mod_map = HashMap::new();
+        let groups = HashMap::new();
+        let cart: Vec<PricingItem> = ids
+            .iter()
+            .map(|id| PricingItem { product_id: (*id).to_string(), quantity: 1, modifier_ids: vec![] })
+            .collect();
+
+        // The reference model: the SAME corridor `decide` runs. Modifiers empty + no groups ⇒ its ONLY
+        // reject path is ProductNotFound, so this isolates the product-existence dimension.
+        let corridor = compute_order_pricing(&cart, &PricingSnapshot {
+            product_map: &product_map,
+            mod_map: &mod_map,
+            groups_by_product: &groups,
+        });
+        let decide_rejects_product_not_found =
+            matches!(corridor, Err(ref e) if e.code == ErrorCode::ProductNotFound);
+
+        let ctx = Context {
+            binding: NO_BINDING,
+            refundable_paid: Lek::ZERO,
+            pricing: Some(PriceInputs {
+                snapshot: PricingSnapshot {
+                    product_map: &product_map,
+                    mod_map: &mod_map,
+                    groups_by_product: &groups,
+                },
+                is_pickup: true,
+                // Well-formed fees + qty 1 + non-empty cart so ONLY PriceContextMismatch can fire.
+                location: FeeLocation { delivery_fee_flat: Some(0), free_delivery_threshold: None, min_order_value: None },
+                distance_m: None,
+                tiers: &[],
+                rate_micro: 0,
+                price_includes_tax: false,
+            }),
+        };
+        let cmd = Command::PlaceOrder { at: Ts(1), actor: Actor::Owner, cart };
+        let result = validate(&cmd, &OrderState::genesis(), &ctx);
+        prop_assert_eq!(result.is_err(), decide_rejects_product_not_found);
+        if let Err(violations) = result {
+            prop_assert_eq!(violations, vec![Invariant::PriceContextMismatch]);
         }
     }
 }

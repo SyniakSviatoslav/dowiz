@@ -99,6 +99,24 @@ pub enum Invariant {
     /// composes cc1 (after the machine + actor-gate). The first invariant that reads observed context,
     /// not just the command.
     CourierStrandGuard { reason: &'static str },
+    /// A [`PlaceOrder`](Command::PlaceOrder) cart references a product the OBSERVED pricing snapshot
+    /// does not know — some line's `product_id` is absent from `ctx.pricing.snapshot.product_map`. The
+    /// first `PlaceOrder` invariant that LIFTS a real [`decide`](super::decide) precondition (not a
+    /// stricter boundary rule): [`decide`] prices the cart via
+    /// [`compute_order_pricing`](super::pricing::compute_order_pricing), which rejects an unknown
+    /// product as [`ProductNotFound`](ErrorCode::ProductNotFound) → a
+    /// [`CorridorBreach`](crate::DomainError::CorridorBreach). So over the product-existence dimension
+    /// `validate` and `decide` agree exactly: an accepted cart never trips `decide`'s `ProductNotFound`.
+    ///
+    /// Reported ONCE (the variant names no product), so N unresolved lines yield one entry — like
+    /// [`QuantityOutOfRange`](Self::QuantityOutOfRange). Evaluated only when a pricing authority is
+    /// observed (as the fee-money check is); a `PlaceOrder` with no `ctx.pricing` is a separate
+    /// caller-contract breach [`decide`] raises, not this invariant.
+    ///
+    /// Scope (VALIDATION-LAYER-SPEC): this step lifts the PRODUCT-existence dimension; an unresolved
+    /// modifier id (`compute_order_pricing`'s `MODIFIER_UNAVAILABLE`) is the SAME invariant extended in
+    /// a follow-up step — a widened predicate, no variant change.
+    PriceContextMismatch,
 }
 
 /// Validate a command against the current state and observed context BEFORE [`decide`](super::decide).
@@ -144,6 +162,19 @@ pub fn validate(cmd: &Command, state: &OrderState, ctx: &Context<'_>) -> Result<
         // malformed money regardless.
         if let Some(pricing) = ctx.pricing.as_ref() {
             check_fee_money_non_negative(&pricing.location, &mut violations);
+            // Price reconciliation — the first PlaceOrder invariant that LIFTS a `decide` precondition:
+            // every cart line's product must resolve against the OBSERVED pricing snapshot. `decide`
+            // prices via `pricing::compute_order_pricing`, which rejects an unknown product as
+            // `ProductNotFound` (→ `CorridorBreach`); flagging it here catches the bug at the boundary
+            // before `decide` prices. Reported ONCE (like `QuantityOutOfRange`) — N unresolved lines
+            // yield one entry; an empty cart has no lines, so this never fires alongside
+            // `EmptyLineItems`. (Modifier-id resolution is the same invariant, extended in a follow-up.)
+            if cart
+                .iter()
+                .any(|item| !pricing.snapshot.product_map.contains_key(&item.product_id))
+            {
+                violations.push(Invariant::PriceContextMismatch);
+            }
         }
     } else {
         // A TRANSITION command — the machine is the sole legality authority; the actor-gate and cc1
@@ -289,8 +320,9 @@ mod tests {
         }
     }
 
-    /// A `PlaceOrder` context whose `FeeLocation` carries the given raw-i64 money fields. The
-    /// snapshot maps are empty — `validate` reads only `ctx.pricing.location`, never prices.
+    /// A `PlaceOrder` context whose `FeeLocation` carries the given raw-i64 money fields and whose
+    /// snapshot maps are supplied by the caller. `validate` reads `ctx.pricing.location` (fee money)
+    /// and `snapshot.product_map` (each cart product_id must resolve) — it never prices.
     fn place_order_ctx<'a>(
         product_map: &'a HashMap<String, crate::ProductInfo>,
         mod_map: &'a HashMap<String, crate::ModifierInfo>,
@@ -316,14 +348,33 @@ mod tests {
         }
     }
 
-    /// A minimal well-formed cart (one line, quantity 1) — `validate` never prices, so the
-    /// product_id need not resolve against any snapshot; it only needs to be non-empty.
+    /// A minimal well-formed cart (one line, quantity 1, product `"p1"`). `validate` now checks that
+    /// each product_id resolves against the observed snapshot, so a test using this cart pairs it with
+    /// a `product_map` that registers `"p1"` (see [`products_resolving`]) to stay well-formed on the
+    /// price-reconciliation dimension.
     fn nonempty_cart() -> Vec<PricingItem> {
         vec![PricingItem {
             product_id: "p1".to_string(),
             quantity: 1,
             modifier_ids: vec![],
         }]
+    }
+
+    /// A `product_map` resolving each given id (price is immaterial — `validate` checks only that the
+    /// cart's product_ids are PRESENT in the observed snapshot, never their price). Lets a test be
+    /// well-formed on the price-reconciliation dimension so an unrelated invariant can be isolated.
+    fn products_resolving(ids: &[&str]) -> HashMap<String, crate::ProductInfo> {
+        ids.iter()
+            .map(|id| {
+                (
+                    (*id).to_string(),
+                    crate::ProductInfo {
+                        name: (*id).to_string(),
+                        price: Lek::ZERO,
+                    },
+                )
+            })
+            .collect()
     }
 
     fn place_order() -> Command {
@@ -402,7 +453,7 @@ mod tests {
     /// that skipped the money check would return `Ok(())` here.
     #[test]
     fn negative_delivery_fee_flat_is_non_positive_money() {
-        let product_map = HashMap::new();
+        let product_map = products_resolving(&["p1"]);
         let mod_map = HashMap::new();
         let groups = HashMap::new();
         let ctx = place_order_ctx(
@@ -428,7 +479,7 @@ mod tests {
     /// `return Err` on the first violation) would return only the first and red this assertion.
     #[test]
     fn all_money_violations_are_returned_not_first_fail() {
-        let product_map = HashMap::new();
+        let product_map = products_resolving(&["p1"]);
         let mod_map = HashMap::new();
         let groups = HashMap::new();
         let ctx = place_order_ctx(
@@ -477,7 +528,7 @@ mod tests {
     /// `PlaceOrder` is not machine-gated (born PENDING).
     #[test]
     fn a_place_order_with_well_formed_fees_passes() {
-        let product_map = HashMap::new();
+        let product_map = products_resolving(&["p1"]);
         let mod_map = HashMap::new();
         let groups = HashMap::new();
         let ctx = place_order_ctx(
@@ -584,7 +635,8 @@ mod tests {
     /// proof: a `validate` that skipped the range check would return `Ok(())` for these.
     #[test]
     fn out_of_range_quantities_are_flagged() {
-        let (product_map, mod_map, groups) = (HashMap::new(), HashMap::new(), HashMap::new());
+        let product_map = products_resolving(&["p1"]);
+        let (mod_map, groups) = (HashMap::new(), HashMap::new());
         let ctx = well_formed_place_order_ctx(&product_map, &mod_map, &groups);
         for bad in [0, -1, 100, 1_000] {
             assert_eq!(
@@ -598,7 +650,8 @@ mod tests {
     /// The inclusive boundary values `1` and `99` (and a mid value) are IN range → no violation.
     #[test]
     fn boundary_quantities_1_and_99_are_in_range() {
-        let (product_map, mod_map, groups) = (HashMap::new(), HashMap::new(), HashMap::new());
+        let product_map = products_resolving(&["p1"]);
+        let (mod_map, groups) = (HashMap::new(), HashMap::new());
         let ctx = well_formed_place_order_ctx(&product_map, &mod_map, &groups);
         for good in [1, 50, 99] {
             assert_eq!(
@@ -634,7 +687,8 @@ mod tests {
                 },
             ],
         };
-        let (product_map, mod_map, groups) = (HashMap::new(), HashMap::new(), HashMap::new());
+        let product_map = products_resolving(&["p1", "p2", "p3"]);
+        let (mod_map, groups) = (HashMap::new(), HashMap::new());
         let ctx = well_formed_place_order_ctx(&product_map, &mod_map, &groups);
         assert_eq!(
             validate(&cmd, &OrderState::genesis(), &ctx),
@@ -829,6 +883,125 @@ mod tests {
                 &plain_ctx()
             ),
             Ok(())
+        );
+    }
+
+    // ───────── RED case #5: PlaceOrder product_id absent from the observed pricing snapshot ─────────
+
+    /// A `PlaceOrder` whose cart references a product the OBSERVED snapshot does not know →
+    /// `PriceContextMismatch`. This LIFTS a real `decide` precondition: `decide` prices via
+    /// [`compute_order_pricing`](super::super::pricing::compute_order_pricing), which rejects the
+    /// unknown product as `ProductNotFound`. RED proof: a `validate` that skipped the resolution check
+    /// returns `Ok(())` here while `decide` would still `CorridorBreach`.
+    #[test]
+    fn unknown_product_id_is_price_context_mismatch() {
+        // The snapshot knows "p1" but NOT "ghost"; the cart orders "ghost".
+        let product_map = products_resolving(&["p1"]);
+        let mod_map = HashMap::new();
+        let groups = HashMap::new();
+        let ctx = well_formed_place_order_ctx(&product_map, &mod_map, &groups);
+        let cmd = Command::PlaceOrder {
+            at: T,
+            actor: Actor::Owner,
+            cart: vec![PricingItem {
+                product_id: "ghost".to_string(),
+                quantity: 1,
+                modifier_ids: vec![],
+            }],
+        };
+        assert_eq!(
+            validate(&cmd, &OrderState::genesis(), &ctx),
+            Err(vec![Invariant::PriceContextMismatch])
+        );
+    }
+
+    /// Every cart product resolving against the observed snapshot passes the reconciliation dimension
+    /// (the green half). RED proof: an always-`Err` validate would red this.
+    #[test]
+    fn all_cart_products_resolving_passes() {
+        let product_map = products_resolving(&["p1", "p2"]);
+        let mod_map = HashMap::new();
+        let groups = HashMap::new();
+        let ctx = well_formed_place_order_ctx(&product_map, &mod_map, &groups);
+        let cmd = Command::PlaceOrder {
+            at: T,
+            actor: Actor::Owner,
+            cart: vec![
+                PricingItem {
+                    product_id: "p1".to_string(),
+                    quantity: 1,
+                    modifier_ids: vec![],
+                },
+                PricingItem {
+                    product_id: "p2".to_string(),
+                    quantity: 3,
+                    modifier_ids: vec![],
+                },
+            ],
+        };
+        assert_eq!(validate(&cmd, &OrderState::genesis(), &ctx), Ok(()));
+    }
+
+    /// Multiple unresolved products flag `PriceContextMismatch` ONCE (the variant names no product),
+    /// even mixed with a resolved line — no duplicate entries (mirrors the QuantityOutOfRange rule).
+    #[test]
+    fn unknown_products_reported_once_across_lines() {
+        let product_map = products_resolving(&["p1"]);
+        let mod_map = HashMap::new();
+        let groups = HashMap::new();
+        let ctx = well_formed_place_order_ctx(&product_map, &mod_map, &groups);
+        let cmd = Command::PlaceOrder {
+            at: T,
+            actor: Actor::Owner,
+            cart: vec![
+                PricingItem {
+                    product_id: "p1".to_string(),
+                    quantity: 1,
+                    modifier_ids: vec![],
+                },
+                PricingItem {
+                    product_id: "ghost1".to_string(),
+                    quantity: 1,
+                    modifier_ids: vec![],
+                },
+                PricingItem {
+                    product_id: "ghost2".to_string(),
+                    quantity: 1,
+                    modifier_ids: vec![],
+                },
+            ],
+        };
+        assert_eq!(
+            validate(&cmd, &OrderState::genesis(), &ctx),
+            Err(vec![Invariant::PriceContextMismatch])
+        );
+    }
+
+    /// The two PlaceOrder invariants that CAN co-fire on one line return together (a `Vec`, not
+    /// first-fail): an out-of-range quantity AND an unknown product → `[QuantityOutOfRange,
+    /// PriceContextMismatch]`, in the order `validate` collects them (quantity before the pricing
+    /// block). Locks the collect order.
+    #[test]
+    fn quantity_out_of_range_and_unknown_product_return_both() {
+        let product_map = products_resolving(&["p1"]); // "ghost" absent
+        let mod_map = HashMap::new();
+        let groups = HashMap::new();
+        let ctx = well_formed_place_order_ctx(&product_map, &mod_map, &groups);
+        let cmd = Command::PlaceOrder {
+            at: T,
+            actor: Actor::Owner,
+            cart: vec![PricingItem {
+                product_id: "ghost".to_string(),
+                quantity: 200,
+                modifier_ids: vec![],
+            }],
+        };
+        assert_eq!(
+            validate(&cmd, &OrderState::genesis(), &ctx),
+            Err(vec![
+                Invariant::QuantityOutOfRange { min: 1, max: 99 },
+                Invariant::PriceContextMismatch,
+            ])
         );
     }
 }
