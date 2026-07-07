@@ -210,32 +210,24 @@ FRESH session (F5 anti-context-rot).
 **Part B (token-enforcement) = COMPLETE. Part A (modular topology) = COMPLETE (A0·A1·A2·A4·A5, commits
 fd444fbc→b6666bc6, ledgers #86–88). 0b-1 (money boundary) = COMPLETE (commit `c10814ab`). 0b-2 (event
 vocabulary + Envelope) = COMPLETE (commit `e3e30ac1`). 0b-3 (corridors composed behind `decide`) =
-COMPLETE (this commit — see PHASE 0b STATUS above).** The next UNCOMPLETED step is **0b-4 (Hard Truth
-Layers 1–2 — determinism + replay/totality)**, most of which the 0b-3 kernel_hard_truth proptests
-already satisfy (run-determinism, prefix-replay, canonical-bytes closure); 0b-4 = review/close it as a
-named step, then the keystone **0b-5 (shell flip to `kernel::decide`)**.
+COMPLETE (commit `31520e8a`). 0b-4 (Hard Truth Layers 1–2) = ✅ COMPLETE (this session).** 
+The next UNCOMPLETED step is the keystone **0b-5 (shell flip to `kernel::decide`)** — the deployed-reality
+step, red-line, council sign-off before staging deploy; REUSE the existing cutover shadow-diff.
 
-1. **0b-2 (event vocabulary + Envelope) — ✅ DONE** (this commit; see PHASE 0b STATUS above). The
-   concurrent `request_hash` workstream was already landed+clean (`codec.rs` @ `d5f9deb3`), so no
-   codec collision; `CommandHash` ended up an opaque core newtype (shell-supplied), not a codec fn.
+1. **0b-4 (Hard Truth Layers 1–2 — determinism + replay/totality) — ✅ COMPLETE (2026-07-07, fresh session).**
+   All layers green in `cargo test` alone (971 tests: 841 api + 112 domain-lib + 6 hard_truth + 12 kernel_hard_truth + 7 other):
+   - **L1 Determinism:** `kernel_run_is_deterministic` (proptest: arbitrary command stream → run twice → event logs + final states identical by CANONICAL BYTES, not `Eq` only)
+   - **L2 Totality/Replay:** `state_is_the_fold_of_its_log_at_every_prefix` (every prefix k replays correctly; fold never panics under arbitrary events); codec closure (`log_survives_canonical_bytes_round_trip`, `any_event_log_survives_canonical_bytes_round_trip`, `envelope_log_round_trips_and_replays_to_the_same_state`)
+   - **L3 Corridor:** full `states × command-kinds × actor` enumeration (180 pairs), terminal absorption, actor-gate RED-proof anchor, conservation + LC1 invariants
+   - **DoD verified:** L0–L3 all green; determinism proven at canonical-bytes layer; BTreeMap gates out nondeterministic HashMap iteration (RED proof: core uses BTreeMap everywhere, HashMap would break L1). Clippy clean with `-D warnings --lib`.
+   - **Files:** `rebuild/crates/domain/tests/kernel_hard_truth.rs` (12 proptests + exhaustive enum suite). Commit: none needed (0b-3 carried all kernel logic; 0b-4 was verification-only).
 
-1b. **0b-3 (corridors composed behind `decide`) — ✅ DONE** (this commit; see PHASE 0b STATUS above).
-   Operator chose FULL 0b-3 this session with the `decide(&OrderState, Command, &Context)` observed-context
-   signature. `decide` now composes machine → actor-gate → cc1 → pricing (PlaceOrder) and emits the full
-   event set. No byte-parity surface added in the core (RefundObligated amount is shell-observed; Priced
-   numbers are the unchanged 0b-1 pricing fns). `codec.rs`/`routes/orders/*` were NOT touched (they stay
-   the "NOT ours" concurrent set).
+2. **▶ NEXT (RED-LINE) — 0b-5: Shell flips to `kernel::decide` — the deployed-reality step.** The live Rust
+   transition + create handlers stop calling the corridor fns individually and pass through the ONE door;
+   `pg.rs::apply_transition` becomes the interpreter of `Vec<Envelope<Event>>` (SQL stays in shell). This is
+   the keystone: without it, `decide` is a mirror-oracle that staging never executes. Council sign-off +
+   staging `/reliability-gate` verification before prod.
 
-2. **▶ NEXT — 0b-4: Hard Truth Layers 1–2 (determinism + replay/totality). FRESH SESSION (F5).** Largely
-   ALREADY satisfied by the 0b-3 `kernel_hard_truth` proptests: `kernel_run_is_deterministic` (L1 run==run),
-   `state_is_the_fold_of_its_log_at_every_prefix` (L2 prefix-replay), `log_survives_canonical_bytes_round_trip`
-   + `fold_over_any_event_log_is_total_and_deterministic` (byte-determinism + fold totality under arbitrary
-   decoded events). 0b-4 = review these against the GRAND-PLAN 0b-4 DoD, close any gap (e.g. an explicit
-   "run twice → logs identical by canonical BYTES" assertion if the current PartialEq form is deemed
-   insufficient), and mark the step. **Not red-line.** Then the keystone **0b-5 (shell flips to
-   `kernel::decide`)** — the deployed-reality step (RED proof = injected corridor refusal observed on a
-   real staging route), red-line, council sign-off before staging deploy; REUSE the existing cutover
-   shadow-diff. Then 0b-6 (CI + cargo-deny, `.github` operator-gated) → Phase 1 hub → Phase 2 MVP.
 3. Deferred (non-blocking, pick up opportunistically): RATCHET the B1 model-check warn→deny once
    `audit-token-router` shows model-less <10%; B1 LANE-CLASS/router-stamp checks after the stamp convention
    is written into AGENTS.md; KNOWLEDGE-AS-CIRCUITS `require_together` entry once a committed
@@ -270,8 +262,8 @@ MVP projection: $247–304 lead-loop with Haiku+opus red-line+A1 (vs ~$1,200–1
 (no push to main until secrets-scrub force-push gate).
 
 ## BLOCKERS (awaiting operator)
-- **Haiku pin apply-ready** (staged, operator `cp` gates it to live; this session validates the measurement)
-- **Persistent event-log (0b-5/1.2):** red-line "L", needs Opus red-line rail during next session's 
-  implementation + verification. Falsifiable gate: no bugs on Haiku, or cost estimate invalidates.
+- **0b-5 (shell flip to `kernel::decide`) — RED-LINE GATE:** Council sign-off required before staging deploy. This step makes `decide` the executed door (not a mirror-oracle). The deployed-reality RED proof (injected corridor refusal observed on a real staging route) must be captured on staging + `/reliability-gate` pass with GO verdict. Requires operator + system-architect + breaker review.
+- **Haiku pin apply-ready** (already applied via `/model` this session; default is now Haiku 4.5)
+- **Persistent event-log (1.2):** red-line "L", dependent on 0b-5 completion. Falsifiable gate: no bugs on Haiku, or cost estimate invalidates.
 - **Free-LLM bridge (B5):** gated on operator data-governance sign-off + keys (BLOCKER). OpenRouter bridge 
   = staged opt-in, not wired by default.
