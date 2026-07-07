@@ -75,7 +75,7 @@ tests stay green).
 
 ## Invariants landed so far — ✅ (2026-07-07)
 
-Six invariants, each landed RED-first, one at a time; `decide` byte-unchanged throughout. Two
+Seven invariants, each landed RED-first, one at a time; `decide` byte-unchanged throughout. Two
 DISJOINT command families:
 
 **TRANSITION commands** — `IllegalTransition` (step 1), **`ActorNotAuthorized`** (step 2, lifts
@@ -117,10 +117,21 @@ fee < 0`). Falsifiability shown with an always-`Ok` mutant → the 4 rejection a
 RED while acceptance stays green. Sovereign-gate green (wasm32 + `--lib` clippy `-D warnings`); full
 `cargo test` green (119). Reflection: `docs/reflections/INBOX/2026-07-07-validation-layer-step1`.
 
-**NEXT (extend, one invariant at a time — each with its RED case first):** `PriceContextMismatch` — cart
-product_ids (and modifier_ids) must resolve against the `ctx` pricing snapshot. This one DOES lift a
-`decide` precondition (`compute_order_pricing` rejects an unknown product/modifier), so it moves the
-PlaceOrder side toward a real `decide` biconditional rather than a pure boundary rule. `IdempotencyKeyMissing`
-is DEFERRED — the current `Command` carries no idempotency key, so it needs a command-vocabulary change (a
-separate, larger step). STILL HUMAN-GATED: wiring `validate` INTO the seam and the 0b-5 shell cutover
-(no cutover until the invariant set the shell relies on is proven).
+**`PriceContextMismatch` (step 6, commit `a511020d`) — ✅ DONE (products only).** The FIRST PlaceOrder
+invariant that LIFTS a real `decide` precondition rather than a stricter boundary rule: every cart line's
+`product_id` must resolve against the OBSERVED `ctx.pricing.snapshot.product_map`. `decide` prices via
+`compute_order_pricing`, which rejects an unknown product as `ProductNotFound` (→ `CorridorBreach`), so over
+the product-existence dimension `validate.ok ⟺ ¬decide.ProductNotFound` — an accepted cart never trips that
+reject. Fieldless variant (keeps `Invariant: Copy` — product_id is a dynamic `String`), reported ONCE like
+`QuantityOutOfRange`. Proptest ties the flag to `compute_order_pricing`'s REAL `ProductNotFound` (the same
+corridor `decide` runs, not a re-transcription). RED-proven (3 unit + 1 proptest red with the check absent);
+prior PlaceOrder tests made well-formed on the new dimension, proven inert (132→137 green). `decide`
+byte-unchanged.
+
+**NEXT (extend, one invariant at a time — each with its RED case first):** MODIFIER resolution — the SAME
+`PriceContextMismatch` variant, widened so a cart's `modifier_ids` must also resolve against the snapshot
+(`compute_order_pricing`'s `MODIFIER_UNAVAILABLE`); a widened predicate, no variant change. Then optionally
+group min/max to close the full PlaceOrder biconditional. `IdempotencyKeyMissing` is DEFERRED — the current
+`Command` carries no idempotency key, so it needs a command-vocabulary change (a separate, larger step,
+human-gated). STILL HUMAN-GATED: wiring `validate` INTO the seam and the 0b-5 shell cutover (no cutover until
+the invariant set the shell relies on is proven).
