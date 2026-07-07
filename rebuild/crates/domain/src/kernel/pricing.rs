@@ -34,6 +34,7 @@
 //! seam is kept so a future redemption runtime is a one-line change, not a re-architecture.
 
 use crate::{ErrorCode, Lek, MoneyError};
+use serde::{Deserialize, Serialize};
 
 /// The `apply_tax` micro-unit scale — 6 dp of rate precision (`money.ts:10`, `SCALE = 1_000_000n`).
 const SCALE: i64 = 1_000_000;
@@ -158,8 +159,10 @@ pub struct PricingError {
 
 // ─────────────────────────── computeOrderPricing (order-pricing.ts:72-142) ───────────────────────────
 
-/// A cart line item (the validated `OrderItemInput`, ids as strings for map lookup).
-#[derive(Debug, Clone)]
+/// A cart line item (the validated `OrderItemInput`, ids as strings for map lookup). The pure INTENT
+/// of a create — so it rides on [`crate::Command::PlaceOrder`] (whence the `Serialize`/`Deserialize`
+/// + `PartialEq`/`Eq`: a command carrying a cart must round-trip and compare like every other).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PricingItem {
     pub product_id: String,
     pub quantity: i64,

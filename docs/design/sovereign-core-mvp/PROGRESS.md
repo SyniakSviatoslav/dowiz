@@ -19,7 +19,75 @@ entry (YAGNI — no committed agent-dispatching script exists to guard yet); THE
 **→ Next phase = PART A** (modular strangler moves) — a different, Rust-crate-touching workstream; start it in a
 FRESH session (F5 anti-context-rot).
 
-## PHASE 0b STATUS — 0b-1 + 0b-2 DONE (2026-07-06)
+## PHASE 0b STATUS — 0b-1 + 0b-2 + 0b-3 DONE (2026-07-06 → 0b-3 2026-07-07)
+
+- **0b-3 corridors composed behind the single `decide` door (GRAND-PLAN 0b-3) — ✅ DONE (this commit).**
+  `decide` grew from `(&OrderState, Command)` to `(&OrderState, Command, &Context)` and now COMPOSES,
+  in the live-handler order: PlaceOrder short-circuit (create/price) · else `assert_transition`
+  (machine) → actor-gate (`policy::assert_owner_target_allowed`, applied only when
+  `command.actor()==Actor::Owner`) → `policy::cc1_strand_guard` → emit `StatusChanged` + (if
+  `transition_effects.terminalize_assignment`) `BindingTerminalized` + (if `record_refund_due &&
+  ctx.refundable_paid>ZERO`) `RefundObligated`. New `Actor{Owner,System}` + an `actor` field on every
+  `Command` + new `Command::PlaceOrder{at,actor,cart}` (create/price). New `DomainError::CorridorBreach
+  {corridor,code}` (carries the EXACT wire `ErrorCode`, stays `Copy`). New `Context{binding,
+  refundable_paid, pricing:Option<PriceInputs>}` + `PriceInputs`. Private `price_cart` (the PlaceOrder
+  pricing assembly) + `money_math_breach`. `PricingItem` gained `PartialEq/Eq/Serialize/Deserialize`
+  (it rides on `PlaceOrder`). Exports: `Actor,Context,PriceInputs,BindingState`.
+  **KEY DESIGN CALLS (operator + plan-vs-reality reconciliations):**
+  (1) **Observed-Context param (OPERATOR decision this session).** binding/paid/price-snapshot are
+  facts the shell OBSERVES about OTHER aggregates ⇒ `Context`; the actor is intent-adjacent ⇒
+  `Command`; the cart is intent ⇒ `PlaceOrder`. Rejected: fat-commands (bloats the on-wire Command
+  shape 0b-4 pins) and fold-binding-into-state (binding lives in a DIFFERENT aggregate,
+  `courier_assignments`). `Context`/`PriceInputs` are supplied like `Ts`/`CommandHash` — the core
+  carries them, never reads a clock/DB/RNG.
+  (2) **`Command` lost `Copy`** (PlaceOrder carries a `Vec<PricingItem>`); `target`/`at`/`actor` became
+  `&self`. Blast radius **contained to the domain crate's tests** — the api shell consumes only
+  `kernel::{pricing,idempotency,policy}`, never `Command`/`decide`/`Event`, so `cargo check -p api`
+  stays clean (no 0b-5 shell flip yet).
+  (3) **`RefundObligated.amount` is shell-OBSERVED, never core-derived** — `ctx.refundable_paid` (the
+  shell's sum over paid payments, exactly as the shell owns the haversine sum over coords, the 0b-1
+  boundary). Fires only on a terminal-cancel with `paid>0` ⇒ INERT today (zero paid rows). **The core
+  invents NO money number** ⇒ no new byte-parity surface: the `Priced` numbers come straight from the
+  already-0b-1-oracle-verified pricing fns, unchanged, only sequenced.
+  (4) **`idempotency_decision` + `needs_honest_dispatch` are NOT folded into `decide`** (plan-vs-reality
+  reconciliation): both yield a CONTROL-FLOW decision (replay/422/proceed; route-through-honest-dispatch),
+  not an event or a refusal — folding them would force `decide` to return non-event outcomes. They stay
+  companion/pre-door pure fns the shell consults around `decide` (idempotency runs BEFORE `decide` in the
+  live handler).
+  (5) **PlaceOrder bypasses the machine** — a placed order is born PENDING (=genesis), so it prices
+  (→`Priced`) and never runs assert_transition/actor-gate/cc1 (which gate TRANSITIONS). `target()=Pending`
+  is a total-map placeholder `decide` never reads for PlaceOrder.
+  (6) **`price_cart` ports `api/.../orders/pg.rs:287-343` VERBATIM** — the section-6→9 assembly order
+  (`compute_order_pricing → delivery_fee_for_order → apply_tax → charged_tax(LC1) → compose_total`,
+  discount=`ZERO`) is the red-line "corridor order vs live handler"; a divergence here IS the
+  mirror-oracle failure mode. Money-math errors (unreachable, REV-S5-4 headroom) → `Internal`
+  `CorridorBreach` via a NAMED fn (`money_math_breach`), not a `|_|` closure — keeps the core lib clean
+  under core clippy `map_err_ignore` at `-D warnings`.
+  (7) **`TransitionEffects`** is now consumed by `decide` (an internal emission detail per the 0b-3 DoD);
+  it stays `pub` only until the shell stops reading it at 0b-5 (plan: → `pub(crate)` then).
+  **Gate (D5):** Hard-Truth Layer 3 — the full 10×9×2 `states × command-kinds × actor` enumeration
+  (every pair `Ok`-with-`StatusChanged`-first or a typed `Err`, zero panics) + conservation
+  (`total = subtotal + charged_tax + delivery_fee − 0`, all ≥0) and LC1 no-double-tax as proptests over
+  the REAL `PlaceOrder` composition (arbitrary carts, INDEPENDENT i64 re-derivation, never re-calling
+  `compose_total`). Concrete unit tests pin the exact effect wiring incl. the PROGRESS example (Cancel of
+  a paid order → `[StatusChanged, BindingTerminalized, RefundObligated]`).
+  **RED proofs (all 3 re-verified this session, each reverted):** (1) neutralize the actor-gate call →
+  the owner SYSTEM-only-cancel test goes red; (2) drop the `BindingTerminalized` emission → the
+  terminal-cancel fact tests go red; (3) pass raw `tax_total` (pre-LC1) instead of `charged` into
+  `compose_total` → the conservation/LC1 proptest CAUGHT the inclusive-venue double-tax (`total=4` vs
+  `3`) that the exclusive-only concrete test missed. **Verified:** 92 core lib + 6 hard_truth + 12
+  kernel_hard_truth green; `sovereign-gate.sh` Gate 1 (wasm32) + Gate 2 (disallowed-types/f64 + core
+  clippy `-D warnings --lib`) green; `cargo check -p api` clean (no shell regression); invariant-guardian
+  read (opus, decorrelated) = **PASS / high / no flags** (independently verified corridor-order parity
+  vs `pg.rs:287-343`, LC1 `charged`-not-`tax_total`, observed refund amount, actor-gate order, purity/
+  totality, nothing-invented; also confirmed persistence-side parity `pg.rs:401-405` — `Priced.tax_total`
+  = the gross-VAT column, `charged` only feeds `total`). Gate 3 (cargo-deny) fails ONLY on the pre-existing
+  RUSTSEC-2023-0071 (rsa) + yanked num-bigint (zero deps added, `Cargo.lock` untouched). **NOTE:** `cargo
+  clippy --all-targets -D warnings` (the aspirational 0b-6 CI shape) reds on pre-existing test-code
+  `unwrap`/`expect`/`as` ACROSS THE WHOLE SUITE (hard_truth.rs, tenant.rs, kernel.rs tests) — a
+  suite-wide 0b-6 cleanup (needs `allow-unwrap-in-tests`), NOT a 0b-3 regression; the enforced core gate
+  is `sovereign-gate.sh --lib` (green). Files: `rebuild/crates/domain/src/{kernel.rs,error.rs,lib.rs,
+  kernel/pricing.rs}`, `tests/kernel_hard_truth.rs`. Commit: this change.
 
 - **0b-2 event vocabulary + `Envelope { seq, at, cause }` (GRAND-PLAN 0b-2) — ✅ DONE (this commit).**
   Grew the kernel alphabet from the lone `StatusChanged` to the money/binding facts the live lifecycle
@@ -140,30 +208,34 @@ FRESH session (F5 anti-context-rot).
 
 ## NEXT SEQUENCE
 **Part B (token-enforcement) = COMPLETE. Part A (modular topology) = COMPLETE (A0·A1·A2·A4·A5, commits
-fd444fbc→b6666bc6, ledgers #86–88). 0b-1 (money boundary) = COMPLETE (commit `c10814ab` — see PHASE 0b
-STATUS above). 0b-2 (event vocabulary + Envelope) = COMPLETE (this commit — see PHASE 0b STATUS
-above).** The next UNCOMPLETED step is #2 (0b-3: compose corridors behind `decide`).
+fd444fbc→b6666bc6, ledgers #86–88). 0b-1 (money boundary) = COMPLETE (commit `c10814ab`). 0b-2 (event
+vocabulary + Envelope) = COMPLETE (commit `e3e30ac1`). 0b-3 (corridors composed behind `decide`) =
+COMPLETE (this commit — see PHASE 0b STATUS above).** The next UNCOMPLETED step is **0b-4 (Hard Truth
+Layers 1–2 — determinism + replay/totality)**, most of which the 0b-3 kernel_hard_truth proptests
+already satisfy (run-determinism, prefix-replay, canonical-bytes closure); 0b-4 = review/close it as a
+named step, then the keystone **0b-5 (shell flip to `kernel::decide`)**.
 
 1. **0b-2 (event vocabulary + Envelope) — ✅ DONE** (this commit; see PHASE 0b STATUS above). The
    concurrent `request_hash` workstream was already landed+clean (`codec.rs` @ `d5f9deb3`), so no
    codec collision; `CommandHash` ended up an opaque core newtype (shell-supplied), not a codec fn.
 
-2. **▶ NEXT — 0b-3: Compose the corridors behind the single `decide` door (GRAND-PLAN 0b-3). FRESH
-   SESSION (F5 mandatory).** This is the WIRE step 0b-2 deliberately left undone: make `decide` EMIT
-   the new facts. Fold the pure corridors that today live beside `decide` — `policy::{actor-gate,
-   transition_effects (terminalize→BindingTerminalized, refund_due→RefundObligated), cc1_strand_guard,
-   needs_honest_dispatch}` + `kernel::pricing` (→ `Priced`) + `kernel::idempotency` — INTO the single
-   `decide` door, so one command yields the full event set (`StatusChanged` + the money/binding facts)
-   under one Envelope. **Gate (D5):** the existing Hard-Truth replay/determinism/round-trip suite must
-   stay green AND extend to assert `decide` now emits the composed facts on the relevant edges (e.g.
-   Cancel of a priced order → `[StatusChanged, BindingTerminalized, RefundObligated]`); byte-parity vs
-   the Node reference for any newly-emitted money numbers; sovereign gate green. **Red-line:** money
-   types — invariant-guardian read, NO council (removed 2026-07-06). STOP-and-record on any byte-parity
-   mismatch. **NOTE:** check the concurrent `request_hash`/orders workstream state before touching
-   `codec.rs`/`routes/orders/*`; those remain the "NOT ours, never commit" set (top of this file).
-2. Then 0b-3 (corridors behind `decide`), 0b-4 (Hard Truth L1–L2), 0b-5 (shell-flip, REUSE the
-   existing cutover shadow-diff, F1), 0b-6 (CI+cargo-deny, `.github` operator-gated) → Phase 1 hub →
-   Phase 2 MVP.
+1b. **0b-3 (corridors composed behind `decide`) — ✅ DONE** (this commit; see PHASE 0b STATUS above).
+   Operator chose FULL 0b-3 this session with the `decide(&OrderState, Command, &Context)` observed-context
+   signature. `decide` now composes machine → actor-gate → cc1 → pricing (PlaceOrder) and emits the full
+   event set. No byte-parity surface added in the core (RefundObligated amount is shell-observed; Priced
+   numbers are the unchanged 0b-1 pricing fns). `codec.rs`/`routes/orders/*` were NOT touched (they stay
+   the "NOT ours" concurrent set).
+
+2. **▶ NEXT — 0b-4: Hard Truth Layers 1–2 (determinism + replay/totality). FRESH SESSION (F5).** Largely
+   ALREADY satisfied by the 0b-3 `kernel_hard_truth` proptests: `kernel_run_is_deterministic` (L1 run==run),
+   `state_is_the_fold_of_its_log_at_every_prefix` (L2 prefix-replay), `log_survives_canonical_bytes_round_trip`
+   + `fold_over_any_event_log_is_total_and_deterministic` (byte-determinism + fold totality under arbitrary
+   decoded events). 0b-4 = review these against the GRAND-PLAN 0b-4 DoD, close any gap (e.g. an explicit
+   "run twice → logs identical by canonical BYTES" assertion if the current PartialEq form is deemed
+   insufficient), and mark the step. **Not red-line.** Then the keystone **0b-5 (shell flips to
+   `kernel::decide`)** — the deployed-reality step (RED proof = injected corridor refusal observed on a
+   real staging route), red-line, council sign-off before staging deploy; REUSE the existing cutover
+   shadow-diff. Then 0b-6 (CI + cargo-deny, `.github` operator-gated) → Phase 1 hub → Phase 2 MVP.
 3. Deferred (non-blocking, pick up opportunistically): RATCHET the B1 model-check warn→deny once
    `audit-token-router` shows model-less <10%; B1 LANE-CLASS/router-stamp checks after the stamp convention
    is written into AGENTS.md; KNOWLEDGE-AS-CIRCUITS `require_together` entry once a committed

@@ -20,9 +20,12 @@ pub mod tenant;
 pub use codec::{CodecError, canonical_bytes, decode_log, encode_log, from_bytes};
 pub use error::{DomainError, ErrorCode, ErrorEnvelope};
 pub use kernel::{
-    Command, CommandHash, Envelope, Event, OrderState, OrderTotals, Ts, decide, fold, replay,
-    replay_envelopes,
+    Actor, Command, CommandHash, Context, Envelope, Event, OrderState, OrderTotals, PriceInputs, Ts,
+    decide, fold, replay, replay_envelopes,
 };
+// The CC-1 strand-guard input a caller must supply on a [`Context`] — re-exported so the shell (and
+// tests) can build a `Context` without reaching into `kernel::policy`.
+pub use kernel::policy::BindingState;
 // Sovereign-core money composition (GRAND-PLAN 0b-1) — re-exported so the shell adapter
 // (`api::routes::orders::pricing`) and pg.rs can `use domain::kernel::pricing::{…}` (or the flat
 // `domain::…`) for the pure integer money surface. The core `DeliveryTier`/`FeeLocation` are

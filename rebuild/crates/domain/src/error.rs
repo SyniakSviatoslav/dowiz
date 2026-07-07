@@ -31,6 +31,17 @@ pub enum DomainError {
     ScaffoldDisabled { from: OrderStatus, to: OrderStatus },
     #[error("Cannot transition to same status: {0:?}")]
     SameStatus(OrderStatus),
+    /// A CORRIDOR — a pure decision composed behind `kernel::decide` that sits OVER the machine (the
+    /// actor-gate, the CC-1 strand guard, or the pricing/LC1 conservation corridor, GRAND-PLAN 0b-3)
+    /// — refused the command. `corridor` names which one (a stable `&'static str` the Hard-Truth
+    /// enumeration/log keys on); `code` is the EXACT wire [`ErrorCode`] the live handler returns for
+    /// that refusal, carried through verbatim so the one composed door and the scattered shell fns
+    /// stay code-identical (a divergence here is the mirror-oracle failure mode 0b-3 guards against).
+    #[error("Corridor breach in {corridor}: {code:?}")]
+    CorridorBreach {
+        corridor: &'static str,
+        code: ErrorCode,
+    },
 }
 
 impl DomainError {
@@ -39,6 +50,8 @@ impl DomainError {
             DomainError::IllegalTransition { .. } => ErrorCode::IllegalTransition,
             DomainError::ScaffoldDisabled { .. } => ErrorCode::ScaffoldDisabled,
             DomainError::SameStatus(_) => ErrorCode::SameStatus,
+            // The corridor speaks the domain's own vocabulary — the carried code IS the wire code.
+            DomainError::CorridorBreach { code, .. } => code,
         }
     }
 }

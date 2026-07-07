@@ -33,7 +33,7 @@ pub mod policy;
 // gate proves it); the shell keeps a thin f64 adapter over this module.
 pub mod pricing;
 
-use crate::{DomainError, Lek, OrderStatus, order_status::assert_transition};
+use crate::{DomainError, ErrorCode, Lek, OrderStatus, order_status::assert_transition};
 use serde::{Deserialize, Serialize};
 
 /// A timestamp in epoch-milliseconds, SUPPLIED BY THE CALLER. The core never reads a clock (Law 1);
@@ -55,30 +55,61 @@ pub struct Ts(pub i64);
 #[serde(transparent)]
 pub struct CommandHash(pub String);
 
-/// The intent alphabet — the actions an actor can *attempt* against an order. Humans and agents are
-/// indistinguishable to the kernel: both are `Command` sources (Manifesto Phase Three, by
-/// construction). Each command maps to exactly one target [`OrderStatus`]; the machine — not this
-/// mapping — is the sole authority on whether the attempt is *legal*.
+/// WHO is attempting the command — the D2 identity seam carried on every [`Command`]. The MACHINE
+/// ([`assert_transition`]) says an edge is *possible*; the ACTOR-GATE
+/// ([`policy::assert_owner_target_allowed`]) says who is *allowed* to drive it (REV-S5-9 Q2). The
+/// deliver-v2 offer-sweep widened the machine to permit CONFIRMED/PREPARING/READY→CANCELLED, but
+/// those are SYSTEM-only edges (the dispatch-grace path): an [`Owner`](Actor::Owner) driving one is
+/// refused, while [`System`](Actor::System) (courier sweeps, schedulers, automation) keeps them.
+/// Humans and agents are indistinguishable to the kernel — both are just command sources with an
+/// `Actor` (Manifesto Phase Three, by construction).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum Actor {
+    /// The venue owner/staff acting through the dashboard — actor-gated on the widened cancel edges.
+    Owner,
+    /// Platform automation (dispatch grace, courier sweeps, schedulers) — keeps the SYSTEM-only edges.
+    System,
+}
+
+/// The intent alphabet — the actions an actor can *attempt* against an order. Every command carries
+/// its [`Actor`] (WHO attempts) and its [`Ts`] (WHEN, caller-supplied). The status commands map to
+/// exactly one target [`OrderStatus`]; [`PlaceOrder`](Command::PlaceOrder) is the CREATE+PRICE door
+/// (it does not transition an existing edge — the order is born PENDING — it prices a cart). The
+/// machine and the composed corridors — not this alphabet — decide whether an attempt is *legal*.
+///
+/// NOT `Copy`: `PlaceOrder` carries a `Vec<PricingItem>` cart. Clone where a value is needed twice.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Command {
-    Confirm { at: Ts },
-    Reject { at: Ts },
-    StartPreparing { at: Ts },
-    MarkReady { at: Ts },
+    Confirm { at: Ts, actor: Actor },
+    Reject { at: Ts, actor: Actor },
+    StartPreparing { at: Ts, actor: Actor },
+    MarkReady { at: Ts, actor: Actor },
     /// Drive toward IN_DELIVERY (legal from CONFIRMED or READY).
-    Dispatch { at: Ts },
-    MarkDelivered { at: Ts },
-    MarkPickedUp { at: Ts },
+    Dispatch { at: Ts, actor: Actor },
+    MarkDelivered { at: Ts, actor: Actor },
+    MarkPickedUp { at: Ts, actor: Actor },
     /// The IN_DELIVERY → READY revert (courier cancel/abort/owner-reassign never strands an order).
-    RevertToReady { at: Ts },
-    Cancel { at: Ts },
+    RevertToReady { at: Ts, actor: Actor },
+    Cancel { at: Ts, actor: Actor },
+    /// CREATE+PRICE — the customer/owner places an order. Carries the cart (pure INTENT); the price
+    /// authority (product/modifier snapshot, delivery/tax inputs) is OBSERVED context supplied on
+    /// [`Context`], not intent. Produces an [`Event::Priced`] money snapshot; the order is born
+    /// PENDING (genesis), so it drives no `StatusChanged` and is NOT machine/actor/cc1-gated.
+    PlaceOrder {
+        at: Ts,
+        actor: Actor,
+        cart: Vec<crate::kernel::pricing::PricingItem>,
+    },
 }
 
 impl Command {
-    /// The status this command drives the order toward. A pure total mapping — legality is decided
-    /// by [`decide`] via the machine, never here.
-    pub fn target(self) -> OrderStatus {
+    /// The status a *transition* command drives the order toward. A pure total mapping — legality is
+    /// decided by [`decide`] via the machine, never here. [`PlaceOrder`](Command::PlaceOrder) creates
+    /// at genesis (PENDING) rather than transitioning, so its "target" is `Pending` (never used by
+    /// `decide`, which routes `PlaceOrder` around the machine entirely).
+    pub fn target(&self) -> OrderStatus {
         match self {
             Command::Confirm { .. } => OrderStatus::Confirmed,
             Command::Reject { .. } => OrderStatus::Rejected,
@@ -89,21 +120,39 @@ impl Command {
             Command::MarkPickedUp { .. } => OrderStatus::PickedUp,
             Command::RevertToReady { .. } => OrderStatus::Ready,
             Command::Cancel { .. } => OrderStatus::Cancelled,
+            Command::PlaceOrder { .. } => OrderStatus::Pending,
         }
     }
 
     /// The caller-supplied event time carried by this command.
-    pub fn at(self) -> Ts {
+    pub fn at(&self) -> Ts {
         match self {
-            Command::Confirm { at }
-            | Command::Reject { at }
-            | Command::StartPreparing { at }
-            | Command::MarkReady { at }
-            | Command::Dispatch { at }
-            | Command::MarkDelivered { at }
-            | Command::MarkPickedUp { at }
-            | Command::RevertToReady { at }
-            | Command::Cancel { at } => at,
+            Command::Confirm { at, .. }
+            | Command::Reject { at, .. }
+            | Command::StartPreparing { at, .. }
+            | Command::MarkReady { at, .. }
+            | Command::Dispatch { at, .. }
+            | Command::MarkDelivered { at, .. }
+            | Command::MarkPickedUp { at, .. }
+            | Command::RevertToReady { at, .. }
+            | Command::Cancel { at, .. }
+            | Command::PlaceOrder { at, .. } => *at,
+        }
+    }
+
+    /// WHO is attempting the command — the input to the actor-gate corridor.
+    pub fn actor(&self) -> Actor {
+        match self {
+            Command::Confirm { actor, .. }
+            | Command::Reject { actor, .. }
+            | Command::StartPreparing { actor, .. }
+            | Command::MarkReady { actor, .. }
+            | Command::Dispatch { actor, .. }
+            | Command::MarkDelivered { actor, .. }
+            | Command::MarkPickedUp { actor, .. }
+            | Command::RevertToReady { actor, .. }
+            | Command::Cancel { actor, .. }
+            | Command::PlaceOrder { actor, .. } => *actor,
         }
     }
 }
@@ -191,18 +240,172 @@ impl OrderState {
     }
 }
 
-/// THE LAW. Given the current state and an attempted command, return the events it produces — or the
-/// reason it is refused. Pure, total, side-effect-free: no clock, no entropy, no IO. The machine
+/// Observed CONTEXT the corridors read — the facts the shell OBSERVES about OTHER aggregates and the
+/// price authority, as opposed to the actor's INTENT (which rides on the [`Command`]). Supplied to
+/// [`decide`] like [`Ts`]/[`CommandHash`]: the core carries and composes it, never reading a
+/// clock/DB/RNG to obtain it (Laws 1–3). The 0b-3 split (operator decision): binding facts, the paid
+/// amount, and the price snapshot are OBSERVED ⇒ `Context`; the actor is intent-adjacent ⇒ `Command`.
+pub struct Context<'a> {
+    /// CC-1 strand-guard input — the order's courier-binding facts (read from `courier_assignments`
+    /// inside the tx). Default `{ false, false }` for a never-dispatched order.
+    pub binding: policy::BindingState,
+    /// The sum of PAID payments to refund on a terminal-cancel (policy L-A `refund_due`). The SHELL
+    /// computes this money aggregate over `payments` — exactly as it owns the Haversine sum over
+    /// coordinates (the 0b-1 f64/aggregate boundary) — and the core carries it. `ZERO` today (zero
+    /// `paid` rows) ⇒ no [`Event::RefundObligated`] fires; the obligation stays correct the moment
+    /// crypto flips and real paid rows appear.
+    pub refundable_paid: Lek,
+    /// The price authority for a [`Command::PlaceOrder`]: the in-tx product/modifier/group snapshot
+    /// plus the already-integerized delivery/tax inputs (the f64→i64 marshalling stays in the shell,
+    /// 0b-1). `None` for transition commands (they do not price); its absence on a `PlaceOrder` is a
+    /// caller-contract [`DomainError::CorridorBreach`].
+    pub pricing: Option<PriceInputs<'a>>,
+}
+
+/// The already-integerized price inputs a [`Command::PlaceOrder`] prices against — the OBSERVED half
+/// of pricing (the cart is the intent half, on the command). Mirrors the shell create-handler's in-tx
+/// reads (`pg.rs:282-337`): the product/modifier/group snapshot, whether the order is pickup, the
+/// location fee config, the whole-meter delivery distance, the delivery tiers, and the micro-scaled
+/// tax rate + inclusive flag. Every float is already an integer here (the 0b-1 boundary).
+pub struct PriceInputs<'a> {
+    pub snapshot: pricing::PricingSnapshot<'a>,
+    pub is_pickup: bool,
+    pub location: pricing::FeeLocation,
+    pub distance_m: Option<i64>,
+    pub tiers: &'a [pricing::DeliveryTier],
+    pub rate_micro: i64,
+    pub price_includes_tax: bool,
+}
+
+impl Context<'_> {
+    /// The context for a status-transition command: the courier-binding facts + the refundable paid
+    /// sum, with no pricing authority (transitions do not price).
+    pub fn for_transition(binding: policy::BindingState, refundable_paid: Lek) -> Self {
+        Context {
+            binding,
+            refundable_paid,
+            pricing: None,
+        }
+    }
+}
+
+/// THE LAW. Given the current state, an attempted command, and the observed [`Context`], return the
+/// events it produces — or the reason it is refused. Pure, total, side-effect-free: no clock, no
+/// entropy, no IO. This is the ONE door — the machine, the actor-gate, the CC-1 strand guard, and
+/// the pricing/LC1 conservation corridor all compose HERE, in the LIVE-HANDLER ORDER (GRAND-PLAN
+/// 0b-3), so one command yields the full event set under one [`Envelope`]. The machine
 /// (`assert_transition`) is the sole legality authority, so a terminal order absorbs every command
-/// (its transition table is empty → `Err`), and no event can ever escape a terminal state.
-pub fn decide(state: &OrderState, command: Command) -> Result<Vec<Event>, DomainError> {
+/// (its transition table is empty → `Err`), and no event can ever escape a terminal state. The
+/// scattered `policy`/`pricing` fns are no longer a public mutation API — they are this door's
+/// internals ([`policy::transition_effects`] became an internal emission detail).
+pub fn decide(
+    state: &OrderState,
+    command: Command,
+    ctx: &Context,
+) -> Result<Vec<Event>, DomainError> {
+    // PlaceOrder is the CREATE+PRICE door: a placed order is born PENDING (= genesis), so it does
+    // not transition an existing edge and never touches the machine/actor/cc1 corridors (which gate
+    // TRANSITIONS). It prices the cart against the observed authority and records the money snapshot.
+    if let Command::PlaceOrder { cart, .. } = &command {
+        let inputs = ctx.pricing.as_ref().ok_or(DomainError::CorridorBreach {
+            corridor: "pricing",
+            // A PlaceOrder with no price authority is a caller-contract violation (the shell must
+            // read the snapshot before calling decide, pg.rs order), not a business outcome.
+            code: ErrorCode::Internal,
+        })?;
+        return Ok(vec![price_cart(cart, inputs)?]);
+    }
+
+    let from = state.status;
     let to = command.target();
-    assert_transition(state.status, to)?;
-    Ok(vec![Event::StatusChanged {
-        from: state.status,
+
+    // 1. The MACHINE — the byte-frozen 10-state relation is the SOLE legality authority.
+    assert_transition(from, to)?;
+
+    // 2. The ACTOR-GATE — an OWNER may not drive the SYSTEM-only widened cancel edges
+    //    (CONFIRMED/PREPARING/READY→CANCELLED, orderAuthz.ts). System keeps them, so the gate applies
+    //    only to an owner-driven command. Runs AFTER the machine vetted the edge, BEFORE the effects.
+    if command.actor() == Actor::Owner {
+        policy::assert_owner_target_allowed(from, to)
+            .map_err(|code| DomainError::CorridorBreach {
+                corridor: "actor_gate",
+                code,
+            })?;
+    }
+
+    // 3. The CC-1 STRAND GUARD — a →DELIVERED/PICKED_UP with a live (or IN_DELIVERY-but-undelivered)
+    //    courier binding is refused, so no order is marked done while a courier is still strand-bound
+    //    (orders.ts:929-955, money-audit H1). A no-op for every other target.
+    policy::cc1_strand_guard(to, from, ctx.binding).map_err(|code| DomainError::CorridorBreach {
+        corridor: "cc1_strand",
+        code,
+    })?;
+
+    // 4. Emit the status fact + the fold effects the transition implies. `transition_effects` is now
+    //    an INTERNAL emission detail (0b-3 DoD) — the shell no longer reads it directly.
+    let effects = policy::transition_effects(from, to);
+    let mut events = Vec::with_capacity(3);
+    events.push(Event::StatusChanged {
+        from,
         to,
         at: command.at(),
-    }])
+    });
+    // R2-3: terminalize the active courier binding on any →CANCELLED/→REJECTED and the
+    // IN_DELIVERY→READY revert (orderStatusService.ts:139) — no order leaves with a live strand.
+    if effects.terminalize_assignment {
+        events.push(Event::BindingTerminalized);
+    }
+    // L-A: record a refund obligation on a terminal-cancel — but only when there IS a paid amount to
+    // refund (orderStatusService.ts:165, per-paid-payment). Zero paid rows today ⇒ inert. The amount
+    // is the SHELL-observed paid sum, never core-derived (no money number is invented in the core).
+    if effects.record_refund_due && ctx.refundable_paid > Lek::ZERO {
+        events.push(Event::RefundObligated {
+            amount: ctx.refundable_paid,
+        });
+    }
+    Ok(events)
+}
+
+/// The pricing/LC1 conservation corridor — ports the shell create-handler's section-6→9 assembly
+/// VERBATIM (`api::routes::orders::pg.rs:287-343`), the ONE order that must never diverge (a
+/// divergence here IS the mirror-oracle failure mode): `compute_order_pricing` →
+/// `delivery_fee_for_order` → `apply_tax` → `charged_tax` (LC1) → `compose_total`. Every pricing
+/// refusal maps to a [`DomainError::CorridorBreach`] carrying the exact pricing [`ErrorCode`]; a
+/// money-math error (unreachable for real inputs — see [`pricing`]) surfaces as an `Internal` breach,
+/// never a silent wrong charge and never a panic (this stays TOTAL).
+fn price_cart(cart: &[pricing::PricingItem], p: &PriceInputs) -> Result<Event, DomainError> {
+    let breach = |code| DomainError::CorridorBreach {
+        corridor: "pricing",
+        code,
+    };
+    let (subtotal, _rows) =
+        pricing::compute_order_pricing(cart, &p.snapshot).map_err(|e| breach(e.code))?;
+    let delivery_fee =
+        pricing::delivery_fee_for_order(subtotal, p.is_pickup, p.location, p.distance_m, p.tiers)
+            .map_err(|e| breach(e.code))?;
+    let tax_i64 = pricing::apply_tax(subtotal.minor_units(), p.rate_micro, p.price_includes_tax)
+        .map_err(money_math_breach)?;
+    let tax_total = Lek::new(tax_i64).map_err(money_math_breach)?;
+    let charged = pricing::charged_tax(tax_total, p.price_includes_tax);
+    let total = pricing::compose_total(subtotal, delivery_fee, charged, Lek::ZERO)
+        .map_err(money_math_breach)?;
+    Ok(Event::Priced {
+        subtotal,
+        delivery_fee,
+        tax_total,
+        total,
+    })
+}
+
+/// A money-math failure (`apply_tax`/`Lek::new`/`compose_total` overflow or a negative composition)
+/// is UNREACHABLE for real inputs (see [`pricing`]'s REV-S5-4 headroom analysis); it surfaces as an
+/// `Internal` corridor breach rather than a silent wrong charge or a panic. A named fn (not a
+/// discarding `|_|` closure) so the core lib stays clean under `-D warnings` (`clippy::map_err_ignore`).
+fn money_math_breach(_e: crate::MoneyError) -> DomainError {
+    DomainError::CorridorBreach {
+        corridor: "pricing",
+        code: ErrorCode::Internal,
+    }
 }
 
 /// TOTAL. Applying a fact cannot fail — it already happened. Produces a new state (no `&mut self`);
@@ -269,10 +472,44 @@ mod tests {
 
     const T: Ts = Ts(1_700_000_000_000);
 
+    /// A no-binding, nothing-paid context — what a transition command sees on a never-dispatched,
+    /// unpaid order (cc1 is a no-op, no refund fires).
+    const NO_BINDING: policy::BindingState = policy::BindingState {
+        has_active_binding: false,
+        has_delivered_binding: false,
+    };
+    fn plain_ctx() -> Context<'static> {
+        Context {
+            binding: NO_BINDING,
+            refundable_paid: Lek::ZERO,
+            pricing: None,
+        }
+    }
+    /// The completeDelivery context — a `delivered` assignment exists, none active — so cc1 permits a
+    /// →DELIVERED/→PICKED_UP (the deliver-flow completion path).
+    fn delivered_ctx() -> Context<'static> {
+        Context {
+            binding: policy::BindingState {
+                has_active_binding: false,
+                has_delivered_binding: true,
+            },
+            refundable_paid: Lek::ZERO,
+            pricing: None,
+        }
+    }
+
     #[test]
     fn decide_emits_one_status_changed_event_carrying_the_command_time() {
         let state = OrderState::genesis(); // PENDING
-        let events = decide(&state, Command::Confirm { at: T }).unwrap();
+        let events = decide(
+            &state,
+            Command::Confirm {
+                at: T,
+                actor: Actor::Owner,
+            },
+            &plain_ctx(),
+        )
+        .unwrap();
         assert_eq!(
             events,
             vec![Event::StatusChanged {
@@ -301,7 +538,14 @@ mod tests {
         let ready = OrderState { status: OrderStatus::Ready, ..OrderState::genesis() };
         // READY -> CONFIRMED is not a machine edge.
         assert!(matches!(
-            decide(&ready, Command::Confirm { at: T }),
+            decide(
+                &ready,
+                Command::Confirm {
+                    at: T,
+                    actor: Actor::Owner
+                },
+                &plain_ctx()
+            ),
             Err(DomainError::IllegalTransition { .. })
         ));
     }
@@ -310,11 +554,23 @@ mod tests {
     fn a_terminal_order_absorbs_every_command() {
         let delivered = OrderState { status: OrderStatus::Delivered, ..OrderState::genesis() };
         for cmd in [
-            Command::Cancel { at: T },
-            Command::Confirm { at: T },
-            Command::RevertToReady { at: T },
+            Command::Cancel {
+                at: T,
+                actor: Actor::System,
+            },
+            Command::Confirm {
+                at: T,
+                actor: Actor::Owner,
+            },
+            Command::RevertToReady {
+                at: T,
+                actor: Actor::System,
+            },
         ] {
-            assert!(decide(&delivered, cmd).is_err(), "delivered must absorb {cmd:?}");
+            assert!(
+                decide(&delivered, cmd.clone(), &plain_ctx()).is_err(),
+                "delivered must absorb {cmd:?}"
+            );
         }
     }
 
@@ -322,16 +578,39 @@ mod tests {
     fn a_full_lifecycle_folds_up_from_the_event_log() {
         let genesis = OrderState::genesis();
         let commands = [
-            Command::Confirm { at: T },
-            Command::StartPreparing { at: T },
-            Command::MarkReady { at: T },
-            Command::Dispatch { at: T },
-            Command::MarkDelivered { at: T },
+            Command::Confirm {
+                at: T,
+                actor: Actor::Owner,
+            },
+            Command::StartPreparing {
+                at: T,
+                actor: Actor::Owner,
+            },
+            Command::MarkReady {
+                at: T,
+                actor: Actor::Owner,
+            },
+            Command::Dispatch {
+                at: T,
+                actor: Actor::Owner,
+            },
+            // The deliver-flow completion — cc1 now composes into `decide`, so →DELIVERED needs the
+            // delivered-binding context (a `delivered` assignment exists), else it is USE_DELIVER_FLOW.
+            Command::MarkDelivered {
+                at: T,
+                actor: Actor::System,
+            },
         ];
         let mut state = genesis;
         let mut log = Vec::new();
-        for &c in &commands {
-            let events = decide(&state, c).expect("each step is a legal edge");
+        for c in &commands {
+            // →DELIVERED/→PICKED_UP need the completeDelivery context; every other edge is cc1-inert.
+            let ctx = if matches!(c.target(), OrderStatus::Delivered | OrderStatus::PickedUp) {
+                delivered_ctx()
+            } else {
+                plain_ctx()
+            };
+            let events = decide(&state, c.clone(), &ctx).expect("each step is a legal edge");
             for e in &events {
                 state = fold(&state, e);
             }
@@ -340,6 +619,205 @@ mod tests {
         assert_eq!(state.status, OrderStatus::Delivered);
         // The state is fully reconstructible from the log alone.
         assert_eq!(replay(genesis, &log), state);
+    }
+
+    // ─────────────────────── 0b-3: corridors composed behind the single `decide` door ───────────────────────
+
+    #[test]
+    fn owner_is_actor_gated_off_the_system_only_cancel_edges_but_system_keeps_them() {
+        // CONFIRMED→CANCELLED is machine-legal (deliver-v2 sweep) but a SYSTEM-only edge (orderAuthz).
+        let confirmed = OrderState { status: OrderStatus::Confirmed, ..OrderState::genesis() };
+        // Owner driving it → CorridorBreach carrying the EXACT wire code the shell returns.
+        assert_eq!(
+            decide(
+                &confirmed,
+                Command::Cancel { at: T, actor: Actor::Owner },
+                &plain_ctx()
+            ),
+            Err(DomainError::CorridorBreach {
+                corridor: "actor_gate",
+                code: ErrorCode::CancelNotPermitted,
+            })
+        );
+        // System (dispatch-grace) keeps the edge → StatusChanged + BindingTerminalized (R2-3).
+        let events = decide(
+            &confirmed,
+            Command::Cancel { at: T, actor: Actor::System },
+            &plain_ctx(),
+        )
+        .unwrap();
+        assert_eq!(
+            events[0],
+            Event::StatusChanged {
+                from: OrderStatus::Confirmed,
+                to: OrderStatus::Cancelled,
+                at: T,
+            }
+        );
+        assert!(events.contains(&Event::BindingTerminalized));
+    }
+
+    #[test]
+    fn cc1_strand_guard_composes_an_active_binding_blocks_delivered() {
+        let in_delivery = OrderState { status: OrderStatus::InDelivery, ..OrderState::genesis() };
+        let ctx = Context {
+            binding: policy::BindingState {
+                has_active_binding: true,
+                has_delivered_binding: false,
+            },
+            refundable_paid: Lek::ZERO,
+            pricing: None,
+        };
+        assert_eq!(
+            decide(
+                &in_delivery,
+                Command::MarkDelivered { at: T, actor: Actor::System },
+                &ctx
+            ),
+            Err(DomainError::CorridorBreach {
+                corridor: "cc1_strand",
+                code: ErrorCode::AssignmentActive,
+            })
+        );
+    }
+
+    #[test]
+    fn cancel_of_a_paid_order_emits_status_binding_and_refund_facts() {
+        // The PROGRESS 0b-3 example verbatim: Cancel of a paid+priced order →
+        // [StatusChanged, BindingTerminalized, RefundObligated]. IN_DELIVERY→CANCELLED is owner-legal
+        // (no-show); the refund fires because a paid amount is OBSERVED on the context.
+        let priced = OrderState {
+            status: OrderStatus::InDelivery,
+            totals: Some(OrderTotals {
+                subtotal: lek(1_000),
+                delivery_fee: lek(200),
+                tax_total: lek(120),
+                total: lek(1_320),
+            }),
+            ..OrderState::genesis()
+        };
+        let ctx = Context {
+            binding: NO_BINDING,
+            refundable_paid: lek(1_320),
+            pricing: None,
+        };
+        let events = decide(
+            &priced,
+            Command::Cancel { at: T, actor: Actor::Owner },
+            &ctx,
+        )
+        .unwrap();
+        assert_eq!(
+            events,
+            vec![
+                Event::StatusChanged {
+                    from: OrderStatus::InDelivery,
+                    to: OrderStatus::Cancelled,
+                    at: T,
+                },
+                Event::BindingTerminalized,
+                Event::RefundObligated { amount: lek(1_320) },
+            ]
+        );
+    }
+
+    #[test]
+    fn cancel_with_no_paid_amount_emits_no_refund_obligation() {
+        // Zero paid rows (today's reality) ⇒ terminalize fires, refund does NOT (nothing was charged).
+        let unpaid = OrderState { status: OrderStatus::InDelivery, ..OrderState::genesis() };
+        let events = decide(
+            &unpaid,
+            Command::Cancel { at: T, actor: Actor::Owner },
+            &plain_ctx(),
+        )
+        .unwrap();
+        assert_eq!(
+            events,
+            vec![
+                Event::StatusChanged {
+                    from: OrderStatus::InDelivery,
+                    to: OrderStatus::Cancelled,
+                    at: T,
+                },
+                Event::BindingTerminalized,
+            ]
+        );
+    }
+
+    #[test]
+    fn place_order_prices_the_cart_into_a_priced_fact() {
+        use std::collections::HashMap;
+        // one product @ 1000, qty 2, no modifiers; pickup (no delivery fee); 20% exclusive tax.
+        let mut product_map = HashMap::new();
+        product_map.insert(
+            "p1".to_string(),
+            pricing::ProductInfo { name: "Pizza".to_string(), price: lek(1_000) },
+        );
+        let mod_map = HashMap::new();
+        let groups_by_product = HashMap::new();
+        let snapshot = pricing::PricingSnapshot {
+            product_map: &product_map,
+            mod_map: &mod_map,
+            groups_by_product: &groups_by_product,
+        };
+        let inputs = PriceInputs {
+            snapshot,
+            is_pickup: true,
+            location: pricing::FeeLocation {
+                delivery_fee_flat: None,
+                free_delivery_threshold: None,
+                min_order_value: None,
+            },
+            distance_m: None,
+            tiers: &[],
+            rate_micro: 200_000, // 0.2 exclusive
+            price_includes_tax: false,
+        };
+        let ctx = Context { binding: NO_BINDING, refundable_paid: Lek::ZERO, pricing: Some(inputs) };
+        let cart = vec![pricing::PricingItem {
+            product_id: "p1".to_string(),
+            quantity: 2,
+            modifier_ids: vec![],
+        }];
+        let events = decide(
+            &OrderState::genesis(),
+            Command::PlaceOrder { at: T, actor: Actor::Owner, cart },
+            &ctx,
+        )
+        .unwrap();
+        // subtotal = 2000, delivery = 0 (pickup), tax = 400 (2000·0.2), total = 2400. LC1 (exclusive)
+        // adds the whole tax; conservation total = subtotal + delivery_fee + charged_tax − 0.
+        assert_eq!(
+            events,
+            vec![Event::Priced {
+                subtotal: lek(2_000),
+                delivery_fee: lek(0),
+                tax_total: lek(400),
+                total: lek(2_400),
+            }]
+        );
+    }
+
+    #[test]
+    fn place_order_without_pricing_context_is_a_caller_contract_breach() {
+        // PlaceOrder REQUIRES a price authority on the context; its absence is Internal (a caller
+        // contract violation), never a panic — decide stays TOTAL.
+        let cart = vec![pricing::PricingItem {
+            product_id: "p1".to_string(),
+            quantity: 1,
+            modifier_ids: vec![],
+        }];
+        assert_eq!(
+            decide(
+                &OrderState::genesis(),
+                Command::PlaceOrder { at: T, actor: Actor::Owner, cart },
+                &plain_ctx()
+            ),
+            Err(DomainError::CorridorBreach {
+                corridor: "pricing",
+                code: ErrorCode::Internal,
+            })
+        );
     }
 
     // ─────────────────────── 0b-2: money/binding facts fold into the aggregate ───────────────────────
