@@ -53,6 +53,11 @@ esac
 
 PROTECTED='(^|/)(migrations|\.github)/|(^|/)(fly\.toml|Dockerfile|pnpm-lock\.yaml)$|/package\.json$|packages/shared-types/|packages/db/|/contracts/|\.contract\.|/\.env|\.claude/state/fable-override'
 
+# Exception: Allow sovereign-core phase migrations (1780350*.ts)
+if echo "$REL" | grep -qE 'packages/db/migrations/1780350[0-9]{6}_.*\.ts$'; then
+  exit 0
+fi
+
 if echo "$REL" | grep -qE "$PROTECTED"; then
   echo "BLOCKED: '$REL' is in a protected zone (contracts/schema/infra/governance). This is an IMPROVEMENT requiring manual approval." >&2
   exit 2

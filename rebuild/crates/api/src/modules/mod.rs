@@ -3,3 +3,4 @@
 //! + ports, NEVER on another module's internals (any undeclared `use crate::modules::<other>` reds
 //! the gate). GRAND-PLAN 1.x hub features land here under the A5 placement rule.
 pub mod channel_attribution;
+pub mod customer_management;

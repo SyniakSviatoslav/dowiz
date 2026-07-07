@@ -1,0 +1,10 @@
+# Module manifest — customer_management (GRAND-PLAN 2.3, hub module for PII ownership).
+# Machine-checked by scripts/module-integrity.mjs: this module may NOT import another module's internals
+# (undeclared `use crate::modules::*` reds the gate).
+name = "customer_management"
+kind = "hub-module"
+depends = []                  # pure data layer, no module dependencies
+events_in = []                # consumes no event stream
+events_out = []               # customer CRUD is read/write only, no event emission
+contract = "rebuild/crates/api/src/modules/customer_management/mod.rs"
+red_line = true               # PII storage + RLS (PII red-line per GRAND-PLAN 2.3)
