@@ -28,6 +28,7 @@ run "gate-armament (serious/red-line/guard-bash armed, not just registered)" nod
 run "token-gates (dispatch warn/deny/fable/distill armed + over-block guards)" node scripts/guardrail-token-gates.mjs
 run "subagent-return-guard (0-tool-use degenerate return blocks; real work passes)" node scripts/guardrail-subagent-return-guard.mjs
 run "audit-token-router --self-test (a/e → exit1, over-block guards)" node scripts/audit-token-router.mjs --self-test
+run "context-budget-guard --self-test (two-tier WARN/HARD ladder + RED WARN≠HARD + extraction)" bash .claude/hooks/context-budget-guard.sh --self-test
 run "module-integrity --self-test (manifest-boundary DENY + over-block guards)" node scripts/module-integrity.mjs --self-test
 run "legacy-freeze --self-test (route-count regex + freeze compare logic)" node scripts/guardrail-legacy-freeze.mjs --self-test
 run "cloud-session-report --self-test (token/time parse + outbound secret-scan)" node scripts/cloud-session-report.mjs --self-test

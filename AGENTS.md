@@ -226,12 +226,39 @@ the fix is architectural, not compressive. Task → generate → finish → FORG
   *false-positive metric* and does NOT validate; ship the RED case with the green. Enforced by
   `scripts/guardrail-falsifiable-proof.mjs` (run-armaments → pre-commit). Spec:
   `docs/operating-model/verified-by-math.md`.
-- **Fable: OFF — main session AND all lanes.** `.claude/settings.json` pins `model: claude-opus-4-8` as the session default; re-enabling Fable is a per-task operator override (`/model`), never a default. Every `Agent` call still MUST pass an explicit `model:`.
+- **Lead/reasoning tier: HAIKU 4.5 (operator directive 2026-07-07 late "push further — haiku for reasoning"; supersedes
+  the earlier-same-day Opus→Sonnet §B0 pin).** The harness (deterministic gates, RED-proven guards, `kernel::decide`,
+  falsifiable-proof) is the safety net, so routine reasoning rides the cheapest tier (Haiku $1/$5 vs Sonnet $3/$15 vs Opus
+  $5/$25 — ~5× cheaper than Opus both ways). This attacks the 89% Opus $-share (§11b) hardest. **Staged** in
+  `docs/operating-model/proposed-settings/settings.json` (= live settings.json + the `model` key); operator applies via
+  `cp` (preserves every live hook — verified `proposed − model-key ≡ live`). Effective next session; the lead cannot
+  downshift mid-session. **SAFETY RAIL (non-negotiable): red-line reasoning ESCALATES to `opus`** — any step touching
+  money / auth / RLS / migrations / a byte-parity oracle (on the MVP path: 0b-5, 1.2, 2.2, 2.3) is reasoned/verified on
+  opus via `doubt-escalation`, never left on Haiku. Sonnet 5 is the middle option when Haiku is visibly struggling but the
+  step isn't red-line. Haiku default is a COST bet backed by the gates; opus-on-red-line is the floor that makes it safe.
+- **Fable: OFF — main session AND all lanes.** Re-enabling Fable is a per-task operator override (`/model`) or an expiring
+  `.claude/state/fable-override` line, never a default; the dispatch gate DENIES `model: fable` lanes. Every `Agent` call still MUST pass an explicit `model:`.
+- **Free / external LLM APIs (OpenRouter, Google AI Studio, Groq, Cerebras, Mistral, GitHub Models — the
+  `free-llm-api-resources` catalog) — GATED, non-default (operator "use free APIs for other tasks" 2026-07-07 + §0·GP
+  "re-validate before adopting"; bridge was DEAD 2026-06-22).** Allowed ONLY for **NON-PROPRIETARY, NON-red-line** work:
+  public-info research, decorrelated second opinions on PUBLIC facts, prose/doc drafting from non-sensitive inputs, format
+  scratch. **HARD BOUNDARY — never send dowiz proprietary context out**: no source code (esp. money/auth/RLS/pricing/
+  contracts/schema), no PII, no secrets, no customer/order data. Ground truth (measured 2026-07-07,
+  `free-llm-api-resources`): free tiers **train on or retain inputs** (Google trains outside EEA; Mistral free = opt-in to
+  training; OpenCode Zen "may improve models"; most providers SILENT ⇒ treat as retained) and cap at ~20–1000 req/day —
+  unfit as a primary doer tier regardless. **Never red-line authority** (a gate/human decides; a free model only *signals*).
+  Wiring the OpenRouter bridge is a STAGED, opt-in tool requiring an operator data-governance sign-off + keys — tracked as
+  a BLOCKER, not switched on by default. For in-Anthropic doer volume, `haiku` (no data egress, no rate cap) remains the tier.
 - **`haiku` = the default doer** — ports with a written recipe, searches/sweeps/inventories, probes, mechanical transforms, test-writing to a spec, distillation.
-- **`opus` = reasoning-critical ONLY** — red-line design, adversarial verification where a miss costs money/PII, judging. (The standing council critics were removed 2026-07-07; a decorrelated read is now an on-demand, human-gated exception per §0·GP — prefer a deterministic check.)
+- **B2 — read-only / analytical subagent lanes default to explicit `model: haiku`** (token-reduction-enforcement §B2). Opus
+  output $25/M vs Haiku $5/M (5×); the data (§11c) says lean on it. Realised as *dispatch-to-Haiku*, NOT a lead-model swap.
+  `agent-dispatch-gate.sh` DENIES a model-less dispatch by default (ratcheted 2026-07-07; newest-12 = 0% model-less), with a
+  carve-out for `subagent_type: Explore`/`fork` (which inherit the parent tier). So: pass `model: haiku` on read-only/doer
+  lanes; use the Explore grant when you want parent-inheritance; reserve explicit `opus` for escalated red-line reasoning.
+- **`opus` = reasoning-critical ESCALATION ONLY** — red-line design (money/auth/RLS/migrations), adversarial verification where a miss costs money/PII, judging; reached via `doubt-escalation`, no longer the standing default. (The standing council critics were removed 2026-07-07; a decorrelated read is now an on-demand, human-gated exception per §0·GP — prefer a deterministic check.)
 - **Free/out-of-band models** (OpenRouter bridge, `:free` slugs) for decorrelated second opinions and bulk research once the bridge is re-validated (slugs were dead 2026-06-22) — never for red-line authority.
 - **Deterministic beats all of them**: before ANY lane, apply rule −1 — source-quote packs via grep/script (not an LLM re-reading files to verify citations), diffs/probes/counts/regen in code. An LLM verifying "line X says Y" is burning tokens on `grep`.
-- Main-session default is **opus 4.8** (pinned in `.claude/settings.json`; `/model` stays the per-session override). Standing shape: opus lead/reasoning, haiku doers, never Fable.
+- Main-session default is **Haiku 4.5** (operator 2026-07-07 "push further" pin, staged in proposed-settings, operator `cp` applies; `/model` stays the per-session override). Standing shape: **Haiku lead/reasoning + doers, opus for escalated red-line only (money/auth/RLS/migrations), Sonnet as the middle fallback, never Fable; free/external LLMs only for non-proprietary non-red-line tasks (gated)**.
 
 **Ops notes:** budget ~15% fan-out retry overhead (measured ~1/7 lanes corrupts at dispatch; a dead lane costs ≈ one floor). The lead embeds this router in every subagent dispatch prompt (subagents don't reliably load AGENTS.md); the one-line form: *"Token router ON: graph-first for structure, skeleton-first for files, distill noisy output, Explore-grade grants for read-only, distilled return; quality floors per AGENTS.md TOKEN ROUTER."*
 

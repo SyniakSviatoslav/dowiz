@@ -12,9 +12,12 @@
 #
 # CHECKS (this increment — ONE check at a time per operator directive):
 #   1. Agent/Task dispatch with NO explicit model:  (MODEL ROUTING: "explicit model: on every
-#      Agent call"). WARN now; ratchet to DENY when compliance is habitual in the _hev log.
-#   (fable-without-override + LANE-CLASS/router stamps are later increments — kept out to avoid
-#    nudge-spam and cargo-culting while the model: habit is still forming; see STRUCTURE-UPGRADE B1.)
+#      Agent call"). RATCHETED WARN→DENY 2026-07-07 (token-reduction-enforcement §B1). Ground truth
+#      that retired the #47 over-block fear: audit-token-router --last 12 = 0% model-less (the habit
+#      took). Carve-outs KEPT: subagent_type Explore/fork inherit the PARENT model (a read-only lane
+#      that deliberately rides the cheap parent tier — forcing ceremony there is pure friction), and
+#      TOKEN_GATE_MODE=warn is a temporary escape hatch. Falsifiable both ways in guardrail-token-gates.
+#   (LANE-CLASS/router stamps are a later increment — kept out to avoid cargo-culting; see STRUCTURE-UPGRADE B1.)
 #
 # HONESTY RULES (STRUCTURE-UPGRADE Part B): deterministic/regex only, no LLM; one _hev line per
 # decision; fail OPEN + log `degraded` only when JSON is unparseable; warn output is non-blocking
@@ -37,31 +40,33 @@ _hev() {
     >>"$HEV_LOG" 2>/dev/null || true
 }
 
-# Parse → tool_name, model, slug on THREE separate lines (jq → python3 → node fallback, matching
-# guard-bash). Newline-separated, not tab: a tab is IFS-whitespace, so an EMPTY model field
+# Parse → tool_name, model, subagent_type, slug on FOUR separate lines (jq → python3 → node fallback,
+# matching guard-bash). Newline-separated, not tab: a tab is IFS-whitespace, so an EMPTY model field
 # (`\t\t`) collapses and `read` mis-assigns the slug to MODEL — the missing-model check would then
-# never fire. Per-line reads preserve empty fields.
+# never fire. Per-line reads preserve empty fields. subagent_type is parsed SEPARATELY from the slug
+# so the Explore/fork inherits-parent carve-out matches the TYPE, never a "explore …" description.
 _parse() {
   if command -v jq &>/dev/null; then
-    printf '%s' "$INPUT" | jq -r '[(.tool_name // ""), (.tool_input.model // ""), (.tool_input.description // .tool_input.subagent_type // "")] | .[]' 2>/dev/null
+    printf '%s' "$INPUT" | jq -r '[(.tool_name // ""), (.tool_input.model // ""), (.tool_input.subagent_type // ""), (.tool_input.description // .tool_input.subagent_type // "")] | .[]' 2>/dev/null
   elif command -v python3 &>/dev/null; then
     printf '%s' "$INPUT" | python3 -c '
 import sys, json
 try:
     d = json.loads(sys.stdin.read()); ti = d.get("tool_input", {}) or {}
     print("\n".join([str(d.get("tool_name") or ""), str(ti.get("model") or ""),
+                     str(ti.get("subagent_type") or ""),
                      str(ti.get("description") or ti.get("subagent_type") or "")]))
 except Exception:
     pass
 ' 2>/dev/null || true
   elif command -v node &>/dev/null; then
     printf '%s' "$INPUT" | node -e '
-let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const o=JSON.parse(d);const ti=o.tool_input||{};process.stdout.write([o.tool_name||"",ti.model||"",ti.description||ti.subagent_type||""].join("\n"));}catch(e){}});' 2>/dev/null || true
+let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const o=JSON.parse(d);const ti=o.tool_input||{};process.stdout.write([o.tool_name||"",ti.model||"",ti.subagent_type||"",ti.description||ti.subagent_type||""].join("\n"));}catch(e){}});' 2>/dev/null || true
   fi
 }
 
-TOOL_NAME=""; MODEL=""; SLUG=""
-{ IFS= read -r TOOL_NAME; IFS= read -r MODEL; IFS= read -r SLUG; } < <(_parse) || true
+TOOL_NAME=""; MODEL=""; SUBAGENT=""; SLUG=""
+{ IFS= read -r TOOL_NAME; IFS= read -r MODEL; IFS= read -r SUBAGENT; IFS= read -r SLUG; } < <(_parse) || true
 
 # Fail OPEN + log degraded only when the JSON is unparseable (infra failure, never a silent block).
 if [ -z "$TOOL_NAME" ]; then
@@ -76,7 +81,8 @@ case "$TOOL_NAME" in
   *) exit 0 ;;
 esac
 
-MODE="${TOKEN_GATE_MODE:-warn}"        # model-absent check: warn (86% today); ratchet to deny on _hev habit.
+MODE="${TOKEN_GATE_MODE:-deny}"        # model-absent check: RATCHETED to DENY 2026-07-07 (newest-12 = 0%
+                                       # model-less; §B1). TOKEN_GATE_MODE=warn = temporary escape hatch.
 FABLE_MODE="${TOKEN_FABLE_MODE:-deny}" # fable check: RE-ARMED to DENY (2026-07-07). The sanctioned
                                        # one-shot Fable audit is CONSUMED, so the standing MODEL ROUTING
                                        # rule ("Fable OFF for lanes") is restored. A human may still grant
@@ -95,11 +101,12 @@ _warn() {
   printf '⚠ agent-dispatch-gate: %s\n' "$1" >&2   # stderr + exit 0 = visible but NON-blocking
 }
 
-# ── Check 1: explicit model: required ────────────────────────────────────────
+# ── Check 1: explicit model: required (Explore/fork inherit parent → carved out) ──
 MODEL_LC="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
-if [ -z "$MODEL_LC" ]; then
-  MSG="MODEL ROUTING: Agent dispatch '${SLUG_SHORT}' has no explicit model: — add one (haiku doer / opus reasoning-only; never Fable for lanes). AGENTS.md MODEL ROUTING."
-  if [ "$MODE" = "deny" ]; then _deny "$MSG"; else _warn "$MSG [warn-only; ratcheting to deny once habitual]"; fi
+SUBAGENT_LC="$(printf '%s' "$SUBAGENT" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+if [ -z "$MODEL_LC" ] && [ "$SUBAGENT_LC" != "explore" ] && [ "$SUBAGENT_LC" != "fork" ]; then
+  MSG="MODEL ROUTING: Agent dispatch '${SLUG_SHORT}' has no explicit model: — add one (haiku doer / sonnet lead / opus reasoning-only; never Fable for lanes). Read-only Explore lanes may omit model: (they inherit the parent). AGENTS.md MODEL ROUTING; TOKEN_GATE_MODE=warn to soften temporarily."
+  if [ "$MODE" = "deny" ]; then _deny "$MSG"; else _warn "$MSG [warn-only escape hatch]"; fi
 fi
 
 # ── Check 2: no Fable for dispatch lanes ─────────────────────────────────────

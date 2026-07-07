@@ -272,3 +272,134 @@ on the lead loop** (method #2/#4/#6, mechanism already shipped). Both are discip
 not new codecs. `scripts/audit-model-spend.mjs` is the new durable instrument to track them
 (the per-lane `subagent_tokens` follow-up from `2026-07-04-token-reduction-synthesis.md` §5 —
 partially discharged for the lead loop; sub-agent lane $ still needs telemetry at emit time).
+
+## 12. ENFORCEMENT APPLIED — the §11 levers wired to teeth (2026-07-07, operator "allow and enforce")
+
+§11 *measured* where the $ goes; §12 is the *enforcement delta* — the mechanisms shipped THIS session so
+the reduction is armed, not advisory. Ground truth unchanged (108 transcripts now, $16,340 lead-loop
+visible; cache-read still 62.8%, Opus still 89.4%). What changed is what the harness now *forces*.
+Each row ships with a falsifiable RED (VbM). Re-run the same two auditors to re-check.
+
+| lever | §11 state (measured) | §12 enforcement shipped | falsifiable re-check |
+|---|---|---|---|
+| **A1** cache-read 62.8% — session length | single 300K directive; peak hit **452,886** | `context-budget-guard.sh` → **two-tier** WARN@300K (soft, start handoff) / **HARD@400K** (mandatory wrap+/clear) + hermetic `--self-test` (RED: WARN≠HARD; 452,886 parsed) | `bash .claude/hooks/context-budget-guard.sh --self-test` (9 asserts, incl. 2 RED) |
+| **B0** Opus 89% $-share | lead loop pinned **Opus 4.8** | Opus→**Haiku 4.5** pin (operator "push further" 2026-07-07 late; supersedes the earlier same-day Sonnet pin — ~5× cheaper than Opus), AND **fixed the apply path**: `proposed-settings/settings.json` was STALE (would have *deleted* the A1+B1+subagent-return hooks on `cp`) → regenerated so `proposed − model-key ≡ live`. **Safety rail:** red-line reasoning (money/auth/RLS/migrations — 0b-5/1.2/2.2/2.3) escalates to `opus` via `doubt-escalation`. | `diff <(grep -v '"model"' proposed-settings/settings.json) .claude/settings.json` → identical |
+| **B5** free/external LLMs (OpenRouter/Gemini/Groq/…) | AGENTS.md: bridge DEAD 2026-06-22 | **GATED policy** (not wired): free tiers only for non-proprietary/non-red-line; ground-truth privacy scan below | AGENTS.md MODEL ROUTING "Free/external LLM APIs" bullet |
+| **B1** model-less dispatch | warn-only (86% agg / **0% newest-12**) | `agent-dispatch-gate.sh` Check-1 **warn→DENY by default** + Explore/fork inherit-parent carve-out + `TOKEN_GATE_MODE=warn` escape hatch | `node scripts/guardrail-token-gates.mjs` (deny-default, carve-out, escape hatch — 9 Check-1 asserts) |
+| **B2** Haiku dispatch (output line) | mechanism shipped, under-used | AGENTS.md MODEL ROUTING: read-only/analytical lanes **default to explicit `model: haiku`**; opus = escalation-only | audit-token-router model-mix on future sessions |
+| **A3** context-editing/compaction | not evaluated | **verdict below** — harness-owned, not a repo change | n/a |
+
+**The apply-path bug was the load-bearing find.** The one manual step the prior handoff prescribed —
+`cp docs/operating-model/proposed-settings/settings.json .claude/settings.json` — would have silently
+**regressed the entire enforcement stack**: the staged file predated the live hooks and carried an older
+`hooks` block (no `agent-dispatch-gate`, no `context-budget-guard`, no `subagent-return-guard`; it re-added
+`route-request`/`loop-detector`/`pre-edit-lessons`). Applying the Sonnet pin would have deleted A1 and B1.
+Fixed: the staged file is now byte-for-byte the live settings + the single `model` key (proven by the diff
+check above). This is the §0·GP move — a deterministic check (diff) catching what a proxy read (“looks like
+just a model pin”) would have shipped.
+
+**A3 — context-editing / compaction (`context_management.edits`) verdict.** *Direction is right, ownership
+is wrong for a repo change.* The beta (`clear_tool_uses_20250919` / `clear_thinking_20251015`) prunes stale
+tool-results/thinking from the re-read prefix — it attacks cache-read (62.8%, the dominant line) **at the
+source**, the one lever no frame/codec reaches. BUT it is an **API-request parameter set by the Claude Code
+harness**, not configurable from `settings.json` or a hook — the repo cannot wire it. The repo-controllable
+equivalents are already in hand: **A1 session-recycle** (shorter sessions ⇒ smaller re-read prefix) + Claude
+Code's built-in auto-compaction / `/compact`. Recommendation: rely on A1 + `/compact` at the WARN tier; treat
+native `context_management` as an upstream-CLI ask, not a repo task. No code shipped (correctly — §0·GP: don't
+build machinery you can't control).
+
+**B5 — free / external LLM APIs (OpenRouter, OpenCode, `free-llm-api-resources`) ground-truth verdict.**
+Operator "use free APIs for other tasks" (2026-07-07). §0·GP requires measuring before adopting (the bridge
+was dead 2026-06-22). Measured the current catalog (WebFetch of `cheahjs/free-llm-api-resources`):
+
+| provider | free limit | trains on / retains inputs? |
+|---|---|---|
+| OpenRouter (`:free`) | 20 req/min, **50 req/day** (1k with $10 topup) | unspecified ⇒ treat as retained |
+| Google AI Studio (Gemini) | ~20 req/day/model | **yes** — "data used for training outside UK/CH/EEA/EU" |
+| Mistral La Plateforme | 1 req/s, 1B tok/mo | **yes** — free tier = **opt-in to training** |
+| Groq / Cerebras | ~1k req/day / 1M tok/day | unspecified ⇒ treat as retained |
+| GitHub Models / Cohere / CF Workers AI | very low | unspecified ⇒ treat as retained |
+| OpenCode Zen (free models) | unspecified | **yes** — "may use data for improvement" |
+
+**Verdict: adopt ONLY for non-proprietary, non-red-line tasks; NEVER route dowiz code/PII/secrets out.** Two
+hard facts kill the "free doer tier" idea for this codebase: (1) **data governance** — every provider that
+*states* a policy trains on or retains free-tier inputs, and the rest are silent (⇒ retained by default); a
+codebase with money/auth/RLS/PII cannot egress source to a training-on-input free tier. (2) **rate limits** —
+20–1000 req/day is far below one agentic doer session's call volume, so even for non-sensitive work it can't
+be the primary tier. Legit uses: public-info research, decorrelated second opinions on PUBLIC facts, prose
+drafting from non-sensitive inputs — always *advisory*, never red-line authority. For in-Anthropic doer
+volume, **Haiku ($1/$5, no data egress, no rate cap)** is the tier — which is exactly what the B0 Haiku pin
+now makes the default. Wiring the OpenRouter bridge is a **staged, opt-in tool gated on an operator
+data-governance sign-off + keys** (BLOCKER), not a default switch.
+
+**What is NOT yet re-measurable (honest gap).** The Haiku pin is *staged*, not applied (operator `cp` +
+next session). So the $-by-model table is UNCHANGED — Opus is still 89% because every session in the corpus
+predates the pin. The falsifiable claim is deferred by construction: **re-run `audit-model-spend.mjs` after
+N Haiku sessions; the Haiku share must rise and Opus fall below 80% (except red-line escalations), or the pin
+did not take** (§B0). B1's deny is live *now* (this session's own dispatches are gated); its aggregate signal
+likewise decays in only as pre-gate history ages out (§11a).
+
+## 13. MVP token/$ budget — how much to ship the Sovereign Core MVP, and the account question
+
+Operator ask (2026-07-07): "estimate how much token will be needed to ship MVP and how much is left on my
+Claude account." Answered from the same ground-truth transcripts — **empirical per-step cost × steps
+remaining**, not a guess.
+
+**Empirical per-step anchor (lead-loop $, measured).** The newest 15 sessions — all the recent
+Sovereign-Core / token-economy work, the right analog for the remaining MVP steps — cost **$792.84 total,
+mean $52.86/session, median $54.86** (range $5.52–$210.08). This is the *post*-context-budget-guard regime
+(shorter sessions); the all-history mean is $151/session, inflated by the pre-recycle marathons (one hit
+999,580 ctx). A Sovereign-Core "step" ≈ one focused session; red-line / large-"L" steps run 1.5–2.5×.
+
+**Steps remaining to the MVP exit gate** (from `docs/design/sovereign-core-mvp/PROGRESS.md` + GRAND-PLAN;
+DONE = Part A/B, 0b-1/0b-2/0b-3, Validation 1–6):
+
+| step | size | red-line | est. sessions |
+|---|---|---|---|
+| 0b-4 Hard-Truth L1–2 (mostly satisfied by 0b-3 proptests — review/close) | light | no | 0.5 |
+| 0b-5 shell flip to `kernel::decide` (keystone; staging deploy + shadow-diff) | medium | **yes** | 2.0 |
+| 0b-6 CI + cargo-deny (`.github` operator-gated) | light | no | 1.0 |
+| 1.1 hub events-in | medium | **yes** | 1.5 |
+| **1.2 persistent event log** ("L") | large | **yes** | 2.5 |
+| 1.3 / 1.5 hub reads + placement | light×2 | no | 2.0 |
+| 2.1 MVP surface wiring | medium | no | 1.0 |
+| **2.2 checkout** ("L", money) | large | **yes** | 2.5 |
+| 2.3 MVP exit hardening | medium | **yes** | 1.5 |
+| A3 orders-split (unblocks at 0b-5) + Validation tail | medium | mixed | 2.0 |
+| **subtotal** | | | **~16.5 sessions** |
+| +15% fan-out/retry + red-line verification overhead (measured ops-note) | | | **~19 sessions** |
+
+**The number, four ways (lead-loop visible $; add ~20–40% for sub-agent sidechains on fan-out steps).**
+The Haiku pin is ~5× cheaper than Opus on *every* line — input, output, AND the dominant 62.8% cache-read
+(Haiku input×0.1 = $0.10/M vs Opus $0.50/M). But red-line steps (0b-5/1.1/1.2/2.2/2.3) escalate their
+*reasoning/verification turns* to opus, so those sessions are ~0.45× an all-Opus session, not 0.20×; the
+blend of ~11 routine + ~8 red-line-ish sessions is what the Haiku rows price:
+
+| basis | per-session (blended) | × ~19 | note |
+|---|---|---|---|
+| recent **Opus** median (today's regime) | ~$55 | **≈ $1,045** | if NO pin applied |
+| **Sonnet 5** pin (superseded) | ~$34 | ≈ $650 | earlier same-day directive |
+| **Haiku 4.5** pin + opus red-line escalation (the "push further" target) | ~$18–25 | **≈ $340–475** | routine ≈$11, red-line ≈$25 |
+| Haiku pin + A1 shorter-session recycle | ~$14–20 | **≈ $270–380** | if recycle discipline holds |
+
+→ **Ship-MVP estimate with the Haiku pin: ≈ $300–500 lead-loop** (most-likely **~$350–425**), ≈ **$450–800
+all-in** including sub-agent lanes — down from ~$1,045 all-Opus. In billed-token terms ≈ **0.8–1.4 B billed
+tokens** (mostly cheap cache-read at 0.1×); the unit that matters is $. Caveat: the Haiku-blend assumes the
+opus-on-red-line rail holds — if a red-line step is (wrongly) left on Haiku and ships a money/parity bug, the
+rework cost dwarfs the savings, so the rail is load-bearing, not optional.
+
+**"How much is left on my Claude account" — the honest answer.** *This environment cannot read the
+Anthropic billing balance* (no billing API here) — check **console.anthropic.com → Billing / Usage** for the
+authoritative number. Two cases change the meaning of "left":
+- **Pay-as-you-go API credits:** the $16,340 above is *real depletion*; remaining-MVP ≈ $550–1,050 more. If
+  the console shows **≥ ~$1,200 credit**, the MVP is covered with headroom; the Sonnet pin roughly halves the
+  remaining burn.
+- **Claude subscription (Max/Team, which Claude Code can run on):** the $16,340 is **list-price-equivalent
+  usage, NOT out-of-pocket** — you are bounded by *rate limits / usage windows*, not a draining credit
+  balance. At ~19 sessions over the ~2–3 weeks of remaining work, MVP is comfortably within a normal plan;
+  "how much is left" = your rolling usage allowance, which resets, not a finite pot.
+
+Either way the actionable lever is the same: **apply the Haiku pin** (`cp` the fixed proposed-settings),
+**hold the A1 recycle discipline**, and **keep opus on red-line steps** — together they take the
+remaining-MVP cost from ~$1,045 all-Opus toward **~$350–425**, a ~2.5–3× reduction, without betting the
+money/parity-critical steps on the cheap tier.

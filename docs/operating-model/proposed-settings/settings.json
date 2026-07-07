@@ -1,5 +1,5 @@
 {
- "model": "claude-sonnet-5",
+ "model": "claude-haiku-4-5",
  "permissions": {
   "allow": [
    "Bash(*)",
@@ -43,15 +43,6 @@
     "hooks": [
      {
       "type": "command",
-      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre-edit-lessons.sh\""
-     }
-    ]
-   },
-   {
-    "matcher": "Edit|Write|MultiEdit",
-    "hooks": [
-     {
-      "type": "command",
       "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/red-line-doubt-gate.sh\""
      }
     ]
@@ -62,6 +53,15 @@
      {
       "type": "command",
       "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh\""
+     }
+    ]
+   },
+   {
+    "matcher": "Agent|Task",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/agent-dispatch-gate.sh\""
      }
     ]
    }
@@ -77,11 +77,30 @@
     ]
    },
    {
-    "matcher": "Bash|Edit|Write|MultiEdit",
+    "matcher": "Bash",
     "hooks": [
      {
       "type": "command",
-      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/loop-detector.sh\""
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/distill-nudge.sh\""
+     }
+    ]
+   },
+   {
+    "matcher": "Agent|Task",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/subagent-return-guard.sh\""
+     }
+    ]
+   }
+  ],
+  "SubagentStop": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/subagent-return-guard.sh\""
      }
     ]
    }
@@ -91,7 +110,7 @@
     "hooks": [
      {
       "type": "command",
-      "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/route-request.sh\""
+      "command": "CONTEXT_WINDOW=1000000 CONTEXT_BUDGET_PCT=30 bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/context-budget-guard.sh\""
      }
     ]
    }

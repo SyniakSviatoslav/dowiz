@@ -48,32 +48,33 @@ const check = (name, ok, detail) => {
 
 const A = (input) => input; // readability alias for an Agent tool_input
 
-// ── WARN mode (production default — never blocks) ────────────────────────────
-console.log('agent-dispatch-gate.sh — WARN mode (default):');
-const w1 = run('Agent', A({ description: 'read-only sweep', subagent_type: 'general-purpose', prompt: 'find X' }));
-check('model-less dispatch does NOT block (warn, exit 0)', w1.status === 0 && !denies(w1));
-check('model-less dispatch leaves a _hev warn line', eventsHas('"hook":"agent-dispatch-gate","event":"warn"'));
-
-const w2 = run('Agent', A({ description: 'reason', subagent_type: 'general-purpose', model: 'opus', prompt: 'design Y' }));
-check('compliant dispatch (model set) is silent (no deny, no stdout nudge)', w2.status === 0 && !denies(w2) && (w2.stdout || '') === '');
-
-const w3 = run('TaskCreate', { subject: 'a task' });
-check('TaskCreate is NOT a dispatch — untouched (exact-name guard)', w3.status === 0 && !denies(w3) && (w3.stdout || '') === '');
-
-const w4 = run('Bash', { command: 'ls' });
-check('non-dispatch tool (Bash) untouched', w4.status === 0 && !denies(w4));
-
-// ── DENY mode (the ratchet — proven armed, shipped OFF) ──────────────────────
-console.log('agent-dispatch-gate.sh — DENY mode (ratchet armed via TOKEN_GATE_MODE=deny):');
-const d1 = run('Agent', A({ description: 'read-only sweep', subagent_type: 'general-purpose', prompt: 'find X' }), { TOKEN_GATE_MODE: 'deny' });
-check('model-less dispatch BLOCKS when promoted (permissionDecision deny)', denies(d1));
+// ── Check 1: explicit model: — DENY by DEFAULT (ratcheted warn→deny 2026-07-07 per
+//    token-reduction-enforcement §B1; justified by ground truth: audit-token-router --last 12 = 0%
+//    model-less). Carve-outs KEPT: subagent_type Explore/fork inherit the parent model (read-only),
+//    and TOKEN_GATE_MODE=warn is a temporary escape hatch. Falsifiable both ways. ──
+console.log('agent-dispatch-gate.sh — Check 1 model-less: DENY by DEFAULT (ratcheted 2026-07-07):');
+const c1 = run('Agent', A({ description: 'read-only sweep', subagent_type: 'general-purpose', prompt: 'find X' }));
+check('DEFAULT: model-less dispatch DENIED (no env, permissionDecision deny)', denies(c1) && c1.status === 0);
 check('deny leaves a _hev deny line', eventsHas('"hook":"agent-dispatch-gate","event":"deny"'));
 
-const d2 = run('Agent', A({ description: 'reason', subagent_type: 'Explore', model: 'haiku', prompt: 'find X' }), { TOKEN_GATE_MODE: 'deny' });
-check('compliant dispatch still ALLOWED in deny mode (over-block guard)', d2.status === 0 && !denies(d2));
+const c2 = run('Agent', A({ description: 'reason', subagent_type: 'general-purpose', model: 'opus', prompt: 'design Y' }));
+check('compliant dispatch (model set) is silent (over-block guard)', c2.status === 0 && !denies(c2) && (c2.stdout || '') === '');
 
-const d3 = run('TaskCreate', { subject: 'x' }, { TOKEN_GATE_MODE: 'deny' });
-check('TaskCreate never blocked even in deny mode (exact-name guard)', d3.status === 0 && !denies(d3));
+const cExp = run('Agent', A({ description: 'sweep the repo', subagent_type: 'Explore', prompt: 'find X' }));
+check('model-less Explore ALLOWED (inherits-parent carve-out, over-block guard)', cExp.status === 0 && !denies(cExp));
+
+const cFork = run('Agent', A({ description: 'fork off', subagent_type: 'fork', prompt: 'x' }));
+check('model-less fork ALLOWED (inherits-parent carve-out)', cFork.status === 0 && !denies(cFork));
+
+const cWarn = run('Agent', A({ description: 'read-only sweep', subagent_type: 'general-purpose', prompt: 'find X' }), { TOKEN_GATE_MODE: 'warn' });
+check('TOKEN_GATE_MODE=warn escape hatch → warn, no block (soften)', cWarn.status === 0 && !denies(cWarn));
+check('escape-hatch warn leaves a _hev warn line', eventsHas('"hook":"agent-dispatch-gate","event":"warn"'));
+
+const d3 = run('TaskCreate', { subject: 'x' });
+check('TaskCreate is NOT a dispatch — never blocked (exact-name guard)', d3.status === 0 && !denies(d3));
+
+const d4 = run('Bash', { command: 'ls' });
+check('non-dispatch tool (Bash) untouched', d4.status === 0 && !denies(d4));
 
 // ── Check 2: Fable — DENY by DEFAULT (RE-ARMED 2026-07-07 after the sanctioned one-shot audit was
 //    consumed; restores standing MODEL ROUTING "Fable OFF for lanes"). A human-only EXPIRING override
