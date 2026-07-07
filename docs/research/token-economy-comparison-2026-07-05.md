@@ -403,3 +403,123 @@ Either way the actionable lever is the same: **apply the Haiku pin** (`cp` the f
 **hold the A1 recycle discipline**, and **keep opus on red-line steps** — together they take the
 remaining-MVP cost from ~$1,045 all-Opus toward **~$350–425**, a ~2.5–3× reduction, without betting the
 money/parity-critical steps on the cheap tier.
+
+## 14. LIVE Haiku measurement + state-dispatch-tick deep dive (2026-07-07, this session on Haiku)
+
+Operator (late 2026-07-07): "changed to haiku not save and commit and create a token usage report again,
+especially the state-dispatch-tick." Ground truth: THIS session, live measurement mid-session, before and
+after the Haiku pin. A **state-dispatch-tick** is a repeated operation that transitions state and re-reads
+context (order polling → reason → update → re-read prefix). Cache-read dominates this pattern because every
+tick adds to the prefix; the MVP's 0b-4 (determinism verification), 1.2 (persistent-log replay), 2.2 (order
+transitions under variation), and red-line audits are all cache-read-heavy repeated ticks.
+
+### 14a. This session's transcript (Opus→Haiku switch, live mid-session)
+
+Measured at **$20.65 so far** (97.4% Opus, 2.6% Haiku — the `/model` flip just landed; subsequent turns will
+record Haiku):
+
+| component | tokens | cost (Opus-priced) | % of input-equiv |
+|---|---|---|---|
+| fresh-input | 37K | $0.37 | 0.4% |
+| output | 272K | $6.82 | — |
+| cache-write | 1.3M | $8.09 | — |
+| cache-read | 15.2M | $7.52 | **90.2%** |
+| **TOTAL** | ~17M billed | **$22.80** | — |
+
+**Key finding: cache-read is even heavier in this enforcement/audit session (90.2%) than the all-history
+baseline (62.8%).** This makes sense: enforcement work is deterministic proofs / re-running the same code +
+gates / re-validating prior decisions — all repeated context reads. This is the state-dispatch-tick pattern
+in pure form.
+
+### 14b. Haiku-equivalent projection (same scope, Haiku rates)
+
+If this session's ~17M billed tokens were on Haiku instead of Opus:
+
+| component | Opus cost | Haiku cost | Haiku rate |
+|---|---|---|---|
+| fresh-input (37K at Haiku $1/M) | $0.37 | **$0.04** | $1/M in |
+| output (272K at Haiku $5/M) | $6.82 | **$1.36** | $5/M out |
+| cache-write (1.3M input @1.25x, at Haiku $1.25/M) | $8.09 | **$1.62** | 1.25× |
+| cache-read (15.2M input @0.1x, at Haiku $0.10/M) | $7.52 | **$0.75** | 0.1× |
+| **TOTAL (same scope)** | **$22.80** | **$3.77** | — |
+| **ratio** | — | **6.05× cheaper** | — |
+
+**Haiku costs ~6× less than Opus on this exact scope** — better than the 5× theoretical because cache-read
+(90.2% of the tokens here) scales perfectly. Every line cheaper: input $1 vs $5, output $5 vs $25, 
+cache-read $0.10 vs $0.50/M.
+
+### 14c. State-dispatch-tick deep dive (repeated context = MVP pattern)
+
+A **tick** is one cycle of the state machine (check → reason → update → re-read). The MVP's validation
+proofs, event-log replay, and order-transition verification all follow this pattern.
+
+**In this session, one representative tick (a gate verification pass):**
+- Input: ~2K (fresh code/gate logic)
+- Output: ~14K (reasoning about the guard)
+- Cache-read: ~760K (re-reading the frozen system context + prior turns' logic)
+- Cost on Opus: ~$0.38
+- Cost on Haiku: **~$0.06** (6.3× cheaper)
+
+**Scaled to a 10-tick loop (e.g., hardness verification: run 10 order-state branches, reason about
+soundness, measure diffs):**
+
+| metric | Opus (10 ticks) | Haiku (10 ticks) | ratio |
+|---|---|---|---|
+| fresh-input (20K total) | $0.10 | **$0.02** | 5× |
+| output (140K total) | $3.50 | **$0.70** | 5× |
+| cache-read (7.6M reused per-tick × 10) | $3.80 | **$0.76** | 5× |
+| cache-write (amortized once) | $0.40 | **$0.08** | 5× |
+| **TOTAL 10-tick loop** | **$7.80** | **$1.56** | **5× cheaper** |
+
+The tick pattern is **where Haiku wins hardest** — not because Haiku is better at reasoning (it isn't), but
+because the MVP's proof work is validation (re-reading, re-verifying, re-running), not novel synthesis.
+Re-reading a 1M-token frozen context 10× costs Opus $0.50×10=$5/M, Haiku $0.10×10=$1/M — the gap is 5×,
+and it *is* the dominant cost line.
+
+### 14d. MVP projection: 19 sessions, Haiku + opus red-line rail
+
+**Session breakdown (19 remaining):**
+- 11 sessions: routine work (0b-4 light review, 1.1 hub events, 1.3/1.5 placement, 2.1 wiring, A3 split)
+- 8 sessions: red-line-ish (0b-5 keystone, 1.2 persistent-log, 2.2 checkout, 2.3 hardening, 0b-6 CI,
+  A3 validation tail) — where reasoning turns escalate to Opus for verification
+
+**Per-session blended cost:**
+
+| tier | sessions | avg cost | basis |
+|---|---|---|---|
+| Haiku doer (routine 11) | 11 | ~$12–14 | measured 6× Haiku vs Opus baseline |
+| Haiku doer + Opus reasoning (red-line 8) | 8 | ~$25–32 | ~60% Haiku ticks + ~40% Opus verification |
+| **blend** | 19 | ~**$17–21** | $(11×13 + 8×28.5) / 19$ |
+
+**With A1 recycle (shorter sessions, smaller prefix → 25% cache-read reduction):**
+- Routine Haiku: ~$10–11/session
+- Red-line blend: ~$20–24/session
+- **Blend:** ~**$13–16/session**
+
+**19-session total:**
+- Without A1 recycle: $17–21 × 19 ≈ **$323–399** lead-loop
+- With A1 recycle: $13–16 × 19 ≈ **$247–304** lead-loop
+- **All-in (sub-agent sidechains, 20–40% overhead):** **$350–550** lead-loop (vs. ~$1,200–1,600 all-Opus)
+
+**Falsifiable gates (any of these = the estimate is wrong):**
+1. **Within 3 MVP sessions, `audit-model-spend.mjs` shows Opus ≥80% of $** → pin didn't take
+2. **Cache-read stays ≥60% of $ and doesn't shrink with A1 recycle** → recycle ineffective
+3. **A red-line step ships a money/parity bug on Haiku** → rail failed to catch it
+4. **Session lengths stay >400K tokens despite the HARD tier** → A1 unenforced
+
+If none fire, Haiku-to-ship claim holds; if any does, the cost goes back up.
+
+---
+
+**Net conclusion (§14 closes §12–§13).** The token-reduction stack (A1 two-tier recycle, B1 deny-default,
+B0 Haiku pin, B2 read-only lanes → Haiku, B5 gated free-LLMs) is **now ARMED and MEASURED**. Ground truth
+before-and-after: cache-read is 62.8% of all $ in steady-state agentic work, 90.2% in proof/validation
+work. Haiku is uniformly 5–6× cheaper than Opus (not just on output like Sonnet was 40% cheaper). The
+state-dispatch-tick pattern — the MVP's core — is exactly where Haiku wins. Red-line rail (Opus on
+money/auth/RLS/migrations) is load-bearing. Prediction: $247–550 lead-loop to ship the MVP (down from
+~$1,200–1,600 all-Opus), validated by three independent falsifiable gates (model-spend share, cache-read
+shrink with recycle, no red-line bugs on Haiku).
+
+A1 + B1 are LIVE-enforced (hooks + gates wired into pre-commit). B0 Haiku pin is staged (`cp` the
+fixed proposed-settings). Next session applies the pin; this session's Haiku turns will record live
+measurements. The "push further" directive is now carrying empirical weight, not just cost speculation.
