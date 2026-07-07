@@ -30,6 +30,11 @@ fi
 echo "1.4f: legacy-api freeze (strangled Node shell apps/api may not grow route registrations)..."
 node scripts/guardrail-legacy-freeze.mjs || exit 1
 
+echo "1.4g: connected islands — security/hygiene guardrails that ran NOWHERE are now enforced (brain-in-brain finding 2026-07-07: an unrun guardrail is a false-positive green)..."
+node scripts/guardrail-definer-search-path.mjs || exit 1   # SECURITY DEFINER search_path pinning (RLS-bypass)
+node scripts/guardrail-no-set-cookie.mjs || exit 1         # bearer-only / CSRF-free posture
+node scripts/guardrail-sandbox-staleness.mjs || exit 1     # sandbox worktree data-loss guard
+
 echo "1.5: i18n parity (no missing/TODO translations)..."
 if git diff --cached --name-only --diff-filter=ACM | grep -qE 'packages/ui/src/lib/i18n(-catalog)?\.ts$'; then
   pnpm exec tsx scripts/i18n-parity.ts || exit 1

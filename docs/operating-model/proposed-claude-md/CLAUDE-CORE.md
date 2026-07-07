@@ -27,12 +27,18 @@
 - **Test failures = code is wrong.** Fix root cause before proceeding; route around broken local tools.
 - **Match project conventions. Non-interactive flags always.**
 
-## Mandatory Proof Rule (ALL changes)
+## Mandatory Proof Rule + Verified-by-Math (ALL changes — standing rule)
 
 Every fix/feature/behavior change needs programmatic proof — an assertion that fails when the code
 is wrong. UI surface → Playwright vs deployed staging (`VITE_BASE_URL=https://dowiz-staging.fly.dev
 pnpm exec playwright test <spec> --reporter=list`, real DOM assertions, `/s/:slug` public +
 `/admin/*` owner). API-only → ≥1 `request.*` assertion. Never declare done without pasting proof.
+
+**Verified-by-Math (VbM, operator 2026-07-07):** validated only if (1) it works (against reality),
+(2) proven with math (deterministic assertion/count/precision-recall + threshold), (3) the
+proof/telemetry is FALSIFIABLE (an input makes it go RED). A test that cannot fail / a metric that is
+green regardless = a false-positive metric, NOT validation. Ship the RED case with the green.
+Enforced: `scripts/guardrail-falsifiable-proof.mjs`. Spec: docs/operating-model/verified-by-math.md.
 
 ## Ship Discipline (per non-trivial change)
 

@@ -15,7 +15,7 @@ exit_conditions: "ВСІ: винуватець ізольовано бісекц
 gates: [STOP-CULPRIT, STOP-FIX]
 proof_artifacts: [bisect-log, culprit-diff, repro, regression-test, green-run]
 out_of_scope: [рефактор-заодно, ревет-що-ламає-причину-зміни]
-escalation: "винуватець — навмисна зміна з причиною → не сліпий ревет; вирішення → /council якщо серйозне"
+escalation: "винуватець — навмисна зміна з причиною → не сліпий ревет; вирішення → ескалація людині якщо серйозне"
 skills_required: [repo-access, git, test-runner]
 memory_file: loops/memory/regression-hunt.md
 verification_report: loops/reports/regression-hunt-0.1.md

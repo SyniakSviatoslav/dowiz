@@ -219,6 +219,13 @@ the fix is architectural, not compressive. Task → generate → finish → FORG
   of real bytes) over any proxy; a decorrelated cross-model read is an **on-demand, human-gated
   exception** (e.g. a one-shot audit sanctioned via `.claude/state/fable-override`), never standing
   machinery, and it only *signals* — a gate/human decides. Spec: `docs/operating-model/model-agnostic-playbook.md` §0·GP.
+- **§VbM — VERIFIED-BY-MATH (operator 2026-07-07, universal).** A task is validated only if (1) it
+  works against reality, (2) it is proven with math (a deterministic assertion/count/precision-recall
+  with a defined threshold), and (3) that proof/telemetry is **falsifiable** — there is an input under
+  which it goes RED. A test that cannot fail, or a metric green regardless of the truth, is a
+  *false-positive metric* and does NOT validate; ship the RED case with the green. Enforced by
+  `scripts/guardrail-falsifiable-proof.mjs` (run-armaments → pre-commit). Spec:
+  `docs/operating-model/verified-by-math.md`.
 - **Fable: OFF — main session AND all lanes.** `.claude/settings.json` pins `model: claude-opus-4-8` as the session default; re-enabling Fable is a per-task operator override (`/model`), never a default. Every `Agent` call still MUST pass an explicit `model:`.
 - **`haiku` = the default doer** — ports with a written recipe, searches/sweeps/inventories, probes, mechanical transforms, test-writing to a spec, distillation.
 - **`opus` = reasoning-critical ONLY** — red-line design, adversarial verification where a miss costs money/PII, judging. (The standing council critics were removed 2026-07-07; a decorrelated read is now an on-demand, human-gated exception per §0·GP — prefer a deterministic check.)

@@ -15,7 +15,7 @@ exit_conditions: "ВСІ: виміряно проти бюджету (відтв
 gates: [STOP-BASELINE, STOP-BUDGET]
 proof_artifacts: [baseline-measurement, bottleneck-evidence, after-measurement, perf-test-budget-gate]
 out_of_scope: [оптимізувати-без-виміру, зміна-поведінки/контрактів-заради-швидкості-без-Ради]
-escalation: "потрібна архітектурна зміна заради перф → серйозна зміна → /council"
+escalation: "потрібна архітектурна зміна заради перф → серйозна зміна → ескалація людині"
 skills_required: [repo-access, profiler, test-runner]
 memory_file: loops/memory/performance.md
 verification_report: loops/reports/performance-0.1.md

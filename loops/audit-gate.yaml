@@ -15,7 +15,7 @@ exit_conditions: "ВСІ: секції A–F PASS з артефактами; vis
 gates: [STOP-AUDIT-A, STOP-VERDICT]
 proof_artifacts: [per-section-screenshots-recordings, visual-regression-baselines, flag-only-list, grep-clean]
 out_of_scope: [фіксити-сервер/контракти/логіку-тут, нові-фічі]
-escalation: "знахідка логіки/контракту/безпеки → flag-only список (не фікс); серйозне вирішення → /council або backend-contract-convergence"
+escalation: "знахідка логіки/контракту/безпеки → flag-only список (не фікс); серйозне вирішення → ескалація людині або backend-contract-convergence"
 skills_required: [headed-browser, repo-access]
 memory_file: loops/memory/audit-gate.md
 verification_report: loops/reports/audit-gate-0.1.md

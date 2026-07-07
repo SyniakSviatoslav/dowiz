@@ -77,9 +77,11 @@ case "$TOOL_NAME" in
 esac
 
 MODE="${TOKEN_GATE_MODE:-warn}"        # model-absent check: warn (86% today); ratchet to deny on _hev habit.
-FABLE_MODE="${TOKEN_FABLE_MODE:-warn}" # fable check: WARN (operator 2026-07-07 "run on fable — purge the
-                                       # blockers"): Fable is dispatchable again; the deny is disarmed to
-                                       # warn (logged, non-blocking). Set TOKEN_FABLE_MODE=deny to re-arm.
+FABLE_MODE="${TOKEN_FABLE_MODE:-deny}" # fable check: RE-ARMED to DENY (2026-07-07). The sanctioned
+                                       # one-shot Fable audit is CONSUMED, so the standing MODEL ROUTING
+                                       # rule ("Fable OFF for lanes") is restored. A human may still grant
+                                       # a sanctioned exception via a non-expired .claude/state/fable-override
+                                       # line; set TOKEN_FABLE_MODE=warn for a temporary escape hatch.
 SLUG_SHORT="$(printf '%s' "$SLUG" | cut -c1-80)"
 
 _deny() {

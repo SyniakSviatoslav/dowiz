@@ -91,6 +91,16 @@ check('read-only access to protected path allowed', bash('cat .claude/hooks/red-
 check('stderr-scrub: hook run with 2>/dev/null allowed', bash('bash .claude/hooks/red-line-doubt-gate.sh 2>/dev/null').status === 0);
 check('feature-branch push allowed', bash('git push origin feat/some-branch').status === 0);
 
+// ── target-based matching (finding #1: ~83% FP → match WRITE TARGETS, not prose) ──
+console.log('guard-bash.sh — target-based matching (finding #1, over-block guards):');
+check('quoted commit msg mentioning migrations//.env/contracts allowed', bash('git commit -m "docs: explain migrations/ .env and contracts/ handling"').status === 0);
+check('read-only curl of a /contracts/ URL → scratchpad allowed', bash('curl -s https://api.example.com/contracts/v1 > /tmp/claude-0/out.json').status === 0);
+check('echo to /tmp/claude-* scratchpad allowed', bash('echo hi > /tmp/claude-0/scratch.txt').status === 0);
+check('cat of a .claude/state file (read) allowed', bash('cat .claude/state/serious-cleared').status === 0);
+check('read a protected file piped to scratchpad allowed (read source ≠ write target)', bash('cat packages/db/schema.sql > /tmp/claude-0/x').status === 0);
+check('write to .env still blocked (exit 2)', bash('echo SECRET=1 > .env').status === 2);
+check('append to a nested apps/api/.env still blocked (exit 2)', bash('echo X >> apps/api/.env').status === 2);
+
 // ── V2 (P1 telemetry) — version-gated ──────────────────────────────────────
 if (V2) {
   console.log('V2 (harness-events telemetry):');

@@ -15,9 +15,9 @@ preconditions:
   - "FIND ran first: available-skills list / find-skills checked — no existing skill fully covers it (full→USE, partial→EXPAND, none→CREATE)"
   - "gate live: SSG quality(triggers-right+works)+safety+ETHICS re-runs on the SKILL.md diff before install (reuse SANDBOX-SWARM-GATE §7) — else do not iterate unrestricted"
   - "skill-creator + find-skills available; quick_validate.py present"
-execution_skills: [find-skills-discovery, skill-creator-draft, skill-creator-modify, skill-creator-eval, quick-validate, worktree-sandbox, diff-review-gate, security-sentinel-scan, ethics-charter-check, librarian-curation]
+execution_skills: [find-skills-discovery, skill-creator-draft, skill-creator-modify, skill-creator-eval, quick-validate, worktree-sandbox, diff-review-gate, red-line-doubt-gate-scan, ethics-charter-check, librarian-curation]
 goal: "the recurring procedure is captured as ONE sharp skill (or an existing skill is EXPANDED / USED) that TRIGGERS on the right prompts, WORKS on ≥1 realistic test, has a checkable DoD, passed the gate, and is DRAFTED for operator install — OR the run correctly stopped at a lesson/guardrail per §4 routing"
-verification: "gate rubric (docs/design/harness/SKILL-EVOLUTION.md §7 · reuses SANDBOX-SWARM-GATE §4): A Quality — quick_validate.py green (frontmatter/kebab/≤1024 chars/no angle-brackets) + skill-creator description eval fires on should-trigger & stays quiet on should-not (20-query trigger-eval.json) + steps work on ≥1 test prompt + checkable DoD (not aspirational) + not a duplicate (EXPAND instead); B Safety — no malware/PII/secret/surprise + no gate-weakening step + security-sentinel PASS + no protected-zone/auto-merge instruction; C ETHICS — Charter green (hard, non-removable). Any RED → REJECT back to sandbox"
+verification: "gate rubric (docs/design/harness/SKILL-EVOLUTION.md §7 · reuses SANDBOX-SWARM-GATE §4): A Quality — quick_validate.py green (frontmatter/kebab/≤1024 chars/no angle-brackets) + skill-creator description eval fires on should-trigger & stays quiet on should-not (20-query trigger-eval.json) + steps work on ≥1 test prompt + checkable DoD (not aspirational) + not a duplicate (EXPAND instead); B Safety — no malware/PII/secret/surprise + no gate-weakening step + red-line-doubt-gate PASS on the diff + no protected-zone/auto-merge instruction; C ETHICS — Charter green (hard, non-removable). Any RED → REJECT back to sandbox"
 iron_principles:
   - no-fake-green
   - ethics-charter-non-removable            # C-block cannot be waived/timed-out/override-filed
@@ -30,7 +30,7 @@ iron_principles:
 loop_body: [FIND, USE-OR-EXPAND-OR-CREATE, ITERATE-SANDBOX, GATE, INSTALL-DRAFT, CURATE]
 exit_conditions: "ALL: FIND attempted before any CREATE; procedure cleared §3 bar OR correctly routed to lesson/guardrail; new/expanded skill passed §7 gate (A+B+C each proof-credited) OR explicitly abandoned; skill DRAFTED to docs/design/harness/proposed-skills/ (NOT self-installed into .claude/skills/); curation pass ran/queued (distill·challenge·promote·prune — store did not grow unboundedly); §5 LOOP REPORT emitted; qualified change → reflection"
 gates: [STOP-PROMOTION-BAR-not-met, STOP-GATE-quality-safety, STOP-ETHICS-hard, STOP-INSTALL-operator-only]
-proof_artifacts: [quick-validate-output, trigger-eval-json, skill-creator-eval-result, security-sentinel-verdict, gate-rubric-filled, curation-note, loop-report]
+proof_artifacts: [quick-validate-output, trigger-eval-json, skill-creator-eval-result, red-line-doubt-gate-verdict, gate-rubric-filled, curation-note, loop-report]
 out_of_scope:
   - "self-installing a skill into .claude/skills/ (protected — operator installs from the draft)"
   - "creating a skill for a one-off / trivial task / a procedure that has not recurred (bar not met → lesson or reflection)"

@@ -102,3 +102,29 @@ system-reminder) instead of executing the task.
 3. Fix guard-bash target-based matching + scratchpad exemption (83% FP rate = over-broad gate → no gate).
 4. `guardrail-loop-registry-parity.mjs` + red-line forbid-circuit for removed-machinery refs; fix the 13 files.
 5. Operator decision on Fable re-arm; delete orphan state.
+
+## STATUS — SHIPPED 2026-07-07 (all top-5 + VbM), proof: `bash scripts/run-armaments.sh` = 14/14 green
+1. ✅ `.claude/hooks/subagent-return-guard.sh` (SubagentStop + belt PostToolUse Agent|Task) — blocks on
+   tool_uses==0 && ≤1 turn && echo/API-error signature; loop-guard on stop_hook_active; fail-open.
+   Fixtures `scripts/fixtures/subagent-return-guard/` (2 real degenerate signatures + control + legit-no-tool);
+   armament `scripts/guardrail-subagent-return-guard.mjs`; registered in settings.json; pinned in
+   `guardrail-hook-matchers.mjs` MUST_COVER.
+2. ✅ circuits wired: `run-circuits.mjs` gained `--self-test` + `--warn-ok` (red-line blocks, warn advisory,
+   no over-block); TWO run() lines in `run-armaments.sh`. Also fixed a latent `globToRe` globstar bug
+   (`**/` required an intermediate dir → top-level `loops/*.yaml` were never checked = a circuit that
+   could never fire; a VbM false-green). Registry now 6 circuits.
+3. ✅ guard-bash target-based matching: PROTECTED/OVERRIDES now match WRITE TARGETS only (redirect dests +
+   mutator path-args on a quote-stripped skeleton), /tmp/claude-* whitelisted. Measured: 0/7 FP on the
+   over-block corpus, 0/5 missed real blocks (`scripts/probe-system-comparison.mjs`). New fixtures in
+   `guardrail-gate-armament.mjs`.
+4. ✅ `scripts/guardrail-loop-registry-parity.mjs` (CERTIFIED⇒report exists; cited paths exist) + red-line
+   forbid-circuits (loops/**/*.yaml + .claude/skills/**); demoted rows 13/21 to DRAFT, blanked 10 bogus
+   citations; fixed 14 files (0 removed-machinery refs remain). Both wired into run-armaments.
+5. ✅ Fable RE-ARMED to `deny` default (one-shot consumed; human expiring-override + warn escape-hatch
+   remain, all falsifiable); orphan `.claude/state/serious-cleared` + `.claude/state/eye/` deleted.
++ ✅ **Verified-by-Math** universal rule (operator 2026-07-07): `docs/operating-model/verified-by-math.md`
+   + `scripts/guardrail-falsifiable-proof.mjs` (every enforced proof must be able to go RED — 12/12) +
+   CLAUDE.md core + AGENTS.md §VbM.
+Remaining (MED/LOW, not top-5): #7 require-classification staged/untracked, #8 external-script bypass,
+#9/#10 gate telemetry + `_hev` UTF-8, #11 npm -g, #12 router-hook wiring/registry, #14 loop-architect M11,
+#15 AGENTS docs-drift. The surviving-proxies + dead/orphaned lists still stand as backlog.

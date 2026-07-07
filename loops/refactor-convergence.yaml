@@ -15,7 +15,7 @@ exit_conditions: "ВСІ: дублі усунено до єдиного джер
 gates: [STOP-MAP, STOP-FULLRUN]
 proof_artifacts: [duplication-map, grep-clean-output, full-green-run, before-after-equivalence]
 out_of_scope: [нові-фічі, поведінкові-зміни, зміна-контрактів, покращувати-заодно]
-escalation: "рефактор оголює потребу зміни контракту/поведінки → окремо через /council"
+escalation: "рефактор оголює потребу зміни контракту/поведінки → окремо, через ескалацію людині (не в межах цього рефактору)"
 skills_required: [repo-access, test-runner]
 memory_file: loops/memory/refactor-convergence.md
 verification_report: loops/reports/refactor-convergence-0.1.md

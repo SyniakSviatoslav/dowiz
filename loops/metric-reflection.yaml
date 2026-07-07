@@ -10,7 +10,7 @@ status: DRAFT            # DRAFT → (loop-architect M1–M11) → CERTIFIED
 intent: "fold scripts/exec-telemetry.mjs's log + git commit history into cross-run insights (patterns, cross-patterns, historical comparison vs the last stored snapshot), written as a docs/governance/metric-reflection-report.md advisory report that feeds the self-improvement ratchet"
 problem_signature: "the harness accumulates exec-telemetry events and commits with no periodic fold — a recurring failure that spans two layers, or a failure correlated with a heavily-churned file, or a fail-rate trend, goes unnoticed until a human happens to read raw logs"
 trigger: "cron (daily/weekly, not yet wired — see loops/registry.md's telemetry-council-review DRAFT row) · ad-hoc `node scripts/metric-reflection.mjs [--since 30d]`"
-role_mindset: "advisory analyst: SURFACE candidate patterns, never PROMOTE one to a reflection/guardrail — that decision is always a human/council/librarian call (CLAUDE.md self-improvement loop, signals-inform/guardrails-decide split)"
+role_mindset: "advisory analyst: SURFACE candidate patterns, never PROMOTE one to a reflection/guardrail — that decision is always a human/librarian call (CLAUDE.md self-improvement loop, signals-inform/guardrails-decide split)"
 preconditions:
   - "scripts/exec-telemetry.mjs has at least one event to analyze (an empty log still produces a valid, empty report — not an error)"
   - "git history is readable in the working tree (no shallow-clone truncation of the requested --since window)"
@@ -18,17 +18,17 @@ execution_skills: [exec-telemetry-query, telemetry-analyze, git-log-fold, cross-
 goal: "one markdown report (docs/governance/metric-reflection-report.md) + one appended history snapshot (loops/runs/metric-reflection-history.jsonl) per run, naming: telemetry-analyze's existing patterns; NEW cross-patterns (cross-layer recurring failures, churn-correlated recurring failures); and a historical comparison against the immediately prior snapshot (new/resolved recurring failures, fail-rate deltas) — every claim traceable to the exact events/commits that produced it"
 verification: "13/13 `node --test scripts/metric-reflection.test.mjs` (pure-function coverage of foldGitHistory/findCrossPatterns/compareHistory/buildReport/formatMarkdown + one real-filesystem history round-trip); a manual RED→GREEN proof narrowing the cross-layer threshold from >=2 to >=3 flips one test red, confirming the assertion is load-bearing, not decorative"
 iron_principles:
-  - never-self-promotes            # the report surfaces candidates; writing a reflection/ledger row from it is always a separate human/council/librarian act
+  - never-self-promotes            # the report surfaces candidates; writing a reflection/ledger row from it is always a separate human/librarian act
   - never-a-gate                    # read-only; a failing/erroring analysis run must not block anything downstream
   - traceable-not-vibes             # every pattern/cross-pattern cites the (layer,name) or file path that produced it, never an unsourced summary
   - monotonic-history                # loops/runs/metric-reflection-history.jsonl is append-only; a run never rewrites a prior snapshot
   - no-fake-green
 proof_artifacts: [metric-reflection-test-output, red-green-canary, sample-report-md, history-jsonl-snapshot]
 out_of_scope:
-  - "auto-writing a docs/reflections/INBOX/ reflection or a REGRESSION-LEDGER.md row from a detected pattern (always a separate human/council/librarian decision)"
+  - "auto-writing a docs/reflections/INBOX/ reflection or a REGRESSION-LEDGER.md row from a detected pattern (always a separate human/librarian decision)"
   - "gating any other loop, commit, or deploy on this report's contents"
   - "reading/folding anything beyond scripts/exec-telemetry.mjs's log and git commit history (no plane-telemetry orphan-branch read — that stays plane-maintainer-only per SYSTEMS-MAP.md)"
-escalation: "a detected cross-pattern that looks like it warrants an immediate guardrail → route to the librarian/Council retro per CLAUDE.md's self-improvement loop, same as any other qualified reflection candidate — this loop itself does not escalate or act"
+escalation: "a detected cross-pattern that looks like it warrants an immediate guardrail → route to the librarian, or a human decision, per CLAUDE.md's self-improvement loop, same as any other qualified reflection candidate — this loop itself does not escalate or act"
 skills_required: [node, git]
 memory_file: loops/memory/metric-reflection.md
 verification_report: loops/reports/metric-reflection-0.1.md   # authored by loop-architect at cert

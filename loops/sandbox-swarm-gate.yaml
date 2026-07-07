@@ -11,11 +11,11 @@ trigger: "/loop-orchestrator sandbox-swarm-gate <ціль; лейни> · scaffo
 role_mindset: "conductor: партиціонує на collision-free лейни, фанить рой, НЕ мерджить сам — гейт (сильна модель) вирішує merge/reject; ETHICS — тверда, незнімна умова"
 preconditions:
   - "ціль партиціонується на 2+ collision-free лейни (різні файли/дір/поверхні, без спільного mutable-стану, без порядкової залежності)"
-  - "гейт живий: protect-paths + invariant-guardian + security-sentinel + ETHICS ре-ранають на merge-diff (див. design §9 pairing rule) — ІНАКШЕ не послаблювати sandbox"
-  - "Agent(isolation:worktree) + Workflow доступні (settings allow); model routing (sonnet/opus/fable) активний"
-execution_skills: [worktree-sandbox, parallel-subagent-fanout, diff-review-gate, invariant-guardian-scan, security-sentinel-scan, ethics-charter-check, red-green-proof, ship-discipline]
+  - "гейт живий: protect-paths + pnpm typecheck+build + bash scripts/run-armaments.sh + red-line-doubt-gate + ETHICS ре-ранають на merge-diff (див. design §9 pairing rule) — ІНАКШЕ не послаблювати sandbox"
+  - "Agent(isolation:worktree) + Workflow доступні (settings allow); model routing (sonnet/opus) активний — Fable OFF для лейнів (MODEL ROUTING v3)"
+execution_skills: [worktree-sandbox, parallel-subagent-fanout, diff-review-gate, run-armaments-scan, red-line-doubt-gate-scan, ethics-charter-check, red-green-proof, ship-discipline]
 goal: "кожен диспатчнутий лейн або MERGED (усі гейт-бокси A/B/C зелені + red-line human-approval присутній) або явно ABANDONED; жодного sandbox без review; LOOP REPORT емітнуто"
-verification: "машинний гейт-рубрик A/B/C (docs/design/harness/SANDBOX-SWARM-GATE.md §4 · scripts/sandbox-swarm-gate.mjs checklist): A pnpm typecheck+build зелені + Mandatory-Proof + red→green + no-false-green; B invariant-guardian PASS + security-sentinel PASS + red-line→human-approval present + protect-paths ре-ранано на diff; C ETHICS Charter зелена (тверда, незнімна). Будь-який RED → REJECT назад у той самий sandbox"
+verification: "машинний гейт-рубрик A/B/C (docs/design/harness/SANDBOX-SWARM-GATE.md §4 · scripts/sandbox-swarm-gate.mjs checklist): A pnpm typecheck+build зелені + Mandatory-Proof + red→green + no-false-green; B bash scripts/run-armaments.sh PASS (protect-paths + guard-bash + red-line-doubt-gate + circuits) + red-line→human-approval present + protect-paths ре-ранано на diff; C ETHICS Charter зелена (тверда, незнімна). Будь-який RED → REJECT назад у той самий sandbox"
 iron_principles:
   - no-fake-green
   - ethics-charter-non-removable          # C-блок неможливо waive/timeout/override-file
@@ -27,13 +27,13 @@ iron_principles:
 loop_body: [SCOPE, SPAWN, ITERATE, GATE, MERGE-OR-REJECT, RATCHET]
 exit_conditions: "ВСІ: кожен лейн MERGED або ABANDONED; 0 sandbox un-reviewed; гейт A+B+C зелений для кожного merged лейна; red-line merged → human-approval задокументовано; §5 LOOP REPORT емітнуто; qualified-зміна → reflection + ledger guardrail"
 gates: [STOP-GATE-per-lane, STOP-ETHICS-hard, STOP-REDLINE-human-approval]
-proof_artifacts: [per-lane-gate-rubric-filled, invariant-guardian-verdict, security-sentinel-verdict, typecheck-build-output, lane-proof-playwright-or-request-or-red-green, merge-plan-dry-run, loop-report]
+proof_artifacts: [per-lane-gate-rubric-filled, run-armaments-output, red-line-doubt-gate-verdict, typecheck-build-output, lane-proof-playwright-or-request-or-red-green, merge-plan-dry-run, loop-report]
 out_of_scope:
   - "мерджити зі скрипта (скрипт НЕ мерджить — merge lead-driven, gate-passed, human-approved)"
   - "послаблювати sandbox без живого гейта (pairing rule §9)"
   - "редагувати .claude/.github навіть усередині sandbox"
-  - "оминати red-line human-approval / serious-gate / red-line-doubt-gate"
-escalation: "ETHICS-red → STOP + людина (жоден green не перекриває). Red-line diff без approval → serious-gate/Council + оператор. Структурна зміна петлі → loop-architect + ре-cert. Спірний лейн → doubt-escalation (K=2)"
+  - "оминати red-line human-approval / red-line-doubt-gate"
+escalation: "ETHICS-red → STOP + людина (жоден green не перекриває). Red-line diff без approval → STOP + людина/оператор (red-line-doubt-gate вирішує, не автомерж). Структурна зміна петлі → loop-architect + ре-cert. Спірний лейн → doubt-escalation (K=2)"
 skills_required: [git-worktree, agent-tool-isolation-worktree, workflow-fanout, headed-browser-or-request-proof, repo-access]
 memory_file: loops/memory/sandbox-swarm-gate.md
 verification_report: loops/reports/sandbox-swarm-gate-0.1.md   # authored by loop-architect at cert

@@ -15,7 +15,7 @@ exit_conditions: "ВСІ: кожен чекпойнт етапу зелений;
 gates: [STOP-COVERAGE, STOP-VERDICT]
 proof_artifacts: [phase-coverage-matrix, red-line-probe-evidence, e2e-run, security-probe, exit-verdict]
 out_of_scope: [лагодити-тут]
-escalation: "FAIL → перелік дір назад у build-stage/error-fix; серйозна архітектурна діра → /council"
+escalation: "FAIL → перелік дір назад у build-stage/error-fix; серйозна архітектурна діра → ескалація людині"
 skills_required: [repo-access, test-runner, headed-browser]
 memory_file: loops/memory/exit-audit.md
 verification_report: loops/reports/exit-audit-0.1.md

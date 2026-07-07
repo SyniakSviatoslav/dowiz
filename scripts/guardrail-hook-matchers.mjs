@@ -41,6 +41,13 @@ const MUST_COVER = [
   { hook: 'agent-dispatch-gate.sh', event: 'PreToolUse', tools: DISPATCH_TOOLS },
   { hook: 'distill-nudge.sh', event: 'PostToolUse', tools: ['Bash'] },
   { hook: 'context-budget-guard.sh', event: 'UserPromptSubmit', tools: [] },
+  // subagent-return-guard.sh (fable-audit ROOT-CAUSE, 2026-07-07): the 0-tool-use degenerate-return
+  // checker. Primary = SubagentStop (can block + force real execution); belt = PostToolUse Agent|Task
+  // (non-blocking parent-side nudge). Both registrations pinned so the #47 "unregister the noisy
+  // gate" anti-pattern fails loudly. SubagentStop has no tool matcher (like Stop) → tools:[] just
+  // asserts registration; the belt must cover both dispatch tool names.
+  { hook: 'subagent-return-guard.sh', event: 'SubagentStop', tools: [] },
+  { hook: 'subagent-return-guard.sh', event: 'PostToolUse', tools: DISPATCH_TOOLS },
 ];
 
 if (!existsSync(SETTINGS)) {

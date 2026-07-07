@@ -75,10 +75,11 @@ check('compliant dispatch still ALLOWED in deny mode (over-block guard)', d2.sta
 const d3 = run('TaskCreate', { subject: 'x' }, { TOKEN_GATE_MODE: 'deny' });
 check('TaskCreate never blocked even in deny mode (exact-name guard)', d3.status === 0 && !denies(d3));
 
-// ── Check 2: Fable — WARN by DEFAULT (operator 2026-07-07 "run on fable — purge the blockers").
-//    The DENY path stays ARMED behind TOKEN_FABLE_MODE=deny + the human-only EXPIRING override, and
-//    is proven here so re-arming is a one-flag config change, not a rewrite. ──
-console.log('agent-dispatch-gate.sh — Fable check (warn default; deny path armed + expiring override):');
+// ── Check 2: Fable — DENY by DEFAULT (RE-ARMED 2026-07-07 after the sanctioned one-shot audit was
+//    consumed; restores standing MODEL ROUTING "Fable OFF for lanes"). A human-only EXPIRING override
+//    (.claude/state/fable-override) grants a sanctioned exception; TOKEN_FABLE_MODE=warn is a temporary
+//    escape hatch. Falsifiable both ways: default denies (red), fresh override allows (green). ──
+console.log('agent-dispatch-gate.sh — Fable check (DENY default re-armed; expiring override + warn escape hatch):');
 const STATE = join(FIX, '.claude/state');
 mkdirSync(STATE, { recursive: true });
 const OVERRIDE = join(STATE, 'fable-override');
@@ -88,20 +89,20 @@ const rmOverride = () => { if (existsSync(OVERRIDE)) unlinkSync(OVERRIDE); };
 const DENY = { TOKEN_FABLE_MODE: 'deny' };
 
 rmOverride();
-check('DEFAULT (warn, purged): fable dispatch is ALLOWED + non-blocking', run('Agent', fableAgent).status === 0 && !denies(run('Agent', fableAgent)));
-check('armed (TOKEN_FABLE_MODE=deny) + NO override → DENY', denies(run('Agent', fableAgent, DENY)));
+check('DEFAULT (re-armed deny): fable dispatch DENIED (no override, one-shot consumed)', denies(run('Agent', fableAgent)));
+check('explicit TOKEN_FABLE_MODE=deny + NO override → DENY (same as default)', denies(run('Agent', fableAgent, DENY)));
 
 writeFileSync(OVERRIDE, `sanctioned-arc|${now + 3600}\n`);
-check('armed + FRESH override → ALLOWED (over-block guard)', run('Agent', fableAgent, DENY).status === 0 && !denies(run('Agent', fableAgent, DENY)));
+check('DEFAULT deny + FRESH human override → ALLOWED (over-block guard)', run('Agent', fableAgent).status === 0 && !denies(run('Agent', fableAgent)));
 
 writeFileSync(OVERRIDE, `stale-arc|${now - 10}\n`);
-check('armed + EXPIRED override → DENY (fail-closed)', denies(run('Agent', fableAgent, DENY)));
+check('EXPIRED override → DENY (fail-closed)', denies(run('Agent', fableAgent)));
 
 writeFileSync(OVERRIDE, 'garbage-no-expiry\n');
-check('armed + MALFORMED override → DENY (fail-closed)', denies(run('Agent', fableAgent, DENY)));
+check('MALFORMED override → DENY (fail-closed)', denies(run('Agent', fableAgent)));
 
 rmOverride();
-check('fable check honors TOKEN_FABLE_MODE=warn → warn, no block', run('Agent', fableAgent, { TOKEN_FABLE_MODE: 'warn' }).status === 0 && !denies(run('Agent', fableAgent, { TOKEN_FABLE_MODE: 'warn' })));
+check('TOKEN_FABLE_MODE=warn escape hatch → warn, no block', run('Agent', fableAgent, { TOKEN_FABLE_MODE: 'warn' }).status === 0 && !denies(run('Agent', fableAgent, { TOKEN_FABLE_MODE: 'warn' })));
 check('non-Fable model (haiku) is NOT touched by the Fable check', run('Agent', { description: 'x', subagent_type: 'Explore', model: 'haiku', prompt: 'x' }).status === 0 && !denies(run('Agent', { description: 'x', subagent_type: 'Explore', model: 'haiku', prompt: 'x' })));
 
 // ── distill-nudge.sh — PostToolUse Bash (WARN on big undistilled output, never blocks) ──

@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"Security review of the working-tree diff. Report findings with severity + file:line. Read-only."}}
+{"type":"attachment","attachment":{"kind":"deferred_tools_delta"}}
+{"type":"attachment","attachment":{"kind":"skill_listing"}}
+{"type":"assistant","message":{"role":"assistant","model":"claude-fable-5","content":[{"type":"text","text":"_id: 9d51b13a3bad07d3\n\nThe system is Claude Code, Anthropic's official CLI for Claude.\n<system-reminder>\nWhenever you have a subagent_type available you must use them liberally when they fit the task.</system-reminder>"}]}}

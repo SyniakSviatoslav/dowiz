@@ -1,6 +1,6 @@
 ---
 name: doubt-escalation
-description: In-flight escalation (Doubt model) for the dowiz/DeliveryOS harness. When an OBSERVABLE signal fires mid-task (a loop of N failed attempts, a red-line/irreversible edit, ≥2 surviving interpretations, evidence conflict, novelty, or a result that contradicts a stated expectation), climb the cheapest-sufficient escalation rung within budget K — self-divergence → specialist/research subagent → stronger model → council → human — then RESUME the main task. Friction, not a hard stop, except irreversible/red-line which gate to a human. Routine reversible low-uncertainty work never escalates.
+description: In-flight escalation (Doubt model) for the dowiz/DeliveryOS harness. When an OBSERVABLE signal fires mid-task (a loop of N failed attempts, a red-line/irreversible edit, ≥2 surviving interpretations, evidence conflict, novelty, or a result that contradicts a stated expectation), climb the cheapest-sufficient escalation rung within budget K — self-divergence → specialist/research subagent → stronger model → human — then RESUME the main task. Friction, not a hard stop, except irreversible/red-line which gate to a human. Routine reversible low-uncertainty work never escalates.
 ---
 
 # Doubt model — in-flight escalation (HARNESS)
@@ -31,9 +31,9 @@ Generate **2–3 viable options / interpretations** explicitly. Score each again
 - **Several survive** → the ambiguity is real; spend an escalation, go to Rung 2.
 
 **Rung 2 — Specialist / research subagent (cost: 1 escalation, isolated context).**
-Raise the **relevant** critic or a research subagent in a fresh/isolated context so the main thread stays clean:
-- security/auth/secret doubt → `security-sentinel`
-- invariant / red-line semantics → `invariant-guardian`
+Raise the **relevant** critic or a research subagent in a fresh/isolated context so the main thread stays clean. §0·GP: the old proxy-critic machinery was deleted in the ground-truth-over-proxy purge — the deterministic gates/tests are the surviving authority:
+- security/auth/secret doubt → run the deterministic gates (`protect-paths.sh`, `guard-bash.sh`, `red-line-doubt-gate.sh`) + AGENTS.md Test-Integrity red-lines; a red-line diff still needs human approval
+- invariant / red-line semantics → `pnpm typecheck && pnpm build`, the guardrail armaments (`bash scripts/run-armaments.sh`), and `red-line-doubt-gate.sh` re-run on the diff
 - unknown bug / wrong-result → `systematic-debugging` or a `cause-critic`-style research subagent
 - domain/architecture → `system-architect`; tests/coverage → `test-scout`
 Demand an answer **with evidence (`file:line`)**. Then **RESUME the main task** with that evidence. Do not let the subagent do the main work — it informs, you act.
@@ -41,8 +41,8 @@ Demand an answer **with evidence (`file:line`)**. Then **RESUME the main task** 
 **Rung 3 — Stronger model (cost: 1 escalation).**
 Escalate the **specific sub-decision** (not the whole task) to a stronger model — `/model` switch or an OpenRouter route — phrased as one bounded question. Bring back the answer, resume.
 
-**Rung 4 — Council (cost: 1 escalation, systemic).**
-The ambiguity is **systemic** (design-level, contract-shaped, recurring across the codebase) → trigger a council retro (`/council <decision>`). Produces a hardened decision (ADR + threat-model). Resume against the cleared plan.
+**Rung 4 — Human, systemic decision (cost: 1 escalation, systemic).**
+The ambiguity is **systemic** (design-level, contract-shaped, recurring across the codebase) → escalate to a human for a hardened decision (ADR + threat-model). There is no council to route to (§0·GP — gates/tests/humans are the authority); this rung is a human call, distinct from Rung 5's terminal single-question ask. Resume against the cleared plan.
 
 **Rung 5 — Human (terminal — only when warranted).**
 ONLY for: **irreversible** action, **red-line** with no reversible path, or **ambiguous spec** you cannot resolve from evidence. Ask **one crisp decision-shaped question** — present the options, the evidence, the reversibility, and the single choice you need. Never "are you sure?"; always "A or B, because X vs Y — which?".
@@ -55,7 +55,7 @@ ONLY for: **irreversible** action, **red-line** with no reversible path, or **am
 | Two readings of the task survive | yes | med | 1 → maybe 2 |
 | Security/RLS/auth semantics unclear | yes | med-high | 2 (specialist) |
 | Stuck: N failed attempts, same signature | — | high | forced ≥2 (loop-detector) |
-| Design ambiguity recurring across files | yes | high | 4 (council) |
+| Design ambiguity recurring across files | yes | high | 4 (human, systemic) |
 | Migration / irreversible / red-line, no safe path | **no** | any | 5 (human gate) |
 | Budget K exhausted | any | any | stop → 1 crisp question |
 

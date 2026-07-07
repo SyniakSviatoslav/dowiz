@@ -29,6 +29,13 @@ red_lines() {
   # (self-improve 2026-06-29; unchanged for all code paths — proven red->green.)
   case "$REL" in
     docs/*|*.md|*.mdx|*.markdown) return 0 ;;
+    # Harness/governance layer (runners, guardrails, hooks) legitimately NAMES a red-line pattern in
+    # order to FORBID it — e.g. .husky/pre-commit invoking guardrail-no-set-cookie.mjs, or a guardrail
+    # whose regex literal is `set-cookie`. Same rationale as docs: none of this ships in the runtime
+    # image. The red-line stays FULL-STRENGTH on the product runtime (apps/ · packages/) and on spikes/.
+    # (brain-in-brain 2026-07-07: surfaced when connecting the no-set-cookie guardrail island — the gate
+    #  over-blocked its own enforcer, the same over-block class as guard-bash finding #1.)
+    .husky/*|scripts/*|.claude/*) return 0 ;;
   esac
   if grep -nE "document\.cookie|set-cookie|Math\.random\(\).*(token|otp|secret|nonce)|parseFloat.*(price|amount|total)|customerPhone|customer_phone" "$REL" >/dev/null 2>&1; then
     echo "RED-LINE: '$REL' trips a product red line (cookie / insecure-random secret / float money / raw PII). Holds in spike+challenge too." >&2

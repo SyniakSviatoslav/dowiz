@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"Distill the recurring mechanical reasoning moves from the reflections. Read-only."}}
+{"type":"attachment","attachment":{"kind":"deferred_tools_delta"}}
+{"type":"attachment","attachment":{"kind":"skill_listing"}}
+{"type":"assistant","message":{"role":"assistant","model":"claude-fable-5","content":[{"type":"text","text":"_context_relevance:\nSkills marked with this trigger should be considered.\n\nModel routing note: several docs are referenced. Prefer reading them directly for accuracy."}]}}

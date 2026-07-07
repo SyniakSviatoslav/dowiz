@@ -38,6 +38,26 @@
       "required": "FORCE ROW LEVEL SECURITY",
       "flags": "mi",
       "message": "A table with ENABLE ROW LEVEL SECURITY must also FORCE it (table owners/BYPASSRLS bypass ENABLE-only RLS)."
+    },
+    {
+      "id": "no-removed-machinery-loops",
+      "source": "fable-audit finding #5 — loops reference REMOVED proxy machinery (council/invariant-guardian/security-sentinel/serious-gate/design-council deleted by the §0·GP purge f1255ad5)",
+      "severity": "red-line",
+      "glob": "loops/**/*.yaml",
+      "type": "forbid",
+      "pattern": "/council|invariant-guardian|security-sentinel|serious-gate|design-council",
+      "flags": "m",
+      "message": "This loop spec references REMOVED machinery (council / invariant-guardian / security-sentinel / serious-gate / design-council). Those proxy gates were deleted (§0·GP ground-truth-over-proxy). Escalate to the deterministic gates / a human, not a removed proxy."
+    },
+    {
+      "id": "no-removed-machinery-skills",
+      "source": "fable-audit finding #5 — skills reference REMOVED proxy machinery",
+      "severity": "red-line",
+      "glob": ".claude/skills/**",
+      "type": "forbid",
+      "pattern": "/council|invariant-guardian|security-sentinel|serious-gate|design-council",
+      "flags": "m",
+      "message": "This skill references REMOVED machinery (council / invariant-guardian / security-sentinel / serious-gate / design-council) — deleted by the §0·GP purge. Point to the deterministic gates / a human instead."
     }
   ]
 }

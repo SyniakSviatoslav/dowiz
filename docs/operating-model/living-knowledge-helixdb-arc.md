@@ -60,3 +60,24 @@ nodes above a threshold form the "activated subgraph" any consumer can trace.
 - Do NOT delete repowise/codebase-memory until the eval (step 2) proves HelixDB better (§7·B: deletion
   needs a deterministic proof of rot — here, a measured worse-or-equal on the eval).
 - Keep it a swappable port (seam) so a NO-GO or a future better store costs an impl swap, not a rewrite.
+
+## 5 · STATUS — BUILT 2026-07-07 (`spikes/living-knowledge/`, Option C)
+Operator refined the directive 2026-07-07: integrate HelixDB (Option C = sovereign default + dev-gated
+real-engine adapter), wire with the memory layers, reverse-engineer + apply patterns, prove with math.
+- **Step 1 SPIKE ✅** — `spikes/living-knowledge/` (zero-dep, deterministic): TF-IDF hash embedding,
+  graph+vector store behind a port, ingest of the 4 harness layers (76 files / 165 reference edges).
+- **Step 2 EVAL ✅ (GO)** — `eval.mjs`: activation recall@5 **0.875 vs 0.813** baseline, precision
+  0.25 vs 0.225, deterministic (bit-identical reruns), real>nonsense confidence, expected-MISS queries
+  included (falsifiable). GROUND TRUTH on HelixDB: OSS repo = CLI+SDK only (Apache-2.0); the engine is a
+  CLOSED, no-visible-license Docker image (`ghcr.io/helixdb/enterprise-dev` v3.0.8) — contradicts the §1
+  "embeddable/Apache-2.0" check. So: sovereign backend is the DEFAULT; the real engine is dev-gated only.
+- **Step 3 INTEGRATE ✅ (Option C)** — `HelixStore` adapter proven against the LIVE engine
+  (`helix-adapter.test.mjs`, LK_HELIX=1: readiness 200, AddN 3/3, count 0→3). Wire contract
+  reverse-engineered from the engine's own errors (`returns` nests in `query`; props = `[k,{Value:{String}}]`).
+- **Step 4 ACTIVATION ✅** — deterministic spreading activation, fan-out + symmetric degree norm, ≥3
+  bands (code-structure · why · data · temporal), `trace()` union/intersect, `analyzeLayers()` coverage.
+- **Step 5 WIRE — SEEDED** — activation retrieval is proven; harness-wiring (activation-traced context
+  replacing blind reads) + the brain-in-brain autonomous cross-layer fix-loop are the NEXT phase.
+  First findings already surfaced: `living-memory` has 0 internal edges; 13 infra guardrails are islands.
+- Reverse-engineered HelixDB patterns applied: deterministic scan-row budget on traversals, AST-composed
+  hybrid retrieval (seed→spread→rerank), index-family thinking. See `spikes/living-knowledge/README.md`.

@@ -1,0 +1,20 @@
+{
+  "corpus": {
+    "files": 77,
+    "edges": 172
+  },
+  "k": 5,
+  "baseRecall": 0.813,
+  "actRecall": 0.875,
+  "basePrec": 0.225,
+  "actPrec": 0.25,
+  "hitMeanTop1": 0.452,
+  "missMeanTop1": 0.357,
+  "deterministic": true,
+  "layers": {
+    "nodeCount": 77,
+    "edgeCount": 172,
+    "islands": 29,
+    "disconnectedLayerPairs": []
+  }
+}

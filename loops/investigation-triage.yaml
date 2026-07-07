@@ -15,7 +15,7 @@ exit_conditions: "ВСІ: детермінований репро зафіксо
 gates: [STOP-REPRO, STOP-ROOT]
 proof_artifacts: [failing-repro-trace, hypothesis-bisect-log, root-evidence, regression-test, green-run]
 out_of_scope: [лагодити-суміжне-заодно, міняти-контракти-без-ескалації, закривати-без-регрес-тесту]
-escalation: "корінь у сервері/контракті → MISSING + окремий діалог (а серйозний фікс → /council)"
+escalation: "корінь у сервері/контракті → MISSING + окремий діалог (а серйозний фікс → ескалація людині)"
 skills_required: [repo-access, logs-access, test-runner]
 memory_file: loops/memory/investigation-triage.md
 verification_report: loops/reports/investigation-triage-0.1.md

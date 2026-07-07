@@ -15,7 +15,7 @@ exit_conditions: "ВСІ: контракт-парність доведена; ve
 gates: [STOP-CONTRACT-MAP, STOP-MIGRATION]
 proof_artifacts: [contract-parity-table, verify-db-rls-output, migration-diff, server-test-run]
 out_of_scope: [міняти-UI-щоб-замаскувати-серверну-прогалину, редагувати-існуючі-міграції]
-escalation: "потрібна зміна контракту, що ламає клієнтів → серйозна зміна → /council перед кодом"
+escalation: "потрібна зміна контракту, що ламає клієнтів → серйозна зміна → ескалація людині перед кодом"
 skills_required: [repo-access, db-access, test-runner]
 memory_file: loops/memory/backend-contract-convergence.md
 verification_report: loops/reports/backend-contract-convergence-0.1.md
