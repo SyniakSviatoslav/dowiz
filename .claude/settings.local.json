@@ -48,7 +48,10 @@
       "Bash(echo \"write exit=$?\")",
       "Artifact",
       "Bash(cp /root/dowiz/.claude/CLAUDE.md /root/dowiz/docs/operating-model/claude-md-reference.md)",
-      "Bash(cp /root/dowiz/docs/operating-model/proposed-claude-md/CLAUDE-CORE.md /root/dowiz/.claude/CLAUDE.md)"
+      "Bash(cp /root/dowiz/docs/operating-model/proposed-claude-md/CLAUDE-CORE.md /root/dowiz/.claude/CLAUDE.md)",
+      "Bash(rm -f .claude/state/serious-cleared)",
+      "Bash(rm -rf .claude/state/eye)",
+      "Bash(node scripts/guardrail-token-gates.mjs)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -89,15 +89,6 @@
       "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
     },
     {
-      "id": "design-convergence",
-      "goal": "загартований план серйозної зміни (Тріадна Рада)",
-      "version": "1.0",
-      "status": "CERTIFIED (звіт ВТРАЧЕНО — re-cert: /build-verify-loop verify)",
-      "trigger": "/council",
-      "trigger_tags": [],
-      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
-    },
-    {
       "id": "error-fix-convergence",
       "goal": "UI↔сервер у повну відповідність, кожен флоу зелений",
       "version": "1.0",
@@ -143,6 +134,15 @@
       "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
     },
     {
+      "id": "metric-reflection",
+      "goal": "згортає `scripts/exec-telemetry.mjs` лог + git-історію в crossrun insight (patterns/cross-patterns/historical comparison) → `docs/governance/metric-reflection-report.md`, годує self-improvement ratchet; read-only/advisory, ніколи не self-promote і ніколи не гейт (backlog item 4)",
+      "version": "0.1",
+      "status": "DRAFT (картка-scaffold; чекає loop-architect M1–M11 через /build-verify-loop verify)",
+      "trigger": "cron (ще не заведено) · node scripts/metric-reflection.mjs",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
       "id": "mobile-polish",
       "goal": "мобільний UX (390px) кожної поверхні → PASS Mobile Rubric",
       "version": "1.0",
@@ -184,6 +184,33 @@
       "version": "0.1",
       "status": "DRAFT",
       "trigger": "/regression-hunt",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "sandbox-swarm-gate",
+      "goal": "повторюваний мульти-агентний процес → рой у sandbox-worktree'ах на повну; якість/безпека/ЕТИКА гейт на межі review перед merge",
+      "version": "0.1",
+      "status": "DRAFT (картка-scaffold; чекає loop-architect M1–M11 через /build-verify-loop verify)",
+      "trigger": "/loop-orchestrator sandbox-swarm-gate · node scripts/sandbox-swarm-gate.mjs",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "skill-evolution",
+      "goal": "повторювана процедура з досвіду/задач/пам'яті → переюзабельний SKILL (find→use→expand→create); 3-й вихід ратчета поряд з guardrail(authority)/lesson(advisory); sandbox+ETHICS-гейт як для коду",
+      "version": "0.1",
+      "status": "DRAFT (картка-scaffold; чекає loop-architect M1–M11 через /build-verify-loop verify)",
+      "trigger": "/loop-orchestrator skill-evolution · skill-creator + find-skills",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "telemetry-council-review",
+      "goal": "щоденний прогін `scripts/telemetry-analyze.mjs` над `loops/runs/exec-events-*.jsonl` → bottleneck/recurring-failure звіт для ради/ратчета (годує metric-reflection); аналізатор read-only/advisory, ніколи не гейт",
+      "version": "0.1",
+      "status": "DRAFT (без картки; metric-reflection тепер побудована — обидві чекають спільного loop-architect cert)",
+      "trigger": "cron (щоденно, ще не заведено) · node scripts/telemetry-analyze.mjs",
       "trigger_tags": [],
       "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
     },
