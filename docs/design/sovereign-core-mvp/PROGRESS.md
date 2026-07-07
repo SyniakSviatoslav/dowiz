@@ -275,7 +275,30 @@ MVP projection: $247–304 lead-loop with Haiku+opus red-line+A1 (vs ~$1,200–1
 (this session stays Haiku unfrozen; next session applies it to default). Commits stay on feat/sovereign-core-phase-zero 
 (no push to main until secrets-scrub force-push gate).
 
-## BLOCKERS (awaiting operator + staging actions)
-- **0b-5 RED PROOF — NEXT (immediate):** Inject a corridor REFUSAL on a proof branch, deploy to staging, run real API test (Confirm→InDelivery edge), expect `CorridorBreach` + immutability, revert, verify success. Captures the routed-reality proof: `decide` IS the executed door on the deployed API. Without this, 0b-5 code is live but unproven (mirror-oracle risk). Effort: 1–2 hours (inject→test→revert cycle). No council needed (disabled 2026-07-05), but staging-proof is mandatory before prod.
-- **Persistent event-log (0b-6/1.2):** red-line "L" architecture step (the Immutable Log), depends on 0b-5 RED proof passing. Falsifiable gate: no bugs on Haiku during event-log work, or cost estimate invalidates.
+## PHASE 1 STATUS — 1.1 + 1.2 SCHEMAS CREATED (2026-07-07 fresh session)
+- **1.1 sales_channels registry (schema) — ✅ MIGRATION CREATED (1780350000000).**
+  `sales_channels` table: `id uuid`, `location_id` FK, `kind` (13-value CHECK mirror from Rust CHANNEL_ALLOWLIST),
+  `name`, `token` (unique, for attribution links), `active`, `created_at`. RLS policy scoped by `location_id`.
+  **NEXT:** PgChannelsRepo impl + route registration (see IMPLEMENTATION-ROADMAP-2026-07-07.md §Phase 1.1).
+  
+- **1.2 persistent event log (schema) — ✅ MIGRATION CREATED (1780350000001).**
+  `order_events` table: `id uuid`, `order_id` FK, `seq` monotonic per order, `at`, `cause_hash`, `payload` bytea,
+  `content_hash`, `signature` (NULL for MVP), `created_at`. RLS via order.location_id. Append-only enforced:
+  `REVOKE UPDATE, DELETE FROM app`. **(order_id, seq) unique**.
+  **NEXT:** Dual-write in apply_events + replay-parity job (critical path blocker for Phase 2.2).
+  
+- **1.5 channels dashboard (read-only) — NOT STARTED.** Depends on 1.1 PgChannelsRepo. List endpoint + UI tab.
+  
+- **Phase 1 exit gate:** 1.1 NOBYPASSRLS test green · 1.2 replay-parity job green on staging · 1.5 Playwright
+  (order via x-channel → dashboard count) green.
+
+## BLOCKERS (awaiting session continuation)
+- **Phase 1.1 Postgres impl (CRITICAL PATH):** PgChannelsRepo in `routes/channels/pg.rs`. Schema + API skeleton
+  staged; repo impl is NEXT (4-6h Haiku). Unblocks 1.5 and enables Phase 2 channel attribution.
+- **Phase 1.2 dual-write + replay-parity (RED-LINE, BLOCKS 2.2):** Interpreter changes in `routes/orders/pg.rs`
+  to insert each event into order_events. Replay-parity CI job (bash script comparing fold vs materialized row).
+  Effort: 8-12h Haiku. Gate: no bugs on cheap models during event-log work.
+- **Cart-token spec (BLOCKS 2.2):** Money-council sign-off BEFORE code. Spec doc: server-priced cart (client
+  submits item/modifier IDs + quantities ONLY; all totals computed server-side; client price fields refused).
+  Effort: 2-4h design + council.
 - **Free-LLM bridge (B5):** gated on operator data-governance sign-off + keys (BLOCKER). OpenRouter bridge = staged opt-in, not wired by default.
