@@ -194,3 +194,81 @@ The gate caught the lead's own behavior and changed it (operator's "use cheaper 
 **The full B0-vs-post-B1 violation DELTA needs session accumulation** — re-run `audit-token-router`
 over the next N sessions; the model-less rate trend (baseline 86%) is the ratchet trigger for
 promoting Check 1 warn→deny. Tracked in PROGRESS.md NEXT SEQUENCE.
+
+## 11. Re-measure 2026-07-07 — the ratchet DELTA + first $-by-model audit (answers the operator's audit question)
+
+Operator ask: "reduce as much as you can without losing quality; evaluate current token-reduction
+tools, find patterns/cross-patterns; comparison in % to the last report; and — which model takes the
+biggest share of the token-budget in **money**, reasoning-heavy Opus or huge-context Haiku/Sonnet?"
+Method: two deterministic $0 auditors re-run over the now-**107** transcripts (was 95 at §10),
+both with hermetic self-tests incl. a RED case (VbM). Re-run: `node scripts/audit-token-router.mjs`
+and `node scripts/audit-model-spend.mjs`.
+
+### 11a. TOKEN ROUTER ratchet — % vs the §10 baseline
+
+| metric | §10 baseline (95 sess) | now (107 sess, agg) | **newest 12 by mtime** |
+|---|---|---|---|
+| Agent dispatches | 1027 | 1042 | 13 |
+| model-less rate | **86%** | **85%** (lagging, history-dominated) | **0%** ⟵ leading indicator |
+| `model: fable` | 43 | 46 | 2 (both sanctioned one-shot audits) |
+
+**Reading:** the aggregate barely moved (86→85%) **by construction** — 95 pre-gate sessions dominate
+the mean. The signal is the leading edge: the 12 newest sessions carry **0 model-less dispatches**
+(vs the ~90% day-one rate §10 predicted a blind deny would block). The B1 warn-then-ratchet gate
+LANDED; the aggregate will decay toward compliance only as pre-gate history ages out. This is the
+`_hev` DELTA §10 left open, now measured — Check-1 warn→deny is defensible on the leading trend.
+
+### 11b. $-by-model — the audit question, answered (lead-loop spend, 107 transcripts)
+
+| model | share of $ | dollars | note |
+|---|---|---|---|
+| **opus** | **89.3%** | **$14,585** | the reasoning lead loop (pinned Opus 4.8, 1M ctx @ standard price) |
+| fable | 10.6% | $1,738 | sanctioned one-shot audits |
+| haiku | 0.0% | $0.46 | doer lanes are ~free per token |
+| sonnet | — | $0 | not used in the lead loop |
+| **TOTAL (visible)** | | **$16,323** | over 21.1B billed tokens |
+
+**Answer: it's Opus, ~89%** — decisively the reasoning lead loop, NOT huge-context Haiku/Sonnet
+(Haiku is $0.46). Pricing from the authoritative claude-api catalog (Opus 4.8 = $5/$25 per MTok, **not**
+$15/$75; 1M context at standard price, no long-context premium). Scope caveat (same as §10's honest
+gap): sub-agent sidechains never appear in lead transcripts, so this is **lead-loop only** — the
+largest single visible line, and precisely the one the "which model dominates" question is about.
+
+### 11c. $-by-LEVER — why the operator's 6 methods have near-zero headroom left (the cross-pattern)
+
+Decomposing the same spend by *what the tokens are* (Opus-priced approximation of the mix):
+
+| lever | share of $ | what cuts it | status |
+|---|---|---|---|
+| **cache-read** (re-reading grown context every turn) | **62.8%** ($10,249) | shorter sessions / context-recycle / compaction | ⟵ **the real lever; NONE of the 6 methods touch it** |
+| cache-write (establishing cache) | 18.7% ($3,059) | stable frozen prefixes (CLAUDE.md CORE split) | partially shipped |
+| output | 12.7% ($2,078) | `effort` tuning · output-constraining (method #4) · route to Haiku (methods #2/#6) | real headroom |
+| **fresh input** | **0.4%** ($71) | distill · graph-first · VSA1 frames · state-delta (methods #1,#3,#5) | **saturated — near-zero ROI** |
+
+**The cross-pattern, measured.** The operator's advice maps onto the spend as follows:
+- **#1 Context Distillation, #3 Prompt Caching, #5 State-Delta** → already shipped AND target the
+  **0.4% fresh-input line**. Prompt caching in particular is already doing its job — 62.8% of $ is
+  cache-*read* at 0.1×, i.e. caching is already saving ~90% on that volume. Pushing these harder is
+  ground-truth-negative ROI (per §0·GP: measure before cutting/building — this measurement says stop).
+- **#4 Output Constraining** → real, hits the 12.7% output line; low-risk for **subagent returns**
+  (schema-forced) and lead-loop `effort` on routine turns.
+- **#2 Speculative Execution + #6 Complexity-Threshold Routing** → the one genuinely-unspent lever:
+  route routine turns to Haiku doers instead of the Opus lead loop. Opus output is $25/M vs Haiku
+  $5/M (5×); Opus is 89% of $. Constraint: the lead loop can't downshift mid-session (model switch
+  invalidates the cache — see shared/prompt-caching.md), so this is a *dispatch-more-to-Haiku*
+  pattern, not a lead-model swap. MODEL ROUTING already ships the mechanism; the data justifies leaning on it.
+- **The single biggest lever — cache-read at 62.8% — is addressed by NONE of the six.** It is a
+  **session-length-discipline** problem: peak lead context hit **999,580** (§10), i.e. the 300K
+  recycle rule ([[token-lifecycle-thresholds-2026-07-05]]) was breached. A ~1M-token session pays
+  ~$0.50/turn just to re-read its own cached prefix, every turn. Enforcing recycle + adopting
+  server-side **context-editing/compaction** (clear stale tool results/thinking; beta) attacks the
+  largest cost line no frame or codec can reach.
+
+**Net honest conclusion.** The reduction stack (frames/distill/graph/blind-orch) is *already
+excellent* and has driven fresh input to 0.4% of $. Further token cuts do **not** come from more of
+that tooling — they come from (1) **session-recycle enforcement** (biggest, red-line-adjacent:
+touches settings/hooks → operator-gated) and (2) **more Haiku dispatch + `effort`/output-constraint
+on the lead loop** (method #2/#4/#6, mechanism already shipped). Both are discipline/routing changes,
+not new codecs. `scripts/audit-model-spend.mjs` is the new durable instrument to track them
+(the per-lane `subagent_tokens` follow-up from `2026-07-04-token-reduction-synthesis.md` §5 —
+partially discharged for the lead loop; sub-agent lane $ still needs telemetry at emit time).
