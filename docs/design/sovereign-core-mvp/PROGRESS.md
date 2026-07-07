@@ -257,6 +257,21 @@ in BLOCKERS below (do NOT guess or ship) on: unresolvable gate-red, byte-parity 
 uncertainty, a harness edit risking recoverability, or a genuine product-vision fork. Skip an unresolved
 recorded blocker. Keep context lean — delegate fiddly/risky work to fresh workers with an explicit `model:`.
 
+## FRESH SESSION — 2026-07-07 LATE (token-reduction enforcement + Haiku pivot + live measurement)
+
+**State:** Token-reduction enforcement SHIPPED + LIVE (A1 two-tier recycle WARN@300K/HARD@400K, B1 model-less→DENY). 
+Haiku pin staged in proposed-settings (operator awaits `cp`). THIS SESSION: live on Haiku, measuring. 
+Report §14 added: state-dispatch-tick (validation work) is 90.2% cache-read, Haiku 6× cheaper on this scope.
+MVP projection: $247–304 lead-loop with Haiku+opus red-line+A1 (vs ~$1,200–1,600 all-Opus).
+
+**Unpushed:** 2 commits (4e0901b6 enforcement + gates, f044fa6a §14 live measurement).
+**Next session applies the Haiku pin:** `cp docs/operating-model/proposed-settings/settings.json .claude/settings.json` 
+(this session stays Haiku unfrozen; next session applies it to default). Commits stay on feat/sovereign-core-phase-zero 
+(no push to main until secrets-scrub force-push gate).
+
 ## BLOCKERS (awaiting operator)
-- _none currently._ (B1 rollout fork RESOLVED 2026-07-06: operator chose **A · warn-then-ratchet**; B1
-  warn-gate shipped + live-verified this run. Ratchet to deny is data-gated on the `_hev` habit trend.)
+- **Haiku pin apply-ready** (staged, operator `cp` gates it to live; this session validates the measurement)
+- **Persistent event-log (0b-5/1.2):** red-line "L", needs Opus red-line rail during next session's 
+  implementation + verification. Falsifiable gate: no bugs on Haiku, or cost estimate invalidates.
+- **Free-LLM bridge (B5):** gated on operator data-governance sign-off + keys (BLOCKER). OpenRouter bridge 
+  = staged opt-in, not wired by default.
