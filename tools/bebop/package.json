@@ -1,0 +1,22 @@
+{
+  "name": "@deliveryos/bebop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "bebop": "bebop.ts"
+  },
+  "scripts": {
+    "boot": "tsx bebop.ts boot",
+    "run": "tsx bebop.ts run",
+    "test": "BEBOP_MEMORY_PATH=\"${BEBOP_MEMORY_PATH:-/tmp/bebop-test-$((RANDOM))}/memory.json\" node --test --import tsx src/*.test.ts"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.2.0",
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.2.0",
+    "@noble/post-quantum": "^0.6.1",
+    "better-auth": "^1.6.23",
+    "tsx": "^4.19.0"
+  }
+}

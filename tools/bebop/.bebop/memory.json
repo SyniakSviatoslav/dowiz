@@ -1,0 +1,189 @@
+{
+  "infoHash": "5f056ead2123c7921faa31629e1f8b6c1ee29d8b4962d5c7c832e70a4e1c9bf7",
+  "nodes": [
+    {
+      "id": "006c47e390135d62c413a3d9d9925f95e89ec97ab51fe512844fb80c3a162f96",
+      "concept": "loops in loops",
+      "payload": "a Loop may spawn sub-Loops (recursive control, terminates by maxSteps)",
+      "edges": [
+        {
+          "to": "e602e0beac4c87ec43a2a096168820911492b02937ed1eaaceb0350e966dff1e",
+          "weight": 1
+        },
+        {
+          "to": "646794c07b2965f9246522b087e6c193361d2d17f747b2047ff481b2c511ba7d",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "04e7b617f59dbc01bf891859533f76cada1bc4109d2a52b6cb9246f015fc2927",
+      "concept": "copilot default",
+      "payload": "every action produced by one model, checked in real time by a DIFFERENT one",
+      "edges": [
+        {
+          "to": "89a0ac2bb562c88f3bde6a3d05f824efb865c4b0d06729e236fe340b19638f29",
+          "weight": 1
+        },
+        {
+          "to": "4e4d77ae5858cbb342600c4111331fe363ca953ad12ea79a0847331a7227f8b4",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "0aa678d3dddfe4446e80ed66770298e2925a1515c8c3b96bfcd2c2049ad92af9",
+      "concept": "loop-iter-2026-07-08",
+      "payload": "iteration: fixed 9 VSA/graph/memory failures (BigInt >>> bug); added persistent ONE living memory (.bebop/memory.json) shared across CLIs; added content-addressed durable store.ts; wired knowledge.ts to fuse memory + repo living-knowledge; 70/70 tests green; copilot+checker doctrines in code",
+      "edges": []
+    },
+    {
+      "id": "377a6f50a628e91ea65f074ebaa1a885ae150fb5390dc77fcbd0e816a5d526b3",
+      "concept": "brain in brain",
+      "payload": "a memory node may contain a whole child memory (recursive)",
+      "edges": [
+        {
+          "to": "ac1935c3a263770277980cfdf80407c89a038e2949802c7fcb5fcf310a0613e1",
+          "weight": 1
+        },
+        {
+          "to": "e602e0beac4c87ec43a2a096168820911492b02937ed1eaaceb0350e966dff1e",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "3b2603c5d80ce902763aa2da2c7140322d2373fdfa9391aea80abf4857ffac09",
+      "concept": "torrent addressing",
+      "payload": "content split into pieces; infoHash is the self-certifying address",
+      "edges": [
+        {
+          "to": "4e4d77ae5858cbb342600c4111331fe363ca953ad12ea79a0847331a7227f8b4",
+          "weight": 1
+        },
+        {
+          "to": "4c563c78496f6080caaebbb5f5f67b32fba5954e05fece5117202be8cbb65e0b",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "4c563c78496f6080caaebbb5f5f67b32fba5954e05fece5117202be8cbb65e0b",
+      "concept": "mesh no server",
+      "payload": "transport-agnostic SyncPort; gossip + Kademlia DHT; no central server",
+      "edges": [
+        {
+          "to": "3b2603c5d80ce902763aa2da2c7140322d2373fdfa9391aea80abf4857ffac09",
+          "weight": 1
+        },
+        {
+          "to": "7cd7d3bb9648d723de044c9842a10fc77401a8bac82cf675589e8c4aaf230d45",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "4e4d77ae5858cbb342600c4111331fe363ca953ad12ea79a0847331a7227f8b4",
+      "concept": "pq identity",
+      "payload": "ML-DSA-65 + ML-KEM-768 + Ed25519 hybrid; node id = hash(pqPub||edPub)",
+      "edges": [
+        {
+          "to": "04e7b617f59dbc01bf891859533f76cada1bc4109d2a52b6cb9246f015fc2927",
+          "weight": 1
+        },
+        {
+          "to": "3b2603c5d80ce902763aa2da2c7140322d2373fdfa9391aea80abf4857ffac09",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "646794c07b2965f9246522b087e6c193361d2d17f747b2047ff481b2c511ba7d",
+      "concept": "hermes session node",
+      "payload": "this Hermes session is a Bebop node: same abstract layers apply to it",
+      "edges": [
+        {
+          "to": "006c47e390135d62c413a3d9d9925f95e89ec97ab51fe512844fb80c3a162f96",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "7cd7d3bb9648d723de044c9842a10fc77401a8bac82cf675589e8c4aaf230d45",
+      "concept": "vsa token codec",
+      "payload": "hypervectors bind/bundle; vector collapses to a stable content hash",
+      "edges": [
+        {
+          "to": "4c563c78496f6080caaebbb5f5f67b32fba5954e05fece5117202be8cbb65e0b",
+          "weight": 1
+        },
+        {
+          "to": "ac1935c3a263770277980cfdf80407c89a038e2949802c7fcb5fcf310a0613e1",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "89a0ac2bb562c88f3bde6a3d05f824efb865c4b0d06729e236fe340b19638f29",
+      "concept": "as above so below",
+      "payload": "one decide/fold/SyncPort contract at every scale; fundamental math/physics",
+      "edges": [
+        {
+          "to": "cbe3815b6d02834aa02cab766858ba06a5311d4a376539b9ccb18e1e8c29b99c",
+          "weight": 1
+        },
+        {
+          "to": "04e7b617f59dbc01bf891859533f76cada1bc4109d2a52b6cb9246f015fc2927",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ac1935c3a263770277980cfdf80407c89a038e2949802c7fcb5fcf310a0613e1",
+      "concept": "graph spreading activation",
+      "payload": "associative recall by energy diffusion along edges with decay",
+      "edges": [
+        {
+          "to": "7cd7d3bb9648d723de044c9842a10fc77401a8bac82cf675589e8c4aaf230d45",
+          "weight": 1
+        },
+        {
+          "to": "377a6f50a628e91ea65f074ebaa1a885ae150fb5390dc77fcbd0e816a5d526b3",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "cbe3815b6d02834aa02cab766858ba06a5311d4a376539b9ccb18e1e8c29b99c",
+      "concept": "kernel law",
+      "payload": "decide/fold/replay is pure; Envelope{cause} is the content-addressed truth",
+      "edges": [
+        {
+          "to": "89a0ac2bb562c88f3bde6a3d05f824efb865c4b0d06729e236fe340b19638f29",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "d8c1f2f54d5ddbb504779a2ba9ccd846652839b8bc328c68410d7b020c0dcf45",
+      "concept": "x",
+      "payload": "X",
+      "edges": []
+    },
+    {
+      "id": "e602e0beac4c87ec43a2a096168820911492b02937ed1eaaceb0350e966dff1e",
+      "concept": "plans in plans",
+      "payload": "a Plan step may itself be a Plan (recursive decomposition)",
+      "edges": [
+        {
+          "to": "377a6f50a628e91ea65f074ebaa1a885ae150fb5390dc77fcbd0e816a5d526b3",
+          "weight": 1
+        },
+        {
+          "to": "006c47e390135d62c413a3d9d9925f95e89ec97ab51fe512844fb80c3a162f96",
+          "weight": 1
+        }
+      ]
+    }
+  ]
+}
