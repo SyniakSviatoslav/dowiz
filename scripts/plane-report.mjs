@@ -12,6 +12,7 @@
 import { execSync, spawnSync } from 'node:child_process';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { mergeCaptureOutput } from './lib/capture-merge.mjs';
 
 const ROOT = process.cwd();
 const today = new Date().toISOString().slice(0, 10);
@@ -21,7 +22,7 @@ const ISSUE_ON_FAIL = process.argv.includes('--github-issue-on-fail');
 
 const capture = (cmd) => {
   try { return { ok: true, out: execSync(cmd, { cwd: ROOT, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }) }; }
-  catch (e) { return { ok: false, out: (e.stdout || '') + (e.stderr || e.message || '') }; }
+  catch (e) { return { ok: false, out: mergeCaptureOutput(e.stdout, e.stderr, e.message) }; }
 };
 
 // Telemetry seam (ADR-plane-telemetry-and-calibration): lifecycle events via the single egress
